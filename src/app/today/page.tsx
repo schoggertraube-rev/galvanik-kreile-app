@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
@@ -11,21 +11,19 @@ import {
   AlertTriangle, 
   AlertCircle, 
   PauseCircle, 
-  Camera,
   Zap, 
   Phone,
   Calendar
 } from "lucide-react";
-import { INITIAL_ORDERS, INITIAL_CUSTOMERS, INITIAL_SCAN_LOG, MockOrder, MockCustomer } from "@/lib/mockData";
+import { INITIAL_ORDERS, INITIAL_CUSTOMERS, MockOrder, MockCustomer } from "@/lib/mockData";
 import { getRiskConfig } from "@/constants/status";
 import { getStationConfig } from "@/constants/stations";
 import { evaluateOrderPriority } from "@/lib/priority";
 
-export default function HeuteDashboard() {
+export default function TodayDashboard() {
   const [orders, setOrders] = useState<MockOrder[]>(INITIAL_ORDERS);
   const [filter, setFilter] = useState<string>("all");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>("o1");
-  const selectedOrder = orders.find(o => o.id === selectedOrderId) ?? null;
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -44,24 +42,34 @@ export default function HeuteDashboard() {
     loadData();
   }, []);
 
-  // Dynamic status counts
-  const countRed = orders.filter(o => o.risk === "red").length;
-  const countOrange = orders.filter(o => o.risk === "orange" || o.risk === "yellow").length;
-  const countGreen = orders.filter(o => o.risk === "green").length;
+  // Filter orders for "today" - overdue (red) or due today (orange)
+  const todayOrders = orders.filter(o => {
+    const evalRes = evaluateOrderPriority({
+      dueDate: o.dueValue,
+      risk: o.risk,
+    });
+    return evalRes.risk === "red" || evalRes.risk === "orange" || evalRes.risk === "yellow"; 
+    // Including yellow (3 days) for a bit more data in demo, but strictly speaking it's red/orange
+  });
+
+  // Dynamic status counts based ONLY on today's orders
+  const countRed = todayOrders.filter(o => o.risk === "red").length;
+  const countOrange = todayOrders.filter(o => o.risk === "orange" || o.risk === "yellow").length;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const countGreen = todayOrders.filter(o => o.risk === "green").length;
 
   // Central workshop station names helper
   const getStationName = (station: string) => {
     return getStationConfig(station).fullName || station;
   };
 
-  // Dynamic station parts calculation for actual warehouse workload (non-fake scales)
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const getPartsCountForStation = (stationKey: string) => {
-    return orders
+    return todayOrders
       .filter(o => o.station === stationKey)
       .reduce((sum, o) => sum + o.parts.length, 0);
   };
 
-  // Visibly change order status upon initiating counter-measures (no fake alert dialogs)
   const handleAction = (orderId: string) => {
     const updated = orders.map(o => {
       if (o.id === orderId || o.orderNumber === orderId) {
@@ -84,34 +92,36 @@ export default function HeuteDashboard() {
     }
   };
 
-  // Phone lookup helper – deterministic, uses only mock data for initial render
   const getCustomerPhone = (customerId: string, customerName: string) => {
-    // Use the initial mock data; this is identical on server and client during first render
-    const list: MockCustomer[] = INITIAL_CUSTOMERS;
+    let list: MockCustomer[] = INITIAL_CUSTOMERS;
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("kreile_customers");
+      if (saved) {
+        try {
+          list = JSON.parse(saved);
+        } catch (e) {
+          console.error("Fehler beim Laden von kreile_customers aus localStorage", e);
+        }
+      }
+    }
     const customer = list.find(
       c => c.id === customerId || c.name.toLowerCase().includes(customerName.toLowerCase())
     );
     return customer && customer.phone && customer.phone.trim() !== "" ? customer.phone : null;
   };
 
-  const filteredOrders = orders.filter(o => {
+  const filteredOrders = todayOrders.filter(o => {
     if (filter === "all") return true;
     if (filter === "critical") return o.risk === "red" || o.risk === "orange";
     return o.risk === filter;
   });
 
-  // Deterministic count of active orders (same on server and client)
-  const activeOrdersCount = orders.length;
+  const selectedOrder = orders.find(o => o.id === selectedOrderId) || null;
 
-  const [greeting, setGreeting] = useState<string>('');
-  const userName = "Max"; // Später dynamisch aus Auth
-
-  // Compute greeting on client after mount to avoid SSR/CSR mismatch
-  useEffect(() => {
-    const hour = new Date().getHours();
-    const g = hour < 11 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend";
-    setGreeting(g);
-  }, []);
+  const activeOrdersCount = todayOrders.length;
+  const hour = new Date().getHours();
+  const greeting = hour < 11 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend";
+  const userName = "Max";
 
   return (
     <div className="space-y-6 pb-12 font-sans antialiased text-slate-900">
@@ -125,49 +135,36 @@ export default function HeuteDashboard() {
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-500/15 border border-blue-500/35 rounded-full text-blue-300 text-xs font-bold uppercase tracking-wider">
               <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
-              Operativer Leitstand
+              Fällige Aufträge für Heute
             </div>
             <h1 className="text-4xl md:text-5xl font-black tracking-tight font-serif text-white">
               {greeting}, {userName}.
             </h1>
             <p className="text-slate-300 text-sm md:text-base max-w-2xl font-medium">
-              Heute sind {activeOrdersCount} Aufträge aktiv.<br className="hidden md:block"/>
-              {countRed} kritisch, {countOrange} gefährdet, {countGreen} im Plan.<br className="hidden md:block"/>
-              Aktueller Engpass: Schleiferei.
+              Heute stehen {activeOrdersCount} Aufträge auf dem Programm.<br className="hidden md:block"/>
+              {countRed} kritisch, {countOrange} gefährdet.<br className="hidden md:block"/>
+              Lass uns das abarbeiten.
             </p>
           </div>
           
-          {/* Status-Board Kennzahlen - dynamic and easy to capture on tablet */}
-          <div className="grid grid-cols-3 gap-3 sm:gap-4 shrink-0">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 shrink-0">
             <div className="bg-red-500/10 border border-red-500/30 px-5 py-4 rounded-xl shadow-sm text-center min-w-[90px] md:min-w-[110px] animate-pulse">
               <div className="text-3xl md:text-4xl font-black text-red-400 leading-none">{countRed}</div>
               <div className="text-[10px] md:text-xs font-bold text-red-300 uppercase tracking-wider mt-1.5">Kritisch</div>
             </div>
             <div className="bg-orange-500/10 border border-orange-500/30 px-5 py-4 rounded-xl shadow-sm text-center min-w-[90px] md:min-w-[110px]">
               <div className="text-3xl md:text-4xl font-black text-orange-400 leading-none">{countOrange}</div>
-              <div className="text-[10px] md:text-xs font-bold text-orange-300 uppercase tracking-wider mt-1.5">Gefährdet</div>
-            </div>
-            <div className="bg-emerald-500/10 border border-emerald-500/30 px-5 py-4 rounded-xl shadow-sm text-center min-w-[90px] md:min-w-[110px]">
-              <div className="text-3xl md:text-4xl font-black text-emerald-400 leading-none">{countGreen}</div>
-              <div className="text-[10px] md:text-xs font-bold text-emerald-300 uppercase tracking-wider mt-1.5">Im Plan</div>
+              <div className="text-[10px] md:text-xs font-bold text-orange-300 uppercase tracking-wider mt-1.5">Fällig</div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Touch-optimized Navigation Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Link href="/today" className="block w-full">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Link href="/" className="block w-full">
           <Button className="w-full bg-white text-slate-800 hover:bg-slate-50 h-16 rounded-xl flex items-center justify-center gap-3 text-lg font-extrabold shadow-sm border-2 border-slate-200 active:scale-98 transition-all cursor-pointer">
             <Calendar className="h-6 w-6 text-blue-900 stroke-[2.5]" />
-            <span>Zum heutigen Tag</span>
-          </Button>
-        </Link>
-
-        <Link href="/orders/new" className="block w-full">
-          <Button className="w-full bg-blue-900 text-white hover:bg-blue-800 h-16 rounded-xl flex items-center justify-center gap-3 text-lg font-extrabold shadow-md active:scale-98 transition-all border-2 border-blue-950 cursor-pointer">
-            <Camera className="h-6 w-6 text-orange-400 stroke-[2.5]" />
-            <span>Wareneingang</span>
+            <span>Gesamter Leitstand</span>
           </Button>
         </Link>
         
@@ -184,18 +181,19 @@ export default function HeuteDashboard() {
         </Button>
       </div>
 
-      {/* Main Shopfloor Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
         {/* Left Side: Order Queue */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between px-1">
-            <h3 className="font-extrabold text-xl text-slate-800 font-serif">Kommende Arbeiten (Prioritäts-Warteschlange)</h3>
+            <h3 className="font-extrabold text-xl text-slate-800 font-serif">Tages-Warteschlange</h3>
             <span className="text-xs text-slate-500 font-bold bg-slate-100 px-2.5 py-1 rounded-full">{filteredOrders.length} Aufträge</span>
           </div>
 
           <div className="space-y-4">
-            {filteredOrders.map((order) => {
+            {filteredOrders.length === 0 ? (
+                <div className="p-8 text-center text-slate-500">Für heute sind keine Aufträge fällig.</div>
+            ) : filteredOrders.map((order) => {
               const evalRes = evaluateOrderPriority({
                 dueDate: order.dueValue,
                 risk: order.risk,
@@ -206,7 +204,6 @@ export default function HeuteDashboard() {
               
               let cardStyle = evalRes.config.cardClass;
               if (isSelected) {
-                // Ensure selection ring is clearly visible
                 cardStyle += " ring-2 ring-blue-900";
               }
               const leftBorderColor = evalRes.config.leftBorderClass;
@@ -223,16 +220,10 @@ export default function HeuteDashboard() {
                     </svg>
                   </div>
                 );
-              } else if (order.risk === "orange") {
+              } else if (order.risk === "orange" || order.risk === "yellow") {
                 iconElement = (
                   <div className="p-2 bg-orange-100 rounded-xl shrink-0 border border-orange-200">
                     <AlertTriangle className="h-6 w-6 text-orange-600" />
-                  </div>
-                );
-              } else if (order.risk === "yellow") {
-                iconElement = (
-                  <div className="p-2 bg-yellow-100 rounded-xl shrink-0 border border-yellow-200">
-                    <AlertTriangle className="h-5 w-5 text-yellow-600" />
                   </div>
                 );
               } else if (order.risk === "blocked") {
@@ -406,7 +397,6 @@ export default function HeuteDashboard() {
                   </>
                 )}
 
-                {/* Associated parts under select order */}
                 <div className="space-y-2 border-t pt-4">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Zugeordnete Werkstücke</span>
                   <div className="space-y-2">
@@ -428,7 +418,6 @@ export default function HeuteDashboard() {
 
                 <hr className="border-slate-100" />
 
-                {/* CRM actions with authentic telephone check */}
                 <div className="space-y-2 pt-1">
                   {(() => {
                     const phone = getCustomerPhone(selectedOrder.customerId, selectedOrder.customerName);
@@ -492,138 +481,11 @@ export default function HeuteDashboard() {
               </div>
               <h4 className="font-extrabold text-sm text-slate-700">Kein Auftrag ausgewählt</h4>
               <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed">
-                Wähle links in der Prioritäts-Warteschlange einen Auftrag aus, um die detaillierten Leitstands-Informationen und internen Maßnahmen freizuschalten.
+                Wähle links in der Tages-Warteschlange einen Auftrag aus, um die detaillierten Leitstands-Informationen und internen Maßnahmen freizuschalten.
               </p>
             </Card>
           )}
           
-          {/* Workload bottlenecks based on live parts database count */}
-          <Card className="shadow-sm border-slate-200 rounded-2xl">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-extrabold text-slate-800 font-serif">Arbeitsauslastung & Engpässe</CardTitle>
-              <CardDescription className="text-xs">Aktuelle Verteilung der Werkstücke.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              
-              {/* Schleiferei Alert */}
-              <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex items-start gap-3">
-                <AlertCircle className="h-5 w-5 text-red-600 mt-0.5 shrink-0 animate-pulse" />
-                <div>
-                  <h5 className="font-extrabold text-sm text-red-950">Engpass: Schleiferei</h5>
-                  <p className="text-xs text-red-700 mt-1">
-                    Auslastung hoch – {getPartsCountForStation("schleiferei")} Teile in Vorarbeit.
-                  </p>
-                  <Link href="/orders?station=schleiferei">
-                    <Button variant="outline" size="sm" className="h-8 text-[10px] font-extrabold mt-2.5 border-red-300 text-red-700 hover:bg-red-100 bg-white cursor-pointer">
-                      Schleiferei anzeigen
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-
-              {/* Bäder / Galvanik load bar */}
-              {(() => {
-                const partsCount = getPartsCountForStation("beschichtung");
-                const percentage = Math.min(100, Math.round((partsCount / 4) * 100));
-                return (
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-xs font-bold text-slate-600">
-                      <span>Galvanik (Bäder)</span>
-                      <span className={percentage > 70 ? "text-orange-600" : "text-emerald-600"}>{percentage}% ({partsCount} Teile)</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full ${percentage > 70 ? "bg-orange-500" : "bg-emerald-500"}`} 
-                        style={{ width: `${percentage}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* Entmetallisierung load bar */}
-              {(() => {
-                const partsCount = getPartsCountForStation("entmetallisierung");
-                const percentage = Math.min(100, Math.round((partsCount / 3) * 100));
-                return (
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center text-xs font-bold text-slate-600">
-                      <span>Entmetallisierung</span>
-                      <span className="text-slate-500">{percentage}% ({partsCount} Teile)</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div className="bg-blue-500 h-full" style={{ width: `${percentage}%` }}></div>
-                    </div>
-                  </div>
-                );
-              })()}
-
-            </CardContent>
-          </Card>
-
-          {/* Actionable resolutions and approvals */}
-          <Card className="shadow-sm border-slate-200 rounded-2xl">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-extrabold text-slate-800 font-serif">Handlungsbedarf / Freigaben</CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 border-t">
-              <div className="divide-y text-xs">
-                {orders.filter(o => o.risk === "blocked").map(order => {
-                  const phone = getCustomerPhone(order.customerId, order.customerName);
-                  return (
-                    <div key={order.id} className="p-3.5 flex justify-between items-center gap-2 hover:bg-slate-50 transition-colors">
-                      <div>
-                        <span className="font-mono font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">{order.orderNumber}</span>
-                        <p className="font-bold text-slate-800 mt-1">{order.customerName}</p>
-                        <p className="text-slate-500 mt-0.5">{order.delayReason || "Entscheidung ausstehend"}</p>
-                      </div>
-                      {phone ? (
-                        <a 
-                          href={`tel:${phone}`}
-                          className="h-8 text-[10px] font-extrabold px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 rounded-xl flex items-center justify-center shrink-0"
-                        >
-                          Anrufen
-                        </a>
-                      ) : (
-                        <Link 
-                          href="/customers" 
-                          className="h-8 text-[10px] font-extrabold px-2 py-2 text-amber-600 bg-white border border-slate-200 border-dashed hover:bg-slate-50 rounded-xl flex items-center justify-center text-center shrink-0"
-                          title="Telefonnummer in Kundenkartei prüfen"
-                        >
-                          Kundenkartei
-                        </Link>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Live Scan Log widget */}
-          <Card className="shadow-sm border-slate-200 rounded-2xl">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-extrabold text-slate-800 font-serif flex items-center justify-between">
-                <span>Letzte Scans / Aktivitäten</span>
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0 border-t">
-              <div className="divide-y text-xs">
-                {INITIAL_SCAN_LOG.map((log, idx) => (
-                  <div key={idx} className="p-3.5 hover:bg-slate-50 transition-colors flex items-start gap-2">
-                    <span className="font-mono font-bold text-slate-400 shrink-0 mt-0.5">{log.time}</span>
-                    <div className="space-y-0.5">
-                      <span className="font-bold text-[9px] uppercase tracking-wider text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-100 inline-block">{log.type}</span>
-                      <p className="font-bold text-slate-800 mt-1">{log.desc}</p>
-                      <p className="text-[10px] text-slate-500 font-medium">{log.status}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
         </div>
       </div>
     </div>
