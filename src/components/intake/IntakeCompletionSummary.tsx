@@ -8,9 +8,9 @@ import { LabelPrintView } from "@/components/orders/LabelPrintView";
 import type { Order } from "@/lib/repositories/ordersRepository";
 
 export function IntakeCompletionSummary({ 
-  customerSelection, items 
+  customerSelection, newCustomerDetails, items, onBack 
 }: { 
-  customerSelection: { id: string | null, newName?: string }, items: Record<string, unknown>[] 
+  customerSelection: { id: string | null, newName?: string }, newCustomerDetails?: any, items: Record<string, unknown>[], onBack?: () => void 
 }) {
   const [saving, setSaving] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
@@ -22,6 +22,7 @@ export function IntakeCompletionSummary({
       const order = await intakeService.processIntake({
         customerId: customerSelection.id,
         newCustomerName: customerSelection.newName,
+        newCustomerDetails,
         orderTitle: `${String(items[0].name)} ${items.length > 1 ? `+ ${items.length - 1} weitere` : ''}`,
         items: items as { name: string; quantity: number; surfaceRequested?: string }[]
       });
@@ -108,15 +109,22 @@ export function IntakeCompletionSummary({
           <Button
             onClick={() => router.push("/today")}
             variant="outline"
-            className="flex-1 h-16 text-lg font-bold rounded-2xl border-2 border-slate-200 text-slate-700 hover:bg-slate-100 active:scale-95 transition-all"
+            className="flex-1 h-16 text-sm font-bold rounded-2xl border-2 border-slate-200 text-slate-700 hover:bg-slate-100 active:scale-95 transition-all"
           >
-            Zurück zum Leitstand
+            Zum Leitstand
+          </Button>
+          <Button
+            onClick={() => router.push(`/orders/${createdOrder.id}`)}
+            variant="outline"
+            className="flex-1 h-16 text-sm font-bold rounded-2xl border-2 border-blue-200 text-blue-700 bg-blue-50 hover:bg-blue-100 active:scale-95 transition-all"
+          >
+            Auftrag öffnen
           </Button>
           <Button
             onClick={() => window.print()}
-            className="flex-1 h-16 text-lg font-black rounded-2xl bg-blue-600 text-white hover:bg-blue-700 shadow-xl shadow-blue-600/30 active:scale-95 transition-all flex items-center justify-center gap-2 animate-pulse"
+            className="flex-1 h-16 text-sm font-black rounded-2xl bg-blue-600 text-white hover:bg-blue-700 shadow-xl shadow-blue-600/30 active:scale-95 transition-all flex items-center justify-center gap-2 animate-pulse"
           >
-            <Printer className="w-6 h-6" /> Etikett drucken
+            <Printer className="w-5 h-5" /> Etikett drucken
           </Button>
         </div>
 
@@ -132,6 +140,16 @@ export function IntakeCompletionSummary({
 
   return (
     <div className="w-full max-w-2xl mx-auto space-y-8 animate-in zoom-in-95 duration-500 pt-6">
+      {onBack && (
+        <div className="flex justify-start mb-2">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold text-sm px-3 py-2 rounded-xl hover:bg-slate-100 transition-all"
+          >
+            <span className="text-xl leading-none">&larr;</span> Zurück zur Korrektur
+          </button>
+        </div>
+      )}
       <div className="text-center space-y-2">
         <div className="w-24 h-24 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
           <CheckCircle2 className="w-12 h-12" />

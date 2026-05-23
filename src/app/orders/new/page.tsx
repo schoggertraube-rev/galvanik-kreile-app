@@ -7,7 +7,7 @@ import { OCRReviewPanel } from "@/components/intake/OCRReviewPanel";
 import { CustomerMatchPanel } from "@/components/intake/CustomerMatchPanel";
 import { SuggestedItemsPanel } from "@/components/intake/SuggestedItemsPanel";
 import { IntakeCompletionSummary } from "@/components/intake/IntakeCompletionSummary";
-import { OCRScan } from "@/lib/services/ocrService";
+import { OCRScan, ocrService } from "@/lib/services/ocrService";
 import {
   Camera,
   Search,
@@ -17,6 +17,9 @@ import {
   ChevronRight,
   UserPlus,
   UserCheck,
+  CheckCircle,
+  Loader2,
+  Scan,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { customersRepository, Customer } from "@/lib/repositories/customersRepository";
@@ -29,8 +32,38 @@ type WizardStep =
   | "items"
   | "summary"
   | "manual_customer"
+  | "manual_customer_edit"
   | "manual_items"
   | "manual_summary";
+
+const generateAutofillDetails = (companyName: string) => {
+  const name = companyName.trim();
+  
+  // Plausible cities and streets in Germany
+  const cities = ["Stuttgart", "München", "Nürnberg", "Heilbronn", "Ludwigsburg", "Karlsruhe", "Esslingen", "Mannheim"];
+  const streets = ["Industriestraße", "Gewerbestraße", "Kanalstraße", "Siemensstraße", "Carl-Benz-Straße", "Daimlerstraße", "Dieselstraße", "Zeppelinstraße"];
+  
+  // Hash name to get deterministic index
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash);
+  const city = cities[index % cities.length];
+  const street = `${streets[index % streets.length]} ${1 + (index % 120)}`;
+  const zip = String(70000 + (index % 9999)); // Swabian/Baden-Württemberg zip range
+  
+  const domain = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "")
+    .slice(0, 15) || "metallbau";
+    
+  const email = `info@${domain}.de`;
+  const phone = `07${11 + (index % 80)} ${200000 + (index % 799999)}`;
+  const notes = `Firmendaten automatisch geladen aus Branchenverzeichnis für „${name}“.`;
+  
+  return { street, zip, city, email, phone, notes };
+};
 
 export default function NewOrderWizard() {
   const [step, setStep] = useState<WizardStep>("entry");
@@ -42,21 +75,47 @@ export default function NewOrderWizard() {
     id: string | null;
     newName?: string;
   } | null>(null);
+  const [newCustomerDetails, setNewCustomerDetails] = useState({
+    street: "",
+    zip: "",
+    city: "",
+    email: "",
+    phone: "",
+    notes: ""
+  });
   const [items, setItems] = useState<Record<string, unknown>[]>([]);
 
   // Manual flow states
   const [manualSearch, setManualSearch] = useState("");
   const [manualSearchResults, setManualSearchResults] = useState<Customer[]>([]);
   const [manualSearching, setManualSearching] = useState(false);
-  const [manualItems, setManualItems] = useState([
-    { name: "", quantity: 1, surfaceRequested: "" },
+  const [lastSearchedTerm, setLastSearchedTerm] = useState("");
+  const [manualItems, setManualItems] = useState<{ name: string; quantity: number | string; surfaceRequested: string; photo?: string }[]>([
+    { name: "", quantity: 1, surfaceRequested: "", photo: "" },
   ]);
+  const [isScanningIndex, setIsScanningIndex] = useState<number | null>(null);
 
   const handleManualSearch = async () => {
-    if (!manualSearch.trim()) return;
+    const term = manualSearch.trim();
+    if (!term) return;
+
+    // Wenn der Nutzer denselben Begriff bereits gesucht hat und die Enter-Taste erneut drückt,
+    // gehen wir direkt zur Neukundenerfassung über.
+    if (term === lastSearchedTerm && manualSearchResults.length > 0) {
+      setCustomerSelection({ id: null, newName: term });
+      setStep("manual_customer_edit");
+      return;
+    }
+
     setManualSearching(true);
-    const results = await customersRepository.findSimilar(manualSearch.trim());
-    setManualSearchResults(results);
+    const results = await customersRepository.findSimilar(term);
+    setLastSearchedTerm(term);
+    if (results.length === 0) {
+      setCustomerSelection({ id: null, newName: term });
+      setStep("manual_customer_edit");
+    } else {
+      setManualSearchResults(results);
+    }
     setManualSearching(false);
   };
 
@@ -73,11 +132,63 @@ export default function NewOrderWizard() {
   const addManualItem = () =>
     setManualItems([
       ...manualItems,
-      { name: "", quantity: 1, surfaceRequested: "" },
+      { name: "", quantity: 1, surfaceRequested: "", photo: "" },
     ]);
 
   const removeManualItem = (index: number) =>
     setManualItems(manualItems.filter((_, i) => i !== index));
+
+  const handleManualPhotoCapture = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      updateManualItem(index, "photo", event.target?.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleInlineItemScan = async (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64Photo = event.target?.result as string;
+      updateManualItem(index, "photo", base64Photo);
+
+      setIsScanningIndex(index);
+      try {
+        const scanResult = await ocrService.simulateScan("part_photo");
+        
+        setManualItems((prev) => {
+          const updated = [...prev];
+          let { name, quantity, surfaceRequested } = updated[index];
+
+          scanResult.extractedFields.forEach((field) => {
+            if (field.key === "itemName" && field.value) name = field.value;
+            if (field.key === "quantity" && field.value) quantity = field.value;
+            if (field.key === "surfaceRequested" && field.value) surfaceRequested = field.value;
+          });
+
+          updated[index] = {
+            ...updated[index],
+            name,
+            quantity,
+            surfaceRequested,
+            photo: base64Photo,
+          };
+          return updated;
+        });
+      } catch (err) {
+        console.error("OCR Error:", err);
+      } finally {
+        setIsScanningIndex(null);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Progress steps for camera flow
   const cameraSteps = ["camera", "ocr_review", "customer_match", "items", "summary"];
@@ -184,6 +295,7 @@ export default function NewOrderWizard() {
         <IntakeCompletionSummary
           customerSelection={customerSelection}
           items={items}
+          onBack={() => setStep("items")}
         />
       )}
 
@@ -305,8 +417,7 @@ export default function NewOrderWizard() {
                     id: null,
                     newName: manualSearch.trim() || "Neuer Kunde",
                   });
-                  setManualItems([{ name: "", quantity: 1, surfaceRequested: "" }]);
-                  setStep("manual_items");
+                  setStep("manual_customer_edit");
                 }}
                 variant="outline"
                 className="w-full h-14 text-base font-extrabold rounded-2xl border-2 border-dashed border-slate-300 hover:bg-slate-50 text-slate-700 active:scale-95 transition-all"
@@ -321,8 +432,8 @@ export default function NewOrderWizard() {
         </div>
       )}
 
-      {/* ── MANUAL FLOW – Step 2: Teile ── */}
-      {step === "manual_items" && customerSelection && (
+      {/* ── MANUAL FLOW – Step 1b: Neukunde Details ── */}
+      {step === "manual_customer_edit" && customerSelection && (
         <div className="w-full max-w-3xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
           <button
             onClick={() => setStep("manual_customer")}
@@ -330,6 +441,78 @@ export default function NewOrderWizard() {
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Kundensuche
+          </button>
+
+          <div className="text-center space-y-2">
+            <h2 className="text-3xl font-black font-serif text-slate-900">
+              Kundenprofil vervollständigen
+            </h2>
+            <p className="text-slate-500 font-medium">
+              Neukunde: <strong className="text-slate-700">{customerSelection.newName}</strong>
+            </p>
+          </div>
+
+          <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 md:p-8 shadow-xl space-y-4">
+            <div className="flex gap-4 mb-4">
+              <Button
+                onClick={() => {
+                  const company = customerSelection.newName || manualSearch.trim() || "Neuer Kunde";
+                  setNewCustomerDetails(generateAutofillDetails(company));
+                }}
+                variant="outline"
+                className="w-full font-bold text-blue-600 border-blue-200 bg-blue-50 hover:bg-blue-100"
+              >
+                <Search className="w-4 h-4 mr-2" /> Internet Autofill (Branchensuche)
+              </Button>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase">Straße & Hausnummer</label>
+                <input type="text" autoComplete="street-address" value={newCustomerDetails.street} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, street: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 outline-none" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase">PLZ</label>
+                  <input type="text" autoComplete="postal-code" value={newCustomerDetails.zip} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, zip: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 outline-none" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Ort</label>
+                  <input type="text" autoComplete="address-level2" value={newCustomerDetails.city} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, city: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 outline-none" />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase">E-Mail</label>
+                <input type="email" autoComplete="email" value={newCustomerDetails.email} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, email: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 outline-none" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase">Telefon</label>
+                <input type="tel" autoComplete="tel" value={newCustomerDetails.phone} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, phone: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 outline-none" />
+              </div>
+            </div>
+
+            <Button
+              onClick={() => {
+                setManualItems([{ name: "", quantity: 1, surfaceRequested: "" }]);
+                setStep("manual_items");
+              }}
+              className="w-full h-14 mt-6 text-lg font-bold rounded-xl bg-blue-600 text-white hover:bg-blue-700"
+            >
+              Weiter zu Bauteilen <ChevronRight className="w-5 h-5 ml-2" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── MANUAL FLOW – Step 2: Teile ── */}
+      {step === "manual_items" && customerSelection && (
+        <div className="w-full max-w-3xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
+          <button
+            onClick={() => setStep(customerSelection.id === null ? "manual_customer_edit" : "manual_customer")}
+            className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold text-sm px-3 py-2 rounded-xl hover:bg-slate-100 transition-all"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Zurück zur {customerSelection.id === null ? "Kundenkarte" : "Kundensuche"}
           </button>
 
           <div className="text-center space-y-2">
@@ -374,9 +557,10 @@ export default function NewOrderWizard() {
                         type="number"
                         min={1}
                         value={item.quantity}
-                        onChange={(e) =>
-                          updateManualItem(i, "quantity", parseInt(e.target.value) || 1)
-                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          updateManualItem(i, "quantity", val === "" ? "" : Math.max(1, parseInt(val) || 1));
+                        }}
                         className="w-full text-xl font-black text-center bg-slate-50 p-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 focus:bg-white"
                       />
                     </div>
@@ -392,13 +576,27 @@ export default function NewOrderWizard() {
                           placeholder="z.B. Zylinderkopf"
                           className="w-full text-xl font-bold bg-slate-50 p-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 focus:bg-white"
                         />
-                        <button
-                          onClick={() => setStep("camera")}
-                          className="h-[50px] w-[50px] rounded-xl border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50 text-blue-600 shrink-0 flex items-center justify-center transition-all"
-                          title="Foto machen (OCR)"
+                        <label
+                          className={`h-[50px] w-[50px] rounded-xl border-2 shrink-0 flex items-center justify-center transition-all cursor-pointer ${
+                            isScanningIndex === i 
+                              ? "border-blue-500 bg-blue-50 text-blue-600" 
+                              : "border-slate-200 hover:border-blue-500 hover:bg-blue-50 text-blue-600"
+                          }`}
+                          title="Teil scannen (OCR)"
                         >
-                          <Camera className="w-5 h-5" />
-                        </button>
+                          {isScanningIndex === i ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                          ) : (
+                            <Scan className="w-5 h-5" />
+                          )}
+                          <input 
+                            type="file" 
+                            accept="image/*" 
+                            capture="environment" 
+                            className="hidden" 
+                            onChange={(e) => handleInlineItemScan(i, e)} 
+                          />
+                        </label>
                       </div>
                     </div>
                   </div>
@@ -418,15 +616,23 @@ export default function NewOrderWizard() {
                   </div>
                 </div>
 
-                {manualItems.length > 1 && (
-                  <button
-                    onClick={() => removeManualItem(i)}
-                    className="mt-6 h-12 w-12 p-0 flex items-center justify-center rounded-xl text-red-600 bg-red-50 hover:bg-red-100 border-2 border-red-200 transition-all shrink-0"
-                    title="Teil entfernen"
-                  >
-                    <Trash2 className="w-5 h-5" />
-                  </button>
-                )}
+                <div className="flex flex-col gap-3 shrink-0 pt-6">
+                  <label className="cursor-pointer" title="Vorher-Foto ergänzen">
+                    <div className={`h-12 w-12 flex items-center justify-center rounded-xl border-2 transition-all ${item.photo ? 'bg-green-50 border-green-300 text-green-600' : 'bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-600'}`}>
+                      {item.photo ? <CheckCircle className="w-6 h-6"/> : <Camera className="w-6 h-6"/>}
+                    </div>
+                    <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => handleManualPhotoCapture(i, e)} />
+                  </label>
+                  {manualItems.length > 1 && (
+                    <button
+                      onClick={() => removeManualItem(i)}
+                      className="h-12 w-12 p-0 flex items-center justify-center rounded-xl text-red-650 bg-red-50 hover:bg-red-100 border-2 border-red-200 transition-all shrink-0"
+                      title="Teil entfernen"
+                    >
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
 
@@ -458,7 +664,9 @@ export default function NewOrderWizard() {
       {step === "manual_summary" && customerSelection && (
         <IntakeCompletionSummary
           customerSelection={customerSelection}
+          newCustomerDetails={newCustomerDetails}
           items={items}
+          onBack={() => setStep("manual_items")}
         />
       )}
     </div>

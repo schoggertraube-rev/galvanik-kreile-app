@@ -7,8 +7,9 @@ export const intakeService = {
   async processIntake(data: {
     customerId: string | null;
     newCustomerName?: string;
+    newCustomerDetails?: any;
     orderTitle: string;
-    items: { name: string; quantity: number; surfaceRequested?: string }[];
+    items: { name: string; quantity: number; surfaceRequested?: string; photo?: string }[];
   }) {
     await eventsRepository.addEvent({ eventType: "ORDER_CREATED_MANUAL" });
 
@@ -16,8 +17,24 @@ export const intakeService = {
     let customerId = data.customerId;
     if (!customerId) {
       if (!data.newCustomerName) throw new Error("Kein Kunde angegeben");
+      const details = data.newCustomerDetails || {};
+      
+      // Merge street and zip/city to address if street exists
+      let address = details.address || "";
+      if (!address && details.street) {
+        address = details.street;
+        if (details.zip) {
+          address += `, ${details.zip}`;
+        }
+        if (details.city) {
+          address += ` ${details.city}`;
+        }
+      }
+
       const newCust = await customersRepository.create({
-        name: data.newCustomerName
+        name: data.newCustomerName,
+        ...details,
+        address
       });
       customerId = newCust.id;
       await eventsRepository.addEvent({ eventType: "CUSTOMER_MATCHED", customerId });
