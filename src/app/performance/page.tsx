@@ -28,7 +28,7 @@ import {
 import { INITIAL_ORDERS, MockOrder } from "@/lib/mockData";
 import { getAllStations } from "@/constants/stations";
 import { bathsRepository, Bath } from "@/lib/repositories/bathsRepository";
-import { computeScore } from "@/lib/performance/score";
+import { calculateWorkshopHealthScore } from "@/lib/performance/score";
 
 // Mapping string names to Lucide icons
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -43,6 +43,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
 export default function PerformancePage() {
   const [orders, setOrders] = useState<MockOrder[]>([]);
   const [baths, setBaths] = useState<Bath[]>([]);
+  const [healthData, setHealthData] = useState<{score: number; details: Record<string, number>} | null>(null);
   const [showFormulaDetails, setShowFormulaDetails] = useState(false);
   const [hourlyRate, setHourlyRate] = useState(95);
   const [fixedCosts, setFixedCosts] = useState(2500);
@@ -101,8 +102,11 @@ export default function PerformancePage() {
         try {
           const loadedBaths = await bathsRepository.getAllBaths();
           setBaths(loadedBaths);
+          
+          const health = await calculateWorkshopHealthScore();
+          setHealthData(health);
         } catch (e) {
-          console.error("Fehler beim Laden der BÃ¤der", e);
+          console.error("Fehler beim Laden der Performance-Daten", e);
         }
       }
     };
@@ -242,16 +246,8 @@ export default function PerformancePage() {
 
   const stationsScore = clamp(stationHealthIndex * 100, 0, 100);
 
-  // 3. Overall Master Performance Score (Â§12)
-  const masterScore = computeScore({
-    onTimeRate: rawOnTimeRate,
-    avgCycleTimeIndex,
-    criticalOrders,
-    complaintRate: dynamicReklaQuote / 100,
-    scanRate,
-    documentationRate,
-    stationHealthIndex
-  });
+  // 3. Overall Master Performance Score (§12)
+  const masterScore = healthData?.score || 0;
 
   // Qualifying the calculated score
   let scoreQualityLabel = "Gute Performance";
@@ -613,65 +609,75 @@ export default function PerformancePage() {
             return (
               <>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between h-[125px]">
-                    <div>
-                      <span className="text-[9px] uppercase font-black text-slate-400 tracking-widest block">Umsatz Netto</span>
-                      <span className="text-2xl font-black text-slate-900 block mt-1">{revenueNet.toLocaleString("de-DE")} â‚¬</span>
+                  <Link href="/finances?view=revenue" className="block group hover:scale-[1.02] transition-transform">
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between h-[125px] group-hover:border-blue-300">
+                      <div>
+                        <span className="text-[9px] uppercase font-black text-slate-400 tracking-widest block group-hover:text-blue-600">Umsatz Netto</span>
+                        <span className="text-2xl font-black text-slate-900 block mt-1">{revenueNet.toLocaleString("de-DE")} €</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-semibold leading-relaxed">
+                        {completedOrders} Aufträge im Zeitraum (Ø 450 €)
+                      </p>
                     </div>
-                    <p className="text-[10px] text-slate-400 font-semibold leading-relaxed">
-                      {completedOrders} AuftrÃ¤ge im Zeitraum (Ã˜ 450 â‚¬)
-                    </p>
-                  </div>
+                  </Link>
 
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between h-[125px]">
-                    <div>
-                      <span className="text-[9px] uppercase font-black text-slate-400 tracking-widest block">Lohn- & Materialkosten</span>
-                      <span className="text-2xl font-black text-slate-900 block mt-1">{(laborCostNet + materialCostNet).toLocaleString("de-DE")} â‚¬</span>
+                  <Link href="/finances?view=costs" className="block group hover:scale-[1.02] transition-transform">
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between h-[125px] group-hover:border-orange-300">
+                      <div>
+                        <span className="text-[9px] uppercase font-black text-slate-400 tracking-widest block group-hover:text-orange-600">Lohn- & Materialkosten</span>
+                        <span className="text-2xl font-black text-slate-900 block mt-1">{(laborCostNet + materialCostNet).toLocaleString("de-DE")} €</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-semibold leading-relaxed flex justify-between">
+                        <span>Material: {materialCostNet.toLocaleString("de-DE")} €</span>
+                        <span>Lohn: {laborCostNet.toLocaleString("de-DE")} €</span>
+                      </p>
                     </div>
-                    <p className="text-[10px] text-slate-400 font-semibold leading-relaxed flex justify-between">
-                      <span>Material: {materialCostNet.toLocaleString("de-DE")} â‚¬</span>
-                      <span>Lohn: {laborCostNet.toLocaleString("de-DE")} â‚¬</span>
-                    </p>
-                  </div>
+                  </Link>
 
-                  <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between h-[125px] relative overflow-hidden">
-                    <div className="absolute top-0 right-0 h-1.5 w-full bg-emerald-500"></div>
-                    <div>
-                      <span className="text-[9px] uppercase font-black text-slate-400 tracking-widest block">Deckungsbeitrag</span>
-                      <span className="text-2xl font-black text-emerald-600 block mt-1">{contributionMarginNet.toLocaleString("de-DE")} â‚¬</span>
+                  <Link href="/finances?view=margin" className="block group hover:scale-[1.02] transition-transform">
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 flex flex-col justify-between h-[125px] relative overflow-hidden group-hover:border-emerald-300">
+                      <div className="absolute top-0 right-0 h-1.5 w-full bg-emerald-500"></div>
+                      <div>
+                        <span className="text-[9px] uppercase font-black text-slate-400 tracking-widest block group-hover:text-emerald-600">Deckungsbeitrag</span>
+                        <span className="text-2xl font-black text-emerald-600 block mt-1">{contributionMarginNet.toLocaleString("de-DE")} €</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-semibold leading-relaxed">
+                        Rohertrag nach direkten variablen Kosten
+                      </p>
                     </div>
-                    <p className="text-[10px] text-slate-400 font-semibold leading-relaxed">
-                      Rohertrag nach direkten variablen Kosten
-                    </p>
-                  </div>
+                  </Link>
 
-                  <div className={`border rounded-2xl p-4 flex flex-col justify-between h-[125px] relative overflow-hidden ${estimatedProfitNet >= 0 ? "bg-emerald-50/20 border-emerald-200" : "bg-red-50/20 border-red-250"}`}>
-                    <div className={`absolute top-0 right-0 h-1.5 w-full ${estimatedProfitNet >= 0 ? "bg-emerald-500" : "bg-red-500"}`}></div>
-                    <div>
-                      <span className="text-[9px] uppercase font-black text-slate-400 tracking-widest block">GeschÃ¤tzter Gewinn</span>
-                      <span className={`text-2xl font-black block mt-1 ${estimatedProfitNet >= 0 ? "text-emerald-700" : "text-red-700"}`}>{estimatedProfitNet.toLocaleString("de-DE")} â‚¬</span>
+                  <Link href="/finances?view=profit" className="block group hover:scale-[1.02] transition-transform">
+                    <div className={`border rounded-2xl p-4 flex flex-col justify-between h-[125px] relative overflow-hidden group-hover:border-blue-400 ${estimatedProfitNet >= 0 ? "bg-emerald-50/20 border-emerald-200" : "bg-red-50/20 border-red-250"}`}>
+                      <div className={`absolute top-0 right-0 h-1.5 w-full ${estimatedProfitNet >= 0 ? "bg-emerald-500" : "bg-red-500"}`}></div>
+                      <div>
+                        <span className="text-[9px] uppercase font-black text-slate-400 tracking-widest block group-hover:text-blue-600">Geschätzter Gewinn</span>
+                        <span className={`text-2xl font-black block mt-1 ${estimatedProfitNet >= 0 ? "text-emerald-700" : "text-red-700"}`}>{estimatedProfitNet.toLocaleString("de-DE")} €</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-semibold leading-relaxed flex justify-between">
+                        <span>Marge: {profitMarginPercent.toFixed(1)} %</span>
+                        <span>Netto nach Fixkosten</span>
+                      </p>
                     </div>
-                    <p className="text-[10px] text-slate-400 font-semibold leading-relaxed flex justify-between">
-                      <span>Marge: {profitMarginPercent.toFixed(1)} %</span>
-                      <span>Netto nach Fixkosten</span>
-                    </p>
-                  </div>
+                  </Link>
                 </div>
 
                 {/* Additional Row: Forecast & Business Advice */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4 border-slate-100">
-                  <div className="flex items-center gap-4 bg-blue-50/40 p-4 rounded-xl border border-blue-100">
-                    <div className="text-center bg-blue-900 text-white rounded-lg p-2 shrink-0">
-                      <span className="text-[9px] font-bold uppercase tracking-widest block font-mono">Forecast</span>
-                      <span className="text-lg font-black">{forecastNet.toLocaleString("de-DE")} â‚¬</span>
+                  <Link href="/finances?view=forecast" className="block group hover:scale-[1.01] transition-transform">
+                    <div className="flex items-center gap-4 bg-blue-50/40 p-4 rounded-xl border border-blue-100 group-hover:border-blue-400">
+                      <div className="text-center bg-blue-900 text-white rounded-lg p-2 shrink-0">
+                        <span className="text-[9px] font-bold uppercase tracking-widest block font-mono">Forecast</span>
+                        <span className="text-lg font-black">{forecastNet.toLocaleString("de-DE")} €</span>
+                      </div>
+                      <div>
+                        <h5 className="font-extrabold text-xs text-slate-800 group-hover:text-blue-900">Umsatzprognose Monatsende</h5>
+                        <p className="text-slate-400 text-[10px] leading-relaxed mt-0.5">
+                          Erwarteter Netto-Umsatz inklusive gewichteter Wahrscheinlichkeiten offener Aufträge ({activeOrders} im Fluss).
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h5 className="font-extrabold text-xs text-slate-800">Umsatzprognose Monatsende</h5>
-                      <p className="text-slate-400 text-[10px] leading-relaxed mt-0.5">
-                        Erwarteter Netto-Umsatz inklusive gewichteter Wahrscheinlichkeiten offener AuftrÃ¤ge ({activeOrders} im Fluss).
-                      </p>
-                    </div>
-                  </div>
+                  </Link>
 
                   <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs">
                     <Info className="h-4.5 w-4.5 text-blue-900 shrink-0" />

@@ -253,7 +253,7 @@ export default function ItemsPage() {
             Lager & Chemieverwaltung
           </h1>
           <p className="text-slate-500 mt-1">
-            Tablet-Leitstand für Bestände, Materialbewegungen und chemische Bäder
+            Tablet-Leitstand für Bestände, Materialbewegungen und chemische Beschichtung
           </p>
         </div>
 
@@ -302,7 +302,7 @@ export default function ItemsPage() {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 className="pl-10 h-11 bg-slate-50 border-slate-200 rounded-xl w-full text-base font-medium"
-                placeholder={activeSection === "inventory" ? "Artikel suchen nach Name, SKU, Lagerort..." : "Bäder suchen..."}
+                placeholder={activeSection === "inventory" ? "Artikel suchen nach Name, SKU, Lagerort..." : "Beschichtung suchen..."}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -541,7 +541,7 @@ export default function ItemsPage() {
               ) : (
                 <div className="col-span-2 p-12 text-center text-slate-500">
                   <FlaskConical className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-                  <p className="font-bold text-lg">Keine galvanischen Bäder gefunden</p>
+                  <p className="font-bold text-lg">Keine galvanische Beschichtung gefunden</p>
                 </div>
               )}
             </div>

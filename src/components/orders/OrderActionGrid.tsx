@@ -1,16 +1,17 @@
-import { useState, useRef } from "react";
-import { Play, CheckCircle, Camera, Phone, Printer, MoreHorizontal } from "lucide-react";
+import { useRef } from "react";
+import { Camera, Phone, Printer, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { eventsRepository } from "@/lib/repositories/eventsRepository";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
-import { STATION_CONFIGS } from "@/constants/stations";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { createStatusEvent } from "@/app/actions/status-events.actions";
+import { StationStatusButton } from "./StationStatusButton";
 
 export function OrderActionGrid({ 
   orderId,
   customerId,
   currentStationId,
+  currentStatus,
   customerPhone,
   onCompleteStation, 
   onPrint 
@@ -18,18 +19,12 @@ export function OrderActionGrid({
   orderId: string;
   customerId?: string;
   currentStationId: string;
+  currentStatus: string;
   customerPhone?: string;
   onCompleteStation?: () => void;
   onPrint?: () => void;
 }) {
-  const [isStarting, setIsStarting] = useState(false);
-  const [selectedStation, setSelectedStation] = useState(currentStationId);
   const fileInputRef = useRef<HTMLInputElement>(null);
- 
-  const handleStartStation = async () => {
-    setSelectedStation(currentStationId);
-    setIsStarting(true);
-  };
  
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -107,38 +102,13 @@ export function OrderActionGrid({
       <h3 className="text-sm font-extrabold text-slate-500 uppercase tracking-widest pl-1">Schnellaktionen</h3>
       <div className="grid grid-cols-2 gap-4">
         
-        {isStarting ? (
-          <div className="h-24 flex flex-col justify-center gap-2 rounded-2xl bg-blue-50 border-2 border-blue-600 p-2">
-            <select 
-              className="w-full text-xs p-1 rounded border border-slate-200 bg-white" 
-              value={selectedStation} 
-              onChange={(e) => setSelectedStation(e.target.value)}
-            >
-              {Object.values(STATION_CONFIGS).map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
-            </select>
-            <div className="flex gap-2">
-              <Button size="sm" variant="ghost" onClick={() => setIsStarting(false)} className="flex-1 h-6 text-xs px-0">Abbrechen</Button>
-              <Button size="sm" className="flex-1 h-6 text-xs bg-blue-600 text-white px-0" onClick={async () => {
-                const sel = selectedStation;
-                await ordersRepository.updateOrder(orderId, { currentStationId: sel, station: sel, status: "in_progress" });
-                await eventsRepository.addEvent({ orderId, customerId, eventType: "STATION_STARTED", metadata: { stationId: sel } });
-                createStatusEvent({ orderId, eventType: "STATION_STARTED", notes: `Station: ${sel}` }).catch(e => console.warn(e));
-                if (typeof window !== "undefined") window.dispatchEvent(new Event("storage"));
-                setIsStarting(false);
-              }}>Starten</Button>
-            </div>
-          </div>
-        ) : (
-          <Button onClick={handleStartStation} className="h-24 flex flex-col gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg active:scale-95 transition-all">
-            <Play className="w-6 h-6" />
-            <span className="font-bold">Station starten</span>
-          </Button>
-        )}
-
-        <Button onClick={onCompleteStation} className="h-24 flex flex-col gap-2 rounded-2xl bg-slate-800 hover:bg-slate-900 text-white shadow-lg active:scale-95 transition-all">
-          <CheckCircle className="w-6 h-6" />
-          <span className="font-bold">Station abschließen</span>
-        </Button>
+        <StationStatusButton 
+          orderId={orderId} 
+          customerId={customerId} 
+          currentStationId={currentStationId} 
+          currentStatus={currentStatus} 
+          onCompleteStation={onCompleteStation} 
+        />
         <Button onClick={onPrint} variant="outline" className="h-24 flex flex-col gap-2 rounded-2xl border-2 border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95 transition-all">
           <Printer className="w-6 h-6 text-blue-600" />
           <span className="font-bold">Etikett drucken</span>

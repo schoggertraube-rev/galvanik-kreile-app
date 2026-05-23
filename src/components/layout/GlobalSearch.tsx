@@ -1,15 +1,28 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { Search, Package, ChevronRight, X, Sparkles, LayoutGrid, Droplets, Activity } from 'lucide-react'
-import { INITIAL_ORDERS, INITIAL_CUSTOMERS, MockOrder, MockCustomer } from '@/lib/mockData'
+import { useRouter } from 'next/navigation'
+import { INITIAL_CUSTOMERS, MockCustomer } from '@/lib/mockData'
+import { ordersRepository, Order } from '@/lib/repositories/ordersRepository'
+
+type MockOrderExt = Order & {
+  description?: string;
+  customerName?: string;
+  surfaceRequested?: string;
+  stationName?: string;
+  customer?: { name?: string };
+  items?: { name?: string; description?: string }[];
+}
 
 export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChange: (v: boolean) => void }) {
+  const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
-  const [orders, setOrders] = useState<MockOrder[]>(INITIAL_ORDERS)
+  const [orders, setOrders] = useState<Order[]>([])
   const [customers, setCustomers] = useState<MockCustomer[]>([])
   const [prevOpen, setPrevOpen] = useState(open)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   if (open !== prevOpen) {
     setPrevOpen(open)
@@ -17,6 +30,12 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
       setSearchTerm('')
     }
   }
+
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => inputRef.current?.focus(), 50)
+    }
+  }, [open])
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -32,31 +51,29 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
     return () => document.removeEventListener('keydown', down)
   }, [open, onOpenChange])
 
-  // Load from localStorage on mount & when open triggers
+  // Load from repositories on mount & when open triggers
   useEffect(() => {
     if (open && typeof window !== "undefined") {
-      const savedOrders = localStorage.getItem("kreile_orders")
-      const savedCustomers = localStorage.getItem("kreile_customers")
-      
-      // Delaying state update to next tick prevents synchronous cascading render warning
-      setTimeout(() => {
-        if (savedOrders) {
-          try {
-            setOrders(JSON.parse(savedOrders))
-          } catch (e) {
-            console.error("GlobalSearch: Error parsing orders", e)
-          }
+      const loadData = async () => {
+        try {
+          const loadedOrders = await ordersRepository.getAll();
+          setOrders(loadedOrders);
+        } catch (e) {
+          console.error("GlobalSearch: Error loading orders", e);
         }
+
+        const savedCustomers = localStorage.getItem("kreile_customers");
         if (savedCustomers) {
           try {
-            setCustomers(JSON.parse(savedCustomers))
+            setCustomers(JSON.parse(savedCustomers));
           } catch (e) {
-            console.error("GlobalSearch: Error parsing customers", e)
+            console.error("GlobalSearch: Error parsing customers", e);
           }
         } else {
-          setCustomers(INITIAL_CUSTOMERS as unknown as MockCustomer[])
+          setCustomers(INITIAL_CUSTOMERS as unknown as MockCustomer[]);
         }
-      }, 0)
+      };
+      loadData();
     }
   }, [open])
 
@@ -68,20 +85,21 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
 
   const filteredOrders = cleanTerm
     ? orders.filter(
-        (o: MockOrder & { title?: string, description?: string, customer?: { name?: string }, surfaceRequested?: string, stationName?: string, items?: Record<string, unknown>[] }) => {
-          const custName = o.customerName || customers.find((c: MockCustomer) => c.id === o.customerId)?.name;
+        (o: Order) => {
+          const orderObj = o as MockOrderExt;
+          const custName = orderObj.customerName || customers.find((c: MockCustomer) => c.id === o.customerId)?.name;
           return safe(o.orderNumber).includes(cleanTerm) ||
           safe(o.task).includes(cleanTerm) ||
           safe(o.title).includes(cleanTerm) ||
-          safe(o.description).includes(cleanTerm) ||
+          safe(orderObj.description).includes(cleanTerm) ||
           safe(custName).includes(cleanTerm) ||
-          safe(o.customer?.name).includes(cleanTerm) ||
-          safe(o.surfaceRequested).includes(cleanTerm) ||
-          safe(o.stationName).includes(cleanTerm) ||
+          safe(orderObj.customer?.name).includes(cleanTerm) ||
+          safe(orderObj.surfaceRequested).includes(cleanTerm) ||
+          safe(orderObj.stationName).includes(cleanTerm) ||
           (Array.isArray(o.parts) && o.parts.some((p: { name?: string, description?: string }) => safe(p.name).includes(cleanTerm) || safe(p.description).includes(cleanTerm))) ||
-          (Array.isArray(o.items) && o.items.some((p: { name?: string, description?: string }) => safe(p.name).includes(cleanTerm) || safe(p.description).includes(cleanTerm)));
+          (Array.isArray(orderObj.items) && orderObj.items.some((p: { name?: string, description?: string }) => safe(p.name).includes(cleanTerm) || safe(p.description).includes(cleanTerm)));
         }
-      ).slice(0, 5)
+      ).slice(0, 20)
     : []
 
   const filteredCustomers = cleanTerm
@@ -96,6 +114,19 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   const hasResults = filteredOrders.length > 0 || filteredCustomers.length > 0
 
   const handleClose = () => onOpenChange(false)
+  
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const exactMatch = filteredOrders.find(o => safe(o.orderNumber) === cleanTerm);
+      if (exactMatch) {
+        router.push(`/orders/${exactMatch.id}`);
+        handleClose();
+      } else if (filteredOrders.length > 0) {
+        router.push(`/orders/${filteredOrders[0].id}`);
+        handleClose();
+      }
+    }
+  }
 
   // Color mapping for customer initials avatar
   const getAvatarColor = (name: string) => {
@@ -145,9 +176,11 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
         <div className="flex items-center border-b border-slate-100 px-4 py-4 gap-3 bg-slate-50/50">
           <Search className="w-5 h-5 text-slate-400 shrink-0" />
           <input 
+            ref={inputRef}
             autoFocus
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
+            onKeyDown={handleKeyDown}
             className="flex-1 bg-transparent outline-none placeholder:text-slate-400 text-base font-medium" 
             placeholder="Nach Auftragsnummer, Kundenname, Telefon oder Aufgabe suchen..." 
           />
@@ -198,7 +231,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                 >
                   <Droplets className="w-4 h-4 text-blue-950 shrink-0" />
                   <div>
-                    <span className="block">4. Galvanik / Bäder</span>
+                    <span className="block">4. Galvanik / Beschichtung</span>
                     <span className="text-[10px] text-slate-450 font-normal">Beschichtung & Badwerte</span>
                   </div>
                 </Link>
@@ -284,7 +317,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                       return (
                         <Link 
                           key={o.id} 
-                          href={`/orders?station=${o.station}&order=${o.id}`}
+                          href={`/orders/${o.id}`}
                           onClick={handleClose}
                           className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100 group"
                         >

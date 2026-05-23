@@ -521,14 +521,14 @@ export default function HeuteDashboard() {
                 </div>
               </div>
 
-              {/* Bäder / Galvanik load bar */}
+              {/* Beschichtung / Galvanik load bar */}
               {(() => {
                 const partsCount = getPartsCountForStation("beschichtung");
                 const percentage = Math.min(100, Math.round((partsCount / 4) * 100));
                 return (
                   <div className="space-y-2">
                     <div className="flex justify-between items-center text-xs font-bold text-slate-600">
-                      <span>Galvanik (Bäder)</span>
+                      <span>Galvanik (Beschichtung)</span>
                       <span className={percentage > 70 ? "text-orange-600" : "text-emerald-600"}>{percentage}% ({partsCount} Teile)</span>
                     </div>
                     <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
