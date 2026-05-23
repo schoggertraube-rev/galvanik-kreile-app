@@ -89,6 +89,9 @@ export const statusEvents = pgTable('status_events', {
   id: varchar('id').primaryKey(),
   tenantId: varchar('tenant_id').notNull(),
   orderId: varchar('order_id').references(() => orders.id).notNull(),
+  itemId: varchar('item_id').references(() => items.id),
+  workerId: varchar('worker_id').references(() => users.id),
   eventType: varchar('event_type').notNull(),
+  notes: text('notes'),
   timestamp: timestamp('timestamp').defaultNow().notNull()
 });
