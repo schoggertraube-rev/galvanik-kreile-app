@@ -122,7 +122,7 @@ export function LabelPrintView({ order, customerName: propCustomerName, onClose,
 
       {/* Footer & Barcode */}
       <div className="flex flex-col items-center gap-2 border-t border-black pt-4">
-        <QRCodeImage value={order.orderNumber} />
+        <QRCodeImage orderId={order.id} orderNumber={order.orderNumber} />
         <div className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mt-1">
           Nächste Station: WARENEINGANG
         </div>
@@ -191,7 +191,7 @@ export function LabelPrintView({ order, customerName: propCustomerName, onClose,
                 </div>
 
                 <div className="flex flex-col items-center gap-1.5 border-t border-black pt-2 mt-auto">
-                  <QRCodeImage value={order.orderNumber} />
+                  <QRCodeImage orderId={order.id} orderNumber={order.orderNumber} />
                 </div>
               </div>
             </div>
@@ -228,16 +228,18 @@ export function LabelPrintView({ order, customerName: propCustomerName, onClose,
   );
 }
 
-const QRCodeImage = ({ value }: { value: string }) => {
+const QRCodeImage = ({ orderId, orderNumber }: { orderId: string; orderNumber: string }) => {
   const [dataUrl, setDataUrl] = useState<string>("");
   
   useEffect(() => {
     import("qrcode").then(QRCode => {
-      QRCode.default.toDataURL(value, { margin: 1, width: 150 })
+      const origin = typeof window !== "undefined" ? window.location.origin : "https://werkstatt.kreile.de";
+      const link = `${origin}/orders/${orderId}`;
+      QRCode.default.toDataURL(link, { margin: 1, width: 150 })
         .then(url => setDataUrl(url))
         .catch(e => console.error("QR Code Error:", e));
     });
-  }, [value]);
+  }, [orderId]);
 
   if (!dataUrl) {
     return <div className="w-16 h-16 bg-slate-100 flex items-center justify-center rounded"><Loader2 className="animate-spin text-slate-400 w-4 h-4" /></div>;
@@ -246,8 +248,8 @@ const QRCodeImage = ({ value }: { value: string }) => {
   return (
     <div className="flex flex-col items-center gap-0.5">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={dataUrl} alt={`QR Code for ${value}`} className="w-[80px] h-[80px] object-contain" />
-      <span className="font-mono text-[8px] font-bold text-black">{value}</span>
+      <img src={dataUrl} alt={`QR Code for ${orderNumber}`} className="w-[80px] h-[80px] object-contain" />
+      <span className="font-mono text-[8px] font-bold text-black">{orderNumber}</span>
     </div>
   );
 };

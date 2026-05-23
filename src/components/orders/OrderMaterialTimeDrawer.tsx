@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Plus, Minus, X, Search, Package, Check } from "lucide-react";
 import { inventoryRepository, InventoryItem } from "@/lib/repositories/inventoryRepository";
 import { eventsRepository } from "@/lib/repositories/eventsRepository";
+import { createStatusEvent } from "@/app/actions/status-events.actions";
 
 interface MaterialBooking {
   id: string;
@@ -86,6 +87,7 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
           eventType: "COSTS_BOOKED",
           metadata: { description: `MATERIAL_CONSUMED: ${mat.qty}x ${mat.name}`, materialId: mat.id, quantity: mat.qty, unit: mat.unit }
         });
+        createStatusEvent({ orderId, eventType: "COSTS_BOOKED", notes: `MATERIAL_CONSUMED: ${mat.qty}x ${mat.name}` }).catch(e => console.warn(e));
       }
 
       // 2. Book time and add time logging timeline event
@@ -96,6 +98,7 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
           eventType: "COSTS_BOOKED",
           metadata: { description: `WORK_TIME_LOGGED: ${minutes} Minuten`, minutes }
         });
+        createStatusEvent({ orderId, eventType: "COSTS_BOOKED", notes: `WORK_TIME_LOGGED: ${minutes} Minuten` }).catch(e => console.warn(e));
       }
 
       setSuccessMsg("Erfolgreich gebucht! Aktualisiere Cockpit...");

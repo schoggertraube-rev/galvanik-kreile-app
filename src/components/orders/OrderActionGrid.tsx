@@ -5,6 +5,7 @@ import { eventsRepository } from "@/lib/repositories/eventsRepository";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { STATION_CONFIGS } from "@/constants/stations";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
+import { createStatusEvent } from "@/app/actions/status-events.actions";
 
 export function OrderActionGrid({ 
   orderId,
@@ -22,16 +23,18 @@ export function OrderActionGrid({
   onPrint?: () => void;
 }) {
   const [isStarting, setIsStarting] = useState(false);
+  const [selectedStation, setSelectedStation] = useState(currentStationId);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
+ 
   const handleStartStation = async () => {
+    setSelectedStation(currentStationId);
     setIsStarting(true);
   };
-
+ 
   const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+ 
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -67,7 +70,7 @@ export function OrderActionGrid({
                 eventType: "PHOTO_CAPTURED",
                 metadata: { timestamp: new Date().toISOString() }
               });
-
+ 
               if (typeof window !== "undefined") {
                 window.dispatchEvent(new Event("storage"));
               }
@@ -80,22 +83,25 @@ export function OrderActionGrid({
     };
     reader.readAsDataURL(file);
   };
-
-  const confirmAction = async (action: string, status: "completed" | "cancelled" | "rework") => {
+ 
+    const confirmAction = async (action: string, status: "completed" | "cancelled" | "rework") => {
     if (confirm(`Möchten Sie wirklich die Aktion "${action}" ausführen?`)) {
       if (status === "rework") {
         await eventsRepository.addEvent({ orderId, customerId, eventType: "REWORK_STARTED" });
+        createStatusEvent({ orderId, eventType: "REWORK_STARTED" }).catch(e => console.warn(e));
       } else if (status === "cancelled") {
         await ordersRepository.updateOrder(orderId, { status: "cancelled" });
         await eventsRepository.addEvent({ orderId, customerId, eventType: "QUALITY_CHECK_FAILED" });
+        createStatusEvent({ orderId, eventType: "QUALITY_CHECK_FAILED" }).catch(e => console.warn(e));
       } else {
         await ordersRepository.updateOrder(orderId, { status: "completed" });
         await eventsRepository.addEvent({ orderId, customerId, eventType: "STATION_COMPLETED" });
+        createStatusEvent({ orderId, eventType: "STATION_COMPLETED" }).catch(e => console.warn(e));
       }
       if (typeof window !== "undefined") window.dispatchEvent(new Event("storage"));
     }
   };
-
+ 
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-extrabold text-slate-500 uppercase tracking-widest pl-1">Schnellaktionen</h3>
@@ -103,22 +109,27 @@ export function OrderActionGrid({
         
         {isStarting ? (
           <div className="h-24 flex flex-col justify-center gap-2 rounded-2xl bg-blue-50 border-2 border-blue-600 p-2">
-            <select className="w-full text-xs p-1 rounded" id="startStationSelect" defaultValue={currentStationId}>
+            <select 
+              className="w-full text-xs p-1 rounded border border-slate-200 bg-white" 
+              value={selectedStation} 
+              onChange={(e) => setSelectedStation(e.target.value)}
+            >
               {Object.values(STATION_CONFIGS).map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
             </select>
             <div className="flex gap-2">
               <Button size="sm" variant="ghost" onClick={() => setIsStarting(false)} className="flex-1 h-6 text-xs px-0">Abbrechen</Button>
               <Button size="sm" className="flex-1 h-6 text-xs bg-blue-600 text-white px-0" onClick={async () => {
-                const sel = (document.getElementById("startStationSelect") as HTMLSelectElement).value;
+                const sel = selectedStation;
                 await ordersRepository.updateOrder(orderId, { currentStationId: sel, station: sel, status: "in_progress" });
                 await eventsRepository.addEvent({ orderId, customerId, eventType: "STATION_STARTED", metadata: { stationId: sel } });
+                createStatusEvent({ orderId, eventType: "STATION_STARTED", notes: `Station: ${sel}` }).catch(e => console.warn(e));
                 if (typeof window !== "undefined") window.dispatchEvent(new Event("storage"));
                 setIsStarting(false);
               }}>Starten</Button>
             </div>
           </div>
         ) : (
-          <Button disabled title="In Entwicklung" onClick={handleStartStation} className="h-24 flex flex-col gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg active:scale-95 transition-all opacity-50">
+          <Button onClick={handleStartStation} className="h-24 flex flex-col gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg active:scale-95 transition-all">
             <Play className="w-6 h-6" />
             <span className="font-bold">Station starten</span>
           </Button>
@@ -141,7 +152,7 @@ export function OrderActionGrid({
           ref={fileInputRef} 
           onChange={handlePhotoCapture} 
         />
-        <Button disabled title="In Entwicklung" onClick={() => fileInputRef.current?.click()} variant="outline" className="h-24 flex flex-col gap-2 rounded-2xl border-2 border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95 transition-all opacity-50">
+        <Button title="Foto aufnehmen" onClick={() => fileInputRef.current?.click()} variant="outline" className="h-24 flex flex-col gap-2 rounded-2xl border-2 border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95 transition-all">
           <Camera className="w-6 h-6 text-orange-500" />
           <span className="font-bold">Foto aufnehmen</span>
         </Button>
@@ -164,10 +175,8 @@ export function OrderActionGrid({
         )}
         
         <DropdownMenu>
-          <DropdownMenuTrigger>
-            <Button variant="ghost" className="flex-1 text-slate-500 hover:text-slate-800 font-bold h-12">
-              <MoreHorizontal className="w-5 h-5 mr-2" /> Weitere
-            </Button>
+          <DropdownMenuTrigger className="flex-1 text-slate-500 hover:bg-slate-100 hover:text-slate-800 font-bold h-12 rounded-lg flex items-center justify-center border border-transparent transition-colors outline-none cursor-pointer">
+            <MoreHorizontal className="w-5 h-5 mr-2" /> Weitere
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={() => confirmAction("Nacharbeit starten", "rework")} className="cursor-pointer font-bold">

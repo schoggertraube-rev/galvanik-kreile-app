@@ -1,4 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
+import { OfflineManager } from "@/lib/offline/OfflineManager";
+import { createStatusEvent } from "@/app/actions/status-events.actions";
 
 export type StatusEventType =
   | "OCR_SCAN_STARTED"
@@ -40,6 +42,16 @@ export type StatusEvent = {
   metadata?: Record<string, unknown>;
 }
 
+let lastTimestamp = 0;
+function getMonotonicTimestamp(): string {
+  let now = Date.now();
+  if (now <= lastTimestamp) {
+    now = lastTimestamp + 1;
+  }
+  lastTimestamp = now;
+  return new Date(now).toISOString();
+}
+
 export const eventsRepository = {
   async getAll(): Promise<StatusEvent[]> {
     if (typeof window !== "undefined") {
@@ -51,7 +63,7 @@ export const eventsRepository = {
     const newEvent: StatusEvent = {
       ...event,
       id: createId(),
-      timestamp: new Date().toISOString()
+      timestamp: getMonotonicTimestamp()
     };
     
     // In-Memory / LocalStorage Mock
@@ -59,6 +71,23 @@ export const eventsRepository = {
       const existing = JSON.parse(localStorage.getItem("kreile_events") || "[]");
       localStorage.setItem("kreile_events", JSON.stringify([...existing, newEvent]));
     }
+
+    // Live write to Supabase if online
+    if (typeof window !== "undefined" && !OfflineManager.isOffline()) {
+      try {
+        if (event.orderId) {
+          await createStatusEvent({
+            orderId: event.orderId,
+            eventType: event.eventType,
+            itemId: event.itemId,
+            notes: event.metadata ? JSON.stringify(event.metadata) : undefined
+          });
+        }
+      } catch (error) {
+        console.warn("Failed to write StatusEvent to Supabase, ignoring:", error);
+      }
+    }
+
     console.log("📝 StatusEvent logged:", newEvent.eventType);
     return newEvent;
   }

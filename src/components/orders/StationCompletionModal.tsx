@@ -7,6 +7,7 @@ import { eventsRepository } from "@/lib/repositories/eventsRepository";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { getNextStation } from "@/lib/stations/nextStation";
 import { computeStationCost, ConsumableUse } from "@/lib/costs/stationCost";
+import { createStatusEvent } from "@/app/actions/status-events.actions";
 import { STATION_CONFIGS } from "@/constants/stations";
 import { DEFAULT_HOURLY_RATE_EUR } from "@/constants/pricing";
 
@@ -103,6 +104,7 @@ export function StationCompletionModal({
         eventType: "STATION_COMPLETED",
         metadata: { stationId: currentStationId }
       });
+      createStatusEvent({ orderId, eventType: "STATION_COMPLETED", notes: `Station: ${currentStationId}` }).catch(e => console.warn(e));
 
       if (nextStation) {
         await ordersRepository.updateOrder(orderId, { currentStationId: nextStation, station: nextStation });
@@ -111,6 +113,7 @@ export function StationCompletionModal({
           eventType: "STATION_STARTED",
           metadata: { stationId: nextStation }
         });
+        createStatusEvent({ orderId, eventType: "STATION_STARTED", notes: `Station: ${nextStation}` }).catch(e => console.warn(e));
       } else {
         await ordersRepository.updateOrder(orderId, { status: "shipped", currentStationId: "warenausgang", station: "warenausgang" });
       }

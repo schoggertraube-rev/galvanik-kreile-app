@@ -37,11 +37,36 @@ export const timelineRepository = {
     
     customerEvents.forEach((e: StatusEvent) => {
       let severity: TimelineEntry["severity"] = "neutral";
-      let title: string = e.eventType;
+      const eventTitleMap: Record<string, string> = {
+        "OCR_SCAN_STARTED": "KI-Scan gestartet",
+        "OCR_SCAN_COMPLETED": "KI-Scan abgeschlossen",
+        "DOCUMENT_CAPTURED": "Dokument erfasst",
+        "CUSTOMER_MATCHED": "Kunde zugeordnet",
+        "ORDER_CREATED_FROM_SCAN": "Auftrag per Scan angelegt",
+        "ORDER_CREATED_MANUAL": "Auftrag manuell angelegt",
+        "ITEMS_SUGGESTED_FROM_SCAN": "Bauteile aus Scan vorgeschlagen",
+        "ITEM_COUNT_CONFIRMED": "Bauteile bestätigt",
+        "PHOTO_CAPTURED": "Foto aufgenommen",
+        "LABEL_PREPARED": "Etikett vorbereitet",
+        "WARENEINGANG_COMPLETED": "Wareneingang abgeschlossen",
+        "STATION_STARTED": "Station begonnen",
+        "STATION_COMPLETED": "Station abgeschlossen",
+        "QUALITY_CHECK_PASSED": "Qualitätsprüfung bestanden",
+        "QUALITY_CHECK_FAILED": "Qualitätsprüfung fehlgeschlagen",
+        "REWORK_STARTED": "Nacharbeit begonnen",
+        "SHIPMENT_PREPARED": "Versand vorbereitet",
+        "SHIPMENT_SENT": "Versand erfolgt",
+        "CUSTOMER_PICKUP": "Abholung durch Kunde",
+        "NOTE_ADDED": "Notiz hinzugefügt",
+        "COSTS_BOOKED": "Kosten gebucht"
+      };
+
+      let title = eventTitleMap[e.eventType] || e.eventType;
       
-      if (e.eventType === "ORDER_CREATED_MANUAL" || e.eventType === "ORDER_CREATED_FROM_SCAN") { title = "Auftrag angelegt"; severity = "good"; }
-      if (e.eventType === "PHOTO_CAPTURED") { title = "Foto aufgenommen"; }
-      if (e.eventType === "QUALITY_CHECK_FAILED") { title = "Qualitätsprüfung fehlgeschlagen"; severity = "critical"; }
+      if (e.eventType === "ORDER_CREATED_MANUAL" || e.eventType === "ORDER_CREATED_FROM_SCAN") severity = "good";
+      if (e.eventType === "PHOTO_CAPTURED") severity = "neutral"; // handled by icon later
+      if (e.eventType.includes("COMPLETED") || e.eventType.includes("PASSED")) severity = "good";
+      if (e.eventType.includes("FAILED")) severity = "critical";
 
       entries.push({
         id: e.id,
@@ -80,17 +105,51 @@ export const timelineRepository = {
     
     return orderEvents.map((e: StatusEvent) => {
       let severity: TimelineEntry["severity"] = "neutral";
+      
+      const eventTitleMap: Record<string, string> = {
+        "OCR_SCAN_STARTED": "KI-Scan gestartet",
+        "OCR_SCAN_COMPLETED": "KI-Scan abgeschlossen",
+        "DOCUMENT_CAPTURED": "Dokument erfasst",
+        "CUSTOMER_MATCHED": "Kunde zugeordnet",
+        "ORDER_CREATED_FROM_SCAN": "Auftrag per Scan angelegt",
+        "ORDER_CREATED_MANUAL": "Auftrag manuell angelegt",
+        "ITEMS_SUGGESTED_FROM_SCAN": "Bauteile aus Scan vorgeschlagen",
+        "ITEM_COUNT_CONFIRMED": "Bauteile bestätigt",
+        "PHOTO_CAPTURED": "Foto aufgenommen",
+        "LABEL_PREPARED": "Etikett vorbereitet",
+        "WARENEINGANG_COMPLETED": "Wareneingang abgeschlossen",
+        "STATION_STARTED": "Station begonnen",
+        "STATION_COMPLETED": "Station abgeschlossen",
+        "QUALITY_CHECK_PASSED": "Qualitätsprüfung bestanden",
+        "QUALITY_CHECK_FAILED": "Qualitätsprüfung fehlgeschlagen",
+        "REWORK_STARTED": "Nacharbeit begonnen",
+        "SHIPMENT_PREPARED": "Versand vorbereitet",
+        "SHIPMENT_SENT": "Versand erfolgt",
+        "CUSTOMER_PICKUP": "Abholung durch Kunde",
+        "NOTE_ADDED": "Notiz hinzugefügt",
+        "COSTS_BOOKED": "Kosten gebucht"
+      };
+
+      let title = eventTitleMap[e.eventType] || e.eventType;
+
       if (e.eventType === "ORDER_CREATED_MANUAL" || e.eventType === "ORDER_CREATED_FROM_SCAN") severity = "good";
-      if (e.eventType.includes("COMPLETED")) severity = "good";
+      if (e.eventType.includes("COMPLETED") || e.eventType.includes("PASSED")) severity = "good";
       if (e.eventType.includes("FAILED")) severity = "critical";
       
+      let subtitle = "";
+      if (e.metadata) {
+        if (e.metadata.stationId) subtitle += `Station: ${e.metadata.stationId} `;
+        if (e.metadata.notes) subtitle += `Notiz: ${e.metadata.notes} `;
+        if (e.metadata.material) subtitle += `(${e.metadata.material}: ${e.metadata.amount}) `;
+      }
+
       return {
         id: e.id,
         customerId: e.customerId || "unknown",
         orderId: e.orderId,
         type: "status" as const,
-        title: e.eventType,
-        subtitle: JSON.stringify(e.metadata || {}),
+        title,
+        subtitle: subtitle.trim() || undefined,
         timestamp: e.timestamp,
         severity
       };
