@@ -10,7 +10,7 @@ import type { Order } from "@/lib/repositories/ordersRepository";
 export function IntakeCompletionSummary({ 
   customerSelection, newCustomerDetails, items, onBack 
 }: { 
-  customerSelection: { id: string | null, newName?: string }, newCustomerDetails?: any, items: Record<string, unknown>[], onBack?: () => void 
+  customerSelection: { id: string | null, newName?: string }, newCustomerDetails?: Record<string, string>, items: Record<string, unknown>[], onBack?: () => void 
 }) {
   const [saving, setSaving] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);

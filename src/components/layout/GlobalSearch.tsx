@@ -68,8 +68,8 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
 
   const filteredOrders = cleanTerm
     ? orders.filter(
-        (o: any) => {
-          const custName = o.customerName || customers.find((c: any) => c.id === o.customerId)?.name;
+        (o: MockOrder & { title?: string, description?: string, customer?: { name?: string }, surfaceRequested?: string, stationName?: string, items?: Record<string, unknown>[] }) => {
+          const custName = o.customerName || customers.find((c: MockCustomer) => c.id === o.customerId)?.name;
           return safe(o.orderNumber).includes(cleanTerm) ||
           safe(o.task).includes(cleanTerm) ||
           safe(o.title).includes(cleanTerm) ||
@@ -78,8 +78,8 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
           safe(o.customer?.name).includes(cleanTerm) ||
           safe(o.surfaceRequested).includes(cleanTerm) ||
           safe(o.stationName).includes(cleanTerm) ||
-          (Array.isArray(o.parts) && o.parts.some((p: any) => safe(p.name).includes(cleanTerm) || safe(p.description).includes(cleanTerm))) ||
-          (Array.isArray(o.items) && o.items.some((p: any) => safe(p.name).includes(cleanTerm) || safe(p.description).includes(cleanTerm)));
+          (Array.isArray(o.parts) && o.parts.some((p: { name?: string, description?: string }) => safe(p.name).includes(cleanTerm) || safe(p.description).includes(cleanTerm))) ||
+          (Array.isArray(o.items) && o.items.some((p: { name?: string, description?: string }) => safe(p.name).includes(cleanTerm) || safe(p.description).includes(cleanTerm)));
         }
       ).slice(0, 5)
     : []

@@ -39,9 +39,10 @@ export function CameraCapture({
         if (videoRef.current) {
           videoRef.current.srcObject = activeStream;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error("Camera access error:", err);
-        setError(err.message || "Kamera-Zugriff verweigert oder nicht verfügbar.");
+        const errorMessage = err instanceof Error ? err.message : "Kamera-Zugriff verweigert oder nicht verfügbar.";
+        setError(errorMessage);
       }
     }
     startCamera();

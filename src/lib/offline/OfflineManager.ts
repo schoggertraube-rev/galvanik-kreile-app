@@ -94,13 +94,13 @@ export const OfflineManager = {
 
           case "CUSTOMER_CREATE": {
             const { customersRepository } = await import("@/lib/repositories/customersRepository");
-            await customersRepository.create(item.payload as any);
+            await customersRepository.create(item.payload as Omit<import('@/lib/repositories/customersRepository').Customer, "customerNumber" | "prefComm" | "risk">);
             break;
           }
           
           case "CUSTOMER_UPDATE": {
             const { customersRepository } = await import("@/lib/repositories/customersRepository");
-            const payload = item.payload as { id: string; changes: any };
+            const payload = item.payload as { id: string; changes: Partial<import('@/lib/repositories/customersRepository').Customer> };
             await customersRepository.updateCustomer(payload.id, payload.changes);
             break;
           }

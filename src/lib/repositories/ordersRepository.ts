@@ -85,7 +85,7 @@ export const ordersRepository = {
     
     // Map parts with high precision format T-A-2026XX-Y
     const cleanOrderNum = String(202600 + all.length);
-    const mappedParts = (data.parts || []).map((part: any, index: number) => {
+    const mappedParts = (data.parts || []).map((part: { id?: string; name?: string; quantity?: string | number; surfaceRequested?: string; status?: string; station?: string }, index: number) => {
       const partNum = index + 1;
       const generatedPartId = `T-A-${cleanOrderNum}-${partNum}`;
       return {
@@ -103,7 +103,7 @@ export const ordersRepository = {
       const savedCustomers = localStorage.getItem("kreile_customers");
       if (savedCustomers) {
         const customers = JSON.parse(savedCustomers);
-        const customer = customers.find((c: any) => c.id === data.customerId);
+        const customer = customers.find((c: { id: string, name: string }) => c.id === data.customerId);
         if (customer) {
           customerName = customer.name;
         }
@@ -145,7 +145,7 @@ export const ordersRepository = {
         id: newOrder.id,
         customerId: newOrder.customerId,
         title: newOrder.title,
-        parts: newOrder.parts as any,
+        parts: newOrder.parts.map((p: Record<string, unknown>) => ({ id: p.id as string, name: p.name as string, quantity: p.quantity as string | number, surfaceRequested: p.surfaceRequested as string })),
         currentStationId: newOrder.currentStationId
       });
       if (dbOrder) {

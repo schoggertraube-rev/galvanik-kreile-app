@@ -14,7 +14,7 @@ export async function getCustomersDb() {
       id: c.id,
       customerNumber: c.customerNumber || "",
       name: c.name,
-      type: c.type as any || "private",
+      type: (c.type as "business" | "private") || "private",
       city: c.city || "",
       email: c.email || "",
       phone: c.phone || "",
@@ -57,7 +57,7 @@ export async function createCustomerDb(data: {
       id: customerId,
       customerNumber,
       name: data.name,
-      type: newCustomer.type as any,
+      type: newCustomer.type as "business" | "private",
       city: newCustomer.city || "",
       email: newCustomer.email || "",
       phone: newCustomer.phone || "",
@@ -79,7 +79,7 @@ export async function updateCustomerDb(id: string, changes: {
 }) {
   if (!db) return null;
   try {
-    const updateData: Record<string, any> = {};
+    const updateData: Record<string, string> = {};
     if (changes.name !== undefined) updateData.name = changes.name;
     if (changes.type !== undefined) updateData.type = changes.type;
     if (changes.city !== undefined) updateData.city = changes.city;

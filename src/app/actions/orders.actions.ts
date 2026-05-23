@@ -108,7 +108,7 @@ export async function updateOrderDb(id: string, changes: {
 }) {
   if (!db) return null;
   try {
-    const updateData: Record<string, any> = {};
+    const updateData: Record<string, string> = {};
     if (changes.status !== undefined) updateData.status = changes.status;
     if (changes.currentStationId !== undefined) updateData.currentStationId = changes.currentStationId;
     if (changes.priorityComputed !== undefined) updateData.priorityComputed = changes.priorityComputed;

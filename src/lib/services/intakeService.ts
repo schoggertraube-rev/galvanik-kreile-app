@@ -7,7 +7,7 @@ export const intakeService = {
   async processIntake(data: {
     customerId: string | null;
     newCustomerName?: string;
-    newCustomerDetails?: any;
+    newCustomerDetails?: Record<string, string>;
     orderTitle: string;
     items: { name: string; quantity: number; surfaceRequested?: string; photo?: string }[];
   }) {
