@@ -93,9 +93,26 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
     );
   }
 
-  // Segment active vs historic orders
-  const activeOrders = orders.filter(o => o.status !== "done" && o.status !== "closed");
-  const historicOrders = orders.filter(o => o.status === "done" || o.status === "closed");
+  // Segment active orders
+  const activeOrders = orders.filter(o => o.status !== "done" && o.status !== "completed" && o.status !== "closed");
+
+  // Top 5 parts
+  const allParts = orders.flatMap(o => o.parts || []);
+  const partFreq = allParts.reduce<Record<string, number>>((acc, p) => {
+    const pObj = p as { name?: string; quantity?: number | string };
+    const name = String(pObj.name || "Unbekanntes Teil");
+    acc[name] = (acc[name] || 0) + Number(pObj.quantity || 1);
+    return acc;
+  }, {});
+  const topParts = Object.entries(partFreq)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, count]) => ({ name, count }));
+
+  // Similar/Recent Orders (max 10)
+  const recentOrders = [...orders]
+    .sort((a, b) => new Date(b.intakeDate || b.dueDate || "").getTime() - new Date(a.intakeDate || a.dueDate || "").getTime())
+    .slice(0, 10);
 
   // Map complaint reasons
   const mapComplaintReason = (reason: string) => {
@@ -319,44 +336,58 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
               </CardContent>
             </Card>
 
-            {/* Wiederkehrende Teile & Ähnliche Aufträge */}
+            {/* Wiederkehrende Teile */}
             <Card className="border-2 border-slate-200 rounded-3xl overflow-hidden shadow-xs bg-white">
               <CardContent className="p-6 md:p-8 space-y-6">
                 <div className="flex justify-between items-center border-b pb-4">
                   <div className="space-y-1">
-                    <h3 className="text-xl font-bold font-serif text-slate-900">Wiederkehrende Teile / Ähnliche Aufträge</h3>
-                    <p className="text-xs font-semibold text-slate-400">Vergangene Arbeiten & Historische Referenzen</p>
+                    <h3 className="text-xl font-bold font-serif text-slate-900">Wiederkehrende Teile</h3>
+                    <p className="text-xs font-semibold text-slate-400">Top 5 Bauteile dieses Kunden nach Häufigkeit</p>
                   </div>
-                  <Badge variant="outline" className="text-slate-500 font-semibold">Historische Ähnlichkeit</Badge>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {topParts.length > 0 ? topParts.map((p, idx) => (
+                    <Badge key={idx} variant="outline" className="px-3 py-1.5 bg-slate-50 text-slate-700 font-bold border-slate-200">
+                      {p.name} <span className="ml-2 text-blue-600">({p.count}x)</span>
+                    </Badge>
+                  )) : (
+                    <p className="text-slate-500 text-sm font-semibold italic py-4">Noch keine Bauteile erfasst.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Ähnliche Aufträge */}
+            <Card className="border-2 border-slate-200 rounded-3xl overflow-hidden shadow-xs bg-white">
+              <CardContent className="p-6 md:p-8 space-y-6">
+                <div className="flex justify-between items-center border-b pb-4">
+                  <div className="space-y-1">
+                    <h3 className="text-xl font-bold font-serif text-slate-900">Ähnliche Aufträge (Zuletzt)</h3>
+                    <p className="text-xs font-semibold text-slate-400">Letzte 10 Aufträge dieses Kunden</p>
+                  </div>
                 </div>
 
                 <div className="space-y-4">
-                  {historicOrders.map(order => (
+                  {recentOrders.map(order => (
                     <div key={order.id} className="p-4 bg-slate-50/50 hover:bg-slate-50 border border-slate-150 rounded-xl flex items-center justify-between gap-4 transition-all">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs font-bold text-slate-500">{order.orderNumber}</span>
-                          <span className="text-xs text-slate-400">• Geliefert: {order.dueDate || "Erledigt"}</span>
+                          <span className="text-xs text-slate-400">• Eingang: {order.intakeDate || "Unbekannt"}</span>
                         </div>
                         <h4 className="font-bold text-slate-800 text-sm">{order.title}</h4>
-                        <div className="flex gap-2">
-                          {((order.parts || []) as unknown as { name: string; finish?: string; finishStyle?: string }[]).map((p, idx: number) => (
-                            <span key={idx} className="text-[10px] bg-slate-200/60 text-slate-600 px-2 py-0.5 rounded font-bold">
-                              {p.name} ({p.finish || p.finishStyle})
-                            </span>
-                          ))}
-                        </div>
                       </div>
-
                       <div className="text-right">
-                        <span className="text-xs px-2 py-1 bg-green-100 text-green-800 font-black rounded-lg">Erledigt</span>
+                        <span className={`text-xs px-2 py-1 font-black rounded-lg ${order.status === "completed" || order.status === "done" ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}`}>
+                          {order.status === "completed" || order.status === "done" ? "Erledigt" : "Aktiv"}
+                        </span>
                       </div>
                     </div>
                   ))}
 
-                  {historicOrders.length === 0 && (
+                  {recentOrders.length === 0 && (
                     <p className="text-slate-500 text-sm font-semibold text-center italic py-4 bg-slate-50/30 border border-slate-100 rounded-xl">
-                      Noch keine abgeschlossenen historischen Referenzarbeiten vorhanden.
+                      Keine Aufträge gefunden.
                     </p>
                   )}
                 </div>
@@ -372,29 +403,9 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                 </div>
 
                 <div className="space-y-4">
-                  <div className="p-4 border border-slate-150 rounded-xl bg-slate-50/30 space-y-3 text-xs">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                        <PhoneCall className="w-3.5 h-3.5 text-emerald-600" /> Telefonat bzgl. Kostenvoranschlag
-                      </span>
-                      <span className="text-slate-400 font-bold">Vor 2 Tagen</span>
-                    </div>
-                    <p className="text-slate-600 leading-relaxed font-semibold">
-                      Herr Kreile hat mit dem Kunden telefoniert. Die Freigabe für den Jugendstilleuchter wird nach Rücksprache im Kirchenvorstand nächste Woche schriftlich erteilt.
-                    </p>
-                  </div>
-
-                  <div className="p-4 border border-slate-150 rounded-xl bg-slate-50/30 space-y-3 text-xs">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                        <Mail className="w-3.5 h-3.5 text-blue-650" /> E-Mail mit Fotodokumentation versendet
-                      </span>
-                      <span className="text-slate-400 font-bold">Vor 7 Tagen</span>
-                    </div>
-                    <p className="text-slate-600 leading-relaxed font-semibold">
-                      Automatisches Update mit Foto vom Entmetallisierungsergebnis an {customer.email || "Kunden"} geschickt. Kunde hat den Empfang kurz bestätigt.
-                    </p>
-                  </div>
+                  <p className="text-slate-500 text-sm font-semibold text-center italic py-4 bg-slate-50/30 border border-slate-100 rounded-xl">
+                    Noch keine Einträge.
+                  </p>
                 </div>
               </CardContent>
             </Card>

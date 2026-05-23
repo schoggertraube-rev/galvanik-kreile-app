@@ -233,8 +233,7 @@ const QRCodeImage = ({ orderId, orderNumber }: { orderId: string; orderNumber: s
   
   useEffect(() => {
     import("qrcode").then(QRCode => {
-      const origin = typeof window !== "undefined" ? window.location.origin : "https://werkstatt.kreile.de";
-      const link = `${origin}/orders/${orderId}`;
+      const link = `https://app.kreile.local/orders/${orderId}`;
       QRCode.default.toDataURL(link, { margin: 1, width: 150 })
         .then(url => setDataUrl(url))
         .catch(e => console.error("QR Code Error:", e));

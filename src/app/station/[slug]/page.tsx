@@ -46,7 +46,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
       wareneingang: " (Neue & Unvollständige Aufträge)",
       entmetallisierung: "",
       schleiferei: " (Vorarbeit & Polieren)",
-      beschichtung: " (Bäder)",
+      beschichtung: " (Beschichtung)",
       warenausgang: " (Versand & Abholung)"
     };
     return `${config.fullName}${suffixMap[slug] || ""}`;

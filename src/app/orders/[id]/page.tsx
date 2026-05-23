@@ -82,6 +82,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             orderId={order.id}
             customerId={order.customerId}
             currentStationId={order.currentStationId || order.station || "wareneingang"}
+            currentStatus={order.status}
             customerPhone={undefined} // Not available on Order mock object directly yet
             onCompleteStation={() => setCompletionModalOpen(true)} 
             onPrint={() => setPrintOpen(true)} 

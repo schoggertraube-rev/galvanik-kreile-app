@@ -1,30 +1,72 @@
-export interface PerformanceScoreInput {
-  onTimeRate: number;            // 0..1 (e.g. 0.95 for 95%)
-  avgCycleTimeIndex: number;     // e.g. 1.0 (target), 1.5 is 50% worse
-  criticalOrders: number;        // number of red/orange risk orders
-  complaintRate: number;         // 0..1 (e.g. 0.02 for 2%)
-  scanRate: number;              // 0..1
-  documentationRate: number;     // 0..1
-  stationHealthIndex: number;    // 0..1
-}
+import { ordersRepository } from "../repositories/ordersRepository";
+import { eventsRepository } from "../repositories/eventsRepository";
+import { complaintsRepository } from "../repositories/complaintsRepository";
 
 const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
 
-export function computeScore(i: PerformanceScoreInput): number {
-  // Alle Eingaben werden auf 0..100 normalisiert (höher = besser)
-  const onTime     = clamp(i.onTimeRate * 100, 0, 100);
-  const cycle      = clamp(100 - (i.avgCycleTimeIndex - 1) * 50, 0, 100); // index 1 = soll, 1.5 = 50% schlechter -> 75 points
-  const critical   = clamp(100 - i.criticalOrders * 15, 0, 100);          // jeder kritische Auftrag kostet 15 Punkte
-  const complaints = clamp(100 - i.complaintRate * 100, 0, 100);
-  const docs       = clamp(((i.scanRate + i.documentationRate) / 2) * 100, 0, 100);
-  const stations   = clamp(i.stationHealthIndex * 100, 0, 100);
+export async function calculateWorkshopHealthScore(): Promise<{
+  score: number;
+  details: {
+    onTimeRate: number;
+    avgCycleTimeIndex: number;
+    criticalOrders: number;
+    complaintRate: number;
+    reworkRate: number;
+  }
+}> {
+  const [orders, events, complaints] = await Promise.all([
+    ordersRepository.getAll(),
+    eventsRepository.getAll(),
+    complaintsRepository.getAll()
+  ]);
 
-  return Math.round(
+  const totalOrders = orders.length || 1;
+  const completedOrders = orders.filter(o => o.status === "completed" || o.status === "done" || o.status === "shipped").length;
+  
+  // Zeit-Metriken
+  const greenOrders = orders.filter(o => o.risk === "green").length;
+  const rawOnTimeRate = totalOrders > 0 ? greenOrders / totalOrders : 1.0;
+  
+  const totalDelayParts = orders
+    .filter(o => o.risk !== "green")
+    .reduce((sum, o) => sum + (o.parts?.length || 0), 0);
+  
+  const baseDurchlaufzeit = 3.2; 
+  const dynamicDurchlaufzeit = baseDurchlaufzeit + (totalDelayParts * 0.15);
+  const avgCycleTimeIndex = dynamicDurchlaufzeit / 4.0;
+  
+  const criticalOrders = orders.filter(o => o.risk === "red" || o.risk === "orange").length;
+
+  // Rekla-Quote aus echtem Repository
+  const complaintRate = (completedOrders > 0) ? (complaints.length / completedOrders) : (complaints.length / totalOrders);
+
+  // Nacharbeits-Quote aus Events (REWORK_STARTED)
+  const reworkEvents = events.filter(e => e.eventType === "REWORK_STARTED").length;
+  const reworkRate = (completedOrders > 0) ? (reworkEvents / completedOrders) : (reworkEvents / totalOrders);
+
+  // Score Berechnung
+  const onTime     = clamp(rawOnTimeRate * 100, 0, 100);
+  const cycle      = clamp(100 - (avgCycleTimeIndex - 1) * 50, 0, 100); 
+  const critical   = clamp(100 - criticalOrders * 15, 0, 100);          
+  const complaintsScore = clamp(100 - complaintRate * 100 * 5, 0, 100); // 5x Multiplikator fÃ¼r Reklas
+  const reworkScore = clamp(100 - reworkRate * 100 * 3, 0, 100);        // 3x Multiplikator fÃ¼r interne Nacharbeit
+
+  const score = Math.round(
     onTime     * 0.25 +
     cycle      * 0.20 +
     critical   * 0.20 +
-    complaints * 0.15 +
-    docs       * 0.10 +
-    stations   * 0.10
+    complaintsScore * 0.20 +
+    reworkScore * 0.15
   );
+
+  return {
+    score: clamp(score, 0, 100),
+    details: {
+      onTimeRate: rawOnTimeRate,
+      avgCycleTimeIndex,
+      criticalOrders,
+      complaintRate,
+      reworkRate
+    }
+  };
 }

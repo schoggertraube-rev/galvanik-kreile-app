@@ -1,3 +1,4 @@
+
 export interface MockPart {
   id: string;
   name: string;
@@ -7,8 +8,8 @@ export interface MockPart {
   hours: string;
   actualHours?: string;
   condition?: string;
-  station: "wareneingang" | "entmetallisierung" | "schleiferei" | "beschichtung" | "warenausgang";
-  status: "Neu" | "Warten" | "In Bearbeitung" | "Fertig" | "Zusatzaufwand" | "Nacharbeit";
+  station: "wareneingang" | "entmetallisierung" | "schleiferei" | "beschichtung" | "warenausgang" | string;
+  status: string;
 }
 
 export interface MockOrder {
@@ -21,10 +22,10 @@ export interface MockOrder {
   dueDate: string;
   dueLabel: string;
   dueValue: string;
-  station: "wareneingang" | "entmetallisierung" | "schleiferei" | "beschichtung" | "warenausgang";
+  station: "wareneingang" | "entmetallisierung" | "schleiferei" | "beschichtung" | "warenausgang" | string;
   currentStationId?: string;
-  risk: "green" | "yellow" | "orange" | "red" | "blocked";
-  status?: "active" | "in_progress" | "completed" | "shipped" | "cancelled" | "waiting";
+  risk: "green" | "yellow" | "orange" | "red" | "blocked" | string;
+  status?: string;
   statusText: string;
   delayReason?: string;
   recommendedAction?: string;
@@ -36,13 +37,13 @@ export interface MockOrder {
 export interface MockCustomer {
   id: string;
   name: string;
-  type: "Privatkunde" | "Geschäftskunde" | "Institution" | string;
+  type: string;
   city: string;
   address: string;
   phone: string;
   email: string;
-  prefComm: "E-Mail" | "Telefon" | "Brief / Post";
-  risk: "Niedrig" | "Mittel" | "Hoch";
+  prefComm: "E-Mail" | "Telefon" | "Brief / Post" | string;
+  risk: "Niedrig" | "Mittel" | "Hoch" | string;
   riskNote?: string;
   notes: string;
   priceAgreements: { id: string; scope: string; rate: string; date: string }[];
@@ -52,1100 +53,1808 @@ export interface MockCustomer {
     task: string;
     intakeDate: string;
     dueDate: string;
-    status: "active" | "done" | "waiting" | "critical";
+    status: string;
     statusText: string;
     parts: { id: string; name: string; material: string; finish: string; location: string }[];
   }[];
   feedbacks: { id: string; date: string; type: "positive" | "negative" | "neutral"; text: string }[];
 }
 
-// 1. Hand-crafted, realistic Workshop Orders (25 total, exactly 8 critical = red/orange)
 export const INITIAL_ORDERS: MockOrder[] = [
   {
-    id: "o1",
-    orderNumber: "A-2026-0042",
-    task: "StoÃŸstangen vernickeln (Opel Rekord C)",
-    customerName: "Museum Lenzburg",
-    customerId: "K-000124",
-    intakeDate: "10.05.2026",
-    dueDate: "20.05.2026",
-    dueLabel: "ÃœberfÃ¤llig seit",
-    dueValue: "3 Stunden",
-    station: "schleiferei",
-    currentStationId: "schleiferei",
-    risk: "red", // 1. CRITICAL
-    statusText: "KRITISCH â€“ ÃœBERFÃ„LLIG",
-    delayReason: "Sehr tiefe Rostnarben erfordern hohen Schleifaufwand / BadkapazitÃ¤t ausgelastet",
-    recommendedAction: "Express-Schaltung galvanisches Kupfer",
-    parts: [
-      { id: "T-2026-0042-A", name: "StoÃŸstange vorne Opel Rekord C", material: "Stahl", finish: "Vernickelt (Premium-Aufbau)", location: "Regal B-02", hours: "5.5h", actualHours: "4.0h", condition: "Kritisch (Tiefer Rost & Dellen)", station: "schleiferei", status: "Zusatzaufwand" },
-      { id: "T-2026-0042-B", name: "StoÃŸstange hinten Opel Rekord C", material: "Stahl", finish: "Vernickelt (Premium-Aufbau)", location: "Regal B-02", hours: "4.0h", actualHours: "2.0h", condition: "Kritisch (Tiefer Rost & Dellen)", station: "schleiferei", status: "Zusatzaufwand" }
+    "id": "ord_1",
+    "orderNumber": "A-2026-0100",
+    "task": "Stoßstange Mercedes 280SE bearbeiten",
+    "customerName": "Museum Lenzburg",
+    "customerId": "inst_1",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-11T10:00:00Z",
+    "dueLabel": "Überfällig seit",
+    "dueValue": "2 Tagen",
+    "station": "wareneingang",
+    "currentStationId": "wareneingang",
+    "risk": "red",
+    "status": "active",
+    "statusText": "Kritisch",
+    "parts": [
+      {
+        "id": "part_0_1",
+        "name": "Stoßstange Mercedes 280SE",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "wareneingang",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o2",
-    orderNumber: "A-2026-0038",
-    task: "Motorradteile Glanzverchromen (BMW R75)",
-    customerName: "Atelier Schmid",
-    customerId: "K-000125",
-    intakeDate: "14.05.2026",
-    dueDate: "21.05.2026",
-    dueLabel: "FÃ¤llig",
-    dueValue: "Morgen",
-    station: "beschichtung",
-    currentStationId: "beschichtung",
-    risk: "orange", // 2. CRITICAL
-    statusText: "GEFÃ„HRDET",
-    delayReason: "ZusÃ¤tzliche Entlackungsschleife verzÃ¶gert Ablauf",
-    recommendedAction: "Schichtzuteilung Schleiferei optimieren",
-    parts: [
-      { id: "T-2026-0038-A", name: "Kraftstofftank BMW R75 (SeitenflÃ¤chen)", material: "Stahlblech", finish: "Glanzverchromt (Teilmaskiert)", location: "Wagen 04", hours: "6.0h", actualHours: "0.5h", condition: "Mittel (Kratzer & Beulen)", station: "beschichtung", status: "In Bearbeitung" },
-      { id: "T-2026-0038-B", name: "AuspuffkrÃ¼mmer links BMW R75", material: "Stahlblech", finish: "Glanzverchromt", location: "Wagen 04", hours: "2.0h", actualHours: "1.8h", condition: "Normaler VerschleiÃŸ", station: "beschichtung", status: "In Bearbeitung" }
+    "id": "ord_2",
+    "orderNumber": "A-2026-0101",
+    "task": "Türgriff Holztür bearbeiten",
+    "customerName": "Pfarrei St. Martin Steyr",
+    "customerId": "inst_2",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-11T10:00:00Z",
+    "dueLabel": "Überfällig seit",
+    "dueValue": "2 Tagen",
+    "station": "entmetallisierung",
+    "currentStationId": "entmetallisierung",
+    "risk": "orange",
+    "status": "active",
+    "statusText": "Kritisch",
+    "parts": [
+      {
+        "id": "part_1_1",
+        "name": "Türgriff Holztür",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "entmetallisierung",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o3",
-    orderNumber: "A-2026-0040",
-    task: "Besteckteile versilbern (24 Stk.)",
-    customerName: "Privatkunde Lenz",
-    customerId: "K-000123",
-    intakeDate: "18.05.2026",
-    dueDate: "22.05.2026",
-    dueLabel: "FÃ¤llig in",
-    dueValue: "2 Tagen",
-    station: "beschichtung",
-    currentStationId: "beschichtung",
-    risk: "yellow",
-    statusText: "LEICHT KRITISCH",
-    delayReason: "Feinsilber-Spezialvorbereitung",
-    recommendedAction: "Vorbehandlung ansetzen",
-    parts: [
-      { id: "T-2026-0040-A", name: "Besteckteile 24er Set (Messer, Gabeln, LÃ¶ffel)", material: "Messing / Alpacca", finish: "Feinsilberschicht (90g/12)", location: "Kiste K-12", hours: "5.5h", actualHours: "4.8h", condition: "Gut (Normaler VerschleiÃŸ)", station: "beschichtung", status: "In Bearbeitung" }
+    "id": "ord_3",
+    "orderNumber": "A-2026-0102",
+    "task": "Leuchter Pfarrei bearbeiten",
+    "customerName": "Oldtimer-Sammler-Verein Westschweiz",
+    "customerId": "inst_3",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-11T10:00:00Z",
+    "dueLabel": "Überfällig seit",
+    "dueValue": "2 Tagen",
+    "station": "schleiferei",
+    "currentStationId": "schleiferei",
+    "risk": "red",
+    "status": "active",
+    "statusText": "Kritisch",
+    "parts": [
+      {
+        "id": "part_2_1",
+        "name": "Leuchter Pfarrei",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "schleiferei",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o4",
-    orderNumber: "A-2026-0035",
-    task: "Jugendstilleuchter brÃ¼nieren",
-    customerName: "Kirche St. Martin",
-    customerId: "K-000126",
-    intakeDate: "19.05.2026",
-    dueDate: "30.05.2026",
-    dueLabel: "Wartet auf",
-    dueValue: "Freigabe",
-    station: "entmetallisierung",
-    currentStationId: "entmetallisierung",
-    risk: "blocked",
-    statusText: "WARTET AUF MATERIAL/KV",
-    delayReason: "Kostenvoranschlag gesendet â€“ RÃ¼ckmeldung Kunde ausstehend",
-    recommendedAction: "Kundendaten Ã¶ffnen",
-    parts: [
-      { id: "T-2026-0035-A", name: "Jugendstil-Deckenleuchter Messingguss", material: "Messingguss", finish: "BrÃ¼niert & Wachs-Konserviert", location: "Regal A-05", hours: "6.0h", actualHours: "0.0h", condition: "Mittel (Teilweise oxidiert)", station: "entmetallisierung", status: "Warten" }
+    "id": "ord_4",
+    "orderNumber": "A-2026-0103",
+    "task": "Bremshebel Motorrad bearbeiten",
+    "customerName": "Möbelmanufaktur Hartl",
+    "customerId": "bus_1",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-11T10:00:00Z",
+    "dueLabel": "Überfällig seit",
+    "dueValue": "2 Tagen",
+    "station": "beschichtung",
+    "currentStationId": "beschichtung",
+    "risk": "orange",
+    "status": "active",
+    "statusText": "Kritisch",
+    "parts": [
+      {
+        "id": "part_3_1",
+        "name": "Bremshebel Motorrad",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "beschichtung",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o5",
-    orderNumber: "A-2026-0030",
-    task: "MÃ¶belbeschlÃ¤ge vergolden",
-    customerName: "Antik-Galerie Mainz",
-    customerId: "K-000127",
-    intakeDate: "15.05.2026",
-    dueDate: "25.05.2026",
-    dueLabel: "FÃ¤llig in",
-    dueValue: "5 Tagen",
-    station: "warenausgang",
-    currentStationId: "warenausgang",
-    risk: "green",
-    statusText: "IM PLAN",
-    recommendedAction: "Endpolitur vorbereiten",
-    parts: [
-      { id: "T-2026-0030-A", name: "Barocke MÃ¶bel-ZierbeschlÃ¤ge (6 Stk)", material: "Bronze/Messing", finish: "Glanzvergoldet (24 Karat)", location: "Kiste P-01", hours: "3.5h", actualHours: "3.5h", condition: "Gut (Normaler VerschleiÃŸ)", station: "warenausgang", status: "Neu" }
+    "id": "ord_5",
+    "orderNumber": "A-2026-0104",
+    "task": "Schaltknauf Porsche 911 bearbeiten",
+    "customerName": "Restaurant Goldener Anker",
+    "customerId": "bus_2",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-11T10:00:00Z",
+    "dueLabel": "Überfällig seit",
+    "dueValue": "2 Tagen",
+    "station": "warenausgang",
+    "currentStationId": "warenausgang",
+    "risk": "red",
+    "status": "active",
+    "statusText": "Kritisch",
+    "parts": [
+      {
+        "id": "part_4_1",
+        "name": "Schaltknauf Porsche 911",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "warenausgang",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o6",
-    orderNumber: "A-2026-0050",
-    task: "Klassik-Autoteile spachteln & lagern",
-    customerName: "Museum Lenzburg",
-    customerId: "K-000124",
-    intakeDate: "20.05.2026",
-    dueDate: "05.06.2026",
-    dueLabel: "Eingelagert",
-    dueValue: "Bereit",
-    station: "wareneingang",
-    currentStationId: "wareneingang",
-    risk: "green",
-    statusText: "IM PLAN",
-    parts: [
-      { id: "T-2026-0050-A", name: "KÃ¼hlergrill Opel Rekord C", material: "Stahlblech", finish: "Glanzverchromt", location: "Lagerfach L-04", hours: "4.0h", actualHours: "0.0h", condition: "Eingelagert", station: "wareneingang", status: "Neu" }
+    "id": "ord_6",
+    "orderNumber": "A-2026-0105",
+    "task": "Fensterbeschlag Jugendstil bearbeiten",
+    "customerName": "Autohaus Sieber",
+    "customerId": "bus_3",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-11T10:00:00Z",
+    "dueLabel": "Überfällig seit",
+    "dueValue": "2 Tagen",
+    "station": "wareneingang",
+    "currentStationId": "wareneingang",
+    "risk": "orange",
+    "status": "active",
+    "statusText": "Kritisch",
+    "parts": [
+      {
+        "id": "part_5_1",
+        "name": "Fensterbeschlag Jugendstil",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "wareneingang",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o7",
-    orderNumber: "A-2026-0051",
-    task: "Neuerfassung Lampenmaske",
-    customerName: "Atelier Schmid",
-    customerId: "K-000125",
-    intakeDate: "21.05.2026",
-    dueDate: "12.06.2026",
-    dueLabel: "Neu erfasst",
-    dueValue: "Wareneingang",
-    station: "wareneingang",
-    currentStationId: "wareneingang",
-    risk: "green",
-    statusText: "IM PLAN",
-    parts: [
-      { id: "T-2026-0051-A", name: "Lampenmaske Vespa V50", material: "Stahlblech", finish: "Glanzverchromt", location: "Kiste WE-01", hours: "2.0h", actualHours: "0.0h", condition: "Neu eingegangen", station: "wareneingang", status: "Neu" }
+    "id": "ord_7",
+    "orderNumber": "A-2026-0106",
+    "task": "Lampenfuß Empire bearbeiten",
+    "customerName": "Schreinerei Bürkle",
+    "customerId": "bus_4",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-11T10:00:00Z",
+    "dueLabel": "Überfällig seit",
+    "dueValue": "2 Tagen",
+    "station": "entmetallisierung",
+    "currentStationId": "entmetallisierung",
+    "risk": "red",
+    "status": "active",
+    "statusText": "Kritisch",
+    "parts": [
+      {
+        "id": "part_6_1",
+        "name": "Lampenfuß Empire",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "entmetallisierung",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o8",
-    orderNumber: "A-2026-0060",
-    task: "Motorradtank entmetallisieren (NSU Quick)",
-    customerName: "Heinz Oldtimer-Ranch",
-    customerId: "K-000128",
-    intakeDate: "08.05.2026",
-    dueDate: "18.05.2026",
-    dueLabel: "ÃœberfÃ¤llig seit",
-    dueValue: "4 Tagen",
-    station: "entmetallisierung",
-    currentStationId: "entmetallisierung",
-    risk: "red", // 3. CRITICAL
-    statusText: "KRITISCH â€“ ÃœBERFÃ„LLIG",
-    delayReason: "Unerwartete Alt-Lackierung unter Chromschicht erfordert chemische Sonderbehandlung",
-    recommendedAction: "Manuelle Abbeizung anordnen",
-    parts: [
-      { id: "T-2026-0060-A", name: "Tank NSU Quick 1952", material: "Stahlblech", finish: "Zur Entchromung", location: "Regal A-02", hours: "3.5h", actualHours: "1.0h", condition: "Kritisch", station: "entmetallisierung", status: "Zusatzaufwand" }
+    "id": "ord_8",
+    "orderNumber": "A-2026-0107",
+    "task": "Wasserhahn historisch bearbeiten",
+    "customerName": "Müller",
+    "customerId": "priv_1",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-11T10:00:00Z",
+    "dueLabel": "Überfällig seit",
+    "dueValue": "2 Tagen",
+    "station": "schleiferei",
+    "currentStationId": "schleiferei",
+    "risk": "orange",
+    "status": "active",
+    "statusText": "Kritisch",
+    "parts": [
+      {
+        "id": "part_7_1",
+        "name": "Wasserhahn historisch",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "schleiferei",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o9",
-    orderNumber: "A-2026-0061",
-    task: "Zierleisten schleifen (Porsche 356)",
-    customerName: "Classic Bike Bodensee",
-    customerId: "K-000134",
-    intakeDate: "13.05.2026",
-    dueDate: "23.05.2026",
-    dueLabel: "FÃ¤llig",
-    dueValue: "Morgen",
-    station: "schleiferei",
-    currentStationId: "schleiferei",
-    risk: "orange", // 4. CRITICAL
-    statusText: "GEFÃ„HRDET",
-    delayReason: "Extrem dÃ¼nnwandiges Aluminium erfordert hochprÃ¤zises manuelles Schleifen",
-    recommendedAction: "Zuteilung an Schleifermeister Weber",
-    parts: [
-      { id: "T-2026-0061-A", name: "Zierleistensatz Porsche 356 (8-teilig)", material: "Aluminium", finish: "Glanzpoliert", location: "Schublade S-04", hours: "8.0h", actualHours: "4.5h", condition: "Filigran", station: "schleiferei", status: "In Bearbeitung" }
+    "id": "ord_9",
+    "orderNumber": "A-2026-0108",
+    "task": "Kerzenleuchter Bronze bearbeiten",
+    "customerName": "Schmid",
+    "customerId": "priv_2",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "beschichtung",
+    "currentStationId": "beschichtung",
+    "risk": "green",
+    "status": "active",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_8_1",
+        "name": "Kerzenleuchter Bronze",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "beschichtung",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o10",
-    orderNumber: "A-2026-0062",
-    task: "Kirchen-Altarleuchter restaurieren",
-    customerName: "Pfarrei St. Ursus",
-    customerId: "K-000129",
-    intakeDate: "05.05.2026",
-    dueDate: "19.05.2026",
-    dueLabel: "ÃœberfÃ¤llig seit",
-    dueValue: "3 Tagen",
-    station: "schleiferei",
-    currentStationId: "schleiferei",
-    risk: "red", // 5. CRITICAL
-    statusText: "KRITISCH â€“ ÃœBERFÃ„LLIG",
-    delayReason: "Freigabe des Denkmalschutzamtes dauerte 10 Tage",
-    recommendedAction: "Express-Schicht am Samstag anberaumen",
-    parts: [
-      { id: "T-2026-0062-A", name: "Altarleuchter St. Ursus (Bronze)", material: "Bronze", finish: "Feuervergoldet (historisch)", location: "Tisch 02", hours: "15.0h", actualHours: "3.5h", condition: "Stark oxidiert", station: "schleiferei", status: "In Bearbeitung" }
+    "id": "ord_10",
+    "orderNumber": "A-2026-0109",
+    "task": "Beschlag Sekretär bearbeiten",
+    "customerName": "Fischer",
+    "customerId": "priv_3",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "warenausgang",
+    "currentStationId": "warenausgang",
+    "risk": "green",
+    "status": "waiting",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_9_1",
+        "name": "Beschlag Sekretär",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "warenausgang",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o11",
-    orderNumber: "A-2026-0063",
-    task: "Schloss-Fenstergriffe vergolden",
-    customerName: "Schlossverwaltung Wildegg",
-    customerId: "K-000133",
-    intakeDate: "12.05.2026",
-    dueDate: "24.05.2026",
-    dueLabel: "FÃ¤llig",
-    dueValue: "Morgen",
-    station: "beschichtung",
-    currentStationId: "beschichtung",
-    risk: "orange", // 6. CRITICAL
-    statusText: "GEFÃ„HRDET",
-    delayReason: "Spezialelektrolyt (Gold-Kobalt) muss regeneriert werden",
-    recommendedAction: "Laboranalyse Goldkonzentration",
-    parts: [
-      { id: "T-2026-0063-A", name: "Fenstergriffe Schloss Wildegg (12 Stk)", material: "Messing", finish: "Hartvergoldet 24k", location: "Kiste K-08", hours: "8.5h", actualHours: "6.0h", condition: "Alt", station: "beschichtung", status: "In Bearbeitung" }
+    "id": "ord_11",
+    "orderNumber": "A-2026-0110",
+    "task": "Stoßstange Mercedes 280SE bearbeiten",
+    "customerName": "Bauer",
+    "customerId": "priv_4",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "wareneingang",
+    "currentStationId": "wareneingang",
+    "risk": "green",
+    "status": "active",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_10_1",
+        "name": "Stoßstange Mercedes 280SE",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "wareneingang",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o12",
-    orderNumber: "A-2026-0064",
-    task: "KÃ¼hlerfigur Emily verchromen (Rolls-Royce)",
-    customerName: "Privatkunde Dr. MÃ¼ller",
-    customerId: "K-000130",
-    intakeDate: "06.05.2026",
-    dueDate: "16.05.2026",
-    dueLabel: "ÃœberfÃ¤llig seit",
-    dueValue: "6 Tagen",
-    station: "beschichtung",
-    currentStationId: "beschichtung",
-    risk: "red", // 7. CRITICAL
-    statusText: "KRITISCH â€“ ÃœBERFÃ„LLIG",
-    delayReason: "Mehrfacher Fehlversuch wegen ungenÃ¼gender Haftung auf Zinkdruckguss",
-    recommendedAction: "Kupfer-Zwischenschicht massiv verstÃ¤rken",
-    parts: [
-      { id: "T-2026-0064-A", name: "KÃ¼hlerfigur Emily (Rolls Royce)", material: "Zinkdruckguss", finish: "Glanzverchromt (Premium)", location: "Meisterschrank", hours: "6.5h", actualHours: "5.0h", condition: "Kritisch", station: "beschichtung", status: "Nacharbeit" }
+    "id": "ord_12",
+    "orderNumber": "A-2026-0111",
+    "task": "Türgriff Holztür bearbeiten",
+    "customerName": "Wagner",
+    "customerId": "priv_5",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "entmetallisierung",
+    "currentStationId": "entmetallisierung",
+    "risk": "green",
+    "status": "active",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_11_1",
+        "name": "Türgriff Holztür",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "entmetallisierung",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o13",
-    orderNumber: "A-2026-0065",
-    task: "Oldtimer-Speichenfelgen verkupfern",
-    customerName: "Heinz Oldtimer-Ranch",
-    customerId: "K-000128",
-    intakeDate: "11.05.2026",
-    dueDate: "23.05.2026",
-    dueLabel: "FÃ¤llig",
-    dueValue: "Morgen",
-    station: "beschichtung",
-    currentStationId: "beschichtung",
-    risk: "orange", // 8. CRITICAL
-    statusText: "GEFÃ„HRDET",
-    delayReason: "Sehr aufwÃ¤ndige Maskierung der GewindegÃ¤nge",
-    recommendedAction: "Hilfsarbeiter fÃ¼r Abdeckarbeiten abstellen",
-    parts: [
-      { id: "T-2026-0065-A", name: "Speichenfelgen Borrani (4 Stk)", material: "Stahl/Messing", finish: "Sauer Kupfer matt", location: "Wagen 06", hours: "12.0h", actualHours: "8.0h", condition: "Normal", station: "beschichtung", status: "In Bearbeitung" }
+    "id": "ord_13",
+    "orderNumber": "A-2026-0112",
+    "task": "Leuchter Pfarrei bearbeiten",
+    "customerName": "Museum Lenzburg",
+    "customerId": "inst_1",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "schleiferei",
+    "currentStationId": "schleiferei",
+    "risk": "green",
+    "status": "waiting",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_12_1",
+        "name": "Leuchter Pfarrei",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "schleiferei",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o14",
-    orderNumber: "A-2026-0066",
-    task: "Vespa KotflÃ¼gel spachteln & verchromen",
-    customerName: "Classic Bike Bodensee",
-    customerId: "K-000134",
-    intakeDate: "16.05.2026",
-    dueDate: "26.05.2026",
-    dueLabel: "FÃ¤llig in",
-    dueValue: "4 Tagen",
-    station: "schleiferei",
-    currentStationId: "schleiferei",
-    risk: "yellow",
-    statusText: "LEICHT KRITISCH",
-    parts: [
-      { id: "T-2026-0066-A", name: "KotflÃ¼gel Vespa V50", material: "Stahlblech", finish: "Glanzverchromt", location: "Kiste WE-02", hours: "4.5h", actualHours: "2.0h", condition: "Gut", station: "schleiferei", status: "In Bearbeitung" }
+    "id": "ord_14",
+    "orderNumber": "A-2026-0113",
+    "task": "Bremshebel Motorrad bearbeiten",
+    "customerName": "Pfarrei St. Martin Steyr",
+    "customerId": "inst_2",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "beschichtung",
+    "currentStationId": "beschichtung",
+    "risk": "green",
+    "status": "active",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_13_1",
+        "name": "Bremshebel Motorrad",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "beschichtung",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o15",
-    orderNumber: "A-2026-0067",
-    task: "Kirchenkelch versilbern & vergolden",
-    customerName: "Pfarrei St. Ursus",
-    customerId: "K-000129",
-    intakeDate: "18.05.2026",
-    dueDate: "05.06.2026",
-    dueLabel: "Wartet auf",
-    dueValue: "Freigabe",
-    station: "entmetallisierung",
-    currentStationId: "entmetallisierung",
-    risk: "blocked",
-    statusText: "WARTET AUF MATERIAL/KV",
-    delayReason: "KV zur Genehmigung bei der DiÃ¶zese",
-    parts: [
-      { id: "T-2026-0067-A", name: "Kirchenkelch St. Ursus (Silber)", material: "Silber", finish: "Innenvergoldet 24k", location: "Safefach 1", hours: "6.0h", actualHours: "0.0h", condition: "Edel", station: "entmetallisierung", status: "Warten" }
+    "id": "ord_15",
+    "orderNumber": "A-2026-0114",
+    "task": "Schaltknauf Porsche 911 bearbeiten",
+    "customerName": "Oldtimer-Sammler-Verein Westschweiz",
+    "customerId": "inst_3",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "warenausgang",
+    "currentStationId": "warenausgang",
+    "risk": "green",
+    "status": "active",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_14_1",
+        "name": "Schaltknauf Porsche 911",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "warenausgang",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o16",
-    orderNumber: "A-2026-0068",
-    task: "Silberbesteck polieren (60 Teile)",
-    customerName: "Privatkunde Weber",
-    customerId: "K-000132",
-    intakeDate: "19.05.2026",
-    dueDate: "02.06.2026",
-    dueLabel: "FÃ¤llig in",
-    dueValue: "11 Tagen",
-    station: "schleiferei",
-    currentStationId: "schleiferei",
-    risk: "green",
-    statusText: "IM PLAN",
-    parts: [
-      { id: "T-2026-0068-A", name: "60-teiliges Silberbesteck WMF", material: "Echtsilber", finish: "Glanzpoliert & Passiviert", location: "Karton WE-03", hours: "4.0h", actualHours: "0.0h", condition: "Gut", station: "schleiferei", status: "Neu" }
+    "id": "ord_16",
+    "orderNumber": "A-2026-0115",
+    "task": "Fensterbeschlag Jugendstil bearbeiten",
+    "customerName": "Möbelmanufaktur Hartl",
+    "customerId": "bus_1",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "wareneingang",
+    "currentStationId": "wareneingang",
+    "risk": "green",
+    "status": "waiting",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_15_1",
+        "name": "Fensterbeschlag Jugendstil",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "wareneingang",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o17",
-    orderNumber: "A-2026-0069",
-    task: "Fenstergriffe matt vernickeln",
-    customerName: "Metallbau Vock AG",
-    customerId: "K-000131",
-    intakeDate: "20.05.2026",
-    dueDate: "03.06.2026",
-    dueLabel: "FÃ¤llig in",
-    dueValue: "12 Tagen",
-    station: "wareneingang",
-    currentStationId: "wareneingang",
-    risk: "green",
-    statusText: "IM PLAN",
-    parts: [
-      { id: "T-2026-0069-A", name: "Fenstergriffe modern (35 Stk)", material: "Messing", finish: "Nickel matt (Edelstahl-Optik)", location: "Kiste WE-04", hours: "5.0h", actualHours: "0.0h", condition: "Neuware", station: "wareneingang", status: "Neu" }
+    "id": "ord_17",
+    "orderNumber": "A-2026-0116",
+    "task": "Lampenfuß Empire bearbeiten",
+    "customerName": "Restaurant Goldener Anker",
+    "customerId": "bus_2",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "entmetallisierung",
+    "currentStationId": "entmetallisierung",
+    "risk": "green",
+    "status": "active",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_16_1",
+        "name": "Lampenfuß Empire",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "entmetallisierung",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o18",
-    orderNumber: "A-2026-0070",
-    task: "Kamingitter antik brÃ¼nieren",
-    customerName: "Privatkunde Dr. MÃ¼ller",
-    customerId: "K-000130",
-    intakeDate: "21.05.2026",
-    dueDate: "10.06.2026",
-    dueLabel: "FÃ¤llig in",
-    dueValue: "19 Tagen",
-    station: "wareneingang",
-    currentStationId: "wareneingang",
-    risk: "green",
-    statusText: "IM PLAN",
-    parts: [
-      { id: "T-2026-0070-A", name: "Kamingitter Schmiedeeisen", material: "Stahl", finish: "Schwarz brÃ¼niert & geÃ¶lt", location: "Palette 02", hours: "3.5h", actualHours: "0.0h", condition: "Rustikal", station: "wareneingang", status: "Neu" }
+    "id": "ord_18",
+    "orderNumber": "A-2026-0117",
+    "task": "Wasserhahn historisch bearbeiten",
+    "customerName": "Autohaus Sieber",
+    "customerId": "bus_3",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "schleiferei",
+    "currentStationId": "schleiferei",
+    "risk": "green",
+    "status": "active",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_17_1",
+        "name": "Wasserhahn historisch",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "schleiferei",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o19",
-    orderNumber: "A-2026-0071",
-    task: "MÃ¼nzensammlung reinigen & konservieren",
-    customerName: "Privatkunde Lenz",
-    customerId: "K-000123",
-    intakeDate: "21.05.2026",
-    dueDate: "15.06.2026",
-    dueLabel: "FÃ¤llig in",
-    dueValue: "24 Tagen",
-    station: "wareneingang",
-    currentStationId: "wareneingang",
-    risk: "green",
-    statusText: "IM PLAN",
-    parts: [
-      { id: "T-2026-0071-A", name: "RÃ¶mische KupfermÃ¼nzen (40 Stk)", material: "Kupfer", finish: "Utraschallreinigung & Mikrowachs", location: "Schublade WE-05", hours: "4.0h", actualHours: "0.0h", condition: "Historisch", station: "wareneingang", status: "Neu" }
+    "id": "ord_19",
+    "orderNumber": "A-2026-0118",
+    "task": "Kerzenleuchter Bronze bearbeiten",
+    "customerName": "Schreinerei Bürkle",
+    "customerId": "bus_4",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "beschichtung",
+    "currentStationId": "beschichtung",
+    "risk": "green",
+    "status": "waiting",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_18_1",
+        "name": "Kerzenleuchter Bronze",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "beschichtung",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o20",
-    orderNumber: "A-2026-0072",
-    task: "Maschinenteile verzinken (Sondercharge)",
-    customerName: "Metallbau Vock AG",
-    customerId: "K-000131",
-    intakeDate: "21.05.2026",
-    dueDate: "08.06.2026",
-    dueLabel: "FÃ¤llig in",
-    dueValue: "17 Tagen",
-    station: "wareneingang",
-    currentStationId: "wareneingang",
-    risk: "green",
-    statusText: "IM PLAN",
-    parts: [
-      { id: "T-2026-0072-A", name: "Halterungen verzinken (250 Stk)", material: "Stahl", finish: "Blau verzinkt (Dickschicht)", location: "Gitterbox 01", hours: "6.0h", actualHours: "0.0h", condition: "Neuware", station: "wareneingang", status: "Neu" }
+    "id": "ord_20",
+    "orderNumber": "A-2026-0119",
+    "task": "Beschlag Sekretär bearbeiten",
+    "customerName": "Müller",
+    "customerId": "priv_1",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "warenausgang",
+    "currentStationId": "warenausgang",
+    "risk": "green",
+    "status": "active",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_19_1",
+        "name": "Beschlag Sekretär",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "warenausgang",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o21",
-    orderNumber: "A-2026-0073",
-    task: "Kronleuchter vergolden (Rokoko)",
-    customerName: "Antik-Galerie Mainz",
-    customerId: "K-000127",
-    intakeDate: "20.05.2026",
-    dueDate: "20.06.2026",
-    dueLabel: "FÃ¤llig in",
-    dueValue: "29 Tagen",
-    station: "wareneingang",
-    currentStationId: "wareneingang",
-    risk: "green",
-    statusText: "IM PLAN",
-    parts: [
-      { id: "T-2026-0073-A", name: "Deckenkronleuchter Rokoko", material: "Messingguss", finish: "Glanzvergoldet 24k", location: "SpezialaufhÃ¤ngung 01", hours: "18.0h", actualHours: "0.0h", condition: "Starke Patina", station: "wareneingang", status: "Neu" }
+    "id": "ord_21",
+    "orderNumber": "A-2026-0120",
+    "task": "Stoßstange Mercedes 280SE bearbeiten",
+    "customerName": "Schmid",
+    "customerId": "priv_2",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "wareneingang",
+    "currentStationId": "wareneingang",
+    "risk": "green",
+    "status": "active",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_20_1",
+        "name": "Stoßstange Mercedes 280SE",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "wareneingang",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o22",
-    orderNumber: "A-2026-0074",
-    task: "AuspuffkrÃ¼mmer hochglanzverchromen",
-    customerName: "Atelier Schmid",
-    customerId: "K-000125",
-    intakeDate: "22.05.2026",
-    dueDate: "15.06.2026",
-    dueLabel: "FÃ¤llig in",
-    dueValue: "24 Tagen",
-    station: "wareneingang",
-    currentStationId: "wareneingang",
-    risk: "green",
-    statusText: "IM PLAN",
-    parts: [
-      { id: "T-2026-0074-A", name: "AuspuffkrÃ¼mmer BMW R75 rechts", material: "Stahl", finish: "Glanzverchromt", location: "Kiste WE-06", hours: "2.0h", actualHours: "0.0h", condition: "Normal", station: "wareneingang", status: "Neu" }
+    "id": "ord_22",
+    "orderNumber": "A-2026-0121",
+    "task": "Türgriff Holztür bearbeiten",
+    "customerName": "Fischer",
+    "customerId": "priv_3",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "entmetallisierung",
+    "currentStationId": "entmetallisierung",
+    "risk": "green",
+    "status": "waiting",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_21_1",
+        "name": "Türgriff Holztür",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "entmetallisierung",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o23",
-    orderNumber: "A-2026-0075",
-    task: "TÃ¼rdrÃ¼cker patinieren (Alt-Berlin)",
-    customerName: "Privatkunde Weber",
-    customerId: "K-000132",
-    intakeDate: "22.05.2026",
-    dueDate: "12.06.2026",
-    dueLabel: "FÃ¤llig in",
-    dueValue: "21 Tagen",
-    station: "wareneingang",
-    currentStationId: "wareneingang",
-    risk: "green",
-    statusText: "IM PLAN",
-    parts: [
-      { id: "T-2026-0075-A", name: "TÃ¼rgriffsatz Jugendstil (4er)", material: "Messing", finish: "Braun patiniert & gewachst", location: "Schublade WE-06", hours: "3.0h", actualHours: "0.0h", condition: "Normal", station: "wareneingang", status: "Neu" }
+    "id": "ord_23",
+    "orderNumber": "A-2026-0122",
+    "task": "Leuchter Pfarrei bearbeiten",
+    "customerName": "Bauer",
+    "customerId": "priv_4",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "schleiferei",
+    "currentStationId": "schleiferei",
+    "risk": "green",
+    "status": "active",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_22_1",
+        "name": "Leuchter Pfarrei",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "schleiferei",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o24",
-    orderNumber: "A-2026-0076",
-    task: "Kupferkessel glanzpolieren",
-    customerName: "Schlossverwaltung Wildegg",
-    customerId: "K-000133",
-    intakeDate: "22.05.2026",
-    dueDate: "18.06.2026",
-    dueLabel: "FÃ¤llig in",
-    dueValue: "27 Tagen",
-    station: "wareneingang",
-    currentStationId: "wareneingang",
-    risk: "green",
-    statusText: "IM PLAN",
-    parts: [
-      { id: "T-2026-0076-A", name: "Historischer Kupferwaschkessel", material: "Kupferblech", finish: "Hand-Hochglanzpolitur & Zaponlack", location: "Palette WE-07", hours: "5.0h", actualHours: "0.0h", condition: "Patina", station: "wareneingang", status: "Neu" }
+    "id": "ord_24",
+    "orderNumber": "A-2026-0123",
+    "task": "Bremshebel Motorrad bearbeiten",
+    "customerName": "Wagner",
+    "customerId": "priv_5",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "beschichtung",
+    "currentStationId": "beschichtung",
+    "risk": "green",
+    "status": "active",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_23_1",
+        "name": "Bremshebel Motorrad",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "beschichtung",
+        "status": "In Bearbeitung"
+      }
     ]
   },
   {
-    id: "o25",
-    orderNumber: "A-2026-0077",
-    task: "Opel Rekord StoÃŸstangenteile Kupferaufbau",
-    customerName: "Museum Lenzburg",
-    customerId: "K-000124",
-    intakeDate: "22.05.2026",
-    dueDate: "22.06.2026",
-    dueLabel: "FÃ¤llig in",
-    dueValue: "31 Tagen",
-    station: "wareneingang",
-    currentStationId: "wareneingang",
-    risk: "green",
-    statusText: "IM PLAN",
-    parts: [
-      { id: "T-2026-0077-A", name: "Opel Rekord C ZierhÃ¶rner (4 Stk)", material: "Stahl", finish: "Galvanisch verkupfert & poliert", location: "Kiste WE-08", hours: "4.5h", actualHours: "0.0h", condition: "Starke Narben", station: "wareneingang", status: "Neu" }
+    "id": "ord_25",
+    "orderNumber": "A-2026-0124",
+    "task": "Schaltknauf Porsche 911 bearbeiten",
+    "customerName": "Museum Lenzburg",
+    "customerId": "inst_1",
+    "intakeDate": "2026-05-10T10:00:00Z",
+    "dueDate": "2026-05-30T10:00:00Z",
+    "dueLabel": "Fällig am",
+    "dueValue": "30.05.2026",
+    "station": "warenausgang",
+    "currentStationId": "warenausgang",
+    "risk": "green",
+    "status": "waiting",
+    "statusText": "Im Plan",
+    "parts": [
+      {
+        "id": "part_24_1",
+        "name": "Schaltknauf Porsche 911",
+        "material": "Messing",
+        "finish": "Glanz",
+        "location": "Regal 1",
+        "hours": "2h",
+        "station": "warenausgang",
+        "status": "In Bearbeitung"
+      }
     ]
   }
 ];
-
-// 2. Customers Mock Database (Exactly 12 customers with fully detailed timelines & prices)
 export const INITIAL_CUSTOMERS: MockCustomer[] = [
   {
-    id: "K-000123",
-    name: "Max Mustermann / Privatkunde Lenz",
-    type: "Privatkunde",
-    city: "Frankfurt",
-    address: "GoethestraÃŸe 12, 60313 Frankfurt",
-    phone: "+49 69 1234567",
-    email: "max.mustermann@gmail.com",
-    prefComm: "E-Mail",
-    risk: "Niedrig",
-    riskNote: "Sehr zuverlÃ¤ssiger Zahler. Klassik-Automobil-Liebhaber (besitzt Opel Rekord C). Erwartet hohe Detailtreue.",
-    notes: "Kunde legt extremen Wert auf makellose Politur der StoÃŸfÃ¤nger-RÃ¼ckseiten vor der Vernickelung, um Korrosion zu verhindern.",
-    priceAgreements: [
-      { id: "pa1", scope: "Standard Privatkunden-Tarif", rate: "Listenpreis", date: "12.01.2025" },
-      { id: "pa2", scope: "Rabatt ab 2. Auftrag", rate: "5% Rabatt auf Lohnanteil", date: "15.03.2025" }
-    ],
-    orders: [
+    "id": "inst_1",
+    "name": "Museum Lenzburg",
+    "type": "Institution",
+    "city": "Lenzburg",
+    "address": "Schlossgasse 1",
+    "phone": "062 111 22 33",
+    "email": "info@museum-lenzburg.ch",
+    "prefComm": "E-Mail",
+    "risk": "Niedrig",
+    "notes": "Stammkunde",
+    "priceAgreements": [
       {
-        id: "o3",
-        orderNumber: "A-2026-0040",
-        task: "Besteckteile versilbern (24 Stk.)",
-        intakeDate: "18.05.2026",
-        dueDate: "22.05.2026",
-        status: "active",
-        statusText: "FÃ¤llig in 2 Tagen",
-        parts: [{ id: "T-2026-0040-A", name: "Besteckteile 24er Set", material: "Messing / Alpacca", finish: "Feinsilberschicht (90g/12)", location: "Kiste K-12" }]
-      },
-      {
-        id: "o19",
-        orderNumber: "A-2026-0071",
-        task: "MÃ¼nzensammlung reinigen & konservieren",
-        intakeDate: "21.05.2026",
-        dueDate: "15.06.2026",
-        status: "active",
-        statusText: "Im Plan",
-        parts: [{ id: "T-2026-0071-A", name: "RÃ¶mische KupfermÃ¼nzen", material: "Kupfer", finish: "Utraschallreinigung & Mikrowachs", location: "Schublade WE-05" }]
+        "id": "pa_0",
+        "scope": "Rahmenvertrag 0",
+        "rate": "15% Rabatt",
+        "date": "2026-01-01"
       }
     ],
-    feedbacks: [
-      { id: "f1", date: "30.10.2025", type: "positive", text: "Sehr zufrieden mit Glanzgrad des KÃ¼hlergrills. Hat uns ein Foto des fertigen Fahrzeugs geschickt." }
-    ]
-  },
-  {
-    id: "K-000124",
-    name: "Museum Lenzburg",
-    type: "GeschÃ¤ftskunde",
-    city: "Lenzburg",
-    address: "Schlossgasse 4, 5600 Lenzburg, Schweiz",
-    phone: "+41 62 888 12 34",
-    email: "restaurierung@museum-lenzburg.ch",
-    prefComm: "Telefon",
-    risk: "Niedrig",
-    riskNote: "Rechnungsstellung an kantonale Kulturstiftung. Manchmal lÃ¤ngere interne Freigabewege, aber absolut bonitÃ¤tsstark.",
-    notes: "SÃ¤mtliche Arbeiten mÃ¼ssen dokumentiert und mit dem Restaurierungsbericht abgeglichen werden. Keine aggressiven mechanischen Schleifverfahren ohne Absprache.",
-    priceAgreements: [
-      { id: "pa3", scope: "Rahmenvertrag Restaurierung", rate: "15% Rabatt auf Entlackung & BÃ¤der", date: "01.01.2024" }
-    ],
-    orders: [
+    "orders": [
       {
-        id: "o1",
-        orderNumber: "A-2026-0042",
-        task: "StoÃŸstangen vernickeln (Opel Rekord C)",
-        intakeDate: "10.05.2026",
-        dueDate: "20.05.2026",
-        status: "critical",
-        statusText: "ÃœberfÃ¤llig seit 3 Stunden",
-        parts: [{ id: "T-2026-0042-A", name: "StoÃŸstange vorne Opel Rekord C", material: "Stahl", finish: "Vernickelt (Premium)", location: "Regal B-02" }]
+        "id": "ord_1",
+        "orderNumber": "A-2026-0100",
+        "task": "Stoßstange Mercedes 280SE bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-11T10:00:00Z",
+        "status": "active",
+        "statusText": "Kritisch",
+        "parts": [
+          {
+            "id": "part_0_1",
+            "name": "Stoßstange Mercedes 280SE",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       },
       {
-        id: "o6",
-        orderNumber: "A-2026-0050",
-        task: "Klassik-Autoteile spachteln & lagern",
-        intakeDate: "20.05.2026",
-        dueDate: "05.06.2026",
-        status: "active",
-        statusText: "Im Plan",
-        parts: [{ id: "T-2026-0050-A", name: "KÃ¼hlergrill Opel Rekord C", material: "Stahlblech", finish: "Glanzverchromt", location: "Lagerfach L-04" }]
+        "id": "ord_13",
+        "orderNumber": "A-2026-0112",
+        "task": "Leuchter Pfarrei bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "waiting",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_12_1",
+            "name": "Leuchter Pfarrei",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       },
       {
-        id: "o25",
-        orderNumber: "A-2026-0077",
-        task: "Opel Rekord StoÃŸstangenteile Kupferaufbau",
-        intakeDate: "22.05.2026",
-        dueDate: "22.06.2026",
-        status: "active",
-        statusText: "Im Plan",
-        parts: [{ id: "T-2026-0077-A", name: "Opel Rekord C ZierhÃ¶rner", material: "Stahl", finish: "Galvanisch verkupfert & poliert", location: "Kiste WE-08" }]
+        "id": "ord_25",
+        "orderNumber": "A-2026-0124",
+        "task": "Schaltknauf Porsche 911 bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "waiting",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_24_1",
+            "name": "Schaltknauf Porsche 911",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       }
     ],
-    feedbacks: [
-      { id: "f2", date: "05.12.2025", type: "positive", text: "Hervorragende historische Patina-Arbeit bei den SchlossbeschlÃ¤gen gelobt. Begleitkarte fÃ¼r Ausstellung erwÃ¼nscht." }
-    ]
+    "feedbacks": []
   },
   {
-    id: "K-000125",
-    name: "Atelier Schmid",
-    type: "GeschÃ¤ftskunde",
-    city: "MÃ¼nchen",
-    address: "SchellingstraÃŸe 45, 80799 MÃ¼nchen",
-    phone: "+49 89 543210",
-    email: "info@atelier-schmid.de",
-    prefComm: "E-Mail",
-    risk: "Mittel",
-    riskNote: "Ã„uÃŸerst anspruchsvoll bezÃ¼glich OberflÃ¤chengÃ¼te. Erfordert oft doppelte Meisterabnahme vor Auslieferung. Reagiert empfindlich auf kleinste Poren.",
-    notes: "Spezialisiert auf High-End Oldtimer-MotorrÃ¤der. StandardmÃ¤ÃŸig alle galvanischen BÃ¤der mit doppelter Zwischenpolitur fahren.",
-    priceAgreements: [
-      { id: "pa5", scope: "Standard Motorradtanks", rate: "Festpreis 450â‚¬ zzgl. MwSt. pro StÃ¼ck", date: "10.02.2025" }
-    ],
-    orders: [
+    "id": "inst_2",
+    "name": "Pfarrei St. Martin Steyr",
+    "type": "Institution",
+    "city": "Steyr",
+    "address": "Stadtplatz 41",
+    "phone": "07252 444",
+    "email": "pfarramt@st-martin-steyr.at",
+    "prefComm": "Telefon",
+    "risk": "Niedrig",
+    "notes": "Stammkunde",
+    "priceAgreements": [
       {
-        id: "o2",
-        orderNumber: "A-2026-0038",
-        task: "Motorradteile Glanzverchromen (BMW R75)",
-        intakeDate: "14.05.2026",
-        dueDate: "21.05.2026",
-        status: "active",
-        statusText: "GefÃ¤hrdet",
-        parts: [{ id: "T-2026-0038-A", name: "Kraftstofftank BMW R75", material: "Stahlblech", finish: "Glanzverchromt (Teilmaskiert)", location: "Wagen 04" }]
-      },
-      {
-        id: "o7",
-        orderNumber: "A-2026-0051",
-        task: "Neuerfassung Lampenmaske",
-        intakeDate: "21.05.2026",
-        dueDate: "12.06.2026",
-        status: "active",
-        statusText: "Im Plan",
-        parts: [{ id: "T-2026-0051-A", name: "Lampenmaske Vespa V50", material: "Stahlblech", finish: "Glanzverchromt", location: "Kiste WE-01" }]
-      },
-      {
-        id: "o22",
-        orderNumber: "A-2026-0074",
-        task: "AuspuffkrÃ¼mmer hochglanzverchromen",
-        intakeDate: "22.05.2026",
-        dueDate: "15.06.2026",
-        status: "active",
-        statusText: "Im Plan",
-        parts: [{ id: "T-2026-0074-A", name: "AuspuffkrÃ¼mmer BMW R75 rechts", material: "Stahl", finish: "Glanzverchromt", location: "Kiste WE-06" }]
+        "id": "pa_1",
+        "scope": "Rahmenvertrag 1",
+        "rate": "15% Rabatt",
+        "date": "2026-01-01"
       }
     ],
-    feedbacks: [
-      { id: "f5", date: "02.10.2025", type: "positive", text: "Nachbesserung der Vespa-Maske als 'perfekt' bewertet. Kooperation lÃ¤uft seither reibungslos." }
-    ]
-  },
-  {
-    id: "K-000126",
-    name: "Kirche St. Martin",
-    type: "Institution",
-    city: "KÃ¶ln",
-    address: "Martinsfeld 1, 50676 KÃ¶ln",
-    phone: "", // Missing number to test fallback
-    email: "pfarramt@st-martin-koeln.de",
-    prefComm: "Brief / Post",
-    risk: "Hoch",
-    riskNote: "Komplexe Entscheidungswege Ã¼ber Kirchenvorstand. Freigaben dauern oft mehrere Wochen. KostenvoranschlÃ¤ge mÃ¼ssen absolut exakt sein.",
-    notes: "Konservatorische Anforderungen beachten. Erfordert schriftliches Analysezertifikat Ã¼ber die galvanische Versilberung/Goldauflage zur Vorlage beim Bistum.",
-    priceAgreements: [
-      { id: "pa7", scope: "Sonderkondition Kirche", rate: "10% Spendenrabatt auf Lohnanteil", date: "15.04.2026" }
-    ],
-    orders: [
+    "orders": [
       {
-        id: "o4",
-        orderNumber: "A-2026-0035",
-        task: "Jugendstilleuchter brÃ¼nieren",
-        intakeDate: "19.05.2026",
-        dueDate: "30.05.2026",
-        status: "waiting",
-        statusText: "Wartet auf KV-Freigabe",
-        parts: [{ id: "T-2026-0035-A", name: "Jugendstil-Deckenleuchter", material: "Messingguss", finish: "BrÃ¼niert & Wachs-Konserviert", location: "Regal A-05" }]
-      }
-    ],
-    feedbacks: [
-      { id: "f6", date: "20.05.2026", type: "neutral", text: "Hoher ErklÃ¤rungsbedarf bezÃ¼glich der Konservierungsmethode. ErklÃ¤rendes Telefonat mit Meister Kreile gefÃ¼hrt." }
-    ]
-  },
-  {
-    id: "K-000127",
-    name: "Antik-Galerie Mainz",
-    type: "GeschÃ¤ftskunde",
-    city: "Mainz",
-    address: "KaiserstraÃŸe 18, 55116 Mainz",
-    phone: "+49 6131 998877",
-    email: "info@antik-mainz.de",
-    prefComm: "E-Mail",
-    risk: "Niedrig",
-    riskNote: "Sehr verlÃ¤sslicher Stammkunde fÃ¼r ZierbeschlÃ¤ge und EinrichtungsgegenstÃ¤nde.",
-    notes: "Besonders empfindlich bei Vergoldungsschichten. Stets dicke Glanzgoldschicht applizieren.",
-    priceAgreements: [
-      { id: "pa8", scope: "ZierbeschlÃ¤ge Vergoldung", rate: "Festpreis 15â‚¬/Stk ab 10 Stk", date: "10.01.2025" }
-    ],
-    orders: [
-      {
-        id: "o5",
-        orderNumber: "A-2026-0030",
-        task: "MÃ¶belbeschlÃ¤ge vergolden",
-        intakeDate: "15.05.2026",
-        dueDate: "25.05.2026",
-        status: "active",
-        statusText: "Im Plan",
-        parts: [{ id: "T-2026-0030-A", name: "Barocke MÃ¶bel-ZierbeschlÃ¤ge", material: "Bronze/Messing", finish: "Glanzvergoldet (24 Karat)", location: "Kiste P-01" }]
+        "id": "ord_2",
+        "orderNumber": "A-2026-0101",
+        "task": "Türgriff Holztür bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-11T10:00:00Z",
+        "status": "active",
+        "statusText": "Kritisch",
+        "parts": [
+          {
+            "id": "part_1_1",
+            "name": "Türgriff Holztür",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       },
       {
-        id: "o21",
-        orderNumber: "A-2026-0073",
-        task: "Kronleuchter vergolden (Rokoko)",
-        intakeDate: "20.05.2026",
-        dueDate: "20.06.2026",
-        status: "active",
-        statusText: "Im Plan",
-        parts: [{ id: "T-2026-0073-A", name: "Deckenkronleuchter Rokoko", material: "Messingguss", finish: "Glanzvergoldet 24k", location: "SpezialaufhÃ¤ngung 01" }]
+        "id": "ord_14",
+        "orderNumber": "A-2026-0113",
+        "task": "Bremshebel Motorrad bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "active",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_13_1",
+            "name": "Bremshebel Motorrad",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       }
     ],
-    feedbacks: []
+    "feedbacks": []
   },
   {
-    id: "K-000128",
-    name: "Heinz Oldtimer-Ranch",
-    type: "GeschÃ¤ftskunde",
-    city: "Stuttgart",
-    address: "PorschestraÃŸe 9, 70435 Stuttgart",
-    phone: "+49 711 990011",
-    email: "werkstatt@heinz-oldtimers.de",
-    prefComm: "Telefon",
-    risk: "Mittel",
-    riskNote: "Hohes Auftragsvolumen, aber oft knappe Termine.",
-    notes: "Fokus auf NSU- und BMW-Oldtimer-MotorrÃ¤der.",
-    priceAgreements: [
-      { id: "pa9", scope: "Motorradfelgen verkupfern", rate: "120â‚¬/Felge", date: "05.02.2026" }
-    ],
-    orders: [
+    "id": "inst_3",
+    "name": "Oldtimer-Sammler-Verein Westschweiz",
+    "type": "Institution",
+    "city": "Lausanne",
+    "address": "Rue du Lac 5",
+    "phone": "021 555 66",
+    "email": "contact@osvw.ch",
+    "prefComm": "E-Mail",
+    "risk": "Mittel",
+    "notes": "Stammkunde",
+    "priceAgreements": [
       {
-        id: "o8",
-        orderNumber: "A-2026-0060",
-        task: "Motorradtank entmetallisieren (NSU Quick)",
-        intakeDate: "08.05.2026",
-        dueDate: "18.05.2026",
-        status: "critical",
-        statusText: "Kritisch - ÃœberfÃ¤llig",
-        parts: [{ id: "T-2026-0060-A", name: "Tank NSU Quick 1952", material: "Stahlblech", finish: "Zur Entchromung", location: "Regal A-02" }]
+        "id": "pa_2",
+        "scope": "Rahmenvertrag 2",
+        "rate": "15% Rabatt",
+        "date": "2026-01-01"
+      }
+    ],
+    "orders": [
+      {
+        "id": "ord_3",
+        "orderNumber": "A-2026-0102",
+        "task": "Leuchter Pfarrei bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-11T10:00:00Z",
+        "status": "active",
+        "statusText": "Kritisch",
+        "parts": [
+          {
+            "id": "part_2_1",
+            "name": "Leuchter Pfarrei",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       },
       {
-        id: "o13",
-        orderNumber: "A-2026-0065",
-        task: "Oldtimer-Speichenfelgen verkupfern",
-        intakeDate: "11.05.2026",
-        dueDate: "23.05.2026",
-        status: "critical",
-        statusText: "GefÃ¤hrdet",
-        parts: [{ id: "T-2026-0065-A", name: "Speichenfelgen Borrani", material: "Stahl/Messing", finish: "Sauer Kupfer matt", location: "Wagen 06" }]
+        "id": "ord_15",
+        "orderNumber": "A-2026-0114",
+        "task": "Schaltknauf Porsche 911 bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "active",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_14_1",
+            "name": "Schaltknauf Porsche 911",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       }
     ],
-    feedbacks: []
+    "feedbacks": []
   },
   {
-    id: "K-000129",
-    name: "Pfarrei St. Ursus",
-    type: "Institution",
-    city: "Solothurn",
-    address: "Hauptgasse 12, 4500 Solothurn, Schweiz",
-    phone: "+41 32 622 11 22",
-    email: "pfarrei@ursus-solothurn.ch",
-    prefComm: "Brief / Post",
-    risk: "Hoch",
-    riskNote: "Erfordert schriftliche KostenvoranschlÃ¤ge mit detaillierter HandwerksbegrÃ¼ndung.",
-    notes: "KirchenschÃ¤tze und historische Goldkelche.",
-    priceAgreements: [],
-    orders: [
+    "id": "bus_1",
+    "name": "Möbelmanufaktur Hartl",
+    "type": "Geschäftskunde",
+    "city": "München",
+    "address": "Holzweg 12",
+    "phone": "089 123456",
+    "email": "kontakt@hartl-moebel.de",
+    "prefComm": "E-Mail",
+    "risk": "Niedrig",
+    "notes": "Stammkunde",
+    "priceAgreements": [
       {
-        id: "o10",
-        orderNumber: "A-2026-0062",
-        task: "Kirchen-Altarleuchter restaurieren",
-        intakeDate: "05.05.2026",
-        dueDate: "19.05.2026",
-        status: "critical",
-        statusText: "Kritisch - ÃœberfÃ¤llig",
-        parts: [{ id: "T-2026-0062-A", name: "Altarleuchter St. Ursus (Bronze)", material: "Bronze", finish: "Feuervergoldet (historisch)", location: "Tisch 02" }]
+        "id": "pa_3",
+        "scope": "Rahmenvertrag 3",
+        "rate": "15% Rabatt",
+        "date": "2026-01-01"
+      }
+    ],
+    "orders": [
+      {
+        "id": "ord_4",
+        "orderNumber": "A-2026-0103",
+        "task": "Bremshebel Motorrad bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-11T10:00:00Z",
+        "status": "active",
+        "statusText": "Kritisch",
+        "parts": [
+          {
+            "id": "part_3_1",
+            "name": "Bremshebel Motorrad",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       },
       {
-        id: "o15",
-        orderNumber: "A-2026-0067",
-        task: "Kirchenkelch versilbern & vergolden",
-        intakeDate: "18.05.2026",
-        dueDate: "05.06.2026",
-        status: "waiting",
-        statusText: "Wartet auf Freigabe",
-        parts: [{ id: "T-2026-0067-A", name: "Kirchenkelch St. Ursus", material: "Silber", finish: "Innenvergoldet 24k", location: "Safefach 1" }]
+        "id": "ord_16",
+        "orderNumber": "A-2026-0115",
+        "task": "Fensterbeschlag Jugendstil bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "waiting",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_15_1",
+            "name": "Fensterbeschlag Jugendstil",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       }
     ],
-    feedbacks: []
+    "feedbacks": []
   },
   {
-    id: "K-000130",
-    name: "Privatkunde Dr. MÃ¼ller",
-    type: "Privatkunde",
-    city: "ZÃ¼rich",
-    address: "Utoquai 34, 8008 ZÃ¼rich, Schweiz",
-    phone: "+41 44 211 44 55",
-    email: "dr.mueller@mueller-law.ch",
-    prefComm: "E-Mail",
-    risk: "Niedrig",
-    riskNote: "Zahlt per Vorauskasse. Absolut premium-orientiert.",
-    notes: "Rolls-Royce Sammler. Erwartet makellose Show-Chrom-OberflÃ¤chen.",
-    priceAgreements: [],
-    orders: [
+    "id": "bus_2",
+    "name": "Restaurant Goldener Anker",
+    "type": "Geschäftskunde",
+    "city": "Hamburg",
+    "address": "Hafenstr 4",
+    "phone": "040 98765",
+    "email": "info@goldener-anker.de",
+    "prefComm": "Telefon",
+    "risk": "Niedrig",
+    "notes": "Stammkunde",
+    "priceAgreements": [
       {
-        id: "o12",
-        orderNumber: "A-2026-0064",
-        task: "KÃ¼hlerfigur Emily verchromen (Rolls-Royce)",
-        intakeDate: "06.05.2026",
-        dueDate: "16.05.2026",
-        status: "critical",
-        statusText: "Kritisch - ÃœberfÃ¤llig",
-        parts: [{ id: "T-2026-0064-A", name: "KÃ¼hlerfigur Emily (Rolls Royce)", material: "Zinkdruckguss", finish: "Glanzverchromt (Premium)", location: "Meisterschrank" }]
+        "id": "pa_4",
+        "scope": "Rahmenvertrag 4",
+        "rate": "15% Rabatt",
+        "date": "2026-01-01"
+      }
+    ],
+    "orders": [
+      {
+        "id": "ord_5",
+        "orderNumber": "A-2026-0104",
+        "task": "Schaltknauf Porsche 911 bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-11T10:00:00Z",
+        "status": "active",
+        "statusText": "Kritisch",
+        "parts": [
+          {
+            "id": "part_4_1",
+            "name": "Schaltknauf Porsche 911",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       },
       {
-        id: "o18",
-        orderNumber: "A-2026-0070",
-        task: "Kamingitter antik brÃ¼nieren",
-        intakeDate: "21.05.2026",
-        dueDate: "10.06.2026",
-        status: "active",
-        statusText: "Im Plan",
-        parts: [{ id: "T-2026-0070-A", name: "Kamingitter Schmiedeeisen", material: "Stahl", finish: "Schwarz brÃ¼niert & geÃ¶lt", location: "Palette 02" }]
+        "id": "ord_17",
+        "orderNumber": "A-2026-0116",
+        "task": "Lampenfuß Empire bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "active",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_16_1",
+            "name": "Lampenfuß Empire",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       }
     ],
-    feedbacks: []
+    "feedbacks": []
   },
   {
-    id: "K-000131",
-    name: "Metallbau Vock AG",
-    type: "GeschÃ¤ftskunde",
-    city: "Aargau",
-    address: "Industriestrasse 14, 5400 Baden, Schweiz",
-    phone: "+41 56 422 77 88",
-    email: "auftrag@vock-metallbau.ch",
-    prefComm: "E-Mail",
-    risk: "Niedrig",
-    riskNote: "GroÃŸer Industriebetrieb, verlÃ¤ssliche Zahlung.",
-    notes: "Zink- und Nickel-Serienteile. Termineinbindung in Lieferketten beachten.",
-    priceAgreements: [
-      { id: "pa10", scope: "Blauverzinken GroÃŸserien", rate: "Kilopreis 1.80 CHF", date: "15.01.2026" }
-    ],
-    orders: [
+    "id": "bus_3",
+    "name": "Autohaus Sieber",
+    "type": "Geschäftskunde",
+    "city": "Stuttgart",
+    "address": "Benzstr 9",
+    "phone": "0711 234567",
+    "email": "werkstatt@sieber-auto.de",
+    "prefComm": "E-Mail",
+    "risk": "Mittel",
+    "notes": "Stammkunde",
+    "priceAgreements": [
       {
-        id: "o17",
-        orderNumber: "A-2026-0069",
-        task: "Fenstergriffe matt vernickeln",
-        intakeDate: "20.05.2026",
-        dueDate: "03.06.2026",
-        status: "active",
-        statusText: "Im Plan",
-        parts: [{ id: "T-2026-0069-A", name: "Fenstergriffe modern", material: "Messing", finish: "Nickel matt", location: "Kiste WE-04" }]
+        "id": "pa_5",
+        "scope": "Rahmenvertrag 5",
+        "rate": "15% Rabatt",
+        "date": "2026-01-01"
+      }
+    ],
+    "orders": [
+      {
+        "id": "ord_6",
+        "orderNumber": "A-2026-0105",
+        "task": "Fensterbeschlag Jugendstil bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-11T10:00:00Z",
+        "status": "active",
+        "statusText": "Kritisch",
+        "parts": [
+          {
+            "id": "part_5_1",
+            "name": "Fensterbeschlag Jugendstil",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       },
       {
-        id: "o20",
-        orderNumber: "A-2026-0072",
-        task: "Maschinenteile verzinken (Sondercharge)",
-        intakeDate: "21.05.2026",
-        dueDate: "08.06.2026",
-        status: "active",
-        statusText: "Im Plan",
-        parts: [{ id: "T-2026-0072-A", name: "Halterungen verzinken", material: "Stahl", finish: "Blau verzinkt (Dickschicht)", location: "Gitterbox 01" }]
+        "id": "ord_18",
+        "orderNumber": "A-2026-0117",
+        "task": "Wasserhahn historisch bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "active",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_17_1",
+            "name": "Wasserhahn historisch",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       }
     ],
-    feedbacks: []
+    "feedbacks": []
   },
   {
-    id: "K-000132",
-    name: "Privatkunde Weber",
-    type: "Privatkunde",
-    city: "Basel",
-    address: "Spalenring 44, 4056 Basel, Schweiz",
-    phone: "+41 61 301 22 33",
-    email: "lisa.weber@sunrise.ch",
-    prefComm: "Telefon",
-    risk: "Niedrig",
-    notes: "Bestecksets und Hausrat.",
-    priceAgreements: [],
-    orders: [
+    "id": "bus_4",
+    "name": "Schreinerei Bürkle",
+    "type": "Geschäftskunde",
+    "city": "Freiburg",
+    "address": "Waldstr 1",
+    "phone": "0761 345678",
+    "email": "info@schreinerei-buerkle.de",
+    "prefComm": "Telefon",
+    "risk": "Niedrig",
+    "notes": "Stammkunde",
+    "priceAgreements": [],
+    "orders": [
       {
-        id: "o16",
-        orderNumber: "A-2026-0068",
-        task: "Silberbesteck polieren (60 Teile)",
-        intakeDate: "19.05.2026",
-        dueDate: "02.06.2026",
-        status: "active",
-        statusText: "Im Plan",
-        parts: [{ id: "T-2026-0068-A", name: "60-teiliges Silberbesteck WMF", material: "Echtsilber", finish: "Glanzpoliert & Passiviert", location: "Karton WE-03" }]
+        "id": "ord_7",
+        "orderNumber": "A-2026-0106",
+        "task": "Lampenfuß Empire bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-11T10:00:00Z",
+        "status": "active",
+        "statusText": "Kritisch",
+        "parts": [
+          {
+            "id": "part_6_1",
+            "name": "Lampenfuß Empire",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       },
       {
-        id: "o23",
-        orderNumber: "A-2026-0075",
-        task: "TÃ¼rdrÃ¼cker patinieren (Alt-Berlin)",
-        intakeDate: "22.05.2026",
-        dueDate: "12.06.2026",
-        status: "active",
-        statusText: "Im Plan",
-        parts: [{ id: "T-2026-0075-A", name: "TÃ¼rgriffsatz Jugendstil", material: "Messing", finish: "Braun patiniert & gewachst", location: "Schublade WE-06" }]
+        "id": "ord_19",
+        "orderNumber": "A-2026-0118",
+        "task": "Kerzenleuchter Bronze bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "waiting",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_18_1",
+            "name": "Kerzenleuchter Bronze",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       }
     ],
-    feedbacks: []
+    "feedbacks": []
   },
   {
-    id: "K-000133",
-    name: "Schlossverwaltung Wildegg",
-    type: "Institution",
-    city: "Wildegg",
-    address: "Schlossberg, 5103 MÃ¶riken-Wildegg, Schweiz",
-    phone: "+41 62 893 22 55",
-    email: "info@schloss-wildegg.ch",
-    prefComm: "E-Mail",
-    risk: "Niedrig",
-    notes: "Historische Zinn-, Messing- und Kupfer-Exponate. Konservierung steht vor Neuglanz.",
-    priceAgreements: [],
-    orders: [
+    "id": "priv_1",
+    "name": "Müller",
+    "type": "Privatkunde",
+    "city": "Berlin",
+    "address": "Hauptstr 1",
+    "phone": "030 111222",
+    "email": "mueller@example.com",
+    "prefComm": "E-Mail",
+    "risk": "Niedrig",
+    "notes": "Stammkunde",
+    "priceAgreements": [],
+    "orders": [
       {
-        id: "o11",
-        orderNumber: "A-2026-0063",
-        task: "Schloss-Fenstergriffe vergolden",
-        intakeDate: "12.05.2026",
-        dueDate: "24.05.2026",
-        status: "critical",
-        statusText: "GefÃ¤hrdet",
-        parts: [{ id: "T-2026-0063-A", name: "Fenstergriffe Schloss Wildegg", material: "Messing", finish: "Hartvergoldet 24k", location: "Kiste K-08" }]
+        "id": "ord_8",
+        "orderNumber": "A-2026-0107",
+        "task": "Wasserhahn historisch bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-11T10:00:00Z",
+        "status": "active",
+        "statusText": "Kritisch",
+        "parts": [
+          {
+            "id": "part_7_1",
+            "name": "Wasserhahn historisch",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       },
       {
-        id: "o24",
-        orderNumber: "A-2026-0076",
-        task: "Kupferkessel glanzpolieren",
-        intakeDate: "22.05.2026",
-        dueDate: "18.06.2026",
-        status: "active",
-        statusText: "Im Plan",
-        parts: [{ id: "T-2026-0076-A", name: "Historischer Kupferwaschkessel", material: "Kupferblech", finish: "Hand-Hochglanzpolitur & Zaponlack", location: "Palette WE-07" }]
+        "id": "ord_20",
+        "orderNumber": "A-2026-0119",
+        "task": "Beschlag Sekretär bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "active",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_19_1",
+            "name": "Beschlag Sekretär",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       }
     ],
-    feedbacks: []
+    "feedbacks": []
   },
   {
-    id: "K-000134",
-    name: "Classic Bike Bodensee",
-    type: "GeschÃ¤ftskunde",
-    city: "Konstanz",
-    address: "Seeweg 14, 78464 Konstanz",
-    phone: "+49 7531 445566",
-    email: "info@classic-bike-bodensee.de",
-    prefComm: "E-Mail",
-    risk: "Niedrig",
-    notes: "Spezialist fÃ¼r klassische MotorrÃ¤der aus dem Voralpengebiet.",
-    priceAgreements: [],
-    orders: [
+    "id": "priv_2",
+    "name": "Schmid",
+    "type": "Privatkunde",
+    "city": "Frankfurt",
+    "address": "Zeil 10",
+    "phone": "069 333444",
+    "email": "schmid@example.com",
+    "prefComm": "Telefon",
+    "risk": "Niedrig",
+    "notes": "Stammkunde",
+    "priceAgreements": [],
+    "orders": [
       {
-        id: "o9",
-        orderNumber: "A-2026-0061",
-        task: "Zierleisten schleifen (Porsche 356)",
-        intakeDate: "13.05.2026",
-        dueDate: "23.05.2026",
-        status: "critical",
-        statusText: "GefÃ¤hrdet",
-        parts: [{ id: "T-2026-0061-A", name: "Zierleistensatz Porsche 356", material: "Aluminium", finish: "Glanzpoliert", location: "Schublade S-04" }]
+        "id": "ord_9",
+        "orderNumber": "A-2026-0108",
+        "task": "Kerzenleuchter Bronze bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "active",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_8_1",
+            "name": "Kerzenleuchter Bronze",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       },
       {
-        id: "o14",
-        orderNumber: "A-2026-0066",
-        task: "Vespa KotflÃ¼gel spachteln & verchromen",
-        intakeDate: "16.05.2026",
-        dueDate: "26.05.2026",
-        status: "active",
-        statusText: "FÃ¤llig in 4 Tagen",
-        parts: [{ id: "T-2026-0066-A", name: "KotflÃ¼gel Vespa V50", material: "Stahlblech", finish: "Glanzverchromt", location: "Kiste WE-02" }]
+        "id": "ord_21",
+        "orderNumber": "A-2026-0120",
+        "task": "Stoßstange Mercedes 280SE bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "active",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_20_1",
+            "name": "Stoßstange Mercedes 280SE",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
       }
     ],
-    feedbacks: []
+    "feedbacks": []
   },
   {
-    id: "K-000128",
-    name: "Autohaus Meier GmbH",
-    type: "Geschäftskunde",
-    city: "München",
-    address: "Autoallee 1, 80331 München",
-    phone: "+49 89 112233",
-    email: "service@autohaus-meier.de",
-    prefComm: "Telefon",
-    risk: "Niedrig",
-    riskNote: "Großkunde, zahlt immer pünktlich.",
-    notes: "Restauriert viele Oldtimer.",
-    priceAgreements: [],
-    orders: [],
-    feedbacks: []
+    "id": "priv_3",
+    "name": "Fischer",
+    "type": "Privatkunde",
+    "city": "Köln",
+    "address": "Rheinpromenade 5",
+    "phone": "0221 555666",
+    "email": "fischer@example.com",
+    "prefComm": "E-Mail",
+    "risk": "Mittel",
+    "notes": "Stammkunde",
+    "priceAgreements": [],
+    "orders": [
+      {
+        "id": "ord_10",
+        "orderNumber": "A-2026-0109",
+        "task": "Beschlag Sekretär bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "waiting",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_9_1",
+            "name": "Beschlag Sekretär",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
+      },
+      {
+        "id": "ord_22",
+        "orderNumber": "A-2026-0121",
+        "task": "Türgriff Holztür bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "waiting",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_21_1",
+            "name": "Türgriff Holztür",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
+      }
+    ],
+    "feedbacks": []
   },
   {
-    id: "K-000129",
-    name: "Zweirad-Schmiede Berlin",
-    type: "Geschäftskunde",
-    city: "Berlin",
-    address: "Motorradweg 5, 10115 Berlin",
-    phone: "+49 30 998877",
-    email: "werkstatt@zweirad-schmiede.berlin",
-    prefComm: "E-Mail",
-    risk: "Mittel",
-    riskNote: "Zahlungsziel oft ausgereizt.",
-    notes: "Spezialist für Simson und MZ.",
-    priceAgreements: [],
-    orders: [],
-    feedbacks: []
+    "id": "priv_4",
+    "name": "Bauer",
+    "type": "Privatkunde",
+    "city": "Nürnberg",
+    "address": "Burgweg 2",
+    "phone": "0911 777888",
+    "email": "bauer@example.com",
+    "prefComm": "E-Mail",
+    "risk": "Niedrig",
+    "notes": "Stammkunde",
+    "priceAgreements": [],
+    "orders": [
+      {
+        "id": "ord_11",
+        "orderNumber": "A-2026-0110",
+        "task": "Stoßstange Mercedes 280SE bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "active",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_10_1",
+            "name": "Stoßstange Mercedes 280SE",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
+      },
+      {
+        "id": "ord_23",
+        "orderNumber": "A-2026-0122",
+        "task": "Leuchter Pfarrei bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "active",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_22_1",
+            "name": "Leuchter Pfarrei",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
+      }
+    ],
+    "feedbacks": []
   },
   {
-    id: "K-000130",
-    name: "Johannes Wagner",
-    type: "Privatkunde",
-    city: "Hamburg",
-    address: "Hafenstraße 12, 20457 Hamburg",
-    phone: "+49 40 555666",
-    email: "johannes.wagner@gmx.de",
-    prefComm: "Telefon",
-    risk: "Niedrig",
-    riskNote: "",
-    notes: "Privater Uhrensammler.",
-    priceAgreements: [],
-    orders: [],
-    feedbacks: []
-  },
-  {
-    id: "K-000131",
-    name: "Classic Cars Stuttgart",
-    type: "Geschäftskunde",
-    city: "Stuttgart",
-    address: "Porschestraße 9, 70435 Stuttgart",
-    phone: "+49 711 334455",
-    email: "info@classic-cars-stuttgart.de",
-    prefComm: "E-Mail",
-    risk: "Niedrig",
-    riskNote: "Top-Kunde.",
-    notes: "Höchste Qualitätsansprüche (Porsche 356 Teile).",
-    priceAgreements: [],
-    orders: [],
-    feedbacks: []
-  },
-  {
-    id: "K-000132",
-    name: "Musikhaus Klang GmbH",
-    type: "Geschäftskunde",
-    city: "Leipzig",
-    address: "Notenweg 3, 04109 Leipzig",
-    phone: "+49 341 223344",
-    email: "werkstatt@musikhaus-klang.de",
-    prefComm: "Telefon",
-    risk: "Niedrig",
-    riskNote: "",
-    notes: "Instrumentenveredelung (Blechblasinstrumente versilbern).",
-    priceAgreements: [],
-    orders: [],
-    feedbacks: []
-  },
-  {
-    id: "K-000133",
-    name: "Elena Schmidt",
-    type: "Privatkunde",
-    city: "Dresden",
-    address: "Altmarkt 5, 01067 Dresden",
-    phone: "+49 351 778899",
-    email: "elena.schmidt@web.de",
-    prefComm: "E-Mail",
-    risk: "Niedrig",
-    riskNote: "",
-    notes: "Antiker Schmuck zur Aufbereitung.",
-    priceAgreements: [],
-    orders: [],
-    feedbacks: []
-  },
-  {
-    id: "K-000134",
-    name: "Möbelmanufaktur Holz & Stahl",
-    type: "Geschäftskunde",
-    city: "Köln",
-    address: "Designring 7, 50667 Köln",
-    phone: "+49 221 445566",
-    email: "einkauf@holz-stahl.koeln",
-    prefComm: "E-Mail",
-    risk: "Mittel",
-    riskNote: "Zahlung 30 Tage netto vereinbart.",
-    notes: "Möbelbeschläge vernickeln und brünieren.",
-    priceAgreements: [],
-    orders: [],
-    feedbacks: []
-  },
-  {
-    id: "K-000135",
-    name: "Schlosserei Müller",
-    type: "Geschäftskunde",
-    city: "Nürnberg",
-    address: "Eisenstraße 14, 90402 Nürnberg",
-    phone: "+49 911 667788",
-    email: "mueller@schlosserei-nuernberg.de",
-    prefComm: "Telefon",
-    risk: "Niedrig",
-    riskNote: "",
-    notes: "Regelmäßige Aufträge für Zäune und Torbeschläge.",
-    priceAgreements: [],
-    orders: [],
-    feedbacks: []
+    "id": "priv_5",
+    "name": "Wagner",
+    "type": "Privatkunde",
+    "city": "Leipzig",
+    "address": "Markt 3",
+    "phone": "0341 999000",
+    "email": "wagner@example.com",
+    "prefComm": "Brief / Post",
+    "risk": "Hoch",
+    "notes": "Stammkunde",
+    "priceAgreements": [],
+    "orders": [
+      {
+        "id": "ord_12",
+        "orderNumber": "A-2026-0111",
+        "task": "Türgriff Holztür bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "active",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_11_1",
+            "name": "Türgriff Holztür",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
+      },
+      {
+        "id": "ord_24",
+        "orderNumber": "A-2026-0123",
+        "task": "Bremshebel Motorrad bearbeiten",
+        "intakeDate": "2026-05-10T10:00:00Z",
+        "dueDate": "2026-05-30T10:00:00Z",
+        "status": "active",
+        "statusText": "Im Plan",
+        "parts": [
+          {
+            "id": "part_23_1",
+            "name": "Bremshebel Motorrad",
+            "material": "Messing",
+            "finish": "Glanz",
+            "location": "Regal 1"
+          }
+        ]
+      }
+    ],
+    "feedbacks": []
   }
 ];
 
-export const INITIAL_SCAN_LOG = [
-  { time: "16:15", type: "Etikett", desc: "DHL Paket von 'Antik-Haus GmbH' eingescannt", status: "Dublettenrisiko: Gering" },
-  { time: "15:40", type: "Objekt", desc: "Foto von Tank BMW R75 zu A-2026-0038 hinzugefÃ¼gt", status: "Klassifiziert als Motorradteil" },
-  { time: "14:10", type: "QR-Code", desc: "Teil T-2026-0042 an Station Schleiferei erfasst", status: "Status: In Bearbeitung" }
+export const INITIAL_INVENTORY = [
+  {
+    "id": "inv_1",
+    "name": "Glanznickel",
+    "unit": "Liter",
+    "minStock": 50,
+    "currentStock": 45,
+    "pricePerUnit": 120.5
+  },
+  {
+    "id": "inv_2",
+    "name": "Kupferzyanid",
+    "unit": "kg",
+    "minStock": 20,
+    "currentStock": 35,
+    "pricePerUnit": 45
+  },
+  {
+    "id": "inv_3",
+    "name": "Schwefelsäure",
+    "unit": "Liter",
+    "minStock": 100,
+    "currentStock": 120,
+    "pricePerUnit": 8.5
+  },
+  {
+    "id": "inv_4",
+    "name": "Glanzzusatz Chrom",
+    "unit": "Liter",
+    "minStock": 10,
+    "currentStock": 8,
+    "pricePerUnit": 250
+  },
+  {
+    "id": "inv_5",
+    "name": "Polierpaste Vorpolitur",
+    "unit": "kg",
+    "minStock": 30,
+    "currentStock": 15,
+    "pricePerUnit": 22
+  },
+  {
+    "id": "inv_6",
+    "name": "Polierpaste Hochglanz",
+    "unit": "kg",
+    "minStock": 30,
+    "currentStock": 40,
+    "pricePerUnit": 35.5
+  },
+  {
+    "id": "inv_7",
+    "name": "Entfettungssalz",
+    "unit": "kg",
+    "minStock": 50,
+    "currentStock": 80,
+    "pricePerUnit": 12
+  },
+  {
+    "id": "inv_8",
+    "name": "Aktivator-Säure",
+    "unit": "Liter",
+    "minStock": 25,
+    "currentStock": 20,
+    "pricePerUnit": 18
+  },
+  {
+    "id": "inv_9",
+    "name": "Goldbad Ansatz",
+    "unit": "Liter",
+    "minStock": 2,
+    "currentStock": 3,
+    "pricePerUnit": 1450
+  },
+  {
+    "id": "inv_10",
+    "name": "Silberbad Ansatz",
+    "unit": "Liter",
+    "minStock": 5,
+    "currentStock": 5,
+    "pricePerUnit": 320
+  }
 ];
-
+export const INITIAL_MOVEMENTS = [
+  {
+    "id": "mov_0",
+    "inventoryItemId": "inv_1",
+    "type": "IN",
+    "amount": 2,
+    "date": "2026-05-01T08:00:00Z"
+  },
+  {
+    "id": "mov_1",
+    "inventoryItemId": "inv_2",
+    "type": "OUT",
+    "amount": 7,
+    "date": "2026-05-02T08:00:00Z"
+  },
+  {
+    "id": "mov_2",
+    "inventoryItemId": "inv_3",
+    "type": "OUT",
+    "amount": 12,
+    "date": "2026-05-03T08:00:00Z"
+  },
+  {
+    "id": "mov_3",
+    "inventoryItemId": "inv_4",
+    "type": "IN",
+    "amount": 17,
+    "date": "2026-05-04T08:00:00Z"
+  },
+  {
+    "id": "mov_4",
+    "inventoryItemId": "inv_5",
+    "type": "OUT",
+    "amount": 22,
+    "date": "2026-05-05T08:00:00Z"
+  },
+  {
+    "id": "mov_5",
+    "inventoryItemId": "inv_6",
+    "type": "OUT",
+    "amount": 27,
+    "date": "2026-05-06T08:00:00Z"
+  },
+  {
+    "id": "mov_6",
+    "inventoryItemId": "inv_7",
+    "type": "IN",
+    "amount": 32,
+    "date": "2026-05-07T08:00:00Z"
+  },
+  {
+    "id": "mov_7",
+    "inventoryItemId": "inv_8",
+    "type": "OUT",
+    "amount": 37,
+    "date": "2026-05-08T08:00:00Z"
+  },
+  {
+    "id": "mov_8",
+    "inventoryItemId": "inv_9",
+    "type": "OUT",
+    "amount": 42,
+    "date": "2026-05-09T08:00:00Z"
+  },
+  {
+    "id": "mov_9",
+    "inventoryItemId": "inv_10",
+    "type": "IN",
+    "amount": 47,
+    "date": "2026-05-10T08:00:00Z"
+  },
+  {
+    "id": "mov_10",
+    "inventoryItemId": "inv_1",
+    "type": "OUT",
+    "amount": 52,
+    "date": "2026-05-11T08:00:00Z"
+  },
+  {
+    "id": "mov_11",
+    "inventoryItemId": "inv_2",
+    "type": "OUT",
+    "amount": 57,
+    "date": "2026-05-12T08:00:00Z"
+  },
+  {
+    "id": "mov_12",
+    "inventoryItemId": "inv_3",
+    "type": "IN",
+    "amount": 62,
+    "date": "2026-05-13T08:00:00Z"
+  },
+  {
+    "id": "mov_13",
+    "inventoryItemId": "inv_4",
+    "type": "OUT",
+    "amount": 67,
+    "date": "2026-05-14T08:00:00Z"
+  },
+  {
+    "id": "mov_14",
+    "inventoryItemId": "inv_5",
+    "type": "OUT",
+    "amount": 72,
+    "date": "2026-05-15T08:00:00Z"
+  },
+  {
+    "id": "mov_15",
+    "inventoryItemId": "inv_6",
+    "type": "IN",
+    "amount": 77,
+    "date": "2026-05-16T08:00:00Z"
+  },
+  {
+    "id": "mov_16",
+    "inventoryItemId": "inv_7",
+    "type": "OUT",
+    "amount": 82,
+    "date": "2026-05-17T08:00:00Z"
+  },
+  {
+    "id": "mov_17",
+    "inventoryItemId": "inv_8",
+    "type": "OUT",
+    "amount": 87,
+    "date": "2026-05-18T08:00:00Z"
+  },
+  {
+    "id": "mov_18",
+    "inventoryItemId": "inv_9",
+    "type": "IN",
+    "amount": 92,
+    "date": "2026-05-19T08:00:00Z"
+  },
+  {
+    "id": "mov_19",
+    "inventoryItemId": "inv_10",
+    "type": "OUT",
+    "amount": 97,
+    "date": "2026-05-20T08:00:00Z"
+  }
+];
+export const INITIAL_BATHS = [
+  {
+    "id": "bath_1",
+    "name": "Nickelbad 1",
+    "processType": "nickel"
+  },
+  {
+    "id": "bath_2",
+    "name": "Chrombad 1",
+    "processType": "chrome"
+  },
+  {
+    "id": "bath_3",
+    "name": "Entfettung 1",
+    "processType": "cleaning"
+  },
+  {
+    "id": "bath_4",
+    "name": "Entmetallisierung 1",
+    "processType": "stripping"
+  }
+];
+export const INITIAL_MEASUREMENTS = [
+  {
+    "id": "meas_0_0",
+    "bathId": "bath_1",
+    "phValue": 4,
+    "temperature": 50,
+    "measuredAt": "2026-05-10T08:00:00Z"
+  },
+  {
+    "id": "meas_0_1",
+    "bathId": "bath_1",
+    "phValue": 4.1,
+    "temperature": 51,
+    "measuredAt": "2026-05-11T08:00:00Z"
+  },
+  {
+    "id": "meas_0_2",
+    "bathId": "bath_1",
+    "phValue": 4.2,
+    "temperature": 52,
+    "measuredAt": "2026-05-12T08:00:00Z"
+  },
+  {
+    "id": "meas_1_0",
+    "bathId": "bath_2",
+    "phValue": 4,
+    "temperature": 50,
+    "measuredAt": "2026-05-10T08:00:00Z"
+  },
+  {
+    "id": "meas_1_1",
+    "bathId": "bath_2",
+    "phValue": 4.1,
+    "temperature": 51,
+    "measuredAt": "2026-05-11T08:00:00Z"
+  },
+  {
+    "id": "meas_1_2",
+    "bathId": "bath_2",
+    "phValue": 4.2,
+    "temperature": 52,
+    "measuredAt": "2026-05-12T08:00:00Z"
+  },
+  {
+    "id": "meas_2_0",
+    "bathId": "bath_3",
+    "phValue": 4,
+    "temperature": 50,
+    "measuredAt": "2026-05-10T08:00:00Z"
+  },
+  {
+    "id": "meas_2_1",
+    "bathId": "bath_3",
+    "phValue": 4.1,
+    "temperature": 51,
+    "measuredAt": "2026-05-11T08:00:00Z"
+  },
+  {
+    "id": "meas_2_2",
+    "bathId": "bath_3",
+    "phValue": 4.2,
+    "temperature": 52,
+    "measuredAt": "2026-05-12T08:00:00Z"
+  },
+  {
+    "id": "meas_3_0",
+    "bathId": "bath_4",
+    "phValue": 4,
+    "temperature": 50,
+    "measuredAt": "2026-05-10T08:00:00Z"
+  },
+  {
+    "id": "meas_3_1",
+    "bathId": "bath_4",
+    "phValue": 4.1,
+    "temperature": 51,
+    "measuredAt": "2026-05-11T08:00:00Z"
+  },
+  {
+    "id": "meas_3_2",
+    "bathId": "bath_4",
+    "phValue": 4.2,
+    "temperature": 52,
+    "measuredAt": "2026-05-12T08:00:00Z"
+  }
+];
+export const INITIAL_PRICE_AGREEMENTS = [
+  {
+    "id": "pa_0",
+    "customerId": "inst_1",
+    "scope": "Rahmenvertrag 0",
+    "rate": "15% Rabatt",
+    "date": "2026-01-01"
+  },
+  {
+    "id": "pa_1",
+    "customerId": "inst_2",
+    "scope": "Rahmenvertrag 1",
+    "rate": "15% Rabatt",
+    "date": "2026-01-01"
+  },
+  {
+    "id": "pa_2",
+    "customerId": "inst_3",
+    "scope": "Rahmenvertrag 2",
+    "rate": "15% Rabatt",
+    "date": "2026-01-01"
+  },
+  {
+    "id": "pa_3",
+    "customerId": "bus_1",
+    "scope": "Rahmenvertrag 3",
+    "rate": "15% Rabatt",
+    "date": "2026-01-01"
+  },
+  {
+    "id": "pa_4",
+    "customerId": "bus_2",
+    "scope": "Rahmenvertrag 4",
+    "rate": "15% Rabatt",
+    "date": "2026-01-01"
+  },
+  {
+    "id": "pa_5",
+    "customerId": "bus_3",
+    "scope": "Rahmenvertrag 5",
+    "rate": "15% Rabatt",
+    "date": "2026-01-01"
+  }
+];
+export const INITIAL_COMPLAINTS = [
+  {
+    "id": "comp_0",
+    "customerId": "inst_1",
+    "orderId": "ord_1",
+    "reason": "Fehlstellen in Beschichtung",
+    "description": "Kunde meldet Poren",
+    "createdAt": "2026-05-15T10:00:00Z",
+    "status": "Offen"
+  },
+  {
+    "id": "comp_1",
+    "customerId": "inst_2",
+    "orderId": "ord_2",
+    "reason": "Fehlstellen in Beschichtung",
+    "description": "Kunde meldet Poren",
+    "createdAt": "2026-05-15T10:00:00Z",
+    "status": "Offen"
+  },
+  {
+    "id": "comp_2",
+    "customerId": "inst_3",
+    "orderId": "ord_3",
+    "reason": "Fehlstellen in Beschichtung",
+    "description": "Kunde meldet Poren",
+    "createdAt": "2026-05-15T10:00:00Z",
+    "status": "Offen"
+  }
+];
+export const INITIAL_SCAN_LOG = [
+  { id: "log-1", time: "08:15", type: "scan", desc: "Zylinderblock (T-004) erfasst", status: "success" },
+  { id: "log-2", time: "08:22", type: "match", desc: "Kunde K-004 zugeordnet", status: "success" }
+];
