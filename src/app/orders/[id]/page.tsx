@@ -43,9 +43,35 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <span className="px-3 py-1.5 bg-blue-100 text-blue-800 font-bold rounded-lg text-sm flex items-center">
             <Box className="w-4 h-4 mr-2" /> Station: {getStationConfig(order.currentStationId || order.station || "wareneingang").name}
           </span>
-          <span className="px-3 py-1.5 bg-red-100 text-red-800 font-bold rounded-lg text-sm flex items-center">
-            <Clock className="w-4 h-4 mr-2" /> Überfällig seit: 3 Stunden
-          </span>
+          {(() => {
+            if (!order.dueDate) {
+              return (
+                <span className="px-3 py-1.5 bg-green-100 text-green-800 font-bold rounded-lg text-sm flex items-center">
+                  <Clock className="w-4 h-4 mr-2" /> Neu angelegt
+                </span>
+              );
+            }
+            const due = new Date(order.dueDate);
+            const today = new Date();
+            const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const dueMidnight = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+            const isOverdue = dueMidnight < todayMidnight;
+            
+            if (isOverdue) {
+              const diffHours = Math.max(0, Math.floor((today.getTime() - due.getTime()) / (1000 * 60 * 60)));
+              return (
+                <span className="px-3 py-1.5 bg-red-100 text-red-800 font-bold rounded-lg text-sm flex items-center">
+                  <Clock className="w-4 h-4 mr-2" /> Überfällig seit: {diffHours} Stunden
+                </span>
+              );
+            } else {
+              return (
+                <span className="px-3 py-1.5 bg-green-100 text-green-800 font-bold rounded-lg text-sm flex items-center">
+                  <Clock className="w-4 h-4 mr-2" /> Fällig am: {due.toLocaleDateString("de-DE")}
+                </span>
+              );
+            }
+          })()}
         </div>
       </div>
 

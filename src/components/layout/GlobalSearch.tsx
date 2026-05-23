@@ -64,22 +64,32 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
 
   const cleanTerm = searchTerm.trim().toLowerCase()
 
-  // Filter logic
+  const safe = (value: unknown) => String(value ?? "").toLowerCase();
+
   const filteredOrders = cleanTerm
     ? orders.filter(
-        (o) =>
-          o.orderNumber.toLowerCase().includes(cleanTerm) ||
-          o.task.toLowerCase().includes(cleanTerm) ||
-          o.customerName.toLowerCase().includes(cleanTerm)
+        (o: any) => {
+          const custName = o.customerName || customers.find((c: any) => c.id === o.customerId)?.name;
+          return safe(o.orderNumber).includes(cleanTerm) ||
+          safe(o.task).includes(cleanTerm) ||
+          safe(o.title).includes(cleanTerm) ||
+          safe(o.description).includes(cleanTerm) ||
+          safe(custName).includes(cleanTerm) ||
+          safe(o.customer?.name).includes(cleanTerm) ||
+          safe(o.surfaceRequested).includes(cleanTerm) ||
+          safe(o.stationName).includes(cleanTerm) ||
+          (Array.isArray(o.parts) && o.parts.some((p: any) => safe(p.name).includes(cleanTerm) || safe(p.description).includes(cleanTerm))) ||
+          (Array.isArray(o.items) && o.items.some((p: any) => safe(p.name).includes(cleanTerm) || safe(p.description).includes(cleanTerm)));
+        }
       ).slice(0, 5)
     : []
 
   const filteredCustomers = cleanTerm
     ? customers.filter(
         (c) =>
-          c.name.toLowerCase().includes(cleanTerm) ||
-          (c.email && c.email.toLowerCase().includes(cleanTerm)) ||
-          (c.phone && c.phone.toLowerCase().includes(cleanTerm))
+          safe(c.name).includes(cleanTerm) ||
+          safe(c.email).includes(cleanTerm) ||
+          safe(c.phone).includes(cleanTerm)
       ).slice(0, 5)
     : []
 

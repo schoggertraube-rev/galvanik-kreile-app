@@ -80,6 +80,8 @@ interface Customer {
   feedbacks: FeedbackLog[];
 }
 
+const safe = (value: unknown) => String(value ?? "").toLowerCase();
+
 export default function CustomersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
@@ -112,10 +114,11 @@ export default function CustomersPage() {
   const [newCustNotes, setNewCustNotes] = useState("");
 
   const filteredCustomers = customers.filter(c => {
+    const cleanTerm = searchTerm.toLowerCase();
     const matchesSearch =
-      c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.city.toLowerCase().includes(searchTerm.toLowerCase());
+      safe(c.name).includes(cleanTerm) ||
+      safe(c.id).includes(cleanTerm) ||
+      safe(c.city).includes(cleanTerm);
 
     if (typeFilter === "all") return matchesSearch;
     return matchesSearch && c.type === typeFilter;

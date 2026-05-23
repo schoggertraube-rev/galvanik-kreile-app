@@ -24,6 +24,9 @@ import { INITIAL_ORDERS, INITIAL_CUSTOMERS, MockOrder, MockCustomer } from "@/li
 import { getStationConfig, getAllStations } from "@/constants/stations";
 import { evaluateOrderPriority } from "@/lib/priority";
 
+const safe = (value: unknown) => String(value ?? "").toLowerCase();
+
+
 function OrdersPageInner() {
   const searchParams = useSearchParams();
   const stationFilter = searchParams.get("station");
@@ -162,10 +165,10 @@ function OrdersPageInner() {
 
   // Filter orders by search term, status filter AND station filter
   const filteredOrders = orders.filter(o => {
-    // 1. Search term match
-    const matchesSearch = o.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          o.task.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          o.customerName.toLowerCase().includes(searchTerm.toLowerCase());
+    const cleanTerm = searchTerm.toLowerCase();
+    const matchesSearch = safe(o.orderNumber).includes(cleanTerm) ||
+                          safe(o.task).includes(cleanTerm) ||
+                          safe(o.customerName).includes(cleanTerm);
     
     if (!matchesSearch) return false;
 
@@ -197,7 +200,7 @@ function OrdersPageInner() {
   // Find customer information for phone details checking
   const getCustomerPhoneDetails = (customerName: string, customerId: string) => {
     const customer = customersList.find(
-      c => c.id === customerId || c.name.toLowerCase().includes(customerName.toLowerCase())
+      c => c.id === customerId || safe(c?.name).includes(safe(customerName))
     );
     if (customer && customer.phone && customer.phone.trim() !== "") {
       return { hasPhone: true, phone: customer.phone };

@@ -105,7 +105,7 @@ export default function TodayDashboard() {
       }
     }
     const customer = list.find(
-      c => c.id === customerId || c.name.toLowerCase().includes(customerName.toLowerCase())
+      c => c.id === customerId || String(c?.name ?? "").toLowerCase().includes(String(customerName ?? "").toLowerCase())
     );
     return customer && customer.phone && customer.phone.trim() !== "" ? customer.phone : null;
   };
