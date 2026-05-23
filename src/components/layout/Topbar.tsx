@@ -27,7 +27,8 @@ export function Topbar() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      setSearchParams(new URLSearchParams(window.location.search))
+      const id = setTimeout(() => setSearchParams(new URLSearchParams(window.location.search)), 0);
+      return () => clearTimeout(id);
     }
   }, [pathname])
 

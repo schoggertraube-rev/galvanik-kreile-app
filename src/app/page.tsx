@@ -110,7 +110,7 @@ export default function HeuteDashboard() {
   useEffect(() => {
     const hour = new Date().getHours();
     const g = hour < 11 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend";
-    setGreeting(g);
+    setTimeout(() => setGreeting(g), 0);
   }, []);
 
   return (
