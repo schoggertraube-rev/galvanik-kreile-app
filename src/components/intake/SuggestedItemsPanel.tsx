@@ -1,10 +1,10 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { Plus, Trash2, Camera as CamIcon, ChevronRight, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export function SuggestedItemsPanel({ ocrData, onConfirm }: { ocrData: Record<string, string>, onConfirm: (items: Record<string, unknown>[]) => void }) {
-  const [items, setItems] = useState([
+  const [items, setItems] = useState(() => [
     { id: Date.now().toString(), name: ocrData.itemName || "Bauteil", quantity: parseInt(ocrData.quantity) || 1, surfaceRequested: ocrData.surfaceRequested || "", photo: "" }
   ]);
 
