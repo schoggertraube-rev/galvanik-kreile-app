@@ -61,7 +61,7 @@ export const timelineRepository = {
         "COSTS_BOOKED": "Kosten gebucht"
       };
 
-      let title = eventTitleMap[e.eventType] || e.eventType;
+      const title = eventTitleMap[e.eventType] || e.eventType;
       
       if (e.eventType === "ORDER_CREATED_MANUAL" || e.eventType === "ORDER_CREATED_FROM_SCAN") severity = "good";
       if (e.eventType === "PHOTO_CAPTURED") severity = "neutral"; // handled by icon later
@@ -130,7 +130,7 @@ export const timelineRepository = {
         "COSTS_BOOKED": "Kosten gebucht"
       };
 
-      let title = eventTitleMap[e.eventType] || e.eventType;
+      const title = eventTitleMap[e.eventType] || e.eventType;
 
       if (e.eventType === "ORDER_CREATED_MANUAL" || e.eventType === "ORDER_CREATED_FROM_SCAN") severity = "good";
       if (e.eventType.includes("COMPLETED") || e.eventType.includes("PASSED")) severity = "good";

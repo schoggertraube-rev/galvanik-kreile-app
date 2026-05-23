@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X, Save, AlertTriangle, Shield, User, MapPin } from "lucide-react";
+import { X, Save, Shield, User, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { Customer } from "@/lib/repositories/customersRepository";
@@ -47,7 +47,7 @@ export function CustomerEditModal({
     }
   };
 
-  const updateField = (key: keyof Customer, val: any) => {
+  const updateField = (key: keyof Customer, val: string | null) => {
     setFormData(prev => ({ ...prev, [key]: val }));
   };
 

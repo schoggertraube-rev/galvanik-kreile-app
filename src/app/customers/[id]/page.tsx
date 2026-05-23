@@ -2,7 +2,7 @@
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { CustomerProfileHeader } from "@/components/customers/CustomerProfileHeader";
-import { CustomerEditModal } from "@/components/customers/CustomerEditModal";
+
 import { PriceAgreementPanel } from "@/components/customers/PriceAgreementPanel";
 import { OrderTimeline } from "@/components/orders/OrderTimeline";
 import { customersRepository, Customer } from "@/lib/repositories/customersRepository";
@@ -34,15 +34,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
   const [orders, setOrders] = useState<Order[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const handleSaveCustomer = async (changes: Partial<Customer>) => {
-    if (!customer) return;
-    const updated = await customersRepository.updateCustomer(customer.id, changes);
-    if (updated) {
-      setCustomer(updated);
-    }
-  };
 
   useEffect(() => {
     async function load() {
