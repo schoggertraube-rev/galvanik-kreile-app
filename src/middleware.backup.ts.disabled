@@ -1,0 +1,23 @@
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { proxy } from './proxy';
+
+export async function middleware(request: NextRequest) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+  // Fallback if Supabase ENVs are missing (mock mode)
+  if (!supabaseUrl || !supabaseKey) {
+    return NextResponse.next();
+  }
+
+  return proxy(request);
+}
+
+export const config = {
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)',
+  ],
+};
