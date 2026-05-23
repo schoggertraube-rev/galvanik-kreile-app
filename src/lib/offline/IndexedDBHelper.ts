@@ -5,7 +5,7 @@ const DB_VERSION = 1;
 
 export interface OfflineAction {
   id: string; // unique cuid
-  actionType: "ORDER_CREATE" | "ORDER_STATUS_UPDATE" | "MATERIAL_BOOKING" | "TIME_BOOKING";
+  actionType: "ORDER_CREATE" | "ORDER_STATUS_UPDATE" | "MATERIAL_BOOKING" | "TIME_BOOKING" | "CUSTOMER_CREATE" | "CUSTOMER_UPDATE";
   payload: unknown;
   timestamp: string; // ISO format
 }

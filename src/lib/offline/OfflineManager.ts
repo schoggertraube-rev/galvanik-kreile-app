@@ -82,36 +82,35 @@ export const OfflineManager = {
         
         switch (item.actionType) {
           case "ORDER_CREATE": {
-            // Create order normally
             await ordersRepository.create(item.payload as Omit<Order, "id" | "orderNumber" | "status" | "risk">);
             break;
           }
           
           case "ORDER_STATUS_UPDATE": {
-            // Update order risk and other metadata
             const payload = item.payload as { id?: string; orderNumber?: string; changes?: Partial<Order> };
-            const orders = await ordersRepository.getAll();
-            const updated = orders.map((o: Order) => {
-              if (o.id === payload.id || o.orderNumber === payload.orderNumber) {
-                return {
-                  ...o,
-                  ...payload.changes
-                } as Order;
-              }
-              return o;
-            });
-            localStorage.setItem("kreile_orders", JSON.stringify(updated));
+            await ordersRepository.updateOrder(payload.id || payload.orderNumber || "", payload.changes || {});
+            break;
+          }
+
+          case "CUSTOMER_CREATE": {
+            const { customersRepository } = await import("@/lib/repositories/customersRepository");
+            await customersRepository.create(item.payload as any);
+            break;
+          }
+          
+          case "CUSTOMER_UPDATE": {
+            const { customersRepository } = await import("@/lib/repositories/customersRepository");
+            const payload = item.payload as { id: string; changes: any };
+            await customersRepository.updateCustomer(payload.id, payload.changes);
             break;
           }
           
           case "MATERIAL_BOOKING": {
-            // Register stock movement normally (handles atomic decrement automatically)
             await inventoryRepository.createMovement(item.payload as Omit<StockMovement, "id" | "createdAt">);
             break;
           }
           
           case "TIME_BOOKING": {
-            // Append work time event normally
             await eventsRepository.addEvent(item.payload as import('../repositories/eventsRepository').StatusEvent);
             break;
           }

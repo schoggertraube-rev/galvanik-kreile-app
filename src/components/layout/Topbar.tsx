@@ -23,6 +23,13 @@ export function Topbar() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [criticalStock, setCriticalStock] = useState(false)
   const [criticalBath, setCriticalBath] = useState(false)
+  const [searchParams, setSearchParams] = useState<URLSearchParams | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setSearchParams(new URLSearchParams(window.location.search))
+    }
+  }, [pathname])
 
   // Offline / PWA States
   const [isOffline, setIsOffline] = useState(false)
@@ -105,7 +112,13 @@ export function Topbar() {
         <nav className="hidden lg:flex flex-1 items-center justify-center px-4">
           <div className="flex items-center bg-slate-900/80 p-2 rounded-2xl border border-slate-700/80 shadow-inner">
             {STATIONS.map((station, i) => {
-              const isActive = pathname === station.path || (station.path !== '/' && pathname.startsWith(station.path));
+              const isWareneingangActive = station.name === 'Wareneingang' && (
+                pathname === '/orders/new' || 
+                (searchParams?.get('station') === 'wareneingang')
+              );
+              const isActive = pathname === station.path || 
+                               (station.path !== '/' && pathname.startsWith(station.path)) ||
+                               isWareneingangActive;
               const isBeschichtung = station.name === 'Beschichtung';
               const hasAlert = isBeschichtung && criticalBath;
 
