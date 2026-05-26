@@ -31,21 +31,12 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
       {/* Header — fixe Höhe 72px */}
       <KreileHeader />
 
-      {/* Body: Sidebar + Hauptinhalt */}
+      {/* Body: Hauptinhalt */}
       <div className="flex flex-1 min-h-0">   {/* min-h-0 verhindert Flex-Overflow */}
-
-        {/* Desktop-Sidebar (ab lg = ≥1024px sichtbar) */}
-        <KreileSidebar />
 
         {/* Scroll-Container für Seiteninhalt */}
         <main
-          className={[
-            "flex-1 overflow-y-auto overflow-x-hidden",
-            // Desktop: normales Padding, kein Bottom-Padding für Nav nötig
-            "lg:p-8",
-            // Tablet/Mobile: kleineres Padding + Bottom-Padding damit BottomNav nichts verdeckt
-            "p-4 pb-24 lg:pb-8",
-          ].join(" ")}
+          className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-28 md:p-6 md:pb-32 lg:p-8 lg:pb-32"
         >
           {/* Max-Width Container — auf großen Screens zentriert */}
           <div className="max-w-[1400px] mx-auto w-full">
@@ -54,7 +45,7 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Bottom Navigation (nur bis lg, also Tablet + Mobile) */}
+      {/* Bottom Navigation (auf allen Screens sichtbar gem. Spezifikation) */}
       <KreileBottomNav />
     </div>
   );

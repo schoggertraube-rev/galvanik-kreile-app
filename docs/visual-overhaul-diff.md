@@ -1,49 +1,32 @@
-# Visual Overhaul V1 Walkthrough & Verification
+# Visual Overhaul Diff Documentation
 
-The Visual Overhaul V1 has been implemented successfully across the three primary screens (Wake/Start, Home/Tagesablauf, Warendurchlauf) and globally rolled out across all pages using Tailwind v4 custom tokens.
+## 1. Design System & Tokens
+- **`src/styles/tokens.css`**: Created to define the new Cremeton UI tokens.
+  - Colors: `#F5EFE3` background, `#2B3B4C` text, `#B8923F` primary, `#FF6B35` accent.
+  - Spacings & Typography scaling map established.
+- **`src/app/globals.css`**: Injected Next.js `@theme` configuration merging tokens.
 
----
+## 2. Global App Shell
+- **`src/components/layout/KreileAppShell.tsx`**: Updated container layout to remove global shell boundaries around `/start`.
+- **`src/components/layout/KreileHeader.tsx`**: Added new skyline and compact logos. Fixed spacing.
+- **`src/components/layout/KreileBottomNav.tsx`**: Implemented new icons (`lucide-react`) matching stroke widths.
 
-## 1. Visual Comparison Overview
+## 3. Main Views Overhauled
+- **Wake Screen (`/start`)**:
+  - Implemented PIN lock dialog mapping `Meister Kreile` and other user roles.
+  - Implemented Live Open-Meteo Weather widget.
+  - Connected dynamically changing Greeting component (`👋, ☕, 🍺`).
+- **Dashboard (`/`)**:
+  - Introduced 5 KPI summary cards at the top.
+  - Added chronological Timeline overview.
+  - Sidebar layout configured for active issues / alerts.
+- **Warendurchlauf (`/warendurchlauf`)**:
+  - Process Hero visual added (`Wareneingang -> Galvanik -> Warenausgang`).
+  - Implemented Slider Modal context instruction dialog for OCR inputs.
 
-### Screen A: `/start` (Wake Screen)
-- **Before**: Raw beige page with manually drawn inline SVGs, static hardcoded weather texts, and default layout.
-- **After**: High-fidelity landing view styled in exact Cremeton `#F5EFE3`, displaying the stunning official **Skyline Wordmark SVG** from public assets. Includes an **asynchronous weather bubble** querying local weather conditions (via Open-Meteo Frankfurt) with proper skeleton loaders, dynamically rendered tageszeit role greetings (👋, 🍽, ☀️, 🌙), and the user PIN unlock dialogs.
+## 4. E2E Safety Net
+- Created `e2e/smoke.spec.ts` to assert all views are rendering properly.
+- Mock Auth Proxy strategy configured in `src/proxy.ts` using `bypass-auth` cookie.
+- Vitest configuration isolated to `src/test/` to avoid conflicts.
 
-### Screen B: `/` (Home / Tagesablauf Dashboard)
-- **Before**: Default layout with basic indicators.
-- **After**: Clean dashboard featuring:
-  - 5 equal-width top KPI Cards (So läuft's heute, Offene Anfragen, In Galvanik, Warenausgang, Fertig heute) displaying live counts.
-  - Chronological vertical timeline card mapping past elements (Green Check), current element (Pulse Orange Clock), and future elements (Grey circles).
-  - "Heute wichtig" alerts side-panel and "Kleiner Hinweis zum Tag" (suggesting weather-dependent Main-walks or indoor catch-ups).
-
-### Screen C: `/warendurchlauf` (Dashboard & Intake Selector)
-- **Before**: Simplistic button prompt.
-- **After**: Modern process control cockpit. Includes:
-  - Hero process visual showing `Wareneingang → Galvanik (red active alert dot) → Warenausgang` with orange gradient and dot grid backing.
-  - Premium ActionTile cards ("Kamera" and "Manuell anlegen") deep-linking to existing OCR scans or manual entry fields.
-  - Live Quotes counts, last 50 orders listings, and fully interactive **So funktioniert's** slider instructions modal explaining the OCR pipeline in 3 stages.
-
----
-
-## 2. Verification and Integrity Check
-
-### Automated Testing Results
-- **Vitest Unit Tests**: Created robust test coverage for `greeting-service` covering all time buckets (Morning, Lunch, Afternoon, Evening, Night) and custom user role expansions.
-- **Run Execution**: 100% successful.
-```bash
- RUN  v4.1.7 C:/Antygravityprojekte/04_Kundenprojekte/galvanik_kreile/02_app
-
- ✓ src/test/dummy.test.ts (1 test) 5ms
- ✓ src/test/greeting.test.ts (5 tests) 5ms
-
- Test Files  2 passed (2)
-      Tests  6 passed (6)
-   Start at  19:20:09
-   Duration  1.69s
-```
-
-### Feature Registry Diff (0 Lost Functions)
-All actions, synchronization cues, IndexedDB local caches, offline managers, custom print routings, and database interfaces continue to operate flawlessly under the new visual frame:
-- **Intake Flow**: OCR scan simulation, confidence levels validation, and matching structures remain completely untouched and integrated.
-- **Sidebar & BottomNav**: Retained full mobile and desktop viewports toggle responsive structures.
+*End of Document*

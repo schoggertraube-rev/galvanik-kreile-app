@@ -39,8 +39,8 @@ export function KreileBottomNav() {
   }, []);
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-kreile-border z-50 px-2 py-2">
-      <div className="flex items-center justify-between w-full gap-1 overflow-x-auto scrollbar-none">
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-neutral-gray-100 z-50 h-[80px] flex items-center justify-center shadow-[0_-4px_24px_rgba(14,26,46,0.04)]">
+      <div className="flex items-center justify-between w-full max-w-[1400px] gap-2 px-4 md:px-6 overflow-x-auto scrollbar-none">
 
         {MAIN_NAV_ITEMS.map((item) => {
           const isActive =
@@ -56,23 +56,23 @@ export function KreileBottomNav() {
               href={item.path}
               className={`relative flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-[16px] transition-all duration-200 shrink-0 ${
                 isActive
-                  ? "bg-kreile-navy text-white shadow-sm"
-                  : "text-kreile-muted hover:text-kreile-navy hover:bg-kreile-bg"
+                  ? "bg-navy-700 text-white shadow-sm"
+                  : "text-text-muted hover:text-navy-900 hover:bg-bg-app-soft"
               }`}
             >
               <item.icon 
                 className={`w-5 h-5 shrink-0 ${
-                  isWarendurchlauf && !isActive ? "text-[#F28A0C]" : ""
+                  isWarendurchlauf && !isActive ? "text-accent-orange" : ""
                 }`} 
                 strokeWidth={1.5} 
               />
-              <span className={`text-[11px] font-bold tracking-tight leading-none ${isActive ? "text-white" : "text-kreile-text"}`}>
+              <span className={`text-[11px] font-bold tracking-tight leading-none ${isActive ? "text-white" : "text-navy-900"}`}>
                 {item.name}
               </span>
 
               {/* Badge für Anfragen */}
               {item.hasBadge && openQuotes > 0 && (
-                <span className="absolute -top-1 -right-1 w-4.5 h-4.5 bg-status-red text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white">
+                <span className="absolute -top-1 -right-1 w-4.5 h-4.5 bg-danger-red text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-white">
                   {openQuotes}
                 </span>
               )}
@@ -82,23 +82,23 @@ export function KreileBottomNav() {
 
         {/* Mehr-Button direkt in der Reihe (wie auf dem Foto) */}
         <DropdownMenu>
-          <DropdownMenuTrigger className="flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-[16px] text-kreile-muted hover:text-kreile-navy hover:bg-kreile-bg transition-all duration-200 outline-none shrink-0 cursor-pointer">
-            <MoreHorizontal className="w-5 h-5 shrink-0 text-kreile-text" strokeWidth={1.8} />
-            <span className="text-[11px] font-bold tracking-tight leading-none text-kreile-text">Mehr</span>
+          <DropdownMenuTrigger className="flex items-center justify-center gap-2 px-3.5 py-2.5 rounded-[16px] text-text-muted hover:text-navy-900 hover:bg-bg-app-soft transition-all duration-200 outline-none shrink-0 cursor-pointer">
+            <MoreHorizontal className="w-5 h-5 shrink-0 text-navy-500" strokeWidth={1.8} />
+            <span className="text-[11px] font-bold tracking-tight leading-none text-navy-500">Mehr</span>
           </DropdownMenuTrigger>
           <DropdownMenuContent
             align="end"
             side="top"
-            className="w-52 mb-2 rounded-2xl border-kreile-border shadow-lg p-1.5 bg-white"
+            className="w-52 mb-2 rounded-2xl border-neutral-gray-100 shadow-[0_4px_24px_rgba(14,26,46,0.10)] p-1.5 bg-white"
           >
-            <div className="text-[10px] font-bold text-kreile-muted uppercase tracking-wider px-2 py-1.5">
+            <div className="text-[10px] font-bold text-text-muted uppercase tracking-wider px-2 py-1.5">
               Ergänzend
             </div>
             {MORE_NAV_ITEMS.map((item) => (
               <DropdownMenuItem
                 key={item.name}
                 onClick={() => router.push(item.path)}
-                className="rounded-xl cursor-pointer py-2.5 font-bold text-kreile-navy focus:bg-kreile-bg"
+                className="rounded-xl cursor-pointer py-2.5 font-bold text-navy-900 focus:bg-bg-app-soft"
               >
                 {item.name}
               </DropdownMenuItem>
