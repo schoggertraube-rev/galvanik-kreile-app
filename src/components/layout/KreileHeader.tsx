@@ -40,48 +40,30 @@ export function KreileHeader() {
 
       {/* LEFT: GK Monogram + Brand */}
       <Link href="/" className="flex items-center gap-3 shrink-0 group">
-        {/* GK Monogram SVG — Elegant combined vector monogram as in the photo */}
-        <div className="w-12 h-12 relative flex items-center justify-center shrink-0">
-          <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-12 h-12">
-            {/* Main calligraphic G-curve */}
-            <path
-              d="M52 22C34.5 22 22 34.5 22 52C22 69.5 34.5 82 52 82C62.5 82 71.5 76.5 76 68.5H58V58H83V81C76 87 65.5 90 52 90C30 90 12 72 12 50C12 28 30 10 52 10C64.5 10 75 15.5 81.5 24.5L71 32C66.5 25.5 60 22 52 22Z"
-              fill="#001B38"
-            />
-            {/* Elegant K legs merging with G's right terminal */}
-            <path
-              d="M74 36L56 54L75 80H86L64.5 50.5L84.5 36H74Z"
-              fill="#001B38"
-            />
-          </svg>
-        </div>
-        <div className="flex flex-col justify-center leading-none">
-          <span className="text-[14px] font-serif font-black tracking-[0.04em] text-kreile-navy uppercase leading-none">
-            GALVANIK KREILE
-          </span>
-          <span className="text-[10px] font-bold text-kreile-accent leading-none mt-1 tracking-wide">
-            Meisterbetrieb seit 1962
-          </span>
-        </div>
+        <img
+          src="/assets/logo/kreile-logo-compact.svg"
+          alt="GK Galvanik Kreile Logo"
+          className="h-14 w-auto object-contain"
+        />
       </Link>
 
       {/* CENTER: Suchleiste mit Skyline */}
       <div className="flex-1 max-w-2xl mx-auto hidden md:block relative">
         <button
           onClick={() => setSearchOpen(true)}
-          className="w-full relative flex items-center bg-kreile-bg border border-kreile-border rounded-full h-11 px-4 gap-3 hover:border-kreile-border-strong transition-colors group"
+          className="w-full relative flex items-center bg-white border border-neutral-gray-100 rounded-2xl h-14 px-5 gap-3 hover:border-neutral-gray-300 transition-colors group shadow-sm"
         >
-          <Search className="w-4 h-4 text-kreile-muted shrink-0" />
-          <span className="text-sm text-kreile-muted flex-1 text-left">
+          <Search className="w-5 h-5 text-navy-500 shrink-0" strokeWidth={1.5} />
+          <span className="text-sm text-text-muted flex-1 text-left">
             Bei Auftrag, Kunde, Teilenummer suchen...
           </span>
           {/* Skyline decorative SVG in der Mitte */}
-          <div className="absolute left-1/2 -translate-x-1/2 bottom-0 h-7 w-40 overflow-hidden opacity-10 pointer-events-none">
+          <div className="absolute left-1/2 -translate-x-1/2 bottom-0 h-10 w-48 overflow-hidden opacity-12 pointer-events-none">
             <svg viewBox="0 0 160 30" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-              <polyline points="0,30 0,20 10,20 10,12 15,12 15,18 20,18 20,8 25,8 25,18 30,18 30,14 35,14 35,6 40,6 40,14 45,14 45,20 50,20 50,10 55,10 55,20 60,20 60,4 65,4 65,20 70,20 70,16 75,16 75,20 80,20 80,12 85,12 85,20 90,20 90,16 95,16 95,20 100,20 100,8 105,8 105,20 110,20 110,14 115,14 115,20 120,20 120,10 125,10 125,20 130,20 130,16 135,16 135,20 140,20 140,18 145,18 145,22 150,22 150,18 155,18 155,24 160,24 160,30" stroke="#001B38" strokeWidth="1.5" fill="none"/>
+              <polyline points="0,30 0,20 10,20 10,12 15,12 15,18 20,18 20,8 25,8 25,18 30,18 30,14 35,14 35,6 40,6 40,14 45,14 45,20 50,20 50,10 55,10 55,20 60,20 60,4 65,4 65,20 70,20 70,16 75,16 75,20 80,20 80,12 85,12 85,20 90,20 90,16 95,16 95,20 100,20 100,8 105,8 105,20 110,20 110,14 115,14 115,20 120,20 120,10 125,10 125,20 130,20 130,16 135,16 135,20 140,20 140,18 145,18 145,22 150,22 150,18 155,18 155,24 160,24 160,30" stroke="#B8923F" strokeWidth="1.5" fill="none"/>
             </svg>
           </div>
-          <Camera className="w-4 h-4 text-kreile-muted shrink-0 group-hover:text-kreile-accent transition-colors" />
+          <Camera className="w-5 h-5 text-navy-500 shrink-0 group-hover:text-accent-orange transition-colors" strokeWidth={1.5} />
         </button>
       </div>
 

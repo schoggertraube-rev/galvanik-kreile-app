@@ -64,7 +64,7 @@ export function KreileBottomNav() {
                 className={`w-5 h-5 shrink-0 ${
                   isWarendurchlauf && !isActive ? "text-[#F28A0C]" : ""
                 }`} 
-                strokeWidth={isActive ? 2.5 : 1.8} 
+                strokeWidth={1.5} 
               />
               <span className={`text-[11px] font-bold tracking-tight leading-none ${isActive ? "text-white" : "text-kreile-text"}`}>
                 {item.name}

@@ -1,0 +1,46 @@
+:root {
+  /* Colors */
+  --bg-app: #F5EFE3;
+  --bg-app-soft: #FAF6EC;
+  --surface-card: #FFFFFF;
+  --surface-tinted: #F9EFE0;
+  --surface-tinted-soft: #F2E9D8;
+  --navy-900: #0E1A2E;
+  --navy-700: #1A2845;
+  --navy-500: #2E3A55;
+  --gold-600: #B8923F;
+  --gold-500: #C9A661;
+  --gold-100: #EFE2C4;
+  --accent-orange: #E8943C;
+  --accent-orange-soft: #FBE8D2;
+  --success-green: #5A8F4D;
+  --success-green-soft: #DDE9D3;
+  --danger-red: #D14F3D;
+  --neutral-gray-300: #C8C2B5;
+  --neutral-gray-100: #ECE6D9;
+  --text-muted: #7A7466;
+
+  /* Typography */
+  --font-display: 'Kreile Display', Georgia, serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  /* Spacing, Radius, Shadow */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+
+  --shadow-card: 0 1px 2px rgba(14, 26, 46, 0.04), 0 4px 16px rgba(14, 26, 46, 0.06);
+  --shadow-elevated: 0 4px 24px rgba(14, 26, 46, 0.10);
+
+  /* Spacings */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+}

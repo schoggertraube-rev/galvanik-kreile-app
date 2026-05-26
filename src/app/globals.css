@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "../styles/tokens.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
@@ -40,49 +41,70 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
   
-  /* --- Kreile Corporate Identity Theme Tokens --- */
-  --color-kreile-bg: #FCF9F6;
-  --color-kreile-surface: #FFFFFF;
-  --color-kreile-surface-warm: #FFF6EA;
-  --color-kreile-surface-soft: #FEFBF7;
+  /* --- Visual Overhaul V1 Theme Mappings --- */
+  --color-bg-app: var(--bg-app);
+  --color-bg-app-soft: var(--bg-app-soft);
+  --color-surface-card: var(--surface-card);
+  --color-surface-tinted: var(--surface-tinted);
+  --color-surface-tinted-soft: var(--surface-tinted-soft);
+  --color-navy-900: var(--navy-900);
+  --color-navy-700: var(--navy-700);
+  --color-navy-500: var(--navy-500);
+  --color-gold-600: var(--gold-600);
+  --color-gold-500: var(--gold-500);
+  --color-gold-100: var(--gold-100);
+  --color-accent-orange: var(--accent-orange);
+  --color-accent-orange-soft: var(--accent-orange-soft);
+  --color-success-green: var(--success-green);
+  --color-success-green-soft: var(--success-green-soft);
+  --color-danger-red: var(--danger-red);
+  --color-neutral-gray-300: var(--neutral-gray-300);
+  --color-neutral-gray-100: var(--neutral-gray-100);
+  --color-text-muted: var(--text-muted);
 
-  --color-kreile-navy: #001B38;
-  --color-kreile-navy-soft: #0B2748;
-  --color-kreile-text: #10223A;
-  --color-kreile-muted: #667085;
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
 
-  --color-kreile-accent: #F28A0C;
-  --color-kreile-accent-soft: #FFE7C2;
-  --color-kreile-sand: #F4E8D6;
-  --color-kreile-gold-muted: #A87922;
+  --shadow-card: var(--shadow-card);
+  --shadow-elevated: var(--shadow-elevated);
 
-  --color-status-green: #4F8A2D;
-  --color-status-green-soft: #EDF6E7;
-  --color-status-yellow: #F2B84B;
-  --color-status-orange: #F28A0C;
-  --color-status-orange-soft: #FFF1DE;
-  --color-status-red: #E20B0B;
-  --color-status-red-soft: #FFE3E1;
-  --color-status-gray: #E8E9EA;
+  /* --- Backward Compatibility Core Theme Mappings --- */
+  --color-kreile-bg: var(--bg-app);
+  --color-kreile-surface: var(--surface-card);
+  --color-kreile-surface-warm: var(--bg-app-soft);
+  --color-kreile-surface-soft: var(--bg-app-soft);
+
+  --color-kreile-navy: var(--navy-900);
+  --color-kreile-navy-soft: var(--navy-700);
+  --color-kreile-text: var(--navy-900);
+  --color-kreile-muted: var(--text-muted);
+
+  --color-kreile-accent: var(--accent-orange);
+  --color-kreile-accent-soft: var(--accent-orange-soft);
+  --color-kreile-sand: var(--gold-100);
+  --color-kreile-gold-muted: var(--gold-600);
+
+  --color-status-green: var(--success-green);
+  --color-status-green-soft: var(--success-green-soft);
+  --color-status-yellow: var(--gold-500);
+  --color-status-orange: var(--accent-orange);
+  --color-status-orange-soft: var(--accent-orange-soft);
+  --color-status-red: var(--danger-red);
+  --color-status-red-soft: var(--accent-orange-soft);
+  --color-status-gray: var(--neutral-gray-300);
   
-  --color-kreile-border: #EDE8E1;
-  --color-kreile-border-strong: #D8CEC2;
+  --color-kreile-border: var(--neutral-gray-100);
+  --color-kreile-border-strong: var(--neutral-gray-300);
 
-  --shadow-kreile-soft: 0 16px 40px rgba(16, 34, 58, 0.08);
-  --shadow-kreile-card: 0 2px 12px rgba(16, 34, 58, 0.06);
+  --shadow-kreile-soft: var(--shadow-elevated);
+  --shadow-kreile-card: var(--shadow-card);
   
-  --radius-kreile-xl: 24px;
-  --radius-kreile-lg: 18px;
+  --radius-kreile-xl: var(--radius-xl);
+  --radius-kreile-lg: var(--radius-lg);
   --radius-kreile-pill: 999px;
-
 }
 
 :root {
@@ -159,14 +181,85 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-kreile-bg text-kreile-text;
-    font-family: var(--font-inter), system-ui, sans-serif;
+    background-color: var(--bg-app) !important;
+    color: var(--navy-900);
+    font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
   }
   html {
-    font-family: var(--font-inter), system-ui, sans-serif;
+    background-color: var(--bg-app) !important;
+    font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
   }
   .font-serif {
     font-family: var(--font-playfair), Georgia, serif;
+  }
+  
+  /* Global visual system component overrides */
+  .btn-primary {
+    background-color: var(--navy-700);
+    color: #FFFFFF;
+    border-radius: var(--radius-sm);
+    height: 46px;
+    padding: 0 16px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+  }
+  .btn-primary:hover {
+    background-color: var(--navy-900);
+  }
+  
+  .btn-secondary {
+    background-color: #FFFFFF;
+    border: 1px solid var(--navy-700);
+    color: var(--navy-700);
+    border-radius: var(--radius-sm);
+    height: 46px;
+    padding: 0 16px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+  }
+  .btn-secondary:hover {
+    background-color: var(--bg-app-soft);
+  }
+
+  .form-input {
+    height: 48px;
+    border-radius: var(--radius-md);
+    background-color: #FFFFFF;
+    border: 1px solid var(--neutral-gray-300);
+    padding: 0 16px;
+    outline: none;
+    transition: all 0.2s ease;
+  }
+  .form-input:focus {
+    border-color: var(--navy-700);
+    box-shadow: 0 0 0 2px rgba(26, 40, 69, 0.15);
+  }
+
+  /* Table premium layouts */
+  .premium-table {
+    width: 100%;
+    border-collapse: collapse;
+    overflow: hidden;
+  }
+  .premium-table th {
+    background-color: var(--bg-app-soft);
+    color: var(--navy-700);
+    font-weight: 700;
+    text-align: left;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--neutral-gray-100);
+  }
+  .premium-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--neutral-gray-100);
+    color: var(--navy-900);
+    font-weight: 500;
+  }
+  .premium-table tr:nth-child(even) {
+    background-color: var(--bg-app-soft);
+  }
+  .premium-table tr:hover {
+    background-color: var(--surface-tinted-soft);
   }
 }
 

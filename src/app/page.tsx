@@ -13,12 +13,16 @@ import {
   ChevronDown,
   Check,
   Clock,
+  HelpCircle,
+  Activity,
+  PartyPopper,
+  Flame,
+  Wrench,
 } from "lucide-react";
 import Link from "next/link";
 
 // ────────────────────────────────────────────────
-// KPI CARD — exakt nach Referenzbild 2
-// Großes rundes Icon + Titel + Zahl + Subtext + Progress
+// KPI CARD — Premium style as in specification
 // ────────────────────────────────────────────────
 type KpiStatus = "neutral" | "warning" | "danger" | "success" | "info";
 
@@ -27,73 +31,57 @@ function KpiCard({
   value,
   subtitle,
   status,
-  progress,
-  icon,
+  icon: Icon,
   emoji,
 }: {
   title: string;
   value: string | number;
   subtitle?: string;
   status: KpiStatus;
-  progress?: number;
-  icon?: React.ReactNode;
+  icon?: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   emoji?: string;
 }) {
   const circleBg: Record<KpiStatus, string> = {
-    neutral: "bg-kreile-sand/55",
-    warning: "bg-[#FFF1DE]",
-    danger: "bg-[#FFE3E1]",
-    success: "bg-[#EDF6E7]",
-    info: "bg-[#E8F0FE]",
+    neutral: "bg-gold-100",
+    warning: "bg-accent-orange-soft",
+    danger: "bg-accent-orange-soft",
+    success: "bg-success-green-soft",
+    info: "bg-bg-app-soft",
   };
-  const progressColor: Record<KpiStatus, string> = {
-    neutral: "bg-kreile-muted",
-    warning: "bg-[#F28A0C]",
-    danger: "bg-[#E20B0B]",
-    success: "bg-[#4F8A2D]",
-    info: "bg-[#001B38]",
+  
+  const iconColor: Record<KpiStatus, string> = {
+    neutral: "text-gold-600",
+    warning: "text-accent-orange",
+    danger: "text-danger-red",
+    success: "text-success-green",
+    info: "text-navy-700",
   };
 
   return (
-    <div className="bg-white rounded-3xl border border-kreile-border p-5 flex flex-col justify-between min-h-[115px] shadow-sm hover:shadow-md transition-all duration-200 relative overflow-hidden group">
-      {/* Horizontaler Inhalt: Icon links, Texte rechts */}
-      <div className="flex items-center gap-4">
-        {/* Icon / Emoji Kreis */}
-        <div className={`w-14 h-14 rounded-full ${circleBg[status]} flex items-center justify-center shrink-0`}>
-          {emoji ? (
-            <span className="text-3xl leading-none">{emoji}</span>
-          ) : (
-            <div className="text-kreile-navy">
-              {icon}
-            </div>
-          )}
-        </div>
-
-        {/* Text-Stapel */}
-        <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-black text-kreile-muted uppercase tracking-widest leading-none mb-1.5">{title}</p>
-          <p className="text-2xl md:text-3xl font-black text-kreile-navy leading-none tracking-tight">{value}</p>
-          {subtitle && (
-            <p className="text-[11px] text-kreile-muted font-bold mt-1 tracking-wide">{subtitle}</p>
-          )}
-        </div>
+    <div className="bg-white rounded-2xl p-5 flex items-center gap-4 h-[132px] shadow-card hover:shadow-md transition-all duration-200 overflow-hidden relative group">
+      {/* Icon / Emoji Circle */}
+      <div className={`w-14 h-14 rounded-full ${circleBg[status]} flex items-center justify-center shrink-0`}>
+        {emoji ? (
+          <span className="text-3xl leading-none">{emoji}</span>
+        ) : Icon ? (
+          <Icon className={`w-7 h-7 ${iconColor[status]}`} strokeWidth={1.5} />
+        ) : null}
       </div>
 
-      {/* Progress Bar am unteren Kartenrand horizontal (wie in Bild 2) */}
-      {progress !== undefined && (
-        <div className="absolute bottom-0 left-0 right-0 h-1 w-full bg-kreile-bg overflow-hidden">
-          <div
-            className={`h-full transition-all duration-500 ${progressColor[status]}`}
-            style={{ width: `${Math.min(100, Math.max(0, progress))}%` }}
-          />
-        </div>
-      )}
+      {/* Text block */}
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-black text-text-muted uppercase tracking-widest leading-none mb-2">{title}</p>
+        <p className="text-2xl font-black text-navy-900 leading-none tracking-tight">{value}</p>
+        {subtitle && (
+          <p className="text-[11px] text-text-muted font-bold mt-1.5 tracking-wide">{subtitle}</p>
+        )}
+      </div>
     </div>
   );
 }
 
 // ────────────────────────────────────────────────
-// TIMELINE ITEM — wie in Bild 2
+// TIMELINE ITEM — Chronological past/present/future
 // ────────────────────────────────────────────────
 type TLStatus = "done" | "current" | "pause" | "upcoming";
 
@@ -114,40 +102,39 @@ function TimelineItem({
 }) {
   const dot: Record<TLStatus, React.ReactNode> = {
     done: (
-      <span className="w-7 h-7 rounded-full bg-status-green flex items-center justify-center shrink-0">
-        <Check className="w-4 h-4 text-white" strokeWidth={3} />
+      <span className="w-7 h-7 rounded-full bg-success-green flex items-center justify-center shrink-0 shadow-sm">
+        <Check className="w-4 h-4 text-white" strokeWidth={2.5} />
       </span>
     ),
     current: (
-      <span className="w-7 h-7 rounded-full border-2 border-kreile-accent bg-white flex items-center justify-center shrink-0">
-        <Clock className="w-3.5 h-3.5 text-kreile-accent" />
+      <span className="w-7 h-7 rounded-full border-2 border-accent-orange bg-white flex items-center justify-center shrink-0 animate-pulse">
+        <Clock className="w-4 h-4 text-accent-orange" strokeWidth={1.5} />
       </span>
     ),
     pause: (
-      <span className="w-7 h-7 rounded-full bg-kreile-sand flex items-center justify-center shrink-0">
-        {/* Besteck-Emoji */}
+      <span className="w-7 h-7 rounded-full bg-gold-100 flex items-center justify-center shrink-0">
         <span className="text-sm">🍽</span>
       </span>
     ),
     upcoming: (
-      <span className="w-7 h-7 rounded-full border-2 border-kreile-border bg-white flex items-center justify-center shrink-0" />
+      <span className="w-7 h-7 rounded-full border-2 border-neutral-gray-300 bg-white flex items-center justify-center shrink-0" />
     ),
   };
 
-  const titleClass = status === "current" ? "text-kreile-accent font-bold" : "text-kreile-navy font-bold";
+  const titleClass = status === "current" ? "text-accent-orange font-bold" : "text-navy-900 font-bold";
 
   return (
-    <div className={`flex items-start gap-4 transition-opacity ${status === "upcoming" ? "opacity-50" : ""}`}>
-      {/* Zeit */}
-      <span className="w-10 text-right text-[13px] font-mono text-kreile-muted shrink-0 pt-1.5">{time}</span>
+    <div className={`flex items-start gap-4 transition-all duration-300 ${status === "upcoming" ? "opacity-60" : ""}`}>
+      {/* Time */}
+      <span className="w-12 text-right text-[13px] font-mono text-text-muted shrink-0 pt-1.5">{time}</span>
 
-      {/* Dot */}
+      {/* Circle Icon */}
       {dot[status]}
 
-      {/* Inhalt */}
+      {/* Content */}
       <div className="flex-1 min-w-0 pt-0.5">
         <p className={`text-sm leading-snug ${titleClass}`}>{title}</p>
-        <p className="text-xs text-kreile-muted mt-0.5 leading-relaxed">{description}</p>
+        <p className="text-xs text-text-muted mt-0.5 leading-relaxed">{description}</p>
       </div>
 
       {/* Action Button */}
@@ -155,12 +142,12 @@ function TimelineItem({
         actionHref ? (
           <Link
             href={actionHref}
-            className="shrink-0 px-3 py-1.5 rounded-lg border border-kreile-border-strong text-xs font-semibold text-kreile-navy hover:bg-kreile-bg transition-colors"
+            className="shrink-0 px-3.5 py-1.5 rounded-lg border border-neutral-gray-300 text-xs font-bold text-navy-700 hover:bg-bg-app-soft transition-colors"
           >
             {actionLabel}
           </Link>
         ) : (
-          <button className="shrink-0 px-3 py-1.5 rounded-lg border border-kreile-border-strong text-xs font-semibold text-kreile-navy hover:bg-kreile-bg transition-colors">
+          <button className="shrink-0 px-3.5 py-1.5 rounded-lg border border-neutral-gray-300 text-xs font-bold text-navy-700 hover:bg-bg-app-soft transition-colors cursor-pointer">
             {actionLabel}
           </button>
         )
@@ -170,45 +157,12 @@ function TimelineItem({
 }
 
 // ────────────────────────────────────────────────
-// IMPORTANT ITEM — „Heute wichtig" Listenzeile
-// ────────────────────────────────────────────────
-function ImportantItem({
-  icon,
-  iconBg,
-  title,
-  subtitle,
-  href,
-}: {
-  icon: React.ReactNode;
-  iconBg: string;
-  title: string;
-  subtitle: string;
-  href?: string;
-}) {
-  const inner = (
-    <div className="flex items-center gap-3 py-3 border-b border-kreile-border last:border-b-0 hover:bg-kreile-bg -mx-2 px-2 rounded-xl transition-colors cursor-pointer group">
-      <div className={`w-9 h-9 rounded-full ${iconBg} flex items-center justify-center shrink-0`}>
-        {icon}
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold text-kreile-navy leading-tight">{title}</p>
-        <p className="text-xs text-kreile-muted truncate">{subtitle}</p>
-      </div>
-      <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-kreile-muted group-hover:text-kreile-navy shrink-0 transition-colors">
-        <polyline points="6 12 10 8 6 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      </svg>
-    </div>
-  );
-
-  return href ? <Link href={href}>{inner}</Link> : inner;
-}
-
-// ────────────────────────────────────────────────
-// MAIN HOME COMPONENT
+// MAIN DASHBOARD
 // ────────────────────────────────────────────────
 export default function HomeDashboard() {
   const [orders, setOrders] = useState<MockOrder[]>([]);
   const [openQuotes, setOpenQuotes] = useState(0);
+  const [morningMessage, setMorningMessage] = useState("Gleich feierabend! 🍺 Salzsäure bestellen nicht vergessen.");
 
   useEffect(() => {
     const load = async () => {
@@ -216,6 +170,14 @@ export default function HomeDashboard() {
       if (dbOrders) setOrders(dbOrders as unknown as MockOrder[]);
       const qCount = await inquiriesRepository.getOpenCount();
       setOpenQuotes(qCount);
+      
+      try {
+        const msgRes = await fetch("/api/morning-message?context=end-of-day");
+        const msgData = await msgRes.json();
+        if (msgData?.message) setMorningMessage(msgData.message);
+      } catch (err) {
+        console.warn("Morning message API not reachable during load:", err);
+      }
     };
     load();
 
@@ -236,16 +198,16 @@ export default function HomeDashboard() {
   const countDone = orders.filter(o => o.risk === "green").length;
 
   const dayStatus = countCritical > 3
-    ? { emoji: "😰", title: "Schwieriger Tag", subtitle: "Eingreifen nötig", status: "danger" as KpiStatus }
+    ? { title: "Kritisch", subtitle: "Eingreifen nötig 🧐", status: "danger" as KpiStatus, emoji: "🧐" }
     : countCritical > 0
-    ? { emoji: "🧐", title: "Aufpassen", subtitle: "Offene Punkte", status: "warning" as KpiStatus }
-    : { emoji: "😊", title: "Gut auf Kurs", subtitle: "Weiter so! 💪", status: "neutral" as KpiStatus };
+    ? { title: "Aufpassen", subtitle: "Offene Punkte 🧐", status: "warning" as KpiStatus, emoji: "🧐" }
+    : { title: "Gut auf Kurs", subtitle: "Weiter so! 💪", status: "neutral" as KpiStatus, emoji: "😊" };
 
   return (
     <div className="space-y-6 pb-8 animate-in fade-in duration-400">
 
-      {/* ── KPI REIHE ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+      {/* ── ROW 1: 5 KPI CARDS ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard
           title="So läuft's heute"
           value={dayStatus.title}
@@ -258,66 +220,48 @@ export default function HomeDashboard() {
           value={openQuotes}
           subtitle={`davon ${Math.min(2, openQuotes)} neu`}
           status={openQuotes > 0 ? "warning" : "neutral"}
-          progress={openQuotes > 0 ? 40 : 0}
-          icon={
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="w-6 h-6 text-kreile-gold-muted">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-              <circle cx="12" cy="14" r="2"/><line x1="12" y1="11" x2="12" y2="11.01"/>
-            </svg>
-          }
+          icon={HelpCircle}
         />
         <KpiCard
           title="In Galvanik"
           value={countGalvanik}
           subtitle={`${countGalvanikCrit} kritisch`}
-          status={countGalvanikCrit > 0 ? "warning" : "info"}
-          progress={countGalvanik > 0 ? 75 : 0}
-          icon={
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="w-6 h-6 text-kreile-navy">
-              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-              <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-            </svg>
-          }
+          status={countGalvanikCrit > 0 ? "danger" : "neutral"}
+          icon={Activity}
         />
         <KpiCard
           title="Warenausgang"
           value={countAusgang}
           subtitle={`${countDue} heute fällig`}
           status="success"
-          progress={90}
-          icon={
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" className="w-6 h-6 text-status-green">
-              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-            </svg>
-          }
+          icon={Truck}
         />
         <KpiCard
           title="Fertig heute"
           value={countDone}
-          subtitle="Super!"
+          subtitle={countDone > 0 ? "Super!" : "Heute noch nichts."}
           status="neutral"
-          emoji="🎉"
+          icon={PartyPopper}
         />
       </div>
 
-      {/* ── HAUPT GRID ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+      {/* ── ROW 2: TIMELINE + SIDEBARS ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
 
-        {/* LINKE SPALTE: Tagesablauf */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-kreile-border shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-kreile-border">
-            <h2 className="text-[17px] font-black text-kreile-navy">Tagesablauf auf einen Blick</h2>
-            <button className="flex items-center gap-1.5 text-sm font-semibold text-kreile-navy bg-kreile-bg border border-kreile-border rounded-xl px-3 py-1.5 hover:bg-kreile-sand transition-colors">
+        {/* LEFT COLUMN: Timeline Card */}
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-neutral-gray-100 shadow-card overflow-hidden">
+          <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-neutral-gray-100">
+            <h2 className="text-[17px] font-black text-navy-900">Tagesablauf auf einen Blick</h2>
+            <button className="flex items-center gap-1.5 text-xs font-bold text-navy-700 bg-bg-app-soft border border-neutral-gray-100 rounded-xl px-3 py-1.5 hover:bg-neutral-gray-300 transition-colors cursor-pointer">
               Kommende Arbeiten <ChevronDown className="w-4 h-4" />
             </button>
           </div>
 
-          {/* Vertikale Linie */}
-          <div className="px-6 py-5 relative">
+          <div className="px-6 py-6 relative">
             {/* Connector Line */}
-            <div className="absolute left-[72px] top-8 bottom-8 w-px bg-kreile-border" />
+            <div className="absolute left-[78px] top-9 bottom-9 w-[1.5px] bg-neutral-gray-300" />
 
-            <div className="space-y-5">
+            <div className="space-y-6">
               <TimelineItem time="08:00" title="Wareneingang geprüft" description="Alle Eingänge von gestern Abend erfasst." status="done" />
               <TimelineItem time="09:15" title="3 Teile in Galvanik gestartet" description="Sie laufen planmäßig." status="done" />
               <TimelineItem
@@ -354,52 +298,72 @@ export default function HomeDashboard() {
           </div>
         </div>
 
-        {/* RECHTE SPALTE */}
-        <div className="space-y-4">
+        {/* RIGHT COLUMN: Stacked Panels */}
+        <div className="space-y-5">
 
-          {/* HEUTE WICHTIG */}
-          <div className="bg-white rounded-2xl border border-kreile-border shadow-sm p-5">
-            <div className="flex items-center gap-2 mb-3">
+          {/* TODAY IMPORTANT PANEL */}
+          <div className="bg-white rounded-2xl border border-neutral-gray-100 shadow-card p-5">
+            <div className="flex items-center gap-2 mb-4">
               <span className="text-xl">⭐</span>
-              <h2 className="text-[15px] font-black text-kreile-navy">Heute wichtig</h2>
+              <h2 className="text-[15px] font-black text-navy-900">Heute wichtig</h2>
             </div>
-            <div className="space-y-0">
-              <ImportantItem
-                icon={<AlertTriangle className="w-4 h-4 text-status-orange" />}
-                iconBg="bg-[#FFF1DE]"
-                title="Salzsäure fast leer"
-                subtitle="Bestellung heute nicht vergessen."
-                href="/items"
-              />
-              <ImportantItem
-                icon={<Info className="w-4 h-4 text-kreile-navy" />}
-                iconBg="bg-[#E8F0FE]"
-                title="2 Freigaben fehlen"
-                subtitle="Kunden warten auf Rückmeldung."
-                href="/customers"
-              />
-              <ImportantItem
-                icon={<CheckCircle className="w-4 h-4 text-status-green" />}
-                iconBg="bg-[#EDF6E7]"
-                title="Warenausgang im Plan"
-                subtitle={`Heute ${countDue} Abholungen geplant.`}
-                href="/orders"
-              />
+            
+            <div className="space-y-0.5">
+              {/* Alert 1 */}
+              <Link href="/items" className="flex items-center gap-3.5 py-3 border-b border-neutral-gray-100 hover:bg-bg-app-soft -mx-2 px-2 rounded-xl transition-colors group">
+                <div className="w-9 h-9 rounded-full bg-accent-orange-soft flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-accent-orange" strokeWidth={1.5} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-navy-900 leading-tight">Salzsäure fast leer</p>
+                  <p className="text-xs text-text-muted truncate">Bestellung heute nicht vergessen.</p>
+                </div>
+                <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-text-muted group-hover:text-navy-900 shrink-0 transition-colors">
+                  <polyline points="6 12 10 8 6 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </Link>
+
+              {/* Alert 2 */}
+              <Link href="/customers" className="flex items-center gap-3.5 py-3 border-b border-neutral-gray-100 hover:bg-bg-app-soft -mx-2 px-2 rounded-xl transition-colors group">
+                <div className="w-9 h-9 rounded-full bg-bg-app-soft flex items-center justify-center shrink-0">
+                  <Info className="w-5 h-5 text-navy-700" strokeWidth={1.5} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-navy-900 leading-tight">2 Freigaben fehlen</p>
+                  <p className="text-xs text-text-muted truncate">Kunden warten auf Rückmeldung.</p>
+                </div>
+                <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-text-muted group-hover:text-navy-900 shrink-0 transition-colors">
+                  <polyline points="6 12 10 8 6 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </Link>
+
+              {/* Alert 3 */}
+              <Link href="/orders" className="flex items-center gap-3.5 py-3 hover:bg-bg-app-soft -mx-2 px-2 rounded-xl transition-colors group">
+                <div className="w-9 h-9 rounded-full bg-success-green-soft flex items-center justify-center shrink-0">
+                  <CheckCircle className="w-5 h-5 text-success-green" strokeWidth={1.5} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-navy-900 leading-tight">Warenausgang im Plan</p>
+                  <p className="text-xs text-text-muted truncate">Heute {countDue} Abholungen geplant.</p>
+                </div>
+                <svg viewBox="0 0 16 16" fill="none" className="w-4 h-4 text-text-muted group-hover:text-navy-900 shrink-0 transition-colors">
+                  <polyline points="6 12 10 8 6 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </Link>
             </div>
           </div>
 
           {/* KLEINER HINWEIS ZUM TAG */}
-          <div className="bg-white rounded-2xl border border-kreile-border shadow-sm p-5">
-            <div className="flex items-center justify-between mb-3">
+          <div className="bg-white rounded-2xl border border-neutral-gray-100 shadow-card p-5">
+            <div className="flex items-center justify-between mb-3.5">
               <div className="flex items-center gap-2">
                 <span className="text-xl">😊</span>
-                <h3 className="text-[14px] font-bold text-kreile-navy">Kleiner Hinweis zum Tag</h3>
+                <h3 className="text-sm font-black text-navy-900">Kleiner Hinweis zum Tag</h3>
               </div>
-              <Heart className="w-4 h-4 text-kreile-muted" />
+              <Heart className="w-4 h-4 text-gold-600 fill-gold-600" />
             </div>
-            <p className="text-sm font-bold text-kreile-navy">Gleich feierabend! 🎊</p>
-            <p className="text-xs text-kreile-muted mt-1 leading-relaxed">
-              Salzsäure bestellen nicht vergessen und dann: wohlverdient Feierabend.
+            <p className="text-sm font-bold text-navy-900 leading-relaxed">
+              {morningMessage}
             </p>
           </div>
 

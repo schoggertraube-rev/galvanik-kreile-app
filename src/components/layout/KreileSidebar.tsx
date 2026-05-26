@@ -82,7 +82,7 @@ export function KreileSidebar() {
                       ? "text-white"
                       : "text-kreile-muted group-hover:text-kreile-navy",
                   ].join(" ")}
-                  strokeWidth={active ? 2.5 : 1.8}
+                  strokeWidth={1.5}
                 />
                 <span className="truncate">{item.name}</span>
               </div>

@@ -1,0 +1,16 @@
+<svg viewBox="0 0 280 56" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Monogram GK Circle -->
+  <circle cx="28" cy="28" r="24" fill="#0E1A2E" />
+  <text x="28" y="35" font-family="Playfair Display, Georgia, serif" font-weight="900" font-size="20" fill="#FFFFFF" text-anchor="middle">GK</text>
+  
+  <!-- Outer Gold ring inside circle -->
+  <circle cx="28" cy="28" r="21" stroke="#B8923F" stroke-width="1.2" opacity="0.8" />
+  
+  <!-- Company Name -->
+  <text x="64" y="27" font-family="Playfair Display, Georgia, serif" font-weight="900" font-size="18" fill="#0E1A2E" letter-spacing="0.04em">KREILE</text>
+  <text x="64" y="44" font-family="Inter, sans-serif" font-weight="600" font-size="9" fill="#0E1A2E" letter-spacing="0.12em">GALVANIK KREILE</text>
+  
+  <!-- Tagline -->
+  <text x="180" y="44" font-family="Inter, sans-serif" font-weight="700" font-size="8" fill="#B8923F" letter-spacing="0.02em">Meisterbetrieb seit 1962</text>
+  <line x1="172" y1="41" x2="176" y2="41" stroke="#B8923F" stroke-width="1" />
+</svg>
