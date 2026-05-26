@@ -44,7 +44,7 @@ export function StationStatusButton({
         : "text-white bg-blue-600 shadow-[0_0_20px_rgba(37,99,235,0.4)] scale-105 z-10 border border-blue-400/50" 
       : hasAlert
         ? "text-red-500 bg-red-50 border border-red-200 animate-pulse hover:bg-red-100"
-        : "text-slate-400 hover:text-white hover:bg-slate-800"
+        : "text-kreile-muted hover:text-white hover:bg-slate-800"
     }
   `;
 

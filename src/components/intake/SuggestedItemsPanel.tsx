@@ -42,17 +42,17 @@ export function SuggestedItemsPanel({ ocrData, onConfirm }: { ocrData: Record<st
             <div className="flex-1 space-y-4">
               <div className="flex gap-4">
                 <div className="w-24 shrink-0">
-                  <label className="block text-[11px] font-extrabold text-slate-400 uppercase tracking-widest mb-1 pl-1">Menge</label>
+                  <label className="block text-[11px] font-extrabold text-kreile-muted uppercase tracking-widest mb-1 pl-1">Menge</label>
                   <input type="number" value={item.quantity} onChange={e => updateItem(i, "quantity", parseInt(e.target.value))} className="w-full text-xl font-black text-center bg-slate-50 p-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 focus:bg-white" />
                 </div>
                 <div className="flex-1">
-                  <label className="block text-[11px] font-extrabold text-slate-400 uppercase tracking-widest mb-1 pl-1">Bezeichnung</label>
+                  <label className="block text-[11px] font-extrabold text-kreile-muted uppercase tracking-widest mb-1 pl-1">Bezeichnung</label>
                   <input type="text" value={item.name} onChange={e => updateItem(i, "name", e.target.value)} className="w-full text-xl font-bold bg-slate-50 p-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 focus:bg-white" />
                 </div>
               </div>
               <div>
-                <label className="block text-[11px] font-extrabold text-slate-400 uppercase tracking-widest mb-1 pl-1">Gewünschte Oberfläche (optional)</label>
-                <input type="text" value={item.surfaceRequested} onChange={e => updateItem(i, "surfaceRequested", e.target.value)} className="w-full text-base font-bold text-slate-700 bg-slate-50 p-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 focus:bg-white" />
+                <label className="block text-[11px] font-extrabold text-kreile-muted uppercase tracking-widest mb-1 pl-1">Gewünschte Oberfläche (optional)</label>
+                <input type="text" value={item.surfaceRequested} onChange={e => updateItem(i, "surfaceRequested", e.target.value)} className="w-full text-base font-bold text-kreile-navy bg-slate-50 p-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 focus:bg-white" />
               </div>
             </div>
             
@@ -72,13 +72,13 @@ export function SuggestedItemsPanel({ ocrData, onConfirm }: { ocrData: Record<st
           </div>
         ))}
         
-        <Button onClick={addItem} variant="outline" className="w-full h-16 border-2 border-dashed border-slate-300 text-slate-500 font-extrabold hover:bg-slate-50 hover:border-blue-300 hover:text-blue-700 rounded-3xl transition-all">
+        <Button onClick={addItem} variant="outline" className="w-full h-16 border-2 border-dashed border-slate-300 text-slate-500 font-extrabold hover:bg-slate-50 hover:border-white/30 hover:text-blue-700 rounded-3xl transition-all">
           <Plus className="mr-2 h-6 w-6" /> Weiteres Teil hinzufügen
         </Button>
       </div>
 
       <div className="pt-6">
-        <Button onClick={() => onConfirm(items)} className="w-full h-16 text-lg font-extrabold rounded-2xl bg-blue-900 text-white hover:bg-blue-800 shadow-xl active:scale-95 transition-all">
+        <Button onClick={() => onConfirm(items)} className="w-full h-16 text-lg font-extrabold rounded-2xl bg-kreile-navy text-white hover:bg-kreile-navy-soft shadow-xl active:scale-95 transition-all">
           Teile bestätigen <ChevronRight className="ml-2 w-6 h-6" />
         </Button>
       </div>

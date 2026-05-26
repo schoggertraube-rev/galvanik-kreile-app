@@ -1,96 +1,124 @@
-import { pgTable, text, timestamp, varchar, integer, real, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, varchar } from "drizzle-orm/pg-core";
+import { createId } from "@paralleldrive/cuid2";
 
-export const users = pgTable('users', {
-  id: varchar('id').primaryKey(),
-  authUserId: varchar('auth_user_id'),
-  tenantId: varchar('tenant_id').notNull(),
-  email: varchar('email').notNull(),
-  fullName: varchar('full_name').notNull(),
-  role: varchar('role').notNull(), // admin | meister | office | workshop | quality
-  active: boolean('active').default(true).notNull(),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull()
+// Helper for CUID primary keys
+const cuidPrimaryKey = (name: string) => text(name).primaryKey().$defaultFn(() => createId());
+
+// 1. Users & Roles
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(), // matches Supabase auth.users.id
+  email: text("email").notNull().unique(),
+  fullName: text("full_name").notNull(),
+  role: varchar("role", { length: 50 }).notNull().default("workshop"), // admin, meister, office, workshop, quality
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const customers = pgTable('customers', {
-  id: varchar('id').primaryKey(),
-  tenantId: varchar('tenant_id').notNull(),
-  customerNumber: varchar('customer_number'),
-  name: text('name').notNull(),
-  type: varchar('type').notNull(),
-  city: text('city'),
-  email: varchar('email'),
-  phone: varchar('phone')
+// 2. Customers
+export const customers = pgTable("customers", {
+  id: cuidPrimaryKey("id"),
+  customerNumber: varchar("customer_number", { length: 50 }),
+  name: text("name").notNull(),
+  type: varchar("type", { length: 50 }).notNull(), // business, privat, institution
+  city: text("city"),
+  address: text("address"),
+  phone: text("phone"),
+  email: text("email"),
+  prefComm: varchar("pref_comm", { length: 50 }),
+  risk: varchar("risk", { length: 50 }).default("Niedrig"),
+  riskNote: text("risk_note"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const inventoryItems = pgTable('inventory_items', {
-  id: varchar('id').primaryKey(),
-  tenantId: varchar('tenant_id').notNull(),
-  sku: varchar('sku').notNull(),
-  name: text('name').notNull(),
-  category: varchar('category'),
-  unit: varchar('unit'),
-  currentStock: integer('current_stock').notNull(),
-  minStock: integer('min_stock').notNull()
+// 3. Price Agreements (Standalone table linked to Customer)
+export const priceAgreements = pgTable("price_agreements", {
+  id: cuidPrimaryKey("id"),
+  customerId: text("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  scope: text("scope").notNull(),
+  rate: text("rate").notNull(),
+  date: timestamp("date").defaultNow().notNull(),
 });
 
-export const baths = pgTable('baths', {
-  id: varchar('id').primaryKey(),
-  tenantId: varchar('tenant_id').notNull(),
-  bathNumber: varchar('bath_number').notNull(),
-  name: text('name').notNull(),
-  processType: varchar('process_type').notNull(),
-  stationId: varchar('station_id').notNull()
+// 4. Orders
+export const orders = pgTable("orders", {
+  id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).default("hotel-kreile"),
+  orderNumber: text("order_number").notNull().unique(),
+  customerId: text("customer_id").notNull().references(() => customers.id),
+  title: text("title").notNull(),
+  task: text("task"),
+  station: varchar("station", { length: 100 }).notNull().default("wareneingang"),
+  currentStationId: varchar("current_station_id", { length: 100 }),
+  status: varchar("status", { length: 50 }).notNull().default("in_progress"),
+  risk: varchar("risk", { length: 50 }).default("green"),
+  priorityComputed: varchar("priority_computed", { length: 50 }).default("green"),
+  parts: jsonb("parts").$type<Record<string, unknown>[]>(), // Legacy / MVP fallback
+  statusText: text("status_text"),
+  delayReason: text("delay_reason"),
+  recommendedAction: text("recommended_action"),
+  intakeDate: timestamp("intake_date").defaultNow(),
+  dueDate: timestamp("due_date"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const orders = pgTable('orders', {
-  id: varchar('id').primaryKey(),
-  tenantId: varchar('tenant_id').notNull(),
-  orderNumber: varchar('order_number').notNull(),
-  customerId: varchar('customer_id').references(() => customers.id),
-  title: text('title').notNull(),
-  currentStationId: varchar('current_station_id'),
-  status: varchar('status').notNull(),
-  priorityComputed: varchar('priority_computed')
+// 4.5 Items (Standalone table for parts, referenced by orders.actions.ts)
+export const items = pgTable("items", {
+  id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).default("hotel-kreile"),
+  orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  customerId: text("customer_id").notNull().references(() => customers.id),
+  name: text("name").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  currentStationId: varchar("current_station_id", { length: 100 }).default("wareneingang"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const items = pgTable('items', {
-  id: varchar('id').primaryKey(),
-  tenantId: varchar('tenant_id').notNull(),
-  itemNumber: varchar('item_number'),
-  orderId: varchar('order_id').references(() => orders.id).notNull(),
-  customerId: varchar('customer_id'),
-  name: text('name').notNull(),
-  quantity: integer('quantity').notNull(),
-  currentStationId: varchar('current_station_id')
+// 5. Events / Timeline
+export const events = pgTable("events", {
+  id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).default("hotel-kreile"),
+  orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  itemId: text("item_id"),
+  eventType: varchar("event_type", { length: 100 }).notNull(),
+  description: text("description"),
+  notes: text("notes"),
+  userId: uuid("user_id").references(() => users.id),
+  workerId: varchar("worker_id", { length: 100 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const stockMovements = pgTable('stock_movements', {
-  id: varchar('id').primaryKey(),
-  tenantId: varchar('tenant_id').notNull(),
-  inventoryItemId: varchar('inventory_item_id').references(() => inventoryItems.id).notNull(),
-  movementType: varchar('movement_type').notNull(),
-  quantity: integer('quantity').notNull(),
-  unit: varchar('unit'),
-  createdBy: varchar('created_by').references(() => users.id)
+// 6. Complaints / Reklamationen
+export const complaints = pgTable("complaints", {
+  id: cuidPrimaryKey("id"),
+  orderId: text("order_id").notNull().references(() => orders.id),
+  customerId: text("customer_id").notNull().references(() => customers.id),
+  reason: text("reason").notNull(),
+  status: varchar("status", { length: 50 }).default("open"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const bathMeasurements = pgTable('bath_measurements', {
-  id: varchar('id').primaryKey(),
-  tenantId: varchar('tenant_id').notNull(),
-  bathId: varchar('bath_id').references(() => baths.id).notNull(),
-  temperature: integer('temperature'),
-  ph: real('ph'),
-  statusAfterMeasurement: varchar('status_after_measurement')
+// 7. Inventory & Baths
+export const baths = pgTable("baths", {
+  id: cuidPrimaryKey("id"),
+  name: text("name").notNull(),
+  status: varchar("status", { length: 50 }).default("stable"),
+  lastMeasuredAt: timestamp("last_measured_at"),
+  temperatureMax: integer("temperature_max"),
+  temperatureMin: integer("temperature_min"),
+  phMax: integer("ph_max"),
+  phMin: integer("ph_min"),
 });
 
-export const statusEvents = pgTable('status_events', {
-  id: varchar('id').primaryKey(),
-  tenantId: varchar('tenant_id').notNull(),
-  orderId: varchar('order_id').references(() => orders.id).notNull(),
-  itemId: varchar('item_id').references(() => items.id),
-  workerId: varchar('worker_id').references(() => users.id),
-  eventType: varchar('event_type').notNull(),
-  notes: text('notes'),
-  timestamp: timestamp('timestamp').defaultNow().notNull()
+export const inventoryItems = pgTable("inventory_items", {
+  id: cuidPrimaryKey("id"),
+  name: text("name").notNull(),
+  category: varchar("category", { length: 100 }),
+  currentStock: integer("current_stock").default(0),
+  minStock: integer("min_stock").default(0),
+  unit: varchar("unit", { length: 20 }),
 });
+
+// Legacy aliases for backward compatibility with old actions
+export const statusEvents = events;
+

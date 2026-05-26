@@ -19,24 +19,31 @@ import { INITIAL_ORDERS, INITIAL_CUSTOMERS, MockOrder, MockCustomer } from "@/li
 import { getRiskConfig } from "@/constants/status";
 import { getStationConfig } from "@/constants/stations";
 import { evaluateOrderPriority } from "@/lib/priority";
+import { ordersRepository } from "@/lib/repositories/ordersRepository";
+import { customersRepository } from "@/lib/repositories/customersRepository";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export default function TodayDashboard() {
   const [orders, setOrders] = useState<MockOrder[]>(INITIAL_ORDERS);
+  const [customers, setCustomers] = useState<MockCustomer[]>(INITIAL_CUSTOMERS);
   const [filter, setFilter] = useState<string>("all");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>("o1");
 
-  // Load from localStorage on mount
+  // Load from Repositories on mount
   useEffect(() => {
     const loadData = async () => {
-      if (typeof window !== "undefined") {
-        const savedOrders = localStorage.getItem("kreile_orders");
-        if (savedOrders) {
-          try {
-            setOrders(JSON.parse(savedOrders));
-          } catch (e) {
-            console.error("Fehler beim Laden von kreile_orders aus localStorage", e);
-          }
+      try {
+        const dbOrders = await ordersRepository.getAll();
+        if (dbOrders && dbOrders.length > 0) {
+          setOrders(dbOrders as unknown as MockOrder[]);
         }
+        
+        const dbCustomers = await customersRepository.getAll();
+        if (dbCustomers && dbCustomers.length > 0) {
+          setCustomers(dbCustomers as unknown as MockCustomer[]);
+        }
+      } catch (e) {
+        console.error("Fehler beim Laden aus Repositories", e);
       }
     };
     loadData();
@@ -90,21 +97,20 @@ export default function TodayDashboard() {
     if (typeof window !== "undefined") {
       localStorage.setItem("kreile_orders", JSON.stringify(updated));
     }
+    // Fire async update to DB in background
+    try {
+      const orderToUpdate = updated.find(o => o.id === orderId || o.orderNumber === orderId);
+      // Async sync to DB
+      if (orderToUpdate) {
+        ordersRepository.updateOrder(orderId, (orderToUpdate as unknown) as Parameters<typeof ordersRepository.updateOrder>[1]).catch(console.error);
+      }
+    } catch (e) {
+      console.error("Fehler beim Speichern der Gegenmaßnahme", e);
+    }
   };
 
   const getCustomerPhone = (customerId: string, customerName: string) => {
-    let list: MockCustomer[] = INITIAL_CUSTOMERS;
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("kreile_customers");
-      if (saved) {
-        try {
-          list = JSON.parse(saved);
-        } catch (e) {
-          console.error("Fehler beim Laden von kreile_customers aus localStorage", e);
-        }
-      }
-    }
-    const customer = list.find(
+    const customer = customers.find(
       c => c.id === customerId || String(c?.name ?? "").toLowerCase().includes(String(customerName ?? "").toLowerCase())
     );
     return customer && customer.phone && customer.phone.trim() !== "" ? customer.phone : null;
@@ -117,44 +123,45 @@ export default function TodayDashboard() {
   });
 
   const selectedOrder = orders.find(o => o.id === selectedOrderId) || null;
-
   const activeOrdersCount = todayOrders.length;
   const hour = new Date().getHours();
   const greeting = hour < 11 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend";
   const userName = "Max";
 
   return (
-    <div className="space-y-6 pb-12 font-sans antialiased text-slate-900">
-      
-      {/* Hero-Section as Cockpit Header */}
-      <div className="bg-linear-to-br from-slate-900 via-slate-850 to-blue-950 text-white p-6 md:p-8 rounded-2xl border border-slate-800 shadow-xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 -mt-20 -mr-20 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute left-1/3 bottom-0 -mb-20 w-80 h-80 bg-orange-500/5 rounded-full blur-3xl pointer-events-none"></div>
+    <div className="space-y-6 pb-12 font-sans antialiased text-kreile-navy">
+      <PageHeader
+        title="Heute im Blick"
+        subtitle="Kritische Fälligkeiten, Express-Freigaben und Gegenmaßnahmen für die Schicht."
+      />
+
+      {/* Cockpit Status Summary - Quiet elegance */}
+      <div className="bg-gradient-to-r from-kreile-navy to-kreile-navy-soft text-white p-6 md:p-8 rounded-2xl border border-white/10 shadow-md relative overflow-hidden">
+        <div className="absolute right-0 top-0 -mt-20 -mr-20 w-80 h-80 bg-kreile-gold-muted/5 rounded-full blur-3xl pointer-events-none"></div>
         
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-500/15 border border-blue-500/35 rounded-full text-blue-300 text-xs font-bold uppercase tracking-wider">
-              <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></span>
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/10 border border-white/20 rounded-full text-white/80 text-xs font-bold uppercase tracking-wider">
+              <span className="w-2 h-2 rounded-full bg-orange-400 animate-pulse"></span>
               Fällige Aufträge für Heute
             </div>
-            <h1 className="text-4xl md:text-5xl font-black tracking-tight font-serif text-white">
+            <h2 className="text-3xl md:text-4xl font-serif font-black tracking-tight text-white">
               {greeting}, {userName}.
-            </h1>
-            <p className="text-slate-300 text-sm md:text-base max-w-2xl font-medium">
+            </h2>
+            <p className="text-white/85 text-xs md:text-sm max-w-2xl font-sans font-medium">
               Heute stehen {activeOrdersCount} Aufträge auf dem Programm.<br className="hidden md:block"/>
-              {countRed} kritisch, {countOrange} gefährdet.<br className="hidden md:block"/>
-              Lass uns das abarbeiten.
+              {countRed} kritisch, {countOrange} gefährdet. Lass uns das abarbeiten.
             </p>
           </div>
           
           <div className="grid grid-cols-2 gap-3 sm:gap-4 shrink-0">
-            <div className="bg-red-500/10 border border-red-500/30 px-5 py-4 rounded-xl shadow-sm text-center min-w-[90px] md:min-w-[110px] animate-pulse">
+            <div className="bg-red-500/15 border border-red-500/30 px-5 py-4 rounded-xl shadow-sm text-center min-w-[90px] md:min-w-[110px] animate-pulse">
               <div className="text-3xl md:text-4xl font-black text-red-400 leading-none">{countRed}</div>
-              <div className="text-[10px] md:text-xs font-bold text-red-300 uppercase tracking-wider mt-1.5">Kritisch</div>
+              <div className="text-[10px] md:text-xs font-extrabold text-red-200 uppercase tracking-wider mt-1.5 font-sans">Kritisch</div>
             </div>
-            <div className="bg-orange-500/10 border border-orange-500/30 px-5 py-4 rounded-xl shadow-sm text-center min-w-[90px] md:min-w-[110px]">
+            <div className="bg-orange-500/15 border border-orange-500/30 px-5 py-4 rounded-xl shadow-sm text-center min-w-[90px] md:min-w-[110px]">
               <div className="text-3xl md:text-4xl font-black text-orange-400 leading-none">{countOrange}</div>
-              <div className="text-[10px] md:text-xs font-bold text-orange-300 uppercase tracking-wider mt-1.5">Fällig</div>
+              <div className="text-[10px] md:text-xs font-extrabold text-orange-200 uppercase tracking-wider mt-1.5 font-sans">Fällig</div>
             </div>
           </div>
         </div>
@@ -162,8 +169,8 @@ export default function TodayDashboard() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Link href="/" className="block w-full">
-          <Button className="w-full bg-white text-slate-800 hover:bg-slate-50 h-16 rounded-xl flex items-center justify-center gap-3 text-lg font-extrabold shadow-sm border-2 border-slate-200 active:scale-98 transition-all cursor-pointer">
-            <Calendar className="h-6 w-6 text-blue-900 stroke-[2.5]" />
+          <Button className="w-full bg-white text-kreile-navy hover:bg-kreile-surface-soft h-16 rounded-xl flex items-center justify-center gap-3 text-lg font-extrabold shadow-sm border-2 border-kreile-border-strong active:scale-98 transition-all cursor-pointer">
+            <Calendar className="h-6 w-6 text-kreile-navy stroke-[2.5]" />
             <span>Gesamter Leitstand</span>
           </Button>
         </Link>
@@ -186,13 +193,13 @@ export default function TodayDashboard() {
         {/* Left Side: Order Queue */}
         <div className="lg:col-span-2 space-y-4">
           <div className="flex items-center justify-between px-1">
-            <h3 className="font-extrabold text-xl text-slate-800 font-serif">Tages-Warteschlange</h3>
-            <span className="text-xs text-slate-500 font-bold bg-slate-100 px-2.5 py-1 rounded-full">{filteredOrders.length} Aufträge</span>
+            <h3 className="font-extrabold text-xl text-kreile-navy font-serif">Tages-Warteschlange</h3>
+            <span className="text-xs text-kreile-muted font-bold bg-kreile-surface-warm px-2.5 py-1 rounded-full">{filteredOrders.length} Aufträge</span>
           </div>
 
           <div className="space-y-4">
             {filteredOrders.length === 0 ? (
-                <div className="p-8 text-center text-slate-500">Für heute sind keine Aufträge fällig.</div>
+                <div className="p-8 text-center text-kreile-muted">Für heute sind keine Aufträge fällig.</div>
             ) : filteredOrders.map((order) => {
               const evalRes = evaluateOrderPriority({
                 dueDate: order.dueValue,
@@ -204,7 +211,7 @@ export default function TodayDashboard() {
               
               let cardStyle = evalRes.config.cardClass;
               if (isSelected) {
-                cardStyle += " ring-2 ring-blue-900";
+                cardStyle += " ring-2 ring-kreile-navy";
               }
               const leftBorderColor = evalRes.config.leftBorderClass;
               
@@ -228,8 +235,8 @@ export default function TodayDashboard() {
                 );
               } else if (order.risk === "blocked") {
                 iconElement = (
-                  <div className="p-2 bg-slate-200 rounded-xl shrink-0">
-                    <PauseCircle className="h-5 w-5 text-slate-600" />
+                  <div className="p-2 bg-kreile-border rounded-xl shrink-0">
+                    <PauseCircle className="h-5 w-5 text-kreile-muted" />
                   </div>
                 );
               } else {
@@ -252,15 +259,15 @@ export default function TodayDashboard() {
                       {iconElement}
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono font-black text-slate-900 text-lg tracking-tight">{order.orderNumber}</span>
-                          <span className="text-xs text-slate-500 font-bold bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">{order.customerName}</span>
+                          <span className="font-mono font-black text-kreile-navy text-lg tracking-tight">{order.orderNumber}</span>
+                          <span className="text-xs text-kreile-muted font-bold bg-kreile-surface-warm px-2.5 py-0.5 rounded-full border border-kreile-border-strong">{order.customerName}</span>
                           {isRed && (
                             <Badge className="bg-red-600 hover:bg-red-700 text-white font-extrabold text-[10px] uppercase tracking-wider px-2 py-0.5 border border-red-700 animate-pulse">
                               Express-Aktion
                             </Badge>
                           )}
                           {isSelected && (
-                            <Badge className="bg-blue-900 text-white font-bold text-[9px] uppercase tracking-wider px-2 py-0.5">
+                            <Badge className="bg-kreile-navy text-white font-bold text-[9px] uppercase tracking-wider px-2 py-0.5">
                               Ausgewählt
                             </Badge>
                           )}
@@ -269,8 +276,8 @@ export default function TodayDashboard() {
                           {order.task}
                         </h4>
                         
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 pt-1">
-                          <span className="font-bold text-slate-700 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">Station: {getStationName(order.station)}</span>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-kreile-muted pt-1">
+                          <span className="font-bold text-kreile-navy bg-kreile-surface-soft border border-kreile-border-strong px-2 py-0.5 rounded-md">Station: {getStationName(order.station)}</span>
                           <span>•</span>
                           <span>Teile: {order.parts.length} Werkstücke</span>
                         </div>
@@ -280,8 +287,8 @@ export default function TodayDashboard() {
                     <div className="w-full md:w-auto flex flex-row md:flex-col justify-between items-end gap-3 self-stretch md:self-auto border-t md:border-0 pt-3 md:pt-0">
                       
                       <div className="text-left md:text-right">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">{order.dueLabel}</span>
-                        <span className={`font-black tracking-tight leading-none ${isRed ? "text-3xl text-red-650" : isOrange ? "text-2xl text-orange-600" : "text-xl text-slate-800"}`}>
+                        <span className="text-[10px] text-kreile-muted font-bold uppercase tracking-wider block">{order.dueLabel}</span>
+                        <span className={`font-black tracking-tight leading-none ${isRed ? "text-3xl text-red-650" : isOrange ? "text-2xl text-orange-600" : "text-xl text-kreile-navy"}`}>
                           {order.dueValue}
                         </span>
                       </div>
@@ -296,7 +303,7 @@ export default function TodayDashboard() {
                           className={`h-10 font-extrabold text-xs gap-2 px-4 rounded-xl border shadow-sm transition-all cursor-pointer ${
                             isRed 
                               ? "bg-red-600 text-white hover:bg-red-700 border-red-700 hover:scale-[1.03]" 
-                              : "bg-blue-900 text-white hover:bg-blue-800 border-blue-950 hover:scale-[1.03]"
+                              : "bg-kreile-navy text-white hover:bg-kreile-navy-soft border-kreile-navy hover:scale-[1.03]"
                           }`}
                         >
                           <Zap className="h-3.5 w-3.5" /> 
@@ -316,21 +323,21 @@ export default function TodayDashboard() {
         <div className="space-y-6">
           
           {selectedOrder ? (
-            <Card className="border-slate-350 shadow-lg rounded-2xl overflow-hidden bg-white ring-2 ring-blue-900/10">
+            <Card className="border-slate-350 shadow-lg rounded-2xl overflow-hidden bg-white ring-2 ring-kreile-navy/10">
               
-              <div className="bg-slate-900 text-white p-5 flex justify-between items-start">
+              <div className="bg-kreile-navy text-white p-5 flex justify-between items-start">
                 <div className="space-y-1">
                   <span className="text-[10px] font-black uppercase tracking-wider text-orange-400 bg-orange-950/50 px-2.5 py-0.5 rounded border border-orange-900/30">
                     Details & Leitstand
                   </span>
                   <h3 className="text-2xl font-mono font-black tracking-tight text-white">{selectedOrder.orderNumber}</h3>
-                  <p className="text-xs text-slate-300 font-bold">{selectedOrder.customerName}</p>
+                  <p className="text-xs text-kreile-muted font-bold">{selectedOrder.customerName}</p>
                 </div>
                 <Button 
                   variant="ghost" 
                   size="sm" 
                   onClick={() => setSelectedOrderId(null)}
-                  className="text-slate-400 hover:text-white hover:bg-slate-800 -mr-2 -mt-2 h-8 w-8 p-0 rounded-full flex items-center justify-center cursor-pointer"
+                  className="text-kreile-muted hover:text-white hover:bg-slate-800 -mr-2 -mt-2 h-8 w-8 p-0 rounded-full flex items-center justify-center cursor-pointer"
                 >
                   ✕
                 </Button>
@@ -339,13 +346,13 @@ export default function TodayDashboard() {
               <CardContent className="p-5 space-y-5">
                 
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Arbeitsauftrag</span>
-                  <h4 className="font-black text-lg text-slate-900 leading-tight">{selectedOrder.task}</h4>
-                  <div className="flex items-center justify-between text-xs text-slate-500 pt-1.5">
-                    <span className="font-extrabold text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-md">
+                  <span className="text-[10px] font-bold text-kreile-muted uppercase tracking-wider">Arbeitsauftrag</span>
+                  <h4 className="font-black text-lg text-kreile-navy leading-tight">{selectedOrder.task}</h4>
+                  <div className="flex items-center justify-between text-xs text-kreile-muted pt-1.5">
+                    <span className="font-extrabold text-kreile-navy bg-kreile-surface-warm border border-kreile-border-strong px-2.5 py-0.5 rounded-md">
                       Station: {getStationName(selectedOrder.station)}
                     </span>
-                    <span className="font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200">
+                    <span className="font-bold text-kreile-muted bg-kreile-surface-warm px-2.5 py-0.5 rounded border border-kreile-border-strong">
                       Status: {getRiskConfig(selectedOrder.risk).label}
                     </span>
                   </div>
@@ -354,9 +361,9 @@ export default function TodayDashboard() {
                 <hr className="border-slate-100" />
 
                 <div className="space-y-1">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Frist / Dringlichkeit</span>
+                  <span className="text-[10px] font-bold text-kreile-muted uppercase tracking-wider block">Frist / Dringlichkeit</span>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-slate-500 font-semibold">{selectedOrder.dueLabel}:</span>
+                    <span className="text-xs text-kreile-muted font-semibold">{selectedOrder.dueLabel}:</span>
                     <span className={`text-sm font-extrabold ${selectedOrder.risk === "red" ? "text-red-650" : selectedOrder.risk === "orange" ? "text-orange-650" : "text-slate-850"}`}>
                       {selectedOrder.dueValue}
                     </span>
@@ -370,7 +377,7 @@ export default function TodayDashboard() {
                       selectedOrder.risk === "red" 
                         ? "bg-red-50 border-red-200 text-red-950" 
                         : selectedOrder.risk === "blocked"
-                        ? "bg-slate-100 border-slate-200 text-slate-850"
+                        ? "bg-kreile-surface-warm border-kreile-border-strong text-slate-850"
                         : "bg-orange-50 border-orange-200 text-orange-950"
                     }`}>
                       <AlertCircle className={`h-5 w-5 shrink-0 ${
@@ -388,9 +395,9 @@ export default function TodayDashboard() {
                   <>
                     <hr className="border-slate-100" />
                     <div className="space-y-2">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Empfohlene Gegenmaßnahme</span>
-                      <div className="bg-blue-50/50 border border-blue-150 p-3.5 rounded-xl flex items-center gap-2.5 text-xs text-blue-950">
-                        <Zap className="h-4 w-4 text-blue-900 shrink-0" />
+                      <span className="text-[10px] font-bold text-kreile-muted uppercase tracking-wider block">Empfohlene Gegenmaßnahme</span>
+                      <div className="bg-kreile-surface-warm border border-kreile-border-strong p-3.5 rounded-xl flex items-center gap-2.5 text-xs text-kreile-navy">
+                        <Zap className="h-4 w-4 text-kreile-navy shrink-0" />
                         <span className="font-semibold">{selectedOrder.recommendedAction}</span>
                       </div>
                     </div>
@@ -398,17 +405,17 @@ export default function TodayDashboard() {
                 )}
 
                 <div className="space-y-2 border-t pt-4">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Zugeordnete Werkstücke</span>
+                  <span className="text-[10px] font-bold text-kreile-muted uppercase tracking-wider block">Zugeordnete Werkstücke</span>
                   <div className="space-y-2">
-                    {selectedOrder.parts.map(part => (
-                      <div key={part.id} className="p-2 bg-slate-50 border rounded-lg flex items-center justify-between text-xs">
+                    {(selectedOrder.parts || []).map(part => (
+                      <div key={part.id} className="p-2 bg-kreile-surface-soft border rounded-lg flex items-center justify-between text-xs">
                         <div>
-                          <p className="font-bold text-slate-800">{part.name}</p>
-                          <p className="text-[10px] text-slate-500">
+                          <p className="font-bold text-kreile-navy">{part.name}</p>
+                          <p className="text-[10px] text-kreile-muted">
                             Oberfläche: {part.finish} | Ort: {part.location}
                           </p>
                         </div>
-                        <Badge variant="outline" className="font-mono text-[9px] bg-white text-slate-500">
+                        <Badge variant="outline" className="font-mono text-[9px] bg-white text-kreile-muted">
                           {part.id}
                         </Badge>
                       </div>
@@ -425,7 +432,7 @@ export default function TodayDashboard() {
                       return (
                         <a 
                           href={`tel:${phone}`}
-                          className="w-full h-11 bg-white hover:bg-slate-50 text-slate-800 font-bold border-2 border-slate-200 rounded-xl flex items-center justify-center gap-2 text-xs shadow-sm transition-all"
+                          className="w-full h-11 bg-white hover:bg-kreile-surface-soft text-kreile-navy font-bold border-2 border-kreile-border-strong rounded-xl flex items-center justify-center gap-2 text-xs shadow-sm transition-all"
                         >
                           <Phone className="h-4 w-4 text-emerald-600 shrink-0" />
                           <span>Kunde anrufen ({phone})</span>
@@ -435,7 +442,7 @@ export default function TodayDashboard() {
                       return (
                         <Link 
                           href="/customers"
-                          className="w-full h-11 bg-white hover:bg-slate-50 text-slate-600 hover:text-blue-900 font-semibold border-2 border-dashed border-slate-200 hover:border-slate-300 rounded-xl flex items-center justify-center gap-2 text-xs transition-all text-center"
+                          className="w-full h-11 bg-white hover:bg-kreile-surface-soft text-kreile-muted hover:text-kreile-navy font-semibold border-2 border-dashed border-kreile-border-strong hover:border-kreile-gold-muted rounded-xl flex items-center justify-center gap-2 text-xs transition-all text-center"
                         >
                           <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
                           <span>Telefonnummer in Kundenkartei prüfen</span>
@@ -446,7 +453,7 @@ export default function TodayDashboard() {
 
                   {selectedOrder.recommendedAction && (
                     <Button 
-                      className="w-full bg-blue-900 hover:bg-blue-800 text-white font-extrabold text-xs h-11 rounded-xl flex items-center justify-center gap-2 border border-blue-950 shadow-sm transition-all cursor-pointer"
+                      className="w-full bg-kreile-navy hover:bg-kreile-navy-soft text-white font-extrabold text-xs h-11 rounded-xl flex items-center justify-center gap-2 border border-kreile-navy shadow-sm transition-all cursor-pointer"
                       onClick={() => handleAction(selectedOrder.id)}
                     >
                       <Zap className="h-3.5 w-3.5 text-orange-400" />
@@ -457,7 +464,7 @@ export default function TodayDashboard() {
                     <Link href="/customers" className="block w-full">
                       <Button 
                         variant="outline" 
-                        className="w-full h-10 text-xs font-bold border-slate-200 hover:bg-slate-50 rounded-xl cursor-pointer"
+                        className="w-full h-10 text-xs font-bold border-kreile-border-strong hover:bg-kreile-surface-soft rounded-xl cursor-pointer"
                       >
                         Kundendaten öffnen
                       </Button>
@@ -465,7 +472,7 @@ export default function TodayDashboard() {
                     <Link href={`/orders?station=${selectedOrder.station}`} className="block w-full">
                       <Button 
                         variant="outline"
-                        className="w-full h-10 text-xs font-bold border-slate-200 hover:bg-slate-50 rounded-xl cursor-pointer"
+                        className="w-full h-10 text-xs font-bold border-kreile-border-strong hover:bg-kreile-surface-soft rounded-xl cursor-pointer"
                       >
                         Station einsehen
                       </Button>
@@ -475,12 +482,12 @@ export default function TodayDashboard() {
               </CardContent>
             </Card>
           ) : (
-            <Card className="border-dashed border-2 border-slate-200 bg-slate-50/50 p-6 text-center rounded-2xl space-y-2">
-              <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+            <Card className="border-dashed border-2 border-kreile-border-strong bg-kreile-surface-soft/50 p-6 text-center rounded-2xl space-y-2">
+              <div className="h-12 w-12 rounded-full bg-kreile-surface-warm flex items-center justify-center mx-auto text-kreile-muted">
                 <FileText className="h-6 w-6" />
               </div>
-              <h4 className="font-extrabold text-sm text-slate-700">Kein Auftrag ausgewählt</h4>
-              <p className="text-xs text-slate-500 max-w-xs mx-auto leading-relaxed">
+              <h4 className="font-extrabold text-sm text-kreile-navy">Kein Auftrag ausgewählt</h4>
+              <p className="text-xs text-kreile-muted max-w-xs mx-auto leading-relaxed">
                 Wähle links in der Tages-Warteschlange einen Auftrag aus, um die detaillierten Leitstands-Informationen und internen Maßnahmen freizuschalten.
               </p>
             </Card>

@@ -31,14 +31,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     load();
   }, [id]);
 
-  if (!order) return <div className="p-8 font-bold text-slate-500 flex items-center justify-center min-h-screen">Lade Auftrag...</div>;
+  if (!order) return <div className="p-8 font-bold text-kreile-muted flex items-center justify-center min-h-screen">Lade Auftrag...</div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
+    <div className="min-h-screen bg-transparent p-4 md:p-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-4xl font-black font-serif text-slate-900">{order.orderNumber}</h1>
-        <h2 className="text-2xl font-bold text-slate-600 mt-1">{order.title}</h2>
+        <h1 className="text-4xl font-black font-serif text-kreile-navy">{order.orderNumber}</h1>
+        <h2 className="text-2xl font-bold text-kreile-muted mt-1">{order.title}</h2>
         <div className="flex gap-4 mt-4">
           <span className="px-3 py-1.5 bg-blue-100 text-blue-800 font-bold rounded-lg text-sm flex items-center">
             <Box className="w-4 h-4 mr-2" /> Station: {getStationConfig(order.currentStationId || order.station || "wareneingang").name}
@@ -88,14 +88,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             onPrint={() => setPrintOpen(true)} 
           />
           
-          <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm">
-            <h3 className="text-sm font-extrabold text-slate-500 uppercase tracking-widest pl-1 mb-4">Teile ({order.parts?.length || 0})</h3>
+          <div className="bg-white border-2 border-kreile-border-strong rounded-3xl p-6 md:p-8 shadow-sm">
+            <h3 className="text-sm font-extrabold text-kreile-muted uppercase tracking-widest pl-1 mb-4">Teile ({order.parts?.length || 0})</h3>
             <div className="space-y-3">
               {order.parts?.map((p: { quantity?: number; name?: string; surfaceRequested?: string }, i: number) => (
-                <div key={i} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 gap-3">
-                  <span className="font-bold text-slate-800 text-lg">{p.quantity}x {p.name}</span>
+                <div key={i} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-kreile-surface-soft rounded-2xl border-2 border-slate-100 gap-3">
+                  <span className="font-bold text-kreile-navy text-lg">{p.quantity}x {p.name}</span>
                   {p.surfaceRequested && (
-                    <span className="text-sm font-bold text-slate-600 bg-white px-3 py-1.5 rounded-lg border-2 border-slate-200">
+                    <span className="text-sm font-bold text-kreile-muted bg-white px-3 py-1.5 rounded-lg border-2 border-kreile-border-strong">
                       {p.surfaceRequested}
                     </span>
                   )}
@@ -106,7 +106,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </div>
 
         {/* Right Column (Timeline & Docs) */}
-        <div className="lg:col-span-5 bg-white border-2 border-slate-200 rounded-3xl p-6 md:p-8 shadow-sm">
+        <div className="lg:col-span-5 bg-white border-2 border-kreile-border-strong rounded-3xl p-6 md:p-8 shadow-sm">
           <OrderTimeline entries={timeline} />
         </div>
       </div>

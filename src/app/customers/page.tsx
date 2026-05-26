@@ -29,6 +29,8 @@ import {
   Check
 } from "lucide-react";
 import { INITIAL_CUSTOMERS } from "@/lib/mockData";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { SearchToolbar } from "@/components/ui/SearchToolbar";
 
 interface MockPart {
   id: string;
@@ -261,68 +263,30 @@ export default function CustomersPage() {
 
   return (
     <div className="space-y-6 pb-12 font-sans max-w-7xl">
-      {/* Title Header with elegant Branding */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3.5xl font-bold font-serif text-slate-900 tracking-tight">Kundenkartei</h1>
-            <Badge variant="outline" className="text-[10px] uppercase font-bold py-0.5 px-2 border-blue-200 text-blue-900 bg-blue-50/50">
-              CRM & Service-Historie
-            </Badge>
-          </div>
-          <p className="text-slate-500 text-sm mt-1">
-            Technische Profile, historische Preisabsprachen, Reklamationen und zugeordnete Bauteile unserer Kunden.
-          </p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <div className="hidden xl:flex items-center gap-2 text-slate-400 text-xs font-medium font-sans border-r pr-4 border-slate-200">
-            <span className="font-serif italic text-slate-800">Meisterbetrieb seit 1962</span>
-          </div>
-          <Button 
-            className="bg-blue-900 text-white hover:bg-blue-800 font-bold h-11 text-sm shadow-sm gap-2"
-            onClick={() => setShowAddModal(true)}
-          >
-            <UserPlus className="h-4.5 w-4.5 text-orange-400" /> Neuer Kunde
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title="Kundenkartei"
+        subtitle="Technische Profile, historische Preisabsprachen, Reklamationen und zugeordnete Bauteile."
+        action={{
+          label: "Neuer Kunde",
+          onClick: () => setShowAddModal(true),
+          icon: UserPlus,
+        }}
+      />
 
       {/* Toolbar & Filters - Optimized for touch, no thin administrative tables */}
-      <Card className="shadow-sm border-slate-200 bg-white">
-        <CardContent className="p-4 flex flex-col lg:flex-row gap-4 items-center justify-between">
-          <div className="relative w-full lg:max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-slate-400" />
-            <Input
-              className="pl-10 bg-slate-50 border-slate-200 rounded-lg w-full h-11 text-sm focus:bg-white transition-all font-sans"
-              placeholder="Name, ID oder Ort suchen..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2 w-full lg:w-auto">
-            {[
-              { id: "all", label: "Alle Kundentypen" },
-              { id: "Privatkunde", label: "Privatkunden" },
-              { id: "Geschäftskunde", label: "Geschäftskunden" },
-              { id: "Institution", label: "Institutionen" }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setTypeFilter(tab.id)}
-                className={`px-4 py-2.5 rounded-lg text-xs font-bold transition-all border shrink-0 ${
-                  typeFilter === tab.id
-                    ? "bg-blue-900 border-blue-950 text-white shadow-sm font-extrabold"
-                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <SearchToolbar
+        value={searchTerm}
+        onChange={setSearchTerm}
+        placeholder="Name, ID oder Ort suchen..."
+        filters={[
+          { id: "all", label: "Alle Kundentypen" },
+          { id: "Privatkunde", label: "Privatkunden" },
+          { id: "Geschäftskunde", label: "Geschäftskunden" },
+          { id: "Institution", label: "Institutionen" }
+        ]}
+        activeFilter={typeFilter}
+        onFilterChange={setTypeFilter}
+      />
 
       {/* CRM Master-Detail Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
@@ -341,25 +305,23 @@ export default function CustomersPage() {
                 const activeOrders = (customer.orders || []).filter(o => o.status !== "done").length;
                 
                 // Color mapping for customer initials avatar
-                let avatarColor = "bg-blue-100 text-blue-800 border-blue-200";
+                let avatarColor = "bg-kreile-surface-warm text-kreile-gold-muted border-kreile-border-strong";
                 let typeIcon = <User className="h-3.5 w-3.5" />;
                 
                 if (customer.type === "Geschäftskunde") {
-                  avatarColor = "bg-orange-100 text-orange-800 border-orange-200";
+                  avatarColor = "bg-orange-50 text-orange-700 border-orange-200";
                   typeIcon = <Building className="h-3.5 w-3.5" />;
                 } else if (customer.type === "Institution") {
-                  avatarColor = "bg-purple-100 text-purple-800 border-purple-200";
+                  avatarColor = "bg-slate-100 text-slate-800 border-slate-200";
                   typeIcon = <School className="h-3.5 w-3.5" />;
                 }
-
-
 
                 return (
                   <Card
                     key={customer.id}
                     onClick={() => selectCustomer(customer)}
-                    className={`transition-all duration-200 cursor-pointer border-slate-200 shadow-sm hover:border-slate-300 hover:shadow bg-white ${
-                      isSelected ? "ring-2 ring-blue-900 border-transparent shadow-md" : ""
+                    className={`transition-all duration-200 cursor-pointer border-kreile-border-strong shadow-sm hover:border-kreile-gold-muted hover:shadow bg-white ${
+                      isSelected ? "ring-2 ring-kreile-navy border-transparent shadow-md" : ""
                     }`}
                   >
                     <CardContent className="p-4 flex items-center justify-between gap-3">
@@ -369,34 +331,34 @@ export default function CustomersPage() {
                         </div>
                         
                         <div className="space-y-0.5">
-                          <h4 className="font-bold text-slate-900 text-sm md:text-base font-serif tracking-tight">
+                          <h4 className="font-bold text-kreile-navy text-sm md:text-base font-serif tracking-tight">
                             {customer.name}
                           </h4>
                           
-                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 font-sans">
-                            <span className="font-mono bg-slate-100 px-1.5 py-0.5 rounded text-[10px] text-slate-600 font-bold">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-kreile-muted font-sans">
+                            <span className="font-mono bg-kreile-surface-warm px-1.5 py-0.5 rounded text-[10px] text-kreile-muted font-bold">
                               {customer.id}
                             </span>
-                            <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-600">
+                            <span className="flex items-center gap-1 text-[11px] font-semibold text-kreile-muted">
                               {typeIcon} {customer.type}
                             </span>
-                            <span className="text-slate-300">•</span>
-                            <span className="text-slate-500 font-medium">{customer.city}</span>
+                            <span className="text-kreile-muted">•</span>
+                            <span className="text-kreile-muted font-medium">{customer.city}</span>
                           </div>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-3 text-right shrink-0">
                         <div className="flex flex-col items-end">
-                          <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wide">Aufträge</span>
-                          <span className="text-sm font-bold text-slate-700 font-sans flex items-center gap-1">
+                          <span className="text-[10px] text-kreile-muted font-extrabold uppercase tracking-wide">Aufträge</span>
+                          <span className="text-sm font-bold text-kreile-navy font-sans flex items-center gap-1">
                             {customer.orders?.length ?? 0}
                             {activeOrders > 0 && (
                               <span className="w-2 h-2 rounded-full bg-orange-500 inline-block animate-pulse" title="Aktiver Auftrag" />
                             )}
                           </span>
                         </div>
-                        <ChevronRight className={`h-5 w-5 transition-transform ${isSelected ? "text-blue-900 translate-x-1" : "text-slate-300"}`} />
+                        <ChevronRight className={`h-5 w-5 transition-transform ${isSelected ? "text-kreile-navy translate-x-1" : "text-kreile-muted"}`} />
                       </div>
                     </CardContent>
                   </Card>
@@ -404,9 +366,9 @@ export default function CustomersPage() {
               })}
             </div>
           ) : (
-            <div className="p-12 text-center text-slate-400 bg-white border border-slate-200 rounded-xl space-y-2">
-              <User className="h-8 w-8 mx-auto text-slate-300 animate-pulse" />
-              <p className="font-bold text-slate-600">Keine passenden Kunden</p>
+            <div className="p-12 text-center text-kreile-muted bg-white border border-kreile-border-strong rounded-xl space-y-2">
+              <User className="h-8 w-8 mx-auto text-kreile-muted animate-pulse" />
+              <p className="font-bold text-kreile-muted">Keine passenden Kunden</p>
               <p className="text-xs">Ändere den Filter oder passe den Suchbegriff an.</p>
             </div>
           )}
@@ -416,14 +378,14 @@ export default function CustomersPage() {
         <div className="lg:col-span-2">
           {selectedCustomer ? (
             <div className="space-y-6">
-              <Card className="shadow-md border-blue-100 overflow-hidden bg-white">
+              <Card className="shadow-md border-kreile-border overflow-hidden bg-white">
                 
-                {/* Beautiful Header in Dark Blue */}
-                <div className="bg-linear-to-r from-blue-900 to-slate-900 text-white p-6 relative">
+                {/* Beautiful Header in Kreile Navy */}
+                <div className="bg-gradient-to-r from-kreile-navy to-kreile-navy-soft text-white p-6 relative">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <div className="flex items-center gap-2.5">
-                        <span className="font-mono text-xs font-bold text-blue-200 bg-blue-950 px-2 py-0.5 rounded border border-blue-800">
+                        <span className="font-mono text-xs font-bold text-white/70 bg-kreile-navy-soft px-2 py-0.5 rounded border border-white/10">
                           {selectedCustomer.id}
                         </span>
                         <Badge className="bg-orange-500 text-white border-0 text-[10px] font-bold uppercase tracking-wider py-0.5 px-2">
@@ -433,7 +395,7 @@ export default function CustomersPage() {
                       <h2 className="font-bold text-2.5xl font-serif mt-2 leading-tight tracking-tight">
                         {selectedCustomer.name}
                       </h2>
-                      <p className="text-xs text-blue-200/90 mt-1 font-sans font-medium flex items-center gap-1">
+                      <p className="text-xs text-white/90 mt-1 font-sans font-medium flex items-center gap-1">
                         <MapPin className="h-3.5 w-3.5 text-orange-400 shrink-0" />
                         {selectedCustomer.address}
                       </p>
@@ -445,11 +407,11 @@ export default function CustomersPage() {
                           href={`tel:${selectedCustomer.phone}`}
                           className="bg-white/10 hover:bg-white/20 text-white font-bold border border-white/20 h-11 px-4 text-xs gap-1.5 flex items-center rounded-md shrink-0 font-sans"
                         >
-                          <Phone className="h-4 w-4 text-orange-450 shrink-0" /> Anrufen ({selectedCustomer.phone})
+                          <Phone className="h-4 w-4 text-orange-400 shrink-0" /> Anrufen ({selectedCustomer.phone})
                         </a>
                       ) : (
                         <div
-                          className="bg-slate-800 text-slate-400 font-bold border border-slate-700 h-11 px-4 text-xs gap-1.5 flex items-center rounded-md cursor-not-allowed shrink-0 font-sans"
+                          className="bg-kreile-navy-soft text-kreile-muted font-bold border border-white/10 h-11 px-4 text-xs gap-1.5 flex items-center rounded-md cursor-not-allowed shrink-0 font-sans"
                           title="Telefonnummer in Kundenkartei prüfen"
                         >
                           <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" /> Nummer prüfen
@@ -459,7 +421,7 @@ export default function CustomersPage() {
                         onClick={() => handleSimulateMail(selectedCustomer.email, selectedCustomer.name)}
                         className="bg-white/10 hover:bg-white/20 text-white font-bold border border-white/20 h-11 text-xs gap-1.5 flex-1 sm:flex-none"
                       >
-                        <Mail className="h-4 w-4 text-blue-400" /> E-Mail
+                        <Mail className="h-4 w-4 text-blue-450" /> E-Mail
                       </Button>
                     </div>
                   </div>
@@ -471,21 +433,21 @@ export default function CustomersPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     
                     {/* Stammdaten Core Specs */}
-                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3 text-sm">
-                      <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">Kontaktdaten</h3>
+                    <div className="bg-kreile-surface-soft p-4 rounded-xl border border-slate-100 space-y-3 text-sm">
+                      <h3 className="text-xs font-extrabold text-kreile-muted uppercase tracking-wider">Kontaktdaten</h3>
                       
                       <div className="space-y-2">
-                        <div className="flex justify-between items-center py-1 border-b border-slate-200/65">
-                          <span className="text-slate-500 font-medium">Telefon:</span>
-                          <span className="font-bold text-slate-800 font-mono">{selectedCustomer.phone}</span>
+                        <div className="flex justify-between items-center py-1 border-b border-kreile-border-strong/65">
+                          <span className="text-kreile-muted font-medium">Telefon:</span>
+                          <span className="font-bold text-kreile-navy font-mono">{selectedCustomer.phone}</span>
                         </div>
-                        <div className="flex justify-between items-center py-1 border-b border-slate-200/65">
-                          <span className="text-slate-500 font-medium">E-Mail:</span>
-                          <span className="font-bold text-slate-800 font-mono text-xs">{selectedCustomer.email}</span>
+                        <div className="flex justify-between items-center py-1 border-b border-kreile-border-strong/65">
+                          <span className="text-kreile-muted font-medium">E-Mail:</span>
+                          <span className="font-bold text-kreile-navy font-mono text-xs">{selectedCustomer.email}</span>
                         </div>
                         <div className="flex justify-between items-center py-1">
-                          <span className="text-slate-500 font-medium">Bevorzugter Kanal:</span>
-                          <Badge className="bg-blue-50 text-blue-800 border-blue-200 border text-[10px] font-bold">
+                          <span className="text-kreile-muted font-medium">Bevorzugter Kanal:</span>
+                          <Badge className="bg-kreile-surface-warm text-kreile-navy border-kreile-border-strong border text-[10px] font-bold">
                             {selectedCustomer.prefComm}
                           </Badge>
                         </div>

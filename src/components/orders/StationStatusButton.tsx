@@ -44,7 +44,7 @@ export function StationStatusButton({
     return (
       <Button 
         onClick={onCompleteStation} 
-        className="h-24 w-full flex flex-col gap-2 rounded-2xl bg-slate-800 hover:bg-slate-900 text-white shadow-lg active:scale-95 transition-all"
+        className="h-24 w-full flex flex-col gap-2 rounded-2xl bg-slate-800 hover:bg-kreile-navy text-white shadow-lg active:scale-95 transition-all"
       >
         <CheckCircle className="w-6 h-6" />
         <span className="font-bold">Station abschließen</span>

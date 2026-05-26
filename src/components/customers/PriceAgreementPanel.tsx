@@ -19,7 +19,7 @@ export function PriceAgreementPanel({ agreements }: { agreements: PriceAgreement
               </div>
               <span className="text-2xl font-black text-amber-600 bg-amber-50 px-3 py-1 rounded-xl">{a.price} €</span>
             </div>
-            {a.note && <p className="text-sm font-medium text-slate-600 mt-4 bg-amber-50/50 p-3 rounded-xl border border-amber-100">{a.note}</p>}
+            {a.note && <p className="text-sm font-medium text-kreile-muted mt-4 bg-amber-50/50 p-3 rounded-xl border border-amber-100">{a.note}</p>}
           </div>
         ))}
       </div>

@@ -125,7 +125,7 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
         <div className="flex justify-between items-center p-6 border-b border-slate-100">
           <div>
             <h2 className="text-2xl font-black font-serif text-slate-900">Verbrauch & Zeit</h2>
-            <p className="text-slate-400 text-xs mt-1">Auftrag: {orderId}</p>
+            <p className="text-kreile-muted text-xs mt-1">Auftrag: {orderId}</p>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors cursor-pointer"><X /></button>
         </div>
@@ -142,14 +142,14 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
           
           {/* Time Picker Stepper */}
           <div className="space-y-3">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest pl-0.5">Arbeitszeit (Minuten)</h3>
+            <h3 className="text-xs font-black text-kreile-muted uppercase tracking-widest pl-0.5">Arbeitszeit (Minuten)</h3>
             <div className="flex items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-200">
               <Button 
                 variant="outline" 
                 className="h-12 w-12 rounded-full border border-slate-350 cursor-pointer" 
                 onClick={() => setMinutes(m => Math.max(0, m - 15))}
               >
-                <Minus className="w-5 h-5 text-slate-700 font-bold" />
+                <Minus className="w-5 h-5 text-kreile-navy font-bold" />
               </Button>
               <span className="text-4xl font-black text-slate-800 w-24 text-center">{minutes}</span>
               <Button 
@@ -157,20 +157,20 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
                 className="h-12 w-12 rounded-full border border-slate-350 cursor-pointer" 
                 onClick={() => setMinutes(m => m + 15)}
               >
-                <Plus className="w-5 h-5 text-slate-700 font-bold" />
+                <Plus className="w-5 h-5 text-kreile-navy font-bold" />
               </Button>
             </div>
           </div>
 
           {/* Booked Consumables List */}
           <div className="space-y-4">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest pl-0.5">Verbrauchsmaterial</h3>
+            <h3 className="text-xs font-black text-kreile-muted uppercase tracking-widest pl-0.5">Verbrauchsmaterial</h3>
             <div className="space-y-2.5">
               {bookedMaterials.map((m, i) => (
                 <div key={m.id} className="flex justify-between items-center bg-white p-3 rounded-2xl border border-slate-200 shadow-xs">
                   <div className="flex items-center gap-2.5">
                     <Package className="h-5 w-5 text-slate-450 shrink-0" />
-                    <span className="font-bold text-slate-700 text-sm">{m.name}</span>
+                    <span className="font-bold text-kreile-navy text-sm">{m.name}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <Button 
@@ -198,7 +198,7 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
             {/* Material Add Search Input Field */}
             <div className="relative mt-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-kreile-muted" />
                 <Input
                   className="pl-9 h-11 bg-slate-50 border-slate-200 rounded-xl w-full text-sm font-semibold"
                   placeholder="Material suchen..."
@@ -222,13 +222,13 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
                         className="p-3 hover:bg-slate-50 cursor-pointer text-xs font-bold text-slate-850 flex justify-between items-center"
                       >
                         <span>{item.name} ({item.sku})</span>
-                        <span className="text-[10px] text-slate-400 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded font-mono">
+                        <span className="text-[10px] text-kreile-muted bg-slate-100 border border-slate-200 px-2 py-0.5 rounded font-mono">
                           Lager: {item.currentStock} {item.unit}
                         </span>
                       </div>
                     ))
                   ) : (
-                    <div className="p-3 text-center text-slate-400 text-xs font-semibold">Keine weiteren Materialien gefunden</div>
+                    <div className="p-3 text-center text-kreile-muted text-xs font-semibold">Keine weiteren Materialien gefunden</div>
                   )}
                 </div>
               )}

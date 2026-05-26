@@ -52,7 +52,7 @@ export function CustomerEditModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 animate-in fade-in duration-200">
+    <div className="fixed inset-0 bg-kreile-navy/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-300">
         
         {/* Header */}
@@ -77,7 +77,7 @@ export function CustomerEditModal({
           
           {/* Section: Stammdaten */}
           <div className="space-y-4">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-150 pb-2">
+            <h3 className="text-xs font-black text-kreile-muted uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-150 pb-2">
               <User className="w-4 h-4 text-blue-600" /> Stammdaten & Typ
             </h3>
             
@@ -108,7 +108,7 @@ export function CustomerEditModal({
 
           {/* Section: Kontakt & Kommunikation */}
           <div className="space-y-4">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-150 pb-2">
+            <h3 className="text-xs font-black text-kreile-muted uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-150 pb-2">
               <MapPin className="w-4 h-4 text-blue-600" /> Kontakt & Standort
             </h3>
             
@@ -167,7 +167,7 @@ export function CustomerEditModal({
 
           {/* Section: Risiko & Besonderheiten */}
           <div className="space-y-4">
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-150 pb-2">
+            <h3 className="text-xs font-black text-kreile-muted uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-150 pb-2">
               <Shield className="w-4 h-4 text-blue-600" /> Bonitäts- & Risikoprofil
             </h3>
             
@@ -204,7 +204,7 @@ export function CustomerEditModal({
 
           {/* Section: Besonderheiten */}
           <div className="space-y-2">
-            <label className="text-xs font-black text-slate-400 uppercase tracking-widest block border-b border-slate-150 pb-2">
+            <label className="text-xs font-black text-kreile-muted uppercase tracking-widest block border-b border-slate-150 pb-2">
               Besonderheiten / Technische Vorgaben
             </label>
             <textarea 

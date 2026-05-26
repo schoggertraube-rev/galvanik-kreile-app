@@ -1,82 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Mail, CheckCircle, Archive, ChevronRight, Flame, Package, Droplets, Clock } from "lucide-react";
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-interface QuoteRequest {
-  id: string;
-  customerName: string;
-  customerId: string;
-  subject: string;
-  description: string;
-  receivedAt: string;
-  rustLevel: "Leicht" | "Mittel" | "Stark" | "Sehr stark";
-  dirtLevel: "Sauber" | "Leicht" | "Stark";
-  partCount: number;
-  material: string;
-  status: "offen" | "angeboten" | "archiviert";
-  photo?: string;
-  pricing: {
-    grundarbeit: number;
-    reinigung: number;
-    entmetallisierung: number;
-    schleifaufwand: number;
-    badchemie: number;
-    risikopuffer: number;
-    marge: number;
-  };
-}
-
-const MOCK_REQUESTS: QuoteRequest[] = [
-  {
-    id: "q1",
-    customerName: "Rosa Schneider",
-    customerId: "K-000131",
-    subject: "Vespa V50 Lampenmaske – Verchromung",
-    description: "Hallo, ich möchte die Lampenmaske meiner Vespa V50 (Baujahr 1968) neu verchromen lassen. Das Teil hat leichte Rostflecken und eine alte Lackschicht. Sehr gerne würde ich ein Angebot erhalten. MfG Rosa Schneider",
-    receivedAt: "2026-05-21",
-    rustLevel: "Leicht",
-    dirtLevel: "Leicht",
-    partCount: 1,
-    material: "Stahlblech",
-    status: "offen",
-    pricing: { grundarbeit: 120, reinigung: 20, entmetallisierung: 35, schleifaufwand: 40, badchemie: 25, risikopuffer: 15, marge: 30 },
-  },
-  {
-    id: "q2",
-    customerName: "Atelier Schmid",
-    customerId: "K-000125",
-    subject: "BMW R75 Motorradtank – Glanzverchromung",
-    description: "Wir haben einen originalen BMW R75 Tank aus den 1940er-Jahren. Der Tank hat Beulen, tiefe Kratzer und Flugrost. Wir benötigen eine vollständige Glanzverchromung inkl. Entlackung und Entmetallisierung. Gibt es Erfahrung mit dieser Epoche?",
-    receivedAt: "2026-05-20",
-    rustLevel: "Stark",
-    dirtLevel: "Stark",
-    partCount: 1,
-    material: "Stahlblech (Oldtimer)",
-    status: "offen",
-    pricing: { grundarbeit: 280, reinigung: 60, entmetallisierung: 90, schleifaufwand: 180, badchemie: 70, risikopuffer: 60, marge: 80 },
-  },
-  {
-    id: "q3",
-    customerName: "Kirchenverwaltung St. Urban",
-    customerId: "K-000132",
-    subject: "Historisches Besteck-Set (48-teilig) – Versilberung",
-    description: "Wir besitzen ein historisches Silberbesteck (48 Teile, Messing/Alpacca), das für den kirchlichen Einsatz aufgearbeitet werden soll. Der Großteil ist stark oxidiert, einige Stücke haben leichte Dellen. Wir wünschen eine komplette Versilberung (90g/12).",
-    receivedAt: "2026-05-19",
-    rustLevel: "Mittel",
-    dirtLevel: "Stark",
-    partCount: 48,
-    material: "Messing / Alpacca",
-    status: "offen",
-    pricing: { grundarbeit: 350, reinigung: 80, entmetallisierung: 120, schleifaufwand: 90, badchemie: 95, risikopuffer: 40, marge: 90 },
-  },
-];
+import { ordersRepository } from "@/lib/repositories/ordersRepository";
+import { inquiriesRepository, QuoteRequest } from "@/lib/repositories/inquiriesRepository";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 const RUST_BADGE: Record<QuoteRequest["rustLevel"], string> = {
   "Leicht": "bg-yellow-50 text-yellow-700 border-yellow-200",
@@ -92,24 +24,41 @@ function calcTotal(p: QuoteRequest["pricing"]) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function QuotesPage() {
-  const [requests, setRequests] = useState<QuoteRequest[]>(MOCK_REQUESTS);
-  const [selectedId, setSelectedId] = useState<string | null>(MOCK_REQUESTS[0].id);
-  const [pricing, setPricing] = useState<Record<string, QuoteRequest["pricing"]>>(
-    Object.fromEntries(MOCK_REQUESTS.map(r => [r.id, { ...r.pricing }]))
-  );
+  const [requests, setRequests] = useState<QuoteRequest[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pricing, setPricing] = useState<Record<string, QuoteRequest["pricing"]>>({});
   const [showEmail, setShowEmail] = useState(false);
+
+  useEffect(() => {
+    const loadRequests = async () => {
+      const data = await inquiriesRepository.getAll();
+      setRequests(data);
+      if (data.length > 0 && !selectedId) {
+        setSelectedId(data[0].id);
+      }
+      setPricing(Object.fromEntries(data.map(r => [r.id, { ...r.pricing }])));
+    };
+    loadRequests();
+
+    const handleUpdate = () => loadRequests();
+    window.addEventListener("kreile-inquiries-updated", handleUpdate);
+    return () => window.removeEventListener("kreile-inquiries-updated", handleUpdate);
+  }, [selectedId]);
 
   const selected = requests.find(r => r.id === selectedId) || null;
   const currentPricing = selectedId ? pricing[selectedId] : null;
   const total = currentPricing ? calcTotal(currentPricing) : 0;
 
-  const handlePriceChange = (field: keyof QuoteRequest["pricing"], value: number) => {
+  const handlePriceChange = async (field: keyof QuoteRequest["pricing"], value: number) => {
     if (!selectedId) return;
-    setPricing(prev => ({ ...prev, [selectedId]: { ...prev[selectedId], [field]: value } }));
+    const newPricing = { ...pricing[selectedId], [field]: value };
+    setPricing(prev => ({ ...prev, [selectedId]: newPricing }));
+    await inquiriesRepository.updatePricing(selectedId, newPricing);
   };
 
-  const handleStatusChange = (id: string, status: QuoteRequest["status"]) => {
+  const handleStatusChange = async (id: string, status: QuoteRequest["status"]) => {
     setRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r));
+    await inquiriesRepository.updateStatus(id, status);
   };
 
   const handleTakeAsOrder = (req: QuoteRequest) => {
@@ -139,10 +88,13 @@ export default function QuotesPage() {
       })),
     };
 
-    const savedOrders = localStorage.getItem("kreile_orders");
-    const existing = savedOrders ? JSON.parse(savedOrders) : [];
-    localStorage.setItem("kreile_orders", JSON.stringify([newOrder, ...existing]));
-    window.dispatchEvent(new Event("storage"));
+    // Save directly to Supabase via Repository
+    try {
+      ordersRepository.create({ ...newOrder, title: newOrder.task } as Parameters<typeof ordersRepository.create>[0]);
+    } catch (e) {
+      console.error("Fehler beim Erstellen des Auftrags aus dem Angebot", e);
+    }
+    
     handleStatusChange(req.id, "angeboten");
     alert(`✓ Auftrag "${req.subject}" wurde im Wareneingang angelegt!`);
   };
@@ -188,19 +140,14 @@ kreile-galvanik.ch`;
 
   return (
     <div className="space-y-6 pb-12 font-sans max-w-6xl">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <Link href="/" className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors">
-          <ArrowLeft className="h-4 w-4" />
-        </Link>
-        <div>
-          <h1 className="text-3xl font-extrabold font-serif text-slate-900 tracking-tight">Angebotsanfragen</h1>
-          <p className="text-slate-500 text-sm mt-0.5">Website-Anfragen strukturieren · kalkulieren · beantworten</p>
-        </div>
-        <Badge className="ml-auto bg-orange-100 text-orange-700 border border-orange-200 font-bold">
-          {requests.filter(r => r.status === "offen").length} Offen
-        </Badge>
-      </div>
+      <PageHeader
+        title="Angebotsanfragen"
+        subtitle="Website-Anfragen strukturieren · kalkulieren · beantworten"
+        action={{
+          label: "+ Neue Anfrage",
+          href: "/quotes/new",
+        }}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Left: Anfragenliste */}
@@ -211,16 +158,16 @@ kreile-galvanik.ch`;
               onClick={() => { setSelectedId(req.id); setShowEmail(false); }}
               className={`cursor-pointer transition-all border-l-4 ${
                 req.id === selectedId
-                  ? "ring-2 ring-blue-900 border-transparent shadow-md"
-                  : "border-slate-200 hover:shadow-sm"
+                  ? "ring-2 ring-kreile-navy border-transparent shadow-md"
+                  : "border-kreile-border-strong hover:shadow-sm"
               } ${req.status === "archiviert" ? "opacity-50" : ""}`}
             >
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">{req.receivedAt}</p>
-                    <h3 className="font-bold text-slate-800 text-sm leading-tight mt-1 truncate">{req.subject}</h3>
-                    <p className="text-xs text-slate-500 mt-0.5">{req.customerName}</p>
+                    <p className="text-xs text-kreile-muted font-bold uppercase tracking-wider">{req.receivedAt}</p>
+                    <h3 className="font-bold text-kreile-navy text-sm leading-tight mt-1 truncate">{req.subject}</h3>
+                    <p className="text-xs text-kreile-muted mt-0.5">{req.customerName}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1 shrink-0">
                     <Badge variant="outline" className={`text-[9px] font-bold ${RUST_BADGE[req.rustLevel]}`}>
@@ -231,7 +178,7 @@ kreile-galvanik.ch`;
                     )}
                   </div>
                 </div>
-                <div className="flex items-center gap-3 mt-2 text-[10px] text-slate-400 font-semibold">
+                <div className="flex items-center gap-3 mt-2 text-[10px] text-kreile-muted font-semibold">
                   <span className="flex items-center gap-1"><Package className="h-3 w-3" />{req.partCount} Tl.</span>
                   <span className="flex items-center gap-1"><Droplets className="h-3 w-3" />Schmutz: {req.dirtLevel}</span>
                   <span className="flex items-center gap-1"><Flame className="h-3 w-3" />{req.material.split("/")[0].trim()}</span>
@@ -245,12 +192,12 @@ kreile-galvanik.ch`;
         {selected && currentPricing ? (
           <div className="lg:col-span-2 space-y-4">
             {/* Anfrage Detail */}
-            <Card className="border-slate-200 shadow-sm">
+            <Card className="border-kreile-border-strong shadow-sm">
               <CardHeader className="pb-3 border-b border-slate-100">
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-base font-black font-serif">{selected.subject}</CardTitle>
-                    <p className="text-xs text-slate-500 mt-1">{selected.customerName} · {selected.receivedAt} · {selected.partCount} Teil(e)</p>
+                    <p className="text-xs text-kreile-muted mt-1">{selected.customerName} · {selected.receivedAt} · {selected.partCount} Teil(e)</p>
                   </div>
                   <Badge variant="outline" className={`text-[9px] font-bold ${RUST_BADGE[selected.rustLevel]}`}>
                     Rost: {selected.rustLevel}
@@ -258,63 +205,63 @@ kreile-galvanik.ch`;
                 </div>
               </CardHeader>
               <CardContent className="pt-4">
-                <p className="text-sm text-slate-600 leading-relaxed italic bg-slate-50 p-3 rounded-lg border border-slate-100">
+                <p className="text-sm text-kreile-muted leading-relaxed italic bg-kreile-surface-soft p-3 rounded-lg border border-slate-100">
                   &ldquo;{selected.description}&rdquo;
                 </p>
               </CardContent>
             </Card>
 
             {/* Preiskalkulation */}
-            <Card className="border-slate-200 shadow-sm">
+            <Card className="border-kreile-border-strong shadow-sm">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-bold font-serif flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-blue-700" /> Preiskalkulation
+                    <Clock className="h-4 w-4 text-kreile-navy" /> Preiskalkulation
                   </CardTitle>
-                  <span className="text-2xl font-black text-blue-900">CHF {total.toFixed(2)}</span>
+                  <span className="text-2xl font-black text-kreile-navy">CHF {total.toFixed(2)}</span>
                 </div>
               </CardHeader>
               <CardContent className="space-y-3">
                 {PRICE_FIELDS.map(({ key, label, color }) => (
                   <div key={key} className="flex items-center gap-3">
                     <span className={`w-3 h-3 rounded-sm shrink-0 ${color}`} />
-                    <label className="text-sm font-semibold text-slate-600 w-44 shrink-0">{label}</label>
+                    <label className="text-sm font-semibold text-kreile-muted w-44 shrink-0">{label}</label>
                     <input
                       type="range"
                       min={0} max={500} step={5}
                       value={currentPricing[key]}
                       onChange={e => handlePriceChange(key, Number(e.target.value))}
-                      className="flex-1 accent-blue-600 h-1.5"
+                      className="flex-1 accent-kreile-navy h-1.5"
                     />
-                    <span className="text-sm font-bold text-slate-800 w-16 text-right">
+                    <span className="text-sm font-bold text-kreile-navy w-16 text-right">
                       CHF {currentPricing[key]}
                     </span>
                   </div>
                 ))}
 
-                <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
-                  <div className="text-xs text-slate-500">
-                    Netto <span className="font-bold text-slate-800">CHF {total.toFixed(2)}</span>
+                <div className="pt-3 border-t border-kreile-border-strong flex items-center justify-between">
+                  <div className="text-xs text-kreile-muted">
+                    Netto <span className="font-bold text-kreile-navy">CHF {total.toFixed(2)}</span>
                     {" "}· Brutto (8.1% MwSt){" "}
-                    <span className="font-bold text-slate-800">CHF {(total * 1.081).toFixed(2)}</span>
+                    <span className="font-bold text-kreile-navy">CHF {(total * 1.081).toFixed(2)}</span>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             {/* Auto-Mail Generator */}
-            <Card className="border-slate-200 shadow-sm">
+            <Card className="border-kreile-border-strong shadow-sm">
               <CardContent className="p-4">
                 <button
                   onClick={() => setShowEmail(v => !v)}
-                  className="flex items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-900 transition-colors"
+                  className="flex items-center gap-2 text-sm font-bold text-kreile-navy hover:text-kreile-accent transition-colors"
                 >
                   <Mail className="h-4 w-4" />
                   {showEmail ? "Antwort-Email ausblenden" : "Antwort-Email generieren"}
                   <ChevronRight className={`h-4 w-4 transition-transform ${showEmail ? "rotate-90" : ""}`} />
                 </button>
                 {showEmail && (
-                  <pre className="mt-3 bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-slate-700 font-mono whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">
+                  <pre className="mt-3 bg-kreile-surface-soft border border-kreile-border-strong rounded-lg p-4 text-xs text-kreile-navy font-mono whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto">
                     {generateEmail(selected, currentPricing)}
                   </pre>
                 )}
@@ -326,7 +273,7 @@ kreile-galvanik.ch`;
               <Button
                 onClick={() => handleTakeAsOrder(selected)}
                 disabled={selected.status === "archiviert"}
-                className="bg-blue-900 hover:bg-blue-800 text-white font-bold rounded-xl shadow-md"
+                className="bg-kreile-navy hover:bg-kreile-navy-soft text-white font-bold rounded-xl shadow-md"
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
                 Als Auftrag übernehmen
@@ -343,7 +290,7 @@ kreile-galvanik.ch`;
               <Button
                 variant="ghost"
                 onClick={() => handleStatusChange(selected.id, "archiviert")}
-                className="font-bold rounded-xl text-slate-500 hover:text-red-600"
+                className="font-bold rounded-xl text-kreile-muted hover:text-red-600"
               >
                 <Archive className="h-4 w-4 mr-2" />
                 Archivieren
@@ -351,7 +298,7 @@ kreile-galvanik.ch`;
             </div>
           </div>
         ) : (
-          <div className="lg:col-span-2 flex items-center justify-center h-64 text-slate-400 text-sm font-semibold bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <div className="lg:col-span-2 flex items-center justify-center h-64 text-kreile-muted text-sm font-semibold bg-kreile-surface-soft rounded-2xl border border-dashed border-kreile-border-strong">
             Wähle eine Anfrage links aus
           </div>
         )}

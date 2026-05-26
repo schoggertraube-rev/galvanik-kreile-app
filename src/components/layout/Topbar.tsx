@@ -104,14 +104,14 @@ export function Topbar() {
       
       {/* Left: Logo */}
       <div className="flex items-center w-48 md:w-64 shrink-0">
-        <Link href="/" className="font-bold text-2xl tracking-tight text-blue-900">
+        <Link href="/" className="font-bold text-2xl tracking-tight text-kreile-navy">
           KREILE
         </Link>
       </div>
 
       {/* Center: Workshop Flow */}
         <nav className="hidden lg:flex flex-1 items-center justify-center px-4">
-          <div className="flex items-center bg-slate-900/80 p-2 rounded-2xl border border-slate-700/80 shadow-inner">
+          <div className="flex items-center bg-kreile-navy/80 p-2 rounded-2xl border border-slate-700/80 shadow-inner">
             {STATIONS.map((station, i) => {
               const isWareneingangActive = station.name === 'Wareneingang' && (
                 pathname === '/orders/new' || 
@@ -134,7 +134,7 @@ export function Topbar() {
                     title={station.name === 'Beschichtung' ? 'Beschichtung (Galvanik)' : undefined}
                   />
                   {i < STATIONS.length - 1 && (
-                    <div className="px-2 text-slate-600">
+                    <div className="px-2 text-kreile-muted">
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                         <path d="m9 18 6-6-6-6"/>
                       </svg>
@@ -153,7 +153,7 @@ export function Topbar() {
           className={`hidden lg:flex items-center gap-2 text-sm font-medium hover:bg-slate-100 px-3 py-2 rounded-md transition-colors border ${
             criticalStock 
               ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 animate-pulse' 
-              : 'text-slate-600 border-transparent font-medium'
+              : 'text-kreile-muted border-transparent font-medium'
           }`}
         >
           <Package className="w-4.5 h-4.5" />
@@ -161,7 +161,7 @@ export function Topbar() {
           <span className={`flex h-2 w-2 rounded-full ${criticalStock ? 'bg-red-650 animate-pulse' : 'bg-green-500'}`}></span>
         </Link>
 
-        <Link href="/" className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 px-3 py-2 rounded-md transition-colors border border-slate-200">
+        <Link href="/" className="flex items-center gap-2 text-sm font-medium text-kreile-muted hover:text-slate-900 hover:bg-slate-100 px-3 py-2 rounded-md transition-colors border border-slate-200">
           <Calendar className="w-4 h-4" />
           <span>Heute · {dateString}</span>
           <span className="flex h-2 w-2 rounded-full bg-orange-500"></span>
@@ -195,7 +195,7 @@ export function Topbar() {
                     {isOffline ? "Offline (Simuliert)" : "Online"}
                   </span>
                 </div>
-                <p className="text-slate-400 text-[10px] leading-relaxed">
+                <p className="text-kreile-muted text-[10px] leading-relaxed">
                   Schalte das Netzwerk ab, um Offline-Materialbuchungen und Statusänderungen zu erproben.
                 </p>
                 <button
@@ -219,7 +219,7 @@ export function Topbar() {
                     <span className="text-slate-500">Warteschlange:</span>
                     <span className="text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded border border-amber-100">{syncQueueCount} Aktionen</span>
                   </div>
-                  <p className="text-slate-400 text-[10px] leading-relaxed">
+                  <p className="text-kreile-muted text-[10px] leading-relaxed">
                     Daten werden in IndexedDB gepuffert und bei Verbindungswiederkehr automatisch übertragen.
                   </p>
                   <button
@@ -231,7 +231,7 @@ export function Topbar() {
                       setShowDropdown(false);
                     }}
                     disabled={isOffline || isSyncing}
-                    className={`w-full py-2.5 bg-slate-900 text-white rounded-xl font-black text-xs hover:bg-slate-800 transition-all active:scale-95 cursor-pointer shadow-slate-200 shadow-[0_4px_12px] flex items-center justify-center gap-2 ${
+                    className={`w-full py-2.5 bg-kreile-navy text-white rounded-xl font-black text-xs hover:bg-slate-800 transition-all active:scale-95 cursor-pointer shadow-slate-200 shadow-[0_4px_12px] flex items-center justify-center gap-2 ${
                       (isOffline || isSyncing) ? "opacity-40 cursor-not-allowed" : ""
                     }`}
                   >
@@ -255,7 +255,7 @@ export function Topbar() {
           </kbd>
         </button>
 
-        <button className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-300 transition-colors">
+        <button className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-kreile-muted hover:bg-slate-300 transition-colors">
           <User className="w-4 h-4" />
         </button>
       </div>

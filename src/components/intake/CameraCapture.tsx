@@ -114,11 +114,11 @@ export function CameraCapture({
         </button>
       )}
 
-      <div className="flex flex-col items-center justify-center h-[460px] w-full bg-slate-900 rounded-3xl relative overflow-hidden shadow-2xl border border-slate-800">
+      <div className="flex flex-col items-center justify-center h-[460px] w-full bg-kreile-navy rounded-3xl relative overflow-hidden shadow-2xl border border-slate-800">
         
         {/* Real Camera Feed */}
         {error ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-slate-400 bg-slate-950">
+          <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-kreile-muted bg-slate-950">
             <AlertCircle className="w-12 h-12 text-red-500 mb-4" />
             <p className="font-bold text-white mb-2">Kamera-Fehler</p>
             <p className="text-sm">{error}</p>

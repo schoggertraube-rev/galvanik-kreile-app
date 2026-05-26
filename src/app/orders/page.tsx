@@ -23,6 +23,10 @@ import {
 import { INITIAL_ORDERS, INITIAL_CUSTOMERS, MockOrder, MockCustomer } from "@/lib/mockData";
 import { getStationConfig, getAllStations } from "@/constants/stations";
 import { evaluateOrderPriority } from "@/lib/priority";
+import { ordersRepository } from "@/lib/repositories/ordersRepository";
+import { customersRepository } from "@/lib/repositories/customersRepository";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { SearchToolbar } from "@/components/ui/SearchToolbar";
 
 const safe = (value: unknown) => String(value ?? "").toLowerCase();
 
@@ -58,27 +62,21 @@ function OrdersPageInner() {
   const [customersList, setCustomersList] = useState<MockCustomer[]>(INITIAL_CUSTOMERS as unknown as MockCustomer[]);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
 
-  // Load from localStorage on mount
+  // Load from Repositories on mount
   useEffect(() => {
     const loadData = async () => {
-      if (typeof window !== "undefined") {
-        const savedOrders = localStorage.getItem("kreile_orders");
-        if (savedOrders) {
-          try {
-            setOrders(JSON.parse(savedOrders));
-          } catch (e) {
-            console.error("Fehler beim Laden von kreile_orders aus localStorage", e);
-          }
+      try {
+        const dbOrders = await ordersRepository.getAll();
+        if (dbOrders && dbOrders.length > 0) {
+          setOrders(dbOrders as unknown as MockOrder[]);
         }
-
-        const savedCustomers = localStorage.getItem("kreile_customers");
-        if (savedCustomers) {
-          try {
-            setCustomersList(JSON.parse(savedCustomers));
-          } catch (e) {
-            console.error("Fehler beim Laden von kreile_customers aus localStorage", e);
-          }
+        
+        const dbCustomers = await customersRepository.getAll();
+        if (dbCustomers && dbCustomers.length > 0) {
+          setCustomersList(dbCustomers as unknown as MockCustomer[]);
         }
+      } catch (e) {
+        console.error("Fehler beim Laden aus Repositories", e);
       }
     };
     loadData();
@@ -115,6 +113,14 @@ function OrdersPageInner() {
     if (typeof window !== "undefined") {
       localStorage.setItem("kreile_orders", JSON.stringify(updated));
     }
+    try {
+      const orderToUpdate = updated.find(o => o.id === orderId);
+      if (orderToUpdate) {
+        ordersRepository.updateOrder(orderId, (orderToUpdate as unknown) as Parameters<typeof ordersRepository.updateOrder>[1]);
+      }
+    } catch (e) {
+      console.error("Fehler beim Speichern des Status", e);
+    }
   };
 
   const handleStationUpdate = (orderId: string, newStation: MockOrder["station"]) => {
@@ -130,6 +136,14 @@ function OrdersPageInner() {
     setOrders(updated);
     if (typeof window !== "undefined") {
       localStorage.setItem("kreile_orders", JSON.stringify(updated));
+    }
+    try {
+      const orderToUpdate = updated.find(o => o.id === orderId);
+      if (orderToUpdate) {
+        ordersRepository.updateOrder(orderId, (orderToUpdate as unknown) as Parameters<typeof ordersRepository.updateOrder>[1]);
+      }
+    } catch (e) {
+      console.error("Fehler beim Speichern der Station", e);
     }
   };
 
@@ -152,6 +166,14 @@ function OrdersPageInner() {
     setOrders(updated);
     if (typeof window !== "undefined") {
       localStorage.setItem("kreile_orders", JSON.stringify(updated));
+    }
+    try {
+      const orderToUpdate = updated.find(o => o.id === order.id);
+      if (orderToUpdate) {
+        ordersRepository.updateOrder(order.id, (orderToUpdate as unknown) as Parameters<typeof ordersRepository.updateOrder>[1]);
+      }
+    } catch (e) {
+      console.error("Fehler beim Speichern der Maßnahme", e);
     }
     setActionSuccessMessage(`Gegenmaßnahme für ${order.orderNumber} eingeleitet: "${order.recommendedAction}" wurde erfolgreich umgesetzt.`);
     // Auto-close after 6 seconds
@@ -209,83 +231,41 @@ function OrdersPageInner() {
   };
 
   return (
-    <div className="space-y-6 pb-12 font-sans max-w-6xl">
-      {/* Title */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            {stationFilter && (
-              <Link href="/orders" className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg mr-1 transition-colors">
-                <ArrowLeft className="h-4 w-4" />
-              </Link>
-            )}
-            <h1 className="text-3xl font-extrabold font-serif text-slate-900 tracking-tight">
-              {getStationHeadline()}
-            </h1>
-          </div>
-          <p className="text-slate-500 text-sm mt-1">
-            {stationFilter 
-              ? `Stationsspezifische Übersicht der Werkstücke in Schritt: ${stationFilter.toUpperCase()}`
-              : "Vollständiges Register aller Werkstattaufträge und zugeordneter Teile. Wähle einen Auftrag für Details."}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button 
-            variant="outline" 
-            className="gap-2 text-slate-600 bg-white" 
-            onClick={() => {
-              setSearchTerm("");
-              setStatusFilter("all");
-              setSelectedOrderId(null);
-            }}
-          >
-            <RefreshCw className="h-4 w-4" /> Zurücksetzen
-          </Button>
-        </div>
-      </div>
-
-      {/* Toolbar / Filters */}
-      <Card className="shadow-sm border-slate-200">
-        <CardContent className="p-4 flex flex-col md:flex-row gap-4 items-center justify-between">
-          <div className="relative w-full md:max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              className="pl-9 bg-slate-50 border-slate-200 rounded-lg w-full h-10 text-sm focus:bg-white transition-all"
-              placeholder="Suchen nach Auftragsnummer, Kunde, Arbeit..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2 w-full md:w-auto">
-            {[
-              { id: "all", label: "Alle Status" },
-              { id: "active", label: "Aktiv in Arbeit" },
-              { id: "waiting", label: "Wartend auf Freigabe" },
-              { id: "critical", label: "Kritisch / Warnung" }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setStatusFilter(tab.id)}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all border ${
-                  statusFilter === tab.id
-                    ? "bg-blue-900 border-blue-950 text-white shadow-sm"
-                    : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+    <div className="space-y-5 pb-12 max-w-6xl">
+      <PageHeader
+        title={getStationHeadline()}
+        subtitle={
+          stationFilter
+            ? `Stationsspezifische Übersicht: ${stationFilter.toUpperCase()}`
+            : "Alle Werkstattaufträge — wähle einen Auftrag für Details."
+        }
+        backHref={stationFilter ? "/orders" : undefined}
+        action={{
+          label: "Zurücksetzen",
+          variant: "outline",
+          onClick: () => { setSearchTerm(""); setStatusFilter("all"); setSelectedOrderId(null); },
+        }}
+      />
+      <SearchToolbar
+        value={searchTerm}
+        onChange={setSearchTerm}
+        placeholder="Suchen nach Auftragsnummer, Kunde, Arbeit..."
+        filters={[
+          { id: "all",      label: "Alle Status" },
+          { id: "active",  label: "Aktiv" },
+          { id: "waiting", label: "Wartend" },
+          { id: "critical",label: "Kritisch", count: orders.filter(o => o.risk === "red" || o.risk === "orange").length },
+        ]}
+        activeFilter={statusFilter}
+        onFilterChange={setStatusFilter}
+      />
 
       {/* Main Content Layout (Master-Detail) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         
         {/* Left Columns: Master Order List */}
         <div className="lg:col-span-2 space-y-3">
-          <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-1">
+          <div className="flex items-center justify-between text-xs text-kreile-muted font-semibold px-1">
             <span>{filteredOrders.length} Aufträge an dieser Station</span>
             <span>Klicke für Details</span>
           </div>
@@ -305,7 +285,7 @@ function OrdersPageInner() {
                 });
                 let borderStyle = evalRes.config.leftBorderClass;
                 let badgeStyle = evalRes.config.badgeClass;
-                let itemBg = "bg-white hover:bg-slate-50/50";
+                let itemBg = "bg-white hover:bg-kreile-surface-soft/50";
 
                 if (isRed) {
                   borderStyle = `${evalRes.config.leftBorderClass} border-l-[8px] ring-1 ring-red-500/25`;
@@ -322,28 +302,28 @@ function OrdersPageInner() {
                 } else if (isBlocked) {
                   borderStyle = `${evalRes.config.leftBorderClass} border-l-4`;
                   badgeStyle = evalRes.config.badgeClass;
-                  itemBg = isSelected ? "bg-slate-150/40" : "bg-slate-50/70";
+                  itemBg = isSelected ? "bg-kreile-border/40" : "bg-kreile-surface-soft/70";
                 }
 
                 return (
                   <Card
                     key={order.id}
                     onClick={() => setSelectedOrderId(order.id)}
-                    className={`transition-all duration-200 cursor-pointer border-slate-200 shadow-sm ${itemBg} ${borderStyle} ${
-                      isSelected ? "ring-2 ring-blue-900 border-transparent shadow" : ""
+                    className={`transition-all duration-200 cursor-pointer border-kreile-border shadow-sm ${itemBg} ${borderStyle} ${
+                      isSelected ? "ring-2 ring-kreile-navy border-transparent shadow" : ""
                     }`}
                   >
                     <CardContent className="p-4 flex items-center justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-extrabold text-slate-900 text-base">{order.orderNumber}</span>
-                          <span className="text-xs text-slate-500">• {order.customerName}</span>
+                          <span className="font-mono font-extrabold text-kreile-navy text-base">{order.orderNumber}</span>
+                          <span className="text-xs text-kreile-muted">• {order.customerName}</span>
                           <Badge variant="outline" className={`text-[9px] font-bold tracking-wider py-0 px-1.5 ${badgeStyle}`}>
                             {order.statusText}
                           </Badge>
                         </div>
-                        <h4 className="font-bold text-slate-800 text-sm md:text-base font-serif">{order.task}</h4>
-                        <div className="flex items-center gap-3 text-xs text-slate-400 font-semibold pt-0.5">
+                        <h4 className="font-bold text-kreile-navy text-sm md:text-base font-serif">{order.task}</h4>
+                        <div className="flex items-center gap-3 text-xs text-kreile-muted font-semibold pt-0.5">
                           <span>Eingang: {order.intakeDate}</span>
                           <span>•</span>
                           <span>Teile: {order.parts.length}</span>
@@ -352,12 +332,12 @@ function OrdersPageInner() {
 
                       <div className="flex items-center gap-4 text-right shrink-0">
                         <div className="flex flex-col items-end">
-                          <span className="text-[10px] text-slate-400 font-bold uppercase">{order.dueLabel}</span>
+                          <span className="text-[10px] text-kreile-muted font-bold uppercase">{order.dueLabel}</span>
                           <span className={`font-black text-lg ${isRed ? "text-red-650" : isOrange ? "text-orange-650" : "text-slate-750"}`}>
                             {order.dueValue}
                           </span>
                         </div>
-                        <ChevronRight className={`h-5 w-5 transition-transform ${isSelected ? "text-blue-900 translate-x-1" : "text-slate-300"}`} />
+                        <ChevronRight className={`h-5 w-5 transition-transform ${isSelected ? "text-kreile-navy translate-x-1" : "text-kreile-muted"}`} />
                       </div>
                     </CardContent>
                   </Card>
@@ -365,9 +345,9 @@ function OrdersPageInner() {
               })}
             </div>
           ) : (
-            <div className="p-12 text-center text-slate-400 bg-white border border-slate-200 rounded-xl space-y-2">
-              <Package className="h-8 w-8 mx-auto text-slate-300 animate-pulse" />
-              <p className="font-bold text-slate-600">Keine Aufträge in dieser Station</p>
+            <div className="p-12 text-center text-kreile-muted bg-white border border-kreile-border-strong rounded-xl space-y-2">
+              <Package className="h-8 w-8 mx-auto text-kreile-muted animate-pulse" />
+              <p className="font-bold text-kreile-muted">Keine Aufträge in dieser Station</p>
               <p className="text-xs">Ändere den Filter, passe den Suchbegriff an oder wähle eine andere Station.</p>
             </div>
           )}
@@ -376,10 +356,10 @@ function OrdersPageInner() {
         {/* Right Column: Detail View panel */}
         <div className="lg:col-span-1">
           {selectedOrder ? (
-            <Card className="shadow-md border-blue-100 overflow-hidden sticky top-6">
+            <Card className="shadow-md border-kreile-border overflow-hidden sticky top-6">
               
-              {/* Header */}
-              <div className="bg-blue-900 text-white p-5 relative">
+              {/* Header — Kreile Navy */}
+              <div className="bg-kreile-navy text-white p-5 relative">
                 <button
                   onClick={() => setSelectedOrderId(null)}
                   className="absolute right-4 top-4 text-white/70 hover:text-white transition-colors"
@@ -387,13 +367,13 @@ function OrdersPageInner() {
                   <X className="h-5 w-5" />
                 </button>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm font-bold text-blue-200">{selectedOrder.orderNumber}</span>
-                  <Badge className="bg-blue-950 text-white border-0 text-[8px] font-bold uppercase tracking-wider py-0.5">
+                  <span className="font-mono text-sm font-bold text-white/70">{selectedOrder.orderNumber}</span>
+                  <Badge className="bg-kreile-navy-soft text-white border-0 text-[8px] font-bold uppercase tracking-wider py-0.5">
                     Station: {getStationConfig(selectedOrder.station).name.toUpperCase()}
                   </Badge>
                 </div>
-                <h3 className="font-bold text-lg font-serif mt-1 leading-tight">{selectedOrder.task}</h3>
-                <p className="text-xs text-blue-200 mt-1 font-semibold">Kunde: {selectedOrder.customerName}</p>
+                <h3 className="font-black text-base mt-1 leading-tight">{selectedOrder.task}</h3>
+                <p className="text-xs text-white/60 mt-1 font-medium">Kunde: {selectedOrder.customerName}</p>
               </div>
 
               {/* Specs */}
@@ -407,7 +387,7 @@ function OrdersPageInner() {
                     </div>
                     <button 
                       onClick={() => setActionSuccessMessage(null)} 
-                      className="absolute right-2 top-2 text-slate-400 hover:text-slate-650 text-xs"
+                      className="absolute right-2 top-2 text-kreile-muted hover:text-slate-650 text-xs"
                     >
                       ✕
                     </button>
@@ -415,14 +395,14 @@ function OrdersPageInner() {
                 )}
                 
                 {/* Dates & Urgency */}
-                <div className="grid grid-cols-2 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100 text-xs">
+                <div className="grid grid-cols-2 gap-3 bg-kreile-surface-soft p-3 rounded-lg border border-slate-100 text-xs">
                   <div>
-                    <span className="text-slate-400 block font-semibold text-[10px] uppercase">Eingang</span>
-                    <span className="font-bold text-slate-800">{selectedOrder.intakeDate}</span>
+                    <span className="text-kreile-muted block font-semibold text-[10px] uppercase">Eingang</span>
+                    <span className="font-bold text-kreile-navy">{selectedOrder.intakeDate}</span>
                   </div>
                   <div>
-                    <span className="text-slate-400 block font-semibold text-[10px] uppercase">Liefertermin</span>
-                    <span className="font-bold text-slate-800">{selectedOrder.dueDate}</span>
+                    <span className="text-kreile-muted block font-semibold text-[10px] uppercase">Liefertermin</span>
+                    <span className="font-bold text-kreile-navy">{selectedOrder.dueDate}</span>
                   </div>
                 </div>
 
@@ -440,7 +420,7 @@ function OrdersPageInner() {
                 {/* Actions Simulation Bar */}
                 <div className="space-y-3 border-t pt-4">
                   <div className="space-y-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-sans">Risiko-Status ändern (Sim)</span>
+                    <span className="text-[10px] font-bold text-kreile-muted uppercase tracking-wider block font-sans">Risiko-Status ändern (Sim)</span>
                     <div className="flex gap-1">
                       {(
                         [
@@ -448,14 +428,14 @@ function OrdersPageInner() {
                           { risk: "yellow", label: "Achtung", color: "bg-yellow-400 hover:bg-yellow-500" },
                           { risk: "orange", label: "Gefahr", color: "bg-orange-500 hover:bg-orange-600" },
                           { risk: "red", label: "Kritisch", color: "bg-red-500 hover:bg-red-600" },
-                          { risk: "blocked", label: "Pause", color: "bg-slate-500 hover:bg-slate-600" }
+                          { risk: "blocked", label: "Pause", color: "bg-kreile-surface-soft0 hover:bg-slate-600" }
                         ] as { risk: "green" | "yellow" | "orange" | "red" | "blocked"; label: string; color: string }[]
                       ).map(btn => (
                         <button
                           key={btn.risk}
                           onClick={() => handleStatusChange(selectedOrder.id, btn.risk)}
                           className={`flex-1 py-1.5 rounded text-[10px] text-center text-white font-bold transition-all border ${
-                            selectedOrder.risk === btn.risk ? "ring-2 ring-blue-900 border-white font-black" : "opacity-80 hover:opacity-100"
+                            selectedOrder.risk === btn.risk ? "ring-2 ring-kreile-navy border-white font-black" : "opacity-80 hover:opacity-100"
                           } ${btn.color}`}
                         >
                           {btn.label}
@@ -465,7 +445,7 @@ function OrdersPageInner() {
                   </div>
 
                   <div className="space-y-2 border-t pt-3">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block font-sans">Arbeitsstation ändern (Sim)</span>
+                    <span className="text-[10px] font-bold text-kreile-muted uppercase tracking-wider block font-sans">Arbeitsstation ändern (Sim)</span>
                     <div className="grid grid-cols-5 gap-1">
                       {getAllStations().map(station => {
                         const labelMap: Record<string, string> = {
@@ -483,8 +463,8 @@ function OrdersPageInner() {
                             onClick={() => handleStationUpdate(selectedOrder.id, station.key)}
                             className={`py-1.5 rounded text-[10px] text-center font-bold transition-all border ${
                               selectedOrder.station === station.key 
-                                ? "bg-blue-900 border-blue-950 text-white font-black ring-1 ring-blue-900" 
-                                : "bg-slate-100 border-slate-200 text-slate-700 hover:bg-slate-200"
+                                ? "bg-kreile-navy border-kreile-navy text-white font-black ring-1 ring-kreile-navy" 
+                                : "bg-kreile-bg border-kreile-border text-kreile-muted hover:bg-kreile-sand"
                             }`}
                           >
                             {label}
@@ -498,23 +478,23 @@ function OrdersPageInner() {
                 {/* Associated parts */}
                 <div className="space-y-3 border-t pt-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Zugeordnete Werkstücke ({selectedOrder.parts.length})</span>
+                    <span className="text-[10px] font-bold text-kreile-muted uppercase tracking-wider">Zugeordnete Werkstücke ({selectedOrder.parts.length})</span>
                   </div>
 
                   <div className="space-y-2">
                     {selectedOrder.parts.map(part => (
-                      <div key={part.id} className="p-3 bg-slate-50 border rounded-lg flex items-center justify-between text-xs hover:border-slate-300">
+                      <div key={part.id} className="p-3 bg-kreile-surface-soft border rounded-lg flex items-center justify-between text-xs hover:border-kreile-gold-muted">
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-slate-800">{part.name}</span>
-                            <span className="font-mono text-[9px] bg-slate-200 text-slate-600 px-1 rounded">{part.id}</span>
+                            <span className="font-bold text-kreile-navy">{part.name}</span>
+                            <span className="font-mono text-[9px] bg-kreile-border text-kreile-muted px-1 rounded">{part.id}</span>
                           </div>
-                          <p className="text-[10px] text-slate-500">
-                            Ziel: <span className="font-semibold text-slate-700">{part.finish}</span> | Mat: {part.material}
+                          <p className="text-[10px] text-kreile-muted">
+                            Ziel: <span className="font-semibold text-kreile-navy">{part.finish}</span> | Mat: {part.material}
                           </p>
-                          <div className="flex items-center gap-1.5 text-[9px] text-blue-900 font-bold mt-1">
+                          <div className="flex items-center gap-1.5 text-[9px] text-kreile-navy font-bold mt-1">
                             <MapPin className="h-3 w-3 text-orange-500" /> {part.location}
-                            <span className="text-slate-300">•</span>
+                            <span className="text-kreile-muted">•</span>
                             <Package className="h-3 w-3 text-slate-450" /> Soll: {part.hours}
                           </div>
                         </div>
@@ -531,7 +511,7 @@ function OrdersPageInner() {
                       return (
                         <a 
                           href={`tel:${phoneDetails.phone}`}
-                          className="w-full h-11 bg-white hover:bg-slate-50 text-slate-800 font-bold border-2 border-slate-200 rounded-xl flex items-center justify-center gap-2 text-xs shadow-sm transition-all"
+                          className="w-full h-11 bg-white hover:bg-kreile-surface-soft text-kreile-navy font-bold border-2 border-kreile-border-strong rounded-xl flex items-center justify-center gap-2 text-xs shadow-sm transition-all"
                         >
                           <PhoneCall className="h-4 w-4 text-emerald-600 shrink-0" />
                           <span>Kunde anrufen ({phoneDetails.phone})</span>
@@ -541,7 +521,7 @@ function OrdersPageInner() {
                       return (
                         <Link 
                           href="/customers"
-                          className="w-full h-11 bg-white hover:bg-slate-50 text-slate-600 hover:text-blue-900 font-semibold border-2 border-dashed border-slate-200 hover:border-slate-300 rounded-xl flex items-center justify-center gap-2 text-xs transition-all text-center"
+                          className="w-full h-11 bg-white hover:bg-kreile-surface-soft text-kreile-muted hover:text-kreile-navy font-semibold border-2 border-dashed border-kreile-border-strong hover:border-kreile-gold-muted rounded-xl flex items-center justify-center gap-2 text-xs transition-all text-center"
                         >
                           <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
                           <span>Telefonnummer in Kundenkartei prüfen</span>
@@ -553,7 +533,7 @@ function OrdersPageInner() {
                   {selectedOrder.recommendedAction && (
                     <Button 
                       onClick={() => handleRecommendedActionClick(selectedOrder)}
-                      className="w-full h-11 bg-blue-900 hover:bg-blue-800 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 shadow"
+                      className="w-full h-11 bg-kreile-navy hover:bg-kreile-navy/90 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 shadow"
                     >
                       <Zap className="h-4 w-4 text-orange-450 shrink-0" />
                       <span>{selectedOrder.recommendedAction}</span>
@@ -564,9 +544,9 @@ function OrdersPageInner() {
               </CardContent>
             </Card>
           ) : (
-            <Card className="border-dashed border-2 border-slate-200 text-center p-12 text-slate-400">
-              <div className="w-12 h-12 bg-slate-50 rounded-full border border-slate-100 flex items-center justify-center mx-auto mb-3">
-                <ChevronRight className="h-6 w-6 text-slate-300 rotate-90" />
+            <Card className="border-dashed border-2 border-kreile-border-strong text-center p-12 text-kreile-muted">
+              <div className="w-12 h-12 bg-kreile-surface-soft rounded-full border border-slate-100 flex items-center justify-center mx-auto mb-3">
+                <ChevronRight className="h-6 w-6 text-kreile-muted rotate-90" />
               </div>
               <p className="font-bold text-sm">Kein Auftrag selektiert</p>
               <p className="text-xs max-w-[200px] mx-auto mt-1">Klicke links auf einen Auftrag in der Liste, um seine Teile und Steuerung anzuzeigen.</p>
@@ -583,10 +563,10 @@ function OrdersPageInner() {
 export default function OrdersPage() {
   return (
     <Suspense fallback={
-      <div className="p-12 text-center text-slate-500 space-y-3 max-w-md mx-auto">
-        <RefreshCw className="h-8 w-8 mx-auto text-slate-400 animate-spin" />
-        <p className="font-extrabold text-slate-700">Lade Auftragsbuch...</p>
-        <p className="text-xs text-slate-500">Die Werkstatt-Daten werden abgeglichen.</p>
+      <div className="p-12 text-center text-kreile-muted space-y-3 max-w-md mx-auto">
+        <RefreshCw className="h-8 w-8 mx-auto text-kreile-muted animate-spin" />
+        <p className="font-extrabold text-kreile-navy">Lade Auftragsbuch...</p>
+        <p className="text-xs text-kreile-muted">Die Werkstatt-Daten werden abgeglichen.</p>
       </div>
     }>
       <OrdersPageInner />

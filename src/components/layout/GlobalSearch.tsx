@@ -6,6 +6,7 @@ import { Search, Package, ChevronRight, X, Sparkles, LayoutGrid, Droplets, Activ
 import { useRouter } from 'next/navigation'
 import { INITIAL_CUSTOMERS, MockCustomer } from '@/lib/mockData'
 import { ordersRepository, Order } from '@/lib/repositories/ordersRepository'
+import { customersRepository } from '@/lib/repositories/customersRepository'
 
 type MockOrderExt = Order & {
   description?: string;
@@ -62,15 +63,11 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
           console.error("GlobalSearch: Error loading orders", e);
         }
 
-        const savedCustomers = localStorage.getItem("kreile_customers");
-        if (savedCustomers) {
-          try {
-            setCustomers(JSON.parse(savedCustomers));
-          } catch (e) {
-            console.error("GlobalSearch: Error parsing customers", e);
-          }
-        } else {
-          setCustomers(INITIAL_CUSTOMERS as unknown as MockCustomer[]);
+        try {
+          const loadedCustomers = await customersRepository.getAll();
+          setCustomers(loadedCustomers as unknown as MockCustomer[]);
+        } catch (e) {
+          console.error("GlobalSearch: Error loading customers", e);
         }
       };
       loadData();
@@ -174,25 +171,25 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
       >
         {/* Search Input Area */}
         <div className="flex items-center border-b border-slate-100 px-4 py-4 gap-3 bg-slate-50/50">
-          <Search className="w-5 h-5 text-slate-400 shrink-0" />
+          <Search className="w-5 h-5 text-kreile-muted shrink-0" />
           <input 
             ref={inputRef}
             autoFocus
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="flex-1 bg-transparent outline-none placeholder:text-slate-400 text-base font-medium" 
+            className="flex-1 bg-transparent outline-none placeholder:text-kreile-muted text-base font-medium" 
             placeholder="Nach Auftragsnummer, Kundenname, Telefon oder Aufgabe suchen..." 
           />
           {searchTerm && (
             <button 
               onClick={() => setSearchTerm('')} 
-              className="p-1 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-slate-650 transition-colors"
+              className="p-1 hover:bg-slate-200 rounded-lg text-kreile-muted hover:text-slate-650 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
           )}
-          <kbd className="hidden md:inline-flex h-5 items-center gap-1 rounded border border-slate-200 bg-white px-1.5 font-mono text-[9px] font-bold text-slate-400 shadow-xs">
+          <kbd className="hidden md:inline-flex h-5 items-center gap-1 rounded border border-slate-200 bg-white px-1.5 font-mono text-[9px] font-bold text-kreile-muted shadow-xs">
             ESC
           </kbd>
         </div>
@@ -205,7 +202,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
             <div className="space-y-4 py-2">
               <div className="px-2">
                 <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5 text-blue-900" />
+                  <Sparkles className="w-3.5 h-3.5 text-kreile-navy" />
                   Schnellzugriff & Verknüpfungen
                 </span>
                 <p className="text-xs text-slate-500 mt-0.5">Navigiere direkt zu den wichtigsten Stationen und Bereichen.</p>
@@ -215,9 +212,9 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                 <Link 
                   href="/orders?station=wareneingang" 
                   onClick={handleClose}
-                  className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20 text-slate-700 hover:text-blue-900 font-semibold text-xs transition-all shadow-xs"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20 text-kreile-navy hover:text-kreile-navy font-semibold text-xs transition-all shadow-xs"
                 >
-                  <LayoutGrid className="w-4 h-4 text-blue-900 shrink-0" />
+                  <LayoutGrid className="w-4 h-4 text-kreile-navy shrink-0" />
                   <div>
                     <span className="block">1. Wareneingang</span>
                     <span className="text-[10px] text-slate-450 font-normal">Aufträge erfassen & drucken</span>
@@ -227,7 +224,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                 <Link 
                   href="/orders?station=beschichtung" 
                   onClick={handleClose}
-                  className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20 text-slate-700 hover:text-blue-900 font-semibold text-xs transition-all shadow-xs"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20 text-kreile-navy hover:text-kreile-navy font-semibold text-xs transition-all shadow-xs"
                 >
                   <Droplets className="w-4 h-4 text-blue-950 shrink-0" />
                   <div>
@@ -239,9 +236,9 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                 <Link 
                   href="/items" 
                   onClick={handleClose}
-                  className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20 text-slate-700 hover:text-blue-900 font-semibold text-xs transition-all shadow-xs"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20 text-kreile-navy hover:text-kreile-navy font-semibold text-xs transition-all shadow-xs"
                 >
-                  <Package className="w-4 h-4 text-slate-600 shrink-0" />
+                  <Package className="w-4 h-4 text-kreile-muted shrink-0" />
                   <div>
                     <span className="block">Lager & Badregelkarte</span>
                     <span className="text-[10px] text-slate-450 font-normal">Säuren, Kupfer & Anoden</span>
@@ -251,7 +248,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                 <Link 
                   href="/performance" 
                   onClick={handleClose}
-                  className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20 text-slate-700 hover:text-blue-900 font-semibold text-xs transition-all shadow-xs"
+                  className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-blue-50/20 text-kreile-navy hover:text-kreile-navy font-semibold text-xs transition-all shadow-xs"
                 >
                   <Activity className="w-4 h-4 text-emerald-600 shrink-0" />
                   <div>
@@ -261,7 +258,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                 </Link>
               </div>
 
-              <div className="text-center py-6 text-slate-400 text-xs font-semibold border-t border-slate-50 mt-4">
+              <div className="text-center py-6 text-kreile-muted text-xs font-semibold border-t border-slate-50 mt-4">
                 Tippe ein Suchwort ein, um die Werkstatt live zu durchsuchen.
               </div>
             </div>
@@ -290,11 +287,11 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                             {getInitials(c.name)}
                           </div>
                           <div>
-                            <span className="font-extrabold text-sm text-slate-900 group-hover:text-blue-900 transition-colors block leading-tight">{c.name}</span>
+                            <span className="font-extrabold text-sm text-slate-900 group-hover:text-kreile-navy transition-colors block leading-tight">{c.name}</span>
                             <span className="text-xs text-slate-500 font-medium block mt-0.5">{c.city} • {c.email || c.phone || "Keine Kontaktdaten"}</span>
                           </div>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+                        <ChevronRight className="w-4 h-4 text-kreile-muted group-hover:translate-x-0.5 transition-transform" />
                       </Link>
                     ))}
                   </div>
@@ -322,7 +319,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                           className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100 group"
                         >
                           <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-linear-to-br from-blue-50 to-blue-100 border border-blue-200/50 flex items-center justify-center text-blue-900 shrink-0">
+                            <div className="w-8 h-8 rounded-xl bg-linear-to-br from-blue-50 to-blue-100 border border-blue-200/50 flex items-center justify-center text-kreile-navy shrink-0">
                               <Package className="w-4 h-4" />
                             </div>
                             <div>
@@ -332,13 +329,13 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                                   {getStationLabel(o.station)}
                                 </span>
                               </div>
-                              <span className="font-bold text-xs text-slate-800 group-hover:text-blue-900 transition-colors block mt-1 leading-tight max-w-[340px] truncate">
+                              <span className="font-bold text-xs text-slate-800 group-hover:text-kreile-navy transition-colors block mt-1 leading-tight max-w-[340px] truncate">
                                 {o.task}
                               </span>
                               <span className="text-[10px] text-slate-500 font-semibold mt-0.5 block">{o.customerName}</span>
                             </div>
                           </div>
-                          <ChevronRight className="w-4 h-4 text-slate-300 group-hover:translate-x-0.5 transition-transform" />
+                          <ChevronRight className="w-4 h-4 text-kreile-muted group-hover:translate-x-0.5 transition-transform" />
                         </Link>
                       )
                     })}
@@ -348,11 +345,11 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
 
               {/* No results */}
               {!hasResults && (
-                <div className="text-center py-12 text-slate-400 space-y-2">
+                <div className="text-center py-12 text-kreile-muted space-y-2">
                   <Package className="w-12 h-12 text-slate-200 mx-auto" />
-                  <p className="font-extrabold text-sm text-slate-700">Keine Suchergebnisse gefunden</p>
+                  <p className="font-extrabold text-sm text-kreile-navy">Keine Suchergebnisse gefunden</p>
                   <p className="text-xs text-slate-500 max-w-[280px] mx-auto">
-                    Es gibt keine Kunden oder Aufträge, die mit dem Suchbegriff &bdquo;<span className="font-bold text-slate-700">{searchTerm}</span>&ldquo; übereinstimmen.
+                    Es gibt keine Kunden oder Aufträge, die mit dem Suchbegriff &bdquo;<span className="font-bold text-kreile-navy">{searchTerm}</span>&ldquo; übereinstimmen.
                   </p>
                 </div>
               )}

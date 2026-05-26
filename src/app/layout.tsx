@@ -1,11 +1,18 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Playfair_Display, Inter } from "next/font/google";
+import { Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { PwaRegister } from "@/components/layout/PwaRegister";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const playfair = Playfair_Display({
+  variable: "--font-playfair",
   subsets: ["latin"],
+  weight: ["700", "800", "900"],
+});
+
+const inter = Inter({
+  variable: "--font-inter",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
 });
 
 const geistMono = Geist_Mono({
@@ -23,8 +30,7 @@ export const metadata: Metadata = {
   }
 };
 
-import { Topbar } from "@/components/layout/Topbar";
-import { Sidebar } from "@/components/layout/Sidebar";
+import { KreileAppShell } from "@/components/layout/KreileAppShell";
 
 export default function RootLayout({
   children,
@@ -34,19 +40,12 @@ export default function RootLayout({
   return (
     <html
       lang="de"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${playfair.variable} ${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
-        <PwaRegister />
-        <Topbar />
-        <div className="flex flex-1 overflow-hidden">
-          <Sidebar />
-          <main className="flex-1 overflow-auto p-4 md:p-8">
-            <div className="max-w-7xl mx-auto h-full">
-              {children}
-            </div>
-          </main>
-        </div>
+      <body>
+        <KreileAppShell>
+          {children}
+        </KreileAppShell>
       </body>
     </html>
   );

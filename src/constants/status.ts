@@ -41,10 +41,10 @@ export const RISK_LEVEL_CONFIGS: Record<RiskLevel, RiskConfig> = {
   blocked: {
     risk: "blocked",
     label: "Wartet auf Freigabe",
-    badgeClass: "bg-slate-200 text-slate-700 border-slate-350",
+    badgeClass: "bg-slate-200 text-kreile-navy border-slate-350",
     cardClass: "border-slate-355 bg-slate-100/60 hover:shadow-md border-l-4 opacity-85 transition-all",
     leftBorderClass: "border-l-slate-600",
-    textColor: "text-slate-600",
+    textColor: "text-kreile-muted",
     accentColor: "#475569"
   },
   green: {

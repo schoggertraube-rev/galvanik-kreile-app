@@ -5,7 +5,7 @@ const DB_VERSION = 1;
 
 export interface OfflineAction {
   id: string; // unique cuid
-  actionType: "ORDER_CREATE" | "ORDER_STATUS_UPDATE" | "MATERIAL_BOOKING" | "TIME_BOOKING" | "CUSTOMER_CREATE" | "CUSTOMER_UPDATE";
+  actionType: "ORDER_CREATE" | "ORDER_STATUS_UPDATE" | "MATERIAL_BOOKING" | "TIME_BOOKING" | "CUSTOMER_CREATE" | "CUSTOMER_UPDATE" | "INQUIRY_CREATE" | "INQUIRY_UPDATE_STATUS" | "INQUIRY_UPDATE_PRICING";
   payload: unknown;
   timestamp: string; // ISO format
 }
@@ -96,7 +96,7 @@ export const IndexedDBHelper = {
     });
   },
 
-  async saveSnapshot(key: "orders" | "customers", data: unknown[]): Promise<void> {
+  async saveSnapshot(key: "orders" | "customers" | "inquiries", data: unknown[]): Promise<void> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction("read_cache", "readwrite");
@@ -108,7 +108,7 @@ export const IndexedDBHelper = {
     });
   },
 
-  async getSnapshot<T>(key: "orders" | "customers"): Promise<T[] | null> {
+  async getSnapshot<T>(key: "orders" | "customers" | "inquiries"): Promise<T[] | null> {
     try {
       const db = await this.getDB();
       return new Promise((resolve, reject) => {

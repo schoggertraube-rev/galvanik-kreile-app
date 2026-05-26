@@ -34,7 +34,7 @@ export function CustomerMatchPanel({ ocrData, onConfirm }: { ocrData: Record<str
         <div className="space-y-4">
           {matches.length > 0 ? (
             <div className="space-y-3">
-              <h3 className="font-bold text-slate-700 text-sm uppercase tracking-wider pl-1">Gefundene Treffer</h3>
+              <h3 className="font-bold text-kreile-navy text-sm uppercase tracking-wider pl-1">Gefundene Treffer</h3>
               {matches.map(m => (
                 <button 
                   key={m.id}
@@ -51,8 +51,8 @@ export function CustomerMatchPanel({ ocrData, onConfirm }: { ocrData: Record<str
             </div>
           ) : (
             <div className="bg-slate-50 border-2 border-slate-200 border-dashed rounded-3xl p-8 text-center">
-              <Search className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-              <h3 className="font-extrabold text-slate-700 text-xl">Kein Bestandskunde gefunden</h3>
+              <Search className="h-12 w-12 text-kreile-muted mx-auto mb-4" />
+              <h3 className="font-extrabold text-kreile-navy text-xl">Kein Bestandskunde gefunden</h3>
               <p className="text-slate-500 mt-1 font-medium">Soll &quot;{ocrData.customerName}&quot; neu angelegt werden?</p>
             </div>
           )}
@@ -61,7 +61,7 @@ export function CustomerMatchPanel({ ocrData, onConfirm }: { ocrData: Record<str
             <Button 
               onClick={() => onConfirm(null, ocrData.customerName)}
               variant="outline"
-              className="w-full h-16 text-lg font-extrabold rounded-2xl border-2 border-slate-300 hover:bg-slate-100 text-slate-700 active:scale-95 transition-all"
+              className="w-full h-16 text-lg font-extrabold rounded-2xl border-2 border-slate-300 hover:bg-slate-100 text-kreile-navy active:scale-95 transition-all"
             >
               <UserPlus className="mr-3 h-6 w-6" />
               Neu anlegen: &quot;{ocrData.customerName}&quot;

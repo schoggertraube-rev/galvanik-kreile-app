@@ -144,13 +144,13 @@ export function StationCompletionModal({
         {/* Tabs */}
         <div className="flex border-b border-slate-200 px-6 pt-2 gap-6 bg-slate-50">
           <button 
-            className={`pb-3 font-bold text-sm border-b-2 transition-colors ${activeTab === "erfassung" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+            className={`pb-3 font-bold text-sm border-b-2 transition-colors ${activeTab === "erfassung" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-kreile-navy"}`}
             onClick={() => setActiveTab("erfassung")}
           >
             Erfassung
           </button>
           <button 
-            className={`pb-3 font-bold text-sm border-b-2 transition-colors ${activeTab === "kosten" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}
+            className={`pb-3 font-bold text-sm border-b-2 transition-colors ${activeTab === "kosten" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-kreile-navy"}`}
             onClick={() => setActiveTab("kosten")}
           >
             Kostenübersicht
@@ -163,7 +163,7 @@ export function StationCompletionModal({
             <div className="space-y-8">
               {/* Arbeitszeit */}
               <div className="space-y-4">
-                <h3 className="font-bold text-slate-700 uppercase tracking-wider text-xs">Arbeitszeit</h3>
+                <h3 className="font-bold text-kreile-navy uppercase tracking-wider text-xs">Arbeitszeit</h3>
                 <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
                   <Button variant="outline" onClick={() => setMinutes(Math.max(0, minutes - 15))} className="w-12 h-12 rounded-full"><Minus /></Button>
                   <div className="flex-1 text-center font-black text-2xl text-slate-800">{minutes} <span className="text-sm font-normal text-slate-500">Minuten</span></div>
@@ -186,7 +186,7 @@ export function StationCompletionModal({
                         onClick={() => setMultiplier(opt.val)}
                         className={`py-2 px-1 rounded-lg text-xs font-bold transition-all ${
                           multiplier === opt.val
-                            ? "bg-slate-900 text-white shadow-xs"
+                            ? "bg-kreile-navy text-white shadow-xs"
                             : "text-slate-605 hover:bg-slate-200/60"
                         }`}
                         title={opt.text}
@@ -216,7 +216,7 @@ export function StationCompletionModal({
 
               {/* Material */}
               <div className="space-y-4">
-                <h3 className="font-bold text-slate-700 uppercase tracking-wider text-xs">Materialverbrauch</h3>
+                <h3 className="font-bold text-kreile-navy uppercase tracking-wider text-xs">Materialverbrauch</h3>
                 
                 {bookedMaterials.map((mat, idx) => (
                   <div key={mat.inventoryItemId} className="flex items-center justify-between p-3 border border-slate-200 rounded-xl">
@@ -242,7 +242,7 @@ export function StationCompletionModal({
                   {showSearchList && (
                     <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-10 max-h-48 overflow-y-auto p-2">
                       <div className="relative mb-2">
-                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-kreile-muted" />
                         <Input className="pl-9 h-9 text-sm" placeholder="Suchen..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                       </div>
                       {allConsumables.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) && !bookedMaterials.some(m => m.inventoryItemId === c.id)).map(item => (
@@ -261,11 +261,11 @@ export function StationCompletionModal({
               <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-600">Arbeitszeit ({minutes} min × {DEFAULT_HOURLY_RATE_EUR} €/h)</span>
+                    <span className="text-kreile-muted">Arbeitszeit ({minutes} min × {DEFAULT_HOURLY_RATE_EUR} €/h)</span>
                     <span className="font-bold">{costs.laborCost.toFixed(2)} €</span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-slate-600">Material ({bookedMaterials.length} Positionen)</span>
+                    <span className="text-kreile-muted">Material ({bookedMaterials.length} Positionen)</span>
                     <span className="font-bold">{costs.materialCost.toFixed(2)} €</span>
                   </div>
                   <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-lg">

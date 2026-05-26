@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 export default function LoginPage({ searchParams }: { searchParams: { message?: string } }) {
   return (
-    <div className="flex h-screen w-full items-center justify-center bg-slate-50">
+    <div className="flex h-screen w-full items-center justify-center bg-transparent">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-2xl font-bold">WerkstattCockpit</CardTitle>
@@ -31,7 +31,7 @@ export default function LoginPage({ searchParams }: { searchParams: { message?: 
                 required
               />
             </div>
-            <Button formAction={login} className="w-full bg-blue-900 hover:bg-blue-800" type="submit">
+            <Button formAction={login} className="w-full bg-kreile-navy hover:bg-kreile-navy-soft" type="submit">
               Einloggen
             </Button>
             {searchParams?.message && (

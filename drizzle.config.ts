@@ -1,13 +1,20 @@
-import { config } from "dotenv";
-import type { Config } from "drizzle-kit";
+import { defineConfig } from "drizzle-kit";
+import * as dotenv from "dotenv";
 
-config({ path: ".env.local" });
+// Lade .env.local für lokale Drizzle Commands
+dotenv.config({ path: ".env.local" });
 
-export default {
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is missing in .env.local");
+}
+
+export default defineConfig({
   schema: "./src/db/schema.ts",
   out: "./src/db/migrations",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL || "postgres://postgres:postgres@localhost:5432/postgres",
+    url: process.env.DATABASE_URL,
   },
-} satisfies Config;
+  verbose: true,
+  strict: true,
+});

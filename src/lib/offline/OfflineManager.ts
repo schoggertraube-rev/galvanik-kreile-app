@@ -114,6 +114,24 @@ export const OfflineManager = {
             await eventsRepository.addEvent(item.payload as import('../repositories/eventsRepository').StatusEvent);
             break;
           }
+          
+          case "INQUIRY_CREATE": {
+            const { inquiriesRepository } = await import("@/lib/repositories/inquiriesRepository");
+            await inquiriesRepository.create(item.payload as Parameters<typeof inquiriesRepository.create>[0]);
+            break;
+          }
+          case "INQUIRY_UPDATE_STATUS": {
+            const { inquiriesRepository } = await import("@/lib/repositories/inquiriesRepository");
+            const payload = item.payload as { id: string; status: Parameters<typeof inquiriesRepository.updateStatus>[1] };
+            await inquiriesRepository.updateStatus(payload.id, payload.status);
+            break;
+          }
+          case "INQUIRY_UPDATE_PRICING": {
+            const { inquiriesRepository } = await import("@/lib/repositories/inquiriesRepository");
+            const payload = item.payload as { id: string; pricing: Parameters<typeof inquiriesRepository.updatePricing>[1] };
+            await inquiriesRepository.updatePricing(payload.id, payload.pricing);
+            break;
+          }
         }
         
         // Remove item from queue on success

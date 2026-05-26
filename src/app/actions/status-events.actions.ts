@@ -42,7 +42,7 @@ export async function getStatusEventsByOrderId(orderId: string) {
   try {
     return await db.query.statusEvents.findMany({
       where: eq(statusEvents.orderId, orderId),
-      orderBy: [desc(statusEvents.timestamp)]
+      orderBy: [desc(statusEvents.createdAt)]
     });
   } catch (error) {
     console.warn("Failed to fetch status events:", error);
@@ -55,7 +55,7 @@ export async function getStatusEventsByItemId(itemId: string) {
   try {
     return await db.query.statusEvents.findMany({
       where: eq(statusEvents.itemId, itemId),
-      orderBy: [desc(statusEvents.timestamp)]
+      orderBy: [desc(statusEvents.createdAt)]
     });
   } catch (error) {
     console.warn("Failed to fetch status events by item:", error);
@@ -67,7 +67,7 @@ export async function getRecentStatusEvents(limit = 10) {
   if (!db) return [];
   try {
     return await db.query.statusEvents.findMany({
-      orderBy: [desc(statusEvents.timestamp)],
+      orderBy: [desc(statusEvents.createdAt)],
       limit
     });
   } catch (error) {

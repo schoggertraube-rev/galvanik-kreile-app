@@ -48,15 +48,19 @@ export async function calculateWorkshopHealthScore(): Promise<{
   const onTime     = clamp(rawOnTimeRate * 100, 0, 100);
   const cycle      = clamp(100 - (avgCycleTimeIndex - 1) * 50, 0, 100); 
   const critical   = clamp(100 - criticalOrders * 15, 0, 100);          
-  const complaintsScore = clamp(100 - complaintRate * 100 * 5, 0, 100); // 5x Multiplikator fÃ¼r Reklas
-  const reworkScore = clamp(100 - reworkRate * 100 * 3, 0, 100);        // 3x Multiplikator fÃ¼r interne Nacharbeit
+  const complaintsScore = clamp(100 - complaintRate * 100, 0, 100);
+  
+  // Da OCR und Docs im MVP noch mock sind, schätzen wir die Dokumentationsrate ab
+  const docs       = clamp(100 - criticalOrders * 5, 0, 100); // Dummy-Wert für MVP
+  const stations   = clamp(100 - criticalOrders * 10, 0, 100); // Dummy-Wert für MVP
 
   const score = Math.round(
     onTime     * 0.25 +
     cycle      * 0.20 +
     critical   * 0.20 +
-    complaintsScore * 0.20 +
-    reworkScore * 0.15
+    complaintsScore * 0.15 +
+    docs       * 0.10 +
+    stations   * 0.10
   );
 
   return {

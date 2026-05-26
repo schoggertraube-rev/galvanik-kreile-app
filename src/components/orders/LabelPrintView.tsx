@@ -91,7 +91,7 @@ export function LabelPrintView({ order, customerName: propCustomerName, onClose,
 
         {/* Order Identifier */}
         <div className="text-center py-4 border-b border-black border-dashed">
-          <div className="text-[12px] font-bold text-slate-600 uppercase tracking-widest">AUFTRAGSNUMMER</div>
+          <div className="text-[12px] font-bold text-kreile-muted uppercase tracking-widest">AUFTRAGSNUMMER</div>
           <div className="text-[44px] font-black tracking-tight leading-none my-1">{order.orderNumber}</div>
           <div className="text-[14px] font-bold mt-1 text-slate-800">{order.title}</div>
         </div>
@@ -137,7 +137,7 @@ export function LabelPrintView({ order, customerName: propCustomerName, onClose,
 
       {/* 2. Premium UI Modal Preview for Workshop Meister */}
       {showPreviewModal && (
-        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
+        <div className="fixed inset-0 bg-kreile-navy/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
           <div className="bg-slate-950 border-2 border-slate-800 rounded-3xl w-full max-w-lg p-6 shadow-2xl space-y-6 flex flex-col max-h-[90vh] overflow-y-auto">
             {/* Modal Header */}
             <div className="flex justify-between items-center border-b border-slate-900 pb-4">
@@ -146,14 +146,14 @@ export function LabelPrintView({ order, customerName: propCustomerName, onClose,
                 <h3 className="text-xl font-bold tracking-tight">Etikettendruck Vorschau</h3>
               </div>
               {onClose && (
-                <button onClick={onClose} className="p-2 hover:bg-slate-900 rounded-xl text-slate-400 hover:text-white transition-colors">
+                <button onClick={onClose} className="p-2 hover:bg-kreile-navy rounded-xl text-kreile-muted hover:text-white transition-colors">
                   <X className="w-5 h-5" />
                 </button>
               )}
             </div>
 
             {/* Simulated Printed Label on Screen */}
-            <div className="flex justify-center py-4 bg-slate-900 rounded-2xl border-2 border-slate-800/50 shadow-inner">
+            <div className="flex justify-center py-4 bg-kreile-navy rounded-2xl border-2 border-slate-800/50 shadow-inner">
               <div className="bg-white text-black p-6 w-[280px] h-[395px] flex flex-col justify-between shadow-xl rounded-xl border border-slate-200 scale-95 origin-center">
                 <div className="space-y-3">
                   <div className="flex justify-between items-center border-b border-black pb-1.5">
@@ -199,7 +199,7 @@ export function LabelPrintView({ order, customerName: propCustomerName, onClose,
             {/* Action Buttons */}
             <div className="flex gap-4">
               {onClose && (
-                <Button variant="outline" onClick={onClose} className="flex-1 h-14 rounded-2xl border-2 border-slate-800 text-slate-300 hover:bg-slate-900 hover:text-white font-bold transition-all">
+                <Button variant="outline" onClick={onClose} className="flex-1 h-14 rounded-2xl border-2 border-slate-800 text-kreile-muted hover:bg-kreile-navy hover:text-white font-bold transition-all">
                   Schließen
                 </Button>
               )}
@@ -241,7 +241,7 @@ const QRCodeImage = ({ orderId, orderNumber }: { orderId: string; orderNumber: s
   }, [orderId]);
 
   if (!dataUrl) {
-    return <div className="w-16 h-16 bg-slate-100 flex items-center justify-center rounded"><Loader2 className="animate-spin text-slate-400 w-4 h-4" /></div>;
+    return <div className="w-16 h-16 bg-slate-100 flex items-center justify-center rounded"><Loader2 className="animate-spin text-kreile-muted w-4 h-4" /></div>;
   }
 
   return (

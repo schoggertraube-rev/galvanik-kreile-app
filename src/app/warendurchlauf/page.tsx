@@ -194,7 +194,7 @@ export default function NewOrderWizard() {
   const cameraSteps = ["camera", "ocr_review", "customer_match", "items", "summary"];
 
   return (
-    <div className="min-h-screen bg-slate-50 pt-8 pb-24 px-4 md:px-8">
+    <div className="min-h-screen bg-transparent pt-8 pb-24 px-4 md:px-8">
       {/* Progress indicator for camera flow */}
       {cameraSteps.includes(step) && (
         <div className="max-w-3xl mx-auto mb-8 flex justify-center gap-2">
@@ -210,7 +210,7 @@ export default function NewOrderWizard() {
                     ? "bg-blue-600 scale-y-150"
                     : isPast
                     ? "bg-blue-300"
-                    : "bg-slate-200"
+                    : "bg-kreile-border"
                 }`}
               />
             );
@@ -238,7 +238,7 @@ export default function NewOrderWizard() {
         <div className="max-w-3xl mx-auto">
           <button
             onClick={() => setStep("camera")}
-            className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold text-sm mb-6 px-3 py-2 rounded-xl hover:bg-slate-100 transition-all"
+            className="flex items-center gap-2 text-kreile-muted hover:text-kreile-navy font-bold text-sm mb-6 px-3 py-2 rounded-xl hover:bg-kreile-surface-warm transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Kamera
@@ -257,7 +257,7 @@ export default function NewOrderWizard() {
         <div className="max-w-3xl mx-auto">
           <button
             onClick={() => setStep("ocr_review")}
-            className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold text-sm mb-6 px-3 py-2 rounded-xl hover:bg-slate-100 transition-all"
+            className="flex items-center gap-2 text-kreile-muted hover:text-kreile-navy font-bold text-sm mb-6 px-3 py-2 rounded-xl hover:bg-kreile-surface-warm transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Prüfung
@@ -276,7 +276,7 @@ export default function NewOrderWizard() {
         <div className="max-w-3xl mx-auto">
           <button
             onClick={() => setStep("customer_match")}
-            className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold text-sm mb-6 px-3 py-2 rounded-xl hover:bg-slate-100 transition-all"
+            className="flex items-center gap-2 text-kreile-muted hover:text-kreile-navy font-bold text-sm mb-6 px-3 py-2 rounded-xl hover:bg-kreile-surface-warm transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Kundenzuordnung
@@ -304,7 +304,7 @@ export default function NewOrderWizard() {
         <div className="w-full max-w-3xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
           <button
             onClick={() => setStep("entry")}
-            className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold text-sm px-3 py-2 rounded-xl hover:bg-slate-100 transition-all"
+            className="flex items-center gap-2 text-kreile-muted hover:text-kreile-navy font-bold text-sm px-3 py-2 rounded-xl hover:bg-kreile-surface-warm transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück
@@ -319,24 +319,24 @@ export default function NewOrderWizard() {
                   <div
                     key={s}
                     className={`h-2 w-12 rounded-full transition-all duration-300 ${
-                      i === cur ? "bg-blue-600 scale-y-150" : i < cur ? "bg-blue-300" : "bg-slate-200"
+                      i === cur ? "bg-blue-600 scale-y-150" : i < cur ? "bg-blue-300" : "bg-kreile-border"
                     }`}
                   />
                 );
               })}
             </div>
-            <h2 className="text-3xl font-black font-serif text-slate-900">
+            <h2 className="text-3xl font-black font-serif text-kreile-navy">
               Manuelle Auftragserfassung
             </h2>
-            <p className="text-slate-500 font-medium">
+            <p className="text-kreile-muted font-medium">
               Schritt 1 von 3 — Kunden suchen oder neu anlegen
             </p>
           </div>
 
-          <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
+          <div className="bg-white border-2 border-kreile-border-strong rounded-3xl p-6 md:p-8 shadow-xl space-y-6">
             {/* Search */}
             <div>
-              <label className="block text-[11px] font-extrabold text-slate-400 uppercase tracking-widest mb-2 pl-1">
+              <label className="block text-[11px] font-extrabold text-kreile-muted uppercase tracking-widest mb-2 pl-1">
                 Kunde suchen
               </label>
               <div className="flex gap-3">
@@ -346,18 +346,18 @@ export default function NewOrderWizard() {
                   onChange={(e) => setManualSearch(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleManualSearch()}
                   placeholder="Name oder Kundennummer eingeben..."
-                  className="w-full text-xl font-bold bg-slate-50 p-4 rounded-2xl border-2 border-slate-200 outline-none focus:border-blue-500 focus:bg-white transition-all"
+                  className="w-full text-xl font-bold bg-kreile-surface-soft p-4 rounded-2xl border-2 border-kreile-border-strong outline-none focus:border-blue-500 focus:bg-white transition-all"
                 />
                 <button
                   onClick={handleManualSearch}
-                  className="h-[64px] w-[64px] rounded-2xl border-2 border-slate-300 hover:border-blue-500 hover:bg-blue-50 text-blue-600 shrink-0 flex items-center justify-center transition-all"
+                  className="h-[64px] w-[64px] rounded-2xl border-2 border-kreile-gold-muted hover:border-blue-500 hover:bg-blue-50 text-blue-600 shrink-0 flex items-center justify-center transition-all"
                   title="Suchen"
                 >
                   <Search className="w-6 h-6" />
                 </button>
                 <button
                   onClick={() => setStep("camera")}
-                  className="h-[64px] w-[64px] rounded-2xl border-2 border-slate-300 hover:border-blue-500 hover:bg-blue-50 text-blue-600 shrink-0 flex items-center justify-center transition-all group"
+                  className="h-[64px] w-[64px] rounded-2xl border-2 border-kreile-gold-muted hover:border-blue-500 hover:bg-blue-50 text-blue-600 shrink-0 flex items-center justify-center transition-all group"
                   title="Kamera nutzen (OCR)"
                 >
                   <Camera className="w-6 h-6 group-hover:scale-110 transition-transform" />
@@ -374,7 +374,7 @@ export default function NewOrderWizard() {
 
             {!manualSearching && manualSearchResults.length > 0 && (
               <div className="space-y-3">
-                <h3 className="font-bold text-slate-600 text-sm uppercase tracking-wider">
+                <h3 className="font-bold text-kreile-muted text-sm uppercase tracking-wider">
                   Gefundene Kunden
                 </h3>
                 {manualSearchResults.map((c) => (
@@ -385,13 +385,13 @@ export default function NewOrderWizard() {
                       setManualItems([{ name: "", quantity: 1, surfaceRequested: "" }]);
                       setStep("manual_items");
                     }}
-                    className="w-full text-left bg-white border-2 border-slate-200 hover:border-blue-500 hover:bg-blue-50 hover:shadow-md p-4 rounded-2xl flex items-center justify-between transition-all active:scale-98"
+                    className="w-full text-left bg-white border-2 border-kreile-border-strong hover:border-blue-500 hover:bg-blue-50 hover:shadow-md p-4 rounded-2xl flex items-center justify-between transition-all active:scale-98"
                   >
                     <div>
-                      <h4 className="font-extrabold text-lg text-slate-900">
+                      <h4 className="font-extrabold text-lg text-kreile-navy">
                         {c.name}
                       </h4>
-                      <p className="text-sm text-slate-500 font-medium">
+                      <p className="text-sm text-kreile-muted font-medium">
                         {c.customerNumber} · {c.city || "Kein Ort"}
                       </p>
                     </div>
@@ -404,13 +404,13 @@ export default function NewOrderWizard() {
             {!manualSearching &&
               manualSearchResults.length === 0 &&
               manualSearch.trim() && (
-                <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center text-slate-500 font-medium">
+                <div className="bg-kreile-surface-soft border-2 border-dashed border-kreile-border-strong rounded-2xl p-6 text-center text-kreile-muted font-medium">
                   Kein Ergebnis für &bdquo;{manualSearch}&ldquo;
                 </div>
               )}
 
             {/* New customer */}
-            <div className="border-t border-slate-200 pt-6">
+            <div className="border-t border-kreile-border-strong pt-6">
               <Button
                 onClick={() => {
                   setCustomerSelection({
@@ -420,7 +420,7 @@ export default function NewOrderWizard() {
                   setStep("manual_customer_edit");
                 }}
                 variant="outline"
-                className="w-full h-14 text-base font-extrabold rounded-2xl border-2 border-dashed border-slate-300 hover:bg-slate-50 text-slate-700 active:scale-95 transition-all"
+                className="w-full h-14 text-base font-extrabold rounded-2xl border-2 border-dashed border-kreile-gold-muted hover:bg-kreile-surface-soft text-kreile-navy active:scale-95 transition-all"
               >
                 <UserPlus className="mr-3 h-5 w-5" />
                 {manualSearch.trim()
@@ -437,22 +437,22 @@ export default function NewOrderWizard() {
         <div className="w-full max-w-3xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
           <button
             onClick={() => setStep("manual_customer")}
-            className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold text-sm px-3 py-2 rounded-xl hover:bg-slate-100 transition-all"
+            className="flex items-center gap-2 text-kreile-muted hover:text-kreile-navy font-bold text-sm px-3 py-2 rounded-xl hover:bg-kreile-surface-warm transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur Kundensuche
           </button>
 
           <div className="text-center space-y-2">
-            <h2 className="text-3xl font-black font-serif text-slate-900">
+            <h2 className="text-3xl font-black font-serif text-kreile-navy">
               Kundenprofil vervollständigen
             </h2>
-            <p className="text-slate-500 font-medium">
-              Neukunde: <strong className="text-slate-700">{customerSelection.newName}</strong>
+            <p className="text-kreile-muted font-medium">
+              Neukunde: <strong className="text-kreile-navy">{customerSelection.newName}</strong>
             </p>
           </div>
 
-          <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 md:p-8 shadow-xl space-y-4">
+          <div className="bg-white border-2 border-kreile-border-strong rounded-3xl p-6 md:p-8 shadow-xl space-y-4">
             <div className="flex gap-4 mb-4">
               <Button
                 onClick={() => {
@@ -468,26 +468,26 @@ export default function NewOrderWizard() {
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase">Straße & Hausnummer</label>
-                <input type="text" autoComplete="street-address" value={newCustomerDetails.street} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, street: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 outline-none" />
+                <label className="text-xs font-bold text-kreile-muted uppercase">Straße & Hausnummer</label>
+                <input type="text" autoComplete="street-address" value={newCustomerDetails.street} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, street: e.target.value})} className="w-full p-3 rounded-xl border-2 border-kreile-border-strong focus:border-blue-500 outline-none" />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase">PLZ</label>
-                  <input type="text" autoComplete="postal-code" value={newCustomerDetails.zip} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, zip: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 outline-none" />
+                  <label className="text-xs font-bold text-kreile-muted uppercase">PLZ</label>
+                  <input type="text" autoComplete="postal-code" value={newCustomerDetails.zip} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, zip: e.target.value})} className="w-full p-3 rounded-xl border-2 border-kreile-border-strong focus:border-blue-500 outline-none" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase">Ort</label>
-                  <input type="text" autoComplete="address-level2" value={newCustomerDetails.city} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, city: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 outline-none" />
+                  <label className="text-xs font-bold text-kreile-muted uppercase">Ort</label>
+                  <input type="text" autoComplete="address-level2" value={newCustomerDetails.city} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, city: e.target.value})} className="w-full p-3 rounded-xl border-2 border-kreile-border-strong focus:border-blue-500 outline-none" />
                 </div>
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase">E-Mail</label>
-                <input type="email" autoComplete="email" value={newCustomerDetails.email} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, email: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 outline-none" />
+                <label className="text-xs font-bold text-kreile-muted uppercase">E-Mail</label>
+                <input type="email" autoComplete="email" value={newCustomerDetails.email} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, email: e.target.value})} className="w-full p-3 rounded-xl border-2 border-kreile-border-strong focus:border-blue-500 outline-none" />
               </div>
               <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase">Telefon</label>
-                <input type="tel" autoComplete="tel" value={newCustomerDetails.phone} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, phone: e.target.value})} className="w-full p-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 outline-none" />
+                <label className="text-xs font-bold text-kreile-muted uppercase">Telefon</label>
+                <input type="tel" autoComplete="tel" value={newCustomerDetails.phone} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, phone: e.target.value})} className="w-full p-3 rounded-xl border-2 border-kreile-border-strong focus:border-blue-500 outline-none" />
               </div>
             </div>
 
@@ -509,7 +509,7 @@ export default function NewOrderWizard() {
         <div className="w-full max-w-3xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
           <button
             onClick={() => setStep(customerSelection.id === null ? "manual_customer_edit" : "manual_customer")}
-            className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold text-sm px-3 py-2 rounded-xl hover:bg-slate-100 transition-all"
+            className="flex items-center gap-2 text-kreile-muted hover:text-kreile-navy font-bold text-sm px-3 py-2 rounded-xl hover:bg-kreile-surface-warm transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
             Zurück zur {customerSelection.id === null ? "Kundenkarte" : "Kundensuche"}
@@ -524,18 +524,18 @@ export default function NewOrderWizard() {
                   <div
                     key={s}
                     className={`h-2 w-12 rounded-full transition-all duration-300 ${
-                      i === cur ? "bg-blue-600 scale-y-150" : i < cur ? "bg-blue-300" : "bg-slate-200"
+                      i === cur ? "bg-blue-600 scale-y-150" : i < cur ? "bg-blue-300" : "bg-kreile-border"
                     }`}
                   />
                 );
               })}
             </div>
-            <h2 className="text-3xl font-black font-serif text-slate-900">
+            <h2 className="text-3xl font-black font-serif text-kreile-navy">
               Bauteile erfassen
             </h2>
-            <p className="text-slate-500 font-medium">
+            <p className="text-kreile-muted font-medium">
               Schritt 2 von 3 — Kunde:{" "}
-              <strong className="text-slate-700">
+              <strong className="text-kreile-navy">
                 {customerSelection.newName || "Bestandskunde"}
               </strong>
             </p>
@@ -545,12 +545,12 @@ export default function NewOrderWizard() {
             {manualItems.map((item, i) => (
               <div
                 key={i}
-                className="bg-white border-2 border-slate-200 rounded-3xl p-5 shadow-sm flex gap-4 items-start focus-within:border-blue-400 transition-colors"
+                className="bg-white border-2 border-kreile-border-strong rounded-3xl p-5 shadow-sm flex gap-4 items-start focus-within:border-blue-400 transition-colors"
               >
                 <div className="flex-1 space-y-4">
                   <div className="flex gap-4">
                     <div className="w-24 shrink-0">
-                      <label className="block text-[11px] font-extrabold text-slate-400 uppercase tracking-widest mb-1 pl-1">
+                      <label className="block text-[11px] font-extrabold text-kreile-muted uppercase tracking-widest mb-1 pl-1">
                         Menge
                       </label>
                       <input
@@ -561,11 +561,11 @@ export default function NewOrderWizard() {
                           const val = e.target.value;
                           updateManualItem(i, "quantity", val === "" ? "" : Math.max(1, parseInt(val) || 1));
                         }}
-                        className="w-full text-xl font-black text-center bg-slate-50 p-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 focus:bg-white"
+                        className="w-full text-xl font-black text-center bg-kreile-surface-soft p-3 rounded-xl border-2 border-kreile-border-strong outline-none focus:border-blue-500 focus:bg-white"
                       />
                     </div>
                     <div className="flex-1">
-                      <label className="block text-[11px] font-extrabold text-slate-400 uppercase tracking-widest mb-1 pl-1">
+                      <label className="block text-[11px] font-extrabold text-kreile-muted uppercase tracking-widest mb-1 pl-1">
                         Bezeichnung
                       </label>
                       <div className="flex gap-2">
@@ -574,13 +574,13 @@ export default function NewOrderWizard() {
                           value={item.name}
                           onChange={(e) => updateManualItem(i, "name", e.target.value)}
                           placeholder="z.B. Zylinderkopf"
-                          className="w-full text-xl font-bold bg-slate-50 p-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 focus:bg-white"
+                          className="w-full text-xl font-bold bg-kreile-surface-soft p-3 rounded-xl border-2 border-kreile-border-strong outline-none focus:border-blue-500 focus:bg-white"
                         />
                         <label
                           className={`h-[50px] w-[50px] rounded-xl border-2 shrink-0 flex items-center justify-center transition-all cursor-pointer ${
                             isScanningIndex === i 
                               ? "border-blue-500 bg-blue-50 text-blue-600" 
-                              : "border-slate-200 hover:border-blue-500 hover:bg-blue-50 text-blue-600"
+                              : "border-kreile-border-strong hover:border-blue-500 hover:bg-blue-50 text-blue-600"
                           }`}
                           title="Teil scannen (OCR)"
                         >
@@ -601,7 +601,7 @@ export default function NewOrderWizard() {
                     </div>
                   </div>
                   <div>
-                    <label className="block text-[11px] font-extrabold text-slate-400 uppercase tracking-widest mb-1 pl-1">
+                    <label className="block text-[11px] font-extrabold text-kreile-muted uppercase tracking-widest mb-1 pl-1">
                       Gewünschte Oberfläche (optional)
                     </label>
                     <input
@@ -611,7 +611,7 @@ export default function NewOrderWizard() {
                         updateManualItem(i, "surfaceRequested", e.target.value)
                       }
                       placeholder="z.B. Vernickeln, Verchromen..."
-                      className="w-full text-base font-bold text-slate-700 bg-slate-50 p-3 rounded-xl border-2 border-slate-200 outline-none focus:border-blue-500 focus:bg-white"
+                      className="w-full text-base font-bold text-kreile-navy bg-kreile-surface-soft p-3 rounded-xl border-2 border-kreile-border-strong outline-none focus:border-blue-500 focus:bg-white"
                     />
                   </div>
                 </div>
@@ -638,7 +638,7 @@ export default function NewOrderWizard() {
 
             <button
               onClick={addManualItem}
-              className="w-full h-16 border-2 border-dashed border-slate-300 text-slate-500 font-extrabold hover:bg-slate-50 hover:border-blue-300 hover:text-blue-700 rounded-3xl transition-all flex items-center justify-center gap-2"
+              className="w-full h-16 border-2 border-dashed border-kreile-gold-muted text-kreile-muted font-extrabold hover:bg-kreile-surface-soft hover:border-white/30 hover:text-blue-700 rounded-3xl transition-all flex items-center justify-center gap-2"
             >
               <Plus className="h-6 w-6" />
               Weiteres Teil hinzufügen
@@ -653,7 +653,7 @@ export default function NewOrderWizard() {
               setStep("manual_summary");
             }}
             disabled={!manualItems.some((it) => it.name.trim())}
-            className="w-full h-16 text-lg font-extrabold rounded-2xl bg-blue-900 text-white hover:bg-blue-800 shadow-xl active:scale-95 transition-all disabled:opacity-40"
+            className="w-full h-16 text-lg font-extrabold rounded-2xl bg-kreile-navy text-white hover:bg-kreile-navy-soft shadow-xl active:scale-95 transition-all disabled:opacity-40"
           >
             Teile bestätigen <ChevronRight className="ml-2 w-6 h-6" />
           </Button>

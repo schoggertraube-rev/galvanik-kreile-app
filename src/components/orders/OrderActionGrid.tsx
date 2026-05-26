@@ -109,7 +109,7 @@ export function OrderActionGrid({
           currentStatus={currentStatus} 
           onCompleteStation={onCompleteStation} 
         />
-        <Button onClick={onPrint} variant="outline" className="h-24 flex flex-col gap-2 rounded-2xl border-2 border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95 transition-all">
+        <Button onClick={onPrint} variant="outline" className="h-24 flex flex-col gap-2 rounded-2xl border-2 border-slate-200 text-kreile-navy hover:bg-slate-50 active:scale-95 transition-all">
           <Printer className="w-6 h-6 text-blue-600" />
           <span className="font-bold">Etikett drucken</span>
         </Button>
@@ -122,7 +122,7 @@ export function OrderActionGrid({
           ref={fileInputRef} 
           onChange={handlePhotoCapture} 
         />
-        <Button title="Foto aufnehmen" onClick={() => fileInputRef.current?.click()} variant="outline" className="h-24 flex flex-col gap-2 rounded-2xl border-2 border-slate-200 text-slate-700 hover:bg-slate-50 active:scale-95 transition-all">
+        <Button title="Foto aufnehmen" onClick={() => fileInputRef.current?.click()} variant="outline" className="h-24 flex flex-col gap-2 rounded-2xl border-2 border-slate-200 text-kreile-navy hover:bg-slate-50 active:scale-95 transition-all">
           <Camera className="w-6 h-6 text-orange-500" />
           <span className="font-bold">Foto aufnehmen</span>
         </Button>
@@ -132,13 +132,13 @@ export function OrderActionGrid({
       <div className="flex gap-4">
         {customerPhone ? (
           <a href={`tel:${customerPhone}`} className="flex-1 block">
-            <Button variant="outline" className="w-full flex items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 text-slate-700 hover:bg-slate-50 font-bold h-12 active:scale-95 transition-all">
+            <Button variant="outline" className="w-full flex items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 text-kreile-navy hover:bg-slate-50 font-bold h-12 active:scale-95 transition-all">
               <Phone className="w-4 h-4 text-green-600" />
               <span>Kunde anrufen</span>
             </Button>
           </a>
         ) : (
-          <Button disabled title="Keine Telefonnummer hinterlegt" variant="outline" className="flex-1 flex items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 text-slate-400 font-bold h-12">
+          <Button disabled title="Keine Telefonnummer hinterlegt" variant="outline" className="flex-1 flex items-center justify-center gap-2 rounded-2xl border-2 border-slate-200 text-kreile-muted font-bold h-12">
             <Phone className="w-4 h-4" />
             <span>Kunde anrufen</span>
           </Button>

@@ -73,8 +73,8 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
 
   if (isLoading) {
     return (
-      <div className="p-8 font-bold text-slate-500 flex flex-col items-center justify-center min-h-screen space-y-4 bg-slate-50">
-        <div className="w-12 h-12 rounded-full border-4 border-slate-200 border-t-blue-900 animate-spin"></div>
+      <div className="p-8 font-bold text-kreile-muted flex flex-col items-center justify-center min-h-screen space-y-4 bg-kreile-surface-soft">
+        <div className="w-12 h-12 rounded-full border-4 border-kreile-border-strong border-t-kreile-navy animate-spin"></div>
         <p className="text-lg">Lade Kundenkartei...</p>
       </div>
     );
@@ -82,12 +82,12 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
 
   if (!customer) {
     return (
-      <div className="p-8 text-center min-h-screen bg-slate-50 flex flex-col items-center justify-center space-y-4">
+      <div className="p-8 text-center min-h-screen bg-transparent flex flex-col items-center justify-center space-y-4">
         <AlertCircle className="w-16 h-16 text-red-500 animate-bounce" />
-        <h2 className="text-2xl font-bold text-slate-800">Kunde nicht gefunden</h2>
-        <p className="text-slate-500">Der gesuchte Kunde existiert nicht oder wurde gelöscht.</p>
+        <h2 className="text-2xl font-bold text-kreile-navy">Kunde nicht gefunden</h2>
+        <p className="text-kreile-muted">Der gesuchte Kunde existiert nicht oder wurde gelöscht.</p>
         <Link href="/customers">
-          <Button className="bg-slate-900 text-white rounded-xl">Zurück zur Kundenliste</Button>
+          <Button className="bg-kreile-navy text-white rounded-xl">Zurück zur Kundenliste</Button>
         </Link>
       </div>
     );
@@ -130,14 +130,14 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-16 font-sans">
+    <div className="min-h-screen bg-transparent pb-16 font-sans">
       {/* Top bar with back navigation */}
-      <div className="bg-white border-b border-slate-200 py-4 px-4 md:px-8 mb-6 flex items-center justify-between shadow-xs sticky top-0 z-10">
-        <Link href="/customers" className="flex items-center gap-2 text-slate-600 hover:text-slate-900 font-bold transition-all group">
+      <div className="bg-white border-b border-kreile-border-strong py-4 px-4 md:px-8 mb-6 flex items-center justify-between shadow-xs sticky top-0 z-10">
+        <Link href="/customers" className="flex items-center gap-2 text-kreile-muted hover:text-kreile-navy font-bold transition-all group">
           <ArrowLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
           <span>Zurück zur Kundenübersicht</span>
         </Link>
-        <span className="font-mono text-sm text-slate-400 font-bold">KUNDENID: {customer.customerNumber}</span>
+        <span className="font-mono text-sm text-kreile-muted font-bold">KUNDENID: {customer.customerNumber}</span>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 md:px-8">
@@ -150,18 +150,18 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
             <CustomerProfileHeader customer={customer} />
 
             {/* Werkstattgedächtnis & Notizen */}
-            <Card className="border-2 border-slate-200 rounded-3xl overflow-hidden shadow-xs bg-white">
+            <Card className="border-2 border-kreile-border-strong rounded-3xl overflow-hidden shadow-xs bg-white">
               <CardContent className="p-6 md:p-8 space-y-6">
                 <div className="flex justify-between items-center border-b pb-4">
-                  <h3 className="text-xl font-bold font-serif text-slate-900">Werkstattgedächtnis</h3>
-                  <Badge variant="outline" className="text-slate-500 font-semibold">Technischer Notizzettel</Badge>
+                  <h3 className="text-xl font-bold font-serif text-kreile-navy">Werkstattgedächtnis</h3>
+                  <Badge variant="outline" className="text-kreile-muted font-semibold">Technischer Notizzettel</Badge>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   {/* Notes Card */}
-                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100 space-y-2">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Wichtige Besonderheiten</span>
-                    <p className="text-sm font-medium text-slate-700 leading-relaxed italic">
+                  <div className="bg-kreile-surface-soft p-5 rounded-2xl border border-slate-100 space-y-2">
+                    <span className="text-[10px] font-bold text-kreile-muted uppercase tracking-wider block">Wichtige Besonderheiten</span>
+                    <p className="text-sm font-medium text-kreile-navy leading-relaxed italic">
                       {customer.notes || "Keine besonderen technischen Anweisungen vermerkt."}
                     </p>
                   </div>
@@ -190,22 +190,22 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4 text-xs font-bold text-slate-500 bg-blue-50/55 p-3 rounded-xl border border-blue-100">
-                  <span className="text-blue-900">Bevorzugter Kommunikationskanal:</span>
-                  <span className="bg-white px-2 py-0.5 rounded-md border text-blue-950 shadow-2xs">{customer.prefComm || "E-Mail"}</span>
+                <div className="flex items-center gap-4 text-xs font-bold text-kreile-muted bg-kreile-surface-warm/40 p-3 rounded-xl border border-kreile-border-strong">
+                  <span className="text-kreile-navy">Bevorzugter Kommunikationskanal:</span>
+                  <span className="bg-white px-2 py-0.5 rounded-md border text-kreile-navy shadow-2xs">{customer.prefComm || "E-Mail"}</span>
                 </div>
               </CardContent>
             </Card>
 
             {/* Aktive Aufträge */}
-            <Card className="border-2 border-slate-200 rounded-3xl overflow-hidden shadow-xs bg-white">
+            <Card className="border-2 border-kreile-border-strong rounded-3xl overflow-hidden shadow-xs bg-white">
               <CardContent className="p-6 md:p-8 space-y-6">
                 <div className="flex justify-between items-center border-b pb-4">
                   <div className="space-y-1">
-                    <h3 className="text-xl font-bold font-serif text-slate-900">Laufende Aufträge</h3>
-                    <p className="text-xs font-semibold text-slate-400">Aktuell in der Werkstatt</p>
+                    <h3 className="text-xl font-bold font-serif text-kreile-navy">Laufende Aufträge</h3>
+                    <p className="text-xs font-semibold text-kreile-muted">Aktuell in der Werkstatt</p>
                   </div>
-                  <Badge className="bg-blue-900 text-white font-extrabold text-xs px-2.5 py-1">
+                  <Badge className="bg-kreile-navy text-white font-extrabold text-xs px-2.5 py-1">
                     {activeOrders.length} Aktiv
                   </Badge>
                 </div>
@@ -217,26 +217,26 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                     const isOrange = order.risk === "orange";
                     
                     return (
-                      <div key={order.id} className="p-5 bg-white border-2 border-slate-100 hover:border-blue-900 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:shadow-xs group">
+                      <div key={order.id} className="p-5 bg-white border-2 border-slate-100 hover:border-kreile-gold-muted rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all hover:shadow-xs group">
                         <div className="space-y-2">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-black text-slate-900 text-base">{order.orderNumber}</span>
+                            <span className="font-mono font-black text-kreile-navy text-base">{order.orderNumber}</span>
                             <Badge variant="outline" className={`text-[9px] font-black uppercase ${
                               isRed 
                                 ? "bg-red-50 text-red-700 border-red-200" 
                                 : isOrange 
                                   ? "bg-orange-50 text-orange-700 border-orange-200" 
-                                  : "bg-slate-50 text-slate-700 border-slate-250"
+                                  : "bg-kreile-surface-soft text-kreile-navy border-slate-250"
                             }`}>
                               {order.statusText || "IN ARBEIT"}
                             </Badge>
                           </div>
-                          <h4 className="font-bold text-slate-800 text-lg font-serif">{order.title}</h4>
+                          <h4 className="font-bold text-kreile-navy text-lg font-serif">{order.title}</h4>
                           
-                          <div className="flex items-center gap-3 text-xs text-slate-400 font-bold">
+                          <div className="flex items-center gap-3 text-xs text-kreile-muted font-bold">
                             <span>Eingang: {order.intakeDate}</span>
                             <span>•</span>
-                            <span className="text-blue-950 font-extrabold bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100/50">
+                            <span className="text-kreile-navy font-extrabold bg-kreile-surface-warm px-2.5 py-0.5 rounded-lg border border-kreile-border/50">
                               Aktuell: {config.name}
                             </span>
                           </div>
@@ -244,13 +244,13 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
 
                         <div className="flex md:flex-col items-end justify-between md:justify-center border-t md:border-t-0 pt-3 md:pt-0 shrink-0">
                           <div className="text-right">
-                            <span className="text-[10px] text-slate-400 font-extrabold block uppercase">Termin</span>
-                            <span className={`font-black text-base ${isRed ? "text-red-750" : isOrange ? "text-orange-700" : "text-slate-700"}`}>
+                            <span className="text-[10px] text-kreile-muted font-extrabold block uppercase">Termin</span>
+                            <span className={`font-black text-base ${isRed ? "text-red-750" : isOrange ? "text-orange-700" : "text-kreile-navy"}`}>
                               {order.dueValue || order.dueDate}
                             </span>
                           </div>
                           
-                          <Link href={`/orders?search=${order.orderNumber}`} className="mt-2 text-xs font-bold text-blue-900 hover:underline flex items-center gap-1 group-hover:translate-x-1 transition-transform">
+                          <Link href={`/orders?search=${order.orderNumber}`} className="mt-2 text-xs font-bold text-kreile-navy hover:underline flex items-center gap-1 group-hover:translate-x-1 transition-transform">
                             <span>Zur Steuerung</span>
                             <ChevronRight className="w-4 h-4" />
                           </Link>
@@ -260,9 +260,9 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                   })}
 
                   {activeOrders.length === 0 && (
-                    <div className="p-8 text-center text-slate-400 bg-slate-50 border rounded-2xl space-y-2 border-dashed">
+                    <div className="p-8 text-center text-kreile-muted bg-kreile-surface-soft border rounded-2xl space-y-2 border-dashed">
                       <Clock className="w-8 h-8 mx-auto text-slate-350" />
-                      <p className="font-bold text-slate-600">Keine aktiven Aufträge</p>
+                      <p className="font-bold text-kreile-muted">Keine aktiven Aufträge</p>
                       <p className="text-xs max-w-md mx-auto">Dieser Kunde hat aktuell alle Werkstattaufträge abgeschlossen oder pausiert.</p>
                     </div>
                   )}
@@ -296,15 +296,15 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                           <span className="text-xs text-slate-450 font-bold">Erfasst: {new Date(c.createdAt).toLocaleDateString("de-DE")}</span>
                         </div>
                         
-                        <div className="text-xs font-bold text-slate-600 flex items-center gap-1">
+                        <div className="text-xs font-bold text-kreile-muted flex items-center gap-1">
                           <span>Betrifft:</span>
-                          <Link href={`/orders?search=${c.orderId}`} className="text-blue-900 hover:underline">
+                          <Link href={`/orders?search=${c.orderId}`} className="text-kreile-navy hover:underline">
                             {c.orderId}
                           </Link>
                         </div>
                       </div>
 
-                      <p className="text-sm font-semibold text-slate-700 leading-relaxed">
+                      <p className="text-sm font-semibold text-kreile-navy leading-relaxed">
                         {c.description}
                       </p>
 
@@ -326,7 +326,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                   ))}
 
                   {complaints.length === 0 && (
-                    <div className="p-6 text-center text-slate-400 bg-slate-50 border border-slate-100 rounded-2xl space-y-1">
+                    <div className="p-6 text-center text-kreile-muted bg-kreile-surface-soft border border-slate-100 rounded-2xl space-y-1">
                       <CheckCircle2 className="w-8 h-8 mx-auto text-emerald-500" />
                       <p className="font-bold text-emerald-800">Keine Reklamationen verzeichnet</p>
                       <p className="text-xs">Exzellente Quote! Für diesen Kunden liegen keine ungelösten Qualitätsfälle vor.</p>
@@ -337,48 +337,48 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
             </Card>
 
             {/* Wiederkehrende Teile */}
-            <Card className="border-2 border-slate-200 rounded-3xl overflow-hidden shadow-xs bg-white">
+            <Card className="border-2 border-kreile-border-strong rounded-3xl overflow-hidden shadow-xs bg-white">
               <CardContent className="p-6 md:p-8 space-y-6">
                 <div className="flex justify-between items-center border-b pb-4">
                   <div className="space-y-1">
-                    <h3 className="text-xl font-bold font-serif text-slate-900">Wiederkehrende Teile</h3>
-                    <p className="text-xs font-semibold text-slate-400">Top 5 Bauteile dieses Kunden nach Häufigkeit</p>
+                    <h3 className="text-xl font-bold font-serif text-kreile-navy">Wiederkehrende Teile</h3>
+                    <p className="text-xs font-semibold text-kreile-muted">Top 5 Bauteile dieses Kunden nach Häufigkeit</p>
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {topParts.length > 0 ? topParts.map((p, idx) => (
-                    <Badge key={idx} variant="outline" className="px-3 py-1.5 bg-slate-50 text-slate-700 font-bold border-slate-200">
-                      {p.name} <span className="ml-2 text-blue-600">({p.count}x)</span>
+                    <Badge key={idx} variant="outline" className="px-3 py-1.5 bg-kreile-surface-soft text-kreile-navy font-bold border-kreile-border-strong">
+                      {p.name} <span className="ml-2 text-kreile-accent">({p.count}x)</span>
                     </Badge>
                   )) : (
-                    <p className="text-slate-500 text-sm font-semibold italic py-4">Noch keine Bauteile erfasst.</p>
+                    <p className="text-kreile-muted text-sm font-semibold italic py-4">Noch keine Bauteile erfasst.</p>
                   )}
                 </div>
               </CardContent>
             </Card>
 
             {/* Ähnliche Aufträge */}
-            <Card className="border-2 border-slate-200 rounded-3xl overflow-hidden shadow-xs bg-white">
+            <Card className="border-2 border-kreile-border-strong rounded-3xl overflow-hidden shadow-xs bg-white">
               <CardContent className="p-6 md:p-8 space-y-6">
                 <div className="flex justify-between items-center border-b pb-4">
                   <div className="space-y-1">
-                    <h3 className="text-xl font-bold font-serif text-slate-900">Ähnliche Aufträge (Zuletzt)</h3>
-                    <p className="text-xs font-semibold text-slate-400">Letzte 10 Aufträge dieses Kunden</p>
+                    <h3 className="text-xl font-bold font-serif text-kreile-navy">Ähnliche Aufträge (Zuletzt)</h3>
+                    <p className="text-xs font-semibold text-kreile-muted">Letzte 10 Aufträge dieses Kunden</p>
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   {recentOrders.map(order => (
-                    <div key={order.id} className="p-4 bg-slate-50/50 hover:bg-slate-50 border border-slate-150 rounded-xl flex items-center justify-between gap-4 transition-all">
+                    <div key={order.id} className="p-4 bg-kreile-surface-soft/50 hover:bg-kreile-surface-soft border border-slate-150 rounded-xl flex items-center justify-between gap-4 transition-all">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-slate-500">{order.orderNumber}</span>
-                          <span className="text-xs text-slate-400">• Eingang: {order.intakeDate || "Unbekannt"}</span>
+                          <span className="font-mono text-xs font-bold text-kreile-muted">{order.orderNumber}</span>
+                          <span className="text-xs text-kreile-muted">• Eingang: {order.intakeDate || "Unbekannt"}</span>
                         </div>
-                        <h4 className="font-bold text-slate-800 text-sm">{order.title}</h4>
+                        <h4 className="font-bold text-kreile-navy text-sm">{order.title}</h4>
                       </div>
                       <div className="text-right">
-                        <span className={`text-xs px-2 py-1 font-black rounded-lg ${order.status === "completed" || order.status === "done" ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}`}>
+                        <span className={`text-xs px-2 py-1 font-black rounded-lg ${order.status === "completed" || order.status === "done" ? "bg-green-100 text-green-800" : "bg-kreile-surface-warm text-kreile-navy"}`}>
                           {order.status === "completed" || order.status === "done" ? "Erledigt" : "Aktiv"}
                         </span>
                       </div>
@@ -386,7 +386,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                   ))}
 
                   {recentOrders.length === 0 && (
-                    <p className="text-slate-500 text-sm font-semibold text-center italic py-4 bg-slate-50/30 border border-slate-100 rounded-xl">
+                    <p className="text-kreile-muted text-sm font-semibold text-center italic py-4 bg-kreile-surface-soft/30 border border-slate-100 rounded-xl">
                       Keine Aufträge gefunden.
                     </p>
                   )}
@@ -395,15 +395,15 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
             </Card>
 
             {/* Kommunikationshistorie */}
-            <Card className="border-2 border-slate-200 rounded-3xl overflow-hidden shadow-xs bg-white">
+            <Card className="border-2 border-kreile-border-strong rounded-3xl overflow-hidden shadow-xs bg-white">
               <CardContent className="p-6 md:p-8 space-y-6">
                 <div className="flex justify-between items-center border-b pb-4">
-                  <h3 className="text-xl font-bold font-serif text-slate-900">Kommunikationshistorie</h3>
-                  <Badge variant="outline" className="text-slate-500 font-semibold">Letzte Kontakte</Badge>
+                  <h3 className="text-xl font-bold font-serif text-kreile-navy">Kommunikationshistorie</h3>
+                  <Badge variant="outline" className="text-kreile-muted font-semibold">Letzte Kontakte</Badge>
                 </div>
 
                 <div className="space-y-4">
-                  <p className="text-slate-500 text-sm font-semibold text-center italic py-4 bg-slate-50/30 border border-slate-100 rounded-xl">
+                  <p className="text-kreile-muted text-sm font-semibold text-center italic py-4 bg-kreile-surface-soft/30 border border-slate-100 rounded-xl">
                     Noch keine Einträge.
                   </p>
                 </div>
@@ -416,13 +416,13 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
           <div className="lg:col-span-4 space-y-8">
             
             {/* Quick Actions Panel */}
-            <Card className="border-2 border-slate-200 rounded-3xl overflow-hidden shadow-xs bg-slate-900 text-white sticky top-24">
+            <Card className="border-2 border-kreile-border-strong rounded-3xl overflow-hidden shadow-xs bg-kreile-navy text-white sticky top-24">
               <CardContent className="p-6 md:p-8 space-y-6">
                 <h3 className="text-lg font-bold font-serif border-b border-white/10 pb-4">Schnellaktionen</h3>
                 
                 <div className="flex flex-col gap-3">
                   <Link href={`/orders/new?customerId=${customer.id}`} className="w-full">
-                    <Button className="w-full h-12 bg-white hover:bg-slate-150 text-slate-900 font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow-md">
+                    <Button className="w-full h-12 bg-white hover:bg-kreile-border text-kreile-navy font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow-md">
                       Neuer Auftrag anlegen
                     </Button>
                   </Link>
@@ -444,7 +444,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                   {customer.email ? (
                     <a href={`mailto:${customer.email}`} className="w-full">
                       <Button variant="outline" className="w-full h-12 bg-transparent border-white/20 hover:bg-white/10 text-white font-extrabold text-sm rounded-xl flex items-center justify-center gap-2">
-                        <Mail className="w-4 h-4 text-blue-350" />
+                        <Mail className="w-4 h-4 text-orange-400" />
                         <span>E-Mail schreiben</span>
                       </Button>
                     </a>
@@ -463,13 +463,13 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
             </Card>
 
             {/* Aggregated Order Timeline */}
-            <div className="bg-white border-2 border-slate-200 rounded-3xl p-6 md:p-8 shadow-xs">
+            <div className="bg-white border-2 border-kreile-border-strong rounded-3xl p-6 md:p-8 shadow-xs">
               <div className="flex justify-between items-center border-b pb-4 mb-6">
                 <div className="flex items-center gap-2">
-                  <History className="w-5 h-5 text-slate-500" />
-                  <h3 className="text-lg font-bold font-serif text-slate-800">Kundengeschichte</h3>
+                  <History className="w-5 h-5 text-kreile-muted" />
+                  <h3 className="text-lg font-bold font-serif text-kreile-navy">Kundengeschichte</h3>
                 </div>
-                <Badge variant="outline" className="text-slate-400 text-[10px] font-bold">Aggregiert</Badge>
+                <Badge variant="outline" className="text-kreile-muted text-[10px] font-bold">Aggregiert</Badge>
               </div>
               <OrderTimeline entries={timeline} />
             </div>

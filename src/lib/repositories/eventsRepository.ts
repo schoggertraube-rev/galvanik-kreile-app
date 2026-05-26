@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { createStatusEvent } from "@/app/actions/status-events.actions";
+import { createStatusEvent, getRecentStatusEvents } from "@/app/actions/status-events.actions";
 
 export type StatusEventType =
   | "OCR_SCAN_STARTED"
@@ -55,6 +55,29 @@ function getMonotonicTimestamp(): string {
 export const eventsRepository = {
   async getAll(): Promise<StatusEvent[]> {
     if (typeof window !== "undefined") {
+      if (!OfflineManager.isOffline()) {
+        try {
+          const dbEvents = await getRecentStatusEvents(200);
+          if (dbEvents && dbEvents.length > 0) {
+            // Map the db schema back to the frontend StatusEvent interface
+            const mappedEvents: StatusEvent[] = dbEvents.map(e => ({
+              id: e.id,
+              orderId: e.orderId || undefined,
+              itemId: e.itemId || undefined,
+              customerId: undefined, // Not in schema directly, adjust if needed
+              eventType: e.eventType as StatusEventType,
+              timestamp: (e.createdAt as unknown as Date).toISOString(),
+              metadata: e.notes ? JSON.parse(e.notes) : undefined
+            }));
+            localStorage.setItem("kreile_events", JSON.stringify(mappedEvents));
+            return mappedEvents;
+          }
+        } catch (error) {
+          console.warn("Failed to fetch events from Supabase, falling back to cache:", error);
+        }
+      }
+
+      // Offline Fallback
       return JSON.parse(localStorage.getItem("kreile_events") || "[]");
     }
     return [];

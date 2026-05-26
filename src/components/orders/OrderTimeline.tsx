@@ -4,10 +4,10 @@ import { CheckCircle2, AlertTriangle, Camera, FileText, Info } from "lucide-reac
 export function OrderTimeline({ entries }: { entries: TimelineEntry[] }) {
   const getIcon = (entry: TimelineEntry) => {
     if (entry.severity === "critical") return <AlertTriangle className="w-5 h-5 text-red-500" />;
-    if (entry.type === "photo" || entry.title === "Foto aufgenommen") return <Camera className="w-5 h-5 text-slate-400" />;
+    if (entry.type === "photo" || entry.title === "Foto aufgenommen") return <Camera className="w-5 h-5 text-kreile-muted" />;
     if (entry.type === "document") return <FileText className="w-5 h-5 text-blue-500" />;
     if (entry.severity === "good") return <CheckCircle2 className="w-5 h-5 text-green-500" />;
-    return <Info className="w-5 h-5 text-slate-400" />;
+    return <Info className="w-5 h-5 text-kreile-muted" />;
   };
 
   return (
@@ -20,7 +20,7 @@ export function OrderTimeline({ entries }: { entries: TimelineEntry[] }) {
               {getIcon(entry)}
             </div>
             <div>
-              <p className="text-xs font-bold text-slate-400 mb-0.5">
+              <p className="text-xs font-bold text-kreile-muted mb-0.5">
                 {new Date(entry.timestamp).toLocaleString("de-DE", { 
                   day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" 
                 })}
@@ -29,7 +29,7 @@ export function OrderTimeline({ entries }: { entries: TimelineEntry[] }) {
                 {entry.title}
               </h4>
               {entry.subtitle && (
-                <p className="text-sm text-slate-600 mt-1 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                <p className="text-sm text-kreile-muted mt-1 bg-slate-50 p-2 rounded-lg border border-slate-100">
                   {entry.subtitle}
                 </p>
               )}

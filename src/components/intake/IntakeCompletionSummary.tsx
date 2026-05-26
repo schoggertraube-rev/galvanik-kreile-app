@@ -53,7 +53,7 @@ export function IntakeCompletionSummary({
 
         {/* Embedded Label preview */}
         <div className="bg-slate-955 border-2 border-slate-900 rounded-3xl p-6 shadow-inner flex flex-col items-center">
-          <div className="text-slate-400 font-extrabold uppercase tracking-widest text-xs mb-4">Etiketten-Vorschau (A6 Hochformat)</div>
+          <div className="text-kreile-muted font-extrabold uppercase tracking-widest text-xs mb-4">Etiketten-Vorschau (A6 Hochformat)</div>
           
           <div className="bg-white text-black p-6 w-[280px] h-[395px] flex flex-col justify-between shadow-xl rounded-xl border border-slate-200">
             <div className="space-y-3">
@@ -109,7 +109,7 @@ export function IntakeCompletionSummary({
           <Button
             onClick={() => router.push("/today")}
             variant="outline"
-            className="flex-1 h-16 text-sm font-bold rounded-2xl border-2 border-slate-200 text-slate-700 hover:bg-slate-100 active:scale-95 transition-all"
+            className="flex-1 h-16 text-sm font-bold rounded-2xl border-2 border-slate-200 text-kreile-navy hover:bg-slate-100 active:scale-95 transition-all"
           >
             Zum Leitstand
           </Button>
@@ -160,15 +160,15 @@ export function IntakeCompletionSummary({
 
       <div className="bg-white border-2 border-slate-200 rounded-3xl p-8 shadow-md space-y-6">
         <div className="flex justify-between items-center py-2 border-b-2 border-slate-100 border-dashed">
-          <span className="text-slate-400 font-extrabold uppercase tracking-widest text-xs">Kunde</span>
+          <span className="text-kreile-muted font-extrabold uppercase tracking-widest text-xs">Kunde</span>
           <span className="text-slate-900 font-black text-lg">{customerSelection.newName || "Bestandskunde (aus Kartei)"}</span>
         </div>
         <div className="flex justify-between items-center py-2 border-b-2 border-slate-100 border-dashed">
-          <span className="text-slate-400 font-extrabold uppercase tracking-widest text-xs">Bauteile</span>
+          <span className="text-kreile-muted font-extrabold uppercase tracking-widest text-xs">Bauteile</span>
           <span className="text-slate-900 font-black text-lg">{items.length} Position(en)</span>
         </div>
         <div className="flex justify-between items-center py-2">
-          <span className="text-slate-400 font-extrabold uppercase tracking-widest text-xs">Nächste Station</span>
+          <span className="text-kreile-muted font-extrabold uppercase tracking-widest text-xs">Nächste Station</span>
           <span className="text-blue-800 bg-blue-50 border border-blue-200 px-4 py-1.5 rounded-full font-black flex items-center gap-2">
             <Factory className="w-4 h-4" /> Wareneingang (Physisch)
           </span>

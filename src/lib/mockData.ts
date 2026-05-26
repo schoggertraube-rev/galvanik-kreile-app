@@ -1858,3 +1858,48 @@ export const INITIAL_SCAN_LOG = [
   { id: "log-1", time: "08:15", type: "scan", desc: "Zylinderblock (T-004) erfasst", status: "success" },
   { id: "log-2", time: "08:22", type: "match", desc: "Kunde K-004 zugeordnet", status: "success" }
 ];
+
+export const MOCK_REQUESTS = [
+  {
+    id: "q1",
+    customerName: "Rosa Schneider",
+    customerId: "K-000131",
+    subject: "Vespa V50 Lampenmaske – Verchromung",
+    description: "Hallo, ich möchte die Lampenmaske meiner Vespa V50 (Baujahr 1968) neu verchromen lassen. Das Teil hat leichte Rostflecken und eine alte Lackschicht. Sehr gerne würde ich ein Angebot erhalten. MfG Rosa Schneider",
+    receivedAt: "2026-05-21",
+    rustLevel: "Leicht",
+    dirtLevel: "Leicht",
+    partCount: 1,
+    material: "Stahlblech",
+    status: "offen",
+    pricing: { grundarbeit: 120, reinigung: 20, entmetallisierung: 35, schleifaufwand: 40, badchemie: 25, risikopuffer: 15, marge: 30 },
+  },
+  {
+    id: "q2",
+    customerName: "Atelier Schmid",
+    customerId: "K-000125",
+    subject: "BMW R75 Motorradtank – Glanzverchromung",
+    description: "Wir haben einen originalen BMW R75 Tank aus den 1940er-Jahren. Der Tank hat Beulen, tiefe Kratzer und Flugrost. Wir benötigen eine vollständige Glanzverchromung inkl. Entlackung und Entmetallisierung. Gibt es Erfahrung mit dieser Epoche?",
+    receivedAt: "2026-05-20",
+    rustLevel: "Stark",
+    dirtLevel: "Stark",
+    partCount: 1,
+    material: "Stahlblech (Oldtimer)",
+    status: "offen",
+    pricing: { grundarbeit: 280, reinigung: 60, entmetallisierung: 90, schleifaufwand: 180, badchemie: 70, risikopuffer: 60, marge: 80 },
+  },
+  {
+    id: "q3",
+    customerName: "Kirchenverwaltung St. Urban",
+    customerId: "K-000132",
+    subject: "Historisches Besteck-Set (48-teilig) – Versilberung",
+    description: "Wir besitzen ein historiches Silberbesteck (48 Teile, Messing/Alpacca), das für den kirchlichen Einsatz aufgearbeitet werden soll. Der Großteil ist stark oxidiert, einige Stücke haben leichte Dellen. Wir wünschen eine komplette Versilberung (90g/12).",
+    receivedAt: "2026-05-19",
+    rustLevel: "Mittel",
+    dirtLevel: "Stark",
+    partCount: 48,
+    material: "Messing / Alpacca",
+    status: "offen",
+    pricing: { grundarbeit: 350, reinigung: 80, entmetallisierung: 120, schleifaufwand: 90, badchemie: 95, risikopuffer: 40, marge: 90 },
+  },
+];
