@@ -3,7 +3,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
-export default function LoginPage({ searchParams }: { searchParams: { message?: string } }) {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ message?: string }> }) {
+  const params = await searchParams;
   return (
     <div className="flex h-screen w-full items-center justify-center bg-transparent">
       <Card className="w-full max-w-sm">
@@ -34,8 +35,8 @@ export default function LoginPage({ searchParams }: { searchParams: { message?: 
             <Button formAction={login} className="w-full bg-kreile-navy hover:bg-kreile-navy-soft" type="submit">
               Einloggen
             </Button>
-            {searchParams?.message && (
-              <p className="text-sm text-red-500 text-center font-bold bg-red-50 p-2 rounded">{searchParams.message}</p>
+            {params?.message && (
+              <p className="text-sm text-red-500 text-center font-bold bg-red-50 p-2 rounded">{params.message}</p>
             )}
           </form>
         </CardContent>
