@@ -1,23 +1,11 @@
 import { createId } from "@paralleldrive/cuid2";
-import { INITIAL_CUSTOMERS } from "@/lib/mockData";
+import { EXTENDED_CUSTOMERS as INITIAL_CUSTOMERS } from "@/lib/mockCustomersExtended";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { IndexedDBHelper } from "@/lib/offline/IndexedDBHelper";
 import { createCustomerDb, getCustomersDb, updateCustomerDb } from "@/app/actions/customers.actions";
+import { Customer } from "@/lib/types/customer";
 
-export type Customer = {
-  id: string;
-  customerNumber: string;
-  name: string;
-  phone?: string;
-  email?: string;
-  city?: string;
-  address?: string;
-  type?: "Privatkunde" | "Geschäftskunde" | "Institution" | "institution" | "business" | "private";
-  prefComm?: "E-Mail" | "Telefon" | "Brief / Post";
-  risk?: "Niedrig" | "Mittel" | "Hoch";
-  riskNote?: string;
-  notes?: string;
-}
+export type { Customer };
 
 export const customersRepository = {
   async getAll(): Promise<Customer[]> {

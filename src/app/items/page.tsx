@@ -244,7 +244,7 @@ export default function ItemsPage() {
   const chemicalList = inventoryItems.filter(item => item.category === "chemical");
 
   return (
-    <div className="space-y-6 pb-12 font-sans antialiased text-kreile-navy">
+    <div className="space-y-6 pb-12 font-sans antialiased text-navy-900">
       
       <PageHeader
         title="Lager & Chemieverwaltung"
@@ -252,13 +252,13 @@ export default function ItemsPage() {
       />
 
       {/* Tab-Switcher */}
-      <div className="flex gap-1 bg-white border border-kreile-border rounded-2xl p-1 w-fit">
+      <div className="flex gap-1 bg-white border border-neutral-gray-100 rounded-2xl p-1 w-fit">
         <button
           onClick={() => { setActiveSection("inventory"); setSearchTerm(""); }}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
             activeSection === "inventory"
-              ? "bg-kreile-navy text-white shadow-sm"
-              : "text-kreile-muted hover:text-kreile-navy"
+              ? "bg-navy-900 text-white shadow-sm"
+              : "text-text-muted hover:text-navy-900"
           }`}
         >
           <Package className="h-4 w-4" />
@@ -268,8 +268,8 @@ export default function ItemsPage() {
           onClick={() => { setActiveSection("baths"); setSearchTerm(""); }}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
             activeSection === "baths"
-              ? "bg-kreile-navy text-white shadow-sm"
-              : "text-kreile-muted hover:text-kreile-navy"
+              ? "bg-navy-900 text-white shadow-sm"
+              : "text-text-muted hover:text-navy-900"
           }`}
         >
           <FlaskConical className="h-4 w-4" />
@@ -284,11 +284,11 @@ export default function ItemsPage() {
         <div className="xl:col-span-2 space-y-4 w-full">
           
           {/* Filters and search layout */}
-          <div className="bg-white p-4 rounded-2xl border border-kreile-border-strong shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="bg-white p-4 rounded-2xl border border-neutral-gray-300 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-kreile-muted" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
               <Input
-                className="pl-10 h-11 bg-kreile-surface-soft border-kreile-border-strong rounded-xl w-full text-base font-medium"
+                className="pl-10 h-11 bg-bg-app-soft border-neutral-gray-300 rounded-xl w-full text-base font-medium"
                 placeholder={activeSection === "inventory" ? "Artikel suchen nach Name, SKU, Lagerort..." : "Beschichtung suchen..."}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -311,8 +311,8 @@ export default function ItemsPage() {
                     onClick={() => setFilterCategory(chip.key)}
                     className={`h-9 px-4 rounded-xl text-xs font-bold transition-all border ${
                       filterCategory === chip.key
-                        ? "bg-kreile-navy text-white border-kreile-navy"
-                        : "bg-kreile-bg hover:bg-kreile-sand text-kreile-muted border-kreile-border"
+                        ? "bg-navy-900 text-white border-navy-900"
+                        : "bg-bg-app hover:bg-gold-100 text-text-muted border-neutral-gray-100"
                     }`}
                   >
                     {chip.name}
@@ -324,9 +324,9 @@ export default function ItemsPage() {
 
           {/* SECTION 1: INVENTORY VIEWS */}
           {activeSection === "inventory" && (
-            <Card className="border-kreile-border-strong shadow-sm overflow-hidden">
+            <Card className="border-neutral-gray-300 shadow-sm overflow-hidden">
               <div className="p-0">
-                <div className="divide-y divide-slate-150">
+                <div className="divide-y divide-neutral-gray-100">
                   {filteredInventoryItems.length > 0 ? (
                     filteredInventoryItems.map((item) => {
                       const isCritical = item.currentStock < item.minStock;
@@ -336,20 +336,20 @@ export default function ItemsPage() {
                         <div
                           key={item.id}
                           onClick={() => setSelectedItemId(item.id)}
-                          className={`p-4 hover:bg-kreile-surface-soft/50 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-                            isSelected ? "bg-kreile-bg border-l-4 border-kreile-navy" : "border-l-4 border-transparent"
+                          className={`p-4 hover:bg-bg-app-soft/50 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                            isSelected ? "bg-bg-app border-l-4 border-navy-900" : "border-l-4 border-transparent"
                           }`}
                         >
                           <div className="flex items-center gap-4">
                             {/* Visual Category avatar */}
                             <div className={`w-12 h-12 rounded-xl flex items-center justify-center border shrink-0 ${
                               isCritical 
-                                ? "bg-red-50 text-red-650 border-red-200 animate-pulse" 
+                                ? "bg-accent-orange-soft text-danger-red border-danger-red animate-pulse" 
                                 : item.category === "chemical" 
-                                  ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                  ? "bg-surface-tinted text-navy-700 border-navy-500"
                                   : item.category === "consumable" 
-                                    ? "bg-amber-50 text-amber-700 border-amber-200"
-                                    : "bg-kreile-surface-soft text-kreile-navy border-kreile-border-strong"
+                                    ? "bg-gold-100 text-gold-600 border-gold-600"
+                                    : "bg-bg-app-soft text-navy-900 border-neutral-gray-300"
                             }`}>
                               {item.category === "chemical" ? (
                                 <FlaskConical className="h-6 w-6" />
@@ -359,27 +359,27 @@ export default function ItemsPage() {
                             </div>
                             
                             <div>
-                              <h4 className="font-extrabold text-slate-950 flex items-center gap-2 flex-wrap text-base">
+                              <h4 className="font-extrabold text-navy-900 flex items-center gap-2 flex-wrap text-base">
                                 {item.name}
-                                <Badge variant="outline" className="font-mono text-[10px] bg-kreile-surface-warm py-0 text-kreile-muted font-bold">
+                                <Badge variant="outline" className="font-mono text-[10px] bg-bg-app-soft py-0 text-text-muted font-bold">
                                   {item.sku}
                                 </Badge>
                                 {isCritical && (
-                                  <Badge className="bg-red-600 text-white text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 border border-red-700 animate-pulse">
+                                  <Badge className="bg-danger-red text-white text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 border border-danger-red animate-pulse">
                                     Mindestbestand unterschritten
                                   </Badge>
                                 )}
                               </h4>
-                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-kreile-muted mt-1 font-semibold">
-                                <span className="text-kreile-navy flex items-center gap-1">
-                                  <MapPin className="h-3.5 w-3.5 text-orange-500" /> {item.storageLocation}
+                              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted mt-1 font-semibold">
+                                <span className="text-navy-900 flex items-center gap-1">
+                                  <MapPin className="h-3.5 w-3.5 text-accent-orange" /> {item.storageLocation}
                                 </span>
                                 <span>•</span>
                                 <span>Min-Soll: {item.minStock} {item.unit}</span>
                                 {item.isHazardous && (
                                   <>
                                     <span>•</span>
-                                    <span className="text-red-500 font-bold uppercase text-[9px]">Gefahrstoff ☣️</span>
+                                    <span className="text-danger-red font-bold uppercase text-[9px]">Gefahrstoff ☣️</span>
                                   </>
                                 )}
                               </div>
@@ -389,18 +389,18 @@ export default function ItemsPage() {
                           {/* Stock value count + large touch +/- quick adjustments */}
                           <div className="flex items-center justify-between sm:justify-end gap-6 border-t sm:border-0 pt-3 sm:pt-0">
                             <div className="text-left sm:text-right">
-                              <span className="text-[10px] text-kreile-muted font-bold uppercase tracking-wider block">Lagerbestand</span>
-                              <span className={`text-2xl font-black ${isCritical ? "text-red-600 font-serif" : "text-kreile-navy"}`}>
-                                {item.currentStock} <span className="text-sm font-bold text-kreile-muted">{item.unit}</span>
+                              <span className="text-[10px] text-text-muted font-bold uppercase tracking-wider block">Lagerbestand</span>
+                              <span className={`text-2xl font-black ${isCritical ? "text-danger-red font-serif" : "text-navy-900"}`}>
+                                {item.currentStock} <span className="text-sm font-bold text-text-muted">{item.unit}</span>
                               </span>
                             </div>
                             
                             {/* Stepper buttons for hand gloves tablet adjustment */}
-                            <div className="flex items-center gap-1.5 bg-kreile-surface-warm p-1 rounded-xl border border-kreile-border-strong">
+                            <div className="flex items-center gap-1.5 bg-bg-app-soft p-1 rounded-xl border border-neutral-gray-300">
                               <Button
                                 size="icon"
                                 variant="outline"
-                                className="h-9 w-9 bg-white text-kreile-navy rounded-lg shadow-sm hover:bg-kreile-surface-soft border border-kreile-border-strong cursor-pointer"
+                                className="h-9 w-9 bg-white text-navy-900 rounded-lg shadow-sm hover:bg-bg-app-soft border border-neutral-gray-300 cursor-pointer"
                                 onClick={(e) => handleQuickAdjust(item.id, "minus", e)}
                               >
                                 <Minus className="h-4.5 w-4.5 font-bold" />
@@ -408,7 +408,7 @@ export default function ItemsPage() {
                               <Button
                                 size="icon"
                                 variant="outline"
-                                className="h-9 w-9 bg-white text-kreile-navy rounded-lg shadow-sm hover:bg-kreile-surface-soft border border-kreile-border-strong cursor-pointer"
+                                className="h-9 w-9 bg-white text-navy-900 rounded-lg shadow-sm hover:bg-bg-app-soft border border-neutral-gray-300 cursor-pointer"
                                 onClick={(e) => handleQuickAdjust(item.id, "plus", e)}
                               >
                                 <Plus className="h-4.5 w-4.5 font-bold" />
@@ -419,8 +419,8 @@ export default function ItemsPage() {
                       );
                     })
                   ) : (
-                    <div className="p-12 text-center text-kreile-muted">
-                      <Package className="h-12 w-12 text-kreile-muted mx-auto mb-3" />
+                    <div className="p-12 text-center text-text-muted">
+                      <Package className="h-12 w-12 text-text-muted mx-auto mb-3" />
                       <p className="font-bold text-lg">Keine Lagerartikel gefunden</p>
                       <p className="text-sm mt-1">Ändere deine Suchbegriffe oder Filteroptionen.</p>
                     </div>
@@ -445,35 +445,35 @@ export default function ItemsPage() {
                       onClick={() => setSelectedBathId(bath.id)}
                       className={`cursor-pointer transition-all duration-300 relative border-2 ${
                         isSelected 
-                          ? "ring-2 ring-kreile-navy border-kreile-navy shadow-md scale-[1.01]" 
+                          ? "ring-2 ring-navy-900 border-navy-900 shadow-md scale-[1.01]" 
                           : isCritical 
-                            ? "border-red-200 bg-red-50/20 hover:bg-red-50/40" 
+                            ? "border-danger-red bg-accent-orange-soft/20 hover:bg-accent-orange-soft/40" 
                             : isWatch
-                              ? "border-amber-200 bg-amber-50/20 hover:bg-amber-50/40"
-                              : "border-kreile-border-strong hover:border-kreile-gold-muted"
+                              ? "border-gold-600 bg-gold-100/20 hover:bg-gold-100/40"
+                              : "border-neutral-gray-300 hover:border-gold-600"
                       }`}
                     >
                       <CardHeader className="pb-2 pt-4 px-4 flex flex-row items-start justify-between">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs font-black text-kreile-muted bg-kreile-surface-warm border border-kreile-border-strong px-2 py-0.5 rounded-md">
+                            <span className="font-mono text-xs font-black text-text-muted bg-bg-app-soft border border-neutral-gray-300 px-2 py-0.5 rounded-md">
                               {bath.bathNumber}
                             </span>
-                            <span className="text-xs text-kreile-muted font-bold uppercase tracking-wider">
+                            <span className="text-xs text-text-muted font-bold uppercase tracking-wider">
                               {bath.processType === "nickel" ? "Nickelbad" : bath.processType === "chrome" ? "Verchromung" : bath.processType === "degreasing" ? "Reinigung" : "Entmetallisierung"}
                             </span>
                           </div>
-                          <CardTitle className="text-xl font-extrabold text-kreile-navy tracking-tight mt-1 font-serif">
+                          <CardTitle className="text-xl font-extrabold text-navy-900 tracking-tight mt-1 font-serif">
                             {bath.name}
                           </CardTitle>
                         </div>
                         
                         <Badge className={`font-extrabold text-[10px] uppercase tracking-wider px-2.5 py-1 ${
                           isCritical 
-                            ? "bg-red-650 text-white border border-red-700 animate-pulse"
+                            ? "bg-danger-red text-white border border-danger-red animate-pulse"
                             : isWatch 
-                              ? "bg-amber-500 text-white border border-amber-600"
-                              : "bg-emerald-600 text-white border border-emerald-700"
+                              ? "bg-gold-1000 text-white border border-gold-600"
+                              : "bg-success-green text-white border border-success-green"
                         }`}>
                           {bath.status === "critical" ? "KRITISCH" : bath.status === "watch" ? "BEACHTEN" : "STABIL"}
                         </Badge>
@@ -481,41 +481,41 @@ export default function ItemsPage() {
                       
                       <CardContent className="pb-4 px-4 pt-1 space-y-4">
                         {/* Target parameters summary grids */}
-                        <div className="grid grid-cols-3 gap-2 bg-white/70 p-3 rounded-xl border border-slate-150">
+                        <div className="grid grid-cols-3 gap-2 bg-white/70 p-3 rounded-xl border border-neutral-gray-100">
                           <div className="text-center">
-                            <div className="flex items-center justify-center text-kreile-muted gap-0.5">
+                            <div className="flex items-center justify-center text-text-muted gap-0.5">
                               <Thermometer className="h-3.5 w-3.5" />
                               <span className="text-[9px] font-bold uppercase tracking-wider">Temperatur</span>
                             </div>
-                            <span className="text-base font-black text-kreile-navy block mt-0.5">
+                            <span className="text-base font-black text-navy-900 block mt-0.5">
                               {bath.targetValues.temperatureMin}–{bath.targetValues.temperatureMax} °C
                             </span>
                           </div>
-                          <div className="text-center border-x border-slate-150">
-                            <div className="flex items-center justify-center text-kreile-muted gap-0.5">
+                          <div className="text-center border-x border-neutral-gray-100">
+                            <div className="flex items-center justify-center text-text-muted gap-0.5">
                               <Droplets className="h-3.5 w-3.5" />
                               <span className="text-[9px] font-bold uppercase tracking-wider">pH-Wert</span>
                             </div>
-                            <span className="text-base font-black text-kreile-navy block mt-0.5">
+                            <span className="text-base font-black text-navy-900 block mt-0.5">
                               {bath.targetValues.phMin}–{bath.targetValues.phMax}
                             </span>
                           </div>
                           <div className="text-center">
-                            <div className="flex items-center justify-center text-kreile-muted gap-0.5">
+                            <div className="flex items-center justify-center text-text-muted gap-0.5">
                               <Activity className="h-3.5 w-3.5" />
                               <span className="text-[9px] font-bold uppercase tracking-wider">Konz.</span>
                             </div>
-                            <span className="text-base font-black text-kreile-navy block mt-0.5">
+                            <span className="text-base font-black text-navy-900 block mt-0.5">
                               {bath.targetValues.concentrationMin}–{bath.targetValues.concentrationMax}%
                             </span>
                           </div>
                         </div>
 
                         {bath.lastMeasurementAt && (
-                          <p className="text-[10px] text-kreile-muted font-semibold flex items-center justify-between px-1">
+                          <p className="text-[10px] text-text-muted font-semibold flex items-center justify-between px-1">
                             <span>Letzte Prüfung: {new Date(bath.lastMeasurementAt).toLocaleDateString("de-DE", { hour: "2-digit", minute: "2-digit" })}</span>
                             {bath.nextMeasurementDueAt && (
-                              <span className={new Date(bath.nextMeasurementDueAt) < new Date() ? "text-red-500 font-extrabold animate-pulse" : ""}>
+                              <span className={new Date(bath.nextMeasurementDueAt) < new Date() ? "text-danger-red font-extrabold animate-pulse" : ""}>
                                 Nächste fällig: {new Date(bath.nextMeasurementDueAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}
                               </span>
                             )}
@@ -526,8 +526,8 @@ export default function ItemsPage() {
                   );
                 })
               ) : (
-                <div className="col-span-2 p-12 text-center text-kreile-muted">
-                  <FlaskConical className="h-12 w-12 text-kreile-muted mx-auto mb-3" />
+                <div className="col-span-2 p-12 text-center text-text-muted">
+                  <FlaskConical className="h-12 w-12 text-text-muted mx-auto mb-3" />
                   <p className="font-bold text-lg">Keine galvanische Beschichtung gefunden</p>
                 </div>
               )}
@@ -540,19 +540,19 @@ export default function ItemsPage() {
           
           {/* SECTION 1 DETAIL CARD: INVENTORY DETAILS */}
           {activeSection === "inventory" && selectedItem && (
-            <Card className="shadow-md border-kreile-border overflow-hidden sticky top-24">
-              <div className="bg-kreile-navy text-white p-5 relative">
-                <div className="absolute right-0 top-0 -mt-10 -mr-10 w-28 h-28 bg-blue-500/10 rounded-full blur-2xl pointer-events-none"></div>
-                <span className="text-[9px] uppercase font-black text-kreile-muted tracking-widest font-mono">Lager-Akte</span>
+            <Card className="shadow-md border-neutral-gray-100 overflow-hidden sticky top-24">
+              <div className="bg-navy-900 text-white p-5 relative">
+                <div className="absolute right-0 top-0 -mt-10 -mr-10 w-28 h-28 bg-gold-1000/10 rounded-full blur-2xl pointer-events-none"></div>
+                <span className="text-[9px] uppercase font-black text-text-muted tracking-widest font-mono">Lager-Akte</span>
                 <h3 className="font-black text-2xl leading-none mt-1.5 font-serif text-white">{selectedItem.name}</h3>
                 <div className="flex gap-2 items-center mt-2.5">
-                  <Badge variant="outline" className="text-[10px] border-slate-700 bg-slate-800 text-kreile-muted font-mono font-bold">
+                  <Badge variant="outline" className="text-[10px] border-navy-700 bg-navy-900 text-text-muted font-mono font-bold">
                     SKU: {selectedItem.sku}
                   </Badge>
                   <Badge className={`text-[9px] uppercase tracking-wider font-extrabold py-0.5 px-2.5 ${
                     selectedItem.category === "chemical" 
-                      ? "bg-indigo-600 text-white border-indigo-700" 
-                      : "bg-amber-600 text-white border-amber-700"
+                      ? "bg-navy-700 text-white border-navy-500" 
+                      : "bg-gold-600 text-white border-gold-600"
                   }`}>
                     {selectedItem.category === "chemical" ? "Chemie" : selectedItem.category === "consumable" ? "Verbrauchsmaterial" : selectedItem.category === "tooling" ? "Werkzeuge" : "Verpackung"}
                   </Badge>
@@ -560,35 +560,35 @@ export default function ItemsPage() {
               </div>
 
               {/* Main Specification Data */}
-              <div className="p-5 border-b border-slate-100 bg-kreile-surface-soft/50 space-y-4">
+              <div className="p-5 border-b border-neutral-gray-100 bg-bg-app-soft/50 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <span className="text-[9px] font-black text-kreile-muted uppercase tracking-wider block">Lagerort</span>
-                    <p className="text-sm font-extrabold text-kreile-navy flex items-center gap-1 mt-0.5">
-                      <MapPin className="h-4 w-4 text-orange-500 shrink-0" /> {selectedItem.storageLocation}
+                    <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Lagerort</span>
+                    <p className="text-sm font-extrabold text-navy-900 flex items-center gap-1 mt-0.5">
+                      <MapPin className="h-4 w-4 text-accent-orange shrink-0" /> {selectedItem.storageLocation}
                     </p>
                   </div>
                   <div>
-                    <span className="text-[9px] font-black text-kreile-muted uppercase tracking-wider block">Mindest-Sollbestand</span>
-                    <p className="text-sm font-extrabold text-kreile-navy mt-0.5">
+                    <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Mindest-Sollbestand</span>
+                    <p className="text-sm font-extrabold text-navy-900 mt-0.5">
                       {selectedItem.minStock} {selectedItem.unit}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-kreile-border-strong">
+                <div className="flex justify-between items-center bg-white p-3 rounded-xl border border-neutral-gray-300">
                   <div>
-                    <span className="text-[10px] font-bold text-kreile-muted uppercase tracking-wider block">Verfügbarer Bestand</span>
+                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block">Verfügbarer Bestand</span>
                     <span className={`text-2xl font-black block mt-0.5 ${
-                      selectedItem.currentStock < selectedItem.minStock ? "text-red-600" : "text-kreile-navy"
+                      selectedItem.currentStock < selectedItem.minStock ? "text-danger-red" : "text-navy-900"
                     }`}>
                       {selectedItem.currentStock} {selectedItem.unit}
                     </span>
                   </div>
                   <Badge className={`font-black text-[10px] uppercase py-1 px-3 ${
                     selectedItem.currentStock < selectedItem.minStock 
-                      ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-50 animate-pulse" 
-                      : "bg-emerald-50 text-emerald-700 border-emerald-250 hover:bg-emerald-50"
+                      ? "bg-accent-orange-soft text-danger-red border-danger-red hover:bg-accent-orange-soft animate-pulse" 
+                      : "bg-success-green-soft text-success-green border-success-green hover:bg-success-green-soft"
                   }`}>
                     {selectedItem.currentStock < selectedItem.minStock ? "⚠️ NACHBESTELLEN" : "✅ STABIL"}
                   </Badge>
@@ -597,20 +597,20 @@ export default function ItemsPage() {
 
               {/* Action 1 Form: Book inventory transaction */}
               <CardContent className="p-5 space-y-6">
-                <form onSubmit={handleDetailedBooking} className="space-y-4 bg-kreile-surface-soft p-4 rounded-xl border border-kreile-border-strong">
-                  <span className="text-xs font-black text-kreile-navy uppercase tracking-wider block mb-1">
+                <form onSubmit={handleDetailedBooking} className="space-y-4 bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-300">
+                  <span className="text-xs font-black text-navy-900 uppercase tracking-wider block mb-1">
                     Bestand buchen
                   </span>
                   
                   {/* Stock direction switcher buttons */}
-                  <div className="grid grid-cols-2 gap-2 bg-kreile-border/50 p-1 rounded-xl border">
+                  <div className="grid grid-cols-2 gap-2 bg-neutral-gray-100/50 p-1 rounded-xl border">
                     <button
                       type="button"
                       onClick={() => setBookingType("stock_in")}
                       className={`py-2 rounded-lg font-bold text-xs transition-all ${
                         bookingType === "stock_in"
-                          ? "bg-white text-kreile-navy shadow-sm border border-kreile-border-strong"
-                          : "text-kreile-muted hover:text-kreile-navy bg-transparent border-0"
+                          ? "bg-white text-navy-900 shadow-sm border border-neutral-gray-300"
+                          : "text-text-muted hover:text-navy-900 bg-transparent border-0"
                       }`}
                     >
                       <Plus className="h-3.5 w-3.5 inline mr-1" /> Stock In (Eingang)
@@ -620,8 +620,8 @@ export default function ItemsPage() {
                       onClick={() => setBookingType("stock_out")}
                       className={`py-2 rounded-lg font-bold text-xs transition-all ${
                         bookingType === "stock_out"
-                          ? "bg-white text-red-700 shadow-sm border border-kreile-border-strong"
-                          : "text-kreile-muted hover:text-kreile-navy bg-transparent border-0"
+                          ? "bg-white text-danger-red shadow-sm border border-neutral-gray-300"
+                          : "text-text-muted hover:text-navy-900 bg-transparent border-0"
                       }`}
                     >
                       <Minus className="h-3.5 w-3.5 inline mr-1" /> Stock Out (Abgang)
@@ -630,8 +630,8 @@ export default function ItemsPage() {
 
                   {/* Quantity and reason controls */}
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-bold text-kreile-muted uppercase tracking-widest pl-0.5">Menge ({selectedItem.unit})</label>
-                    <div className="flex items-center gap-3 bg-white px-3 py-1.5 rounded-xl border border-kreile-border-strong">
+                    <label className="block text-[10px] font-bold text-text-muted uppercase tracking-widest pl-0.5">Menge ({selectedItem.unit})</label>
+                    <div className="flex items-center gap-3 bg-white px-3 py-1.5 rounded-xl border border-neutral-gray-300">
                       <Button
                         type="button"
                         variant="outline"
@@ -646,7 +646,7 @@ export default function ItemsPage() {
                         min="1"
                         value={bookingQty}
                         onChange={(e) => setBookingQty(Math.max(1, parseInt(e.target.value) || 1))}
-                        className="w-full text-center font-extrabold text-lg text-kreile-navy bg-transparent border-0 outline-none"
+                        className="w-full text-center font-extrabold text-lg text-navy-900 bg-transparent border-0 outline-none"
                       />
                       <Button
                         type="button"
@@ -661,10 +661,10 @@ export default function ItemsPage() {
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-[10px] font-bold text-kreile-muted uppercase tracking-widest pl-0.5">Grund / Bemerkung</label>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase tracking-widest pl-0.5">Grund / Bemerkung</label>
                     <Input
                       type="text"
-                      className="bg-white border-kreile-border-strong rounded-xl font-semibold text-kreile-navy text-sm h-10"
+                      className="bg-white border-neutral-gray-300 rounded-xl font-semibold text-navy-900 text-sm h-10"
                       placeholder="z.B. Lieferung Fa. BASF, Materialbruch etc."
                       value={bookingReason}
                       onChange={(e) => setBookingReason(e.target.value)}
@@ -674,7 +674,7 @@ export default function ItemsPage() {
                   <Button
                     type="submit"
                     className={`w-full h-11 text-xs font-black rounded-xl text-white shadow-sm hover:brightness-95 cursor-pointer flex items-center justify-center gap-1.5 ${
-                      bookingType === "stock_in" ? "bg-kreile-navy border-kreile-navy" : "bg-red-650 border-red-700"
+                      bookingType === "stock_in" ? "bg-navy-900 border-navy-900" : "bg-danger-red border-danger-red"
                     }`}
                   >
                     {bookingType === "stock_in" ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
@@ -684,7 +684,7 @@ export default function ItemsPage() {
 
                 {/* History list of selected item stock movements */}
                 <div className="space-y-3 pt-2">
-                  <h4 className="text-xs font-black text-kreile-muted uppercase tracking-widest flex items-center gap-1 pl-0.5">
+                  <h4 className="text-xs font-black text-text-muted uppercase tracking-widest flex items-center gap-1 pl-0.5">
                     <History className="h-4 w-4" />
                     Bewegungshistorie
                   </h4>
@@ -696,12 +696,12 @@ export default function ItemsPage() {
                         const isConsumption = mov.movementType === "consumption";
                         
                         return (
-                          <div key={mov.id} className="p-3 bg-white rounded-xl border border-slate-150 text-xs flex justify-between gap-3 shadow-xs">
+                          <div key={mov.id} className="p-3 bg-white rounded-xl border border-neutral-gray-100 text-xs flex justify-between gap-3 shadow-xs">
                             <div className="space-y-0.5">
-                              <span className="font-bold text-kreile-navy block leading-tight">
+                              <span className="font-bold text-navy-900 block leading-tight">
                                 {mov.reason || (isIn ? "Wareneingang" : "Warenabgang")}
                               </span>
-                              <div className="flex items-center gap-2 text-[10px] text-kreile-muted font-semibold mt-0.5">
+                              <div className="flex items-center gap-2 text-[10px] text-text-muted font-semibold mt-0.5">
                                 <span>{new Date(mov.createdAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
                                 <span>•</span>
                                 <span className="flex items-center gap-0.5">
@@ -712,10 +712,10 @@ export default function ItemsPage() {
                             
                             <span className={`font-black text-sm whitespace-nowrap ${
                               isIn 
-                                ? "text-emerald-600" 
+                                ? "text-success-green" 
                                 : isConsumption 
-                                  ? "text-orange-600" 
-                                  : "text-red-600"
+                                  ? "text-accent-orange" 
+                                  : "text-danger-red"
                             }`}>
                               {isIn ? "+" : "-"}{mov.quantity} {mov.unit}
                             </span>
@@ -723,7 +723,7 @@ export default function ItemsPage() {
                         );
                       })
                     ) : (
-                      <p className="text-[11px] text-kreile-muted py-3 text-center">Noch keine Buchungen für diesen Artikel vorhanden.</p>
+                      <p className="text-[11px] text-text-muted py-3 text-center">Noch keine Buchungen für diesen Artikel vorhanden.</p>
                     )}
                   </div>
                 </div>
@@ -733,29 +733,29 @@ export default function ItemsPage() {
 
           {/* SECTION 2 DETAIL CARD: BATH DETAILS & DIGITAL RULE CARD ACTIONS */}
           {activeSection === "baths" && selectedBath && (
-            <Card className="shadow-md border-kreile-border overflow-hidden sticky top-24">
-              <div className="bg-kreile-navy text-white p-5 relative">
-                <div className="absolute right-0 top-0 -mt-10 -mr-10 w-28 h-28 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
+            <Card className="shadow-md border-neutral-gray-100 overflow-hidden sticky top-24">
+              <div className="bg-navy-900 text-white p-5 relative">
+                <div className="absolute right-0 top-0 -mt-10 -mr-10 w-28 h-28 bg-gold-1000/10 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="text-[9px] uppercase font-black text-kreile-muted tracking-widest font-mono">Prozess-Kontrollkarte</span>
+                    <span className="text-[9px] uppercase font-black text-text-muted tracking-widest font-mono">Prozess-Kontrollkarte</span>
                     <h3 className="font-black text-2xl leading-none mt-1.5 font-serif text-white">{selectedBath.name}</h3>
                   </div>
-                  <span className="font-mono text-base font-black text-white/70 bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-xl">
+                  <span className="font-mono text-base font-black text-white/70 bg-navy-900 border border-navy-700 px-3 py-1.5 rounded-xl">
                     {selectedBath.bathNumber}
                   </span>
                 </div>
               </div>
 
               {/* Quick Locked status block */}
-              <div className="p-4 bg-kreile-surface-soft border-b border-slate-100 flex items-center justify-between gap-4">
+              <div className="p-4 bg-bg-app-soft border-b border-neutral-gray-100 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
                   <Badge className={`font-extrabold text-[10px] uppercase py-1 px-2.5 ${
                     selectedBath.status === "critical" 
-                      ? "bg-red-50 text-red-700 border-red-200 hover:bg-red-50 animate-pulse" 
+                      ? "bg-accent-orange-soft text-danger-red border-danger-red hover:bg-accent-orange-soft animate-pulse" 
                       : selectedBath.status === "watch"
-                        ? "bg-amber-50 text-amber-700 border-amber-250 hover:bg-amber-50"
-                        : "bg-emerald-50 text-emerald-700 border-emerald-250 hover:bg-emerald-50"
+                        ? "bg-gold-100 text-gold-600 border-gold-600 hover:bg-gold-100"
+                        : "bg-success-green-soft text-success-green border-success-green hover:bg-success-green-soft"
                   }`}>
                     {selectedBath.status === "critical" ? "🔴 KRITISCH" : selectedBath.status === "watch" ? "🟡 BEOBACHTEN" : "🟢 PROZESS STABIL"}
                   </Badge>
@@ -766,7 +766,7 @@ export default function ItemsPage() {
                   <Button 
                     size="sm" 
                     variant="outline" 
-                    className="h-8 text-[11px] font-bold gap-1 text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 cursor-pointer"
+                    className="h-8 text-[11px] font-bold gap-1 text-success-green border-success-green bg-success-green-soft hover:bg-success-green cursor-pointer"
                     onClick={() => handleStatusOverride("stable", "Meister-Freigabe nach manueller Sichtprüfung.")}
                   >
                     <Unlock className="h-3.5 w-3.5" /> Bad Freigeben
@@ -775,7 +775,7 @@ export default function ItemsPage() {
                   <Button 
                     size="sm" 
                     variant="outline" 
-                    className="h-8 text-[11px] font-bold gap-1 text-red-650 border-red-200 bg-red-50 hover:bg-red-100 cursor-pointer"
+                    className="h-8 text-[11px] font-bold gap-1 text-danger-red border-danger-red bg-accent-orange-soft hover:bg-danger-red cursor-pointer"
                     onClick={() => handleStatusOverride("critical", "Präventive Sperrung durch Meister wegen Verunreinigung.")}
                   >
                     <Lock className="h-3.5 w-3.5" /> Bad Sperren
@@ -787,41 +787,41 @@ export default function ItemsPage() {
               <CardContent className="p-5 space-y-6 max-h-[580px] overflow-y-auto pr-2">
                 
                 {/* FORM 1: Enter Chemical Bath Measurement */}
-                <form onSubmit={handleMeasurementBooking} className="space-y-3.5 bg-kreile-surface-soft p-4 rounded-xl border border-kreile-border-strong">
-                  <div className="flex items-center gap-1.5 text-xs font-black text-kreile-navy uppercase tracking-wider mb-1">
-                    <Activity className="h-4 w-4 text-kreile-navy" />
+                <form onSubmit={handleMeasurementBooking} className="space-y-3.5 bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-300">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-navy-900 uppercase tracking-wider mb-1">
+                    <Activity className="h-4 w-4 text-navy-900" />
                     <span>Messung eintragen</span>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2">
                     <div className="space-y-1">
-                      <label className="block text-[9px] font-bold text-kreile-muted uppercase tracking-widest pl-0.5">Temp (°C)</label>
+                      <label className="block text-[9px] font-bold text-text-muted uppercase tracking-widest pl-0.5">Temp (°C)</label>
                       <Input
                         type="number"
                         step="0.1"
-                        className="bg-white border-kreile-border-strong rounded-lg text-xs font-bold text-center h-9 pr-0"
+                        className="bg-white border-neutral-gray-300 rounded-lg text-xs font-bold text-center h-9 pr-0"
                         placeholder={`Soll: ${selectedBath.targetValues.temperatureMin}-${selectedBath.targetValues.temperatureMax}`}
                         value={measTemp}
                         onChange={(e) => setMeasTemp(e.target.value)}
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="block text-[9px] font-bold text-kreile-muted uppercase tracking-widest pl-0.5">pH-Wert</label>
+                      <label className="block text-[9px] font-bold text-text-muted uppercase tracking-widest pl-0.5">pH-Wert</label>
                       <Input
                         type="number"
                         step="0.05"
-                        className="bg-white border-kreile-border-strong rounded-lg text-xs font-bold text-center h-9 pr-0"
+                        className="bg-white border-neutral-gray-300 rounded-lg text-xs font-bold text-center h-9 pr-0"
                         placeholder={`Soll: ${selectedBath.targetValues.phMin}-${selectedBath.targetValues.phMax}`}
                         value={measPh}
                         onChange={(e) => setMeasPh(e.target.value)}
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="block text-[9px] font-bold text-kreile-muted uppercase tracking-widest pl-0.5">Konz (%)</label>
+                      <label className="block text-[9px] font-bold text-text-muted uppercase tracking-widest pl-0.5">Konz (%)</label>
                       <Input
                         type="number"
                         step="1"
-                        className="bg-white border-kreile-border-strong rounded-lg text-xs font-bold text-center h-9 pr-0"
+                        className="bg-white border-neutral-gray-300 rounded-lg text-xs font-bold text-center h-9 pr-0"
                         placeholder={`Soll: ${selectedBath.targetValues.concentrationMin}-${selectedBath.targetValues.concentrationMax}`}
                         value={measConc}
                         onChange={(e) => setMeasConc(e.target.value)}
@@ -831,9 +831,9 @@ export default function ItemsPage() {
 
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
-                      <label className="block text-[9px] font-bold text-kreile-muted uppercase tracking-widest pl-0.5">Sichtprüfung</label>
+                      <label className="block text-[9px] font-bold text-text-muted uppercase tracking-widest pl-0.5">Sichtprüfung</label>
                       <select
-                        className="w-full bg-white border border-kreile-border-strong rounded-lg text-xs font-bold text-kreile-navy h-9 px-2.5 focus:border-blue-900 outline-none"
+                        className="w-full bg-white border border-neutral-gray-300 rounded-lg text-xs font-bold text-navy-900 h-9 px-2.5 focus:border-navy-700 outline-none"
                         value={measVisual}
                         onChange={(e) => setMeasVisual(e.target.value)}
                       >
@@ -843,10 +843,10 @@ export default function ItemsPage() {
                       </select>
                     </div>
                     <div className="space-y-1">
-                      <label className="block text-[9px] font-bold text-kreile-muted uppercase tracking-widest pl-0.5">Bemerkung</label>
+                      <label className="block text-[9px] font-bold text-text-muted uppercase tracking-widest pl-0.5">Bemerkung</label>
                       <Input
                         type="text"
-                        className="bg-white border-kreile-border-strong rounded-lg text-xs font-semibold h-9"
+                        className="bg-white border-neutral-gray-300 rounded-lg text-xs font-semibold h-9"
                         placeholder="Frei text..."
                         value={measNote}
                         onChange={(e) => setMeasNote(e.target.value)}
@@ -856,7 +856,7 @@ export default function ItemsPage() {
 
                   <Button
                     type="submit"
-                    className="w-full h-10 text-xs font-black bg-kreile-navy border-kreile-navy rounded-xl text-white hover:bg-kreile-navy-soft shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                    className="w-full h-10 text-xs font-black bg-navy-900 border-navy-900 rounded-xl text-white hover:bg-navy-700 shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     <Check className="h-4 w-4" />
                     <span>Messwerte speichern</span>
@@ -864,16 +864,16 @@ export default function ItemsPage() {
                 </form>
 
                 {/* FORM 2: Log Chemical addition (Dosierung) */}
-                <form onSubmit={handleAdditionBooking} className="space-y-3.5 bg-kreile-surface-soft p-4 rounded-xl border border-kreile-border-strong">
-                  <div className="flex items-center gap-1.5 text-xs font-black text-kreile-navy uppercase tracking-wider mb-1">
-                    <FlaskConical className="h-4 w-4 text-kreile-navy" />
+                <form onSubmit={handleAdditionBooking} className="space-y-3.5 bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-300">
+                  <div className="flex items-center gap-1.5 text-xs font-black text-navy-900 uppercase tracking-wider mb-1">
+                    <FlaskConical className="h-4 w-4 text-navy-900" />
                     <span>Chemie zusetzen (Dosierung)</span>
                   </div>
 
                   <div className="space-y-1">
-                    <label className="block text-[9px] font-bold text-kreile-muted uppercase tracking-widest pl-0.5">Gefahrstoff / Zusatz chemie</label>
+                    <label className="block text-[9px] font-bold text-text-muted uppercase tracking-widest pl-0.5">Gefahrstoff / Zusatz chemie</label>
                     <select
-                      className="w-full bg-white border border-kreile-border-strong rounded-lg text-xs font-bold text-kreile-navy h-9 px-2.5 focus:border-blue-900 outline-none"
+                      className="w-full bg-white border border-neutral-gray-300 rounded-lg text-xs font-bold text-navy-900 h-9 px-2.5 focus:border-navy-700 outline-none"
                       value={addChemId}
                       onChange={(e) => setAddChemId(e.target.value)}
                       required
@@ -889,11 +889,11 @@ export default function ItemsPage() {
 
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-2">
-                      <label className="block text-[9px] font-bold text-kreile-muted uppercase tracking-widest pl-0.5">Zusatzmenge</label>
-                      <div className="flex items-center gap-2 bg-white px-2 py-0.5 rounded-lg border border-kreile-border-strong">
+                      <label className="block text-[9px] font-bold text-text-muted uppercase tracking-widest pl-0.5">Zusatzmenge</label>
+                      <div className="flex items-center gap-2 bg-white px-2 py-0.5 rounded-lg border border-neutral-gray-300">
                         <button
                           type="button"
-                          className="h-7 w-7 rounded-md border text-kreile-muted bg-kreile-surface-soft flex items-center justify-center font-bold text-sm"
+                          className="h-7 w-7 rounded-md border text-text-muted bg-bg-app-soft flex items-center justify-center font-bold text-sm"
                           onClick={() => setAddQty(q => Math.max(1, q - 1))}
                         >
                           -
@@ -901,13 +901,13 @@ export default function ItemsPage() {
                         <input
                           type="number"
                           min="1"
-                          className="w-full text-center font-extrabold text-xs text-kreile-navy bg-transparent border-0 outline-none h-7"
+                          className="w-full text-center font-extrabold text-xs text-navy-900 bg-transparent border-0 outline-none h-7"
                           value={addQty}
                           onChange={(e) => setAddQty(Math.max(1, parseInt(e.target.value) || 1))}
                         />
                         <button
                           type="button"
-                          className="h-7 w-7 rounded-md border text-kreile-muted bg-kreile-surface-soft flex items-center justify-center font-bold text-sm"
+                          className="h-7 w-7 rounded-md border text-text-muted bg-bg-app-soft flex items-center justify-center font-bold text-sm"
                           onClick={() => setAddQty(q => q + 1)}
                         >
                           +
@@ -915,10 +915,10 @@ export default function ItemsPage() {
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <label className="block text-[9px] font-bold text-kreile-muted uppercase tracking-widest pl-0.5">Grund der Dosierung</label>
+                      <label className="block text-[9px] font-bold text-text-muted uppercase tracking-widest pl-0.5">Grund der Dosierung</label>
                       <Input
                         type="text"
-                        className="bg-white border-kreile-border-strong rounded-lg text-xs font-semibold h-9"
+                        className="bg-white border-neutral-gray-300 rounded-lg text-xs font-semibold h-9"
                         placeholder="z.B. pH-Senkung"
                         value={addReason}
                         onChange={(e) => setAddReason(e.target.value)}
@@ -928,7 +928,7 @@ export default function ItemsPage() {
 
                   <Button
                     type="submit"
-                    className="w-full h-10 text-xs font-black bg-kreile-navy border-kreile-navy rounded-xl text-white hover:bg-kreile-navy-soft shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
+                    className="w-full h-10 text-xs font-black bg-navy-900 border-navy-900 rounded-xl text-white hover:bg-navy-700 shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
                   >
                     <Plus className="h-4 w-4" />
                     <span>Zusatz buchen & Abbuchen</span>
@@ -937,7 +937,7 @@ export default function ItemsPage() {
 
                 {/* Combined Timeline log of recent measurements & additions */}
                 <div className="space-y-3 pt-2">
-                  <h4 className="text-xs font-black text-kreile-muted uppercase tracking-widest flex items-center gap-1 pl-0.5">
+                  <h4 className="text-xs font-black text-text-muted uppercase tracking-widest flex items-center gap-1 pl-0.5">
                     <History className="h-4 w-4" />
                     Messungs- & Zusatzhistorie
                   </h4>
@@ -945,31 +945,31 @@ export default function ItemsPage() {
                   <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
                     {/* Render measurements */}
                     {selectedBathMeasurements.map((m) => (
-                      <div key={m.id} className="p-3 bg-white rounded-xl border border-slate-150 text-xs space-y-1.5 shadow-xs">
+                      <div key={m.id} className="p-3 bg-white rounded-xl border border-neutral-gray-100 text-xs space-y-1.5 shadow-xs">
                         <div className="flex justify-between items-center">
-                          <span className="font-bold text-kreile-navy">
+                          <span className="font-bold text-navy-900">
                             Prüfung · {m.measuredBy === "meister@kreile.de" ? "Meister" : "Fachkraft"}
                           </span>
                           <Badge className={`text-[8px] uppercase tracking-wider font-extrabold px-1.5 py-0.5 ${
                             m.statusAfterMeasurement === "critical"
-                              ? "bg-red-50 text-red-700 border border-red-200"
+                              ? "bg-accent-orange-soft text-danger-red border border-danger-red"
                               : m.statusAfterMeasurement === "watch"
-                                ? "bg-amber-50 text-amber-700 border border-amber-250"
-                                : "bg-emerald-50 text-emerald-700 border border-emerald-250"
+                                ? "bg-gold-100 text-gold-600 border border-gold-600"
+                                : "bg-success-green-soft text-success-green border border-success-green"
                           }`}>
                             {m.statusAfterMeasurement === "critical" ? "Kritisch" : m.statusAfterMeasurement === "watch" ? "Beobachten" : "Stabil"}
                           </Badge>
                         </div>
                         
-                        <div className="grid grid-cols-3 gap-1 bg-kreile-surface-soft p-2 rounded-lg border border-slate-100 text-[10px] text-center font-semibold text-kreile-muted">
+                        <div className="grid grid-cols-3 gap-1 bg-bg-app-soft p-2 rounded-lg border border-neutral-gray-100 text-[10px] text-center font-semibold text-text-muted">
                           <div>T: {m.temperature ? `${m.temperature}°C` : "N/A"}</div>
                           <div className="border-x">pH: {m.ph ? m.ph : "N/A"}</div>
                           <div>K: {m.concentration ? `${m.concentration}%` : "N/A"}</div>
                         </div>
 
-                        {m.note && <p className="text-[10px] text-kreile-muted italic bg-kreile-surface-soft/50 p-1.5 rounded border border-dashed border-kreile-border-strong leading-normal">{m.note}</p>}
+                        {m.note && <p className="text-[10px] text-text-muted italic bg-bg-app-soft/50 p-1.5 rounded border border-dashed border-neutral-gray-300 leading-normal">{m.note}</p>}
                         
-                        <span className="text-[9px] text-kreile-muted block font-semibold">
+                        <span className="text-[9px] text-text-muted block font-semibold">
                           {new Date(m.measuredAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
@@ -977,23 +977,23 @@ export default function ItemsPage() {
 
                     {/* Render additions */}
                     {selectedBathAdditions.map((a) => (
-                      <div key={a.id} className="p-3 bg-indigo-50/40 rounded-xl border border-indigo-100 text-xs space-y-1 shadow-xs">
-                        <div className="flex justify-between items-center text-indigo-950 font-bold">
+                      <div key={a.id} className="p-3 bg-surface-tinted/40 rounded-xl border border-navy-500 text-xs space-y-1 shadow-xs">
+                        <div className="flex justify-between items-center text-navy-700 font-bold">
                           <span>🧪 Chemie-Dosierung</span>
                           <span>+{a.quantity} {a.unit}</span>
                         </div>
-                        <p className="text-kreile-navy font-semibold text-[11px] leading-tight">
+                        <p className="text-navy-900 font-semibold text-[11px] leading-tight">
                           Zusatz von <span className="font-extrabold">{a.inventoryItemName}</span>
                         </p>
-                        <p className="text-kreile-muted text-[10px]">{a.reason}</p>
-                        <span className="text-[9px] text-indigo-400 block font-semibold pt-0.5">
+                        <p className="text-text-muted text-[10px]">{a.reason}</p>
+                        <span className="text-[9px] text-navy-700 block font-semibold pt-0.5">
                           {new Date(a.createdAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                         </span>
                       </div>
                     ))}
 
                     {selectedBathMeasurements.length === 0 && selectedBathAdditions.length === 0 && (
-                      <p className="text-[11px] text-kreile-muted py-3 text-center">Noch keine Historie erfasst.</p>
+                      <p className="text-[11px] text-text-muted py-3 text-center">Noch keine Historie erfasst.</p>
                     )}
                   </div>
                 </div>

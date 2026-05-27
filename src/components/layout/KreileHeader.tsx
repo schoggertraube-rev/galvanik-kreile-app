@@ -36,7 +36,7 @@ export function KreileHeader() {
   }, []);
 
   return (
-    <header className="h-[72px] shrink-0 bg-white border-b border-kreile-border flex items-center px-4 md:px-6 gap-4 z-40 relative">
+    <header className="h-[72px] shrink-0 bg-white border-b border-neutral-gray-100 flex items-center px-4 md:px-6 gap-4 z-40 relative">
 
       {/* LEFT: GK Monogram + Brand */}
       <Link href="/" className="flex items-center gap-3 shrink-0 group">
@@ -73,31 +73,31 @@ export function KreileHeader() {
         {/* Mobile Suche */}
         <button
           onClick={() => setSearchOpen(true)}
-          className="md:hidden w-9 h-9 rounded-full bg-kreile-bg border border-kreile-border flex items-center justify-center text-kreile-navy"
+          className="md:hidden w-9 h-9 rounded-full bg-white border border-neutral-gray-100 flex items-center justify-center text-navy-900"
         >
           <Search className="w-4 h-4" />
         </button>
 
         {/* Datum-Pill */}
-        <div className="hidden lg:flex items-center gap-2 bg-kreile-bg border border-kreile-border rounded-full px-3 h-9 text-sm font-semibold text-kreile-navy">
-          <Calendar className="w-4 h-4 text-kreile-muted" />
+        <div className="hidden lg:flex items-center gap-2 bg-white border border-neutral-gray-100 rounded-full px-3 h-9 text-sm font-semibold text-navy-900 shadow-sm">
+          <Calendar className="w-4 h-4 text-text-muted" />
           <span>Heute · {dateString}</span>
-          <span className="w-2 h-2 rounded-full bg-status-orange" />
+          <span className="w-2 h-2 rounded-full bg-accent-orange animate-pulse" />
         </div>
 
         {/* Online/Offline Pill mit Zähler */}
         <button
           onClick={() => OfflineManager.toggleSimulatedOffline()}
-          className={`hidden sm:flex items-center gap-2 rounded-full px-3 h-9 text-sm font-bold border transition-colors ${
+          className={`hidden sm:flex items-center gap-2 rounded-full px-3 h-9 text-sm font-bold border transition-colors shadow-sm ${
             isOffline
-              ? "bg-kreile-bg border-kreile-border text-kreile-muted"
-              : "bg-kreile-bg border-kreile-border text-kreile-navy"
+              ? "bg-bg-app-soft border-neutral-gray-100 text-text-muted"
+              : "bg-white border-neutral-gray-100 text-navy-900"
           }`}
         >
-          <span className={`w-2 h-2 rounded-full ${isOffline ? "bg-status-orange" : "bg-status-green"}`} />
+          <span className={`w-2 h-2 rounded-full ${isOffline ? "bg-accent-orange" : "bg-success-green"}`} />
           <span>{isOffline ? "Offline" : "Online"}</span>
           {orderCount > 0 && (
-            <span className="bg-kreile-navy text-white text-[10px] font-black rounded-full px-1.5 py-px min-w-[20px] text-center">
+            <span className="bg-gold-1000 text-white text-[10px] font-black rounded-full px-1.5 py-px min-w-[20px] text-center">
               {orderCount > 99 ? "99+" : orderCount}
             </span>
           )}
@@ -105,16 +105,16 @@ export function KreileHeader() {
 
         {/* Glocke mit rotem Badge */}
         <div className="relative">
-          <button className="w-9 h-9 rounded-full bg-kreile-bg border border-kreile-border flex items-center justify-center text-kreile-navy hover:border-kreile-border-strong transition-colors">
+          <button className="w-9 h-9 rounded-full bg-white border border-neutral-gray-100 flex items-center justify-center text-navy-900 hover:border-neutral-gray-300 transition-colors shadow-sm">
             <Bell className="w-4 h-4" />
           </button>
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-status-red rounded-full text-[9px] text-white font-black flex items-center justify-center">
+          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-danger-red rounded-full text-[9px] text-white font-black flex items-center justify-center">
             3
           </span>
         </div>
 
-        {/* Profilbild rund */}
-        <button className="w-9 h-9 rounded-full bg-kreile-navy text-white flex items-center justify-center text-xs font-black shrink-0">
+        {/* Profilbild rund (Kreis 48px) */}
+        <button className="w-12 h-12 rounded-full bg-navy-700 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-sm">
           MK
         </button>
 

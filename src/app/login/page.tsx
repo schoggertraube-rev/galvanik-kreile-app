@@ -32,11 +32,11 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                 required
               />
             </div>
-            <Button formAction={login} className="w-full bg-kreile-navy hover:bg-kreile-navy-soft" type="submit">
+            <Button formAction={login} className="w-full bg-navy-900 hover:bg-navy-700" type="submit">
               Einloggen
             </Button>
             {params?.message && (
-              <p className="text-sm text-red-500 text-center font-bold bg-red-50 p-2 rounded">{params.message}</p>
+              <p className="text-sm text-danger-red text-center font-bold bg-accent-orange-soft p-2 rounded">{params.message}</p>
             )}
           </form>
         </CardContent>

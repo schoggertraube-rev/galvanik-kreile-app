@@ -34,19 +34,19 @@ export default function ArchivePage() {
   };
 
   return (
-    <div className="space-y-6 pb-12 font-sans antialiased text-kreile-navy max-w-5xl mx-auto">
+    <div className="space-y-6 pb-12 font-sans antialiased text-navy-900 max-w-5xl mx-auto">
       <PageHeader
         title="Kontrolle & Archiv"
         subtitle="Abgeschlossene und versendete Aufträge (Nur-Lese-Ansicht)."
       />
 
       {orders.length === 0 ? (
-        <Card className="border-dashed border-2 border-kreile-border-strong bg-kreile-surface-soft/50 p-12 text-center rounded-2xl space-y-4">
-          <div className="h-16 w-16 rounded-full bg-kreile-surface-warm flex items-center justify-center mx-auto text-kreile-muted">
+        <Card className="border-dashed border-2 border-neutral-gray-300 bg-bg-app-soft/50 p-12 text-center rounded-2xl space-y-4">
+          <div className="h-16 w-16 rounded-full bg-bg-app-soft flex items-center justify-center mx-auto text-text-muted">
             <ArchiveIcon className="h-8 w-8" />
           </div>
-          <h4 className="font-extrabold text-lg text-kreile-navy">Keine archivierten Aufträge</h4>
-          <p className="text-sm text-kreile-muted max-w-sm mx-auto leading-relaxed">
+          <h4 className="font-extrabold text-lg text-navy-900">Keine archivierten Aufträge</h4>
+          <p className="text-sm text-text-muted max-w-sm mx-auto leading-relaxed">
             Aktuell befinden sich keine Aufträge im Archiv. Sobald ein Auftrag den Warenausgang verlässt, taucht er hier auf.
           </p>
         </Card>
@@ -57,14 +57,14 @@ export default function ArchivePage() {
               <CardContent className="p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 opacity-75 hover:opacity-100">
                 
                 <div className="flex items-start gap-4">
-                  <div className="p-2 bg-kreile-surface-warm rounded-xl shrink-0">
-                    <ArchiveIcon className="h-5 w-5 text-kreile-muted" />
+                  <div className="p-2 bg-bg-app-soft rounded-xl shrink-0">
+                    <ArchiveIcon className="h-5 w-5 text-text-muted" />
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono font-black text-kreile-navy text-lg tracking-tight">{order.orderNumber}</span>
-                      <span className="text-xs text-kreile-muted font-bold bg-kreile-surface-warm px-2.5 py-0.5 rounded-full border border-kreile-border-strong">{order.customerName}</span>
-                      <Badge className="bg-kreile-border text-kreile-navy font-bold text-[9px] uppercase tracking-wider px-2 py-0.5">
+                      <span className="font-mono font-black text-navy-900 text-lg tracking-tight">{order.orderNumber}</span>
+                      <span className="text-xs text-text-muted font-bold bg-bg-app-soft px-2.5 py-0.5 rounded-full border border-neutral-gray-300">{order.customerName}</span>
+                      <Badge className="bg-neutral-gray-100 text-navy-900 font-bold text-[9px] uppercase tracking-wider px-2 py-0.5">
                         Abgeschlossen
                       </Badge>
                     </div>
@@ -72,8 +72,8 @@ export default function ArchivePage() {
                       {order.task}
                     </h4>
                     
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-kreile-muted pt-1">
-                      <span className="font-bold text-kreile-navy bg-kreile-surface-soft border border-kreile-border-strong px-2 py-0.5 rounded-md">Letzte Station: {getStationName(order.station)}</span>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted pt-1">
+                      <span className="font-bold text-navy-900 bg-bg-app-soft border border-neutral-gray-300 px-2 py-0.5 rounded-md">Letzte Station: {getStationName(order.station)}</span>
                       <span>•</span>
                       <span>Teile: {order.parts.length} Werkstücke</span>
                     </div>
@@ -81,7 +81,7 @@ export default function ArchivePage() {
                 </div>
 
                 <div className="w-full md:w-auto flex flex-row md:flex-col justify-between items-end gap-3 self-stretch md:self-auto border-t md:border-0 pt-3 md:pt-0">
-                   <div className="text-left md:text-right text-kreile-muted">
+                   <div className="text-left md:text-right text-text-muted">
                      <span className="text-[10px] font-bold uppercase tracking-wider block">Datum</span>
                      <span className="font-black tracking-tight leading-none text-xl">
                        {order.dueDate || "N/A"}

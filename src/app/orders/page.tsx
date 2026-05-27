@@ -265,7 +265,7 @@ function OrdersPageInner() {
         
         {/* Left Columns: Master Order List */}
         <div className="lg:col-span-2 space-y-3">
-          <div className="flex items-center justify-between text-xs text-kreile-muted font-semibold px-1">
+          <div className="flex items-center justify-between text-xs text-text-muted font-semibold px-1">
             <span>{filteredOrders.length} Aufträge an dieser Station</span>
             <span>Klicke für Details</span>
           </div>
@@ -285,45 +285,45 @@ function OrdersPageInner() {
                 });
                 let borderStyle = evalRes.config.leftBorderClass;
                 let badgeStyle = evalRes.config.badgeClass;
-                let itemBg = "bg-white hover:bg-kreile-surface-soft/50";
+                let itemBg = "bg-white hover:bg-bg-app-soft/50";
 
                 if (isRed) {
                   borderStyle = `${evalRes.config.leftBorderClass} border-l-[8px] ring-1 ring-red-500/25`;
                   badgeStyle = evalRes.config.badgeClass;
-                  itemBg = isSelected ? "bg-red-50/30" : "bg-red-50/10";
+                  itemBg = isSelected ? "bg-accent-orange-soft/50" : "bg-accent-orange-soft/50";
                 } else if (isOrange) {
                   borderStyle = `${evalRes.config.leftBorderClass} border-l-[6px]`;
                   badgeStyle = evalRes.config.badgeClass;
-                  itemBg = isSelected ? "bg-orange-50/20" : "bg-white";
+                  itemBg = isSelected ? "bg-gold-100/20" : "bg-white";
                 } else if (isYellow) {
                   borderStyle = `${evalRes.config.leftBorderClass} border-l-[6px]`;
                   badgeStyle = evalRes.config.badgeClass;
-                  itemBg = isSelected ? "bg-yellow-50/20" : "bg-white";
+                  itemBg = isSelected ? "bg-gold-100/20" : "bg-white";
                 } else if (isBlocked) {
                   borderStyle = `${evalRes.config.leftBorderClass} border-l-4`;
                   badgeStyle = evalRes.config.badgeClass;
-                  itemBg = isSelected ? "bg-kreile-border/40" : "bg-kreile-surface-soft/70";
+                  itemBg = isSelected ? "bg-neutral-gray-100/40" : "bg-bg-app-soft/70";
                 }
 
                 return (
                   <Card
                     key={order.id}
                     onClick={() => setSelectedOrderId(order.id)}
-                    className={`transition-all duration-200 cursor-pointer border-kreile-border shadow-sm ${itemBg} ${borderStyle} ${
-                      isSelected ? "ring-2 ring-kreile-navy border-transparent shadow" : ""
+                    className={`transition-all duration-200 cursor-pointer border-neutral-gray-100 shadow-sm ${itemBg} ${borderStyle} ${
+                      isSelected ? "ring-2 ring-navy-900 border-transparent shadow" : ""
                     }`}
                   >
                     <CardContent className="p-4 flex items-center justify-between gap-4">
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono font-extrabold text-kreile-navy text-base">{order.orderNumber}</span>
-                          <span className="text-xs text-kreile-muted">• {order.customerName}</span>
+                          <span className="font-mono font-extrabold text-navy-900 text-base">{order.orderNumber}</span>
+                          <span className="text-xs text-text-muted">• {order.customerName}</span>
                           <Badge variant="outline" className={`text-[9px] font-bold tracking-wider py-0 px-1.5 ${badgeStyle}`}>
                             {order.statusText}
                           </Badge>
                         </div>
-                        <h4 className="font-bold text-kreile-navy text-sm md:text-base font-serif">{order.task}</h4>
-                        <div className="flex items-center gap-3 text-xs text-kreile-muted font-semibold pt-0.5">
+                        <h4 className="font-bold text-navy-900 text-sm md:text-base font-serif">{order.task}</h4>
+                        <div className="flex items-center gap-3 text-xs text-text-muted font-semibold pt-0.5">
                           <span>Eingang: {order.intakeDate}</span>
                           <span>•</span>
                           <span>Teile: {order.parts.length}</span>
@@ -332,12 +332,12 @@ function OrdersPageInner() {
 
                       <div className="flex items-center gap-4 text-right shrink-0">
                         <div className="flex flex-col items-end">
-                          <span className="text-[10px] text-kreile-muted font-bold uppercase">{order.dueLabel}</span>
-                          <span className={`font-black text-lg ${isRed ? "text-red-650" : isOrange ? "text-orange-650" : "text-slate-750"}`}>
+                          <span className="text-[10px] text-text-muted font-bold uppercase">{order.dueLabel}</span>
+                          <span className={`font-black text-lg ${isRed ? "text-danger-red" : isOrange ? "text-accent-orange" : "text-slate-750"}`}>
                             {order.dueValue}
                           </span>
                         </div>
-                        <ChevronRight className={`h-5 w-5 transition-transform ${isSelected ? "text-kreile-navy translate-x-1" : "text-kreile-muted"}`} />
+                        <ChevronRight className={`h-5 w-5 transition-transform ${isSelected ? "text-navy-900 translate-x-1" : "text-text-muted"}`} />
                       </div>
                     </CardContent>
                   </Card>
@@ -345,9 +345,9 @@ function OrdersPageInner() {
               })}
             </div>
           ) : (
-            <div className="p-12 text-center text-kreile-muted bg-white border border-kreile-border-strong rounded-xl space-y-2">
-              <Package className="h-8 w-8 mx-auto text-kreile-muted animate-pulse" />
-              <p className="font-bold text-kreile-muted">Keine Aufträge in dieser Station</p>
+            <div className="p-12 text-center text-text-muted bg-white border border-neutral-gray-300 rounded-xl space-y-2">
+              <Package className="h-8 w-8 mx-auto text-text-muted animate-pulse" />
+              <p className="font-bold text-text-muted">Keine Aufträge in dieser Station</p>
               <p className="text-xs">Ändere den Filter, passe den Suchbegriff an oder wähle eine andere Station.</p>
             </div>
           )}
@@ -356,10 +356,10 @@ function OrdersPageInner() {
         {/* Right Column: Detail View panel */}
         <div className="lg:col-span-1">
           {selectedOrder ? (
-            <Card className="shadow-md border-kreile-border overflow-hidden sticky top-6">
+            <Card className="shadow-md border-neutral-gray-100 overflow-hidden sticky top-6">
               
               {/* Header — Kreile Navy */}
-              <div className="bg-kreile-navy text-white p-5 relative">
+              <div className="bg-navy-900 text-white p-5 relative">
                 <button
                   onClick={() => setSelectedOrderId(null)}
                   className="absolute right-4 top-4 text-white/70 hover:text-white transition-colors"
@@ -368,7 +368,7 @@ function OrdersPageInner() {
                 </button>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-sm font-bold text-white/70">{selectedOrder.orderNumber}</span>
-                  <Badge className="bg-kreile-navy-soft text-white border-0 text-[8px] font-bold uppercase tracking-wider py-0.5">
+                  <Badge className="bg-navy-700 text-white border-0 text-[8px] font-bold uppercase tracking-wider py-0.5">
                     Station: {getStationConfig(selectedOrder.station).name.toUpperCase()}
                   </Badge>
                 </div>
@@ -379,15 +379,15 @@ function OrdersPageInner() {
               {/* Specs */}
               <CardContent className="p-5 space-y-5">
                 {actionSuccessMessage && (
-                  <div className="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl text-emerald-800 text-xs font-semibold flex items-start gap-2.5 relative">
-                    <CheckCircle2 className="h-4.5 w-4.5 text-emerald-600 shrink-0 mt-0.5" />
+                  <div className="bg-success-green-soft border border-success-green p-3.5 rounded-xl text-success-green text-xs font-semibold flex items-start gap-2.5 relative">
+                    <CheckCircle2 className="h-4.5 w-4.5 text-success-green shrink-0 mt-0.5" />
                     <div className="pr-6 leading-relaxed">
-                      <span className="font-extrabold uppercase text-[9px] tracking-wide text-emerald-700 block">Systemmeldung</span>
+                      <span className="font-extrabold uppercase text-[9px] tracking-wide text-success-green block">Systemmeldung</span>
                       {actionSuccessMessage}
                     </div>
                     <button 
                       onClick={() => setActionSuccessMessage(null)} 
-                      className="absolute right-2 top-2 text-kreile-muted hover:text-slate-650 text-xs"
+                      className="absolute right-2 top-2 text-text-muted hover:text-slate-650 text-xs"
                     >
                       ✕
                     </button>
@@ -395,23 +395,23 @@ function OrdersPageInner() {
                 )}
                 
                 {/* Dates & Urgency */}
-                <div className="grid grid-cols-2 gap-3 bg-kreile-surface-soft p-3 rounded-lg border border-slate-100 text-xs">
+                <div className="grid grid-cols-2 gap-3 bg-bg-app-soft p-3 rounded-lg border border-neutral-gray-100 text-xs">
                   <div>
-                    <span className="text-kreile-muted block font-semibold text-[10px] uppercase">Eingang</span>
-                    <span className="font-bold text-kreile-navy">{selectedOrder.intakeDate}</span>
+                    <span className="text-text-muted block font-semibold text-[10px] uppercase">Eingang</span>
+                    <span className="font-bold text-navy-900">{selectedOrder.intakeDate}</span>
                   </div>
                   <div>
-                    <span className="text-kreile-muted block font-semibold text-[10px] uppercase">Liefertermin</span>
-                    <span className="font-bold text-kreile-navy">{selectedOrder.dueDate}</span>
+                    <span className="text-text-muted block font-semibold text-[10px] uppercase">Liefertermin</span>
+                    <span className="font-bold text-navy-900">{selectedOrder.dueDate}</span>
                   </div>
                 </div>
 
                 {/* Delay alerts */}
                 {selectedOrder.delayReason && (
-                  <div className="bg-orange-50 border border-orange-200 text-orange-950 p-3.5 rounded-lg flex items-start gap-2.5 text-xs">
-                    <AlertTriangle className="h-4.5 w-4.5 text-orange-600 shrink-0 mt-0.5" />
+                  <div className="bg-gold-100 border border-accent-orange text-accent-orange p-3.5 rounded-lg flex items-start gap-2.5 text-xs">
+                    <AlertTriangle className="h-4.5 w-4.5 text-accent-orange shrink-0 mt-0.5" />
                     <div>
-                       <span className="font-extrabold uppercase text-[9px] tracking-wider text-orange-850">Störungsursache</span>
+                       <span className="font-extrabold uppercase text-[9px] tracking-wider text-accent-orange">Störungsursache</span>
                       <p className="mt-0.5 font-medium leading-relaxed">{selectedOrder.delayReason}</p>
                     </div>
                   </div>
@@ -420,22 +420,22 @@ function OrdersPageInner() {
                 {/* Actions Simulation Bar */}
                 <div className="space-y-3 border-t pt-4">
                   <div className="space-y-2">
-                    <span className="text-[10px] font-bold text-kreile-muted uppercase tracking-wider block font-sans">Risiko-Status ändern (Sim)</span>
+                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block font-sans">Risiko-Status ändern (Sim)</span>
                     <div className="flex gap-1">
                       {(
                         [
-                          { risk: "green", label: "Plan", color: "bg-emerald-500 hover:bg-emerald-600" },
-                          { risk: "yellow", label: "Achtung", color: "bg-yellow-400 hover:bg-yellow-500" },
-                          { risk: "orange", label: "Gefahr", color: "bg-orange-500 hover:bg-orange-600" },
-                          { risk: "red", label: "Kritisch", color: "bg-red-500 hover:bg-red-600" },
-                          { risk: "blocked", label: "Pause", color: "bg-kreile-surface-soft0 hover:bg-slate-600" }
+                          { risk: "green", label: "Plan", color: "bg-success-green-soft0 hover:bg-success-green" },
+                          { risk: "yellow", label: "Achtung", color: "bg-yellow-400 hover:bg-gold-1000" },
+                          { risk: "orange", label: "Gefahr", color: "bg-gold-1000 hover:bg-orange-600" },
+                          { risk: "red", label: "Kritisch", color: "bg-accent-orange-soft0 hover:bg-danger-red" },
+                          { risk: "blocked", label: "Pause", color: "bg-bg-app-soft0 hover:bg-gold-1000" }
                         ] as { risk: "green" | "yellow" | "orange" | "red" | "blocked"; label: string; color: string }[]
                       ).map(btn => (
                         <button
                           key={btn.risk}
                           onClick={() => handleStatusChange(selectedOrder.id, btn.risk)}
                           className={`flex-1 py-1.5 rounded text-[10px] text-center text-white font-bold transition-all border ${
-                            selectedOrder.risk === btn.risk ? "ring-2 ring-kreile-navy border-white font-black" : "opacity-80 hover:opacity-100"
+                            selectedOrder.risk === btn.risk ? "ring-2 ring-navy-900 border-white font-black" : "opacity-80 hover:opacity-100"
                           } ${btn.color}`}
                         >
                           {btn.label}
@@ -445,7 +445,7 @@ function OrdersPageInner() {
                   </div>
 
                   <div className="space-y-2 border-t pt-3">
-                    <span className="text-[10px] font-bold text-kreile-muted uppercase tracking-wider block font-sans">Arbeitsstation ändern (Sim)</span>
+                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block font-sans">Arbeitsstation ändern (Sim)</span>
                     <div className="grid grid-cols-5 gap-1">
                       {getAllStations().map(station => {
                         const labelMap: Record<string, string> = {
@@ -463,8 +463,8 @@ function OrdersPageInner() {
                             onClick={() => handleStationUpdate(selectedOrder.id, station.key)}
                             className={`py-1.5 rounded text-[10px] text-center font-bold transition-all border ${
                               selectedOrder.station === station.key 
-                                ? "bg-kreile-navy border-kreile-navy text-white font-black ring-1 ring-kreile-navy" 
-                                : "bg-kreile-bg border-kreile-border text-kreile-muted hover:bg-kreile-sand"
+                                ? "bg-navy-900 border-navy-900 text-white font-black ring-1 ring-navy-900" 
+                                : "bg-bg-app border-neutral-gray-100 text-text-muted hover:bg-gold-100"
                             }`}
                           >
                             {label}
@@ -478,23 +478,23 @@ function OrdersPageInner() {
                 {/* Associated parts */}
                 <div className="space-y-3 border-t pt-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-kreile-muted uppercase tracking-wider">Zugeordnete Werkstücke ({selectedOrder.parts.length})</span>
+                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Zugeordnete Werkstücke ({selectedOrder.parts.length})</span>
                   </div>
 
                   <div className="space-y-2">
                     {selectedOrder.parts.map(part => (
-                      <div key={part.id} className="p-3 bg-kreile-surface-soft border rounded-lg flex items-center justify-between text-xs hover:border-kreile-gold-muted">
+                      <div key={part.id} className="p-3 bg-bg-app-soft border rounded-lg flex items-center justify-between text-xs hover:border-gold-600">
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-kreile-navy">{part.name}</span>
-                            <span className="font-mono text-[9px] bg-kreile-border text-kreile-muted px-1 rounded">{part.id}</span>
+                            <span className="font-bold text-navy-900">{part.name}</span>
+                            <span className="font-mono text-[9px] bg-neutral-gray-100 text-text-muted px-1 rounded">{part.id}</span>
                           </div>
-                          <p className="text-[10px] text-kreile-muted">
-                            Ziel: <span className="font-semibold text-kreile-navy">{part.finish}</span> | Mat: {part.material}
+                          <p className="text-[10px] text-text-muted">
+                            Ziel: <span className="font-semibold text-navy-900">{part.finish}</span> | Mat: {part.material}
                           </p>
-                          <div className="flex items-center gap-1.5 text-[9px] text-kreile-navy font-bold mt-1">
-                            <MapPin className="h-3 w-3 text-orange-500" /> {part.location}
-                            <span className="text-kreile-muted">•</span>
+                          <div className="flex items-center gap-1.5 text-[9px] text-navy-900 font-bold mt-1">
+                            <MapPin className="h-3 w-3 text-accent-orange" /> {part.location}
+                            <span className="text-text-muted">•</span>
                             <Package className="h-3 w-3 text-slate-450" /> Soll: {part.hours}
                           </div>
                         </div>
@@ -511,9 +511,9 @@ function OrdersPageInner() {
                       return (
                         <a 
                           href={`tel:${phoneDetails.phone}`}
-                          className="w-full h-11 bg-white hover:bg-kreile-surface-soft text-kreile-navy font-bold border-2 border-kreile-border-strong rounded-xl flex items-center justify-center gap-2 text-xs shadow-sm transition-all"
+                          className="w-full h-11 bg-white hover:bg-bg-app-soft text-navy-900 font-bold border-2 border-neutral-gray-300 rounded-xl flex items-center justify-center gap-2 text-xs shadow-sm transition-all"
                         >
-                          <PhoneCall className="h-4 w-4 text-emerald-600 shrink-0" />
+                          <PhoneCall className="h-4 w-4 text-success-green shrink-0" />
                           <span>Kunde anrufen ({phoneDetails.phone})</span>
                         </a>
                       );
@@ -521,9 +521,9 @@ function OrdersPageInner() {
                       return (
                         <Link 
                           href="/customers"
-                          className="w-full h-11 bg-white hover:bg-kreile-surface-soft text-kreile-muted hover:text-kreile-navy font-semibold border-2 border-dashed border-kreile-border-strong hover:border-kreile-gold-muted rounded-xl flex items-center justify-center gap-2 text-xs transition-all text-center"
+                          className="w-full h-11 bg-white hover:bg-bg-app-soft text-text-muted hover:text-navy-900 font-semibold border-2 border-dashed border-neutral-gray-300 hover:border-gold-600 rounded-xl flex items-center justify-center gap-2 text-xs transition-all text-center"
                         >
-                          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                          <AlertTriangle className="h-4 w-4 text-gold-600 shrink-0" />
                           <span>Telefonnummer in Kundenkartei prüfen</span>
                         </Link>
                       );
@@ -533,9 +533,9 @@ function OrdersPageInner() {
                   {selectedOrder.recommendedAction && (
                     <Button 
                       onClick={() => handleRecommendedActionClick(selectedOrder)}
-                      className="w-full h-11 bg-kreile-navy hover:bg-kreile-navy/90 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 shadow"
+                      className="w-full h-11 bg-navy-900 hover:bg-navy-900/90 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-2 shadow"
                     >
-                      <Zap className="h-4 w-4 text-orange-450 shrink-0" />
+                      <Zap className="h-4 w-4 text-accent-orange shrink-0" />
                       <span>{selectedOrder.recommendedAction}</span>
                     </Button>
                   )}
@@ -544,9 +544,9 @@ function OrdersPageInner() {
               </CardContent>
             </Card>
           ) : (
-            <Card className="border-dashed border-2 border-kreile-border-strong text-center p-12 text-kreile-muted">
-              <div className="w-12 h-12 bg-kreile-surface-soft rounded-full border border-slate-100 flex items-center justify-center mx-auto mb-3">
-                <ChevronRight className="h-6 w-6 text-kreile-muted rotate-90" />
+            <Card className="border-dashed border-2 border-neutral-gray-300 text-center p-12 text-text-muted">
+              <div className="w-12 h-12 bg-bg-app-soft rounded-full border border-neutral-gray-100 flex items-center justify-center mx-auto mb-3">
+                <ChevronRight className="h-6 w-6 text-text-muted rotate-90" />
               </div>
               <p className="font-bold text-sm">Kein Auftrag selektiert</p>
               <p className="text-xs max-w-[200px] mx-auto mt-1">Klicke links auf einen Auftrag in der Liste, um seine Teile und Steuerung anzuzeigen.</p>
@@ -563,10 +563,10 @@ function OrdersPageInner() {
 export default function OrdersPage() {
   return (
     <Suspense fallback={
-      <div className="p-12 text-center text-kreile-muted space-y-3 max-w-md mx-auto">
-        <RefreshCw className="h-8 w-8 mx-auto text-kreile-muted animate-spin" />
-        <p className="font-extrabold text-kreile-navy">Lade Auftragsbuch...</p>
-        <p className="text-xs text-kreile-muted">Die Werkstatt-Daten werden abgeglichen.</p>
+      <div className="p-12 text-center text-text-muted space-y-3 max-w-md mx-auto">
+        <RefreshCw className="h-8 w-8 mx-auto text-text-muted animate-spin" />
+        <p className="font-extrabold text-navy-900">Lade Auftragsbuch...</p>
+        <p className="text-xs text-text-muted">Die Werkstatt-Daten werden abgeglichen.</p>
       </div>
     }>
       <OrdersPageInner />

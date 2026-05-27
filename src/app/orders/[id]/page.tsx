@@ -31,16 +31,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     load();
   }, [id]);
 
-  if (!order) return <div className="p-8 font-bold text-kreile-muted flex items-center justify-center min-h-screen">Lade Auftrag...</div>;
+  if (!order) return <div className="p-8 font-bold text-text-muted flex items-center justify-center min-h-screen">Lade Auftrag...</div>;
 
   return (
     <div className="min-h-screen bg-transparent p-4 md:p-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-4xl font-black font-serif text-kreile-navy">{order.orderNumber}</h1>
-        <h2 className="text-2xl font-bold text-kreile-muted mt-1">{order.title}</h2>
+        <h1 className="text-4xl font-black font-serif text-navy-900">{order.orderNumber}</h1>
+        <h2 className="text-2xl font-bold text-text-muted mt-1">{order.title}</h2>
         <div className="flex gap-4 mt-4">
-          <span className="px-3 py-1.5 bg-blue-100 text-blue-800 font-bold rounded-lg text-sm flex items-center">
+          <span className="px-3 py-1.5 bg-navy-700 text-navy-700 font-bold rounded-lg text-sm flex items-center">
             <Box className="w-4 h-4 mr-2" /> Station: {getStationConfig(order.currentStationId || order.station || "wareneingang").name}
           </span>
           {(() => {
@@ -60,7 +60,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             if (isOverdue) {
               const diffHours = Math.max(0, Math.floor((today.getTime() - due.getTime()) / (1000 * 60 * 60)));
               return (
-                <span className="px-3 py-1.5 bg-red-100 text-red-800 font-bold rounded-lg text-sm flex items-center">
+                <span className="px-3 py-1.5 bg-danger-red text-danger-red font-bold rounded-lg text-sm flex items-center">
                   <Clock className="w-4 h-4 mr-2" /> Überfällig seit: {diffHours} Stunden
                 </span>
               );
@@ -88,14 +88,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             onPrint={() => setPrintOpen(true)} 
           />
           
-          <div className="bg-white border-2 border-kreile-border-strong rounded-3xl p-6 md:p-8 shadow-sm">
-            <h3 className="text-sm font-extrabold text-kreile-muted uppercase tracking-widest pl-1 mb-4">Teile ({order.parts?.length || 0})</h3>
+          <div className="bg-white border-2 border-neutral-gray-300 rounded-3xl p-6 md:p-8 shadow-sm">
+            <h3 className="text-sm font-extrabold text-text-muted uppercase tracking-widest pl-1 mb-4">Teile ({order.parts?.length || 0})</h3>
             <div className="space-y-3">
               {order.parts?.map((p: { quantity?: number; name?: string; surfaceRequested?: string }, i: number) => (
-                <div key={i} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-kreile-surface-soft rounded-2xl border-2 border-slate-100 gap-3">
-                  <span className="font-bold text-kreile-navy text-lg">{p.quantity}x {p.name}</span>
+                <div key={i} className="flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 bg-bg-app-soft rounded-2xl border-2 border-neutral-gray-100 gap-3">
+                  <span className="font-bold text-navy-900 text-lg">{p.quantity}x {p.name}</span>
                   {p.surfaceRequested && (
-                    <span className="text-sm font-bold text-kreile-muted bg-white px-3 py-1.5 rounded-lg border-2 border-kreile-border-strong">
+                    <span className="text-sm font-bold text-text-muted bg-white px-3 py-1.5 rounded-lg border-2 border-neutral-gray-300">
                       {p.surfaceRequested}
                     </span>
                   )}
@@ -106,7 +106,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </div>
 
         {/* Right Column (Timeline & Docs) */}
-        <div className="lg:col-span-5 bg-white border-2 border-kreile-border-strong rounded-3xl p-6 md:p-8 shadow-sm">
+        <div className="lg:col-span-5 bg-white border-2 border-neutral-gray-300 rounded-3xl p-6 md:p-8 shadow-sm">
           <OrderTimeline entries={timeline} />
         </div>
       </div>

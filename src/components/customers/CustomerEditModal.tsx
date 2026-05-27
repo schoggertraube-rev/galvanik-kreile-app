@@ -52,21 +52,21 @@ export function CustomerEditModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-kreile-navy/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-slate-200 animate-in zoom-in-95 duration-300">
+    <div className="fixed inset-0 bg-navy-900/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 animate-in fade-in duration-200">
+      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-neutral-gray-100 animate-in zoom-in-95 duration-300">
         
         {/* Header */}
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        <div className="p-6 border-b border-neutral-gray-100 flex justify-between items-center bg-bg-app-soft">
           <div>
-            <h2 className="text-2xl font-black font-serif text-slate-900">Kundenakte bearbeiten</h2>
-            <p className="text-slate-500 text-xs font-bold uppercase tracking-widest mt-1">
+            <h2 className="text-2xl font-black font-serif text-navy-900">Kundenakte bearbeiten</h2>
+            <p className="text-navy-500 text-xs font-bold uppercase tracking-widest mt-1">
               Kunden-Nr: {customer.customerNumber || "N/A"}
             </p>
           </div>
           <button 
             type="button"
             onClick={onClose} 
-            className="p-2 hover:bg-slate-200 rounded-full transition-colors"
+            className="p-2 hover:bg-neutral-gray-100 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -77,26 +77,26 @@ export function CustomerEditModal({
           
           {/* Section: Stammdaten */}
           <div className="space-y-4">
-            <h3 className="text-xs font-black text-kreile-muted uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-150 pb-2">
-              <User className="w-4 h-4 text-blue-600" /> Stammdaten & Typ
+            <h3 className="text-xs font-black text-text-muted uppercase tracking-widest flex items-center gap-1.5 border-b border-neutral-gray-100 pb-2">
+              <User className="w-4 h-4 text-navy-700" /> Stammdaten & Typ
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-extrabold text-slate-500">Firmen- oder Kundenname</label>
+                <label className="text-xs font-extrabold text-navy-500">Firmen- oder Kundenname</label>
                 <Input 
                   value={formData.name} 
                   onChange={e => updateField("name", e.target.value)} 
-                  className="rounded-xl border-2 border-slate-200 focus:border-blue-500"
+                  className="rounded-xl border-2 border-neutral-gray-100 focus:border-navy-700"
                   required
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-extrabold text-slate-500">Kundentyp</label>
+                <label className="text-xs font-extrabold text-navy-500">Kundentyp</label>
                 <select 
                   value={formData.type} 
                   onChange={e => updateField("type", e.target.value)}
-                  className="w-full h-10 px-3 rounded-xl border-2 border-slate-200 text-sm focus:border-blue-500 outline-none"
+                  className="w-full h-10 px-3 rounded-xl border-2 border-neutral-gray-100 text-sm focus:border-navy-700 outline-none"
                 >
                   <option value="business">Geschäftskunde</option>
                   <option value="private">Privatkunde</option>
@@ -108,55 +108,55 @@ export function CustomerEditModal({
 
           {/* Section: Kontakt & Kommunikation */}
           <div className="space-y-4">
-            <h3 className="text-xs font-black text-kreile-muted uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-150 pb-2">
-              <MapPin className="w-4 h-4 text-blue-600" /> Kontakt & Standort
+            <h3 className="text-xs font-black text-text-muted uppercase tracking-widest flex items-center gap-1.5 border-b border-neutral-gray-100 pb-2">
+              <MapPin className="w-4 h-4 text-navy-700" /> Kontakt & Standort
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-extrabold text-slate-500">E-Mail Adresse</label>
+                <label className="text-xs font-extrabold text-navy-500">E-Mail Adresse</label>
                 <Input 
                   type="email"
                   value={formData.email} 
                   onChange={e => updateField("email", e.target.value)} 
-                  className="rounded-xl border-2 border-slate-200 focus:border-blue-500"
+                  className="rounded-xl border-2 border-neutral-gray-100 focus:border-navy-700"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-extrabold text-slate-500">Telefonnummer</label>
+                <label className="text-xs font-extrabold text-navy-500">Telefonnummer</label>
                 <Input 
                   type="tel"
                   value={formData.phone} 
                   onChange={e => updateField("phone", e.target.value)} 
-                  className="rounded-xl border-2 border-slate-200 focus:border-blue-500"
+                  className="rounded-xl border-2 border-neutral-gray-100 focus:border-navy-700"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-extrabold text-slate-500">Straße & Hausnummer</label>
+                <label className="text-xs font-extrabold text-navy-500">Straße & Hausnummer</label>
                 <Input 
                   value={formData.address} 
                   onChange={e => updateField("address", e.target.value)} 
-                  className="rounded-xl border-2 border-slate-200 focus:border-blue-500"
+                  className="rounded-xl border-2 border-neutral-gray-100 focus:border-navy-700"
                   placeholder="Musterstraße 42"
                 />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-extrabold text-slate-500">Stadt / Ort</label>
+                <label className="text-xs font-extrabold text-navy-500">Stadt / Ort</label>
                 <Input 
                   value={formData.city} 
                   onChange={e => updateField("city", e.target.value)} 
-                  className="rounded-xl border-2 border-slate-200 focus:border-blue-500"
+                  className="rounded-xl border-2 border-neutral-gray-100 focus:border-navy-700"
                   placeholder="70173 Stuttgart"
                 />
               </div>
             </div>
             
             <div className="space-y-1">
-              <label className="text-xs font-extrabold text-slate-500">Bevorzugter Kommunikationskanal</label>
+              <label className="text-xs font-extrabold text-navy-500">Bevorzugter Kommunikationskanal</label>
               <select 
                 value={formData.prefComm} 
                 onChange={e => updateField("prefComm", e.target.value)}
-                className="w-full h-10 px-3 rounded-xl border-2 border-slate-200 text-sm focus:border-blue-500 outline-none"
+                className="w-full h-10 px-3 rounded-xl border-2 border-neutral-gray-100 text-sm focus:border-navy-700 outline-none"
               >
                 <option value="E-Mail">E-Mail</option>
                 <option value="Telefon">Telefon</option>
@@ -167,22 +167,22 @@ export function CustomerEditModal({
 
           {/* Section: Risiko & Besonderheiten */}
           <div className="space-y-4">
-            <h3 className="text-xs font-black text-kreile-muted uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-150 pb-2">
-              <Shield className="w-4 h-4 text-blue-600" /> Bonitäts- & Risikoprofil
+            <h3 className="text-xs font-black text-text-muted uppercase tracking-widest flex items-center gap-1.5 border-b border-neutral-gray-100 pb-2">
+              <Shield className="w-4 h-4 text-navy-700" /> Bonitäts- & Risikoprofil
             </h3>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1">
-                <label className="text-xs font-extrabold text-slate-500">Zahlungsrisiko / Bonität</label>
+                <label className="text-xs font-extrabold text-navy-500">Zahlungsrisiko / Bonität</label>
                 <select 
                   value={formData.risk} 
                   onChange={e => updateField("risk", e.target.value)}
                   className={`w-full h-10 px-3 rounded-xl border-2 text-sm outline-none font-bold ${
                     formData.risk === "Hoch" 
-                      ? "border-red-300 bg-red-50 text-red-700" 
+                      ? "border-danger-red bg-accent-orange-soft text-danger-red" 
                       : formData.risk === "Mittel"
-                      ? "border-orange-300 bg-orange-50 text-orange-700"
-                      : "border-slate-200 bg-white text-slate-800"
+                      ? "border-accent-orange bg-gold-100 text-accent-orange"
+                      : "border-neutral-gray-100 bg-white text-navy-900"
                   }`}
                 >
                   <option value="Niedrig">Niedrig (Standard)</option>
@@ -191,11 +191,11 @@ export function CustomerEditModal({
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-extrabold text-slate-500">Risiko-Begründung / Interne Notiz</label>
+                <label className="text-xs font-extrabold text-navy-500">Risiko-Begründung / Interne Notiz</label>
                 <Input 
                   value={formData.riskNote} 
                   onChange={e => updateField("riskNote", e.target.value)} 
-                  className="rounded-xl border-2 border-slate-200 focus:border-blue-500"
+                  className="rounded-xl border-2 border-neutral-gray-100 focus:border-navy-700"
                   placeholder="z.B. Nur Vorkasse bei Kleinaufträgen"
                 />
               </div>
@@ -204,20 +204,20 @@ export function CustomerEditModal({
 
           {/* Section: Besonderheiten */}
           <div className="space-y-2">
-            <label className="text-xs font-black text-kreile-muted uppercase tracking-widest block border-b border-slate-150 pb-2">
+            <label className="text-xs font-black text-text-muted uppercase tracking-widest block border-b border-neutral-gray-100 pb-2">
               Besonderheiten / Technische Vorgaben
             </label>
             <textarea 
               value={formData.notes} 
               onChange={e => updateField("notes", e.target.value)}
-              className="w-full min-h-[100px] p-3 rounded-xl border-2 border-slate-200 focus:border-blue-500 outline-none text-sm"
+              className="w-full min-h-[100px] p-3 rounded-xl border-2 border-neutral-gray-100 focus:border-navy-700 outline-none text-sm"
               placeholder="z.B. Bevorzugt Nickel-Oberfläche glänzend, Verpackung in Spezialkarton..."
             />
           </div>
         </form>
 
         {/* Footer */}
-        <div className="p-6 border-t border-slate-100 flex justify-between items-center bg-slate-50">
+        <div className="p-6 border-t border-neutral-gray-100 flex justify-between items-center bg-bg-app-soft">
           <Button 
             type="button" 
             variant="ghost" 
@@ -230,7 +230,7 @@ export function CustomerEditModal({
             type="submit" 
             onClick={handleSubmit}
             disabled={saving}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl flex items-center gap-2"
+            className="bg-navy-700 hover:bg-navy-700 text-white font-bold rounded-xl flex items-center gap-2"
           >
             <Save className="w-4 h-4" />
             {saving ? "Wird gespeichert..." : "Kundenkarte speichern"}

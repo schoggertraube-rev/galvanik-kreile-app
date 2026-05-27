@@ -133,24 +133,24 @@ export function StationCompletionModal({
       <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden">
         
         {/* Header */}
-        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+        <div className="p-6 border-b border-neutral-gray-100 flex justify-between items-center bg-bg-app-soft">
           <div>
-            <h2 className="text-xl font-black text-slate-900">Stationsabschluss · {currentStationLabel}</h2>
-            <p className="text-slate-500 text-sm mt-1">Auftrag {orderId}</p>
+            <h2 className="text-xl font-black text-navy-900">Stationsabschluss · {currentStationLabel}</h2>
+            <p className="text-navy-500 text-sm mt-1">Auftrag {orderId}</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full"><X className="w-5 h-5" /></button>
+          <button onClick={onClose} className="p-2 hover:bg-neutral-gray-100 rounded-full"><X className="w-5 h-5" /></button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-200 px-6 pt-2 gap-6 bg-slate-50">
+        <div className="flex border-b border-neutral-gray-100 px-6 pt-2 gap-6 bg-bg-app-soft">
           <button 
-            className={`pb-3 font-bold text-sm border-b-2 transition-colors ${activeTab === "erfassung" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-kreile-navy"}`}
+            className={`pb-3 font-bold text-sm border-b-2 transition-colors ${activeTab === "erfassung" ? "border-navy-700 text-navy-700" : "border-transparent text-navy-500 hover:text-navy-900"}`}
             onClick={() => setActiveTab("erfassung")}
           >
             Erfassung
           </button>
           <button 
-            className={`pb-3 font-bold text-sm border-b-2 transition-colors ${activeTab === "kosten" ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-kreile-navy"}`}
+            className={`pb-3 font-bold text-sm border-b-2 transition-colors ${activeTab === "kosten" ? "border-navy-700 text-navy-700" : "border-transparent text-navy-500 hover:text-navy-900"}`}
             onClick={() => setActiveTab("kosten")}
           >
             Kostenübersicht
@@ -163,17 +163,17 @@ export function StationCompletionModal({
             <div className="space-y-8">
               {/* Arbeitszeit */}
               <div className="space-y-4">
-                <h3 className="font-bold text-kreile-navy uppercase tracking-wider text-xs">Arbeitszeit</h3>
-                <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <h3 className="font-bold text-navy-900 uppercase tracking-wider text-xs">Arbeitszeit</h3>
+                <div className="flex items-center gap-4 bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-100">
                   <Button variant="outline" onClick={() => setMinutes(Math.max(0, minutes - 15))} className="w-12 h-12 rounded-full"><Minus /></Button>
-                  <div className="flex-1 text-center font-black text-2xl text-slate-800">{minutes} <span className="text-sm font-normal text-slate-500">Minuten</span></div>
+                  <div className="flex-1 text-center font-black text-2xl text-navy-900">{minutes} <span className="text-sm font-normal text-navy-500">Minuten</span></div>
                   <Button variant="outline" onClick={() => setMinutes(minutes + 15)} className="w-12 h-12 rounded-full"><Plus /></Button>
                 </div>
 
                 {/* Erschwernis / Zusatzaufwand */}
                 <div>
-                  <label className="text-xs font-bold text-slate-500 block mb-2">Erschwernis / Zusatzaufwand</label>
-                  <div className="grid grid-cols-4 gap-2 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
+                  <label className="text-xs font-bold text-navy-500 block mb-2">Erschwernis / Zusatzaufwand</label>
+                  <div className="grid grid-cols-4 gap-2 bg-bg-app-soft p-1.5 rounded-xl border border-neutral-gray-100">
                     {[
                       { val: 1, label: "1x", text: "Standard" },
                       { val: 2, label: "2x", text: "Erhöht" },
@@ -186,8 +186,8 @@ export function StationCompletionModal({
                         onClick={() => setMultiplier(opt.val)}
                         className={`py-2 px-1 rounded-lg text-xs font-bold transition-all ${
                           multiplier === opt.val
-                            ? "bg-kreile-navy text-white shadow-xs"
-                            : "text-slate-605 hover:bg-slate-200/60"
+                            ? "bg-navy-900 text-white shadow-xs"
+                            : "text-slate-605 hover:bg-neutral-gray-100/60"
                         }`}
                         title={opt.text}
                       >
@@ -199,8 +199,8 @@ export function StationCompletionModal({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-xs font-bold text-slate-500 block mb-1">Tätigkeit</label>
-                    <select className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm" value={taskType} onChange={e => setTaskType(e.target.value)}>
+                    <label className="text-xs font-bold text-navy-500 block mb-1">Tätigkeit</label>
+                    <select className="w-full h-10 px-3 rounded-lg border border-neutral-gray-100 text-sm" value={taskType} onChange={e => setTaskType(e.target.value)}>
                       <option>Schleifen</option>
                       <option>Polieren</option>
                       <option>Setup</option>
@@ -208,7 +208,7 @@ export function StationCompletionModal({
                     </select>
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-slate-500 block mb-1">Bemerkung (optional)</label>
+                    <label className="text-xs font-bold text-navy-500 block mb-1">Bemerkung (optional)</label>
                     <Input className="h-10 text-sm" value={note} onChange={e => setNote(e.target.value)} />
                   </div>
                 </div>
@@ -216,39 +216,39 @@ export function StationCompletionModal({
 
               {/* Material */}
               <div className="space-y-4">
-                <h3 className="font-bold text-kreile-navy uppercase tracking-wider text-xs">Materialverbrauch</h3>
+                <h3 className="font-bold text-navy-900 uppercase tracking-wider text-xs">Materialverbrauch</h3>
                 
                 {bookedMaterials.map((mat, idx) => (
-                  <div key={mat.inventoryItemId} className="flex items-center justify-between p-3 border border-slate-200 rounded-xl">
+                  <div key={mat.inventoryItemId} className="flex items-center justify-between p-3 border border-neutral-gray-100 rounded-xl">
                     <div className="flex items-center gap-3">
-                      {!mat.price && <AlertTriangle className="w-4 h-4 text-orange-500" />}
+                      {!mat.price && <AlertTriangle className="w-4 h-4 text-accent-orange" />}
                       <span className="font-bold text-sm">{mat.name}</span>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => handleQtyChange(idx, "minus")} className="p-1 border rounded-md hover:bg-slate-50"><Minus className="w-4 h-4" /></button>
+                        <button onClick={() => handleQtyChange(idx, "minus")} className="p-1 border rounded-md hover:bg-bg-app-soft"><Minus className="w-4 h-4" /></button>
                         <span className="w-8 text-center font-bold text-sm">{mat.quantity}</span>
-                        <button onClick={() => handleQtyChange(idx, "plus")} className="p-1 border rounded-md hover:bg-slate-50"><Plus className="w-4 h-4" /></button>
+                        <button onClick={() => handleQtyChange(idx, "plus")} className="p-1 border rounded-md hover:bg-bg-app-soft"><Plus className="w-4 h-4" /></button>
                       </div>
-                      <span className="text-sm text-slate-500 w-24 text-right">× {mat.price.toFixed(2)} €</span>
+                      <span className="text-sm text-navy-500 w-24 text-right">× {mat.price.toFixed(2)} €</span>
                     </div>
                   </div>
                 ))}
 
                 <div className="relative">
-                  <Button variant="outline" className="w-full justify-start text-slate-500 border-dashed" onClick={() => setShowSearchList(!showSearchList)}>
+                  <Button variant="outline" className="w-full justify-start text-navy-500 border-dashed" onClick={() => setShowSearchList(!showSearchList)}>
                     <Plus className="w-4 h-4 mr-2" /> Material hinzufügen
                   </Button>
                   {showSearchList && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-xl z-10 max-h-48 overflow-y-auto p-2">
+                    <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-neutral-gray-100 rounded-xl shadow-xl z-10 max-h-48 overflow-y-auto p-2">
                       <div className="relative mb-2">
-                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-kreile-muted" />
+                        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
                         <Input className="pl-9 h-9 text-sm" placeholder="Suchen..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                       </div>
                       {allConsumables.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) && !bookedMaterials.some(m => m.inventoryItemId === c.id)).map(item => (
-                        <button key={item.id} onClick={() => handleAddMaterial(item)} className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 rounded-lg flex justify-between">
+                        <button key={item.id} onClick={() => handleAddMaterial(item)} className="w-full text-left px-3 py-2 text-sm hover:bg-bg-app-soft rounded-lg flex justify-between">
                           <span className="font-bold">{item.name}</span>
-                          <span className="text-slate-500">{item.pricePerUnit?.toFixed(2) || "0.00"} € / {item.unit}</span>
+                          <span className="text-navy-500">{item.pricePerUnit?.toFixed(2) || "0.00"} € / {item.unit}</span>
                         </button>
                       ))}
                     </div>
@@ -258,19 +258,19 @@ export function StationCompletionModal({
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200">
+              <div className="bg-bg-app-soft rounded-2xl p-6 border border-neutral-gray-100">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-kreile-muted">Arbeitszeit ({minutes} min × {DEFAULT_HOURLY_RATE_EUR} €/h)</span>
+                    <span className="text-text-muted">Arbeitszeit ({minutes} min × {DEFAULT_HOURLY_RATE_EUR} €/h)</span>
                     <span className="font-bold">{costs.laborCost.toFixed(2)} €</span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-kreile-muted">Material ({bookedMaterials.length} Positionen)</span>
+                    <span className="text-text-muted">Material ({bookedMaterials.length} Positionen)</span>
                     <span className="font-bold">{costs.materialCost.toFixed(2)} €</span>
                   </div>
-                  <div className="pt-4 border-t border-slate-200 flex justify-between items-center text-lg">
-                    <span className="font-black text-slate-900">Gesamtkosten Station</span>
-                    <span className="font-black text-blue-700">{costs.total.toFixed(2)} €</span>
+                  <div className="pt-4 border-t border-neutral-gray-100 flex justify-between items-center text-lg">
+                    <span className="font-black text-navy-900">Gesamtkosten Station</span>
+                    <span className="font-black text-navy-700">{costs.total.toFixed(2)} €</span>
                   </div>
                 </div>
               </div>
@@ -279,11 +279,11 @@ export function StationCompletionModal({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-slate-100 flex justify-between items-center bg-slate-50">
+        <div className="p-6 border-t border-neutral-gray-100 flex justify-between items-center bg-bg-app-soft">
           <Button variant="ghost" onClick={onClose}>Abbrechen</Button>
           <Button 
             disabled={!canSubmit} 
-            className="bg-blue-600 hover:bg-blue-700 text-white font-bold" 
+            className="bg-navy-700 hover:bg-navy-700 text-white font-bold" 
             onClick={handleSubmit}
           >
             {nextStation ? `Abschließen und zu ${nextStationLabel} ›` : "Auftrag versendet markieren"}

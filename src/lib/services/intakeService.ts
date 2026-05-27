@@ -34,6 +34,11 @@ export const intakeService = {
 
       const newCust = await customersRepository.create({
         name: data.newCustomerName,
+        type: "Privatkunde",
+        city: details.city || "Unbekannt",
+        phone: details.phone || "",
+        email: details.email || "",
+        prefComm: "Telefon",
         ...details,
         address
       });

@@ -100,8 +100,8 @@ function WeatherCard() {
       <div className="flex justify-end items-center gap-1.5 mt-3">
         <span className="text-[11px] text-text-muted font-mono">{timeStr}</span>
         <svg viewBox="0 0 16 10" fill="none" className="w-4 h-3">
-          <path d="M1 5l3 4L13 1" stroke="#5A8F4D" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M4 5l3 4L16 1" stroke="#5A8F4D" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M1 5l3 4L13 1" stroke="#B8923F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+          <path d="M4 5l3 4L16 1" stroke="#B8923F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
       </div>
     </div>
@@ -250,17 +250,17 @@ export default function StartScreen() {
       </div>
 
       {/* User Avatar Kacheln */}
-      <div className="flex gap-5 md:gap-7 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-300 fill-mode-both">
+      <div className="flex gap-5 md:gap-7 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-300 fill-mode-both overflow-x-auto pb-4 snap-x">
         {DEMO_USERS.map((user) => {
           const Icon = user.icon;
           return (
             <button
               key={user.id}
               onClick={() => setSelectedUser(user)}
-              className="w-[160px] md:w-[190px] aspect-square bg-white rounded-[28px] border border-neutral-gray-100 shadow-card hover:shadow-md hover:-translate-y-1 transition-all duration-300 active:scale-95 flex flex-col items-center justify-center gap-5 p-6 group cursor-pointer"
+              className="w-[220px] h-[260px] shrink-0 snap-center bg-bg-app-soft rounded-[28px] border border-neutral-gray-100 shadow-card hover:shadow-md hover:-translate-y-1 transition-all duration-300 active:scale-95 flex flex-col items-center justify-center gap-6 p-6 group cursor-pointer"
             >
-              <div className="w-20 h-20 rounded-full bg-gold-100 flex items-center justify-center shadow-inner">
-                <span className="font-serif font-black text-2xl text-gold-600 tracking-tight">
+              <div className="w-24 h-24 rounded-full bg-gold-100 flex items-center justify-center shadow-inner">
+                <span className="font-serif font-black text-3xl text-gold-600 tracking-tight">
                   {user.initials}
                 </span>
               </div>

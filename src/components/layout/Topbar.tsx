@@ -100,18 +100,18 @@ export function Topbar() {
   }, [showDropdown]);
 
   return (
-    <header className="h-16 shrink-0 border-b border-slate-200 bg-white px-4 md:px-6 flex items-center justify-between z-10 shadow-sm relative">
+    <header className="h-16 shrink-0 border-b border-neutral-gray-100 bg-white px-4 md:px-6 flex items-center justify-between z-10 shadow-sm relative">
       
       {/* Left: Logo */}
       <div className="flex items-center w-48 md:w-64 shrink-0">
-        <Link href="/" className="font-bold text-2xl tracking-tight text-kreile-navy">
+        <Link href="/" className="font-bold text-2xl tracking-tight text-navy-900">
           KREILE
         </Link>
       </div>
 
       {/* Center: Workshop Flow */}
         <nav className="hidden lg:flex flex-1 items-center justify-center px-4">
-          <div className="flex items-center bg-kreile-navy/80 p-2 rounded-2xl border border-slate-700/80 shadow-inner">
+          <div className="flex items-center bg-navy-900/80 p-2 rounded-2xl border border-navy-700/80 shadow-inner">
             {STATIONS.map((station, i) => {
               const isWareneingangActive = station.name === 'Wareneingang' && (
                 pathname === '/orders/new' || 
@@ -134,7 +134,7 @@ export function Topbar() {
                     title={station.name === 'Beschichtung' ? 'Beschichtung (Galvanik)' : undefined}
                   />
                   {i < STATIONS.length - 1 && (
-                    <div className="px-2 text-kreile-muted">
+                    <div className="px-2 text-text-muted">
                       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                         <path d="m9 18 6-6-6-6"/>
                       </svg>
@@ -150,21 +150,21 @@ export function Topbar() {
       <div className="flex items-center gap-2 md:gap-4 shrink-0">
         <Link 
           href="/items" 
-          className={`hidden lg:flex items-center gap-2 text-sm font-medium hover:bg-slate-100 px-3 py-2 rounded-md transition-colors border ${
+          className={`hidden lg:flex items-center gap-2 text-sm font-medium hover:bg-neutral-gray-100 px-3 py-2 rounded-md transition-colors border ${
             criticalStock 
-              ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100 animate-pulse' 
-              : 'text-kreile-muted border-transparent font-medium'
+              ? 'bg-accent-orange-soft text-danger-red border-danger-red hover:bg-danger-red animate-pulse' 
+              : 'text-text-muted border-transparent font-medium'
           }`}
         >
           <Package className="w-4.5 h-4.5" />
           <span className="hidden xl:inline">Lager</span>
-          <span className={`flex h-2 w-2 rounded-full ${criticalStock ? 'bg-red-650 animate-pulse' : 'bg-green-500'}`}></span>
+          <span className={`flex h-2 w-2 rounded-full ${criticalStock ? 'bg-danger-red animate-pulse' : 'bg-gold-1000'}`}></span>
         </Link>
 
-        <Link href="/" className="flex items-center gap-2 text-sm font-medium text-kreile-muted hover:text-slate-900 hover:bg-slate-100 px-3 py-2 rounded-md transition-colors border border-slate-200">
+        <Link href="/" className="flex items-center gap-2 text-sm font-medium text-text-muted hover:text-navy-900 hover:bg-neutral-gray-100 px-3 py-2 rounded-md transition-colors border border-neutral-gray-100">
           <Calendar className="w-4 h-4" />
           <span>Heute · {dateString}</span>
-          <span className="flex h-2 w-2 rounded-full bg-orange-500"></span>
+          <span className="flex h-2 w-2 rounded-full bg-gold-1000"></span>
         </Link>
 
         {/* Offline & Sync Widget Dropdown Container */}
@@ -173,29 +173,29 @@ export function Topbar() {
             onClick={() => setShowDropdown(!showDropdown)}
             className={`flex items-center gap-2 text-xs font-black px-3.5 py-2.5 rounded-xl transition-all border cursor-pointer active:scale-95 ${
               isOffline 
-                ? "bg-amber-50 border-amber-200 text-amber-800 hover:bg-amber-100" 
-                : "bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100"
+                ? "bg-gold-100 border-gold-600 text-gold-600 hover:bg-amber-100" 
+                : "bg-success-green-soft border-success-green text-success-green hover:bg-success-green"
             }`}
           >
-            <span className={`h-2 w-2 rounded-full ${isOffline ? "bg-amber-500 animate-pulse" : "bg-emerald-550 animate-pulse"}`}></span>
+            <span className={`h-2 w-2 rounded-full ${isOffline ? "bg-gold-1000 animate-pulse" : "bg-success-green animate-pulse"}`}></span>
             <span className="hidden sm:inline">{isOffline ? "Offline" : "Online"}</span>
             {syncQueueCount > 0 && (
-              <span className="flex items-center gap-0.5 bg-amber-500 text-white text-[9px] font-black py-0.5 px-1.5 rounded-full animate-bounce shrink-0">
+              <span className="flex items-center gap-0.5 bg-gold-1000 text-white text-[9px] font-black py-0.5 px-1.5 rounded-full animate-bounce shrink-0">
                 🔄 {syncQueueCount}
               </span>
             )}
           </button>
 
           {showDropdown && (
-            <div className="absolute right-0 top-12 mt-2 w-72 bg-white border-2 border-slate-200 rounded-2xl shadow-xl z-50 p-4 space-y-4">
+            <div className="absolute right-0 top-12 mt-2 w-72 bg-white border-2 border-neutral-gray-100 rounded-2xl shadow-xl z-50 p-4 space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between items-center border-b pb-2">
-                  <span className="font-extrabold text-slate-800 text-xs uppercase tracking-wider">Verbindungsstatus</span>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${isOffline ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-850"}`}>
+                  <span className="font-extrabold text-navy-900 text-xs uppercase tracking-wider">Verbindungsstatus</span>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${isOffline ? "bg-amber-100 text-gold-600" : "bg-success-green text-success-green"}`}>
                     {isOffline ? "Offline (Simuliert)" : "Online"}
                   </span>
                 </div>
-                <p className="text-kreile-muted text-[10px] leading-relaxed">
+                <p className="text-text-muted text-[10px] leading-relaxed">
                   Schalte das Netzwerk ab, um Offline-Materialbuchungen und Statusänderungen zu erproben.
                 </p>
                 <button
@@ -205,7 +205,7 @@ export function Topbar() {
                   }}
                   className={`w-full py-2.5 rounded-xl font-extrabold text-xs transition-all active:scale-95 cursor-pointer ${
                     isOffline 
-                      ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-250 shadow-[0_4px_12px]"
+                      ? "bg-success-green text-white hover:bg-success-green shadow-emerald-250 shadow-[0_4px_12px]"
                       : "bg-amber-600 text-white hover:bg-amber-700 shadow-amber-250 shadow-[0_4px_12px]"
                   }`}
                 >
@@ -216,10 +216,10 @@ export function Topbar() {
               {syncQueueCount > 0 && (
                 <div className="border-t pt-3 space-y-2">
                   <div className="flex justify-between items-center text-xs font-black">
-                    <span className="text-slate-500">Warteschlange:</span>
-                    <span className="text-amber-700 bg-amber-50 px-2.5 py-0.5 rounded border border-amber-100">{syncQueueCount} Aktionen</span>
+                    <span className="text-navy-500">Warteschlange:</span>
+                    <span className="text-gold-600 bg-gold-100 px-2.5 py-0.5 rounded border border-gold-600">{syncQueueCount} Aktionen</span>
                   </div>
-                  <p className="text-kreile-muted text-[10px] leading-relaxed">
+                  <p className="text-text-muted text-[10px] leading-relaxed">
                     Daten werden in IndexedDB gepuffert und bei Verbindungswiederkehr automatisch übertragen.
                   </p>
                   <button
@@ -231,7 +231,7 @@ export function Topbar() {
                       setShowDropdown(false);
                     }}
                     disabled={isOffline || isSyncing}
-                    className={`w-full py-2.5 bg-kreile-navy text-white rounded-xl font-black text-xs hover:bg-slate-800 transition-all active:scale-95 cursor-pointer shadow-slate-200 shadow-[0_4px_12px] flex items-center justify-center gap-2 ${
+                    className={`w-full py-2.5 bg-navy-900 text-white rounded-xl font-black text-xs hover:bg-navy-900 transition-all active:scale-95 cursor-pointer shadow-neutral-gray-100 shadow-[0_4px_12px] flex items-center justify-center gap-2 ${
                       (isOffline || isSyncing) ? "opacity-40 cursor-not-allowed" : ""
                     }`}
                   >
@@ -246,24 +246,24 @@ export function Topbar() {
 
         <button 
           onClick={() => setSearchOpen(true)}
-          className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-md transition-colors"
+          className="flex items-center gap-2 text-sm font-medium text-navy-500 hover:text-navy-900 bg-neutral-gray-100 hover:bg-neutral-gray-100 px-3 py-2 rounded-md transition-colors"
         >
           <Search className="w-4 h-4" />
           <span className="hidden md:inline">Suche...</span>
-          <kbd className="hidden md:inline-flex h-5 items-center gap-1 rounded border border-slate-300 bg-slate-50 px-1.5 font-mono text-[10px] font-medium text-slate-500">
+          <kbd className="hidden md:inline-flex h-5 items-center gap-1 rounded border border-text-muted bg-bg-app-soft px-1.5 font-mono text-[10px] font-medium text-navy-500">
             <span className="text-xs">⌘</span>K
           </kbd>
         </button>
 
-        <button className="h-8 w-8 rounded-full bg-slate-200 flex items-center justify-center text-kreile-muted hover:bg-slate-300 transition-colors">
+        <button className="h-8 w-8 rounded-full bg-neutral-gray-100 flex items-center justify-center text-text-muted hover:bg-text-muted transition-colors">
           <User className="w-4 h-4" />
         </button>
       </div>
 
       {/* Sync Success Toast Banner */}
       {syncSuccessToast && (
-        <div className="absolute top-18 right-6 bg-emerald-50 text-emerald-800 border-2 border-emerald-200 py-3 px-5 rounded-2xl font-bold text-xs flex items-center gap-2 shadow-lg animate-in slide-in-from-top-4 duration-300 z-50">
-          <span className="h-2 w-2 rounded-full bg-emerald-550 animate-ping"></span>
+        <div className="absolute top-18 right-6 bg-success-green-soft text-success-green border-2 border-success-green py-3 px-5 rounded-2xl font-bold text-xs flex items-center gap-2 shadow-lg animate-in slide-in-from-top-4 duration-300 z-50">
+          <span className="h-2 w-2 rounded-full bg-success-green animate-ping"></span>
           {syncSuccessToast}
         </div>
       )}

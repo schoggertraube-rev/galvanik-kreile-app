@@ -14,7 +14,7 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
 
   if (isStartScreen) {
     return (
-      <div className="min-h-screen bg-kreile-bg text-kreile-text antialiased">
+      <div className="min-h-screen bg-bg-app text-kreile-text antialiased">
         <PwaRegister />
         {children}
       </div>
@@ -23,7 +23,7 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className="flex flex-col bg-kreile-bg text-kreile-text antialiased"
+      className="flex flex-col bg-bg-app text-navy-900 antialiased"
       style={{ height: "100dvh" }}          // dvh für korrekte mobile Viewport-Höhe
     >
       <PwaRegister />

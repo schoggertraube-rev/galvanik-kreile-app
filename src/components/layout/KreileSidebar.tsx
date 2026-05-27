@@ -19,10 +19,9 @@ export const MAIN_NAV_ITEMS = [
   { name: "Home",           path: "/",               icon: Home },
   { name: "Aufträge",       path: "/orders",          icon: ListTodo },
   { name: "Anfragen",       path: "/quotes",          icon: MessageSquare, hasBadge: true },
-  { name: "Teile",          path: "/items",           icon: Box },
   { name: "Kunden",         path: "/customers",       icon: Users },
   { name: "Warendurchlauf", path: "/warendurchlauf",  icon: PackageCheck },
-  { name: "Lager",          path: "/inventory",       icon: Warehouse },
+  { name: "Lager & Chemie", path: "/items",           icon: Warehouse },
   { name: "Scan",           path: "/scan",            icon: ScanLine },
 ];
 
@@ -52,11 +51,11 @@ export function KreileSidebar() {
     path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
 
   return (
-    <aside className="hidden lg:flex flex-col w-56 xl:w-64 shrink-0 border-r border-kreile-border bg-white h-full overflow-y-auto">
+    <aside className="hidden lg:flex flex-col w-56 xl:w-64 shrink-0 border-r border-neutral-gray-100 bg-white h-full overflow-y-auto">
 
       {/* Logo-Block oben (wiederholt das Brand kurz) */}
-      <div className="px-4 pt-5 pb-3 border-b border-kreile-border">
-        <p className="text-[10px] font-bold text-kreile-muted uppercase tracking-widest">Navigation</p>
+      <div className="px-4 pt-5 pb-3 border-b border-neutral-gray-100">
+        <p className="text-[10px] font-bold text-text-muted uppercase tracking-widest">Navigation</p>
       </div>
 
       {/* Haupt-Nav */}
@@ -70,8 +69,8 @@ export function KreileSidebar() {
               className={[
                 "group flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150",
                 active
-                  ? "bg-kreile-navy text-white"
-                  : "text-kreile-muted hover:bg-kreile-bg hover:text-kreile-navy",
+                  ? "bg-navy-900 text-white"
+                  : "text-text-muted hover:bg-bg-app hover:text-navy-900",
               ].join(" ")}
             >
               <div className="flex items-center gap-3">
@@ -80,7 +79,7 @@ export function KreileSidebar() {
                     "w-[18px] h-[18px] shrink-0 transition-colors",
                     active
                       ? "text-white"
-                      : "text-kreile-muted group-hover:text-kreile-navy",
+                      : "text-text-muted group-hover:text-navy-900",
                   ].join(" ")}
                   strokeWidth={1.5}
                 />
@@ -92,7 +91,7 @@ export function KreileSidebar() {
                 <span
                   className={[
                     "text-[10px] font-black px-1.5 py-0.5 rounded-full min-w-[20px] text-center",
-                    active ? "bg-white text-kreile-navy" : "bg-status-red text-white",
+                    active ? "bg-white text-navy-900" : "bg-danger-red text-white",
                   ].join(" ")}
                 >
                   {openQuotes}
@@ -104,8 +103,8 @@ export function KreileSidebar() {
       </nav>
 
       {/* Ergänzende Funktionen */}
-      <div className="px-3 pb-4 border-t border-kreile-border pt-3">
-        <p className="px-3 mb-2 text-[10px] font-bold text-kreile-muted uppercase tracking-widest">
+      <div className="px-3 pb-4 border-t border-neutral-gray-100 pt-3">
+        <p className="px-3 mb-2 text-[10px] font-bold text-text-muted uppercase tracking-widest">
           Ergänzend
         </p>
         {MORE_NAV_ITEMS.map((item) => {
@@ -117,11 +116,11 @@ export function KreileSidebar() {
               className={[
                 "flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-colors",
                 active
-                  ? "text-kreile-navy font-bold bg-kreile-bg"
-                  : "text-kreile-muted hover:bg-kreile-bg hover:text-kreile-navy",
+                  ? "text-navy-900 font-bold bg-bg-app"
+                  : "text-text-muted hover:bg-bg-app hover:text-navy-900",
               ].join(" ")}
             >
-              <span className={`w-1 h-1 rounded-full shrink-0 ${active ? "bg-kreile-accent" : "bg-kreile-border"}`} />
+              <span className={`w-1 h-1 rounded-full shrink-0 ${active ? "bg-accent-orange" : "bg-neutral-gray-100"}`} />
               {item.name}
             </Link>
           );

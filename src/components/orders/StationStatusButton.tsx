@@ -44,7 +44,7 @@ export function StationStatusButton({
     return (
       <Button 
         onClick={onCompleteStation} 
-        className="h-24 w-full flex flex-col gap-2 rounded-2xl bg-slate-800 hover:bg-kreile-navy text-white shadow-lg active:scale-95 transition-all"
+        className="h-24 w-full flex flex-col gap-2 rounded-2xl bg-navy-900 hover:bg-navy-900 text-white shadow-lg active:scale-95 transition-all"
       >
         <CheckCircle className="w-6 h-6" />
         <span className="font-bold">Station abschließen</span>
@@ -54,9 +54,9 @@ export function StationStatusButton({
 
   if (isStarting) {
     return (
-      <div className="h-24 w-full flex flex-col justify-center gap-2 rounded-2xl bg-blue-50 border-2 border-blue-600 p-2">
+      <div className="h-24 w-full flex flex-col justify-center gap-2 rounded-2xl bg-gold-100 border-2 border-navy-700 p-2">
         <select 
-          className="w-full text-xs p-1 rounded border border-slate-200 bg-white" 
+          className="w-full text-xs p-1 rounded border border-neutral-gray-100 bg-white" 
           value={selectedStation} 
           onChange={(e) => setSelectedStation(e.target.value)}
         >
@@ -64,7 +64,7 @@ export function StationStatusButton({
         </select>
         <div className="flex gap-2">
           <Button size="sm" variant="ghost" onClick={() => setIsStarting(false)} className="flex-1 h-6 text-xs px-0">Abbrechen</Button>
-          <Button size="sm" className="flex-1 h-6 text-xs bg-blue-600 text-white px-0" onClick={executeStart}>Starten</Button>
+          <Button size="sm" className="flex-1 h-6 text-xs bg-navy-700 text-white px-0" onClick={executeStart}>Starten</Button>
         </div>
       </div>
     );
@@ -73,7 +73,7 @@ export function StationStatusButton({
   return (
     <Button 
       onClick={handleStartStation} 
-      className="h-24 w-full flex flex-col gap-2 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white shadow-lg active:scale-95 transition-all"
+      className="h-24 w-full flex flex-col gap-2 rounded-2xl bg-navy-700 hover:bg-navy-700 text-white shadow-lg active:scale-95 transition-all"
     >
       <Play className="w-6 h-6" />
       <span className="font-bold">Station starten</span>

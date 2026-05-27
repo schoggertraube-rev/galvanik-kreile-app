@@ -144,17 +144,17 @@ export default function StatusDelayPage() {
 
     // Determine color scheme & status label dynamically
     let blockerSymbol = "✅ Optimal";
-    let colorClass = "bg-emerald-50/50 border-emerald-200 text-emerald-950 shadow-emerald-100";
+    let colorClass = "bg-success-green-soft/50 border-success-green text-success-green shadow-emerald-100";
     
     if (load >= 90) {
       blockerSymbol = "⚠️ Engpass / Überlastet";
-      colorClass = "bg-red-50 border-red-200 text-red-950 shadow-red-100 animate-pulse";
+      colorClass = "bg-accent-orange-soft border-danger-red text-danger-red shadow-red-100 animate-pulse";
     } else if (load >= 75) {
       blockerSymbol = "🔥 Hohe Auslastung";
-      colorClass = "bg-orange-50 border-orange-200 text-orange-950 shadow-orange-100";
+      colorClass = "bg-gold-100 border-accent-orange text-accent-orange shadow-orange-100";
     } else if (load >= 45) {
       blockerSymbol = "⏱️ Normaler Betrieb";
-      colorClass = "bg-yellow-50/50 border-yellow-200 text-yellow-950 shadow-yellow-100";
+      colorClass = "bg-gold-100 border-yellow-200 text-yellow-950 shadow-yellow-100";
     }
 
     return {
@@ -186,38 +186,38 @@ export default function StatusDelayPage() {
 
       {/* Summary Info Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <Card className="border-red-200 bg-red-50/10">
+        <Card className="border-danger-red bg-accent-orange-soft/50">
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-600 font-black text-xl shrink-0">
+            <div className="w-12 h-12 rounded-full bg-danger-red flex items-center justify-center text-danger-red font-black text-xl shrink-0">
               {countRed}
             </div>
             <div>
-              <span className="text-[10px] text-kreile-muted font-bold uppercase block leading-none">Kritischer Verzug</span>
-              <span className="font-extrabold text-kreile-navy text-sm mt-1 inline-block">Sofortige Klärung nötig</span>
+              <span className="text-[10px] text-text-muted font-bold uppercase block leading-none">Kritischer Verzug</span>
+              <span className="font-extrabold text-navy-900 text-sm mt-1 inline-block">Sofortige Klärung nötig</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-orange-200 bg-orange-50/10">
+        <Card className="border-accent-orange bg-gold-100/10">
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center text-orange-600 font-black text-xl shrink-0">
+            <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center text-accent-orange font-black text-xl shrink-0">
               {countOrange}
             </div>
             <div>
-              <span className="text-[10px] text-kreile-muted font-bold uppercase block leading-none">Gefährdet / Achtung</span>
-              <span className="font-extrabold text-kreile-navy text-sm mt-1 inline-block">Terminliche Engpässe</span>
+              <span className="text-[10px] text-text-muted font-bold uppercase block leading-none">Gefährdet / Achtung</span>
+              <span className="font-extrabold text-navy-900 text-sm mt-1 inline-block">Terminliche Engpässe</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-kreile-border-strong bg-kreile-surface-soft/10">
+        <Card className="border-neutral-gray-300 bg-bg-app-soft/10">
           <CardContent className="p-4 flex items-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-kreile-surface-warm flex items-center justify-center text-kreile-muted font-black text-xl shrink-0">
+            <div className="w-12 h-12 rounded-full bg-bg-app-soft flex items-center justify-center text-text-muted font-black text-xl shrink-0">
               {countBlocked}
             </div>
             <div>
-              <span className="text-[10px] text-kreile-muted font-bold uppercase block leading-none">Wartet auf Freigabe</span>
-              <span className="font-extrabold text-kreile-navy text-sm mt-1 inline-block">Kundenentscheidung offen</span>
+              <span className="text-[10px] text-text-muted font-bold uppercase block leading-none">Wartet auf Freigabe</span>
+              <span className="font-extrabold text-navy-900 text-sm mt-1 inline-block">Kundenentscheidung offen</span>
             </div>
           </CardContent>
         </Card>
@@ -230,7 +230,7 @@ export default function StatusDelayPage() {
         <div className="lg:col-span-2 space-y-4">
           
           {/* Reason Category Pills Filter */}
-          <div className="flex flex-wrap gap-1.5 p-1 bg-kreile-surface-warm rounded-lg border text-xs">
+          <div className="flex flex-wrap gap-1.5 p-1 bg-bg-app-soft rounded-lg border text-xs">
             {[
               { id: "all", label: "Alle Gründe" },
               { id: "Zusatzarbeit", label: "🛠️ Zusatzaufwand" },
@@ -244,8 +244,8 @@ export default function StatusDelayPage() {
                 onClick={() => setFilterCategory(cat.id)}
                 className={`px-3 py-2 rounded-md font-bold transition-all ${
                   filterCategory === cat.id
-                    ? "bg-white text-kreile-navy shadow-sm font-extrabold"
-                    : "text-slate-505 hover:text-slate-850"
+                    ? "bg-white text-navy-900 shadow-sm font-extrabold"
+                    : "text-bg-app-soft5 hover:text-slate-850"
                 }`}
               >
                 {cat.label}
@@ -255,11 +255,11 @@ export default function StatusDelayPage() {
 
           {/* Cards List */}
           <div className="space-y-4">
-            <div className="flex items-center justify-between text-xs text-kreile-muted font-bold px-1">
+            <div className="flex items-center justify-between text-xs text-text-muted font-bold px-1">
               <span>{filteredDelays.length} aktive Eskalationskandidaten</span>
               {selectedStation && (
                 <span 
-                  className="text-kreile-navy bg-kreile-surface-warm border border-kreile-border-strong px-2.5 py-1 rounded cursor-pointer flex items-center gap-1 font-bold" 
+                  className="text-navy-900 bg-bg-app-soft border border-neutral-gray-300 px-2.5 py-1 rounded cursor-pointer flex items-center gap-1 font-bold" 
                   onClick={() => setSelectedStation(null)}
                 >
                   Station: {selectedStation} ✕
@@ -277,10 +277,10 @@ export default function StatusDelayPage() {
                 const borderStyle = config.leftBorderClass;
                 const badgeStyle = config.badgeClass;
                 const cardStyle = isCritical 
-                  ? "border-red-300 bg-red-50/20 shadow-red-50/50 shadow-md"
+                  ? "border-danger-red bg-accent-orange-soft/50 shadow-red-50/50 shadow-md"
                   : isWarning 
-                    ? "border-orange-200 bg-orange-50/10 shadow-sm"
-                    : "border-kreile-border-strong bg-white shadow-sm";
+                    ? "border-accent-orange bg-gold-100/10 shadow-sm"
+                    : "border-neutral-gray-300 bg-white shadow-sm";
 
                 return (
                   <Card key={item.orderId} className={`transition-all duration-200 ${cardStyle} border-l-8 ${borderStyle}`}>
@@ -290,10 +290,10 @@ export default function StatusDelayPage() {
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b pb-3">
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-extrabold text-kreile-navy text-base">{item.id}</span>
-                            <span className="text-xs text-kreile-muted font-semibold">• {item.customerName}</span>
+                            <span className="font-mono font-extrabold text-navy-900 text-base">{item.id}</span>
+                            <span className="text-xs text-text-muted font-semibold">• {item.customerName}</span>
                           </div>
-                          <h4 className="font-bold text-kreile-navy text-sm sm:text-base font-serif">{item.task}</h4>
+                          <h4 className="font-bold text-navy-900 text-sm sm:text-base font-serif">{item.task}</h4>
                         </div>
 
                         <div className="text-left sm:text-right shrink-0">
@@ -301,7 +301,7 @@ export default function StatusDelayPage() {
                             {item.reasonCategory.toUpperCase()} • {item.stationName}
                           </Badge>
                           <span className={`block font-black text-sm mt-1 ${
-                            isCritical ? "text-red-650" : isWarning ? "text-orange-650" : "text-slate-650"
+                            isCritical ? "text-danger-red" : isWarning ? "text-accent-orange" : "text-slate-650"
                           }`}>
                             {item.delayText}
                           </span>
@@ -309,15 +309,15 @@ export default function StatusDelayPage() {
                       </div>
 
                       {/* Detail Text */}
-                      <div className="text-xs text-kreile-muted leading-relaxed font-medium bg-kreile-surface-soft/50 p-3.5 rounded-xl border border-slate-100">
-                        <span className="font-extrabold text-[10px] text-kreile-muted block uppercase mb-1">Problembeschreibung</span>
+                      <div className="text-xs text-text-muted leading-relaxed font-medium bg-bg-app-soft/50 p-3.5 rounded-xl border border-neutral-gray-100">
+                        <span className="font-extrabold text-[10px] text-text-muted block uppercase mb-1">Problembeschreibung</span>
                         {item.reasonDetail}
                       </div>
 
                       {/* Action Bar */}
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                         <div className="text-[10px] text-slate-450 font-bold uppercase leading-relaxed">
-                          Empfehlung: <span className="text-kreile-navy font-black">{item.recommendedAction}</span>
+                          Empfehlung: <span className="text-navy-900 font-black">{item.recommendedAction}</span>
                         </div>
                         
                         <div className="flex gap-2 w-full sm:w-auto">
@@ -325,7 +325,7 @@ export default function StatusDelayPage() {
                             <Button 
                               size="sm" 
                               onClick={() => handleTriggerAction(item.id)}
-                              className="bg-kreile-navy text-white hover:bg-kreile-navy-soft h-12 text-xs font-bold w-full sm:w-auto px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                              className="bg-navy-900 text-white hover:bg-navy-700 h-12 text-xs font-bold w-full sm:w-auto px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                             >
                               <Phone className="h-4 w-4" /> Kunde anrufen
                             </Button>
@@ -335,11 +335,11 @@ export default function StatusDelayPage() {
                               onClick={() => handleTriggerAction(item.id)}
                               className={`h-12 text-xs font-bold w-full sm:w-auto px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
                                 isCritical 
-                                  ? "bg-red-600 text-white hover:bg-red-700" 
-                                  : "bg-kreile-navy text-white hover:bg-kreile-navy-soft"
+                                  ? "bg-danger-red text-white hover:bg-danger-red" 
+                                  : "bg-navy-900 text-white hover:bg-navy-700"
                               }`}
                             >
-                              <Flame className="h-4 w-4 text-orange-400 animate-pulse" /> Maßnahme einleiten
+                              <Flame className="h-4 w-4 text-accent-orange animate-pulse" /> Maßnahme einleiten
                             </Button>
                           )}
                         </div>
@@ -350,8 +350,8 @@ export default function StatusDelayPage() {
                 );
               })
             ) : (
-              <Card className="p-12 text-center text-kreile-muted bg-white border border-kreile-border-strong border-dashed rounded-xl space-y-3">
-                <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center mx-auto text-emerald-600">
+              <Card className="p-12 text-center text-text-muted bg-white border border-neutral-gray-300 border-dashed rounded-xl space-y-3">
+                <div className="w-12 h-12 rounded-full bg-success-green-soft border border-success-green flex items-center justify-center mx-auto text-success-green">
                   <ShieldCheck className="h-6 w-6" />
                 </div>
                 <div>
@@ -365,9 +365,9 @@ export default function StatusDelayPage() {
 
         {/* Right Column: Station Heatmap */}
         <div className="space-y-4">
-          <Card className="shadow-sm border-kreile-border-strong">
+          <Card className="shadow-sm border-neutral-gray-300">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-bold text-kreile-navy font-serif">Stations-Engpass-Heatmap</CardTitle>
+              <CardTitle className="text-base font-bold text-navy-900 font-serif">Stations-Engpass-Heatmap</CardTitle>
               <CardDescription className="text-xs">Größe spiegelt wartende Teile wider, Farbe die Auslastung.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -383,26 +383,26 @@ export default function StatusDelayPage() {
                       className={`rounded-xl border p-3 flex flex-col justify-between transition-all duration-200 cursor-pointer shadow-sm relative overflow-hidden group ${
                         station.sizeClass
                       } ${station.colorClass} ${
-                        isSelected ? "ring-2 ring-kreile-navy border-transparent scale-[0.98]" : "hover:shadow-md"
+                        isSelected ? "ring-2 ring-navy-900 border-transparent scale-[0.98]" : "hover:shadow-md"
                       }`}
                     >
                       <div className="space-y-1">
                         <div className="flex justify-between items-start gap-1">
                           <span className="font-bold text-xs sm:text-sm tracking-tight font-serif leading-none block">{station.name}</span>
-                          <span className="text-[10px] font-bold text-kreile-muted block shrink-0">{station.load}%</span>
+                          <span className="text-[10px] font-bold text-text-muted block shrink-0">{station.load}%</span>
                         </div>
-                        <Badge className="text-[8px] bg-kreile-navy/10 text-slate-850 font-bold border-0 mt-1">
+                        <Badge className="text-[8px] bg-navy-900/10 text-slate-850 font-bold border-0 mt-1">
                           {station.blockerSymbol}
                         </Badge>
                       </div>
 
                       <div className="mt-4 flex items-end justify-between">
                         <div>
-                          <span className="text-[9px] text-kreile-muted font-bold uppercase block leading-none">Wartende Teile</span>
+                          <span className="text-[9px] text-text-muted font-bold uppercase block leading-none">Wartende Teile</span>
                           <span className="text-2xl font-black block mt-0.5 leading-none">{station.partsWaiting} Stk.</span>
                         </div>
                         
-                         <span className="text-[8px] font-extrabold text-kreile-navy bg-kreile-surface-warm border border-kreile-border-strong rounded px-1 group-hover:bg-white/40">
+                         <span className="text-[8px] font-extrabold text-navy-900 bg-bg-app-soft border border-neutral-gray-300 rounded px-1 group-hover:bg-white/40">
                            Slot: {station.nextFreeSlot.split(" ")[0]}
                          </span>
                       </div>
@@ -412,10 +412,10 @@ export default function StatusDelayPage() {
               </div>
 
               {/* Heatmap Legend */}
-              <div className="flex items-center justify-between text-[9px] font-bold text-kreile-muted border-t pt-3 px-1 uppercase tracking-wider">
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-red-500 rounded-sm"></span> Überlast (&gt;90%)</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-orange-500 rounded-sm"></span> Hoch (70-90%)</span>
-                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-emerald-500 rounded-sm"></span> Optimal (&lt;70%)</span>
+              <div className="flex items-center justify-between text-[9px] font-bold text-text-muted border-t pt-3 px-1 uppercase tracking-wider">
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-accent-orange-soft0 rounded-sm"></span> Überlast (&gt;90%)</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-gold-1000 rounded-sm"></span> Hoch (70-90%)</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 bg-success-green-soft0 rounded-sm"></span> Optimal (&lt;70%)</span>
               </div>
 
             </CardContent>
