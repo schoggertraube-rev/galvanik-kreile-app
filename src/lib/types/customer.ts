@@ -130,10 +130,13 @@ export type Customer = {
   type: CustomerType;
 
   city?: string;
+  zipCode?: string;
   address?: string;
   email?: string;
   phone?: string;
   contactPerson?: string;
+  companyName?: string;
+  imageUrls?: string[];
 
   prefComm?: "E-Mail" | "Telefon" | "Brief / Post" | "whatsapp" | "unknown";
   communicationPreference?: "phone" | "email" | "whatsapp" | "post" | "unknown";

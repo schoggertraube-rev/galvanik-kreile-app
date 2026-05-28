@@ -124,18 +124,15 @@ export function RightNav() {
         />
       </div>
 
-      <div className="flex flex-col gap-1 w-full border-t border-neutral-gray-100 pt-4 mb-4">
-        <div className="flex flex-col items-center w-full">
-          <RightNavItem
-            label="Kontrolle & Archiv"
-            href="/archive"
-            icon={<Archive className="w-5 h-5" strokeWidth={1.5} />}
-            variant="normal"
-            isActive={isActive("/archive")}
-            onClick={() => trackUiEvent("nav_click", { target: "/archive" })}
-          />
-        </div>
-        <SubMenuLink label="Performance" href="/performance" isAvailable={performanceFeature.available} />
+      <div className="flex flex-col items-center w-full border-t border-neutral-gray-100 pt-4 mb-4">
+        <RightNavItem
+          label="Kontrolle"
+          href="/kontrolle"
+          icon={<Archive className="w-5 h-5" strokeWidth={1.5} />}
+          variant="normal"
+          isActive={isActive("/kontrolle") || isActive("/archive") || isActive("/performance")}
+          onClick={() => trackUiEvent("nav_click", { target: "/kontrolle" })}
+        />
       </div>
       
     </aside>

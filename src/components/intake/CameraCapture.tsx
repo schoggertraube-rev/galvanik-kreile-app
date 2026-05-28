@@ -10,7 +10,7 @@ export function CameraCapture({
   onScanComplete,
   onCancel,
 }: {
-  onScanComplete: (scan: OCRScan) => void;
+  onScanComplete: (scan: OCRScan, base64Image?: string) => void;
   onCancel?: () => void;
 }) {
   const [scanning, setScanning] = useState(false);
@@ -86,7 +86,7 @@ export function CameraCapture({
     await eventsRepository.addEvent({ eventType: "OCR_SCAN_COMPLETED" });
     setScanning(false);
     stopCamera();
-    onScanComplete(scan);
+    onScanComplete(scan, imageData);
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,7 +103,7 @@ export function CameraCapture({
       await eventsRepository.addEvent({ eventType: "OCR_SCAN_COMPLETED" });
       setScanning(false);
       stopCamera();
-      onScanComplete(scan);
+      onScanComplete(scan, base64);
     };
     reader.readAsDataURL(file);
   };

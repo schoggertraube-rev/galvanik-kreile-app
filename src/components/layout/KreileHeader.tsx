@@ -74,13 +74,10 @@ export function KreileHeader() {
 
       {/* LEFT: GK Monogram + Brand */}
       <Link href="/" className="flex items-center gap-3 shrink-0 group">
-        <Image
-          src="/logo.png"
-          alt="Kreile Galvanik"
-          width={180}
-          height={40}
+        <img
+          src="/assets/logo/kreile-wordmark-skyline.svg"
+          alt="Kreile Wortmarke Skyline"
           className="h-10 w-auto object-contain"
-          priority
         />
       </Link>
 

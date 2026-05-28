@@ -21,8 +21,9 @@ export const customersRepository = {
       
       return data.map(c => ({
         id: c.id,
-        customerNumber: c.id.substring(0, 8), // Fallback since DB has no customer_number column
+        customerNumber: c.customer_number || c.id.substring(0, 8),
         name: c.name,
+        companyName: c.company_name || undefined,
         type: c.type,
         contactPerson: c.contact_person,
         email: c.email,
@@ -35,6 +36,10 @@ export const customersRepository = {
         internalWarning: c.internal_warning || undefined,
         tags: c.tags || [],
         creditRating: c.credit_rating || undefined,
+        imageUrls: c.image_urls || [],
+        address: c.address || undefined,
+        city: c.city || undefined,
+        zipCode: c.zip_code || undefined,
         createdAt: c.created_at,
         updatedAt: c.updated_at
       })) as Customer[];
@@ -82,8 +87,9 @@ export const customersRepository = {
 
       return {
         id: data.id,
-        customerNumber: data.id.substring(0, 8),
+        customerNumber: data.customer_number || data.id.substring(0, 8),
         name: data.name,
+        companyName: data.company_name || undefined,
         type: data.type,
         contactPerson: data.contact_person,
         email: data.email,
@@ -96,6 +102,10 @@ export const customersRepository = {
         internalWarning: data.internal_warning || undefined,
         tags: data.tags || [],
         creditRating: data.credit_rating || undefined,
+        imageUrls: data.image_urls || [],
+        address: data.address || undefined,
+        city: data.city || undefined,
+        zipCode: data.zip_code || undefined,
         createdAt: data.created_at,
         updatedAt: data.updated_at
       } as Customer;
@@ -113,8 +123,14 @@ export const customersRepository = {
       
       const newCustomerDb = {
         id: newId,
+        customer_number: `K-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
         name: data.name,
+        company_name: data.companyName || null,
         type: data.type,
+        address: data.address || null,
+        city: data.city || null,
+        zip_code: data.zipCode || null,
+        image_urls: data.imageUrls || [],
         contact_person: data.contactPerson,
         email: data.email,
         phone: data.phone,
@@ -137,7 +153,7 @@ export const customersRepository = {
       return {
         ...data,
         id: newId,
-        customerNumber: newId.substring(0, 8)
+        customerNumber: newCustomerDb.customer_number
       } as Customer;
     }
 
@@ -186,7 +202,12 @@ export const customersRepository = {
       
       const updateData: any = {};
       if (changes.name !== undefined) updateData.name = changes.name;
+      if (changes.companyName !== undefined) updateData.company_name = changes.companyName;
       if (changes.type !== undefined) updateData.type = changes.type;
+      if (changes.address !== undefined) updateData.address = changes.address;
+      if (changes.city !== undefined) updateData.city = changes.city;
+      if (changes.zipCode !== undefined) updateData.zip_code = changes.zipCode;
+      if (changes.imageUrls !== undefined) updateData.image_urls = changes.imageUrls;
       if (changes.contactPerson !== undefined) updateData.contact_person = changes.contactPerson;
       if (changes.email !== undefined) updateData.email = changes.email;
       if (changes.phone !== undefined) updateData.phone = changes.phone;

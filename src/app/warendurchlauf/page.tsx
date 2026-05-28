@@ -7,6 +7,9 @@ import { OCRReviewPanel } from "@/components/intake/OCRReviewPanel";
 import { CustomerMatchPanel } from "@/components/intake/CustomerMatchPanel";
 import { SuggestedItemsPanel } from "@/components/intake/SuggestedItemsPanel";
 import { IntakeCompletionSummary } from "@/components/intake/IntakeCompletionSummary";
+import { OcrMatchResult } from "@/components/intake/OcrMatchResult";
+import { NewCustomerForm } from "@/components/customers/NewCustomerForm";
+import { processImageWithAI } from "@/app/actions/ocr.actions";
 import { OCRScan, ocrService } from "@/lib/services/ocrService";
 import {
   Camera,
@@ -20,6 +23,7 @@ import {
   CheckCircle,
   Loader2,
   Scan,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { customersRepository, Customer } from "@/lib/repositories/customersRepository";
@@ -34,7 +38,8 @@ type WizardStep =
   | "manual_customer"
   | "manual_customer_edit"
   | "manual_items"
-  | "manual_summary";
+  | "manual_summary"
+  | "ocr_match_result";
 
 const generateAutofillDetails = (companyName: string) => {
   const name = companyName.trim();
@@ -70,6 +75,7 @@ export default function NewOrderWizard() {
 
   // Shared payload
   const [ocrScan, setOcrScan] = useState<OCRScan | null>(null);
+  const [ocrPreviewUrl, setOcrPreviewUrl] = useState<string | undefined>();
   const [parsedOcrData, setParsedOcrData] = useState<Record<string, string> | null>(null);
   const [customerSelection, setCustomerSelection] = useState<{
     id: string | null;
@@ -117,6 +123,31 @@ export default function NewOrderWizard() {
       setManualSearchResults(results);
     }
     setManualSearching(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setManualSearching(true); // Re-using this state for loading indicator
+    
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = event.target?.result as string;
+      const scan = await processImageWithAI(base64);
+      const extract = (key: string) => scan.extractedFields.find(f => f.key === key)?.value || "";
+      setParsedOcrData({
+        customerName: extract("customerName"),
+        customerNumber: extract("customerNumber"),
+        itemName: extract("itemName"),
+        quantity: extract("quantity"),
+        surfaceRequested: extract("surfaceRequested"),
+      });
+      setOcrPreviewUrl(base64);
+      setStep("ocr_match_result");
+      setManualSearching(false);
+    };
+    reader.readAsDataURL(file);
   };
 
   const updateManualItem = (
@@ -225,11 +256,22 @@ export default function NewOrderWizard() {
 
       {/* ── CAMERA FLOW ── */}
       {step === "camera" && (
-        <CameraCapture
-          onScanComplete={(scan) => {
+        <CameraCapture 
+          onScanComplete={(scan, base64Image) => {
             setOcrScan(scan);
-            setStep("ocr_review");
-          }}
+            const extract = (key: string) => scan.extractedFields.find(f => f.key === key)?.value || "";
+            setParsedOcrData({
+              customerName: extract("customerName"),
+              customerNumber: extract("customerNumber"),
+              itemName: extract("itemName"),
+              quantity: extract("quantity"),
+              surfaceRequested: extract("surfaceRequested"),
+            });
+            if (base64Image) {
+              setOcrPreviewUrl(base64Image);
+            }
+            setStep("ocr_match_result");
+          }} 
           onCancel={() => setStep("entry")}
         />
       )}
@@ -348,13 +390,13 @@ export default function NewOrderWizard() {
                   placeholder="Name oder Kundennummer eingeben..."
                   className="w-full text-xl font-bold bg-bg-app-soft p-4 rounded-2xl border-2 border-neutral-gray-300 outline-none focus:border-navy-700 focus:bg-white transition-all"
                 />
-                <button
-                  onClick={handleManualSearch}
-                  className="h-[64px] w-[64px] rounded-2xl border-2 border-gold-600 hover:border-navy-700 hover:bg-gold-100 text-navy-700 shrink-0 flex items-center justify-center transition-all"
-                  title="Suchen"
+                <label
+                  className="h-[64px] w-[64px] rounded-2xl border-2 border-gold-600 hover:border-navy-700 hover:bg-gold-100 text-navy-700 shrink-0 flex items-center justify-center transition-all cursor-pointer group"
+                  title="Dokument hochladen"
                 >
-                  <Search className="w-6 h-6" />
-                </button>
+                  <Upload className="w-6 h-6 group-hover:scale-110 transition-transform" />
+                  <input type="file" className="hidden" accept=".pdf,image/jpeg,image/png" onChange={handleFileUpload} />
+                </label>
                 <button
                   onClick={() => setStep("camera")}
                   className="h-[64px] w-[64px] rounded-2xl border-2 border-gold-600 hover:border-navy-700 hover:bg-gold-100 text-navy-700 shrink-0 flex items-center justify-center transition-all group"
@@ -434,74 +476,15 @@ export default function NewOrderWizard() {
 
       {/* ── MANUAL FLOW – Step 1b: Neukunde Details ── */}
       {step === "manual_customer_edit" && customerSelection && (
-        <div className="w-full max-w-3xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
-          <button
-            onClick={() => setStep("manual_customer")}
-            className="flex items-center gap-2 text-text-muted hover:text-navy-900 font-bold text-sm px-3 py-2 rounded-xl hover:bg-bg-app-soft transition-all"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Zurück zur Kundensuche
-          </button>
-
-          <div className="text-center space-y-2">
-            <h2 className="text-3xl font-black font-serif text-navy-900">
-              Kundenprofil vervollständigen
-            </h2>
-            <p className="text-text-muted font-medium">
-              Neukunde: <strong className="text-navy-900">{customerSelection.newName}</strong>
-            </p>
-          </div>
-
-          <div className="bg-white border-2 border-neutral-gray-300 rounded-3xl p-6 md:p-8 shadow-xl space-y-4">
-            <div className="flex gap-4 mb-4">
-              <Button
-                onClick={() => {
-                  const company = customerSelection.newName || manualSearch.trim() || "Neuer Kunde";
-                  setNewCustomerDetails(generateAutofillDetails(company));
-                }}
-                variant="outline"
-                className="w-full font-bold text-navy-700 border-navy-700 bg-gold-100 hover:bg-navy-700"
-              >
-                <Search className="w-4 h-4 mr-2" /> Internet Autofill (Branchensuche)
-              </Button>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-text-muted uppercase">Straße & Hausnummer</label>
-                <input type="text" autoComplete="street-address" value={newCustomerDetails.street} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, street: e.target.value})} className="w-full p-3 rounded-xl border-2 border-neutral-gray-300 focus:border-navy-700 outline-none" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-text-muted uppercase">PLZ</label>
-                  <input type="text" autoComplete="postal-code" value={newCustomerDetails.zip} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, zip: e.target.value})} className="w-full p-3 rounded-xl border-2 border-neutral-gray-300 focus:border-navy-700 outline-none" />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-text-muted uppercase">Ort</label>
-                  <input type="text" autoComplete="address-level2" value={newCustomerDetails.city} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, city: e.target.value})} className="w-full p-3 rounded-xl border-2 border-neutral-gray-300 focus:border-navy-700 outline-none" />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-text-muted uppercase">E-Mail</label>
-                <input type="email" autoComplete="email" value={newCustomerDetails.email} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, email: e.target.value})} className="w-full p-3 rounded-xl border-2 border-neutral-gray-300 focus:border-navy-700 outline-none" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-text-muted uppercase">Telefon</label>
-                <input type="tel" autoComplete="tel" value={newCustomerDetails.phone} onChange={(e) => setNewCustomerDetails({...newCustomerDetails, phone: e.target.value})} className="w-full p-3 rounded-xl border-2 border-neutral-gray-300 focus:border-navy-700 outline-none" />
-              </div>
-            </div>
-
-            <Button
-              onClick={() => {
-                setManualItems([{ name: "", quantity: 1, surfaceRequested: "" }]);
-                setStep("manual_items");
-              }}
-              className="w-full h-14 mt-6 text-lg font-bold rounded-xl bg-navy-700 text-white hover:bg-navy-700"
-            >
-              Weiter zu Bauteilen <ChevronRight className="w-5 h-5 ml-2" />
-            </Button>
-          </div>
-        </div>
+        <NewCustomerForm
+          customerId={customerSelection.id}
+          onClose={() => setStep("manual_customer")}
+          onSave={(id) => {
+            setCustomerSelection({ id, newName: customerSelection.newName }); 
+            setManualItems([{ name: "", quantity: 1, surfaceRequested: "" }]);
+            setStep("manual_items");
+          }}
+        />
       )}
 
       {/* ── MANUAL FLOW – Step 2: Teile ── */}
@@ -668,6 +651,31 @@ export default function NewOrderWizard() {
           items={items}
           onBack={() => setStep("manual_items")}
         />
+      )}
+
+      {/* ── OCR MATCH RESULT (N3 & N4) ── */}
+      {step === "ocr_match_result" && parsedOcrData && (
+        <div className="w-full h-full flex flex-col pt-10">
+          <div className="mb-4 text-center">
+            <button
+              onClick={() => setStep("entry")}
+              className="inline-flex items-center gap-2 text-text-muted hover:text-navy-900 font-bold text-sm px-3 py-2 rounded-xl hover:bg-bg-app-soft transition-all"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Abbrechen
+            </button>
+          </div>
+          <OcrMatchResult 
+            ocrData={parsedOcrData}
+            previewUrl={ocrPreviewUrl}
+            onComplete={() => {
+              // Successfully created an order or skipped
+              setStep("entry");
+              setParsedOcrData(null);
+              setOcrPreviewUrl(undefined);
+            }}
+          />
+        </div>
       )}
     </div>
   );

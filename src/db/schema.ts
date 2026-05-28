@@ -21,13 +21,16 @@ export const customers = pgTable("customers", {
   name: text("name").notNull(),
   type: varchar("type", { length: 50 }).notNull(), // business, privat, institution
   city: text("city"),
+  zipCode: text("zip_code"),
   address: text("address"),
+  companyName: text("company_name"),
   phone: text("phone"),
   email: text("email"),
   prefComm: varchar("pref_comm", { length: 50 }),
   risk: varchar("risk", { length: 50 }).default("Niedrig"),
   riskNote: text("risk_note"),
   notes: text("notes"),
+  imageUrls: text("image_urls").array().default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -59,6 +62,7 @@ export const orders = pgTable("orders", {
   recommendedAction: text("recommended_action"),
   intakeDate: timestamp("intake_date").defaultNow(),
   dueDate: timestamp("due_date"),
+  attachmentUrl: text("attachment_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -122,3 +126,30 @@ export const inventoryItems = pgTable("inventory_items", {
 // Legacy aliases for backward compatibility with old actions
 export const statusEvents = events;
 
+// 8. Inquiries (QuoteRequests)
+export const inquiries = pgTable("inquiries", {
+  id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  customerId: text("customer_id").references(() => customers.id, { onDelete: "set null" }),
+  customerName: text("customer_name").notNull(),
+  subject: text("subject").notNull().default(''),
+  description: text("description").notNull().default(''),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  rustLevel: text("rust_level"),
+  dirtLevel: text("dirt_level"),
+  partCount: integer("part_count").notNull().default(1),
+  material: text("material").notNull().default(''),
+  status: text("status").notNull().default('offen'),
+  photo: text("photo"),
+  pricing: jsonb("pricing").$type<{
+    grundarbeit: number;
+    reinigung: number;
+    entmetallisierung: number;
+    schleifaufwand: number;
+    badchemie: number;
+    risikopuffer: number;
+    marge: number;
+  }>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});

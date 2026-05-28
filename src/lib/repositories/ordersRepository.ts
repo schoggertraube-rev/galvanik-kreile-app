@@ -25,6 +25,7 @@ export type Order = {
   customerName?: string;
   rawIntakeDate?: string;
   rawDueDate?: string;
+  attachmentUrl?: string;
 }
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
@@ -36,19 +37,19 @@ export const ordersRepository = {
       const { data: dbOrders, error: ordersError } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
       if (ordersError) {
         console.error("Supabase ordersRepository.getAll (orders) error:", ordersError);
-        throw ordersError;
+        return [];
       }
       
       const { data: dbItems, error: itemsError } = await supabase.from('items').select('*');
       if (itemsError) {
         console.error("Supabase ordersRepository.getAll (items) error:", itemsError);
-        throw itemsError;
+        return [];
       }
       
       const { data: dbCustomers, error: customersError } = await supabase.from('customers').select('id, name');
       if (customersError) {
         console.error("Supabase ordersRepository.getAll (customers) error:", customersError);
-        throw customersError;
+        return [];
       }
 
       return dbOrders.map(o => {
@@ -97,6 +98,7 @@ export const ordersRepository = {
           dueDate,
           rawIntakeDate: !isNaN(rawIntake.getTime()) ? rawIntake.toISOString() : undefined,
           rawDueDate: !isNaN(rawDue.getTime()) ? rawDue.toISOString() : undefined,
+          attachmentUrl: o.attachment_url,
           dueLabel: "Fällig in",
           dueValue: "10 Tagen"
         };
@@ -143,7 +145,7 @@ export const ordersRepository = {
       const orderId = data.id || createId();
       const orderNumber = `A-${202600 + Math.floor(Math.random() * 10000)}`;
       
-      const newOrderDb = {
+      const newOrderDb: any = {
         id: orderId,
         order_number: orderNumber,
         customer_id: data.customerId,
@@ -153,6 +155,9 @@ export const ordersRepository = {
         received_at: intakeDate,
         due_date: dueDate
       };
+      if (data.attachmentUrl) {
+        newOrderDb.attachment_url = data.attachmentUrl;
+      }
       
       const { error: orderError } = await supabase.from('orders').insert(newOrderDb);
       if (orderError) {
