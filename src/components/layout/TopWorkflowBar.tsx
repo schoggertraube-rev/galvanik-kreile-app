@@ -16,7 +16,7 @@ function TopWorkflowBarContent() {
   const searchParams = useSearchParams();
 
   return (
-    <div className="w-full bg-gradient-to-r from-bg-app to-surface-tinted border-b border-neutral-gray-100 py-4 px-4 flex justify-center relative overflow-hidden shrink-0 shadow-sm z-10">
+    <div className="sticky top-0 z-50 w-full bg-bg-app/90 backdrop-blur-md py-4 px-4 flex justify-center relative overflow-hidden shrink-0">
       {/* SVG Decorative Dot Grid on the Top-Right */}
       <div className="absolute right-0 top-0 h-full w-1/3 opacity-8 pointer-events-none">
         <svg width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -47,8 +47,8 @@ function TopWorkflowBarContent() {
               <Link
                 href={station.path}
                 className={`relative w-28 md:w-40 bg-white rounded-2xl border ${
-                  isActive ? "border-accent-orange shadow-md scale-102 ring-1 ring-accent-orange/30" : "border-neutral-gray-100 shadow-sm"
-                } p-3 md:p-4 flex flex-col items-center justify-center gap-2 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer`}
+                  isActive ? "border-accent-orange shadow-md ring-1 ring-accent-orange/30 scale-105" : "border-neutral-gray-100 shadow-sm"
+                } p-3 md:p-4 flex flex-col items-center justify-center gap-2 hover:scale-105 transition-all duration-300 cursor-pointer active:scale-95`}
               >
                 <span className="text-[10px] md:text-xs font-bold text-text-muted leading-none tracking-wider uppercase">{station.name}</span>
                 <Icon className={`w-8 h-8 md:w-10 md:h-10 ${isActive ? "text-accent-orange" : "text-navy-700"}`} />

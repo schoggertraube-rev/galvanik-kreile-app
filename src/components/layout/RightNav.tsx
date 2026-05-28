@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { RightNavItem } from "./RightNavItem";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { bathsRepository } from "@/lib/repositories/bathsRepository";
-import { Home, PackageCheck, Warehouse, Archive, Users } from "lucide-react";
+import { Home, PackageCheck, Warehouse, Archive, Users, MessageSquare } from "lucide-react";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import Link from "next/link";
 import { useFeatureFlag } from "@/lib/license/useFeatureFlag";
@@ -14,20 +14,22 @@ function SubMenuLink({ label, href, isAvailable }: { label: string, href: string
   const pathname = usePathname();
   const isActive = pathname === href;
   
+  if (!isAvailable) {
+    return (
+      <div className="text-[9px] font-bold py-1.5 px-2 rounded-lg text-left mx-2 mb-1 flex items-center gap-1.5 opacity-40 cursor-not-allowed text-neutral-gray-500 grayscale select-none">
+        <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-neutral-gray-300" />
+        {label}
+      </div>
+    );
+  }
+
   return (
     <Link 
-      href={isAvailable ? href : "#"}
+      href={href}
       className={`text-[9px] font-bold py-1.5 px-2 rounded-lg text-left transition-colors mx-2 mb-1 flex items-center gap-1.5 ${
-        !isAvailable ? "opacity-50 cursor-not-allowed text-neutral-gray-400" :
         isActive ? "text-navy-900 bg-neutral-gray-100" : "text-text-muted hover:text-navy-900 hover:bg-bg-app"
       }`}
-      onClick={(e) => {
-        if (!isAvailable) {
-          e.preventDefault();
-        } else {
-          trackUiEvent("nav_click", { target: href, type: "sub_menu" });
-        }
-      }}
+      onClick={() => trackUiEvent("nav_click", { target: href, type: "sub_menu" })}
     >
       <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-navy-900' : 'bg-neutral-gray-300'}`} />
       {label}
@@ -40,7 +42,6 @@ export function RightNav() {
   const [openQuotes, setOpenQuotes] = useState(0);
   const [hasCriticalBaths, setHasCriticalBaths] = useState(false);
   
-  const engpassFeature = useFeatureFlag("engpass_heatmap");
   const performanceFeature = useFeatureFlag("performance_score");
 
   useEffect(() => {
@@ -77,19 +78,27 @@ export function RightNav() {
         />
       </div>
 
-      <div className="flex flex-col gap-1 w-full border-t border-neutral-gray-100 pt-4">
-        <div className="flex flex-col items-center w-full">
-          <RightNavItem
-            label="Warendurchlauf"
-            href="/warendurchlauf"
-            icon={<PackageCheck className="w-6 h-6" strokeWidth={1.5} />}
-            variant="primary"
-            highlight="green"
-            isActive={isActive("/station") || isActive("/warendurchlauf")}
-            onClick={() => trackUiEvent("nav_click", { target: "/warendurchlauf" })}
-          />
-        </div>
-        <SubMenuLink label="Verzug" href="/status" isAvailable={engpassFeature.available} />
+      <div className="flex flex-col items-center w-full border-t border-neutral-gray-100 pt-4">
+        <RightNavItem
+          label="Warendurchlauf"
+          href="/warendurchlauf"
+          icon={<PackageCheck className="w-6 h-6" strokeWidth={1.5} />}
+          variant="primary"
+          isActive={isActive("/station") || isActive("/warendurchlauf")}
+          onClick={() => trackUiEvent("nav_click", { target: "/warendurchlauf" })}
+        />
+      </div>
+
+      <div className="flex flex-col items-center w-full">
+        <RightNavItem
+          label="Anfragen"
+          href="/quotes"
+          icon={<MessageSquare className="w-5 h-5" strokeWidth={1.5} />}
+          variant="normal"
+          badge={openQuotes}
+          isActive={isActive("/quotes")}
+          onClick={() => trackUiEvent("nav_click", { target: "/quotes" })}
+        />
       </div>
 
       <div className="flex flex-col items-center w-full border-t border-neutral-gray-100 pt-4">

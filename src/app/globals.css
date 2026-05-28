@@ -192,18 +192,18 @@
   
   /* Subtle scrollbar */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 4px;
+    height: 4px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: var(--neutral-gray-100);
+    background: rgba(0, 0, 0, 0.05);
     border-radius: 4px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: var(--neutral-gray-300);
+    background: rgba(0, 0, 0, 0.15);
   }
 
   .font-serif {

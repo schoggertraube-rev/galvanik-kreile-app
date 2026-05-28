@@ -10,7 +10,7 @@ interface RightNavItemProps {
   isActive?: boolean;
   status?: "critical" | "warning" | "ok";
   badge?: number;
-  highlight?: "green";
+  highlight?: "green"; // Kept for interface compatibility, but visual effect changed per instructions
   onClick?: () => void;
 }
 
@@ -22,36 +22,35 @@ export function RightNavItem({
   isActive,
   status,
   badge,
-  highlight,
   onClick
 }: RightNavItemProps) {
   const isPrimary = variant === "primary";
-  const isGreenHighlight = highlight === "green";
 
   return (
     <Link
       href={href}
       className={cn(
-        "relative flex flex-col items-center justify-center gap-1.5 transition-colors rounded-2xl shrink-0 w-[72px] cursor-pointer",
+        "relative flex flex-col items-center justify-center gap-1.5 transition-all duration-300 rounded-2xl cursor-pointer shadow-sm hover:scale-105",
+        // Primary is large and protrudes slightly if active
         isPrimary ? "h-[96px] md:h-[112px]" : "h-[72px] md:h-[80px]",
+        isActive && isPrimary ? "w-[84px] translate-x-1.5 z-10" : "w-[72px]",
+        // Active visual state
         isActive 
-          ? isGreenHighlight 
-            ? "bg-success-green text-white shadow-md border-success-green" 
-            : "bg-white shadow-sm border border-neutral-gray-200"
-          : isGreenHighlight 
-            ? "bg-success-green-soft text-success-green hover:bg-success-green/20"
-            : "hover:bg-neutral-gray-100",
+          ? "bg-bg-app border border-neutral-gray-200" 
+          : "bg-white border border-transparent hover:bg-neutral-gray-100",
         "active:scale-95" // Touch feedback
       )}
       onClick={onClick}
     >
-      {/* Status Dot */}
-      {status && (
+      {/* Active dot / Status Dot */}
+      {(status || isActive) && (
         <div 
           className={cn(
-            "absolute top-2 right-2 w-2 h-2 rounded-full",
+            "absolute top-2 right-2 w-2 h-2 rounded-full shadow-sm",
             status === "critical" ? "bg-danger-red animate-pulse" : 
-            status === "warning" ? "bg-accent-orange" : "bg-success-green"
+            status === "warning" ? "bg-accent-orange" : 
+            status === "ok" ? "bg-success-green" :
+            isActive ? "bg-navy-900" : ""
           )}
         />
       )}
@@ -65,18 +64,14 @@ export function RightNavItem({
 
       <div className={cn(
         "flex items-center justify-center rounded-xl p-2",
-        isActive 
-          ? (isGreenHighlight ? "text-white" : "text-navy-900") 
-          : (isGreenHighlight ? "text-success-green" : "text-text-muted")
+        isActive ? "text-navy-900" : "text-text-muted"
       )}>
         {icon}
       </div>
 
       <span className={cn(
         "text-[10px] font-bold text-center px-1 leading-tight break-words max-w-full",
-        isActive 
-          ? (isGreenHighlight ? "text-white" : "text-navy-900") 
-          : (isGreenHighlight ? "text-success-green" : "text-text-muted")
+        isActive ? "text-navy-900" : "text-text-muted"
       )}>
         {label}
       </span>
