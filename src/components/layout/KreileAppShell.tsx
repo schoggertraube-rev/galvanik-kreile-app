@@ -2,15 +2,14 @@
 
 import { usePathname } from "next/navigation";
 import { KreileHeader } from "./KreileHeader";
-import { KreileSidebar } from "./KreileSidebar";
-import { KreileBottomNav } from "./KreileBottomNav";
+import { RightNav } from "./RightNav";
 import { PwaRegister } from "./PwaRegister";
 
 export function KreileAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   // Start/Login-Screen: kein Header, keine Nav
-  const isStartScreen = pathname === "/start";
+  const isStartScreen = pathname === "/start" || pathname === "/login";
 
   if (isStartScreen) {
     return (
@@ -34,9 +33,14 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
       {/* Body: Hauptinhalt */}
       <div className="flex flex-1 min-h-0">   {/* min-h-0 verhindert Flex-Overflow */}
 
+        {/* Linke Navigation (zuvor rechts) */}
+        <div className="hidden md:flex shrink-0">
+          <RightNav />
+        </div>
+
         {/* Scroll-Container für Seiteninhalt */}
         <main
-          className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-28 md:p-6 md:pb-32 lg:p-8 lg:pb-32"
+          className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8"
         >
           {/* Max-Width Container — auf großen Screens zentriert */}
           <div className="max-w-[1400px] mx-auto w-full">
@@ -44,9 +48,6 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
-
-      {/* Bottom Navigation (auf allen Screens sichtbar gem. Spezifikation) */}
-      <KreileBottomNav />
     </div>
   );
 }

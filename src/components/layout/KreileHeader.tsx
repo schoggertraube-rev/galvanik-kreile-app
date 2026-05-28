@@ -7,6 +7,7 @@ import { useState, useEffect, useRef } from "react";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { logout } from "@/app/actions/auth";
+import { trackUiEvent } from "@/lib/tracking/tracking";
 
 export function KreileHeader() {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -95,7 +96,17 @@ export function KreileHeader() {
               <polyline points="0,30 0,20 10,20 10,12 15,12 15,18 20,18 20,8 25,8 25,18 30,18 30,14 35,14 35,6 40,6 40,14 45,14 45,20 50,20 50,10 55,10 55,20 60,20 60,4 65,4 65,20 70,20 70,16 75,16 75,20 80,20 80,12 85,12 85,20 90,20 90,16 95,16 95,20 100,20 100,8 105,8 105,20 110,20 110,14 115,14 115,20 120,20 120,10 125,10 125,20 130,20 130,16 135,16 135,20 140,20 140,18 145,18 145,22 150,22 150,18 155,18 155,24 160,24 160,30" stroke="#B8923F" strokeWidth="1.5" fill="none"/>
             </svg>
           </div>
-          <Camera className="w-5 h-5 text-navy-500 shrink-0 group-hover:text-accent-orange transition-colors" strokeWidth={1.5} />
+          <Link
+            href="/scan"
+            onClick={(e) => {
+              e.stopPropagation();
+              trackUiEvent("nav_click", { target: "/scan", source: "quick_action" });
+            }}
+            className="p-2 hover:bg-neutral-gray-100 rounded-full transition-colors z-10"
+            title="Schnellannahme (Scan)"
+          >
+            <Camera className="w-5 h-5 text-navy-500 shrink-0 group-hover:text-accent-orange transition-colors" strokeWidth={1.5} />
+          </Link>
         </button>
       </div>
 
@@ -160,6 +171,13 @@ export function KreileHeader() {
                 <p className="text-xs font-bold text-navy-900">Angemeldet als</p>
                 <p className="text-[10px] text-text-muted">{userInitials}</p>
               </div>
+              <Link
+                href="/settings"
+                onClick={() => setUserDropdownOpen(false)}
+                className="block w-full text-left px-3 py-2 text-sm font-bold text-navy-900 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer mb-1"
+              >
+                Einstellungen
+              </Link>
               <button
                 onClick={handleLogout}
                 className="w-full text-left px-3 py-2 text-sm font-bold text-danger-red hover:bg-danger-red/10 rounded-xl transition-colors cursor-pointer"

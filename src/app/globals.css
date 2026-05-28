@@ -189,6 +189,23 @@
     background-color: var(--bg-app) !important;
     font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
   }
+  
+  /* Subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--neutral-gray-100);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--neutral-gray-300);
+  }
+
   .font-serif {
     font-family: var(--font-playfair), Georgia, serif;
   }

@@ -19,36 +19,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 
-// Custom ProcessStepCard inside the Hero band
-function ProcessStepCard({
-  label,
-  icon: Icon,
-  isActive,
-  hasAlertDot,
-  href,
-}: {
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  isActive?: boolean;
-  hasAlertDot?: boolean;
-  href: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`relative w-44 bg-white rounded-2xl border ${
-        isActive ? "border-accent-orange shadow-md scale-102" : "border-neutral-gray-100 shadow-sm"
-      } p-5 flex flex-col items-center justify-center gap-3.5 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer`}
-    >
-      <span className="text-xs font-bold text-text-muted leading-none">{label}</span>
-      <Icon className="w-10 h-10 text-navy-700" />
-      
-      {hasAlertDot && (
-        <span className="absolute top-2.5 right-2.5 w-3.5 h-3.5 rounded-full bg-danger-red border-2 border-white animate-pulse" />
-      )}
-    </Link>
-  );
-}
 
 export function IntakeEntry({
   onSelect,
@@ -82,34 +52,6 @@ export function IntakeEntry({
 
   return (
     <div className="w-full max-w-4xl mx-auto space-y-6 animate-in fade-in duration-400">
-
-      {/* ── PROCESS VISUAL HERO ── */}
-      <div className="relative w-full h-[220px] rounded-3xl bg-gradient-to-r from-bg-app to-surface-tinted border border-neutral-gray-100 p-6 flex items-center justify-center gap-6 overflow-hidden shadow-sm">
-        {/* SVG Decorative Dot Grid on the Top-Right */}
-        <div className="absolute right-0 top-0 h-full w-1/3 opacity-8 pointer-events-none">
-          <svg width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <defs>
-              <pattern id="dotPattern" x="0" y="0" width="16" height="16" patternUnits="userSpaceOnUse">
-                <circle cx="2" cy="2" r="2" fill="#E8943C" />
-              </pattern>
-            </defs>
-            <rect width="100%" height="100%" fill="url(#dotPattern)" />
-          </svg>
-        </div>
-
-        {/* Process step 1 */}
-        <ProcessStepCard label="Wareneingang" icon={Package} href="/orders?station=wareneingang" />
-        
-        <ArrowRight className="w-7 h-7 text-accent-orange" strokeWidth={2.5} />
-        
-        {/* Process step 2 (Galvanik active alert dot) */}
-        <ProcessStepCard label="Galvanik" icon={FlaskConical} hasAlertDot={true} isActive={true} href="/orders?station=beschichtung" />
-        
-        <ArrowRight className="w-7 h-7 text-accent-orange" strokeWidth={2.5} />
-        
-        {/* Process step 3 */}
-        <ProcessStepCard label="Warenausgang" icon={Truck} href="/orders?station=warenausgang" />
-      </div>
 
       {/* ── SECTION HEADER ── */}
       <div className="relative pb-2">
