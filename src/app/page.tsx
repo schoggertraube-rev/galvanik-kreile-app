@@ -33,6 +33,7 @@ function KpiCard({
   status,
   icon: Icon,
   emoji,
+  href,
 }: {
   title: string;
   value: string | number;
@@ -40,6 +41,7 @@ function KpiCard({
   status: KpiStatus;
   icon?: React.ComponentType<{ className?: string; strokeWidth?: number }>;
   emoji?: string;
+  href?: string;
 }) {
   const circleBg: Record<KpiStatus, string> = {
     neutral: "bg-gold-100",
@@ -57,8 +59,8 @@ function KpiCard({
     info: "text-navy-700",
   };
 
-  return (
-    <div className="bg-white rounded-2xl p-5 flex items-center gap-4 h-[132px] shadow-card hover:shadow-md transition-all duration-200 overflow-hidden relative group">
+  const Content = (
+    <>
       {/* Icon / Emoji Circle */}
       <div className={`w-14 h-14 rounded-full ${circleBg[status]} flex items-center justify-center shrink-0`}>
         {emoji ? (
@@ -76,6 +78,22 @@ function KpiCard({
           <p className="text-[11px] text-text-muted font-bold mt-1.5 tracking-wide">{subtitle}</p>
         )}
       </div>
+    </>
+  );
+
+  const containerClasses = "bg-white rounded-2xl p-5 flex items-center gap-4 h-[132px] shadow-card hover:shadow-md transition-all duration-200 overflow-hidden relative group";
+
+  if (href) {
+    return (
+      <Link href={href} className={`${containerClasses} block cursor-pointer active:scale-95`}>
+        {Content}
+      </Link>
+    );
+  }
+
+  return (
+    <div className={containerClasses}>
+      {Content}
     </div>
   );
 }
@@ -221,6 +239,7 @@ export default function HomeDashboard() {
           subtitle={`davon ${Math.min(2, openQuotes)} neu`}
           status={openQuotes > 0 ? "warning" : "neutral"}
           icon={HelpCircle}
+          href="/quotes"
         />
         <KpiCard
           title="In Galvanik"
@@ -228,6 +247,7 @@ export default function HomeDashboard() {
           subtitle={`${countGalvanikCrit} kritisch`}
           status={countGalvanikCrit > 0 ? "danger" : "neutral"}
           icon={Activity}
+          href="/station/beschichtung"
         />
         <KpiCard
           title="Warenausgang"
@@ -235,6 +255,7 @@ export default function HomeDashboard() {
           subtitle={`${countDue} heute fällig`}
           status="success"
           icon={Truck}
+          href="/station/warenausgang"
         />
         <KpiCard
           title="Fertig heute"

@@ -54,8 +54,8 @@ export function IntakeEntry({
     <div className="w-full max-w-4xl mx-auto space-y-6 animate-in fade-in duration-400">
 
       {/* ── SECTION HEADER ── */}
-      <div className="relative pb-2">
-        <h2 className="text-2xl font-black text-navy-900 tracking-tight">Neue Annahme erfassen</h2>
+      <div className="relative pb-2 flex flex-col items-center">
+        <h2 className="text-2xl font-black text-navy-900 tracking-tight text-center">Neue Annahme erfassen</h2>
         <div className="h-1 w-14 bg-gold-600 rounded-full mt-2" />
       </div>
 
@@ -64,10 +64,10 @@ export function IntakeEntry({
         {/* CAMERA CARD */}
         <button
           onClick={() => onSelect("camera")}
-          className="bg-surface-tinted rounded-3xl border border-neutral-gray-100 p-8 text-left flex items-center justify-between hover:shadow-md hover:border-accent-orange/30 transition-all duration-200 active:scale-98 group cursor-pointer"
+          className="bg-white rounded-3xl border border-neutral-gray-100 p-8 text-left flex items-center justify-between hover:shadow-md hover:border-accent-orange/20 transition-all duration-200 active:scale-98 group cursor-pointer"
         >
           <div className="flex items-center gap-5">
-            <div className="w-16 h-16 rounded-full bg-white border border-neutral-gray-100 flex items-center justify-center shrink-0 shadow-sm">
+            <div className="w-16 h-16 rounded-full bg-bg-app-soft flex items-center justify-center shrink-0 border border-neutral-gray-100">
               <Camera className="w-8 h-8 text-accent-orange" strokeWidth={1.5} />
             </div>
             <div>
@@ -130,7 +130,6 @@ export function IntakeEntry({
 
       {/* ── LETZTE ANNAHMEN ── */}
       <div className="space-y-2">
-        <p className="text-sm font-black text-navy-900 tracking-wide">Letzte Annahmen</p>
         <Link
           href="/orders"
           className="flex items-center justify-between p-5 bg-white rounded-2xl border border-neutral-gray-100 hover:shadow-sm hover:border-accent-orange/10 transition-all group"
@@ -147,27 +146,7 @@ export function IntakeEntry({
         </Link>
       </div>
 
-      {/* ── TIPP BANNER ── */}
-      <div className="flex items-center justify-between p-5 bg-accent-orange-soft rounded-2xl border border-neutral-gray-100">
-        <div className="flex items-center gap-3.5">
-          <div className="w-8 h-8 bg-accent-orange rounded-full flex items-center justify-center shrink-0 shadow-sm">
-            <Info className="w-5 h-5 text-white" strokeWidth={2} />
-          </div>
-          <p className="text-sm font-bold text-navy-900 leading-relaxed">
-            Tipp: Scanne Lieferschein, Zettel oder Kundenbegleitschreiben für schnellere Erfassung.
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            setModalSlide(0);
-            setShowModal(true);
-          }}
-          className="text-sm font-black text-accent-orange hover:text-navy-900 shrink-0 whitespace-nowrap flex items-center gap-1 transition-colors cursor-pointer"
-        >
-          <span>So funktioniert's</span>
-          <ChevronRight className="w-4 h-4" />
-        </button>
-      </div>
+      {/* ── TIPP BANNER REMOVED ── */}
 
       {/* ── INSTRUCTIONS MODAL (3-STEP-SLIDER) ── */}
       {showModal && (

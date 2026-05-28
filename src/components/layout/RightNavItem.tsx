@@ -33,7 +33,7 @@ export function RightNavItem({
         "relative flex flex-col items-center justify-center gap-1.5 transition-all duration-300 rounded-2xl cursor-pointer shadow-sm hover:scale-105",
         // Primary is large and protrudes slightly if active
         isPrimary ? "h-[96px] md:h-[112px]" : "h-[72px] md:h-[80px]",
-        isActive && isPrimary ? "w-[84px] translate-x-1.5 z-10" : "w-[72px]",
+        isActive && isPrimary ? "w-[96px] translate-x-3 z-10" : "w-[72px]",
         // Active visual state
         isActive 
           ? "bg-bg-app border border-neutral-gray-200" 

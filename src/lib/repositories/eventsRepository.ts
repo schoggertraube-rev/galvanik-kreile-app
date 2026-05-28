@@ -62,23 +62,22 @@ export const eventsRepository = {
     if (isSupabase) {
       const supabase = createClient();
       const { data, error } = await supabase
-        .from('status_events')
+        .from('events')
         .select('*')
-        .order('timestamp', { ascending: false });
+        .order('created_at', { ascending: false });
 
       if (error) {
         console.error("Supabase eventsRepository.getAll error:", error);
-        throw error;
+        throw new Error(`Supabase error: ${error.message}`);
       }
 
       return data.map(e => ({
         id: e.id,
         orderId: e.order_id || undefined,
         itemId: e.item_id || undefined,
-        customerId: e.customer_id || undefined,
         eventType: e.event_type as StatusEventType,
-        timestamp: e.timestamp,
-        metadata: e.metadata || undefined
+        timestamp: e.created_at,
+        metadata: e.notes ? safeParseJson(e.notes) : undefined
       })) as StatusEvent[];
     }
 
@@ -94,22 +93,29 @@ export const eventsRepository = {
     const timestamp = getMonotonicTimestamp();
 
     if (isSupabase) {
+      // The remote 'events' table requires an order_id (NOT NULL, FK to orders).
+      // If we don't have one (e.g. OCR_SCAN_STARTED), we cannot insert it into Supabase.
+      // We mock it locally to avoid crashing the app.
+      if (!event.orderId) {
+        console.warn(`Skipping Supabase insert for event '${event.eventType}' because orderId is missing.`);
+        return { ...event, id: newId, timestamp };
+      }
+
       const supabase = createClient();
       
       const dbEvent = {
         id: newId,
-        order_id: event.orderId || null,
+        order_id: event.orderId,
         item_id: event.itemId || null,
-        customer_id: event.customerId || null,
         event_type: event.eventType,
-        metadata: event.metadata || null,
-        timestamp
+        notes: event.metadata ? JSON.stringify(event.metadata) : null,
+        description: event.customerId ? `Customer: ${event.customerId}` : null,
       };
 
-      const { error } = await supabase.from('status_events').insert(dbEvent);
+      const { error } = await supabase.from('events').insert(dbEvent);
       if (error) {
         console.error("Supabase eventsRepository.addEvent error:", error);
-        throw error;
+        throw new Error(`Supabase error: ${error.message}`);
       }
 
       return {
@@ -135,3 +141,11 @@ export const eventsRepository = {
     return newEvent;
   }
 };
+
+function safeParseJson(str: string) {
+  try {
+    return JSON.parse(str);
+  } catch {
+    return { raw: str };
+  }
+}
