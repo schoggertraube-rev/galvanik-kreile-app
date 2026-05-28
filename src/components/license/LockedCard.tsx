@@ -1,68 +1,81 @@
-"use client";
-// src/components/license/LockedCard.tsx
-// Zentrale Locked-Card Komponente gemäß Spec — immer sichtbar, niemals ausgeblendet
+import React, { ReactNode } from "react";
+import { FeatureKey } from "@/lib/license/types";
+import { useFeatureFlag } from "@/lib/license/useFeatureFlag";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Lock } from "lucide-react";
-import type { FeatureFlag } from "@/lib/license/types";
 
-type Visibility = "full" | "minimal";
-
-interface LockedCardProps {
-  flag: FeatureFlag;
-  visibility?: Visibility;
-  children?: React.ReactNode;
-  className?: string;
+export interface LockedCardProps {
+  featureKey: FeatureKey;
+  title: string;
+  children: ReactNode;
+  demoPreview?: ReactNode;
 }
 
-export function LockedCard({
-  flag,
-  visibility = "minimal",
-  children,
-  className = "",
-}: LockedCardProps) {
-  if (flag.enabled && flag.dataReadinessState === "reliable") {
-    // Active: render children directly
-    return <div className={className}>{children}</div>;
+export function LockedCard({ featureKey, title, children, demoPreview }: LockedCardProps) {
+  const { available, lockReason, role } = useFeatureFlag(featureKey);
+
+  if (available) {
+    return <>{children}</>;
   }
 
-  const isLocked = !flag.enabled;
-  const isDataThin = flag.enabled && flag.dataReadinessState !== "reliable";
+  // Gesperrt je nach Rolle rendern
+  if (role === "demo") {
+    return (
+      <Card className="relative overflow-hidden border-dashed">
+        <div className="absolute top-2 right-2 bg-accent-orange text-white text-xs font-bold px-2 py-1 rounded-full z-10 shadow">
+          Demo
+        </div>
+        <CardHeader>
+          <CardTitle className="text-navy-900">{title}</CardTitle>
+        </CardHeader>
+        <CardContent className="opacity-70 pointer-events-none blur-[1px]">
+          {demoPreview || <div className="h-32 bg-neutral-gray-100 rounded-lg" />}
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (role === "mitarbeiter") {
+    return (
+      <Card className="bg-neutral-gray-50 border-neutral-gray-200 opacity-60">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-navy-400 flex items-center gap-2">
+            <Lock className="w-4 h-4" />
+            {title}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-text-muted">Nicht verfügbar</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // inhaber: sichtbare Karte mit title, Lock-Grund
+  const lockMessage =
+    lockReason === "plan"
+      ? "Im aktuellen Plan nicht enthalten"
+      : lockReason === "datenreife"
+      ? "Noch nicht genug Daten"
+      : "Nicht verfügbar";
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl ${className}`}>
-      {/* Demo content — blurred behind lock */}
-      {children && (
-        <div
-          className="pointer-events-none select-none"
-          style={{ opacity: 0.35, filter: "blur(3px)" }}
-          aria-hidden
-        >
-          {children}
+    <Card className="relative overflow-hidden border-neutral-gray-200 shadow-sm">
+      <div className="absolute inset-0 bg-white/60 backdrop-blur-[2px] z-10 flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-white p-4 rounded-full shadow-md mb-4">
+          <Lock className="w-6 h-6 text-text-muted" />
         </div>
-      )}
-
-      {/* Overlay */}
-      {isLocked && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-white/60 backdrop-blur-xs p-4 text-center">
-          <Lock className="w-5 h-5 text-navy-500" />
-          {visibility === "full" && flag.unlockTier && (
-            <span className="text-[10px] font-bold text-navy-700 bg-gold-100 border border-navy-700 rounded-full px-2 py-0.5">
-              Verfügbar im{" "}
-              {flag.unlockTier.charAt(0).toUpperCase() + flag.unlockTier.slice(1)}-Plan
-            </span>
-          )}
-          <p className="text-xs text-navy-500 max-w-[180px]">
-            {visibility === "full" ? flag.hintLong : "Funktion zurzeit nicht verfügbar"}
-          </p>
-        </div>
-      )}
-
-      {/* Data-thin overlay — no lock, just a subtle hint */}
-      {isDataThin && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-white/50 p-4 text-center">
-          <span className="text-xl">⏳</span>
-          <p className="text-xs text-navy-500 max-w-[180px]">{flag.hintShort}</p>
-        </div>
-      )}
-    </div>
+        <h3 className="font-bold text-navy-900 mb-1">{title}</h3>
+        <p className="text-sm text-text-muted font-medium bg-neutral-gray-100 px-3 py-1 rounded-full">
+          {lockMessage}
+        </p>
+      </div>
+      <CardHeader>
+        <CardTitle className="text-navy-900 opacity-30">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="opacity-30 pointer-events-none grayscale">
+        {demoPreview || <div className="h-32 bg-neutral-gray-100 rounded-lg" />}
+      </CardContent>
+    </Card>
   );
 }

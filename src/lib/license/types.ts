@@ -27,6 +27,8 @@ export interface FeatureOverride {
   enabled: boolean;
 }
 
+export type UserLicenseRole = "inhaber" | "mitarbeiter" | "demo";
+
 // Backwards compatibility for existing UI components
 export interface FeatureFlag {
   enabled: boolean;

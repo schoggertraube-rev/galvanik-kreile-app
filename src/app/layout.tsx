@@ -43,6 +43,16 @@ export default function RootLayout({
       className={`${playfair.variable} ${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body>
+        {/* DEBUG SCRIPT ZUR FEHLERSUCHE AUF DEM TABLET */}
+        <script dangerouslySetInnerHTML={{ __html: `
+          window.onerror = function(msg, url, line, col, error) {
+            alert("JS Error: " + msg + " (Line: " + line + ")");
+            return false;
+          };
+          window.addEventListener('unhandledrejection', function(event) {
+            alert("Promise Error: " + (event.reason && event.reason.message ? event.reason.message : event.reason));
+          });
+        ` }} />
         <KreileAppShell>
           {children}
         </KreileAppShell>

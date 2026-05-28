@@ -1,39 +1,35 @@
 "use client";
 // src/components/license/QuotaBanner.tsx
 // Kontingent-Banner für Inhaber (warnt, blockiert NICHT)
-import { useLicenseContext } from "@/hooks/useFeatureFlag";
+import React from "react";
+import { useLicense } from "@/lib/license/LicenseContext";
+import { QUOTA_CONFIG } from "@/config/license.config";
 
-function getUsagePercent(current: number, max: number): number {
-  if (max === 0) return 0;
-  return Math.round((current / max) * 100);
-}
-
-export function QuotaBanner({ role }: { role: string }) {
-  const { plan } = useLicenseContext();
+export function QuotaBanner() {
+  const { role } = useLicense();
 
   // Only inhaber sees quotas
-  if (role !== "inhaber" && role !== "admin") return null;
+  if (role !== "inhaber") return null;
 
-  const { quotas } = plan;
-  const ordersPct = getUsagePercent(quotas.currentMonthOrders, quotas.ordersPerMonth);
-  const storagePct = getUsagePercent(quotas.currentStorageGb, quotas.photoStorageGb);
-  const usersPct = getUsagePercent(quotas.currentActiveUsers, quotas.activeUsers);
+  const max = QUOTA_CONFIG.limit;
+  const current = QUOTA_CONFIG.currentUsage;
+  
+  if (max === 0) return null;
+  const usagePct = Math.round((current / max) * 100);
 
-  const maxPct = Math.max(ordersPct, storagePct, usersPct);
-
-  if (maxPct < 80 || quotas.ordersPerMonth === 0) return null;
+  if (usagePct < 80) return null;
 
   const bannerStyle =
-    maxPct >= 120
+    usagePct >= 120
       ? "bg-red-50 border-red-200 text-red-700"
-      : maxPct >= 100
+      : usagePct >= 100
       ? "bg-amber-50 border-amber-200 text-amber-700"
       : "bg-blue-50 border-blue-200 text-blue-700";
 
   const label =
-    maxPct >= 120
+    usagePct >= 120
       ? "⚠️ Kontingent stark überschritten"
-      : maxPct >= 100
+      : usagePct >= 100
       ? "⚠️ Kontingent überschritten"
       : "ℹ️ Kontingent fast erreicht";
 

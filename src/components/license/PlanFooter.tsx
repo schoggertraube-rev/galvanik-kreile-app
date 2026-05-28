@@ -1,43 +1,32 @@
 "use client";
 // src/components/license/PlanFooter.tsx
-// Plan-Anzeige für Inhaber-Rolle im Settings/Footer
-import { useLicenseContext } from "@/hooks/useFeatureFlag";
+import React from "react";
+import { useLicense } from "@/lib/license/LicenseContext";
+import { LicensePlan } from "@/lib/license/types";
 
-const tierLabels: Record<string, string> = {
+const tierLabels: Record<LicensePlan, string> = {
   basis: "Basis",
   pro: "Pro",
   premium: "Premium",
   enterprise: "Enterprise",
 };
 
-export function PlanFooter({ role }: { role: string }) {
-  const { plan } = useLicenseContext();
+export function PlanFooter() {
+  const { plan, role } = useLicense();
 
-  // Only inhaber sees plan info
-  if (role !== "inhaber" && role !== "admin" && role !== "anbieter_admin") return null;
-
-  // Adapt to the new LicensePlan string type, defaulting to active
-  const planName = typeof plan === 'string' ? plan : (plan as any).tier || "basis";
-  const planStatus = typeof plan === 'string' ? "active" : (plan as any).status || "active";
+  // Rendert NUR wenn role === "inhaber"
+  if (role !== "inhaber") return null;
 
   return (
     <div className="flex items-center justify-between px-4 py-3 bg-bg-app-soft border-t border-neutral-gray-100 text-xs text-navy-500">
       <span>
         Plan:{" "}
         <strong className="text-navy-900">
-          {tierLabels[planName] ?? planName}
+          {tierLabels[plan] ?? plan}
         </strong>
       </span>
-      <span
-        className={`font-bold px-2 py-0.5 rounded-full text-[10px] ${
-          planStatus === "active"
-            ? "bg-success-green/10 text-success-green"
-            : planStatus === "demo"
-            ? "bg-gold-100 text-accent-orange"
-            : "bg-red-100 text-red-600"
-        }`}
-      >
-        {planStatus === "active" ? "Aktiv" : planStatus === "demo" ? "Demo" : "Gesperrt"}
+      <span className="font-bold px-2 py-0.5 rounded-full text-[10px] bg-success-green/10 text-success-green">
+        Aktiv
       </span>
     </div>
   );
