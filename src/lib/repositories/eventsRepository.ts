@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { createStatusEvent, getRecentStatusEvents } from "@/app/actions/status-events.actions";
+import { createClient } from "@/lib/supabase/client";
 
 export type StatusEventType =
   | "OCR_SCAN_STARTED"
@@ -52,66 +52,86 @@ function getMonotonicTimestamp(): string {
   return new Date(now).toISOString();
 }
 
+const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
+
+// RLS-Hinweis:
+// Diese Tabelle muss auf INSERT+SELECT beschränkt werden. (Append-Only Log)
+
 export const eventsRepository = {
   async getAll(): Promise<StatusEvent[]> {
-    if (typeof window !== "undefined") {
-      if (!OfflineManager.isOffline()) {
-        try {
-          const dbEvents = await getRecentStatusEvents(200);
-          if (dbEvents && dbEvents.length > 0) {
-            // Map the db schema back to the frontend StatusEvent interface
-            const mappedEvents: StatusEvent[] = dbEvents.map(e => ({
-              id: e.id,
-              orderId: e.orderId || undefined,
-              itemId: e.itemId || undefined,
-              customerId: undefined, // Not in schema directly, adjust if needed
-              eventType: e.eventType as StatusEventType,
-              timestamp: (e.createdAt as unknown as Date).toISOString(),
-              metadata: e.notes ? JSON.parse(e.notes) : undefined
-            }));
-            localStorage.setItem("kreile_events", JSON.stringify(mappedEvents));
-            return mappedEvents;
-          }
-        } catch (error) {
-          console.warn("Failed to fetch events from Supabase, falling back to cache:", error);
-        }
+    if (isSupabase) {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('status_events')
+        .select('*')
+        .order('timestamp', { ascending: false });
+
+      if (error) {
+        console.error("Supabase eventsRepository.getAll error:", error);
+        throw error;
       }
 
-      // Offline Fallback
+      return data.map(e => ({
+        id: e.id,
+        orderId: e.order_id || undefined,
+        itemId: e.item_id || undefined,
+        customerId: e.customer_id || undefined,
+        eventType: e.event_type as StatusEventType,
+        timestamp: e.timestamp,
+        metadata: e.metadata || undefined
+      })) as StatusEvent[];
+    }
+
+    // --- Mock Fallback ---
+    if (typeof window !== "undefined") {
       return JSON.parse(localStorage.getItem("kreile_events") || "[]");
     }
     return [];
   },
-  async addEvent(event: Omit<StatusEvent, "id" | "timestamp">) {
+
+  async addEvent(event: Omit<StatusEvent, "id" | "timestamp">): Promise<StatusEvent> {
+    const newId = createId();
+    const timestamp = getMonotonicTimestamp();
+
+    if (isSupabase) {
+      const supabase = createClient();
+      
+      const dbEvent = {
+        id: newId,
+        order_id: event.orderId || null,
+        item_id: event.itemId || null,
+        customer_id: event.customerId || null,
+        event_type: event.eventType,
+        metadata: event.metadata || null,
+        timestamp
+      };
+
+      const { error } = await supabase.from('status_events').insert(dbEvent);
+      if (error) {
+        console.error("Supabase eventsRepository.addEvent error:", error);
+        throw error;
+      }
+
+      return {
+        ...event,
+        id: newId,
+        timestamp
+      };
+    }
+
+    // --- Mock Fallback ---
     const newEvent: StatusEvent = {
       ...event,
-      id: createId(),
-      timestamp: getMonotonicTimestamp()
+      id: newId,
+      timestamp
     };
     
-    // In-Memory / LocalStorage Mock
     if (typeof window !== "undefined") {
       const existing = JSON.parse(localStorage.getItem("kreile_events") || "[]");
       localStorage.setItem("kreile_events", JSON.stringify([...existing, newEvent]));
     }
 
-    // Live write to Supabase if online
-    if (typeof window !== "undefined" && !OfflineManager.isOffline()) {
-      try {
-        if (event.orderId) {
-          await createStatusEvent({
-            orderId: event.orderId,
-            eventType: event.eventType,
-            itemId: event.itemId,
-            notes: event.metadata ? JSON.stringify(event.metadata) : undefined
-          });
-        }
-      } catch (error) {
-        console.warn("Failed to write StatusEvent to Supabase, ignoring:", error);
-      }
-    }
-
-    console.log("📝 StatusEvent logged:", newEvent.eventType);
+    console.log("📝 StatusEvent logged (Mock):", newEvent.eventType);
     return newEvent;
   }
 };

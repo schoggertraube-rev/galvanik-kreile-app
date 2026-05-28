@@ -1,3 +1,5 @@
+import { bathMeasurementsRepository } from "../repositories/bathMeasurementsRepository";
+
 export type BathMeasurement = {
   temperature?: number | null;
   ph?: number | null;
@@ -37,4 +39,16 @@ export function computeBathStatus(m: BathMeasurement, t: BathTargetValues): Bath
   if (checks.includes("critical")) return "critical";
   if (checks.includes("watch")) return "watch";
   return "stable";
+}
+
+/**
+ * Holt die letzte Messung aus dem Repository und berechnet damit den Status.
+ * Wenn keine Messung vorliegt, wird standardmäßig "stable" zurückgegeben.
+ */
+export async function computeCurrentBathStatus(bathId: string, t: BathTargetValues): Promise<BathStatus> {
+  const latestMeasurement = await bathMeasurementsRepository.getLatest(bathId);
+  if (!latestMeasurement) {
+    return "stable";
+  }
+  return computeBathStatus(latestMeasurement, t);
 }

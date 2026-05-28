@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, ListTodo, Users, Package, AlertTriangle, TrendingUp, Archive, Settings, FileText } from 'lucide-react'
+import { LayoutDashboard, ListTodo, Users, Package, AlertTriangle, TrendingUp, Archive, Settings, FileText, Printer } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { inquiriesRepository } from '@/lib/repositories/inquiriesRepository'
 
@@ -14,7 +14,7 @@ const SIDEBAR_ITEMS = [
   { name: 'Lager & Chemie', path: '/items', icon: Package },
   { name: 'Verzug & Engpässe', path: '/status', icon: AlertTriangle },
   { name: 'Performance', path: '/performance', icon: TrendingUp },
-  { name: 'Kontrolle & Archiv', path: '/archive', icon: Archive },
+  { name: 'Druck-Warteschlange', path: '/print-queue', icon: Printer },
 ]
 
 export function Sidebar() {

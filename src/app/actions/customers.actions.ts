@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 export async function getCustomersDb() {
   if (!db) return [];
   try {
-    const dbCustomers = await db.select().from(customers);
+    const dbCustomers = await db.select().from(customers).orderBy(customers.createdAt);
     return dbCustomers.map(c => ({
       id: c.id,
       customerNumber: c.customerNumber || "",
@@ -42,7 +42,7 @@ export async function createCustomerDb(data: {
     
     const newCustomer = {
       id: customerId,
-      tenantId: "hotel-kreile",
+      tenantId: "galvanik-kreile",
       customerNumber,
       name: data.name,
       type: data.type || "private",

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { createClient } from '@/utils/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 
 export async function login(formData: FormData) {
   const supabase = await createClient()
@@ -15,9 +15,19 @@ export async function login(formData: FormData) {
   const { error } = await supabase.auth.signInWithPassword(data)
 
   if (error) {
-    redirect('/login?message=E-Mail oder Passwort falsch')
+    redirect('/start?message=E-Mail oder Passwort falsch')
   }
 
   revalidatePath('/', 'layout')
   redirect('/')
+}
+
+export async function logout() {
+  try {
+    const supabase = await createClient()
+    await supabase.auth.signOut()
+  } catch (error) {
+    console.warn("Supabase signout failed (maybe not configured), redirecting anyway...", error)
+  }
+  redirect('/start')
 }

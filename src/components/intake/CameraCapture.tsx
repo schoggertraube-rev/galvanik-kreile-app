@@ -2,7 +2,8 @@
 import { useState, useRef, useEffect } from "react";
 import { Camera, ArrowLeft, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ocrService, OCRScan } from "@/lib/services/ocrService";
+import { OCRScan } from "@/lib/services/ocrService";
+import { processImageWithAI } from "@/app/actions/ocr.actions";
 import { eventsRepository } from "@/lib/repositories/eventsRepository";
 
 export function CameraCapture({
@@ -69,13 +70,18 @@ export function CameraCapture({
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     
     // Convert to base64 (ready for real OCR API)
-    // const imageData = canvas.toDataURL("image/jpeg", 0.8);
+    const imageData = canvas.toDataURL("image/jpeg", 0.7);
+    
+    // Freeze the video feed so the user doesn't have to hold the tablet still
+    if (videoRef.current) {
+      videoRef.current.pause();
+    }
     
     setScanning(true);
     await eventsRepository.addEvent({ eventType: "OCR_SCAN_STARTED" });
     
-    // We pass the simulated scan for now, but the picture was taken!
-    const scan = await ocrService.simulateScan("document");
+    // Call the server action with the captured image
+    const scan = await processImageWithAI(imageData);
     
     await eventsRepository.addEvent({ eventType: "OCR_SCAN_COMPLETED" });
     setScanning(false);
@@ -89,11 +95,17 @@ export function CameraCapture({
     
     setScanning(true);
     await eventsRepository.addEvent({ eventType: "OCR_SCAN_STARTED" });
-    const scan = await ocrService.simulateScan("document");
-    await eventsRepository.addEvent({ eventType: "OCR_SCAN_COMPLETED" });
-    setScanning(false);
-    stopCamera();
-    onScanComplete(scan);
+    
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const base64 = event.target?.result as string;
+      const scan = await processImageWithAI(base64);
+      await eventsRepository.addEvent({ eventType: "OCR_SCAN_COMPLETED" });
+      setScanning(false);
+      stopCamera();
+      onScanComplete(scan);
+    };
+    reader.readAsDataURL(file);
   };
 
   return (

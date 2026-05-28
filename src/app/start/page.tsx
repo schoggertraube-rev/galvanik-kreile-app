@@ -4,27 +4,29 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Delete, Clock, Wrench, Calculator, Sun, CloudRain, Cloud, ShieldAlert } from "lucide-react";
 import { getGreeting } from "@/lib/greeting";
+import { EmailLoginDialog } from "@/components/start/EmailLoginDialog";
+import { useSearchParams } from "next/navigation";
 
 const DEMO_USERS = [
   {
     id: "1",
     initials: "MK",
     role: "Meister",
-    pin: "1234",
+    pin: "0190",
     icon: Wrench,
   },
   {
     id: "2",
     initials: "CD",
     role: "Werkstatt",
-    pin: "1234",
+    pin: "0190",
     icon: Wrench,
   },
   {
     id: "3",
     initials: "RS",
     role: "Büro",
-    pin: "1234",
+    pin: "0190",
     icon: Calculator,
   },
 ];
@@ -122,16 +124,41 @@ function PinDialog({ user, onClose }: { user: typeof DEMO_USERS[0]; onClose: () 
     
     if (newPin.length === 4) {
       if (newPin === user.pin) {
-        // Store current user in localStorage for application state
-        localStorage.setItem("kreile_user_role", user.role);
-        localStorage.setItem("kreile_user_initials", user.initials);
-        router.push("/");
+        try {
+          // Store current user in localStorage for application state
+          localStorage.setItem("kreile_user_role", user.role);
+          localStorage.setItem("kreile_user_initials", user.initials);
+        } catch (e) {
+          console.warn("localStorage is blocked, skipping user info storage", e);
+        }
+        
+        // Robust persistent cookie (1 Jahr) für Tablet & Cloudflare Tunnel
+        // Behebt Probleme mit getrennten Sessions/LocalStorage und PWA Restarts
+        const isHttps = window.location.protocol === "https:";
+        document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+        
+        // Force a hard navigation to ensure the server picks up the new cookie
+        window.location.href = "/";
       } else {
         setError(true);
         setTimeout(() => setPin(""), 600);
       }
     }
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= "0" && e.key <= "9") {
+        handleInput(e.key);
+      } else if (e.key === "Backspace") {
+        setPin(p => p.slice(0, -1));
+      } else if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [pin, user.pin]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 backdrop-blur-sm">
@@ -160,7 +187,7 @@ function PinDialog({ user, onClose }: { user: typeof DEMO_USERS[0]; onClose: () 
             />
           ))}
         </div>
-        {error && <p className="text-center text-danger-red text-xs font-semibold -mt-4 mb-3">Falscher PIN</p>}
+        {error && <p className="text-center text-danger-red text-xs font-semibold -mt-4 mb-3">Falscher PIN (Versuche 0190)</p>}
 
         {/* Numpad */}
         <div className="grid grid-cols-3 gap-2 px-5 pb-5">
@@ -192,9 +219,15 @@ function PinDialog({ user, onClose }: { user: typeof DEMO_USERS[0]; onClose: () 
   );
 }
 
-export default function StartScreen() {
+import { Suspense } from "react";
+
+function StartScreenContent() {
   const [selectedUser, setSelectedUser] = useState<typeof DEMO_USERS[0] | null>(null);
+  const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [greetingInfo, setGreetingInfo] = useState({ text: "Guten Morgen, Meister!", emoji: "👋" });
+  
+  const searchParams = useSearchParams();
+  const errorMessage = searchParams?.get("message");
 
   useEffect(() => {
     const updateGreeting = () => {
@@ -272,9 +305,60 @@ export default function StartScreen() {
         })}
       </div>
 
+      {/* Admin Login Trigger & Error Messages */}
+      <div className="mt-8 flex flex-col items-center gap-4 animate-in fade-in duration-700 delay-500 fill-mode-both">
+        {errorMessage && (
+          <p className="text-sm text-danger-red font-bold bg-danger-red/10 px-4 py-2 rounded-xl mb-2">
+            {errorMessage}
+          </p>
+        )}
+        <button 
+          onClick={() => setShowEmailLogin(true)}
+          className="text-xs text-text-muted hover:text-navy-900 font-bold uppercase tracking-wider transition-colors cursor-pointer"
+        >
+          Administrator / E-Mail Login
+        </button>
+
+        {/* Robust Tablet Test Login */}
+        <button
+          onClick={() => {
+            try {
+              alert("Button wurde geklickt!"); // DEBUG
+              localStorage.setItem("kreile_user_role", "Werkstatt");
+              localStorage.setItem("kreile_user_initials", "CD");
+              const isHttps = window.location.protocol === "https:";
+              document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+              window.location.href = "/";
+            } catch (err: any) {
+              alert("Fehler beim Login: " + err.message);
+            }
+          }}
+          className="mt-4 px-6 py-2 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-900 text-sm font-bold rounded-full transition-colors cursor-pointer flex items-center gap-2"
+        >
+          <span className="w-2 h-2 rounded-full bg-accent-orange animate-pulse"></span>
+          Tablet Test-Login (Werkstatt)
+        </button>
+      </div>
+
       {selectedUser && (
         <PinDialog user={selectedUser} onClose={() => setSelectedUser(null)} />
       )}
+
+      {showEmailLogin && (
+        <EmailLoginDialog onClose={() => setShowEmailLogin(false)} />
+      )}
     </div>
+  );
+}
+
+export default function StartScreen() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-bg-app-soft flex items-center justify-center p-8">
+        <div className="text-text-muted font-bold animate-pulse text-lg">Lade Startbildschirm...</div>
+      </div>
+    }>
+      <StartScreenContent />
+    </Suspense>
   );
 }

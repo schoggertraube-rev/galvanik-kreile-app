@@ -2,11 +2,15 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Search, Package, ChevronRight, X, Sparkles, LayoutGrid, Droplets, Activity } from 'lucide-react'
+import { Search, Package, ChevronRight, X, Sparkles, LayoutGrid, Droplets, Activity, Clock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { INITIAL_CUSTOMERS, MockCustomer } from '@/lib/mockData'
 import { ordersRepository, Order } from '@/lib/repositories/ordersRepository'
 import { customersRepository } from '@/lib/repositories/customersRepository'
+import { findActions, buildFallbackSuggestion } from '@/lib/search/fuzzy'
+import { SEARCH_ACTIONS } from '@/lib/search/actionRegistry'
+import { getRecentSearches, addRecentSearch } from '@/lib/search/recent'
+import type { SearchSuggestion } from '@/types/search'
 
 type MockOrderExt = Order & {
   description?: string;
@@ -110,10 +114,33 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
 
   const hasResults = filteredOrders.length > 0 || filteredCustomers.length > 0
 
-  const handleClose = () => onOpenChange(false)
+  // Intent-based action suggestions (shown above entity results)
+  const actionSuggestions: SearchSuggestion[] = cleanTerm
+    ? findActions(cleanTerm, SEARCH_ACTIONS)
+    : []
+
+  const hasAnyResults = hasResults || actionSuggestions.length > 0
+
+  // Fallback — shown when nothing matches (NEVER "Keine Ergebnisse")
+  const fallbackSuggestions: SearchSuggestion[] = cleanTerm && !hasAnyResults
+    ? buildFallbackSuggestion(cleanTerm)
+    : []
+
+  const [recentSearches] = [getRecentSearches()]
+
+  const handleClose = () => {
+    if (searchTerm.trim().length > 1) addRecentSearch(searchTerm.trim())
+    onOpenChange(false)
+  }
   
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
+      // If only action hits, navigate to first action
+      if (actionSuggestions.length > 0 && filteredOrders.length === 0 && filteredCustomers.length === 0) {
+        router.push(actionSuggestions[0].routeOnSelect)
+        handleClose()
+        return
+      }
       const exactMatch = filteredOrders.find(o => safe(o.orderNumber) === cleanTerm);
       if (exactMatch) {
         router.push(`/orders/${exactMatch.id}`);
@@ -267,6 +294,30 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
           {/* Search Term Inputted - Show Grouped Results */}
           {searchTerm && (
             <div className="space-y-4">
+
+              {/* Group 0: Intent Actions — shown BEFORE entities */}
+              {actionSuggestions.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="px-2">
+                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">Aktionen</span>
+                  </div>
+                  <div className="space-y-1">
+                    {actionSuggestions.map((s) => (
+                      <button
+                        key={s.routeOnSelect}
+                        onClick={() => { router.push(s.routeOnSelect); handleClose(); }}
+                        className="flex items-center justify-between w-full p-2.5 rounded-xl hover:bg-gold-100 transition-colors border border-transparent hover:border-navy-700 group text-left"
+                      >
+                        <div>
+                          <span className="font-bold text-sm text-navy-900 block">{s.label}</span>
+                          {s.secondary && <span className="text-xs text-navy-500">{s.secondary}</span>}
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               
               {/* Group 1: Customers */}
               {filteredCustomers.length > 0 && (
@@ -343,14 +394,25 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                 </div>
               )}
 
-              {/* No results */}
-              {!hasResults && (
-                <div className="text-center py-12 text-text-muted space-y-2">
-                  <Package className="w-12 h-12 text-neutral-gray-100 mx-auto" />
-                  <p className="font-extrabold text-sm text-navy-900">Keine Suchergebnisse gefunden</p>
-                  <p className="text-xs text-navy-500 max-w-[280px] mx-auto">
-                    Es gibt keine Kunden oder Aufträge, die mit dem Suchbegriff &bdquo;<span className="font-bold text-navy-900">{searchTerm}</span>&ldquo; übereinstimmen.
-                  </p>
+              {/* Fallback — NEVER "Keine Ergebnisse", always a suggestion */}
+              {!hasAnyResults && fallbackSuggestions.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="px-2">
+                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">Vorschläge</span>
+                  </div>
+                  {fallbackSuggestions.map((s) => (
+                    <button
+                      key={s.routeOnSelect}
+                      onClick={() => { router.push(s.routeOnSelect); handleClose(); }}
+                      className="flex items-center justify-between w-full p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-neutral-gray-100 group text-left"
+                    >
+                      <div>
+                        <span className="font-bold text-sm text-navy-900">{s.label}</span>
+                        {s.secondary && <span className="block text-xs text-navy-500 mt-0.5">{s.secondary}</span>}
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform shrink-0" />
+                    </button>
+                  ))}
                 </div>
               )}
 

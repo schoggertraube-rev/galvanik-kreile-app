@@ -107,16 +107,23 @@ export function IntakeCompletionSummary({
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-4">
           <Button
-            onClick={() => router.push("/today")}
+            onClick={() => router.push("/warendurchlauf")}
             variant="outline"
             className="flex-1 h-16 text-sm font-bold rounded-2xl border-2 border-neutral-gray-100 text-navy-900 hover:bg-neutral-gray-100 active:scale-95 transition-all"
           >
             Zum Leitstand
           </Button>
           <Button
+            onClick={() => router.push(`/customers/${createdOrder.customerId}`)}
+            variant="outline"
+            className="flex-1 h-16 text-sm font-bold rounded-2xl border-2 border-navy-700 text-navy-700 bg-gold-100 hover:bg-navy-100 active:scale-95 transition-all"
+          >
+            Zur Kundenkarte
+          </Button>
+          <Button
             onClick={() => router.push(`/orders/${createdOrder.id}`)}
             variant="outline"
-            className="flex-1 h-16 text-sm font-bold rounded-2xl border-2 border-navy-700 text-navy-700 bg-gold-100 hover:bg-navy-700 active:scale-95 transition-all"
+            className="flex-1 h-16 text-sm font-bold rounded-2xl border-2 border-navy-700 text-navy-700 bg-gold-100 hover:bg-navy-100 active:scale-95 transition-all"
           >
             Auftrag öffnen
           </Button>

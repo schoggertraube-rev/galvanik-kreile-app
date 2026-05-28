@@ -43,7 +43,7 @@ export const priceAgreements = pgTable("price_agreements", {
 // 4. Orders
 export const orders = pgTable("orders", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).default("hotel-kreile"),
+  tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
   orderNumber: text("order_number").notNull().unique(),
   customerId: text("customer_id").notNull().references(() => customers.id),
   title: text("title").notNull(),
@@ -65,7 +65,7 @@ export const orders = pgTable("orders", {
 // 4.5 Items (Standalone table for parts, referenced by orders.actions.ts)
 export const items = pgTable("items", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).default("hotel-kreile"),
+  tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   customerId: text("customer_id").notNull().references(() => customers.id),
   name: text("name").notNull(),
@@ -77,7 +77,7 @@ export const items = pgTable("items", {
 // 5. Events / Timeline
 export const events = pgTable("events", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).default("hotel-kreile"),
+  tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   itemId: text("item_id"),
   eventType: varchar("event_type", { length: 100 }).notNull(),

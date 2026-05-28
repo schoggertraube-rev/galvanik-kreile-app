@@ -52,17 +52,16 @@ export async function proxy(request: NextRequest) {
 
   if (
     !user &&
-    !request.nextUrl.pathname.startsWith('/login') &&
-    !request.nextUrl.pathname.startsWith('/auth') &&
-    !request.nextUrl.pathname.startsWith('/start')
+    !request.nextUrl.pathname.startsWith('/start') &&
+    !request.nextUrl.pathname.startsWith('/auth')
   ) {
     const url = request.nextUrl.clone()
-    url.pathname = '/login'
+    url.pathname = '/start'
     return NextResponse.redirect(url)
   }
 
-  // Verhindere, dass eingeloggte Nutzer die Login-Seite erneut aufrufen
-  if (user && request.nextUrl.pathname.startsWith('/login')) {
+  // Verhindere, dass eingeloggte Nutzer die Start-Seite (Login) erneut aufrufen
+  if (user && request.nextUrl.pathname.startsWith('/start')) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)

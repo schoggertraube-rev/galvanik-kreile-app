@@ -8,8 +8,8 @@ import { createId } from "@paralleldrive/cuid2";
 export async function getOrdersDb() {
   if (!db) return [];
   try {
-    const dbOrders = await db.select().from(orders);
-    const dbItems = await db.select().from(items);
+    const dbOrders = await db.select().from(orders).orderBy(orders.createdAt);
+    const dbItems = await db.select().from(items).orderBy(items.createdAt);
     const dbCustomers = await db.select().from(customers);
     
     return dbOrders.map(o => {
@@ -17,8 +17,8 @@ export async function getOrdersDb() {
       const customer = dbCustomers.find(c => c.id === o.customerId);
       const customerName = customer ? customer.name : "Unbekannter Kunde";
       
-      const intakeDate = new Date().toISOString();
-      const dueDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
+      const intakeDate = o.intakeDate ? new Date(o.intakeDate).toISOString() : (o.createdAt ? new Date(o.createdAt).toISOString() : "2026-05-01T08:00:00.000Z");
+      const dueDate = o.dueDate ? new Date(o.dueDate).toISOString() : new Date(new Date(intakeDate).getTime() + 10 * 24 * 60 * 60 * 1000).toISOString();
       const dueLabel = "Fällig in";
       const dueValue = "10 Tagen";
       
@@ -60,11 +60,13 @@ export async function createOrderDb(data: {
   if (!db) return null;
   try {
     const orderId = data.id || createId();
-    const orderNumber = `A-${202600 + Math.floor(Math.random() * 10000)}`;
+    const year = new Date().getFullYear();
+    const sequenceNumber = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    const orderNumber = `A-${year}-${sequenceNumber}`;
     
     const newOrder = {
       id: orderId,
-      tenantId: "hotel-kreile",
+      tenantId: "galvanik-kreile",
       orderNumber,
       customerId: data.customerId,
       title: data.title,
@@ -78,7 +80,7 @@ export async function createOrderDb(data: {
     if (data.parts && data.parts.length > 0) {
       const newItems = data.parts.map(p => ({
         id: p.id || createId(),
-        tenantId: "hotel-kreile",
+        tenantId: "galvanik-kreile",
         orderId,
         customerId: data.customerId,
         name: p.name,

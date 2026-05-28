@@ -21,7 +21,7 @@ export async function createStatusEvent(data: {
   try {
     const newEvent = {
       id: createId(),
-      tenantId: data.tenantId || "hotel-kreile",
+      tenantId: data.tenantId || "galvanik-kreile",
       orderId: data.orderId,
       eventType: data.eventType,
       itemId: data.itemId,

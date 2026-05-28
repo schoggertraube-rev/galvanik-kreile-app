@@ -3,15 +3,47 @@
 import Link from "next/link";
 import { Search, Camera, Bell, Calendar } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
+import { logout } from "@/app/actions/auth";
 
 export function KreileHeader() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [syncQueueCount, setSyncQueueCount] = useState(0);
   const [orderCount, setOrderCount] = useState(0);
+  
+  // User Dropdown State
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [userInitials, setUserInitials] = useState<string>("?");
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Load initials from local storage on mount
+    const initials = localStorage.getItem("kreile_user_initials");
+    if (initials) setUserInitials(initials);
+  }, []);
+
+  // Click outside to close user dropdown
+  useEffect(() => {
+    if (!userDropdownOpen) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target as Node)) {
+        setUserDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [userDropdownOpen]);
+
+  const handleLogout = async () => {
+    localStorage.removeItem("kreile_user_role");
+    localStorage.removeItem("kreile_user_initials");
+    document.cookie = "bypass-auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+    setUserDropdownOpen(false);
+    await logout(); // Calls server action to destroy supabase session
+  };
 
   const today = new Date();
   const dateString = today.toLocaleDateString("de-DE", {
@@ -114,9 +146,29 @@ export function KreileHeader() {
         </div>
 
         {/* Profilbild rund (Kreis 48px) */}
-        <button className="w-12 h-12 rounded-full bg-navy-700 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-sm">
-          MK
-        </button>
+        <div className="relative" ref={userDropdownRef}>
+          <button 
+            onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+            className="w-12 h-12 rounded-full bg-navy-700 hover:bg-navy-900 transition-colors text-white flex items-center justify-center text-sm font-black shrink-0 shadow-sm cursor-pointer"
+          >
+            {userInitials}
+          </button>
+          
+          {userDropdownOpen && (
+            <div className="absolute right-0 top-14 mt-2 w-48 bg-white border-2 border-neutral-gray-100 rounded-2xl shadow-xl z-50 p-2 animate-in slide-in-from-top-2 fade-in duration-200">
+              <div className="px-3 py-2 border-b border-neutral-gray-100 mb-1">
+                <p className="text-xs font-bold text-navy-900">Angemeldet als</p>
+                <p className="text-[10px] text-text-muted">{userInitials}</p>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="w-full text-left px-3 py-2 text-sm font-bold text-danger-red hover:bg-danger-red/10 rounded-xl transition-colors cursor-pointer"
+              >
+                Abmelden
+              </button>
+            </div>
+          )}
+        </div>
 
       </div>
 

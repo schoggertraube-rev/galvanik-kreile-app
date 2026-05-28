@@ -454,6 +454,26 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                       <span>Keine E-Mail</span>
                     </Button>
                   )}
+
+                  {/* DSGVO Anonymisierung */}
+                  {customer.name && !customer.name.startsWith("ANONYMISIERT") && (
+                    <div className="pt-4 mt-2 border-t border-white/10">
+                      <Button 
+                        variant="outline" 
+                        onClick={async () => {
+                          if (confirm("DSGVO-Anonymisierung wirklich durchführen? Kundendaten werden unwiderruflich überschrieben. Auftragsdaten bleiben erhalten.")) {
+                            const { anonymizeCustomer } = await import("@/lib/privacy/dsgvoAnonymizer");
+                            await anonymizeCustomer(customer.id, "Admin");
+                            window.location.reload();
+                          }
+                        }}
+                        className="w-full h-10 bg-transparent border-danger-red/50 hover:bg-danger-red hover:text-white text-danger-red font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all"
+                      >
+                        <AlertTriangle className="w-4 h-4" />
+                        <span>DSGVO-Löschung / Anonymisieren</span>
+                      </Button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="border-t border-white/10 pt-4 text-center">

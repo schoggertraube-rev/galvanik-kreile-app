@@ -17,8 +17,14 @@ export const intakeService = {
     // 1. Kunde zuordnen oder anlegen
     let customerId = data.customerId;
     if (!customerId) {
-      if (!data.newCustomerName) throw new Error("Kein Kunde angegeben");
-      const details = data.newCustomerDetails || {};
+      // If no new customer name provided, use placeholder
+  let newName = data.newCustomerName;
+  if (!newName) {
+    console.warn("⚠️ Kein Kunde angegeben – erstelle Platzhalterkunde 'Unbekannter Kunde'.");
+    newName = "Unbekannter Kunde";
+  }
+  const details = data.newCustomerDetails || {};
+
       
       // Merge street and zip/city to address if street exists
       let address = details.address || "";
@@ -33,7 +39,7 @@ export const intakeService = {
       }
 
       const newCust = await customersRepository.create({
-        name: data.newCustomerName,
+        name: newName,
         type: "Privatkunde",
         city: details.city || "Unbekannt",
         phone: details.phone || "",

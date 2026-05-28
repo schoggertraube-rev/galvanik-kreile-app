@@ -2,7 +2,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { INITIAL_ORDERS } from "@/lib/mockData";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { IndexedDBHelper } from "@/lib/offline/IndexedDBHelper";
-import { createOrderDb, getOrdersDb, updateOrderDb } from "@/app/actions/orders.actions";
+import { createClient } from "@/lib/supabase/client";
 
 export type Order = {
   id: string;
@@ -23,28 +23,89 @@ export type Order = {
   intakeDate?: string;
   task?: string;
   customerName?: string;
+  rawIntakeDate?: string;
+  rawDueDate?: string;
 }
+
+const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
 export const ordersRepository = {
   async getAll(): Promise<Order[]> {
-    if (typeof window !== "undefined") {
-      // 1. If online, try fetching from Supabase DB first
-      if (!OfflineManager.isOffline()) {
-        try {
-          const dbOrders = await getOrdersDb();
-          if (dbOrders && dbOrders.length > 0) {
-            localStorage.setItem("kreile_orders", JSON.stringify(dbOrders));
-            IndexedDBHelper.saveSnapshot("orders", dbOrders.slice(0, 50)).catch(err =>
-              console.error("Failed to save orders snapshot to IndexedDB:", err)
-            );
-            return dbOrders as Order[];
-          }
-        } catch (error) {
-          console.warn("Failed to fetch orders from Supabase, falling back to cache:", error);
-        }
+    if (isSupabase) {
+      const supabase = createClient();
+      const { data: dbOrders, error: ordersError } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+      if (ordersError) {
+        console.error("Supabase ordersRepository.getAll (orders) error:", ordersError);
+        throw ordersError;
+      }
+      
+      const { data: dbItems, error: itemsError } = await supabase.from('items').select('*');
+      if (itemsError) {
+        console.error("Supabase ordersRepository.getAll (items) error:", itemsError);
+        throw itemsError;
+      }
+      
+      const { data: dbCustomers, error: customersError } = await supabase.from('customers').select('id, name');
+      if (customersError) {
+        console.error("Supabase ordersRepository.getAll (customers) error:", customersError);
+        throw customersError;
       }
 
-      // 2. If offline or error, try reading from IndexedDB Read-Cache snapshot
+      return dbOrders.map(o => {
+        const orderItems = dbItems.filter(item => item.order_id === o.id);
+        const customer = dbCustomers.find(c => c.id === o.customer_id);
+        const customerName = customer ? customer.name : "Unbekannter Kunde";
+        
+        let normalizedOrderNumber = o.order_number || "A-0000-0000";
+        const numMatch = normalizedOrderNumber.match(/^A-(\d{4})-?(\d+)$/i);
+        if (numMatch) {
+          normalizedOrderNumber = `A-${numMatch[1]}-${numMatch[2].padStart(4, '0')}`;
+        }
+        
+        const rawIntake = o.intake_date ? new Date(o.intake_date) : (o.created_at ? new Date(o.created_at) : new Date());
+        const rawDue = o.due_date ? new Date(o.due_date) : new Date(rawIntake.getTime() + 10 * 24 * 60 * 60 * 1000);
+        
+        const intakeDate = !isNaN(rawIntake.getTime()) 
+          ? rawIntake.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ", " + rawIntake.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + " Uhr"
+          : "Unbekannt";
+        const dueDate = !isNaN(rawDue.getTime()) 
+          ? rawDue.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
+          : "Unbekannt";
+        
+        return {
+          id: o.id,
+          orderNumber: normalizedOrderNumber,
+          customerId: o.customer_id || "",
+          customerName,
+          title: o.title,
+          task: o.task || o.title || "Unbenanntes Projekt",
+          station: o.current_station || "wareneingang",
+          currentStationId: o.current_station || "wareneingang",
+          status: o.status,
+          risk: o.risk || "green",
+          statusText: o.status_text,
+          delayReason: o.delay_reason,
+          recommendedAction: o.recommended_action,
+          parts: orderItems.map(item => ({
+            id: item.id,
+            name: item.name,
+            quantity: item.quantity,
+            surfaceRequested: item.surface_requested || "",
+            station: o.current_station || "wareneingang"
+          })),
+          intakeDate,
+          dueDate,
+          rawIntakeDate: !isNaN(rawIntake.getTime()) ? rawIntake.toISOString() : undefined,
+          rawDueDate: !isNaN(rawDue.getTime()) ? rawDue.toISOString() : undefined,
+          dueLabel: "Fällig in",
+          dueValue: "10 Tagen"
+        };
+      });
+    }
+
+    // --- Mock Fallback ---
+    if (typeof window !== "undefined") {
+      // If offline or error, try reading from IndexedDB Read-Cache snapshot
       if (OfflineManager.isOffline()) {
         const cached = await IndexedDBHelper.getSnapshot<Order>("orders");
         if (cached && cached.length > 0) {
@@ -53,7 +114,7 @@ export const ordersRepository = {
         }
       }
 
-      // 3. Fallback to localStorage
+      // Fallback to localStorage
       const saved = localStorage.getItem("kreile_orders");
       const orders = saved ? JSON.parse(saved) : INITIAL_ORDERS;
       
@@ -61,7 +122,7 @@ export const ordersRepository = {
         localStorage.setItem("kreile_orders", JSON.stringify(INITIAL_ORDERS));
       }
 
-      // 4. If online, update the IndexedDB cache snapshot for next time
+      // Update the IndexedDB cache snapshot for next time
       if (!OfflineManager.isOffline()) {
         IndexedDBHelper.saveSnapshot("orders", orders.slice(0, 50)).catch(err =>
           console.error("Failed to save orders snapshot to IndexedDB:", err)
@@ -74,18 +135,81 @@ export const ordersRepository = {
   },
 
   async create(data: Omit<Order, "id" | "orderNumber" | "status" | "risk"> & { id?: string }): Promise<Order> {
+    const intakeDate = new Date().toISOString();
+    const dueDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
+    
+    if (isSupabase) {
+      const supabase = createClient();
+      const orderId = data.id || createId();
+      const orderNumber = `A-${202600 + Math.floor(Math.random() * 10000)}`;
+      
+      const newOrderDb = {
+        id: orderId,
+        order_number: orderNumber,
+        customer_id: data.customerId,
+        title: data.title,
+        status: "in_progress",
+        risk: "green",
+        received_at: intakeDate,
+        due_date: dueDate
+      };
+      
+      const { error: orderError } = await supabase.from('orders').insert(newOrderDb);
+      if (orderError) {
+        console.error("Supabase ordersRepository.create (order) error:", orderError);
+        throw orderError;
+      }
+      
+      const mappedParts = (data.parts || []).map((part: any) => ({
+        id: part.id || createId(),
+        order_id: orderId,
+        name: part.name || "Teil",
+        quantity: typeof part.quantity === "number" ? part.quantity : parseInt(String(part.quantity)) || 1,
+        surface_requested: part.surfaceRequested || ""
+      }));
+      
+      if (mappedParts.length > 0) {
+        const { error: itemsError } = await supabase.from('items').insert(mappedParts);
+        if (itemsError) {
+          console.error("Supabase ordersRepository.create (items) error:", itemsError);
+          throw itemsError;
+        }
+      }
+      
+      let customerName = "Unbekannter Kunde";
+      const { data: customerData } = await supabase.from('customers').select('name').eq('id', data.customerId).single();
+      if (customerData) {
+        customerName = customerData.name;
+      }
+      
+      return {
+        ...data,
+        id: orderId,
+        orderNumber,
+        customerName,
+        status: "in_progress",
+        risk: "green",
+        intakeDate,
+        dueDate,
+        dueLabel: "Fällig in",
+        dueValue: "10 Tagen",
+        parts: mappedParts.map(p => ({
+            id: p.id,
+            name: p.name,
+            quantity: p.quantity,
+            surfaceRequested: p.surface_requested,
+            status: "in_progress",
+            station: data.currentStationId || "wareneingang"
+        }))
+      };
+    }
+
+    // --- Mock Fallback ---
     const all = await this.getAll();
     const orderNumber = `A-${202600 + all.length}`;
     
-    // Default dates
-    const intakeDate = new Date().toISOString();
-    const dueDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
-    const dueLabel = "Fällig in";
-    const dueValue = "10 Tagen";
-    
-    // Map parts with high precision format T-A-2026XX-Y
     const cleanOrderNum = String(202600 + all.length);
-    const mappedParts = (data.parts || []).map((part: { id?: string; name?: string; quantity?: string | number; surfaceRequested?: string; status?: string; station?: string }, index: number) => {
+    const mappedParts = (data.parts || []).map((part: any, index: number) => {
       const partNum = index + 1;
       const generatedPartId = `T-A-${cleanOrderNum}-${partNum}`;
       return {
@@ -121,14 +245,13 @@ export const ordersRepository = {
       risk: "green",
       intakeDate,
       dueDate,
-      dueLabel,
-      dueValue,
+      dueLabel: "Fällig in",
+      dueValue: "10 Tagen",
       parts: mappedParts
     };
 
     const updated = [newOrder, ...all];
 
-    // 1. Handle Offline write queue
     if (OfflineManager.isOffline()) {
       console.log("📴 Offline: Queuing order creation in IndexedDB");
       await OfflineManager.enqueueAction("ORDER_CREATE", data);
@@ -137,24 +260,6 @@ export const ordersRepository = {
         localStorage.setItem("kreile_orders", JSON.stringify(updated));
       }
       return newOrder;
-    }
-
-    // 2. Handle Online standard write to Supabase
-    try {
-      const dbOrder = await createOrderDb({
-        id: newOrder.id,
-        customerId: newOrder.customerId,
-        title: newOrder.title,
-        parts: newOrder.parts.map((p: Record<string, unknown>) => ({ id: p.id as string, name: p.name as string, quantity: p.quantity as string | number, surfaceRequested: p.surfaceRequested as string })),
-        currentStationId: newOrder.currentStationId
-      });
-      if (dbOrder) {
-        console.log("⚡ Order created in Supabase:", dbOrder.orderNumber);
-        newOrder.orderNumber = dbOrder.orderNumber;
-      }
-    } catch (error) {
-      console.warn("Failed to create order in Supabase, queuing for sync:", error);
-      await OfflineManager.enqueueAction("ORDER_CREATE", data);
     }
 
     if (typeof window !== "undefined") {
@@ -167,6 +272,44 @@ export const ordersRepository = {
   },
 
   async updateOrder(idOrNumber: string, changes: Partial<Order>): Promise<Order | null> {
+    if (isSupabase) {
+      const supabase = createClient();
+      const isId = idOrNumber.length > 20; 
+      
+      const updateData: any = {};
+      if (changes.status) updateData.status = changes.status;
+      if (changes.title) updateData.title = changes.title;
+      if (changes.risk) updateData.risk = changes.risk;
+      if (changes.statusText) updateData.status_text = changes.statusText;
+      if (changes.delayReason) updateData.delay_reason = changes.delayReason;
+      if (changes.recommendedAction) updateData.recommended_action = changes.recommendedAction;
+      if (changes.station || changes.currentStationId) updateData.current_station = changes.station || changes.currentStationId;
+      if (changes.customerId) updateData.customer_id = changes.customerId;
+      if (changes.rawIntakeDate) updateData.intake_date = changes.rawIntakeDate;
+      if (changes.rawDueDate) updateData.due_date = changes.rawDueDate;
+      if (changes.task) updateData.task = changes.task;
+      
+      if (Object.keys(updateData).length > 0) {
+        const query = supabase.from('orders').update(updateData);
+        const { error } = isId 
+          ? await query.eq('id', idOrNumber)
+          : await query.eq('order_number', idOrNumber);
+          
+        if (error) {
+          const errMsg = error.message || JSON.stringify(error);
+          console.error("Supabase ordersRepository.updateOrder error:", errMsg, error.details, error.hint, error.code);
+          throw new Error(errMsg);
+        }
+      }
+      
+      // Return the updated object by re-fetching all and finding it, 
+      // ensuring we have the exact UI format mapped correctly.
+      const all = await this.getAll();
+      const updatedOrder = all.find(o => o.id === idOrNumber || o.orderNumber === idOrNumber);
+      return updatedOrder || null;
+    }
+
+    // --- Mock Fallback ---
     const all = await this.getAll();
     let updatedOrder: Order | null = null;
 
@@ -180,7 +323,6 @@ export const ordersRepository = {
 
     if (!updatedOrder) return null;
 
-    // 1. Handle Offline write queue
     if (OfflineManager.isOffline()) {
       console.log("📴 Offline: Queuing order status update in IndexedDB");
       await OfflineManager.enqueueAction("ORDER_STATUS_UPDATE", {
@@ -194,25 +336,6 @@ export const ordersRepository = {
         window.dispatchEvent(new Event("storage"));
       }
       return updatedOrder;
-    }
-
-    // 2. Handle Online standard write to Supabase
-    try {
-      const actualId = (updatedOrder as Order).id;
-      await updateOrderDb(actualId, {
-        status: changes.status,
-        currentStationId: changes.currentStationId || changes.station,
-        priorityComputed: changes.risk,
-        title: changes.title
-      });
-      console.log("⚡ Order updated in Supabase:", actualId);
-    } catch (error) {
-      console.warn("Failed to update order in Supabase, queuing for sync:", error);
-      await OfflineManager.enqueueAction("ORDER_STATUS_UPDATE", {
-        id: (updatedOrder as Order).id,
-        orderNumber: (updatedOrder as Order).orderNumber,
-        changes
-      });
     }
 
     if (typeof window !== "undefined") {

@@ -18,13 +18,15 @@ import {
   MapPin, 
   Zap,
   ArrowLeft,
-  CheckCircle2
+  CheckCircle2,
+  Edit2
 } from "lucide-react";
 import { INITIAL_ORDERS, INITIAL_CUSTOMERS, MockOrder, MockCustomer } from "@/lib/mockData";
 import { getStationConfig, getAllStations } from "@/constants/stations";
 import { evaluateOrderPriority } from "@/lib/priority";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { customersRepository } from "@/lib/repositories/customersRepository";
+import { OrderEditModal } from "@/components/orders/OrderEditModal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchToolbar } from "@/components/ui/SearchToolbar";
 
@@ -61,6 +63,7 @@ function OrdersPageInner() {
   }
   const [customersList, setCustomersList] = useState<MockCustomer[]>(INITIAL_CUSTOMERS as unknown as MockCustomer[]);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
+  const [isEditingOrder, setIsEditingOrder] = useState(false);
 
   // Load from Repositories on mount
   useEffect(() => {
@@ -182,8 +185,25 @@ function OrdersPageInner() {
     }, 6000);
   };
 
+  const handleSaveOrder = async (changes: any) => {
+    if (!selectedOrderId) return;
+    try {
+      const updatedOrder = await ordersRepository.updateOrder(selectedOrderId, changes);
+      if (updatedOrder) {
+        setOrders(prev => prev.map(o => o.id === selectedOrderId ? (updatedOrder as unknown as MockOrder) : o));
+      }
+    } catch (e: any) {
+      console.error("Fehler beim Speichern der Auftragsdaten", e);
+      throw e;
+    }
+  };
+
   // Find currently selected order
   const selectedOrder = orders.find(o => o.id === selectedOrderId) || null;
+
+  if (selectedOrderId && !selectedOrder && process.env.NODE_ENV === "development") {
+    console.warn("Selected order not found", { selectedOrderId, availableIds: orders.map(o => o.id) });
+  }
 
   // Filter orders by search term, status filter AND station filter
   const filteredOrders = orders.filter(o => {
@@ -308,9 +328,12 @@ function OrdersPageInner() {
                 return (
                   <Card
                     key={order.id}
-                    onClick={() => setSelectedOrderId(order.id)}
+                    onClickCapture={(e) => {
+                      console.log("Card onClickCapture fired!", { id: order.id });
+                      setSelectedOrderId(order.id);
+                    }}
                     className={`transition-all duration-200 cursor-pointer border-neutral-gray-100 shadow-sm ${itemBg} ${borderStyle} ${
-                      isSelected ? "ring-2 ring-navy-900 border-transparent shadow" : ""
+                      isSelected ? "ring-2 ring-navy-900 border-transparent shadow" : "hover:border-neutral-gray-300"
                     }`}
                   >
                     <CardContent className="p-4 flex items-center justify-between gap-4">
@@ -326,7 +349,7 @@ function OrdersPageInner() {
                         <div className="flex items-center gap-3 text-xs text-text-muted font-semibold pt-0.5">
                           <span>Eingang: {order.intakeDate}</span>
                           <span>•</span>
-                          <span>Teile: {order.parts.length}</span>
+                          <span>Teile: {order.parts?.length || 0}</span>
                         </div>
                       </div>
 
@@ -366,6 +389,13 @@ function OrdersPageInner() {
                 >
                   <X className="h-5 w-5" />
                 </button>
+                <button
+                  onClick={() => setIsEditingOrder(true)}
+                  className="absolute right-12 top-4 text-white/70 hover:text-white transition-colors"
+                  title="Auftrag bearbeiten"
+                >
+                  <Edit2 className="h-5 w-5" />
+                </button>
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-sm font-bold text-white/70">{selectedOrder.orderNumber}</span>
                   <Badge className="bg-navy-700 text-white border-0 text-[8px] font-bold uppercase tracking-wider py-0.5">
@@ -373,7 +403,7 @@ function OrdersPageInner() {
                   </Badge>
                 </div>
                 <h3 className="font-black text-base mt-1 leading-tight">{selectedOrder.task}</h3>
-                <p className="text-xs text-white/60 mt-1 font-medium">Kunde: {selectedOrder.customerName}</p>
+                <p className="text-xs text-white/60 mt-1 font-medium">Kunde: {selectedOrder.customerName || "Unbekannter Kunde"}</p>
               </div>
 
               {/* Specs */}
@@ -398,13 +428,37 @@ function OrdersPageInner() {
                 <div className="grid grid-cols-2 gap-3 bg-bg-app-soft p-3 rounded-lg border border-neutral-gray-100 text-xs">
                   <div>
                     <span className="text-text-muted block font-semibold text-[10px] uppercase">Eingang</span>
-                    <span className="font-bold text-navy-900">{selectedOrder.intakeDate}</span>
+                    <span className="font-bold text-navy-900">{selectedOrder.intakeDate || "Kein Datum"}</span>
                   </div>
                   <div>
                     <span className="text-text-muted block font-semibold text-[10px] uppercase">Liefertermin</span>
-                    <span className="font-bold text-navy-900">{selectedOrder.dueDate}</span>
+                    <span className="font-bold text-navy-900">{selectedOrder.dueDate || "Nicht gesetzt"}</span>
                   </div>
                 </div>
+
+                {/* Parts / Werkstücke */}
+                {selectedOrder.parts && selectedOrder.parts.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block font-sans">Zu bearbeitende Teile</span>
+                    <div className="bg-white border border-neutral-gray-100 rounded-lg overflow-hidden divide-y divide-neutral-gray-100">
+                      {selectedOrder.parts.map((p: any, i: number) => (
+                        <div key={i} className="p-3 flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-3">
+                            <span className="bg-navy-900 text-white font-mono text-[10px] px-2 py-0.5 rounded font-bold">
+                              {p.quantity}x
+                            </span>
+                            <span className="font-bold text-navy-900">{p.name || "Unbekanntes Teil"}</span>
+                          </div>
+                          {p.surfaceRequested && (
+                            <span className="text-[10px] font-mono bg-bg-app-soft text-text-muted px-2 py-1 rounded">
+                              {p.surfaceRequested}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Delay alerts */}
                 {selectedOrder.delayReason && (
@@ -420,7 +474,7 @@ function OrdersPageInner() {
                 {/* Actions Simulation Bar */}
                 <div className="space-y-3 border-t pt-4">
                   <div className="space-y-2">
-                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block font-sans">Risiko-Status ändern (Sim)</span>
+                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block font-sans">Risiko-Status ändern</span>
                     <div className="flex gap-1">
                       {(
                         [
@@ -445,7 +499,7 @@ function OrdersPageInner() {
                   </div>
 
                   <div className="space-y-2 border-t pt-3">
-                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block font-sans">Arbeitsstation ändern (Sim)</span>
+                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block font-sans">Arbeitsstation ändern</span>
                     <div className="grid grid-cols-5 gap-1">
                       {getAllStations().map(station => {
                         const labelMap: Record<string, string> = {
@@ -478,11 +532,11 @@ function OrdersPageInner() {
                 {/* Associated parts */}
                 <div className="space-y-3 border-t pt-4">
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Zugeordnete Werkstücke ({selectedOrder.parts.length})</span>
+                    <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Zugeordnete Werkstücke ({(selectedOrder.parts || []).length})</span>
                   </div>
 
                   <div className="space-y-2">
-                    {selectedOrder.parts.map(part => (
+                    {(selectedOrder.parts || []).map(part => (
                       <div key={part.id} className="p-3 bg-bg-app-soft border rounded-lg flex items-center justify-between text-xs hover:border-gold-600">
                         <div className="space-y-0.5">
                           <div className="flex items-center gap-1.5">
@@ -556,6 +610,14 @@ function OrdersPageInner() {
 
       </div>
 
+      {isEditingOrder && selectedOrder && (
+        <OrderEditModal
+          order={selectedOrder as any}
+          customers={customersList as any}
+          onClose={() => setIsEditingOrder(false)}
+          onSave={handleSaveOrder}
+        />
+      )}
     </div>
   );
 }

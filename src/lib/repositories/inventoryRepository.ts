@@ -1,5 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
+import { createClient } from "@/lib/supabase/client";
 
 export interface InventoryItem {
   id: string;
@@ -46,29 +47,36 @@ const INITIAL_ITEMS: InventoryItem[] = [
 
 const INITIAL_MOVEMENTS: StockMovement[] = [
   { id: "sm-1", inventoryItemId: "inv-1", movementType: "stock_in", quantity: 50, unit: "l", reason: "Reguläre Nachlieferung", createdBy: "office@kreile.de", createdAt: "2026-05-20T08:30:00Z" },
-  { id: "sm-2", inventoryItemId: "inv-5", movementType: "consumption", quantity: 5, unit: "pcs", orderId: "o1", reason: "Materialentnahme Schleiferei", createdBy: "werkstatt1@kreile.de", createdAt: "2026-05-21T09:15:00Z" },
-  { id: "sm-3", inventoryItemId: "inv-6", movementType: "consumption", quantity: 10, unit: "pcs", orderId: "o2", reason: "Reinigung Schleiferei", createdBy: "werkstatt2@kreile.de", createdAt: "2026-05-21T10:45:00Z" },
-  { id: "sm-4", inventoryItemId: "inv-4", movementType: "consumption", quantity: 2, unit: "l", reason: "Dosierung Nickelbad 1", createdBy: "meister@kreile.de", createdAt: "2026-05-21T11:20:00Z" },
-  { id: "sm-5", inventoryItemId: "inv-7", movementType: "correction", quantity: -2, unit: "pcs", reason: "Ausschuss-Korrektur Inventur", createdBy: "meister@kreile.de", createdAt: "2026-05-21T14:00:00Z" },
-  { id: "sm-6", inventoryItemId: "inv-2", movementType: "consumption", quantity: 5, unit: "l", orderId: "o11", reason: "Badregeneration Nickelbad 1", createdBy: "meister@kreile.de", createdAt: "2026-05-20T10:00:00Z" },
-  { id: "sm-7", inventoryItemId: "inv-11", movementType: "consumption", quantity: 15, unit: "pcs", orderId: "o5", reason: "Verpackung Möbelbeschläge", createdBy: "werkstatt2@kreile.de", createdAt: "2026-05-21T16:00:00Z" },
-  { id: "sm-8", inventoryItemId: "inv-3", movementType: "consumption", quantity: 10, unit: "l", reason: "Ansatz Entfettungsbad 1", createdBy: "werkstatt1@kreile.de", createdAt: "2026-05-19T08:00:00Z" },
-  { id: "sm-9", inventoryItemId: "inv-12", movementType: "consumption", quantity: 25, unit: "m", orderId: "o3", reason: "Verpackung Besteckteile", createdBy: "werkstatt2@kreile.de", createdAt: "2026-05-21T15:30:00Z" },
-  { id: "sm-10", inventoryItemId: "inv-10", movementType: "stock_in", quantity: 10, unit: "pcs", reason: "Ersatzbeschaffung Aufhängungen", createdBy: "office@kreile.de", createdAt: "2026-05-18T10:00:00Z" },
-  { id: "sm-11", inventoryItemId: "inv-5", movementType: "consumption", quantity: 8, unit: "pcs", orderId: "o9", reason: "Schleifvorgang Porsche Zierleisten", createdBy: "werkstatt1@kreile.de", createdAt: "2026-05-21T11:00:00Z" },
-  { id: "sm-12", inventoryItemId: "inv-13", movementType: "consumption", quantity: 2, unit: "pcs", orderId: "o9", reason: "Polieren Porsche Zierleisten", createdBy: "werkstatt1@kreile.de", createdAt: "2026-05-21T13:45:00Z" },
-  { id: "sm-13", inventoryItemId: "inv-14", movementType: "consumption", quantity: 1, unit: "pcs", orderId: "o8", reason: "Entrostung Tank NSU", createdBy: "werkstatt2@kreile.de", createdAt: "2026-05-20T14:30:00Z" },
-  { id: "sm-14", inventoryItemId: "inv-1", movementType: "consumption", quantity: 15, unit: "l", reason: "Nachdosierung Säurebad", createdBy: "meister@kreile.de", createdAt: "2026-05-21T08:15:00Z" },
-  { id: "sm-15", inventoryItemId: "inv-8", movementType: "consumption", quantity: 3, unit: "pcs", reason: "Verschleißersatz Bürsten", createdBy: "werkstatt1@kreile.de", createdAt: "2026-05-20T16:45:05Z" },
-  { id: "sm-16", inventoryItemId: "inv-11", movementType: "stock_in", quantity: 100, unit: "pcs", reason: "Nachbestellung Kartonagen", createdBy: "office@kreile.de", createdAt: "2026-05-17T11:30:00Z" },
-  { id: "sm-17", inventoryItemId: "inv-4", movementType: "stock_in", quantity: 20, unit: "l", reason: "Chemielieferung BASF", createdBy: "office@kreile.de", createdAt: "2026-05-19T09:00:00Z" },
-  { id: "sm-18", inventoryItemId: "inv-5", movementType: "consumption", quantity: 4, unit: "pcs", orderId: "o10", reason: "Vorschleifen Altarleuchter", createdBy: "werkstatt2@kreile.de", createdAt: "2026-05-21T10:15:00Z" },
-  { id: "sm-19", inventoryItemId: "inv-13", movementType: "consumption", quantity: 3, unit: "pcs", orderId: "o10", reason: "Feinpolitur Altarleuchter", createdBy: "werkstatt2@kreile.de", createdAt: "2026-05-21T15:00:00Z" },
-  { id: "sm-20", inventoryItemId: "inv-2", movementType: "stock_in", quantity: 30, unit: "l", reason: "Nachbestellung Nickelzusatz", createdBy: "office@kreile.de", createdAt: "2026-05-19T14:30:00Z" }
+  { id: "sm-2", inventoryItemId: "inv-5", movementType: "consumption", quantity: 5, unit: "pcs", orderId: "o1", reason: "Materialentnahme Schleiferei", createdBy: "werkstatt1@kreile.de", createdAt: "2026-05-21T09:15:00Z" }
 ];
+
+const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
 export const inventoryRepository = {
   async getAllItems(): Promise<InventoryItem[]> {
+    if (isSupabase) {
+      const supabase = createClient();
+      const { data, error } = await supabase.from('inventory_items').select('*').order('name', { ascending: true });
+      if (error) {
+        console.error("Supabase inventoryRepository.getAllItems error:", error);
+        throw error;
+      }
+      return data.map(item => ({
+        id: item.id,
+        sku: item.sku,
+        name: item.name,
+        category: (item.is_consumable ? "consumable" : "tooling") as any, // Fallback da DB kein 'category' Feld hat
+        unit: item.unit,
+        currentStock: item.current_stock,
+        minStock: item.min_stock || 0,
+        storageLocation: "Standardlager", // Fallback da DB kein 'storage_location' Feld hat
+        isConsumable: item.is_consumable,
+        isHazardous: item.is_hazardous,
+        pricePerUnit: item.price_per_unit || undefined
+      }));
+    }
+
+    // --- Mock Fallback ---
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("kreile_inventory_items");
       if (saved) return JSON.parse(saved);
@@ -78,6 +86,27 @@ export const inventoryRepository = {
   },
 
   async getAllMovements(): Promise<StockMovement[]> {
+    if (isSupabase) {
+      const supabase = createClient();
+      const { data, error } = await supabase.from('stock_movements').select('*').order('created_at', { ascending: false });
+      if (error) {
+        console.error("Supabase inventoryRepository.getAllMovements error:", error);
+        throw error;
+      }
+      return data.map(m => ({
+        id: m.id,
+        inventoryItemId: m.inventory_item_id,
+        movementType: m.movement_type as any,
+        quantity: m.quantity,
+        unit: m.unit,
+        orderId: m.order_id || undefined,
+        reason: m.reason || undefined,
+        createdBy: m.created_by,
+        createdAt: m.created_at
+      }));
+    }
+
+    // --- Mock Fallback ---
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("kreile_stock_movements");
       if (saved) return JSON.parse(saved);
@@ -87,11 +116,58 @@ export const inventoryRepository = {
   },
 
   async getItemById(id: string): Promise<InventoryItem | null> {
+    if (isSupabase) {
+      const supabase = createClient();
+      const { data, error } = await supabase.from('inventory_items').select('*').eq('id', id).single();
+      if (error) {
+        if (error.code === 'PGRST116') return null;
+        console.error("Supabase inventoryRepository.getItemById error:", error);
+        throw error;
+      }
+      if (!data) return null;
+      
+      return {
+        id: data.id,
+        sku: data.sku,
+        name: data.name,
+        category: (data.is_consumable ? "consumable" : "tooling") as any,
+        unit: data.unit,
+        currentStock: data.current_stock,
+        minStock: data.min_stock || 0,
+        storageLocation: "Standardlager",
+        isConsumable: data.is_consumable,
+        isHazardous: data.is_hazardous,
+        pricePerUnit: data.price_per_unit || undefined
+      };
+    }
+
+    // --- Mock Fallback ---
     const all = await this.getAllItems();
     return all.find(item => item.id === id) || null;
   },
 
   async getMovementsByItem(inventoryItemId: string): Promise<StockMovement[]> {
+    if (isSupabase) {
+      const supabase = createClient();
+      const { data, error } = await supabase.from('stock_movements').select('*').eq('inventory_item_id', inventoryItemId).order('created_at', { ascending: false });
+      if (error) {
+        console.error("Supabase inventoryRepository.getMovementsByItem error:", error);
+        throw error;
+      }
+      return data.map(m => ({
+        id: m.id,
+        inventoryItemId: m.inventory_item_id,
+        movementType: m.movement_type as any,
+        quantity: m.quantity,
+        unit: m.unit,
+        orderId: m.order_id || undefined,
+        reason: m.reason || undefined,
+        createdBy: m.created_by,
+        createdAt: m.created_at
+      }));
+    }
+
+    // --- Mock Fallback ---
     const all = await this.getAllMovements();
     return all
       .filter(m => m.inventoryItemId === inventoryItemId)
@@ -99,6 +175,66 @@ export const inventoryRepository = {
   },
 
   async createMovement(data: Omit<StockMovement, "id" | "createdAt">): Promise<StockMovement> {
+    if (isSupabase) {
+      const supabase = createClient();
+      
+      // 1. Hole den aktuellen Artikel für Bestandskalkulation
+      const item = await this.getItemById(data.inventoryItemId);
+      if (!item) {
+        throw new Error(`Inventory item ${data.inventoryItemId} not found.`);
+      }
+
+      // 2. Berechne neuen Bestand
+      let change = data.quantity;
+      if (data.movementType === "consumption" || data.movementType === "stock_out" || data.movementType === "waste") {
+        change = -Math.abs(data.quantity);
+      } else if (data.movementType === "correction") {
+        change = data.quantity;
+      } else {
+        change = Math.abs(data.quantity);
+      }
+      
+      const newStock = Math.max(0, item.currentStock + change);
+      
+      const newMovementDb = {
+        id: createId(),
+        inventory_item_id: data.inventoryItemId,
+        movement_type: data.movementType,
+        quantity: change, // Speichere die faktische Änderung (inkl. Vorzeichen), wie es in ERPs üblich ist, oder absolut? Mock nutzte absolut im Objekt.
+        unit: data.unit,
+        order_id: data.orderId || null,
+        reason: data.reason || null,
+        created_by: data.createdBy, // Stub für UUID im RLS Fall, aktuell Mail/Dummy
+        created_at: new Date().toISOString()
+      };
+
+      // TRANSAKTIONALE SEQUENZ
+      // A: Insert Bewegung (Historie ist wichtiger)
+      const { error: moveError } = await supabase.from('stock_movements').insert(newMovementDb);
+      if (moveError) {
+        console.error("Supabase createMovement (insert movement) failed:", moveError);
+        throw moveError;
+      }
+
+      // B: Update Lagerbestand
+      const { error: updateError } = await supabase.from('inventory_items').update({ current_stock: newStock }).eq('id', data.inventoryItemId);
+      if (updateError) {
+        console.error("CRITICAL: Movement inserted, but stock update failed! Inventory out of sync.", updateError);
+        throw updateError;
+      }
+
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event("storage"));
+      }
+
+      return {
+        ...data,
+        id: newMovementDb.id,
+        createdAt: newMovementDb.created_at
+      };
+    }
+
+    // --- Mock Fallback ---
     const items = await this.getAllItems();
     const item = items.find(i => i.id === data.inventoryItemId);
     
@@ -106,14 +242,13 @@ export const inventoryRepository = {
       throw new Error(`Inventory item ${data.inventoryItemId} not found.`);
     }
 
-    // Calculate new stock
     let change = data.quantity;
     if (data.movementType === "consumption" || data.movementType === "stock_out" || data.movementType === "waste") {
       change = -Math.abs(data.quantity);
     } else if (data.movementType === "correction") {
-      change = data.quantity; // correction can be positive or negative
+      change = data.quantity; 
     } else {
-      change = Math.abs(data.quantity); // stock_in
+      change = Math.abs(data.quantity);
     }
 
     item.currentStock = Math.max(0, item.currentStock + change);
@@ -124,31 +259,23 @@ export const inventoryRepository = {
       createdAt: new Date().toISOString()
     };
 
-    // 1. Handle Offline write queue
     if (OfflineManager.isOffline()) {
       console.log("📴 Offline: Queuing material booking movement in IndexedDB");
       await OfflineManager.enqueueAction("MATERIAL_BOOKING", data);
       
-      // Perform optimistic updates locally for instant inventory warning & layout refresh
       if (typeof window !== "undefined") {
         localStorage.setItem("kreile_inventory_items", JSON.stringify(items));
-        
-        // optimistic movement tracking
         const movements = await this.getAllMovements();
         localStorage.setItem("kreile_stock_movements", JSON.stringify([newMovement, ...movements]));
-        
-        window.dispatchEvent(new Event("storage")); // force layout state sync
+        window.dispatchEvent(new Event("storage")); 
       }
       return newMovement;
     }
 
-    // 2. Handle Online standard write
     if (typeof window !== "undefined") {
       localStorage.setItem("kreile_inventory_items", JSON.stringify(items));
       const movements = await this.getAllMovements();
       localStorage.setItem("kreile_stock_movements", JSON.stringify([newMovement, ...movements]));
-      
-      // Dispatch custom storage event to update topbar instantly
       window.dispatchEvent(new Event("storage"));
     }
 
@@ -160,4 +287,3 @@ export const inventoryRepository = {
     return items.some(item => item.currentStock < item.minStock);
   }
 };
-

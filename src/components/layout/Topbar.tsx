@@ -2,13 +2,16 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Search, User, Package, Calendar } from 'lucide-react'
+import { Search, User, Package, Calendar, LogOut, Camera } from 'lucide-react'
 import { GlobalSearch } from './GlobalSearch'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
+import { logout } from '@/app/actions/auth'
 import { inventoryRepository } from '@/lib/repositories/inventoryRepository'
 import { bathsRepository } from '@/lib/repositories/bathsRepository'
 import { OfflineManager } from '@/lib/offline/OfflineManager'
 import { StationStatusButton } from '@/components/ui/StationStatusButton'
+import { WarningBell } from '@/components/warnings/WarningBell'
 
 const STATIONS = [
   { name: 'Wareneingang', path: '/station/wareneingang' }, // Pfad zum Station-Queue
@@ -38,6 +41,37 @@ export function Topbar() {
   const [showDropdown, setShowDropdown] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [syncSuccessToast, setSyncSuccessToast] = useState<string | null>(null)
+  
+  // User Dropdown State
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false)
+  const [userInitials, setUserInitials] = useState<string>("?")
+  const router = useRouter()
+  const userDropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    // Load initials from local storage on mount
+    const initials = localStorage.getItem("kreile_user_initials")
+    if (initials) setUserInitials(initials)
+  }, [])
+
+  // Click outside to close user dropdown
+  useEffect(() => {
+    if (!userDropdownOpen) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target as Node)) {
+        setUserDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [userDropdownOpen]);
+
+  const handleLogout = async () => {
+    localStorage.removeItem("kreile_user_role");
+    localStorage.removeItem("kreile_user_initials");
+    setUserDropdownOpen(false);
+    await logout(); // Calls server action to destroy supabase session
+  };
 
   // Datum formatieren für "Heute" Button
   const today = new Date()
@@ -148,6 +182,7 @@ export function Topbar() {
 
       {/* Right: Actions */}
       <div className="flex items-center gap-2 md:gap-4 shrink-0">
+        <WarningBell />
         <Link 
           href="/items" 
           className={`hidden lg:flex items-center gap-2 text-sm font-medium hover:bg-neutral-gray-100 px-3 py-2 rounded-md transition-colors border ${
@@ -255,9 +290,38 @@ export function Topbar() {
           </kbd>
         </button>
 
-        <button className="h-8 w-8 rounded-full bg-neutral-gray-100 flex items-center justify-center text-text-muted hover:bg-text-muted transition-colors">
-          <User className="w-4 h-4" />
+        <button
+          onClick={() => router.push('/scan')}
+          title="Foto-Scan starten"
+          className="flex items-center gap-2 text-sm font-medium text-navy-500 hover:text-navy-900 bg-neutral-gray-100 hover:bg-neutral-gray-100 px-3 py-2 rounded-md transition-colors border border-transparent hover:border-navy-700"
+        >
+          <Camera className="w-4 h-4" />
+          <span className="hidden lg:inline">Foto‑Scan</span>
         </button>
+
+        <div className="relative" ref={userDropdownRef}>
+          <button 
+            onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+            className="h-8 w-8 rounded-full bg-gold-100 flex items-center justify-center text-gold-600 font-bold text-xs hover:bg-gold-200 transition-colors cursor-pointer"
+          >
+            {userInitials}
+          </button>
+          
+          {userDropdownOpen && (
+            <div className="absolute right-0 top-10 mt-2 w-48 bg-white border-2 border-neutral-gray-100 rounded-2xl shadow-xl z-50 p-2 animate-in slide-in-from-top-2 fade-in duration-200">
+              <div className="px-3 py-2 border-b border-neutral-gray-100 mb-1">
+                <p className="text-xs font-bold text-navy-900">Angemeldet als</p>
+                <p className="text-[10px] text-text-muted">{userInitials}</p>
+              </div>
+              <button
+                onClick={handleLogout}
+                className="w-full text-left px-3 py-2 text-sm font-bold text-danger-red hover:bg-danger-red/10 rounded-xl transition-colors cursor-pointer"
+              >
+                Abmelden
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Sync Success Toast Banner */}

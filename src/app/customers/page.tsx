@@ -29,10 +29,12 @@ import {
   Check
 } from "lucide-react";
 import { CustomerDetailView } from "@/components/customers/CustomerDetailView";
+import { CustomerTypeConsequences } from "@/components/customers/CustomerTypeConsequences";
 import { Customer } from "@/lib/types/customer";
 import { EXTENDED_CUSTOMERS as INITIAL_CUSTOMERS } from "@/lib/mockCustomersExtended";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchToolbar } from "@/components/ui/SearchToolbar";
+import type { CustomerType } from "@/types/customerType";
 
 const safe = (value: unknown) => String(value ?? "").toLowerCase();
 
@@ -40,8 +42,6 @@ export default function CustomersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  
-  // Custom dialog state for creating a customer (simulated UI)
   const [showAddModal, setShowAddModal] = useState(false);
 
   const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS as unknown as Customer[]);
