@@ -31,6 +31,7 @@ export const metadata: Metadata = {
 };
 
 import { KreileAppShell } from "@/components/layout/KreileAppShell";
+import { LicenseProvider } from "@/lib/license/LicenseContext";
 
 export default function RootLayout({
   children,
@@ -53,9 +54,11 @@ export default function RootLayout({
             alert("Promise Error: " + (event.reason && event.reason.message ? event.reason.message : event.reason));
           });
         ` }} />
-        <KreileAppShell>
-          {children}
-        </KreileAppShell>
+        <LicenseProvider>
+          <KreileAppShell>
+            {children}
+          </KreileAppShell>
+        </LicenseProvider>
       </body>
     </html>
   );
