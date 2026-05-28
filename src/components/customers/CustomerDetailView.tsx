@@ -10,13 +10,8 @@ import {
   ChevronRight,
   Sparkles,
   AlertTriangle,
-  Euro,
   FileText,
-  Camera,
   MessageSquare,
-  Building,
-  User,
-  School,
   FileWarning, CheckCircle, ShieldAlert
 } from "lucide-react";
 import { CustomerMemoryCard } from "./CustomerMemoryCard";
@@ -41,7 +36,7 @@ export function CustomerDetailView({ customer, onEdit }: CustomerDetailViewProps
     <div className="space-y-6 animate-fade-in">
       <Card className="shadow-md border-neutral-gray-100 overflow-hidden bg-white">
         {/* Beautiful Header in Kreile Navy */}
-        <div className="bg-gradient-to-r from-navy-900 to-navy-700 text-white p-6 relative">
+        <div className="bg-linear-to-r from-navy-900 to-navy-700 text-white p-6 relative">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
@@ -142,7 +137,7 @@ export function CustomerDetailView({ customer, onEdit }: CustomerDetailViewProps
 
                 {/* NEW: AI Enrichment & Firmenprofil */}
                 {customer.aiSummary && (
-                  <div className="bg-gradient-to-br from-indigo-50 to-blue-50 border border-indigo-100 rounded-xl p-5 shadow-sm relative">
+                  <div className="bg-linear-to-br from-indigo-50 to-blue-50 border border-indigo-100 rounded-xl p-5 shadow-sm relative">
                     <div className="flex items-center gap-2 mb-3">
                       <Sparkles className="h-5 w-5 text-indigo-500" />
                       <h3 className="text-sm font-extrabold text-indigo-900 uppercase tracking-wider">KI-Executive Summary</h3>

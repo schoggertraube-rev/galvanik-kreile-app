@@ -125,7 +125,7 @@ export const inquiriesRepository = {
       };
       const { error } = await supabase.from('inquiries').insert([dbRow]);
       if (error) {
-        console.error("Supabase inquiriesRepository.create error:", error);
+        console.error("Supabase inquiriesRepository.create error:", error.message, error.details, error.hint);
       }
     } else {
       if (typeof window !== "undefined") {

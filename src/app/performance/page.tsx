@@ -351,7 +351,7 @@ export default function PerformancePage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
         {/* Left Side: Stunning Master Performance Score Circular Gauge */}
-        <Card className="bg-gradient-to-br from-navy-900 via-navy-900 to-blue-950 border-navy-900 shadow-xl text-white overflow-hidden relative flex flex-col justify-between p-5 min-h-[300px]">
+        <Card className="bg-linear-to-br from-navy-900 via-navy-900 to-blue-950 border-navy-900 shadow-xl text-white overflow-hidden relative flex flex-col justify-between p-5 min-h-[300px]">
           <div className="absolute right-0 top-0 -mt-12 -mr-12 w-32 h-32 bg-navy-700/10 rounded-full blur-3xl pointer-events-none"></div>
           
           <div>
@@ -821,7 +821,7 @@ export default function PerformancePage() {
 
       {/* ── Finanzcontrolling ──────────────────────────────────────────── */}
       <Card className="shadow-sm border-neutral-gray-300 overflow-hidden">
-        <CardHeader className="bg-gradient-to-r from-navy-900 to-blue-950 text-white pb-4">
+        <CardHeader className="bg-linear-to-r from-navy-900 to-blue-950 text-white pb-4">
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base font-black font-serif tracking-tight">Finanzcontrolling &amp; Kalkulation</CardTitle>

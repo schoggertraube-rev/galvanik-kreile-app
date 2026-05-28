@@ -37,4 +37,4 @@ Folgende Tabellen wurden in `0000_charming_ken_ellis.sql` angelegt, besitzen abe
 ### Generelle strukturelle Lücken in der Migration:
 *   **Foreign Keys fehlen:** Keine einzige Tabelle hat saubere `REFERENCES`-Beziehungen auf Datenbankebene.
 *   **Keine RLS-Policies:** Es gibt keine Row Level Security; Datensätze wären ungeschützt.
-*   **Tenant-ID Fallback:** `tenant_id` wird fälschlicherweise auf `hotel-kreile` gesetzt (Copy/Paste Relikt).
+*   **Tenant-ID Fallback:** *(Behoben)* Ursprünglich wurde `tenant_id` fälschlicherweise auf `hotel-kreile` gesetzt (Copy/Paste Relikt). Dies wurde durch Migration 0004 (`0004_fix_hotel_tenant.sql`) endgültig bereinigt.

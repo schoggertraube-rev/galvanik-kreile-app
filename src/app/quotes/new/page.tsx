@@ -34,7 +34,7 @@ export default function NewQuotePage() {
   const handleSave = async () => {
     await inquiriesRepository.create({
       customerName: customerName || "Unbekannter Anrufer",
-      customerId: customerId || "K-NEW",
+      customerId: customerId || "",
       subject: subject || "Neue Anfrage",
       description: description || "Keine Beschreibung hinterlegt.",
       partCount,

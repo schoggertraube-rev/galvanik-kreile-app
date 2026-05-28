@@ -19,7 +19,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "customer_id": {
           "name": "customer_id",
@@ -112,7 +112,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "bath_id": {
           "name": "bath_id",
@@ -181,7 +181,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "bath_id": {
           "name": "bath_id",
@@ -268,7 +268,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "bath_number": {
           "name": "bath_number",
@@ -363,7 +363,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "customer_id": {
           "name": "customer_id",
@@ -438,7 +438,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "order_id": {
           "name": "order_id",
@@ -509,7 +509,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "order_id": {
           "name": "order_id",
@@ -590,7 +590,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "customer_number": {
           "name": "customer_number",
@@ -697,7 +697,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "sku": {
           "name": "sku",
@@ -806,7 +806,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "item_number": {
           "name": "item_number",
@@ -935,7 +935,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "image_url": {
           "name": "image_url",
@@ -993,7 +993,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "order_number": {
           "name": "order_number",
@@ -1126,7 +1126,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "customer_id": {
           "name": "customer_id",
@@ -1196,7 +1196,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "order_id": {
           "name": "order_id",
@@ -1284,7 +1284,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "slug": {
           "name": "slug",
@@ -1342,7 +1342,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "order_id": {
           "name": "order_id",
@@ -1423,7 +1423,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "inventory_item_id": {
           "name": "inventory_item_id",
@@ -1510,7 +1510,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "name": {
           "name": "name",
@@ -1556,7 +1556,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "email": {
           "name": "email",
@@ -1621,7 +1621,7 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "order_id": {
           "name": "order_id",

@@ -1,3 +1,4 @@
+// Historischer no-hotel-relics check: Dieses Skript dient nur zur Überprüfung, ob alte "hotel-kreile" Relikte existieren.
 const { Client } = require('pg');
 const fs = require('fs');
 const path = require('path');

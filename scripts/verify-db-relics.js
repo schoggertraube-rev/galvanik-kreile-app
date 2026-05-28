@@ -1,3 +1,4 @@
+// Historischer no-hotel-relics check: Dieses Skript dient nur zur Überprüfung, ob alte "hotel-kreile" Relikte existieren.
 const { Client } = require('pg');
 require('dotenv').config({ path: '.env.local' });
 

@@ -360,7 +360,7 @@ Topbar: kleiner Punkt zeigt Online/Offline. Bei Offline und vorhandener Queue: B
 - **Seed-Skript:** `db/seed.ts`, ausführbar via `npm run db:seed`
 - **Bibliothek:** `@faker-js/faker` mit `faker.seed(42)`
 - **Inhalt:**
-  - 1 Hotel-Mandant „Kreile Werkstatt" (für spätere Mandantenfähigkeit vorbereitet)
+  - 1 Galvanik-Mandant „Kreile Werkstatt" (Historische Notiz: ehemals als Hotel-Mandant bezeichnet, Konzept bereinigt)
   - 6 User: 1 admin, 1 meister, 1 office, 2 workshop, 1 quality
   - 25 Kunden (Mischung: 15 Privat, 5 Business, 5 Institution wie Museum/Kirche)
   - 12 Lagerartikel (Chemie, Schleifpapier, Polierscheibe, Bürste, Verpackung)

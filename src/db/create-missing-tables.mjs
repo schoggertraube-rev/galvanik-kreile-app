@@ -75,7 +75,7 @@ async function main() {
     await sql`
       CREATE TABLE IF NOT EXISTS orders (
         id text PRIMARY KEY,
-        tenant_id varchar(50) DEFAULT 'hotel-kreile',
+        tenant_id varchar(50) DEFAULT 'galvanik-kreile',
         order_number text NOT NULL UNIQUE,
         customer_id text NOT NULL REFERENCES customers(id),
         title text NOT NULL,
@@ -99,7 +99,7 @@ async function main() {
     await sql`
       CREATE TABLE IF NOT EXISTS items (
         id text PRIMARY KEY,
-        tenant_id varchar(50) DEFAULT 'hotel-kreile',
+        tenant_id varchar(50) DEFAULT 'galvanik-kreile',
         order_id text NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
         customer_id text NOT NULL REFERENCES customers(id),
         name text NOT NULL,
@@ -113,7 +113,7 @@ async function main() {
     await sql`
       CREATE TABLE IF NOT EXISTS events (
         id text PRIMARY KEY,
-        tenant_id varchar(50) DEFAULT 'hotel-kreile',
+        tenant_id varchar(50) DEFAULT 'galvanik-kreile',
         order_id text NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
         item_id text,
         event_type varchar(100) NOT NULL,

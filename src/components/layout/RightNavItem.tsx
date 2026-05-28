@@ -70,7 +70,7 @@ export function RightNavItem({
       </div>
 
       <span className={cn(
-        "text-[10px] font-bold text-center px-1 leading-tight break-words max-w-full",
+        "text-[10px] font-bold text-center px-1 leading-tight wrap-break-word max-w-full",
         isActive ? "text-navy-900" : "text-text-muted"
       )}>
         {label}

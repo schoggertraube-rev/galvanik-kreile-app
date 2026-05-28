@@ -561,7 +561,7 @@ src/
 - Nutzungsdaten werden in der Admin-Konsole lesend dargestellt — keine automatische Sperrung bei Überschreitung.
 - Datenreife-Konzept ist separater Strang; diese Spec referenziert es nur.
 - Mitarbeiter-Rollen kennen keine Plan-Information, auch nicht zufällig (z.B. in API-Responses).
-- Demo-Werkstatt verwendet ausschließlich Galvanik-Daten. Spätere Demo-Varianten (Hotel, Lerntherapie) wären separate Demo-Instanzen mit eigener Subdomain.
+- Demo-Werkstatt verwendet ausschließlich Galvanik-Daten. (Historische Notiz: Spätere Demo-Varianten wie Hotel oder Lerntherapie wären separate Demo-Instanzen gewesen, Konzept verworfen).
 
 ---
 

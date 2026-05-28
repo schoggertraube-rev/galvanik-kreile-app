@@ -146,7 +146,7 @@ export function CameraCapture({
         )}
 
         {/* Fake Camera Viewfinder Overlay */}
-        <div className="absolute inset-0 border-[40px] border-black/50 pointer-events-none" />
+        <div className="absolute inset-0 border-40 border-black/50 pointer-events-none" />
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="w-64 h-80 border-2 border-dashed border-white/50 rounded-xl relative">
             {/* Laser Scanner Effect */}

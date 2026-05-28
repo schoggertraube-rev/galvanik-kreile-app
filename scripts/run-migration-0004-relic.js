@@ -1,3 +1,4 @@
+// Einmaliges Altlast-Korrekturskript: Dieses Skript wendet die Migration 0004_fix_hotel_tenant.sql an.
 const { Client } = require('pg');
 const fs = require('fs');
 const path = require('path');

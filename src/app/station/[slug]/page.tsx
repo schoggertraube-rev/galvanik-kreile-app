@@ -88,7 +88,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
             {filteredOrders.length > 0 ? (
               <div className="space-y-6">
                 {slug === "wareneingang" && (
-                  <Card className="bg-gradient-to-r from-navy-900 to-navy-700 text-white p-6 rounded-xl shadow-md border border-white/10">
+                  <Card className="bg-linear-to-r from-navy-900 to-navy-700 text-white p-6 rounded-xl shadow-md border border-white/10">
                     <div className="flex flex-col items-center">
                       <h2 className="text-xl font-bold font-serif mb-4 text-white">Neuen Auftrag erfassen</h2>
                       <Link href="/orders/new" className="w-full max-w-sm">

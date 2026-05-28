@@ -73,7 +73,7 @@ Generiert am: 2026-05-27T20:22:05.232Z
 | Spalte | Datentyp | Nullable | Default |
 |---|---|---|---|
 | `id` | `text` | NO | `null` |
-| `tenant_id` | `character varying` | YES | `'hotel-kreile'::character varying` |
+| `tenant_id` | `character varying` | YES | `'galvanik-kreile'::character varying` |
 | `order_id` | `text` | NO | `null` |
 | `item_id` | `text` | YES | `null` |
 | `event_type` | `character varying` | NO | `null` |
@@ -97,7 +97,7 @@ Generiert am: 2026-05-27T20:22:05.232Z
 | Spalte | Datentyp | Nullable | Default |
 |---|---|---|---|
 | `id` | `text` | NO | `null` |
-| `tenant_id` | `character varying` | YES | `'hotel-kreile'::character varying` |
+| `tenant_id` | `character varying` | YES | `'galvanik-kreile'::character varying` |
 | `order_id` | `text` | NO | `null` |
 | `customer_id` | `text` | NO | `null` |
 | `name` | `text` | NO | `null` |
@@ -119,7 +119,7 @@ Generiert am: 2026-05-27T20:22:05.232Z
 | Spalte | Datentyp | Nullable | Default |
 |---|---|---|---|
 | `id` | `text` | NO | `null` |
-| `tenant_id` | `character varying` | YES | `'hotel-kreile'::character varying` |
+| `tenant_id` | `character varying` | YES | `'galvanik-kreile'::character varying` |
 | `order_number` | `text` | NO | `null` |
 | `customer_id` | `text` | NO | `null` |
 | `title` | `text` | NO | `null` |

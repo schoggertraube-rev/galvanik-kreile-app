@@ -16,7 +16,7 @@ export function EntityDecisionOverlay({
   orderId
 }: EntityDecisionOverlayProps) {
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-navy-900/40 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-100 flex items-center justify-center bg-navy-900/40 backdrop-blur-sm" onClick={onClose}>
       <div 
         className="bg-white rounded-3xl p-6 shadow-2xl max-w-sm w-full mx-4 animate-in zoom-in-95 duration-200"
         onClick={e => e.stopPropagation()}

@@ -252,7 +252,7 @@
           "type": "varchar(50)",
           "primaryKey": false,
           "notNull": false,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "order_id": {
           "name": "order_id",
@@ -405,7 +405,7 @@
           "type": "varchar(50)",
           "primaryKey": false,
           "notNull": false,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "order_id": {
           "name": "order_id",
@@ -497,7 +497,7 @@
           "type": "varchar(50)",
           "primaryKey": false,
           "notNull": false,
-          "default": "'hotel-kreile'"
+          "default": "'galvanik-kreile'"
         },
         "order_number": {
           "name": "order_number",

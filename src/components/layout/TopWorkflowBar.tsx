@@ -16,7 +16,7 @@ function TopWorkflowBarContent() {
   const searchParams = useSearchParams();
 
   return (
-    <div className="sticky top-0 z-50 w-full bg-bg-app/90 backdrop-blur-md py-4 px-4 flex justify-center relative overflow-hidden shrink-0">
+    <div className="sticky top-0 z-50 w-full bg-bg-app/90 backdrop-blur-md py-4 px-4 flex justify-center overflow-hidden shrink-0">
       {/* SVG Decorative Dot Grid on the Top-Right */}
       <div className="absolute right-0 top-0 h-full w-1/3 opacity-8 pointer-events-none">
         <svg width="100%" height="100%" fill="none" xmlns="http://www.w3.org/2000/svg">
