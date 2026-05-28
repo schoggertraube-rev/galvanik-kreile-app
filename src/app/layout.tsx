@@ -23,6 +23,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "KREILE WerkstattCockpit",
   description: "Mobiles PWA-Betriebssystem für die Galvanik Kreile Werkstatt",
+  applicationName: "Kreile Cockpit",
   appleWebApp: {
     capable: true,
     title: "Kreile Cockpit",

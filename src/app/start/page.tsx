@@ -12,21 +12,21 @@ const DEMO_USERS = [
     id: "1",
     initials: "MK",
     role: "Meister",
-    pin: "0190",
+    pin: "1234",
     icon: Wrench,
   },
   {
     id: "2",
     initials: "CD",
     role: "Werkstatt",
-    pin: "0190",
+    pin: "1234",
     icon: Wrench,
   },
   {
     id: "3",
     initials: "RS",
     role: "Büro",
-    pin: "0190",
+    pin: "1234",
     icon: Calculator,
   },
 ];
@@ -110,10 +110,13 @@ function WeatherCard() {
   );
 }
 
+import { initializeDemoIfNeeded } from "@/app/actions/demoSetup";
+
 // PIN Dialog Component
 function PinDialog({ user, onClose }: { user: typeof DEMO_USERS[0]; onClose: () => void }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(false);
   const router = useRouter();
 
   const handleInput = (num: string) => {
@@ -124,6 +127,7 @@ function PinDialog({ user, onClose }: { user: typeof DEMO_USERS[0]; onClose: () 
     
     if (newPin.length === 4) {
       if (newPin === user.pin) {
+        setIsInitializing(true);
         try {
           // Store current user in localStorage for application state
           localStorage.setItem("kreile_user_role", user.role);
@@ -132,13 +136,19 @@ function PinDialog({ user, onClose }: { user: typeof DEMO_USERS[0]; onClose: () 
           console.warn("localStorage is blocked, skipping user info storage", e);
         }
         
-        // Robust persistent cookie (1 Jahr) für Tablet & Cloudflare Tunnel
-        // Behebt Probleme mit getrennten Sessions/LocalStorage und PWA Restarts
-        const isHttps = window.location.protocol === "https:";
-        document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-        
-        // Force a hard navigation to ensure the server picks up the new cookie
-        window.location.href = "/";
+        initializeDemoIfNeeded().then(() => {
+          // Robust persistent cookie (1 Jahr) für Tablet & Cloudflare Tunnel
+          const isHttps = window.location.protocol === "https:";
+          document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+          
+          // Force a hard navigation to ensure the server picks up the new cookie
+          window.location.href = "/";
+        }).catch(() => {
+          // Navigiere auch bei Fehler weiter
+          const isHttps = window.location.protocol === "https:";
+          document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+          window.location.href = "/";
+        });
       } else {
         setError(true);
         setTimeout(() => setPin(""), 600);
@@ -173,8 +183,15 @@ function PinDialog({ user, onClose }: { user: typeof DEMO_USERS[0]; onClose: () 
               <p className="text-[10px] text-text-muted uppercase tracking-wider">PIN eingeben</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-text-muted hover:text-navy-900 text-2xl leading-none cursor-pointer">×</button>
+          <button onClick={onClose} className="text-text-muted hover:text-navy-900 text-2xl leading-none cursor-pointer" disabled={isInitializing}>×</button>
         </div>
+
+        {isInitializing && (
+          <div className="bg-accent-orange/10 px-6 py-3 border-b border-accent-orange/20 flex flex-col items-center justify-center">
+             <span className="text-sm font-semibold text-accent-orange animate-pulse">Initialisiere Demo-Datenbank...</span>
+             <span className="text-xs text-text-muted text-center mt-1">Dieser Vorgang kann ein paar Sekunden dauern, bitte warten.</span>
+          </div>
+        )}
 
         {/* PIN Dots */}
         <div className="flex justify-center gap-4 py-7">
@@ -187,7 +204,7 @@ function PinDialog({ user, onClose }: { user: typeof DEMO_USERS[0]; onClose: () 
             />
           ))}
         </div>
-        {error && <p className="text-center text-danger-red text-xs font-semibold -mt-4 mb-3">Falscher PIN (Versuche 0190)</p>}
+        {error && <p className="text-center text-danger-red text-xs font-semibold -mt-4 mb-3">Falscher PIN (Versuche 1234)</p>}
 
         {/* Numpad */}
         <div className="grid grid-cols-3 gap-2 px-5 pb-5">

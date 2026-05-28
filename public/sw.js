@@ -45,16 +45,23 @@ self.addEventListener("activate", (event) => {
 
 // Fetch Event - Network-First falling back to Cached App Shell
 self.addEventListener("fetch", (event) => {
-  // Only handle standard HTTP/HTTPS GET requests (avoid chrome-extension or POST requests)
+  // Ignore non-GET requests or external requests
   if (event.request.method !== "GET" || !event.request.url.startsWith(self.location.origin)) {
+    return;
+  }
+
+  const url = new URL(event.request.url);
+  
+  // NEVER cache API, Auth or dynamically sensitive routes
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/auth/')) {
     return;
   }
 
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // If the request succeeds, clone and store it in cache
-        if (response && response.status === 200 && response.type === "basic") {
+        // If the request succeeds and is not a 206 (Partial Content), cache it
+        if (response && response.status === 200 && response.type === "basic" && !url.pathname.startsWith('/api/')) {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache);

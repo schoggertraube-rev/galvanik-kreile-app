@@ -15,7 +15,7 @@ import {
   INITIAL_COMPLAINTS, 
 } from "../lib/mockData";
 
-async function main() {
+export async function seedDatabase() {
   console.log("🌱 Starte Datenbank-Seeding für V2...");
 
   try {
@@ -112,12 +112,14 @@ async function main() {
     }
 
     console.log("✅ Seeding erfolgreich abgeschlossen!");
-    process.exit(0);
-
+    return { success: true };
   } catch (error) {
     console.error("❌ Fehler beim Seeding:", error);
-    process.exit(1);
+    throw error;
   }
 }
 
-main();
+// Wenn die Datei direkt über tsx/node aufgerufen wird:
+if (require.main === module || process.argv[1]?.includes('seed')) {
+  seedDatabase().then(() => process.exit(0)).catch(() => process.exit(1));
+}

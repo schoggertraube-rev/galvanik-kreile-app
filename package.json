@@ -9,7 +9,6 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "prepare": "husky",
     "db:seed": "tsx src/db/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",

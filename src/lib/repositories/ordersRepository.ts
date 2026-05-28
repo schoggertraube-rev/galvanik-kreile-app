@@ -161,7 +161,7 @@ export const ordersRepository = {
       
       const { error: orderError } = await supabase.from('orders').insert(newOrderDb);
       if (orderError) {
-        console.error("Supabase ordersRepository.create (order) error:", orderError);
+        console.error("Supabase ordersRepository.create (order) error:", orderError.message, orderError.details, orderError.hint);
         throw orderError;
       }
       
