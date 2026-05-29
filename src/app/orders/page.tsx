@@ -68,15 +68,16 @@ function OrdersPageInner() {
 
   // Load from Repositories on mount
   useEffect(() => {
+    let isMounted = true;
     const loadData = async () => {
       try {
         const dbOrders = await ordersRepository.getAll();
-        if (dbOrders && dbOrders.length > 0) {
+        if (isMounted && dbOrders && dbOrders.length > 0) {
           setOrders(dbOrders as unknown as MockOrder[]);
         }
         
         const dbCustomers = await customersRepository.getAll();
-        if (dbCustomers && dbCustomers.length > 0) {
+        if (isMounted && dbCustomers && dbCustomers.length > 0) {
           setCustomersList(dbCustomers as unknown as MockCustomer[]);
         }
       } catch (e) {
@@ -84,6 +85,20 @@ function OrdersPageInner() {
       }
     };
     loadData();
+
+    const handleSync = () => {
+      console.log("[OrdersPage] Sync event received, reloading orders...");
+      loadData();
+    };
+
+    window.addEventListener('kreile-sync-orders', handleSync);
+    window.addEventListener('kreile-sync-focus', handleSync);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('kreile-sync-orders', handleSync);
+      window.removeEventListener('kreile-sync-focus', handleSync);
+    };
   }, []);
 
   const handleStatusChange = (orderId: string, newRisk: "green" | "yellow" | "orange" | "red" | "blocked") => {

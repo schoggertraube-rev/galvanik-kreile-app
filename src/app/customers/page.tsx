@@ -49,15 +49,32 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS as unknown as Customer[]);
 
   useEffect(() => {
+    let isMounted = true;
+    
     const loadCustomers = async () => {
       try {
         const data = await customersRepository.getAll();
-        setCustomers(data);
+        if (isMounted) setCustomers(data);
       } catch (err) {
         console.error("Failed to load customers:", err);
       }
     };
+    
     loadCustomers();
+
+    const handleSync = () => {
+      console.log("[CustomersPage] Sync event received, reloading customers...");
+      loadCustomers();
+    };
+
+    window.addEventListener('kreile-sync-customers', handleSync);
+    window.addEventListener('kreile-sync-focus', handleSync);
+    
+    return () => {
+      isMounted = false;
+      window.removeEventListener('kreile-sync-customers', handleSync);
+      window.removeEventListener('kreile-sync-focus', handleSync);
+    };
   }, []);
 
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);

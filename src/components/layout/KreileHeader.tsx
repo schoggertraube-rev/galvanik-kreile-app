@@ -9,6 +9,7 @@ import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { logout } from "@/app/actions/auth";
 import { trackUiEvent } from "@/lib/tracking/tracking";
+import { useRealtimeStatus } from "./RealtimeSyncManager";
 
 export function KreileHeader() {
   const [searchOpen, setSearchOpen] = useState(false);
@@ -16,6 +17,8 @@ export function KreileHeader() {
   const [syncQueueCount, setSyncQueueCount] = useState(0);
   const [orderCount, setOrderCount] = useState(0);
   
+  const { status: realtimeStatus } = useRealtimeStatus();
+
   // User Dropdown State
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [userInitials, setUserInitials] = useState<string>("?");
@@ -146,6 +149,19 @@ export function KreileHeader() {
             </span>
           )}
         </button>
+
+        {/* Live-Sync Indicator */}
+        {realtimeStatus !== "disabled" && (
+          <div className="hidden lg:flex items-center gap-1.5 px-3 h-9 rounded-full bg-white border border-neutral-gray-100 shadow-sm text-xs font-bold text-navy-700">
+            {realtimeStatus === "active" ? (
+              <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live</>
+            ) : realtimeStatus === "connecting" ? (
+              <><span className="w-1.5 h-1.5 rounded-full bg-accent-orange animate-pulse" /> Sync...</>
+            ) : (
+              <><span className="w-1.5 h-1.5 rounded-full bg-danger-red" /> Getrennt</>
+            )}
+          </div>
+        )}
 
         {/* Glocke mit rotem Badge */}
         <div className="relative">
