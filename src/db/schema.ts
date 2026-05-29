@@ -5,13 +5,17 @@ import { createId } from "@paralleldrive/cuid2";
 const cuidPrimaryKey = (name: string) => text(name).primaryKey().$defaultFn(() => createId());
 
 // 1. Users & Roles
-export const users = pgTable("users", {
+export const appUsers = pgTable("app_users", {
   id: uuid("id").primaryKey().defaultRandom(), // matches Supabase auth.users.id
   email: text("email").notNull().unique(),
   fullName: text("full_name").notNull(),
-  role: varchar("role", { length: 50 }).notNull().default("workshop"), // admin, meister, office, workshop, quality
+  role: varchar("role", { length: 50 }).notNull().default("workshop"), // developer, admin, meister, office, workshop, readonly
+  location: text("location"),
+  language: text("language").default("de"),
+  pinHash: text("pin_hash"),
   active: boolean("active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 // 2. Customers
@@ -87,7 +91,7 @@ export const events = pgTable("events", {
   eventType: varchar("event_type", { length: 100 }).notNull(),
   description: text("description"),
   notes: text("notes"),
-  userId: uuid("user_id").references(() => users.id),
+  userId: uuid("user_id").references(() => appUsers.id),
   workerId: varchar("worker_id", { length: 100 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -162,4 +166,44 @@ export const uiEventsTable = pgTable("ui_events", {
   payload: jsonb("payload").$type<Record<string, unknown>>(),
   sessionId: text("session_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+// 10. Admin & Features
+export const featureFlags = pgTable("feature_flags", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  description: text("description"),
+  enabled: boolean("enabled").default(false),
+  rolesAllowed: text("roles_allowed").array().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const importJobs = pgTable("import_jobs", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  type: text("type").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdBy: uuid("created_by").references(() => appUsers.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const importJobRows = pgTable("import_job_rows", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  jobId: text("job_id").notNull().references(() => importJobs.id, { onDelete: "cascade" }),
+  rowIndex: integer("row_index").notNull(),
+  data: jsonb("data").notNull(),
+  status: text("status").notNull().default("pending"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const auditLog = pgTable("audit_log", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  action: text("action").notNull(),
+  tableName: text("table_name"),
+  recordId: text("record_id"),
+  actorId: uuid("actor_id").references(() => appUsers.id),
+  payload: jsonb("payload"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });

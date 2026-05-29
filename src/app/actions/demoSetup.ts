@@ -1,7 +1,7 @@
 'use server'
 
 import { db } from '@/db'
-import { orders, customers, users } from '@/db/schema'
+import { orders, customers, appUsers } from '@/db/schema'
 import { seedDatabase } from '@/db/seed'
 import { count } from 'drizzle-orm'
 
@@ -14,7 +14,7 @@ export async function initializeDemoIfNeeded() {
   try {
     const oRes = await db.select({ value: count() }).from(orders)
     const cRes = await db.select({ value: count() }).from(customers)
-    const uRes = await db.select({ value: count() }).from(users)
+    const uRes = await db.select({ value: count() }).from(appUsers)
     
     const orderCount = oRes[0].value
     const customerCount = cRes[0].value

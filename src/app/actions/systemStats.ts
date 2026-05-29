@@ -1,7 +1,7 @@
 'use server'
 
 import { db } from '@/db'
-import { orders, customers, users } from '@/db/schema'
+import { orders, customers, appUsers } from '@/db/schema'
 import { count } from 'drizzle-orm'
 import { createClient } from '@/lib/supabase/server'
 
@@ -33,7 +33,7 @@ export async function getSystemStats() {
   try {
     const oRes = await db.select({ value: count() }).from(orders)
     const cRes = await db.select({ value: count() }).from(customers)
-    const uRes = await db.select({ value: count() }).from(users)
+    const uRes = await db.select({ value: count() }).from(appUsers)
 
     return {
       provider,

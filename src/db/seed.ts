@@ -7,7 +7,7 @@ import {
   complaints, 
   baths, 
   inventoryItems, 
-  users 
+  appUsers 
 } from "./schema";
 import { 
   INITIAL_CUSTOMERS, 
@@ -29,14 +29,15 @@ export async function seedDatabase({ safeMode = false } = {}) {
       await db.delete(customers);
       await db.delete(baths);
       await db.delete(inventoryItems);
-      await db.delete(users);
+      await db.delete(appUsers);
     } else {
       console.log("🛡️ Safe Mode aktiv: Überspringe Löschvorgang...");
     }
 
-    // 2. Insert Users (Mock Admin User)
+    // 2. Create appUsers
     console.log("👤 Lege Benutzer an...");
-    await db.insert(users).values({
+    await db.insert(appUsers).values({
+      id: "123e4567-e89b-12d3-a456-426614174000",
       email: "demo@kreile.de",
       fullName: "Max Meister",
       role: "admin",
