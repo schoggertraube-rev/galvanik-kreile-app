@@ -1,0 +1,183 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+import { X, Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, ChevronDown, ChevronRight } from "lucide-react";
+import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
+import { bathsRepository } from "@/lib/repositories/bathsRepository";
+
+interface MobileNavProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export function MobileNav({ isOpen, onClose }: MobileNavProps) {
+  const pathname = usePathname();
+  const [openQuotes, setOpenQuotes] = useState(0);
+  const [hasCriticalBaths, setHasCriticalBaths] = useState(false);
+  
+  // Submenu states
+  const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      setOpenQuotes(await inquiriesRepository.getOpenCount());
+      setHasCriticalBaths(await bathsRepository.hasCriticalBath());
+    };
+    if (isOpen) {
+      fetchStats();
+    }
+  }, [isOpen]);
+
+  // Lock body scroll when open
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
+
+  // Close on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isOpen) {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
+  if (!isOpen) return null;
+
+  const isActive = (path: string) =>
+    path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
+
+  const NavItem = ({ label, href, icon: Icon, badge, status, submenu }: any) => {
+    const active = isActive(href);
+    const hasSub = !!submenu;
+    const isSubOpen = openSubmenu === href;
+
+    return (
+      <div className="flex flex-col border-b border-neutral-gray-100/50 last:border-0">
+        <div className="flex items-center w-full">
+          <Link
+            href={href}
+            onClick={onClose}
+            className={`flex-1 flex items-center gap-4 py-4 px-4 min-h-[56px] transition-colors ${active ? "text-accent-orange bg-accent-orange/5 font-bold" : "text-navy-900 font-medium"}`}
+          >
+            <div className="relative flex items-center justify-center shrink-0 w-6 h-6">
+              <Icon className="w-6 h-6" strokeWidth={1.5} />
+              {status === "critical" && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-danger-red rounded-full border-2 border-white" />
+              )}
+            </div>
+            <span className="text-base">{label}</span>
+            {badge > 0 && (
+              <span className="ml-auto bg-accent-orange text-white text-[10px] font-black px-2 py-0.5 rounded-full">
+                {badge}
+              </span>
+            )}
+          </Link>
+          
+          {hasSub && (
+            <button
+              onClick={() => setOpenSubmenu(isSubOpen ? null : href)}
+              className="p-4 min-h-[56px] flex items-center justify-center text-neutral-gray-400 active:bg-neutral-gray-100"
+            >
+              {isSubOpen ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+            </button>
+          )}
+        </div>
+        
+        {hasSub && isSubOpen && (
+          <div className="bg-neutral-gray-50 flex flex-col py-2 px-12">
+            {submenu.map((sub: any) => (
+              <Link
+                key={sub.href}
+                href={sub.href}
+                onClick={onClose}
+                className={`py-3 text-sm min-h-[48px] flex items-center ${pathname === sub.href ? "text-accent-orange font-bold" : "text-text-muted"}`}
+              >
+                {sub.label}
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex md:hidden">
+      {/* Backdrop */}
+      <div 
+        className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
+        onClick={onClose}
+      />
+      
+      {/* Slide-in Panel */}
+      <div className="relative w-[85%] max-w-[320px] bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
+        
+        <div className="flex items-center justify-between p-4 border-b border-neutral-gray-100 min-h-[72px]">
+          <img src="/assets/logo/kreile-wordmark-skyline.svg" alt="Kreile" className="h-8 w-auto" />
+          <button 
+            onClick={onClose}
+            className="p-2 -mr-2 text-navy-500 hover:bg-neutral-gray-100 rounded-full"
+          >
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 pb-24">
+          <NavItem
+            label="Home"
+            href="/"
+            icon={Home}
+          />
+          <NavItem
+            label="Warendurchlauf"
+            href="/warendurchlauf"
+            icon={PackageCheck}
+            submenu={[
+              { label: "Wareneingang", href: "/warendurchlauf" },
+              { label: "Galvanik", href: "/station/beschichtung" },
+              { label: "Warenausgang", href: "/station/warenausgang" },
+            ]}
+          />
+          <NavItem
+            label="Anfragen"
+            href="/quotes"
+            icon={MessageSquare}
+            badge={openQuotes}
+          />
+          <NavItem
+            label="Kunden & Aufträge"
+            href="/kunden-auftraege"
+            icon={Users}
+          />
+          <NavItem
+            label="Lager & Chemie"
+            href="/items"
+            icon={Warehouse}
+            status={hasCriticalBaths ? "critical" : undefined}
+          />
+          <NavItem
+            label="Kontrolle"
+            href="/kontrolle"
+            icon={Archive}
+            submenu={[
+              { label: "Archiv", href: "/archive" },
+              { label: "Performance", href: "/performance" }
+            ]}
+          />
+        </nav>
+      </div>
+    </div>
+  );
+}

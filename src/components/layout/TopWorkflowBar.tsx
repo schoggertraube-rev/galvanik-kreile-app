@@ -29,7 +29,7 @@ function TopWorkflowBarContent() {
         </svg>
       </div>
 
-      <nav className="flex items-center justify-between w-full gap-2 md:gap-4 relative z-10 max-w-full">
+      <nav className="flex items-center justify-start md:justify-between w-full gap-2 md:gap-4 relative z-10 max-w-full overflow-x-auto snap-x scroll-smooth pb-2 md:pb-0 scrollbar-hide">
         {STATIONS.map((station, i) => {
           const isWareneingangActive = station.name === 'Wareneingang' && (
             pathname === '/orders/new' || 
@@ -46,15 +46,15 @@ function TopWorkflowBarContent() {
             <React.Fragment key={station.path}>
               <Link
                 href={station.path}
-                className={`relative flex-1 min-w-[100px] max-w-md bg-white rounded-2xl border ${
-                  isActive ? "border-accent-orange shadow-md ring-1 ring-accent-orange/30 scale-[1.02] md:scale-105" : "border-neutral-gray-100 shadow-sm"
+                className={`relative shrink-0 snap-center min-w-[120px] md:min-w-[100px] flex-1 max-w-md bg-white rounded-2xl border ${
+                  isActive ? "border-accent-orange shadow-md ring-1 ring-accent-orange/30 md:scale-105" : "border-neutral-gray-100 shadow-sm"
                 } p-3 md:p-4 flex flex-col items-center justify-center gap-2 hover:scale-[1.02] md:hover:scale-105 transition-all duration-300 cursor-pointer active:scale-95`}
               >
                 <span className="text-[10px] md:text-xs font-bold text-text-muted leading-none tracking-wider uppercase">{station.name}</span>
                 <Icon className={`w-8 h-8 md:w-10 md:h-10 ${isActive ? "text-accent-orange" : "text-navy-700"}`} />
               </Link>
               {i < STATIONS.length - 1 && (
-                <ArrowRight className="w-5 h-5 md:w-7 md:h-7 text-accent-orange shrink-0" strokeWidth={2.5} />
+                <ArrowRight className="hidden md:flex w-5 h-5 md:w-7 md:h-7 text-accent-orange shrink-0" strokeWidth={2.5} />
               )}
             </React.Fragment>
           );

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Search, Camera, Bell, Calendar } from "lucide-react";
+import { Search, Camera, Bell, Calendar, Menu } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
+import { MobileNav } from "./MobileNav";
 import { useState, useEffect, useRef } from "react";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
@@ -16,6 +17,7 @@ export function KreileHeader() {
   const [isOffline, setIsOffline] = useState(false);
   const [syncQueueCount, setSyncQueueCount] = useState(0);
   const [orderCount, setOrderCount] = useState(0);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   
   const { status: realtimeStatus } = useRealtimeStatus();
 
@@ -75,12 +77,29 @@ export function KreileHeader() {
   return (
     <header className="h-[72px] shrink-0 bg-bg-app flex items-center px-4 md:px-6 gap-4 z-40 relative">
 
+      {/* Hamburger Menu Mobile */}
+      <button 
+        className="md:hidden p-2 -ml-2 text-navy-900 hover:bg-neutral-gray-100 rounded-full min-w-[48px] min-h-[48px] flex items-center justify-center shrink-0"
+        onClick={() => setMobileNavOpen(true)}
+      >
+        <Menu className="w-6 h-6" />
+      </button>
+
       {/* LEFT: GK Monogram + Brand */}
-      <Link href="/" className="flex items-center gap-3 shrink-0 group">
+      <Link href="/" className="hidden md:flex items-center gap-3 shrink-0 group">
         <img
           src="/assets/logo/kreile-wordmark-skyline.svg"
           alt="Kreile Wortmarke Skyline"
           className="h-10 w-auto object-contain"
+        />
+      </Link>
+      
+      {/* Mobile Logo Only */}
+      <Link href="/" className="md:hidden flex items-center shrink-0">
+        <img
+          src="/assets/logo/kreile-wordmark-skyline.svg"
+          alt="Kreile Wortmarke"
+          className="h-7 w-auto object-contain"
         />
       </Link>
 
@@ -164,7 +183,7 @@ export function KreileHeader() {
         )}
 
         {/* Glocke mit rotem Badge */}
-        <div className="relative">
+        <div className="relative hidden md:block">
           <button className="w-9 h-9 rounded-full bg-white border border-neutral-gray-100 flex items-center justify-center text-navy-900 hover:border-neutral-gray-300 transition-colors shadow-sm">
             <Bell className="w-4 h-4" />
           </button>
@@ -208,6 +227,8 @@ export function KreileHeader() {
       </div>
 
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
+      
+      <MobileNav isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
     </header>
   );
 }
