@@ -79,6 +79,10 @@ export const items = pgTable("items", {
   name: text("name").notNull(),
   quantity: integer("quantity").notNull().default(1),
   currentStationId: varchar("current_station_id", { length: 100 }).default("wareneingang"),
+  material: text("material"),
+  surfaceRequested: text("surface_requested"),
+  photoIds: jsonb("photo_ids").$type<string[]>(),
+  photo: text("photo"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
