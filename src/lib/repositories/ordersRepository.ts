@@ -145,14 +145,14 @@ export const ordersRepository = {
       const orderId = data.id || createId();
       const orderNumber = `A-${202600 + Math.floor(Math.random() * 10000)}`;
       
-      const newOrderDb: any = {
+      const newOrderDb: Record<string, unknown> = {
         id: orderId,
         order_number: orderNumber,
         customer_id: data.customerId,
         title: data.title,
         status: "in_progress",
         risk: "green",
-        received_at: intakeDate,
+        intake_date: intakeDate,
         due_date: dueDate
       };
       if (data.attachmentUrl) {
@@ -165,12 +165,13 @@ export const ordersRepository = {
         throw orderError;
       }
       
-      const mappedParts = (data.parts || []).map((part: any) => ({
-        id: part.id || createId(),
+      const mappedParts = (data.parts || []).map((part: Record<string, unknown>) => ({
+        id: (part.id as string) || createId(),
         order_id: orderId,
-        name: part.name || "Teil",
+        customer_id: data.customerId,
+        name: (part.name as string) || "Teil",
         quantity: typeof part.quantity === "number" ? part.quantity : parseInt(String(part.quantity)) || 1,
-        surface_requested: part.surfaceRequested || ""
+        surface_requested: (part.surfaceRequested as string) || ""
       }));
       
       if (mappedParts.length > 0) {
@@ -281,7 +282,7 @@ export const ordersRepository = {
       const supabase = createClient();
       const isId = idOrNumber.length > 20; 
       
-      const updateData: any = {};
+      const updateData: Record<string, unknown> = {};
       if (changes.status) updateData.status = changes.status;
       if (changes.title) updateData.title = changes.title;
       if (changes.risk) updateData.risk = changes.risk;

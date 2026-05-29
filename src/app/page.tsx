@@ -225,7 +225,7 @@ export default function HomeDashboard() {
     <div className="space-y-6 pb-8 animate-in fade-in duration-400">
 
       {/* ── ROW 1: 5 KPI CARDS ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4">
         <KpiCard
           title="So läuft's heute"
           value={dayStatus.title}
@@ -267,10 +267,10 @@ export default function HomeDashboard() {
       </div>
 
       {/* ── ROW 2: TIMELINE + SIDEBARS ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
 
         {/* LEFT COLUMN: Timeline Card */}
-        <div className="lg:col-span-2 bg-white rounded-2xl border border-neutral-gray-100 shadow-card overflow-hidden">
+        <div className="md:col-span-2 bg-white rounded-2xl border border-neutral-gray-100 shadow-card overflow-hidden">
           <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-neutral-gray-100">
             <h2 className="text-[17px] font-black text-navy-900">Tagesablauf auf einen Blick</h2>
             <button className="flex items-center gap-1.5 text-xs font-bold text-navy-700 bg-bg-app-soft border border-neutral-gray-100 rounded-xl px-3 py-1.5 hover:bg-neutral-gray-300 transition-colors cursor-pointer">

@@ -67,7 +67,12 @@ export const eventsRepository = {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error("Supabase eventsRepository.getAll error:", error);
+        console.error("Supabase eventsRepository.getAll error:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
         throw new Error(`Supabase error: ${error.message}`);
       }
 
@@ -114,7 +119,12 @@ export const eventsRepository = {
 
       const { error } = await supabase.from('events').insert(dbEvent);
       if (error) {
-        console.error("Supabase eventsRepository.addEvent error:", error);
+        console.error("Supabase eventsRepository.addEvent error:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
         throw new Error(`Supabase error: ${error.message}`);
       }
 

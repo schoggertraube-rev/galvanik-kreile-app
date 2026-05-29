@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { FocusOverlay } from "@/components/entities/FocusOverlay";
+import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { customersRepository } from "@/lib/repositories/customersRepository";
@@ -218,36 +218,34 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
       } else {
         onClose();
       }
-    } catch (err) {
-      console.error("Failed to save customer", err);
+    } catch (err: any) {
+      console.error("Failed to save customer", {
+        message: err.message || err,
+        details: err.details,
+        fullError: err
+      });
+      alert(`Fehler beim Speichern: ${err.message || "Unbekannter Fehler. Bitte überprüfen Sie Ihre Internetverbindung."}`);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <FocusOverlay isOpen={true} onClose={onClose}>
-      <div className="flex h-full max-w-[1200px] mx-auto pt-10 px-4 pb-4 gap-6">
+    <ResponsiveDetailDrawer 
+      isOpen={true} 
+      onClose={onClose}
+      title={customerId ? "Kunde bearbeiten" : "Neuen Kunden anlegen"}
+    >
+      <div className="flex flex-col lg:flex-row gap-6">
         
         {/* Left Column: Form */}
-        <div className="flex-1 bg-white rounded-2xl shadow-xl border border-neutral-gray-200 flex flex-col overflow-hidden">
-          {/* Header */}
-          <div className="px-6 py-4 border-b border-neutral-gray-100 flex items-center justify-between bg-bg-app-soft/50">
-            <div>
-              <h2 className="text-xl font-black font-serif text-navy-900">
-                {customerId ? "Kunde bearbeiten" : "Neuen Kunden anlegen"}
-              </h2>
-              <p className="text-xs text-text-muted font-bold mt-1">
-                Kundennummer: <span className="font-mono text-navy-900 bg-white px-2 py-0.5 rounded border shadow-sm">{customerNumber}</span>
-              </p>
-            </div>
-            <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full hover:bg-neutral-gray-200">
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
+        <div className="flex-1 flex flex-col gap-6">
+          <p className="text-xs text-text-muted font-bold -mt-2 mb-2">
+            Kundennummer: <span className="font-mono text-navy-900 bg-neutral-gray-100 px-2 py-0.5 rounded border">{customerNumber}</span>
+          </p>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-xs font-bold text-navy-900">Name *</label>
@@ -411,14 +409,14 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
           </div>
 
           {/* Footer */}
-          <div className="p-4 border-t border-neutral-gray-100 bg-white flex justify-end gap-3">
-            <Button variant="outline" onClick={onClose} disabled={loading} className="font-bold">
+          <div className="pt-4 mt-2 border-t border-neutral-gray-100 flex justify-end gap-3">
+            <Button variant="outline" onClick={onClose} disabled={loading} className="font-bold h-12 px-6">
               Abbrechen
             </Button>
-            <Button onClick={handleSave} disabled={loading || !name} className="bg-navy-900 hover:bg-navy-800 text-white font-bold min-w-[140px]">
+            <Button onClick={handleSave} disabled={loading || !name} className="bg-navy-900 hover:bg-navy-800 text-white font-bold h-12 px-8 min-w-[140px]">
               {loading ? "Speichert..." : (
                 <>
-                  <Save className="w-4 h-4 mr-2" />
+                  <Save className="w-5 h-5 mr-2" />
                   Speichern
                 </>
               )}
@@ -427,7 +425,7 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
         </div>
 
         {/* Right Column: Actions */}
-        <div className="w-[300px] flex flex-col gap-4">
+        <div className="w-full lg:w-[300px] flex flex-col gap-4">
           <div className="bg-white rounded-2xl shadow-xl border border-neutral-gray-200 p-5 space-y-4">
             <h3 className="text-sm font-black font-serif text-navy-900 border-b border-neutral-gray-100 pb-2">
               Aktionen
@@ -452,6 +450,6 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
         </div>
 
       </div>
-    </FocusOverlay>
+    </ResponsiveDetailDrawer>
   );
 }

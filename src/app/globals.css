@@ -190,6 +190,12 @@
     font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
   }
   
+  /* Safe Area Variables for PWA */
+  :root {
+    --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-area-top: env(safe-area-inset-top, 0px);
+  }
+  
   /* Subtle scrollbar */
   ::-webkit-scrollbar {
     width: 4px;

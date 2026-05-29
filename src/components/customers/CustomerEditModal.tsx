@@ -53,7 +53,7 @@ export function CustomerEditModal({
 
   return (
     <div className="fixed inset-0 bg-navy-900/60 backdrop-blur-sm flex justify-center items-center z-50 p-4 animate-in fade-in duration-200">
-      <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden border border-neutral-gray-100 animate-in zoom-in-95 duration-300">
+      <div className="bg-white w-full max-w-[95vw] rounded-3xl shadow-2xl flex flex-col max-h-[95vh] overflow-hidden border border-neutral-gray-100 animate-in zoom-in-95 duration-300">
         
         {/* Header */}
         <div className="p-6 border-b border-neutral-gray-100 flex justify-between items-center bg-bg-app-soft">
@@ -73,7 +73,7 @@ export function CustomerEditModal({
         </div>
 
         {/* Form Content */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-8">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           
           {/* Section: Stammdaten */}
           <div className="space-y-4">

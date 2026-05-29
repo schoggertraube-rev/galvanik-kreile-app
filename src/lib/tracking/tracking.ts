@@ -1,3 +1,6 @@
+import { logUiEvent } from "@/app/actions/tracking.actions";
+import { OfflineManager } from "@/lib/offline/OfflineManager";
+
 export type UiEventName = 
   | "nav_click"
   | "overlay_open"
@@ -5,7 +8,17 @@ export type UiEventName =
   | "overlay_close_esc";
 
 export function trackUiEvent(eventName: UiEventName, payload?: Record<string, any>) {
-  // In a real application, this would send an event to an analytics server (e.g. PostHog, Mixpanel, Google Analytics).
-  // For now, we mock it by logging to the console.
+  // Behalte console.log für lokales Debugging
   console.log(`[Tracking] Event: ${eventName}`, payload || {});
+
+  // Bei Offline-Modus direkt abbrechen, um Fehler zu vermeiden
+  if (typeof window !== "undefined" && OfflineManager.isOffline()) {
+    return;
+  }
+
+  // Server Action im Hintergrund aufrufen
+  logUiEvent(eventName, payload).catch(err => {
+    // Fehler schlucken, damit Tracking nie die App crasht
+    console.debug("[Tracking] Background sync failed:", err);
+  });
 }

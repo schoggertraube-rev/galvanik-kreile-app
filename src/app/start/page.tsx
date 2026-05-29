@@ -136,19 +136,27 @@ function PinDialog({ user, onClose }: { user: typeof DEMO_USERS[0]; onClose: () 
           console.warn("localStorage is blocked, skipping user info storage", e);
         }
         
-        initializeDemoIfNeeded().then(() => {
-          // Robust persistent cookie (1 Jahr) für Tablet & Cloudflare Tunnel
-          const isHttps = window.location.protocol === "https:";
-          document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-          
-          // Force a hard navigation to ensure the server picks up the new cookie
-          window.location.href = "/";
-        }).catch(() => {
-          // Navigiere auch bei Fehler weiter
+        if (localStorage.getItem("setup_done")) {
+          // Setup bereits erledigt -> direkt weiter
           const isHttps = window.location.protocol === "https:";
           document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
           window.location.href = "/";
-        });
+        } else {
+          initializeDemoIfNeeded().then((res) => {
+            if (res?.initialized) {
+              localStorage.setItem("setup_done", "true");
+            } else if (res?.reason === "data_exists" || res?.reason === "not_supabase") {
+              localStorage.setItem("setup_done", "true");
+            }
+            const isHttps = window.location.protocol === "https:";
+            document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+            window.location.href = "/";
+          }).catch(() => {
+            const isHttps = window.location.protocol === "https:";
+            document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+            window.location.href = "/";
+          });
+        }
       } else {
         setError(true);
         setTimeout(() => setPin(""), 600);
@@ -188,8 +196,8 @@ function PinDialog({ user, onClose }: { user: typeof DEMO_USERS[0]; onClose: () 
 
         {isInitializing && (
           <div className="bg-accent-orange/10 px-6 py-3 border-b border-accent-orange/20 flex flex-col items-center justify-center">
-             <span className="text-sm font-semibold text-accent-orange animate-pulse">Initialisiere Demo-Datenbank...</span>
-             <span className="text-xs text-text-muted text-center mt-1">Dieser Vorgang kann ein paar Sekunden dauern, bitte warten.</span>
+             <span className="text-sm font-semibold text-accent-orange animate-pulse">Beispieldaten werden vorbereitet...</span>
+             <span className="text-xs text-text-muted text-center mt-1">Dieser Vorgang dauert einen Moment.</span>
           </div>
         )}
 

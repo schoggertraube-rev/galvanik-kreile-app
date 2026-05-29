@@ -9,13 +9,43 @@ export type { Customer };
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
+function sanitizeCustomerPayload(data: Record<string, any>, isUpdate = false): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) continue;
+
+    // Handle NOT NULL jsonb/array fields
+    if (['approval_profile', 'payment_profile', 'expectation_profile', 'technical_profile'].includes(key)) {
+      result[key] = value ?? {};
+    } else if (key === 'tags') {
+      result[key] = value ?? [];
+    } else if (key === 'image_urls') {
+      result[key] = value ?? [];
+    } else {
+      if (!isUpdate && value === null) {
+        // Omit null values on insert so Supabase applies defaults or keeps it null if nullable
+        continue;
+      }
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
 export const customersRepository = {
   async getAll(): Promise<Customer[]> {
     if (isSupabase) {
       const supabase = createClient();
       const { data, error } = await supabase.from('customers').select('*').order('created_at', { ascending: false });
       if (error) {
-        console.error("Supabase customersRepository.getAll error:", error);
+        console.error("Supabase customersRepository.getAll error:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
         throw error;
       }
       
@@ -80,7 +110,12 @@ export const customersRepository = {
       if (error) {
         // PostgREST returns a PGROUTINE error if 0 rows, so we handle it gracefully or log it
         if (error.code === 'PGRST116') return null; // No rows found
-        console.error("Supabase customersRepository.getById error:", error);
+        console.error("Supabase customersRepository.getById error:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        });
         throw error;
       }
       if (!data) return null;
@@ -121,7 +156,7 @@ export const customersRepository = {
       const supabase = createClient();
       const newId = createId();
       
-      const newCustomerDb = {
+      const rawCustomerDb = {
         id: newId,
         customer_number: `K-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
         name: data.name,
@@ -141,12 +176,21 @@ export const customersRepository = {
         trust_level: data.trustLevel || null,
         internal_warning: data.internalWarning || null,
         tags: data.tags || null,
-        credit_rating: data.creditRating || null
+        credit_rating: data.creditRating || null,
+        notes: data.notes || null
       };
+
+      const newCustomerDb = sanitizeCustomerPayload(rawCustomerDb, false);
 
       const { error } = await supabase.from('customers').insert(newCustomerDb);
       if (error) {
-        console.error("Supabase customersRepository.create error:", error);
+        console.error("Supabase customersRepository.create error:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+          fullError: error
+        });
         throw error;
       }
       
@@ -200,30 +244,37 @@ export const customersRepository = {
     if (isSupabase) {
       const supabase = createClient();
       
-      const updateData: any = {};
-      if (changes.name !== undefined) updateData.name = changes.name;
-      if (changes.companyName !== undefined) updateData.company_name = changes.companyName;
-      if (changes.type !== undefined) updateData.type = changes.type;
-      if (changes.address !== undefined) updateData.address = changes.address;
-      if (changes.city !== undefined) updateData.city = changes.city;
-      if (changes.zipCode !== undefined) updateData.zip_code = changes.zipCode;
-      if (changes.imageUrls !== undefined) updateData.image_urls = changes.imageUrls;
-      if (changes.contactPerson !== undefined) updateData.contact_person = changes.contactPerson;
-      if (changes.email !== undefined) updateData.email = changes.email;
-      if (changes.phone !== undefined) updateData.phone = changes.phone;
-      if (changes.paymentProfile !== undefined) updateData.payment_profile = changes.paymentProfile;
-      if (changes.approvalProfile !== undefined) updateData.approval_profile = changes.approvalProfile;
-      if (changes.expectationProfile !== undefined) updateData.expectation_profile = changes.expectationProfile;
-      if (changes.technicalProfile !== undefined) updateData.technical_profile = changes.technicalProfile;
-      if (changes.trustLevel !== undefined) updateData.trust_level = changes.trustLevel;
-      if (changes.internalWarning !== undefined) updateData.internal_warning = changes.internalWarning;
-      if (changes.tags !== undefined) updateData.tags = changes.tags;
-      if (changes.creditRating !== undefined) updateData.credit_rating = changes.creditRating;
+      const rawUpdateData: Record<string, any> = {};
+      if (changes.name !== undefined) rawUpdateData.name = changes.name;
+      if (changes.companyName !== undefined) rawUpdateData.company_name = changes.companyName;
+      if (changes.type !== undefined) rawUpdateData.type = changes.type;
+      if (changes.address !== undefined) rawUpdateData.address = changes.address;
+      if (changes.city !== undefined) rawUpdateData.city = changes.city;
+      if (changes.zipCode !== undefined) rawUpdateData.zip_code = changes.zipCode;
+      if (changes.imageUrls !== undefined) rawUpdateData.image_urls = changes.imageUrls;
+      if (changes.contactPerson !== undefined) rawUpdateData.contact_person = changes.contactPerson;
+      if (changes.email !== undefined) rawUpdateData.email = changes.email;
+      if (changes.phone !== undefined) rawUpdateData.phone = changes.phone;
+      if (changes.paymentProfile !== undefined) rawUpdateData.payment_profile = changes.paymentProfile;
+      if (changes.approvalProfile !== undefined) rawUpdateData.approval_profile = changes.approvalProfile;
+      if (changes.expectationProfile !== undefined) rawUpdateData.expectation_profile = changes.expectationProfile;
+      if (changes.technicalProfile !== undefined) rawUpdateData.technical_profile = changes.technicalProfile;
+      if (changes.trustLevel !== undefined) rawUpdateData.trust_level = changes.trustLevel;
+      if (changes.internalWarning !== undefined) rawUpdateData.internal_warning = changes.internalWarning;
+      if (changes.tags !== undefined) rawUpdateData.tags = changes.tags;
+      if (changes.creditRating !== undefined) rawUpdateData.credit_rating = changes.creditRating;
+
+      const updateData = sanitizeCustomerPayload(rawUpdateData, true);
 
       if (Object.keys(updateData).length > 0) {
         const { error } = await supabase.from('customers').update(updateData).eq('id', id);
         if (error) {
-          console.error("Supabase customersRepository.updateCustomer error:", error);
+          console.error("Supabase customersRepository.updateCustomer error:", {
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          });
           throw error;
         }
       }

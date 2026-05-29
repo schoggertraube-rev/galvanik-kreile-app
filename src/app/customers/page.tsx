@@ -49,13 +49,15 @@ export default function CustomersPage() {
   const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS as unknown as Customer[]);
 
   useEffect(() => {
-    const stored = localStorage.getItem("kreile_customers_v2");
-    if (stored) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCustomers(JSON.parse(stored));
-    } else {
-      localStorage.setItem("kreile_customers_v2", JSON.stringify(INITIAL_CUSTOMERS));
-    }
+    const loadCustomers = async () => {
+      try {
+        const data = await customersRepository.getAll();
+        setCustomers(data);
+      } catch (err) {
+        console.error("Failed to load customers:", err);
+      }
+    };
+    loadCustomers();
   }, []);
 
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);

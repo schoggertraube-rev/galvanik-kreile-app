@@ -30,6 +30,7 @@ import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { getAllStations } from "@/constants/stations";
 import { bathsRepository, Bath } from "@/lib/repositories/bathsRepository";
 import { calculateWorkshopHealthScore } from "@/lib/performance/score";
+import { TrackingOverview } from "@/components/analytics/TrackingOverview";
 
 // Mapping string names to Lucide icons
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -938,6 +939,9 @@ export default function PerformancePage() {
         </Card>
       </div>
 
+      <div className="mt-8">
+        <TrackingOverview />
+      </div>
     </div>
   );
 }

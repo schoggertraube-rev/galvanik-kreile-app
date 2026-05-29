@@ -15,20 +15,24 @@ import {
   INITIAL_COMPLAINTS, 
 } from "../lib/mockData";
 
-export async function seedDatabase() {
+export async function seedDatabase({ safeMode = false } = {}) {
   console.log("🌱 Starte Datenbank-Seeding für V2...");
 
   try {
     // 1. Cleanup existing data (Cascade deletes handle relations if configured, but safe ordering is best)
-    console.log("🧹 Lösche alte Daten...");
-    await db.delete(complaints);
-    await db.delete(events);
-    await db.delete(orders);
-    await db.delete(priceAgreements);
-    await db.delete(customers);
-    await db.delete(baths);
-    await db.delete(inventoryItems);
-    await db.delete(users);
+    if (!safeMode) {
+      console.log("🧹 Lösche alte Daten...");
+      await db.delete(complaints);
+      await db.delete(events);
+      await db.delete(orders);
+      await db.delete(priceAgreements);
+      await db.delete(customers);
+      await db.delete(baths);
+      await db.delete(inventoryItems);
+      await db.delete(users);
+    } else {
+      console.log("🛡️ Safe Mode aktiv: Überspringe Löschvorgang...");
+    }
 
     // 2. Insert Users (Mock Admin User)
     console.log("👤 Lege Benutzer an...");
