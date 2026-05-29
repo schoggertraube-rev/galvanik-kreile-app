@@ -103,10 +103,17 @@ export const events = pgTable("events", {
 // 6. Complaints / Reklamationen
 export const complaints = pgTable("complaints", {
   id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
   orderId: text("order_id").notNull().references(() => orders.id),
   customerId: text("customer_id").notNull().references(() => customers.id),
+  itemId: text("item_id"),
   reason: text("reason").notNull(),
+  stationId: text("station_id"),
+  description: text("description").notNull().default(''),
+  photoIds: jsonb("photo_ids").$type<string[]>(),
   status: varchar("status", { length: 50 }).default("open"),
+  resolvedAt: timestamp("resolved_at"),
+  resolution: text("resolution"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
