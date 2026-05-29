@@ -56,7 +56,16 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
   const isActive = (path: string) =>
     path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
 
-  const NavItem = ({ label, href, icon: Icon, badge, status, submenu }: any) => {
+  type NavItemProps = {
+    label: string;
+    href: string;
+    icon: React.ElementType;
+    badge?: number;
+    status?: "critical" | string;
+    submenu?: { label: string; href: string; }[];
+  };
+
+  const NavItem = ({ label, href, icon: Icon, badge, status, submenu }: NavItemProps) => {
     const active = isActive(href);
     const hasSub = !!submenu;
     const isSubOpen = openSubmenu === href;
@@ -76,7 +85,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
               )}
             </div>
             <span className="text-base font-medium">{label}</span>
-            {badge > 0 && (
+            {(badge ?? 0) > 0 && (
               <span className="ml-auto bg-accent-orange text-white text-[10px] font-black px-2 py-0.5 rounded-full">
                 {badge}
               </span>
@@ -95,7 +104,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
         
         {hasSub && isSubOpen && (
           <div className="bg-neutral-gray-50 flex flex-col py-2 px-12">
-            {submenu.map((sub: any) => (
+            {submenu.map((sub: { label: string; href: string; }) => (
               <Link
                 key={sub.href}
                 href={sub.href}
@@ -116,14 +125,14 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
       {/* Backdrop */}
       {open && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+          className="fixed inset-0 bg-black/40 z-40 transition-opacity"
           onClick={onClose}
         />
       )}
       
       {/* Slide-in Panel */}
       <div 
-        className={`fixed left-0 top-0 h-full w-72 bg-bg-app z-50 transform transition-transform duration-300 shadow-2xl flex flex-col ${open ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed left-0 top-0 h-full w-72 bg-white z-50 transform transition-transform duration-300 shadow-2xl flex flex-col ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="flex items-center justify-between p-4 px-6 border-b border-neutral-gray-100 min-h-[72px]">
           <img src="/assets/logo/kreile-wordmark-skyline.svg" alt="Kreile" className="h-8 w-auto" />

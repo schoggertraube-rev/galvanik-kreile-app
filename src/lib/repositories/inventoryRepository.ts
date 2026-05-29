@@ -65,7 +65,7 @@ export const inventoryRepository = {
         id: item.id,
         sku: item.sku,
         name: item.name,
-        category: (item.is_consumable ? "consumable" : "tooling") as any, // Fallback da DB kein 'category' Feld hat
+        category: (item.is_consumable ? "consumable" : "tooling") as InventoryItem["category"], // Fallback da DB kein 'category' Feld hat
         unit: item.unit,
         currentStock: item.current_stock,
         minStock: item.min_stock || 0,
@@ -96,7 +96,7 @@ export const inventoryRepository = {
       return data.map(m => ({
         id: m.id,
         inventoryItemId: m.inventory_item_id,
-        movementType: m.movement_type as any,
+        movementType: m.movement_type as StockMovement["movementType"],
         quantity: m.quantity,
         unit: m.unit,
         orderId: m.order_id || undefined,
@@ -130,7 +130,7 @@ export const inventoryRepository = {
         id: data.id,
         sku: data.sku,
         name: data.name,
-        category: (data.is_consumable ? "consumable" : "tooling") as any,
+        category: (data.is_consumable ? "consumable" : "tooling") as InventoryItem["category"],
         unit: data.unit,
         currentStock: data.current_stock,
         minStock: data.min_stock || 0,
@@ -157,7 +157,7 @@ export const inventoryRepository = {
       return data.map(m => ({
         id: m.id,
         inventoryItemId: m.inventory_item_id,
-        movementType: m.movement_type as any,
+        movementType: m.movement_type as StockMovement["movementType"],
         quantity: m.quantity,
         unit: m.unit,
         orderId: m.order_id || undefined,

@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { X, Printer, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { customersRepository } from "@/lib/repositories/customersRepository";
+import { generateOrderLabel } from "@/app/actions/pdf.actions";
 
 interface Order {
   id: string;
@@ -12,7 +12,7 @@ interface Order {
   customerName?: string;
   title: string;
   task?: string;
-  parts: any[];
+  parts: Record<string, unknown>[];
   intakeDate?: string;
   createdAt?: string;
 }
@@ -34,126 +34,38 @@ export function BulkLabelPrintView({ orders, onClose, onPrintComplete }: BulkLab
   }, []);
 
   useEffect(() => {
-    let active = true;
-    async function loadCustomers() {
-      const newMap: Record<string, string> = {};
-      const uniqueCustomerIds = Array.from(new Set(orders.map(o => o.customerId).filter(Boolean)));
-      
-      for (const cid of uniqueCustomerIds) {
-        try {
-          const cust = await customersRepository.getById(cid);
-          if (cust) newMap[cid] = cust.name;
-        } catch (e) {
-          console.error(e);
-        }
-      }
-      if (active) setCustomerMap(newMap);
-    }
-    loadCustomers();
-    return () => { active = false; };
-  }, [orders]);
+    setMounted(true);
+  }, []);
 
-  useEffect(() => {
-    import("qrcode").then(QRCode => {
-      orders.forEach(order => {
-        const link = `https://app.kreile.local/orders/${order.id}`;
-        QRCode.default.toDataURL(link, { margin: 1, width: 150 })
-          .then(url => setQrCodes(prev => ({ ...prev, [order.id]: url })))
-          .catch(e => console.error("QR Code Error:", e));
-      });
-    });
-  }, [orders]);
-
-  const handlePrint = () => {
+  const handlePrint = async () => {
     setPrinting(true);
-    setTimeout(() => {
-      window.print();
-      setPrinting(false);
+    try {
+      const orderIds = orders.map(o => o.id);
+      const base64 = await generateOrderLabel(orderIds);
+      const url = `data:application/pdf;base64,${base64}`;
+      const win = window.open();
+      if (win) {
+        win.document.write(`<iframe src="${url}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+        win.document.title = `Bulk_Laufkarten_${new Date().getTime()}.pdf`;
+      } else {
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Bulk_Laufkarten_${new Date().getTime()}.pdf`;
+        a.click();
+      }
       if (onPrintComplete) onPrintComplete();
-    }, 500);
+    } catch (e) {
+      console.error("Fehler beim Generieren der Bulk-Laufkarten", e);
+      alert("Fehler beim Generieren der Laufkarten.");
+    } finally {
+      setPrinting(false);
+    }
   };
 
   if (!mounted || orders.length === 0) return null;
 
-  const labelContent = (
-    <div className="hidden print:block w-full">
-      <style dangerouslySetInnerHTML={{__html: `
-        @media print {
-          body * { visibility: hidden; }
-          .bulk-print-area, .bulk-print-area * { visibility: visible; }
-          .bulk-print-area { position: absolute; left: 0; top: 0; width: 100%; }
-          .print-page { page-break-after: always; height: 148mm; width: 105mm; }
-          @page { size: A6 portrait; margin: 0; }
-        }
-      `}} />
-      <div className="bulk-print-area">
-        {orders.map((order) => {
-          const cName = customerMap[order.customerId] || order.customerName || "Unbekannt";
-          const dStr = order.intakeDate || (order.createdAt ? new Date(order.createdAt).toLocaleDateString("de-DE") : new Date().toLocaleDateString("de-DE"));
-          
-          return (
-            <div key={order.id} className="print-page font-sans text-black flex flex-col justify-between p-6 bg-white overflow-hidden border-b border-gray-200">
-              <div className="space-y-4">
-                <div className="flex justify-between items-center border-b border-black pb-2">
-                  <span className="font-extrabold text-[13px] tracking-[0.15em] uppercase">KREILE GALVANIK</span>
-                  <span className="text-[10px] font-medium tracking-wider">A6 ETIKETT</span>
-                </div>
-
-                <div className="text-center py-4 border-b border-black border-dashed">
-                  <div className="text-[12px] font-bold text-gray-500 uppercase tracking-widest">AUFTRAGSNUMMER</div>
-                  <div className="text-[44px] font-black tracking-tight leading-none my-1">{order.orderNumber}</div>
-                  <div className="text-[14px] font-bold mt-1 text-black">{order.task || order.title}</div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-y-3 text-[12px] py-2 border-b border-black">
-                  <div>
-                    <div className="text-[10px] font-bold text-gray-500 uppercase">KUNDE</div>
-                    <div className="font-black text-[13px]">{cName}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-bold text-gray-500 uppercase">DATUM</div>
-                    <div className="font-bold">{dStr}</div>
-                  </div>
-                  <div className="col-span-2">
-                    <div className="text-[10px] font-bold text-gray-500 uppercase">BAUTEILE</div>
-                    <div className="space-y-1 mt-1 font-bold">
-                      {order.parts?.slice(0, 8).map((p: any, i: number) => (
-                        <div key={i} className="flex justify-between text-[11px] border-b border-gray-100 last:border-0 py-0.5">
-                          <span>{String(p.quantity)}x {String(p.name)}</span>
-                          {!!p.surfaceRequested && <span className="font-mono text-[9px] bg-gray-100 px-1 rounded">{String(p.surfaceRequested)}</span>}
-                        </div>
-                      ))}
-                      {(order.parts?.length || 0) > 8 && <div className="text-[9px] italic text-gray-500">+ weitere Positionen...</div>}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col items-center gap-2 border-t border-black pt-4">
-                {qrCodes[order.id] ? (
-                  <div className="flex flex-col items-center gap-0.5">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={qrCodes[order.id]} alt="QR" className="w-[80px] h-[80px] object-contain" />
-                    <span className="font-mono text-[8px] font-bold text-black">{order.orderNumber}</span>
-                  </div>
-                ) : (
-                  <div className="w-20 h-20 bg-gray-100 flex flex-col items-center justify-center">QR Code</div>
-                )}
-                <div className="text-[9px] text-gray-600 font-bold uppercase tracking-wider mt-1">
-                  Nächste Station: WARENEINGANG
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-
   return (
     <>
-      {createPortal(labelContent, document.body)}
-
       <div className="fixed inset-0 bg-navy-900/90 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-in fade-in duration-300">
         <div className="bg-navy-900 border-2 border-navy-900 rounded-3xl w-full max-w-2xl p-8 shadow-2xl space-y-6 flex flex-col max-h-[90vh]">
           <div className="flex justify-between items-center border-b border-navy-800 pb-4">

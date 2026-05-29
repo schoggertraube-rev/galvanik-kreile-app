@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, User, Package, FileText, CheckCircle, ChevronRight, ChevronLeft } from "lucide-react";
-import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
+import { createInquiry } from "@/app/actions/inquiries.actions";
 
 type WizardStep = "customer" | "details" | "text" | "summary";
 
@@ -23,6 +23,7 @@ export default function NewQuotePage() {
   const [rustLevel, setRustLevel] = useState<"Leicht" | "Mittel" | "Stark" | "Sehr stark">("Leicht");
   const [dirtLevel, setDirtLevel] = useState<"Sauber" | "Leicht" | "Stark">("Leicht");
   const [description, setDescription] = useState("");
+  const [errors, setErrors] = useState<Record<string, string[]>>({});
 
   const steps: { id: WizardStep; label: string; icon: React.ReactNode }[] = [
     { id: "customer", label: "Kunde", icon: <User className="w-4 h-4" /> },
@@ -32,17 +33,26 @@ export default function NewQuotePage() {
   ];
 
   const handleSave = async () => {
-    await inquiriesRepository.create({
-      customerName: customerName || "Unbekannter Anrufer",
+    setErrors({});
+    const res = await createInquiry({
+      customerName: customerName,
       customerId: customerId || "",
-      subject: subject || "Neue Anfrage",
-      description: description || "Keine Beschreibung hinterlegt.",
+      subject: subject,
+      description: description,
       partCount,
       material,
       rustLevel,
       dirtLevel
     });
-    router.push("/quotes");
+    
+    if (res?.success) {
+      router.push("/quotes");
+    } else if (res?.errors) {
+      setErrors(res.errors);
+      // Navigate back to the step with errors
+      if (res.errors.customerName) setStep("customer");
+      else if (res.errors.subject || res.errors.partCount) setStep("details");
+    }
   };
 
   return (
@@ -100,8 +110,9 @@ export default function NewQuotePage() {
                       value={customerName}
                       onChange={e => setCustomerName(e.target.value)}
                       placeholder="Z.B. Garage Müller oder Max Mustermann" 
-                      className="w-full p-4 bg-bg-app-soft border-2 border-neutral-gray-300 rounded-xl focus:border-navy-700 focus:ring-0 text-navy-900 font-bold"
+                      className={`w-full p-4 bg-bg-app-soft border-2 rounded-xl focus:ring-0 font-bold ${errors.customerName ? "border-danger-red text-danger-red" : "border-neutral-gray-300 text-navy-900 focus:border-navy-700"}`}
                     />
+                    {errors.customerName && <p className="text-danger-red text-xs mt-1 font-bold">{errors.customerName[0]}</p>}
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Kundennummer (Optional)</label>
@@ -133,8 +144,9 @@ export default function NewQuotePage() {
                       value={subject}
                       onChange={e => setSubject(e.target.value)}
                       placeholder="Z.B. Stoßstange Verchromen" 
-                      className="w-full p-4 bg-bg-app-soft border-2 border-neutral-gray-300 rounded-xl focus:border-navy-700 focus:ring-0 text-navy-900 font-bold"
+                      className={`w-full p-4 bg-bg-app-soft border-2 rounded-xl focus:ring-0 font-bold ${errors.subject ? "border-danger-red text-danger-red" : "border-neutral-gray-300 text-navy-900 focus:border-navy-700"}`}
                     />
+                    {errors.subject && <p className="text-danger-red text-xs mt-1 font-bold">{errors.subject[0]}</p>}
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -144,8 +156,9 @@ export default function NewQuotePage() {
                         min="1"
                         value={partCount}
                         onChange={e => setPartCount(parseInt(e.target.value) || 1)}
-                        className="w-full p-4 bg-bg-app-soft border-2 border-neutral-gray-300 rounded-xl focus:border-navy-700 focus:ring-0 text-navy-900 font-bold"
+                        className={`w-full p-4 bg-bg-app-soft border-2 rounded-xl focus:ring-0 font-bold ${errors.partCount ? "border-danger-red text-danger-red" : "border-neutral-gray-300 text-navy-900 focus:border-navy-700"}`}
                       />
+                      {errors.partCount && <p className="text-danger-red text-xs mt-1 font-bold">{errors.partCount[0]}</p>}
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Material</label>
@@ -236,6 +249,12 @@ export default function NewQuotePage() {
               <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
                 <h2 className="text-xl font-black font-serif text-navy-900">4. Zusammenfassung</h2>
                 
+                {Object.keys(errors).length > 0 && (
+                  <div className="bg-danger-red-soft p-4 rounded-xl border border-danger-red">
+                    <p className="text-danger-red font-bold text-sm">Bitte beheben Sie die Fehler in den vorherigen Schritten.</p>
+                  </div>
+                )}
+                
                 <div className="bg-bg-app-soft border border-neutral-gray-300 rounded-2xl p-6 space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -281,3 +300,4 @@ export default function NewQuotePage() {
     </div>
   );
 }
+

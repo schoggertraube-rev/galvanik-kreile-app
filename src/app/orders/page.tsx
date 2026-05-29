@@ -24,8 +24,9 @@ import {
 import { INITIAL_ORDERS, INITIAL_CUSTOMERS, MockOrder, MockCustomer } from "@/lib/mockData";
 import { getStationConfig, getAllStations } from "@/constants/stations";
 import { evaluateOrderPriority } from "@/lib/priority";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
-import { customersRepository } from "@/lib/repositories/customersRepository";
+import { ordersRepository, type Order } from "@/lib/repositories/ordersRepository";
+import { customersRepository, type Customer } from "@/lib/repositories/customersRepository";
+import { getUrgency, Urgency } from "@/lib/orders/getUrgency";
 import { OrderEditModal } from "@/components/orders/OrderEditModal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchToolbar } from "@/components/ui/SearchToolbar";
@@ -201,14 +202,14 @@ function OrdersPageInner() {
     }, 6000);
   };
 
-  const handleSaveOrder = async (changes: any) => {
+  const handleSaveOrder = async (changes: Partial<Order>) => {
     if (!selectedOrderId) return;
     try {
       const updatedOrder = await ordersRepository.updateOrder(selectedOrderId, changes);
       if (updatedOrder) {
         setOrders(prev => prev.map(o => o.id === selectedOrderId ? (updatedOrder as unknown as MockOrder) : o));
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Fehler beim Speichern der Auftragsdaten", e);
       throw e;
     }
@@ -238,7 +239,25 @@ function OrdersPageInner() {
     // 3. Station filter match (strictly segregates orders per station screen)
     if (stationFilter && o.station !== stationFilter) return false;
 
+    // 4. Verzug filter
+    if (statusFilter === "verzug") {
+      const u = getUrgency(o.dueDate);
+      if (u !== "kritisch" && u !== "gefaehrdet") return false;
+    }
+
     return true;
+  });
+
+  // Sort by urgency, then dueDate
+  filteredOrders.sort((a, b) => {
+    const ua = getUrgency(a.dueDate);
+    const ub = getUrgency(b.dueDate);
+    const score = { "kritisch": 0, "gefaehrdet": 1, "im_plan": 2 };
+    if (score[ua] !== score[ub]) return score[ua] - score[ub];
+    
+    const da = new Date(a.dueDate || "9999-12-31").getTime();
+    const db = new Date(b.dueDate || "9999-12-31").getTime();
+    return da - db;
   });
 
   // Station display helper
@@ -291,6 +310,7 @@ function OrdersPageInner() {
           { id: "active",  label: "Aktiv" },
           { id: "waiting", label: "Wartend" },
           { id: "critical",label: "Kritisch", count: orders.filter(o => o.risk === "red" || o.risk === "orange").length },
+          { id: "verzug",  label: "Nur Verzug", count: orders.filter(o => { const u = getUrgency(o.dueDate); return u === "kritisch" || u === "gefaehrdet"; }).length },
         ]}
         activeFilter={statusFilter}
         onFilterChange={setStatusFilter}
@@ -352,6 +372,11 @@ function OrdersPageInner() {
                   <CardContent className="p-4 flex flex-col justify-between h-full gap-4">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
+                        {(() => {
+                          const u = getUrgency(order.dueDate);
+                          const dotColor = u === "kritisch" ? "bg-danger-red" : u === "gefaehrdet" ? "bg-accent-orange" : "bg-success-green";
+                          return <div className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />;
+                        })()}
                         <span className="font-mono font-extrabold text-navy-900 text-base">{order.orderNumber}</span>
                         <span className="text-xs text-text-muted">• {order.customerName}</span>
                       </div>
@@ -445,7 +470,7 @@ function OrdersPageInner() {
               <div className="space-y-2">
                 <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block font-sans">Zu bearbeitende Teile</span>
                 <div className="bg-white border border-neutral-gray-100 rounded-lg overflow-hidden divide-y divide-neutral-gray-100">
-                  {selectedOrder.parts.map((p: any, i: number) => (
+                  {selectedOrder.parts.map((p, i) => (
                     <div key={i} className="p-3 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-3">
                         <span className="bg-navy-900 text-white font-mono text-[10px] px-2 py-0.5 rounded font-bold">
@@ -602,8 +627,8 @@ function OrdersPageInner() {
 
       {isEditingOrder && selectedOrder && (
         <OrderEditModal
-          order={selectedOrder as any}
-          customers={customersList as any}
+          order={selectedOrder as unknown as Order}
+          customers={customersList as unknown as Customer[]}
           onClose={() => setIsEditingOrder(false)}
           onSave={handleSaveOrder}
         />

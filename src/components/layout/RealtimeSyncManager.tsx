@@ -30,7 +30,7 @@ export function RealtimeSyncProvider({ children }: { children: ReactNode }) {
     let channel: RealtimeChannel;
 
     // Dispatch global event so repositories can listen
-    const dispatchSync = (table: string, payload?: any) => {
+    const dispatchSync = (table: string, payload?: Record<string, unknown>) => {
       console.log(`[RealtimeSync] DB Change detected on ${table}`, payload);
       window.dispatchEvent(new CustomEvent(`kreile-sync-${table}`, { detail: payload }));
       window.dispatchEvent(new CustomEvent('kreile-sync', { detail: { table, payload } }));

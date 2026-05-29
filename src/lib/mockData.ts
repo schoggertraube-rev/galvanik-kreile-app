@@ -8,6 +8,8 @@ export interface MockPart {
   hours: string;
   actualHours?: string;
   condition?: string;
+  quantity?: number;
+  surfaceRequested?: string;
   station: "wareneingang" | "entmetallisierung" | "schleiferei" | "beschichtung" | "warenausgang" | string;
   status: string;
 }

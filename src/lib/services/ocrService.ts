@@ -13,7 +13,8 @@ export type OCRScan = {
 };
 
 export const ocrService = {
-  async simulateScan(type: "document" | "label" | "part_photo"): Promise<OCRScan> {
+  // DEPRECATED: ersetzt durch geminiOcr
+  async simulateScan(type: "document" | "part_photo"): Promise<OCRScan> {
     console.log(`📸 OCR Service: Starte Simulation für ${type}`);
     // Simuliere Wartezeit für echtes Feeling
     await new Promise(r => setTimeout(r, 1800)); 

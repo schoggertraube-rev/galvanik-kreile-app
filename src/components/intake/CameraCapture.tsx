@@ -2,15 +2,15 @@
 import { useState, useRef, useEffect } from "react";
 import { Camera, ArrowLeft, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { OCRScan } from "@/lib/services/ocrService";
-import { processImageWithAI } from "@/app/actions/ocr.actions";
+import { processImage } from "@/app/actions/ocr.actions";
+import { OcrResult } from "@/lib/ocr/geminiOcr";
 import { eventsRepository } from "@/lib/repositories/eventsRepository";
 
 export function CameraCapture({
   onScanComplete,
   onCancel,
 }: {
-  onScanComplete: (scan: OCRScan, base64Image?: string) => void;
+  onScanComplete: (scan: OcrResult, base64Image?: string) => void;
   onCancel?: () => void;
 }) {
   const [scanning, setScanning] = useState(false);
@@ -81,7 +81,7 @@ export function CameraCapture({
     await eventsRepository.addEvent({ eventType: "OCR_SCAN_STARTED" });
     
     // Call the server action with the captured image
-    const scan = await processImageWithAI(imageData);
+    const scan = await processImage(imageData);
     
     await eventsRepository.addEvent({ eventType: "OCR_SCAN_COMPLETED" });
     setScanning(false);
@@ -99,7 +99,7 @@ export function CameraCapture({
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64 = event.target?.result as string;
-      const scan = await processImageWithAI(base64);
+      const scan = await processImage(base64);
       await eventsRepository.addEvent({ eventType: "OCR_SCAN_COMPLETED" });
       setScanning(false);
       stopCamera();

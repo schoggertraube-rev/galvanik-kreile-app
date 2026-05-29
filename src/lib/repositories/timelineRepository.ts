@@ -1,5 +1,7 @@
 import { eventsRepository, StatusEvent } from "./eventsRepository";
 import { complaintsRepository, Complaint } from "./complaintsRepository";
+import { createClient } from "@/lib/supabase/client";
+import { OfflineManager } from "@/lib/offline/OfflineManager";
 
 export type TimelineEntry = {
   id: string;
@@ -16,7 +18,8 @@ export type TimelineEntry = {
     | "complaint"
     | "stock"
     | "bath"
-    | "note";
+    | "note"
+    | "customer";
   title: string;
   subtitle?: string;
   timestamp: string;
@@ -154,5 +157,113 @@ export const timelineRepository = {
         severity
       };
     }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  },
+
+  async getGlobalTimeline(): Promise<TimelineEntry[]> {
+    if (OfflineManager.isOffline()) {
+      return [];
+    }
+
+    try {
+      const supabase = createClient();
+      const entries: TimelineEntry[] = [];
+
+      // 1. Letzte Aufträge
+      const { data: orders } = await supabase
+        .from('orders')
+        .select('id, customer_id, title, order_number, created_at')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (orders) {
+        orders.forEach(o => {
+          entries.push({
+            id: o.id,
+            customerId: o.customer_id || "unknown",
+            orderId: o.id,
+            type: "order",
+            title: `Neuer Auftrag: ${o.title || o.order_number}`,
+            subtitle: o.order_number,
+            timestamp: o.created_at,
+            severity: "good"
+          });
+        });
+      }
+
+      // 2. Letzte Statusänderungen
+      const { data: events } = await supabase
+        .from('events')
+        .select('id, customer_id, order_id, event_type, created_at')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (events) {
+        events.forEach(e => {
+          let severity: TimelineEntry["severity"] = "neutral";
+          if (e.event_type.includes("CREATED") || e.event_type.includes("COMPLETED") || e.event_type.includes("PASSED")) severity = "good";
+          if (e.event_type.includes("FAILED") || e.event_type === "COMPLAINT_FILED") severity = "critical";
+
+          const eventTitleMap: Record<string, string> = {
+            "OCR_SCAN_STARTED": "KI-Scan gestartet",
+            "OCR_SCAN_COMPLETED": "KI-Scan abgeschlossen",
+            "DOCUMENT_CAPTURED": "Dokument erfasst",
+            "CUSTOMER_MATCHED": "Kunde zugeordnet",
+            "ORDER_CREATED_FROM_SCAN": "Auftrag per Scan angelegt",
+            "ORDER_CREATED_MANUAL": "Auftrag manuell angelegt",
+            "ITEMS_SUGGESTED_FROM_SCAN": "Bauteile aus Scan vorgeschlagen",
+            "ITEM_COUNT_CONFIRMED": "Bauteile bestätigt",
+            "PHOTO_CAPTURED": "Foto aufgenommen",
+            "LABEL_PREPARED": "Etikett vorbereitet",
+            "WARENEINGANG_COMPLETED": "Wareneingang abgeschlossen",
+            "STATION_STARTED": "Station begonnen",
+            "STATION_COMPLETED": "Station abgeschlossen",
+            "QUALITY_CHECK_PASSED": "Qualitätsprüfung bestanden",
+            "QUALITY_CHECK_FAILED": "Qualitätsprüfung fehlgeschlagen",
+            "REWORK_STARTED": "Nacharbeit begonnen",
+            "SHIPMENT_PREPARED": "Versand vorbereitet",
+            "SHIPMENT_SENT": "Versand erfolgt",
+            "CUSTOMER_PICKUP": "Abholung durch Kunde",
+            "NOTE_ADDED": "Notiz hinzugefügt",
+            "COSTS_BOOKED": "Kosten gebucht"
+          };
+
+          entries.push({
+            id: e.id,
+            customerId: e.customer_id || "unknown",
+            orderId: e.order_id,
+            type: "status",
+            title: eventTitleMap[e.event_type] || `Status: ${e.event_type}`,
+            timestamp: e.created_at,
+            severity
+          });
+        });
+      }
+
+      // 3. Letzte Kundenanlagen
+      const { data: customers } = await supabase
+        .from('customers')
+        .select('id, name, created_at')
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (customers) {
+        customers.forEach(c => {
+          entries.push({
+            id: c.id,
+            customerId: c.id,
+            type: "customer",
+            title: `Neukunde: ${c.name}`,
+            timestamp: c.created_at,
+            severity: "good"
+          });
+        });
+      }
+
+      // Zusammenführen & Sortieren
+      return entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    } catch (err) {
+      console.error("Error fetching global timeline:", err);
+      return [];
+    }
   }
 };

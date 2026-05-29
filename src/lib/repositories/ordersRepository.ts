@@ -215,7 +215,7 @@ export const ordersRepository = {
     const orderNumber = `A-${202600 + all.length}`;
     
     const cleanOrderNum = String(202600 + all.length);
-    const mappedParts = (data.parts || []).map((part: any, index: number) => {
+    const mappedParts = (data.parts || []).map((part: Record<string, unknown>, index: number) => {
       const partNum = index + 1;
       const generatedPartId = `T-A-${cleanOrderNum}-${partNum}`;
       return {

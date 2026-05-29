@@ -1,0 +1,20 @@
+import { z } from "zod";
+
+export const orderSchema = z.object({
+  customerId: z.string().optional(),
+  customerName: z.string().min(2, "Der Kundenname muss mindestens 2 Zeichen lang sein."),
+  title: z.string().optional(),
+  currentStationId: z.string().optional(),
+  dueDate: z.coerce.date().refine((date) => date > new Date(), {
+    message: "Das Fälligkeitsdatum muss in der Zukunft liegen.",
+  }).optional(),
+  parts: z.array(z.object({
+    id: z.string().optional(),
+    name: z.string().min(1, "Teilebezeichnung darf nicht leer sein."),
+    quantity: z.coerce.number().min(1, "Menge muss mindestens 1 sein."),
+    surfaceRequested: z.string().optional(),
+    material: z.string().optional()
+  })).min(1, "Es muss mindestens ein Bauteil angegeben werden."),
+});
+
+export type OrderInput = z.infer<typeof orderSchema>;

@@ -50,16 +50,21 @@ export async function getOrdersDb() {
   }
 }
 
-export async function createOrderDb(data: {
-  id?: string;
-  customerId: string;
-  title: string;
-  parts: { id?: string; name: string; quantity: number | string; surfaceRequested?: string }[];
-  currentStationId?: string;
-}) {
-  if (!db) return null;
+export async function createOrderDb(data: Record<string, unknown>) {
+  if (!db) return { success: false, error: "Database not available" };
+  
+  const { orderSchema } = await import("@/lib/validation/orderSchema");
+  const parsed = orderSchema.safeParse(data);
+  
+  if (!parsed.success) {
+    const formattedErrors = parsed.error.flatten().fieldErrors;
+    return { success: false, errors: formattedErrors };
+  }
+  
+  const validData = parsed.data;
+  
   try {
-    const orderId = data.id || createId();
+    const orderId = (typeof data.id === 'string' ? data.id : undefined) || createId();
     const year = new Date().getFullYear();
     const sequenceNumber = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
     const orderNumber = `A-${year}-${sequenceNumber}`;
@@ -68,37 +73,40 @@ export async function createOrderDb(data: {
       id: orderId,
       tenantId: "galvanik-kreile",
       orderNumber,
-      customerId: data.customerId,
-      title: data.title,
-      currentStationId: data.currentStationId || "wareneingang",
+      customerId: validData.customerId || "",
+      title: validData.title || "Unbenannt",
+      currentStationId: validData.currentStationId || "wareneingang",
       status: "in_progress",
       priorityComputed: "green",
     };
     
     await db.insert(orders).values(newOrder);
     
-    if (data.parts && data.parts.length > 0) {
-      const newItems = data.parts.map(p => ({
+    if (validData.parts && validData.parts.length > 0) {
+      const newItems = validData.parts.map(p => ({
         id: p.id || createId(),
         tenantId: "galvanik-kreile",
         orderId,
-        customerId: data.customerId,
+        customerId: validData.customerId || "",
         name: p.name,
         quantity: typeof p.quantity === "number" ? p.quantity : parseInt(p.quantity as string) || 1,
-        currentStationId: data.currentStationId || "wareneingang"
+        currentStationId: validData.currentStationId || "wareneingang"
       }));
       await db.insert(items).values(newItems);
     }
     
     return {
-      ...newOrder,
-      station: newOrder.currentStationId,
-      risk: newOrder.priorityComputed,
-      parts: data.parts
+      success: true,
+      data: {
+        ...newOrder,
+        station: newOrder.currentStationId,
+        risk: newOrder.priorityComputed,
+        parts: validData.parts
+      }
     };
   } catch (error) {
     console.error("Failed to create order in DB:", error);
-    return null;
+    return { success: false, error: "Database error" };
   }
 }
 

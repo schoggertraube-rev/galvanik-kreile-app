@@ -111,6 +111,16 @@ export type CustomerInsight = {
   createdAt: string;
 };
 
+export interface CustomerOrderPart {
+  id?: string;
+  name?: string;
+  material?: string;
+  finish?: string;
+  location?: string;
+  quantity?: number;
+  [key: string]: unknown;
+}
+
 // MockOrder integration to avoid importing huge mock file everywhere
 export interface CustomerMockOrder {
   id: string;
@@ -120,7 +130,7 @@ export interface CustomerMockOrder {
   dueDate: string;
   status: "active" | "done" | "waiting" | "critical" | string;
   statusText: string;
-  parts: any[];
+  parts: CustomerOrderPart[];
 }
 
 export type Customer = {
@@ -158,8 +168,8 @@ export type Customer = {
 
   // Legacy mappings for backwards compatibility
   orders?: CustomerMockOrder[];
-  priceAgreements?: any[];
-  feedbacks?: any[];
+  priceAgreements?: Record<string, unknown>[];
+  feedbacks?: Record<string, unknown>[];
 
   notes?: string;
   internalWarning?: string;

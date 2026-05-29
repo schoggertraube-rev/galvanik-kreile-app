@@ -9,8 +9,9 @@ import { SuggestedItemsPanel } from "@/components/intake/SuggestedItemsPanel";
 import { IntakeCompletionSummary } from "@/components/intake/IntakeCompletionSummary";
 import { OcrMatchResult } from "@/components/intake/OcrMatchResult";
 import { NewCustomerForm } from "@/components/customers/NewCustomerForm";
-import { processImageWithAI } from "@/app/actions/ocr.actions";
-import { OCRScan, ocrService } from "@/lib/services/ocrService";
+import { processImage } from "@/app/actions/ocr.actions";
+import { ocrService } from "@/lib/services/ocrService";
+import { OcrResult } from "@/lib/ocr/geminiOcr";
 import {
   Camera,
   Search,
@@ -27,6 +28,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { customersRepository, Customer } from "@/lib/repositories/customersRepository";
+import { orderSchema } from "@/lib/validation/orderSchema";
 
 type WizardStep =
   | "entry"
@@ -74,7 +76,7 @@ export default function NewOrderWizard() {
   const [step, setStep] = useState<WizardStep>("entry");
 
   // Shared payload
-  const [ocrScan, setOcrScan] = useState<OCRScan | null>(null);
+  const [ocrScan, setOcrScan] = useState<OcrResult | null>(null);
   const [ocrPreviewUrl, setOcrPreviewUrl] = useState<string | undefined>();
   const [parsedOcrData, setParsedOcrData] = useState<Record<string, string> | null>(null);
   const [customerSelection, setCustomerSelection] = useState<{
@@ -100,6 +102,7 @@ export default function NewOrderWizard() {
     { name: "", quantity: 1, surfaceRequested: "", photo: "" },
   ]);
   const [isScanningIndex, setIsScanningIndex] = useState<number | null>(null);
+  const [itemErrors, setItemErrors] = useState<Record<number, Record<string, string[]>>>({});
 
   const handleManualSearch = async () => {
     const term = manualSearch.trim();
@@ -134,14 +137,13 @@ export default function NewOrderWizard() {
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64 = event.target?.result as string;
-      const scan = await processImageWithAI(base64);
-      const extract = (key: string) => scan.extractedFields.find(f => f.key === key)?.value || "";
+      const scan = await processImage(base64);
       setParsedOcrData({
-        customerName: extract("customerName"),
-        customerNumber: extract("customerNumber"),
-        itemName: extract("itemName"),
-        quantity: extract("quantity"),
-        surfaceRequested: extract("surfaceRequested"),
+        customerName: scan.customerName || scan.company || "",
+        customerNumber: "", // Not natively in OcrResult right now, can be added if needed
+        itemName: scan.articleDescription || "",
+        quantity: scan.quantity?.toString() || "",
+        surfaceRequested: scan.surface || "",
       });
       setOcrPreviewUrl(base64);
       setStep("ocr_match_result");
@@ -191,17 +193,15 @@ export default function NewOrderWizard() {
 
       setIsScanningIndex(index);
       try {
-        const scanResult = await ocrService.simulateScan("part_photo");
+        const scanResult = await processImage(base64Photo);
         
         setManualItems((prev) => {
           const updated = [...prev];
           let { name, quantity, surfaceRequested } = updated[index];
 
-          scanResult.extractedFields.forEach((field) => {
-            if (field.key === "itemName" && field.value) name = field.value;
-            if (field.key === "quantity" && field.value) quantity = field.value;
-            if (field.key === "surfaceRequested" && field.value) surfaceRequested = field.value;
-          });
+          if (scanResult.articleDescription) name = scanResult.articleDescription;
+          if (scanResult.quantity) quantity = scanResult.quantity;
+          if (scanResult.surface) surfaceRequested = scanResult.surface;
 
           updated[index] = {
             ...updated[index],
@@ -254,18 +254,16 @@ export default function NewOrderWizard() {
         <IntakeEntry onSelect={(mode) => setStep(mode === "camera" ? "camera" : "manual_customer")} />
       )}
 
-      {/* ── CAMERA FLOW ── */}
       {step === "camera" && (
         <CameraCapture 
           onScanComplete={(scan, base64Image) => {
             setOcrScan(scan);
-            const extract = (key: string) => scan.extractedFields.find(f => f.key === key)?.value || "";
             setParsedOcrData({
-              customerName: extract("customerName"),
-              customerNumber: extract("customerNumber"),
-              itemName: extract("itemName"),
-              quantity: extract("quantity"),
-              surfaceRequested: extract("surfaceRequested"),
+              customerName: scan.customerName || scan.company || "",
+              customerNumber: "", 
+              itemName: scan.articleDescription || "",
+              quantity: scan.quantity?.toString() || "",
+              surfaceRequested: scan.surface || "",
             });
             if (base64Image) {
               setOcrPreviewUrl(base64Image);
@@ -276,29 +274,10 @@ export default function NewOrderWizard() {
         />
       )}
 
-      {step === "ocr_review" && ocrScan && (
-        <div className="max-w-3xl mx-auto">
-          <button
-            onClick={() => setStep("camera")}
-            className="flex items-center gap-2 text-text-muted hover:text-navy-900 font-bold text-sm mb-6 px-3 py-2 rounded-xl hover:bg-bg-app-soft transition-all"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Zurück zur Kamera
-          </button>
-          <OCRReviewPanel
-            scan={ocrScan}
-            onConfirm={(data) => {
-              setParsedOcrData(data);
-              setStep("customer_match");
-            }}
-          />
-        </div>
-      )}
-
       {step === "customer_match" && parsedOcrData && (
         <div className="max-w-3xl mx-auto">
           <button
-            onClick={() => setStep("ocr_review")}
+            onClick={() => setStep("ocr_match_result")}
             className="flex items-center gap-2 text-text-muted hover:text-navy-900 font-bold text-sm mb-6 px-3 py-2 rounded-xl hover:bg-bg-app-soft transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -557,7 +536,7 @@ export default function NewOrderWizard() {
                           value={item.name}
                           onChange={(e) => updateManualItem(i, "name", e.target.value)}
                           placeholder="z.B. Zylinderkopf"
-                          className="w-full text-xl font-bold bg-bg-app-soft p-3 rounded-xl border-2 border-neutral-gray-300 outline-none focus:border-navy-700 focus:bg-white"
+                          className={`w-full text-xl font-bold bg-bg-app-soft p-3 rounded-xl border-2 outline-none focus:bg-white ${itemErrors[i]?.name ? "border-danger-red text-danger-red focus:border-danger-red" : "border-neutral-gray-300 focus:border-navy-700"}`}
                         />
                         <label
                           className={`h-[50px] w-[50px] rounded-xl border-2 shrink-0 flex items-center justify-center transition-all cursor-pointer ${
@@ -581,6 +560,7 @@ export default function NewOrderWizard() {
                           />
                         </label>
                       </div>
+                      {itemErrors[i]?.name && <p className="text-danger-red text-xs mt-1 font-bold">{itemErrors[i].name[0]}</p>}
                     </div>
                   </div>
                   <div>
@@ -630,12 +610,29 @@ export default function NewOrderWizard() {
 
           <Button
             onClick={() => {
+              setItemErrors({});
+              // Try to validate parts using Zod schema's part definition
+              let hasErrors = false;
+              const newErrors: Record<number, Record<string, string[]>> = {};
+              
+              manualItems.forEach((it, idx) => {
+                const partSchema = orderSchema.shape.parts.element;
+                const parsed = partSchema.safeParse(it);
+                if (!parsed.success) {
+                  hasErrors = true;
+                  newErrors[idx] = parsed.error.flatten().fieldErrors;
+                }
+              });
+              
+              if (hasErrors) {
+                setItemErrors(newErrors);
+                return;
+              }
+              
               const valid = manualItems.filter((it) => it.name.trim());
-              if (valid.length === 0) return;
               setItems(valid);
               setStep("manual_summary");
             }}
-            disabled={!manualItems.some((it) => it.name.trim())}
             className="w-full h-16 text-lg font-extrabold rounded-2xl bg-navy-900 text-white hover:bg-navy-700 shadow-xl active:scale-95 transition-all disabled:opacity-40"
           >
             Teile bestätigen <ChevronRight className="ml-2 w-6 h-6" />

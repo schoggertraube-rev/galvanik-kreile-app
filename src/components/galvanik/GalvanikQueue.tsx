@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { Order } from "@/lib/repositories/ordersRepository";
 import { GalvanikOrderRow } from "./GalvanikOrderRow";
 import { isBefore, startOfDay } from "date-fns";
+import { getUrgency } from "@/lib/orders/getUrgency";
 import { ArrowUpDown, Users } from "lucide-react";
 
 interface GalvanikQueueProps {
@@ -31,16 +32,13 @@ export function GalvanikQueue({ orders }: GalvanikQueueProps) {
     return [...filteredOrders].sort((a, b) => {
       if (sortMode === "dueDate") {
         // Sort: critical -> warning -> ok, dann nach Datum aufsteigend
-        const getUrgency = (o: Order) => {
-          if (!o.dueDate) return 3; // kein Datum = am unwichtigsten
-          const due = new Date(o.dueDate);
-          if (isBefore(due, today)) return 1; // critical
-          if (isBefore(due, new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000))) return 2; // warning
-          return 3; // ok
+        const getUrgencyScore = (o: Order) => {
+          const u = getUrgency(o.dueDate);
+          return { "kritisch": 1, "gefaehrdet": 2, "im_plan": 3 }[u] || 3;
         };
 
-        const urgA = getUrgency(a);
-        const urgB = getUrgency(b);
+        const urgA = getUrgencyScore(a);
+        const urgB = getUrgencyScore(b);
         if (urgA !== urgB) return urgA - urgB;
 
         if (!a.dueDate) return 1;

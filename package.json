@@ -24,6 +24,7 @@
     "@google/genai": "^2.6.0",
     "@googlemaps/js-api-loader": "^2.0.2",
     "@paralleldrive/cuid2": "^3.3.0",
+    "@react-pdf/renderer": "^4.5.1",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.106.1",
     "@types/google.maps": "^3.64.1",

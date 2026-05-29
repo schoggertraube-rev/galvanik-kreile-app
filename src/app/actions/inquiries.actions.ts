@@ -51,8 +51,19 @@ export async function getOpenInquiriesCount(): Promise<number> {
   }
 }
 
-export async function createInquiry(data: Omit<QuoteRequest, "id" | "receivedAt" | "status" | "pricing">): Promise<QuoteRequest | null> {
-  if (!db) return null;
+export async function createInquiry(data: Record<string, unknown>) {
+  if (!db) return { success: false, error: "Database not available" };
+  
+  const { inquirySchema } = await import("@/lib/validation/inquirySchema");
+  const parsed = inquirySchema.safeParse(data);
+  
+  if (!parsed.success) {
+    const formattedErrors = parsed.error.flatten().fieldErrors;
+    return { success: false, errors: formattedErrors };
+  }
+  
+  const validData = parsed.data;
+  
   try {
     const newId = createId();
     const pricing = {
@@ -68,30 +79,33 @@ export async function createInquiry(data: Omit<QuoteRequest, "id" | "receivedAt"
     const dbRow = {
       id: newId,
       tenantId: "galvanik-kreile",
-      customerName: data.customerName,
-      customerId: data.customerId || null,
-      subject: data.subject,
-      description: data.description,
-      rustLevel: data.rustLevel,
-      dirtLevel: data.dirtLevel,
-      partCount: data.partCount,
-      material: data.material,
-      status: "offen",
+      customerName: validData.customerName,
+      customerId: validData.customerId || null,
+      subject: validData.subject,
+      description: validData.description,
+      rustLevel: validData.rustLevel,
+      dirtLevel: validData.dirtLevel,
+      partCount: validData.partCount,
+      material: validData.material,
+      status: validData.status || "offen",
       pricing,
     };
     
     await db.insert(inquiries).values(dbRow);
     
     return {
-      ...data,
-      id: newId,
-      receivedAt: new Date().toISOString(),
-      status: "offen",
-      pricing,
+      success: true,
+      data: {
+        ...validData,
+        id: newId,
+        receivedAt: new Date().toISOString(),
+        status: validData.status || "offen",
+        pricing,
+      }
     };
   } catch (error) {
     console.error("Failed to create inquiry in DB:", error);
-    return null;
+    return { success: false, error: "Database error" };
   }
 }
 

@@ -377,12 +377,12 @@ export function CustomerDetailView({ customer, onEdit }: CustomerDetailViewProps
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {customer.feedbacks.map(fb => (
-                      <div key={fb.id} className={`p-4 border rounded-xl flex gap-3 ${fb.type === 'negative' ? 'bg-danger-red/5 border-danger-red/20' : 'bg-bg-app-soft border-neutral-gray-200'}`}>
+                    {customer.feedbacks.map((fb: Record<string, unknown>) => (
+                      <div key={fb.id as string | undefined} className={`p-4 border rounded-xl flex gap-3 ${fb.type === 'negative' ? 'bg-danger-red/5 border-danger-red/20' : 'bg-bg-app-soft border-neutral-gray-100'}`}>
                         {fb.type === 'negative' ? <FileWarning className="w-5 h-5 text-danger-red shrink-0" /> : <MessageSquare className="w-5 h-5 text-navy-500 shrink-0" />}
                         <div>
-                          <span className="text-[10px] font-bold text-text-muted block mb-1">{fb.date}</span>
-                          <p className="text-sm text-navy-900">{fb.text}</p>
+                          <span className="text-[10px] font-bold text-text-muted block mb-1">{fb.date as string}</span>
+                          <p className="text-sm text-navy-900">{fb.text as string}</p>
                         </div>
                       </div>
                     ))}

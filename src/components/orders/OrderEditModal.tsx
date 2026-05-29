@@ -65,9 +65,9 @@ export function OrderEditModal({
 
       await onSave(finalChanges);
       onClose();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to save order:", err);
-      alert(`Fehler beim Speichern des Auftrags: ${err?.message || "Unbekannter Fehler"}`);
+      alert(`Fehler beim Speichern des Auftrags: ${(err as Error)?.message || "Unbekannter Fehler"}`);
     } finally {
       setSaving(false);
     }

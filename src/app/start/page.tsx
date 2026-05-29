@@ -354,8 +354,8 @@ function StartScreenContent() {
               const isHttps = window.location.protocol === "https:";
               document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
               window.location.href = "/";
-            } catch (err: any) {
-              alert("Fehler beim Login: " + err.message);
+            } catch (err: unknown) {
+              alert("Fehler beim Login: " + (err as Error).message);
             }
           }}
           className="mt-4 px-6 py-2 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-900 text-sm font-bold rounded-full transition-colors cursor-pointer flex items-center gap-2"

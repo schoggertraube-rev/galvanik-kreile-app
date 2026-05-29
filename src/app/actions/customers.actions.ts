@@ -27,46 +27,53 @@ export async function getCustomersDb() {
   }
 }
 
-export async function createCustomerDb(data: {
-  id?: string;
-  name: string;
-  type?: string;
-  city?: string;
-  email?: string;
-  phone?: string;
-}) {
-  if (!db) return null;
+export async function createCustomerDb(data: Record<string, unknown>) {
+  if (!db) return { success: false, error: "Database not available" };
+  
+  const { customerSchema } = await import("@/lib/validation/customerSchema");
+  const parsed = customerSchema.safeParse(data);
+  
+  if (!parsed.success) {
+    const formattedErrors = parsed.error.flatten().fieldErrors;
+    return { success: false, errors: formattedErrors };
+  }
+  
+  const validData = parsed.data;
+  
   try {
-    const customerId = data.id || createId();
+    const customerId = (typeof data.id === 'string' ? data.id : undefined) || createId();
     const customerNumber = `K-${1000 + Math.floor(Math.random() * 1000)}`;
     
     const newCustomer = {
       id: customerId,
       tenantId: "galvanik-kreile",
       customerNumber,
-      name: data.name,
-      type: data.type || "private",
-      city: data.city || null,
-      email: data.email || null,
-      phone: data.phone || null,
+      name: validData.name,
+      type: validData.type || "private",
+      city: validData.city || null,
+      email: validData.email || null,
+      phone: validData.phone || null,
     };
     
     await db.insert(customers).values(newCustomer);
     
     return {
-      id: customerId,
-      customerNumber,
-      name: data.name,
-      type: newCustomer.type as "business" | "private",
-      city: newCustomer.city || "",
-      email: newCustomer.email || "",
-      phone: newCustomer.phone || "",
-      prefComm: "E-Mail" as const,
-      risk: "Niedrig" as const,
+      success: true,
+      data: {
+        id: customerId,
+        customerNumber,
+        name: validData.name,
+        type: newCustomer.type as "business" | "private",
+        city: newCustomer.city || "",
+        email: newCustomer.email || "",
+        phone: newCustomer.phone || "",
+        prefComm: "E-Mail" as const,
+        risk: "Niedrig" as const,
+      }
     };
   } catch (error) {
     console.error("Failed to create customer in DB:", error);
-    return null;
+    return { success: false, error: "Database error" };
   }
 }
 

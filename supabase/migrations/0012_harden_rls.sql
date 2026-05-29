@@ -31,14 +31,15 @@ CREATE POLICY tenant_isolation_events ON events
   WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
 
 -- Try for status_events just in case it wasn't renamed in DB
-DROP POLICY IF EXISTS "service_role_all_events" ON status_events;
-DROP POLICY IF EXISTS "auth_read_events" ON status_events;
-DROP POLICY IF EXISTS "tenant_isolation_status_events" ON status_events;
-
-CREATE POLICY tenant_isolation_status_events ON status_events
-  FOR ALL TO public
-  USING (tenant_id = current_setting('app.tenant_id', true))
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+DO $$
+BEGIN
+  IF to_regclass('public.status_events') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "service_role_all_events" ON status_events';
+    EXECUTE 'DROP POLICY IF EXISTS "auth_read_events" ON status_events';
+    EXECUTE 'DROP POLICY IF EXISTS "tenant_isolation_status_events" ON status_events';
+    EXECUTE 'CREATE POLICY tenant_isolation_status_events ON status_events FOR ALL TO public USING (tenant_id = current_setting(''app.tenant_id'', true)) WITH CHECK (tenant_id = current_setting(''app.tenant_id'', true))';
+  END IF;
+END $$;
 
 -- ==========================================
 -- 3. inquiries (ensure WITH CHECK exists)

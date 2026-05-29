@@ -8,6 +8,7 @@ import { FocusOverlay } from "@/components/entities/FocusOverlay";
 import { OrderFocusView } from "@/components/entities/OrderFocusView";
 import { CustomerFocusView } from "@/components/entities/CustomerFocusView";
 import type { Order } from "@/lib/repositories/ordersRepository";
+import { getUrgency } from "@/lib/orders/getUrgency";
 
 interface GalvanikOrderRowProps {
   order: Order;
@@ -18,23 +19,13 @@ export function GalvanikOrderRow({ order }: GalvanikOrderRowProps) {
   const [focusType, setFocusType] = useState<"order" | "customer" | null>(null);
 
   // Dringlichkeitslogik
+  const urgencyLevel = getUrgency(order.dueDate);
   const due = order.dueDate ? new Date(order.dueDate) : null;
-  const today = startOfDay(new Date());
-  
-  let urgencyLevel: "critical" | "warning" | "ok" = "ok";
-  if (due) {
-    if (isBefore(due, today)) {
-      urgencyLevel = "critical";
-    } else if (isBefore(due, new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000))) {
-      // <= morgen
-      urgencyLevel = "warning";
-    }
-  }
 
   const urgencyColors = {
-    critical: "bg-danger-red animate-pulse",
-    warning: "bg-accent-orange",
-    ok: "bg-success-green"
+    kritisch: "bg-danger-red",
+    gefaehrdet: "bg-accent-orange",
+    im_plan: "bg-success-green"
   };
 
   return (

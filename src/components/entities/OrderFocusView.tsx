@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Order } from "@/lib/repositories/ordersRepository";
-import { X, Save, Clock, MapPin, Package, AlertTriangle } from "lucide-react";
+import { X, Save, Clock, MapPin, Package, AlertTriangle, Printer, Loader2 } from "lucide-react";
+import { generateOrderLabel } from "@/app/actions/pdf.actions";
 
 interface OrderFocusViewProps {
   order: Order;
@@ -25,6 +26,31 @@ export function OrderFocusView({ order, onClose, onSave }: OrderFocusViewProps) 
       console.error("Fehler beim Speichern", e);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const [isPrinting, setIsPrinting] = useState(false);
+  const handlePrint = async () => {
+    setIsPrinting(true);
+    try {
+      const base64 = await generateOrderLabel(order.id);
+      const url = `data:application/pdf;base64,${base64}`;
+      const win = window.open();
+      if (win) {
+        win.document.write(`<iframe src="${url}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+        win.document.title = `Laufkarte_${order.orderNumber}.pdf`;
+      } else {
+        // Fallback to download if popup blocked
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Laufkarte_${order.orderNumber}.pdf`;
+        a.click();
+      }
+    } catch (e) {
+      console.error("Fehler beim Generieren der Laufkarte", e);
+      alert("Fehler beim Generieren der Laufkarte.");
+    } finally {
+      setIsPrinting(false);
     }
   };
 
@@ -101,6 +127,14 @@ export function OrderFocusView({ order, onClose, onSave }: OrderFocusViewProps) 
           className="px-6 py-2.5 text-sm font-bold text-text-muted hover:text-navy-900 hover:bg-neutral-gray-100 rounded-xl transition-colors"
         >
           Schließen
+        </button>
+        <button
+          onClick={handlePrint}
+          disabled={isPrinting}
+          className="px-6 py-2.5 text-sm font-bold rounded-xl flex items-center gap-2 transition-all bg-navy-900 text-white hover:bg-navy-800 shadow-md mr-auto"
+        >
+          {isPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Printer className="w-4 h-4" />}
+          Laufkarte drucken
         </button>
         <button 
           onClick={handleSave}

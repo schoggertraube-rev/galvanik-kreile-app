@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { customersRepository } from "@/lib/repositories/customersRepository";
 import { Customer } from "@/lib/types/customer";
 import { createClient } from "@/lib/supabase/client";
+import { createCustomerDb } from "@/app/actions/customers.actions";
 import { Loader } from "@googlemaps/js-api-loader";
 import { Building2, Copy, FilePlus2, Save, Upload, X } from "lucide-react";
 import Image from "next/image";
@@ -21,6 +22,7 @@ interface NewCustomerFormProps {
 export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: NewCustomerFormProps) {
   const [loading, setLoading] = useState(false);
   const [customer, setCustomer] = useState<Customer | null>(null);
+  const [errors, setErrors] = useState<Record<string, string[]>>({});
   
   // Form State
   const [name, setName] = useState("");
@@ -145,6 +147,7 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
   const handleSave = async () => {
     try {
       setLoading(true);
+      setErrors({});
       const supabase = createClient();
       
       // 1. Upload new files
@@ -197,10 +200,10 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
           imageUrls: allImageUrls,
         });
       } else {
-        const created = await customersRepository.create({
-          name: name || "Unbenannt",
-          type: companyName ? "business" : "private",
+        const res = await createCustomerDb({
+          name: name,
           companyName,
+          type: companyName ? "business" : "private",
           address: street,
           zipCode,
           city,
@@ -208,9 +211,16 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
           email,
           notes,
           imageUrls: allImageUrls,
-          customerNumber, // Explicitly pass it since we generated it
-        } as Omit<Customer, "id">);
-        savedId = created.id;
+        });
+        if (res?.success && res.data) {
+          savedId = res.data.id;
+        } else if (res?.errors) {
+          setErrors(res.errors);
+          setLoading(false);
+          return;
+        } else {
+          throw new Error(res?.error || "Fehler beim Speichern");
+        }
       }
 
       if (onSave && savedId) {
@@ -218,13 +228,13 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
       } else {
         onClose();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Failed to save customer", {
-        message: err.message || err,
-        details: err.details,
+        message: (err as Error).message || err,
+        details: (err as { details?: unknown }).details,
         fullError: err
       });
-      alert(`Fehler beim Speichern: ${err.message || "Unbekannter Fehler. Bitte überprüfen Sie Ihre Internetverbindung."}`);
+      alert(`Fehler beim Speichern: ${(err as Error)?.message || "Unbekannter Fehler. Bitte überprüfen Sie Ihre Internetverbindung."}`);
     } finally {
       setLoading(false);
     }
@@ -254,8 +264,9 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
                   value={name} 
                   onChange={e => setName(e.target.value)} 
                   placeholder="Max Mustermann"
-                  className="font-medium"
+                  className={`font-medium ${errors.name ? "border-danger-red focus-visible:ring-danger-red" : ""}`}
                 />
+                {errors.name && <p className="text-danger-red text-[10px] font-bold">{errors.name[0]}</p>}
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold text-navy-900">Firma (optional)</label>
@@ -315,8 +326,9 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
                   value={phone} 
                   onChange={e => setPhone(e.target.value)} 
                   placeholder="+49 123 456789"
-                  className="font-medium"
+                  className={`font-medium ${errors.phone ? "border-danger-red focus-visible:ring-danger-red" : ""}`}
                 />
+                {errors.phone && <p className="text-danger-red text-[10px] font-bold">{errors.phone[0]}</p>}
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold text-navy-900">E-Mail</label>
@@ -325,8 +337,9 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
                   onChange={e => setEmail(e.target.value)} 
                   placeholder="max@beispiel.de"
                   type="email"
-                  className="font-medium"
+                  className={`font-medium ${errors.email ? "border-danger-red focus-visible:ring-danger-red" : ""}`}
                 />
+                {errors.email && <p className="text-danger-red text-[10px] font-bold">{errors.email[0]}</p>}
               </div>
             </div>
 
