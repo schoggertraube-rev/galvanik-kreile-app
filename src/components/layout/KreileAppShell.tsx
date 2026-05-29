@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { KreileHeader } from "./KreileHeader";
 import { RightNav } from "./RightNav";
+import { MobileNav } from "./MobileNav";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { TabletTopFlowNav } from "./TabletTopFlowNav";
 import { PwaRegister } from "./PwaRegister";
@@ -14,6 +15,7 @@ import { RealtimeSyncProvider } from "./RealtimeSyncManager";
 export function KreileAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
     getSystemStats().then(stats => {
@@ -54,7 +56,7 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
         )}
 
         {/* Header — fixe Höhe 72px */}
-        <KreileHeader />
+        <KreileHeader onMenuToggle={() => setMobileNavOpen(true)} />
 
         {/* Tablet Landscape Top Nav (nur sichtbar zwischen md und xl) */}
         <TabletTopFlowNav className="hidden md:flex xl:hidden shrink-0" />
@@ -63,9 +65,13 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
         <div className="flex flex-1 min-h-0">   {/* min-h-0 verhindert Flex-Overflow */}
 
           {/* Linke Navigation (Desktop Sidebar, sichtbar ab xl) */}
-          <div className="hidden xl:flex shrink-0">
+          <div className="hidden md:flex shrink-0">
+            {/* Mobile (<768px): MobileNav via Hamburger */}
+            {/* Tablet/Desktop (≥768px): RightNav permanent sichtbar */}
             <RightNav />
           </div>
+          
+          <MobileNav open={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
 
           {/* Scroll-Container für Seiteninhalt */}
           <main

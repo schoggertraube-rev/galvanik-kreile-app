@@ -8,11 +8,11 @@ import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { bathsRepository } from "@/lib/repositories/bathsRepository";
 
 interface MobileNavProps {
-  isOpen: boolean;
+  open: boolean;
   onClose: () => void;
 }
 
-export function MobileNav({ isOpen, onClose }: MobileNavProps) {
+export function MobileNav({ open, onClose }: MobileNavProps) {
   const pathname = usePathname();
   const [openQuotes, setOpenQuotes] = useState(0);
   const [hasCriticalBaths, setHasCriticalBaths] = useState(false);
@@ -25,14 +25,14 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
       setOpenQuotes(await inquiriesRepository.getOpenCount());
       setHasCriticalBaths(await bathsRepository.hasCriticalBath());
     };
-    if (isOpen) {
+    if (open) {
       fetchStats();
     }
-  }, [isOpen]);
+  }, [open]);
 
   // Lock body scroll when open
   useEffect(() => {
-    if (isOpen) {
+    if (open) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
@@ -40,20 +40,18 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
     return () => {
       document.body.style.overflow = "";
     };
-  }, [isOpen]);
+  }, [open]);
 
   // Close on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isOpen) {
+      if (e.key === "Escape" && open) {
         onClose();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
-
-  if (!isOpen) return null;
+  }, [open, onClose]);
 
   const isActive = (path: string) =>
     path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
@@ -69,7 +67,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
           <Link
             href={href}
             onClick={onClose}
-            className={`flex-1 flex items-center gap-4 py-4 px-4 min-h-[56px] transition-colors ${active ? "text-accent-orange bg-accent-orange/5 font-bold" : "text-navy-900 font-medium"}`}
+            className={`flex-1 flex items-center gap-4 py-4 px-6 min-h-[56px] transition-colors ${active ? "text-accent-orange bg-accent-orange/5 font-bold" : "text-navy-900 font-medium"}`}
           >
             <div className="relative flex items-center justify-center shrink-0 w-6 h-6">
               <Icon className="w-6 h-6" strokeWidth={1.5} />
@@ -77,7 +75,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                 <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-danger-red rounded-full border-2 border-white" />
               )}
             </div>
-            <span className="text-base">{label}</span>
+            <span className="text-base font-medium">{label}</span>
             {badge > 0 && (
               <span className="ml-auto bg-accent-orange text-white text-[10px] font-black px-2 py-0.5 rounded-full">
                 {badge}
@@ -88,7 +86,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
           {hasSub && (
             <button
               onClick={() => setOpenSubmenu(isSubOpen ? null : href)}
-              className="p-4 min-h-[56px] flex items-center justify-center text-neutral-gray-400 active:bg-neutral-gray-100"
+              className="p-4 px-6 min-h-[56px] flex items-center justify-center text-neutral-gray-400 active:bg-neutral-gray-100"
             >
               {isSubOpen ? <ChevronDown className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
             </button>
@@ -114,21 +112,24 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex md:hidden">
+    <>
       {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
-        onClick={onClose}
-      />
+      {open && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 transition-opacity"
+          onClick={onClose}
+        />
+      )}
       
       {/* Slide-in Panel */}
-      <div className="relative w-[85%] max-w-[320px] bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-left duration-200">
-        
-        <div className="flex items-center justify-between p-4 border-b border-neutral-gray-100 min-h-[72px]">
+      <div 
+        className={`fixed left-0 top-0 h-full w-72 bg-bg-app z-50 transform transition-transform duration-300 shadow-2xl flex flex-col ${open ? 'translate-x-0' : '-translate-x-full'}`}
+      >
+        <div className="flex items-center justify-between p-4 px-6 border-b border-neutral-gray-100 min-h-[72px]">
           <img src="/assets/logo/kreile-wordmark-skyline.svg" alt="Kreile" className="h-8 w-auto" />
           <button 
             onClick={onClose}
-            className="p-2 -mr-2 text-navy-500 hover:bg-neutral-gray-100 rounded-full"
+            className="p-2 -mr-2 text-navy-500 hover:bg-neutral-gray-100 rounded-full min-h-[48px] min-w-[48px] flex items-center justify-center"
           >
             <X className="w-6 h-6" />
           </button>
@@ -157,12 +158,12 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
             badge={openQuotes}
           />
           <NavItem
-            label="Kunden & Aufträge"
+            label="Kunden/Aufträge"
             href="/kunden-auftraege"
             icon={Users}
           />
           <NavItem
-            label="Lager & Chemie"
+            label="Lager/Chemie"
             href="/items"
             icon={Warehouse}
             status={hasCriticalBaths ? "critical" : undefined}
@@ -178,6 +179,6 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
           />
         </nav>
       </div>
-    </div>
+    </>
   );
 }

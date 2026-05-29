@@ -12,12 +12,15 @@ import { logout } from "@/app/actions/auth";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 
-export function KreileHeader() {
+interface KreileHeaderProps {
+  onMenuToggle: () => void;
+}
+
+export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [syncQueueCount, setSyncQueueCount] = useState(0);
   const [orderCount, setOrderCount] = useState(0);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   
   const { status: realtimeStatus } = useRealtimeStatus();
 
@@ -79,8 +82,8 @@ export function KreileHeader() {
 
       {/* Hamburger Menu Mobile */}
       <button 
-        className="md:hidden p-2 -ml-2 text-navy-900 hover:bg-neutral-gray-100 rounded-full min-w-[48px] min-h-[48px] flex items-center justify-center shrink-0"
-        onClick={() => setMobileNavOpen(true)}
+        className="flex md:hidden p-3 -ml-2 text-navy-900 hover:bg-neutral-gray-100 rounded-full min-w-[48px] min-h-[48px] items-center justify-center shrink-0"
+        onClick={onMenuToggle}
       >
         <Menu className="w-6 h-6" />
       </button>
@@ -227,8 +230,6 @@ export function KreileHeader() {
       </div>
 
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
-      
-      <MobileNav isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
     </header>
   );
 }
