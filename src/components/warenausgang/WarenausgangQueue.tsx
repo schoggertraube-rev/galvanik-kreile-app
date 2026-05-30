@@ -10,20 +10,53 @@ import { getUrgency } from "@/lib/orders/getUrgency";
 import { generateDeliveryNote } from "@/app/actions/pdf.actions";
 
 interface WarenausgangQueueProps {
-  orders: Order[]; // These should only be orders in warenausgang
+  allOrders: Order[]; // Receives all orders to determine completeness
 }
 
-export function WarenausgangQueue({ orders }: WarenausgangQueueProps) {
-  // Kunde -> Aufträge
-  const groupedOrders = useMemo(() => {
-    const groups: Record<string, Order[]> = {};
-    orders.forEach(o => {
-      const c = o.customerName || "Unbekannt";
-      if (!groups[c]) groups[c] = [];
-      groups[c].push(o);
+export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
+  // Filtere nach fertigen Aufträgen
+  const finishedOrders = useMemo(() => {
+    const finishedStatuses = ["completed", "shipped", "fertig", "abgeschlossen"];
+    return allOrders.filter(o => {
+      const isFinishedStatus = finishedStatuses.includes(o.status?.toLowerCase() || "");
+      // Fallback auf Station warenausgang, falls Status nicht explizit gepflegt ist
+      const isWarenausgangStation = o.station === "warenausgang" || o.currentStationId === "warenausgang";
+      return isFinishedStatus || isWarenausgangStation;
     });
-    return groups;
-  }, [orders]);
+  }, [allOrders]);
+
+  // Gruppiere die fertigen Aufträge nach Kunde und sortiere die Gruppen (Vollständige zuerst)
+  const groupedOrders = useMemo(() => {
+    const groups: Record<string, { orders: Order[], isComplete: boolean }> = {};
+    
+    // 1. Fertige Aufträge gruppieren
+    finishedOrders.forEach(o => {
+      const c = o.customerName || "Unbekannt";
+      if (!groups[c]) groups[c] = { orders: [], isComplete: true };
+      groups[c].orders.push(o);
+    });
+
+    // 2. Vollständigkeitsprüfung anhand ALLER Aufträge des Kunden
+    const finishedStatuses = ["completed", "shipped", "fertig", "abgeschlossen"];
+    allOrders.forEach(o => {
+      const c = o.customerName || "Unbekannt";
+      // Wenn der Kunde in der Gruppe ist, prüfe, ob es noch unfertige Aufträge für ihn gibt
+      if (groups[c]) {
+        const isFinishedStatus = finishedStatuses.includes(o.status?.toLowerCase() || "");
+        const isWarenausgangStation = o.station === "warenausgang" || o.currentStationId === "warenausgang";
+        if (!isFinishedStatus && !isWarenausgangStation && o.status !== "cancelled") {
+          groups[c].isComplete = false;
+        }
+      }
+    });
+
+    return Object.entries(groups).sort((a, b) => {
+      // Sortiere vollständige Gruppen nach oben
+      if (a[1].isComplete && !b[1].isComplete) return -1;
+      if (!a[1].isComplete && b[1].isComplete) return 1;
+      return a[0].localeCompare(b[0]);
+    });
+  }, [allOrders, finishedOrders]);
 
   const [isGeneratingNote, setIsGeneratingNote] = useState<string | null>(null);
 
@@ -58,24 +91,18 @@ export function WarenausgangQueue({ orders }: WarenausgangQueueProps) {
   return (
     <div className="flex flex-col gap-6 w-full max-w-4xl mx-auto">
       <div className="flex items-center justify-between text-xs text-text-muted font-semibold px-1">
-        <span>{orders.length} Aufträge im Warenausgang</span>
+        <span>{finishedOrders.length} Aufträge im Warenausgang</span>
         <span>Nach Kunde gruppiert</span>
       </div>
 
-      {Object.entries(groupedOrders).length === 0 ? (
+      {groupedOrders.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-neutral-gray-100 shadow-sm text-text-muted text-sm font-medium">
           Keine fertigen Aufträge im Warenausgang.
         </div>
       ) : (
-        Object.entries(groupedOrders).map(([customer, custOrders]) => {
-          // Dummy-Logik: Ein Kunde gilt als vollständig, wenn alle seine Aufträge hier im Warenausgang sind.
-          // Da wir hier nur die Warenausgang-Aufträge haben, wissen wir nicht zwingend, ob der Kunde noch andere offene hat, 
-          // außer wir würden global filtern. Fürs Frontend nehmen wir an, wenn wir hier rendern, 
-          // prüfen wir einfach, ob mehr als 0 Aufträge da sind und nennen es mal testweise "vollständig" 
-          // oder simulieren es. Die echte DB-Prüfung müsste serverseitig erfolgen.
-          // Für diesen Lauf definieren wir: Wenn der Kunde hier gelistet ist, 
-          // nehmen wir an, wir zeigen den Button an. 
-          const isComplete = true; // Placeholder für echte Vollständigkeitsprüfung (z.B. aus DB)
+        groupedOrders.map(([customer, groupData]) => {
+          const custOrders = groupData.orders;
+          const isComplete = groupData.isComplete;
 
           return (
             <div key={customer} className="bg-white border-2 border-neutral-gray-100 rounded-3xl p-5 shadow-sm transition-all hover:border-neutral-gray-200">

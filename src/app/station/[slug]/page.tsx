@@ -76,7 +76,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
       {slug === "beschichtung" ? (
         <GalvanikQueue orders={filteredOrders as unknown as Order[]} />
       ) : slug === "warenausgang" ? (
-        <WarenausgangQueue orders={filteredOrders as unknown as Order[]} />
+        <WarenausgangQueue allOrders={orders as unknown as Order[]} />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           <div className="lg:col-span-2 space-y-3">

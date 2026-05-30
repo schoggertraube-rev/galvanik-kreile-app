@@ -108,6 +108,24 @@ export function GalvanikQueue({ orders }: GalvanikQueueProps) {
           <div className="text-center py-16 bg-white rounded-2xl border border-neutral-gray-100 shadow-sm text-text-muted text-sm font-medium">
             Keine Aufträge in der Galvanik gefunden.
           </div>
+        ) : sortMode === "customer" ? (
+          Object.entries(
+            sortedOrders.reduce((acc, order) => {
+              const cust = order.customerName || "Unbekannt";
+              if (!acc[cust]) acc[cust] = [];
+              acc[cust].push(order);
+              return acc;
+            }, {} as Record<string, Order[]>)
+          ).map(([customer, custOrders]) => (
+            <div key={customer} className="space-y-3 mb-4">
+              <h3 className="font-bold text-lg text-navy-900 border-b-2 border-neutral-gray-100 pb-2 pl-2">{customer}</h3>
+              <div className="flex flex-col gap-3">
+                {custOrders.map(order => (
+                  <GalvanikOrderRow key={order.id} order={order} />
+                ))}
+              </div>
+            </div>
+          ))
         ) : (
           sortedOrders.map(order => (
             <GalvanikOrderRow key={order.id} order={order} />
