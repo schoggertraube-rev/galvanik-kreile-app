@@ -11,6 +11,7 @@ import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { logout } from "@/app/actions/auth";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
+import { getCompanySettings } from "@/app/actions/company.actions";
 
 interface KreileHeaderProps {
   onMenuToggle: () => void;
@@ -21,6 +22,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const [isOffline, setIsOffline] = useState(false);
   const [syncQueueCount, setSyncQueueCount] = useState(0);
   const [orderCount, setOrderCount] = useState(0);
+  const [logoUrl, setLogoUrl] = useState("/assets/logo/kreile-wordmark-skyline.svg");
   
   const { status: realtimeStatus } = useRealtimeStatus();
 
@@ -69,6 +71,12 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
       setSyncQueueCount(count);
       const orders = await ordersRepository.getAll();
       setOrderCount(orders?.length ?? 0);
+      try {
+        const settings = await getCompanySettings();
+        if (settings.logoUrl) setLogoUrl(settings.logoUrl);
+      } catch (e) {
+        console.error("Failed to load settings in header", e);
+      }
     };
     updateState();
 
@@ -91,18 +99,18 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
       {/* LEFT: GK Monogram + Brand */}
       <Link href="/" className="hidden md:flex items-center gap-3 shrink-0 group">
         <img
-          src="/assets/logo/kreile-wordmark-skyline.svg"
-          alt="Kreile Wortmarke Skyline"
-          className="h-10 w-auto object-contain"
+          src={logoUrl}
+          alt="Firmenlogo"
+          className="h-10 w-auto object-contain max-w-[200px]"
         />
       </Link>
       
       {/* Mobile Logo Only */}
       <Link href="/" className="md:hidden flex items-center shrink-0">
         <img
-          src="/assets/logo/kreile-wordmark-skyline.svg"
-          alt="Kreile Wortmarke"
-          className="h-7 w-auto object-contain"
+          src={logoUrl}
+          alt="Firmenlogo"
+          className="h-7 w-auto object-contain max-w-[140px]"
         />
       </Link>
 

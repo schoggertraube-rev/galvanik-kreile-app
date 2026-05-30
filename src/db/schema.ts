@@ -218,3 +218,23 @@ export const auditLog = pgTable("audit_log", {
   payload: jsonb("payload"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const companySettingsTable = pgTable("company_settings", {
+  id: text("id").primaryKey().default("default"),
+  tenantId: text("tenant_id").notNull(),
+  companyName: text("company_name").notNull().default(""),
+  tagline: text("tagline").default(""),
+  street: text("street").default(""),
+  zip: text("zip").default(""),
+  city: text("city").default(""),
+  country: text("country").default("Deutschland"),
+  phone: text("phone").default(""),
+  email: text("email").default(""),
+  website: text("website").default(""),
+  iban: text("iban").default(""),
+  bic: text("bic").default(""),
+  bankName: text("bank_name").default(""),
+  taxId: text("tax_id").default(""),
+  logoUrl: text("logo_url").default("/logo.png"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

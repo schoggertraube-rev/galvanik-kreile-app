@@ -7,9 +7,10 @@ import { UserManagement } from "@/components/admin/UserManagement";
 import { RoleMatrix } from "@/components/admin/RoleMatrix";
 import { FeatureToggles } from "@/components/admin/FeatureToggles";
 import { DataImportCenter } from "@/components/admin/DataImportCenter";
-import { Server, Users, Shield, Power, Database, Settings } from "lucide-react";
+import { CompanySettingsForm } from "@/components/admin/CompanySettingsForm";
+import { Server, Users, Shield, Power, Database, Settings, Building2 } from "lucide-react";
 
-type Tab = "status" | "users" | "roles" | "features" | "import" | "system";
+type Tab = "status" | "company" | "users" | "roles" | "features" | "import" | "system";
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("status");
@@ -23,6 +24,7 @@ export default function SettingsPage() {
 
       <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide border-b border-neutral-gray-200">
         <TabButton active={activeTab === "status"} onClick={() => setActiveTab("status")} icon={<Server />} label="Status & Diagnose" />
+        <TabButton active={activeTab === "company"} onClick={() => setActiveTab("company")} icon={<Building2 />} label="Firmendaten" />
         <TabButton active={activeTab === "users"} onClick={() => setActiveTab("users")} icon={<Users />} label="Benutzer" />
         <TabButton active={activeTab === "roles"} onClick={() => setActiveTab("roles")} icon={<Shield />} label="Rollen & Rechte" />
         <TabButton active={activeTab === "features"} onClick={() => setActiveTab("features")} icon={<Power />} label="Feature-Toggles" />
@@ -32,6 +34,7 @@ export default function SettingsPage() {
 
       <div className="pt-2">
         {activeTab === "status" && <AdminDashboard />}
+        {activeTab === "company" && <CompanySettingsForm />}
         {activeTab === "users" && <UserManagement />}
         {activeTab === "roles" && <RoleMatrix />}
         {activeTab === "features" && <FeatureToggles />}

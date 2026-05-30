@@ -10,6 +10,7 @@ import { DeliveryNoteDocument } from "@/lib/pdf/DeliveryNote";
 import { DocumentProps } from "@react-pdf/renderer";
 import { Order } from "@/lib/repositories/ordersRepository";
 import { Customer } from "@/lib/repositories/customersRepository";
+import { companySettingsRepository } from "@/lib/repositories/companySettingsRepository";
 
 async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -42,8 +43,10 @@ export async function generateOrderLabel(orderIds: string | string[]) {
     pdfData.push({ order: o, customerName: cName, qrCodeBase64: qr });
   }
 
+  const settings = await companySettingsRepository.getSettings();
+
   const pdfStream = await renderToStream(
-    React.createElement(OrderLabelDocument, { data: pdfData }) as unknown as React.ReactElement<DocumentProps>
+    React.createElement(OrderLabelDocument, { data: pdfData, settings }) as unknown as React.ReactElement<DocumentProps>
   );
 
   const pdfBuffer = await streamToBuffer(pdfStream);
@@ -69,8 +72,10 @@ export async function generateDeliveryNote(orderIds: string | string[]) {
   // const logoPath = path.join(process.cwd(), "public", "logo.png");
   // const logoBase64 = fs.existsSync(logoPath) ? `data:image/png;base64,${fs.readFileSync(logoPath).toString('base64')}` : undefined;
   
+  const settings = await companySettingsRepository.getSettings();
+
   const pdfStream = await renderToStream(
-    React.createElement(DeliveryNoteDocument, { orders: targetOrders, customer: customer }) as unknown as React.ReactElement<DocumentProps>
+    React.createElement(DeliveryNoteDocument, { orders: targetOrders, customer: customer, settings }) as unknown as React.ReactElement<DocumentProps>
   );
   
   const pdfBuffer = await streamToBuffer(pdfStream);

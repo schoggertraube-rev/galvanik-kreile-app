@@ -2,8 +2,8 @@ import React from "react";
 import { Page, Text, View, Document, StyleSheet, Image } from "@react-pdf/renderer";
 import type { Order } from "@/lib/repositories/ordersRepository";
 import type { Customer } from "@/lib/repositories/customersRepository";
+import type { CompanySettings } from "@/lib/repositories/companySettingsRepository";
 import { format } from "date-fns";
-import fs from "fs";
 import path from "path";
 
 const styles = StyleSheet.create({
@@ -145,10 +145,10 @@ const styles = StyleSheet.create({
 interface DeliveryNoteProps {
   orders: Order[];
   customer: Customer;
-  logoBase64?: string;
+  settings: CompanySettings;
 }
 
-export const DeliveryNoteDocument = ({ orders, customer, logoBase64 }: DeliveryNoteProps) => {
+export const DeliveryNoteDocument = ({ orders, customer, settings }: DeliveryNoteProps) => {
   const currentDate = format(new Date(), "dd.MM.yyyy");
 
   return (
@@ -156,18 +156,18 @@ export const DeliveryNoteDocument = ({ orders, customer, logoBase64 }: DeliveryN
       <Page size="A4" style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          {logoBase64 ? (
-            <Image src={logoBase64} style={{ width: 120, objectFit: "contain" }} />
+          {settings.logoUrl && !settings.logoUrl.endsWith(".svg") ? (
+            <Image src={settings.logoUrl} style={{ width: 120, objectFit: "contain" }} />
           ) : (
             <View style={styles.logoPlaceholder}>
-              <Text style={styles.logoText}>KREILE LOGO</Text>
+              <Text style={styles.logoText}>{settings.companyName.toUpperCase()}</Text>
             </View>
           )}
           <View style={styles.companyInfo}>
-            <Text style={{ fontWeight: "bold", color: "#000000" }}>Kreile Galvanik GmbH</Text>
-            <Text>Musterstraße 123</Text>
-            <Text>12345 Musterstadt</Text>
-            <Text>Tel: 01234 / 567 89</Text>
+            <Text style={{ fontWeight: "bold", color: "#000000" }}>{settings.companyName}</Text>
+            <Text>{settings.street}</Text>
+            <Text>{settings.zip} {settings.city}</Text>
+            <Text>Tel: {settings.phone}</Text>
           </View>
         </View>
 
@@ -227,7 +227,7 @@ export const DeliveryNoteDocument = ({ orders, customer, logoBase64 }: DeliveryN
         <View style={styles.signatureBox}>
           <View>
             <View style={styles.signatureLine} />
-            <Text style={styles.signatureText}>Übergabe (Kreile Galvanik)</Text>
+            <Text style={styles.signatureText}>Übergabe ({settings.companyName})</Text>
           </View>
           <View>
             <View style={styles.signatureLine} />
@@ -237,8 +237,8 @@ export const DeliveryNoteDocument = ({ orders, customer, logoBase64 }: DeliveryN
 
         {/* Footer */}
         <View style={styles.footer}>
-          <Text>Kreile Galvanik GmbH • Musterstraße 123 • 12345 Musterstadt • USt-IdNr.: DE123456789</Text>
-          <Text>Gerichtsstand ist Musterstadt. Es gelten unsere Allgemeinen Geschäftsbedingungen.</Text>
+          <Text>{settings.companyName} • {settings.street} • {settings.zip} {settings.city} • USt-IdNr.: {settings.taxId}</Text>
+          <Text>Gerichtsstand ist {settings.city}. Es gelten unsere Allgemeinen Geschäftsbedingungen.</Text>
         </View>
       </Page>
     </Document>

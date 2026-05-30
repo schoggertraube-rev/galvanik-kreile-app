@@ -128,6 +128,8 @@ const styles = StyleSheet.create({
   }
 });
 
+import type { CompanySettings } from "@/lib/repositories/companySettingsRepository";
+
 interface OrderLabelData {
   order: Order;
   customerName: string;
@@ -136,9 +138,10 @@ interface OrderLabelData {
 
 interface OrderLabelProps {
   data: OrderLabelData[];
+  settings: CompanySettings;
 }
 
-export const OrderLabelDocument = ({ data }: OrderLabelProps) => {
+export const OrderLabelDocument = ({ data, settings }: OrderLabelProps) => {
   return (
     <Document>
       {data.map(({ order, customerName, qrCodeBase64 }, index) => {
@@ -152,7 +155,7 @@ export const OrderLabelDocument = ({ data }: OrderLabelProps) => {
           <Page key={order.id || index} size="A6" style={styles.page}>
             {/* Header */}
             <View style={styles.headerRow}>
-              <Text style={styles.headerText}>KREILE GALVANIK</Text>
+              <Text style={styles.headerText}>{settings.companyName.toUpperCase()}</Text>
               <Text style={{ fontSize: 8 }}>A6 ETIKETT</Text>
             </View>
 
