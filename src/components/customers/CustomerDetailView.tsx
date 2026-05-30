@@ -36,7 +36,7 @@ export function CustomerDetailView({ customer, onEdit }: CustomerDetailViewProps
     <div className="space-y-6 animate-fade-in">
       <Card className="shadow-md border-neutral-gray-100 overflow-hidden bg-white">
         {/* Beautiful Header in Kreile Navy */}
-        <div className="bg-linear-to-r from-navy-900 to-navy-700 text-white p-6 relative">
+        <div className="bg-linear-to-r from-navy-900 to-navy-700 text-white p-4 md:p-6 relative">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
@@ -116,7 +116,7 @@ export function CustomerDetailView({ customer, onEdit }: CustomerDetailViewProps
               </TabsList>
             </div>
 
-            <div className="p-6">
+            <div className="p-4 md:p-6">
               <TabsContent value="uebersicht" className="mt-0 space-y-6">
                 
                 {/* 1. Werkstattgedächtnis */}
@@ -189,21 +189,27 @@ export function CustomerDetailView({ customer, onEdit }: CustomerDetailViewProps
                 {/* 2. Stammdaten Grid */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {/* Kontakt */}
-                  <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-100 space-y-3">
+                  <div className="bg-bg-app-soft p-3 md:p-4 rounded-xl border border-neutral-gray-100 space-y-3 relative pb-8">
                     <h3 className="text-xs font-extrabold text-text-muted uppercase tracking-wider">Kontaktdaten</h3>
                     <div className="space-y-2 text-sm">
-                      <div className="flex justify-between py-1 border-b border-neutral-gray-300/65">
-                        <span className="text-text-muted font-medium">Telefon:</span>
-                        <span className="font-bold text-navy-900">{customer.phone || "-"}</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-neutral-gray-300/65">
-                        <span className="text-text-muted font-medium">E-Mail:</span>
-                        <span className="font-bold text-navy-900 text-xs">{customer.email || "-"}</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-neutral-gray-300/65">
-                        <span className="text-text-muted font-medium">Bevorzugt:</span>
-                        <Badge className="bg-white text-navy-900 border border-neutral-gray-300 text-[10px] font-bold">{customer.prefComm || "Unbekannt"}</Badge>
-                      </div>
+                      {customer.phone && customer.phone !== "-" && customer.phone !== "Unbekannt" && (
+                        <div className="flex justify-between py-1 border-b border-neutral-gray-300/65">
+                          <span className="text-text-muted font-medium">Telefon:</span>
+                          <span className="font-bold text-navy-900">{customer.phone}</span>
+                        </div>
+                      )}
+                      {customer.email && customer.email !== "-" && customer.email !== "Unbekannt" && (
+                        <div className="flex justify-between py-1 border-b border-neutral-gray-300/65">
+                          <span className="text-text-muted font-medium">E-Mail:</span>
+                          <span className="font-bold text-navy-900 text-xs">{customer.email}</span>
+                        </div>
+                      )}
+                      {customer.prefComm && customer.prefComm !== "unknown" && (
+                        <div className="flex justify-between py-1 border-b border-neutral-gray-300/65">
+                          <span className="text-text-muted font-medium">Bevorzugt:</span>
+                          <Badge className="bg-white text-navy-900 border border-neutral-gray-300 text-[10px] font-bold">{customer.prefComm}</Badge>
+                        </div>
+                      )}
                     </div>
                     {/* Maps Placeholder Link */}
                     {customer.address && customer.address !== "Keine Adresse hinterlegt" && (
@@ -216,40 +222,53 @@ export function CustomerDetailView({ customer, onEdit }: CustomerDetailViewProps
                         Auf Google Maps öffnen
                       </a>
                     )}
+                    <button onClick={() => onEdit(customer)} className="absolute bottom-3 left-3 md:left-4 text-[10px] text-navy-500 font-bold hover:underline">Fehlende Daten ergänzen</button>
                   </div>
 
                   {/* Profil (Expectations) */}
-                  <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-100 space-y-3">
+                  <div className="bg-bg-app-soft p-3 md:p-4 rounded-xl border border-neutral-gray-100 space-y-3 relative pb-8">
                     <h3 className="text-xs font-extrabold text-text-muted uppercase tracking-wider">Kundenprofil</h3>
                     <div className="space-y-2 text-sm">
-                      <div className="flex justify-between py-1 border-b border-neutral-gray-300/65">
-                        <span className="text-text-muted font-medium">Qualität:</span>
-                        <span className="font-bold text-navy-900">{customer.expectationProfile?.qualityExpectation || "Standard"}</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-neutral-gray-300/65">
-                        <span className="text-text-muted font-medium">Preisbewusst:</span>
-                        <span className="font-bold text-navy-900">{customer.expectationProfile?.priceSensitivity || "Unbekannt"}</span>
-                      </div>
-                      <div className="flex justify-between py-1 border-b border-neutral-gray-300/65">
-                        <span className="text-text-muted font-medium">Freigaben:</span>
-                        <span className="font-bold text-navy-900">{customer.approvalProfile?.usualApprovalTimeDays ? `${customer.approvalProfile.usualApprovalTimeDays} Tage` : "Unbekannt"}</span>
-                      </div>
+                      {customer.expectationProfile?.qualityExpectation && customer.expectationProfile.qualityExpectation !== "unclear" && (
+                        <div className="flex justify-between py-1 border-b border-neutral-gray-300/65">
+                          <span className="text-text-muted font-medium">Qualität:</span>
+                          <span className="font-bold text-navy-900">{customer.expectationProfile.qualityExpectation}</span>
+                        </div>
+                      )}
+                      {customer.expectationProfile?.priceSensitivity && customer.expectationProfile.priceSensitivity !== "unknown" && (
+                        <div className="flex justify-between py-1 border-b border-neutral-gray-300/65">
+                          <span className="text-text-muted font-medium">Preisbewusst:</span>
+                          <span className="font-bold text-navy-900">{customer.expectationProfile.priceSensitivity}</span>
+                        </div>
+                      )}
+                      {customer.approvalProfile?.usualApprovalTimeDays && (
+                        <div className="flex justify-between py-1 border-b border-neutral-gray-300/65">
+                          <span className="text-text-muted font-medium">Freigaben:</span>
+                          <span className="font-bold text-navy-900">{customer.approvalProfile.usualApprovalTimeDays} Tage</span>
+                        </div>
+                      )}
                     </div>
+                    <button onClick={() => onEdit(customer)} className="absolute bottom-3 left-3 md:left-4 text-[10px] text-navy-500 font-bold hover:underline">Fehlende Daten ergänzen</button>
                   </div>
 
                   {/* Technisches Profil */}
-                  <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-100 space-y-3">
+                  <div className="bg-bg-app-soft p-3 md:p-4 rounded-xl border border-neutral-gray-100 space-y-3 relative pb-8">
                     <h3 className="text-xs font-extrabold text-text-muted uppercase tracking-wider">Technisches Profil</h3>
                     <div className="space-y-2 text-sm">
-                      <div className="py-1 border-b border-neutral-gray-300/65">
-                        <span className="text-text-muted font-medium block mb-1">Typische Materialien:</span>
-                        <span className="font-bold text-navy-900 text-xs">{(customer.technicalProfile?.commonMaterials || []).join(", ") || "-"}</span>
-                      </div>
-                      <div className="py-1 border-b border-neutral-gray-300/65">
-                        <span className="text-text-muted font-medium block mb-1">Typische Oberflächen:</span>
-                        <span className="font-bold text-navy-900 text-xs">{(customer.technicalProfile?.commonSurfaces || []).join(", ") || "-"}</span>
-                      </div>
+                      {customer.technicalProfile?.commonMaterials && customer.technicalProfile.commonMaterials.length > 0 && (
+                        <div className="py-1 border-b border-neutral-gray-300/65">
+                          <span className="text-text-muted font-medium block mb-1">Typische Materialien:</span>
+                          <span className="font-bold text-navy-900 text-xs">{customer.technicalProfile.commonMaterials.join(", ")}</span>
+                        </div>
+                      )}
+                      {customer.technicalProfile?.commonSurfaces && customer.technicalProfile.commonSurfaces.length > 0 && (
+                        <div className="py-1 border-b border-neutral-gray-300/65">
+                          <span className="text-text-muted font-medium block mb-1">Typische Oberflächen:</span>
+                          <span className="font-bold text-navy-900 text-xs">{customer.technicalProfile.commonSurfaces.join(", ")}</span>
+                        </div>
+                      )}
                     </div>
+                    <button onClick={() => onEdit(customer)} className="absolute bottom-3 left-3 md:left-4 text-[10px] text-navy-500 font-bold hover:underline">Fehlende Daten ergänzen</button>
                   </div>
                 </div>
               </TabsContent>

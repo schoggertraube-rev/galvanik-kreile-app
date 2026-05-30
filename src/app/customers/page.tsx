@@ -111,7 +111,6 @@ export default function CustomersPage() {
     <div className="space-y-6 pb-12 font-sans max-w-7xl">
       <PageHeader
         title="Kundenkartei"
-        subtitle="Technische Profile, historische Preisabsprachen, Reklamationen und zugeordnete Bauteile."
         action={{
           label: "Neuer Kunde",
           onClick: () => setShowAddModal(true),
@@ -170,7 +169,7 @@ export default function CustomersPage() {
                       isSelected ? "ring-2 ring-navy-900 border-transparent shadow-md" : ""
                     }`}
                   >
-                    <CardContent className="p-4 flex items-center justify-between gap-3">
+                    <CardContent className="p-3 md:p-4 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <div className={`w-11 h-11 rounded-xl border flex items-center justify-center font-bold text-sm shrink-0 ${avatarColor}`}>
                           {customer.name.substring(0, 2).toUpperCase()}
@@ -182,9 +181,11 @@ export default function CustomersPage() {
                           </h4>
                           
                           <div className="flex flex-wrap items-center gap-2 text-xs text-text-muted font-sans">
-                            <span className="font-mono bg-bg-app-soft px-1.5 py-0.5 rounded text-[10px] text-text-muted font-bold">
-                              {customer.id}
-                            </span>
+                            {customer.customerNumber && (
+                              <span className="font-mono bg-bg-app-soft px-1.5 py-0.5 rounded text-[10px] text-text-muted font-bold">
+                                {customer.customerNumber}
+                              </span>
+                            )}
                             <span className="flex items-center gap-1 text-[11px] font-semibold text-text-muted">
                               {typeIcon} {customer.type}
                             </span>

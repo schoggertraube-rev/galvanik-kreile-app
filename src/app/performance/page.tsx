@@ -196,12 +196,12 @@ export default function PerformancePage() {
       colorClass = "border-accent-orange bg-gold-100/10 text-accent-orange hover:bg-gold-100/20";
       badgeColor = "bg-orange-100 text-accent-orange border-accent-orange";
       trendIcon = <TrendingUp className="h-3.5 w-3.5 text-accent-orange shrink-0" />;
-      trendLabel = "ErhÃ¶htes Volumen";
+      trendLabel = "Erhöhtes Volumen";
     } else if (load >= 45) {
       colorClass = "border-yellow-250 bg-gold-100/10 text-yellow-950 hover:bg-gold-100/20";
       badgeColor = "bg-yellow-100 text-yellow-800 border-yellow-200";
       trendIcon = <Activity className="h-3.5 w-3.5 text-yellow-600 shrink-0" />;
-      trendLabel = "RegulÃ¤r";
+      trendLabel = "Regulär";
     }
 
     const IconComponent = ICON_MAP[station.iconName] || Activity;
@@ -274,17 +274,17 @@ export default function PerformancePage() {
       let cta = "Auftragsliste filtern";
       
       if (s.key === "schleiferei") {
-        recommendation = "Schleiferei Ã¼berlastet. Zusatzschicht koordinieren oder SchleifvorgÃ¤nge aufteilen, um RÃ¼ckstau zu verringern.";
+        recommendation = "Schleiferei überlastet. Zusatzschicht koordinieren oder Schleifvorgänge aufteilen, um Rückstau zu verringern.";
       } else if (s.key === "beschichtung") {
-        recommendation = "Kritische GalvanikkapazitÃ¤t. Badzusatz-Buchungen oder Sperren/Freigaben auf der Leitkarte prÃ¼fen.";
+        recommendation = "Kritische Galvanikkapazität. Badzusatz-Buchungen oder Sperren/Freigaben auf der Leitkarte prüfen.";
         link = "/items";
-        cta = "Badregelkarte Ã¶ffnen";
+        cta = "Badregelkarte öffnen";
       } else if (s.key === "entmetallisierung") {
         recommendation = "Entmetallisierung unter Hochdruck. Chemiewerte und Badregelkarte kontrollieren.";
         link = "/items";
-        cta = "Chemiebestand prÃ¼fen";
+        cta = "Chemiebestand prüfen";
       } else {
-        recommendation = `ErhÃ¶hte Auslastung in Station ${s.name}. ÃœberprÃ¼fe die anstehenden Teile.`;
+        recommendation = `Erhöhte Auslastung in Station ${s.name}. Überprüfe die anstehenden Teile.`;
       }
       
       return {
@@ -322,24 +322,10 @@ export default function PerformancePage() {
   return (
     <div className="space-y-6 pb-12 font-sans max-w-6xl text-navy-900">
       
-      {/* Top Banner indicating Cockpit Active State */}
-      <div className="bg-gold-100 border border-navy-700 p-4 rounded-xl flex items-start gap-3 shadow-xs">
-        <AlertCircle className="h-5.5 w-5.5 text-navy-700 shrink-0 mt-0.5" />
-        <div>
-          <h5 className="font-extrabold text-sm text-navy-700 flex items-center gap-2">
-            Performance Monitor Cockpit <Badge className="bg-navy-900 text-white font-bold text-[9px] py-0 px-1.5 uppercase border-none">Aktiviert</Badge>
-          </h5>
-          <p className="text-xs text-navy-700 mt-1 leading-relaxed">
-            Dieses Cockpit berechnet die Werkstatteffizienz in Echtzeit basierend auf den AuftrÃ¤gen im LocalStorage und dem Status der BÃ¤der. Klicke auf die Heatmap-Kacheln, um betroffene Stationen direkt zu filtern.
-          </p>
-        </div>
-      </div>
-
       {/* Header Title */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-gray-300 pb-5">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-gray-300 pb-4">
         <div>
-          <h1 className="text-2xl font-black text-navy-900">Werkstatt-Performance & Analyse</h1>
-          <p className="text-text-muted text-sm mt-1">Echtzeitauswertungen von Durchlaufzeiten, KapazitÃ¤ten und QualitÃ¤tskennzahlen.</p>
+          <h1 className="text-xl md:text-2xl font-black text-navy-900">Werkstatt-Performance & Analyse</h1>
         </div>
         <select className="bg-white border-neutral-gray-300 border text-navy-900 text-sm rounded-md px-3 py-2 shadow-sm font-semibold h-11">
           <option>Diese Woche (KW 21)</option>
@@ -406,7 +392,7 @@ export default function PerformancePage() {
                   {scoreQualityLabel}
                 </Badge>
                 <p className="text-xs text-text-muted leading-relaxed max-w-[140px] mt-1 font-medium">
-                  Gewichteter Leistungsindex aus Termintreue, BÃ¤dern, Durchlaufzeit & QS.
+                  Gewichteter Leistungsindex aus Termintreue, Bädern, Durchlaufzeit & QS.
                 </p>
               </div>
             </div>
@@ -433,7 +419,7 @@ export default function PerformancePage() {
                   <span className="font-bold text-white">{Math.round(cycleScore)}% (+{Math.round(cycleScore * 0.20)} Pkt)</span>
                 </div>
                 <div className="flex justify-between py-1.5">
-                  <span>Kritische AuftrÃ¤ge (20% Gewicht)</span>
+                  <span>Kritische Aufträge (20% Gewicht)</span>
                   <span className="font-bold text-white">{Math.round(criticalScore)}% (+{Math.round(criticalScore * 0.20)} Pkt)</span>
                 </div>
                 <div className="flex justify-between py-1.5">
@@ -467,7 +453,7 @@ export default function PerformancePage() {
                   <div className="text-4xl font-black text-navy-900 leading-none mt-2">{Math.round(onTimeScore)} %</div>
                 </div>
                 <p className="text-[10px] text-text-muted font-semibold flex items-center justify-between">
-                  <span>Zielwert: &ge; 95% â€¢ PÃ¼nktlich freigegebene Teile</span>
+                  <span>Zielwert: &ge; 95% â€¢ Pünktlich freigegebene Teile</span>
                   <span className="text-[9px] text-navy-900 font-extrabold uppercase opacity-0 group-hover:opacity-100 transition-opacity">Filtern &rarr;</span>
                 </p>
               </CardContent>
@@ -503,7 +489,7 @@ export default function PerformancePage() {
                   <div className="text-4xl font-black text-accent-orange leading-none mt-2">{dynamicReklaQuote} %</div>
                 </div>
                 <p className="text-[10px] text-text-muted font-semibold flex items-center justify-between">
-                  <span>Zielwert: &le; 2.0% â€¢ Kritische VerzÃ¶gerungen</span>
+                  <span>Zielwert: &le; 2.0% â€¢ Kritische Verzögerungen</span>
                   <span className="text-[9px] text-navy-900 font-extrabold uppercase opacity-0 group-hover:opacity-100 transition-opacity">Kritische Filtern &rarr;</span>
                 </p>
               </CardContent>
@@ -537,11 +523,11 @@ export default function PerformancePage() {
         <CardHeader className="pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <CardTitle className="text-xl font-black text-navy-900 font-serif flex items-center gap-2">
-              <span>ðŸ“Š Finanzcontrolling & RentabilitÃ¤t</span>
+              <span>ðŸ“Š Finanzcontrolling & Rentabilität</span>
               <Badge className="bg-success-green text-white font-bold text-[9px] py-0.5 px-2 uppercase border-none">Live</Badge>
             </CardTitle>
             <CardDescription className="text-xs">
-              Echtzeit-Mittelwertkalkulation basierend auf abgeschlossenen AuftrÃ¤gen. Verschiebe die Regler, um Auswirkungen sofort zu simulieren.
+              Echtzeit-Mittelwertkalkulation basierend auf abgeschlossenen Aufträgen. Verschiebe die Regler, um Auswirkungen sofort zu simulieren.
             </CardDescription>
           </div>
           <button 
@@ -565,9 +551,9 @@ export default function PerformancePage() {
                 max="200" 
                 value={hourlyRate} 
                 onChange={(e) => setHourlyRate(parseInt(e.target.value))}
-                className="w-full h-2 bg-neutral-gray-100 rounded-lg appearance-none cursor-pointer accent-blue-900"
+                className="w-full h-2 bg-neutral-gray-100 rounded-lg appearance-none cursor-pointer accent-blue-900 touch-pan-y"
               />
-              <span className="text-[10px] text-text-muted font-semibold block">Berechnungsbasis fÃ¼r KundenauftrÃ¤ge und Lohnkostenanteile (Standard: 95 â‚¬)</span>
+              <span className="text-[10px] text-text-muted font-semibold block">Berechnungsbasis für Kundenaufträge und Lohnkostenanteile (Standard: 95 â‚¬)</span>
             </div>
 
             <div className="space-y-2">
@@ -582,9 +568,9 @@ export default function PerformancePage() {
                 step="250"
                 value={fixedCosts} 
                 onChange={(e) => setFixedCosts(parseInt(e.target.value))}
-                className="w-full h-2 bg-neutral-gray-100 rounded-lg appearance-none cursor-pointer accent-blue-900"
+                className="w-full h-2 bg-neutral-gray-100 rounded-lg appearance-none cursor-pointer accent-blue-900 touch-pan-y"
               />
-              <span className="text-[10px] text-text-muted font-semibold block">Gemeinkosten, Badchemie-Grundbeladung, Mieten und GehÃ¤lter (Standard: 2500 â‚¬)</span>
+              <span className="text-[10px] text-text-muted font-semibold block">Gemeinkosten, Badchemie-Grundbeladung, Mieten und Gehälter (Standard: 2500 â‚¬)</span>
             </div>
           </div>
 
@@ -605,7 +591,7 @@ export default function PerformancePage() {
             return (
               <>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Link href="/finances?view=revenue" className="block group hover:scale-[1.02] transition-transform">
+                  <Link href="?metric=revenue" className="block group hover:scale-[1.02] transition-transform">
                     <div className="bg-bg-app-soft border border-neutral-gray-300 rounded-2xl p-4 flex flex-col justify-between h-[125px] group-hover:border-white/30">
                       <div>
                         <span className="text-[9px] uppercase font-black text-text-muted tracking-widest block group-hover:text-navy-700">Umsatz Netto</span>
@@ -617,7 +603,7 @@ export default function PerformancePage() {
                     </div>
                   </Link>
 
-                  <Link href="/finances?view=costs" className="block group hover:scale-[1.02] transition-transform">
+                  <Link href="?metric=costs" className="block group hover:scale-[1.02] transition-transform">
                     <div className="bg-bg-app-soft border border-neutral-gray-300 rounded-2xl p-4 flex flex-col justify-between h-[125px] group-hover:border-accent-orange">
                       <div>
                         <span className="text-[9px] uppercase font-black text-text-muted tracking-widest block group-hover:text-accent-orange">Lohn- & Materialkosten</span>
@@ -630,7 +616,7 @@ export default function PerformancePage() {
                     </div>
                   </Link>
 
-                  <Link href="/finances?view=margin" className="block group hover:scale-[1.02] transition-transform">
+                  <Link href="?metric=margin" className="block group hover:scale-[1.02] transition-transform">
                     <div className="bg-bg-app-soft border border-neutral-gray-300 rounded-2xl p-4 flex flex-col justify-between h-[125px] relative overflow-hidden group-hover:border-success-green">
                       <div className="absolute top-0 right-0 h-1.5 w-full bg-success-green-soft0"></div>
                       <div>
@@ -643,7 +629,7 @@ export default function PerformancePage() {
                     </div>
                   </Link>
 
-                  <Link href="/finances?view=profit" className="block group hover:scale-[1.02] transition-transform">
+                  <Link href="?metric=profit" className="block group hover:scale-[1.02] transition-transform">
                     <div className={`border rounded-2xl p-4 flex flex-col justify-between h-[125px] relative overflow-hidden group-hover:border-navy-700 ${estimatedProfitNet >= 0 ? "bg-success-green-soft/50 border-success-green" : "bg-accent-orange-soft/50 border-danger-red"}`}>
                       <div className={`absolute top-0 right-0 h-1.5 w-full ${estimatedProfitNet >= 0 ? "bg-success-green-soft0" : "bg-accent-orange-soft0"}`}></div>
                       <div>
@@ -660,7 +646,7 @@ export default function PerformancePage() {
 
                 {/* Additional Row: Forecast & Business Advice */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4 border-neutral-gray-100">
-                  <Link href="/finances?view=forecast" className="block group hover:scale-[1.01] transition-transform">
+                  <Link href="?metric=forecast" className="block group hover:scale-[1.01] transition-transform">
                     <div className="flex items-center gap-4 bg-gold-100/40 p-4 rounded-xl border border-neutral-gray-100 group-hover:border-navy-700">
                       <div className="text-center bg-navy-900 text-white rounded-lg p-2 shrink-0">
                         <span className="text-[9px] font-bold uppercase tracking-widest block font-mono">Forecast</span>
@@ -679,7 +665,7 @@ export default function PerformancePage() {
                     <Info className="h-4.5 w-4.5 text-navy-900 shrink-0" />
                     <p className="text-text-muted leading-relaxed font-semibold">
                       <strong>Analyse:</strong> Der aktuelle Deckungsbeitrag ist stabil bei ca. <strong>{revenueNet > 0 ? Math.round((contributionMarginNet / revenueNet) * 100) : 0}%</strong>. 
-                      Eine ErhÃ¶hung des Verrechnungssatzes um 10 â‚¬ steigert den geschÃ¤tzten Gewinn bei gleichem Durchsatz direkt um <strong>{(completedOrders * 2.5 * 10).toFixed(0)} â‚¬</strong>.
+                      Eine Erhöhung des Verrechnungssatzes um 10 â‚¬ steigert den geschätzten Gewinn bei gleichem Durchsatz direkt um <strong>{(completedOrders * 2.5 * 10).toFixed(0)} â‚¬</strong>.
                     </p>
                   </div>
                 </div>
@@ -708,11 +694,11 @@ export default function PerformancePage() {
                   </div>
                   <h5 className="font-extrabold text-sm text-navy-900 mt-2 font-serif">{bath.name}</h5>
                   <p className="text-text-muted mt-1 font-semibold leading-relaxed">
-                    Sperrung wegen GrenzwertÃ¼berschreitung. ({bath.notes || "Temperatur / pH-Wert auÃŸerhalb Toleranz"}).
+                    Sperrung wegen Grenzwertüberschreitung. ({bath.notes || "Temperatur / pH-Wert außerhalb Toleranz"}).
                   </p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-neutral-gray-100 flex items-center justify-between">
-                  <span className="text-[10px] text-text-muted font-extrabold uppercase">Empfehlung: Heizung/Zusatz prÃ¼fen</span>
+                  <span className="text-[10px] text-text-muted font-extrabold uppercase">Empfehlung: Heizung/Zusatz prüfen</span>
                   <Link href="/items" className="text-danger-red font-black flex items-center gap-0.5 hover:underline">
                     Badregelkarte <ChevronRight className="h-3.5 w-3.5" />
                   </Link>
@@ -750,7 +736,7 @@ export default function PerformancePage() {
         <CardHeader className="pb-4">
           <CardTitle className="text-lg font-bold text-navy-900 font-serif">Analytische Werkstatt-Heatmap & Durchsatz</CardTitle>
           <CardDescription className="text-xs">
-            Chronologischer Produktionsdurchlauf (1 bis 5). Klicke auf eine Station, um die zugehÃ¶rigen AuftrÃ¤ge zu filtern und zu steuern.
+            Chronologischer Produktionsdurchlauf (1 bis 5). Klicke auf eine Station, um die zugehörigen Aufträge zu filtern und zu steuern.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -809,9 +795,9 @@ export default function PerformancePage() {
           </div>
 
           <div className="mt-4 flex items-center justify-between text-[9px] font-bold text-text-muted border-t pt-3 px-1 uppercase tracking-wider">
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-accent-orange-soft0 rounded-sm"></span> Engpass / Ãœberlast</span>
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-gold-1000 rounded-sm"></span> ErhÃ¶htes Volumen</span>
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-gold-1000 rounded-sm"></span> RegulÃ¤rer Betrieb</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-accent-orange-soft0 rounded-sm"></span> Engpass / Überlast</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-gold-1000 rounded-sm"></span> Erhöhtes Volumen</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-gold-1000 rounded-sm"></span> Regulärer Betrieb</span>
             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-success-green-soft0 rounded-sm"></span> Optimal / Leerlauf</span>
           </div>
         </CardContent>
