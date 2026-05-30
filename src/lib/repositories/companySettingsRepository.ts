@@ -18,6 +18,12 @@ export interface CompanySettings {
   bankName: string;
   taxId: string;
   logoUrl: string;
+  emailGreeting: string;
+  emailPickupInfo: string;
+  emailPaymentInfo: string;
+  emailAgbText: string;
+  emailFooter: string;
+  emailAdditionalNotes: string;
 }
 
 const DEFAULT_SETTINGS: CompanySettings = {
@@ -35,6 +41,12 @@ const DEFAULT_SETTINGS: CompanySettings = {
   bankName: "Musterbank",
   taxId: "DE123456789",
   logoUrl: "/assets/logo/kreile-wordmark-skyline.svg",
+  emailGreeting: "Sehr geehrte Damen und Herren,",
+  emailPickupInfo: "Ihr Auftrag ist fertig und kann abgeholt werden.",
+  emailPaymentInfo: "Bitte ueberweisen Sie den Rechnungsbetrag unter Angabe der Auftragsnummer.",
+  emailAgbText: "",
+  emailFooter: "Mit freundlichen Gruessen, Ihr Team von Galvanik Kreile",
+  emailAdditionalNotes: "",
 };
 
 export const companySettingsRepository = {
@@ -75,7 +87,13 @@ export const companySettingsRepository = {
         bic: data.bic,
         bankName: data.bank_name,
         taxId: data.tax_id,
-        logoUrl: data.logo_url
+        logoUrl: data.logo_url,
+        emailGreeting: data.email_greeting,
+        emailPickupInfo: data.email_pickup_info,
+        emailPaymentInfo: data.email_payment_info,
+        emailAgbText: data.email_agb_text,
+        emailFooter: data.email_footer,
+        emailAdditionalNotes: data.email_additional_notes
       } : DEFAULT_SETTINGS;
 
       if (typeof window !== "undefined") {
@@ -117,6 +135,12 @@ export const companySettingsRepository = {
       bank_name: merged.bankName,
       tax_id: merged.taxId,
       logo_url: merged.logoUrl,
+      email_greeting: merged.emailGreeting,
+      email_pickup_info: merged.emailPickupInfo,
+      email_payment_info: merged.emailPaymentInfo,
+      email_agb_text: merged.emailAgbText,
+      email_footer: merged.emailFooter,
+      email_additional_notes: merged.emailAdditionalNotes,
       updated_at: new Date().toISOString()
     };
 

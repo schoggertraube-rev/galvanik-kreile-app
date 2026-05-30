@@ -236,5 +236,11 @@ export const companySettingsTable = pgTable("company_settings", {
   bankName: text("bank_name").default(""),
   taxId: text("tax_id").default(""),
   logoUrl: text("logo_url").default("/logo.png"),
+  emailGreeting: text("email_greeting").default("Sehr geehrte Damen und Herren,"),
+  emailPickupInfo: text("email_pickup_info").default("Ihr Auftrag ist fertig und kann abgeholt werden."),
+  emailPaymentInfo: text("email_payment_info").default("Bitte ueberweisen Sie den Rechnungsbetrag unter Angabe der Auftragsnummer."),
+  emailAgbText: text("email_agb_text").default(""),
+  emailFooter: text("email_footer").default("Mit freundlichen Gruessen, Ihr Team von Galvanik Kreile"),
+  emailAdditionalNotes: text("email_additional_notes").default(""),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

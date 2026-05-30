@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { getCompanySettings, updateCompanySettings } from "@/app/actions/company.actions";
 import { CompanySettings } from "@/lib/repositories/companySettingsRepository";
-import { Loader2, Save, Upload, Building2 } from "lucide-react";
+import { Loader2, Save, Upload, Building2, Mail } from "lucide-react";
 
 export function CompanySettingsForm() {
   const [loading, setLoading] = useState(true);
@@ -25,7 +25,7 @@ export function CompanySettingsForm() {
     load();
   }, []);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => prev ? { ...prev, [name]: value } : null);
   };
@@ -183,6 +183,65 @@ export function CompanySettingsForm() {
             <div>
               <label className="block text-xs font-bold text-navy-900 uppercase tracking-wider mb-1">BIC</label>
               <input name="bic" value={formData.bic} onChange={handleChange} className="w-full border-2 border-neutral-gray-200 rounded-xl px-4 py-2 text-sm focus:border-navy-500 focus:outline-none font-mono" />
+            </div>
+          </div>
+          
+          <div className="md:col-span-2 space-y-6 mt-8">
+            <h3 className="font-bold text-navy-900 border-b border-neutral-gray-100 pb-2 flex items-center gap-2">
+              <Mail className="w-5 h-5" />
+              E-Mail-Vorlagen (Versand)
+            </h3>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 uppercase tracking-wider mb-1">Anrede</label>
+                  <input name="emailGreeting" value={formData.emailGreeting || ""} onChange={handleChange} className="w-full border-2 border-neutral-gray-200 rounded-xl px-4 py-2 text-sm focus:border-navy-500 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 uppercase tracking-wider mb-1">Abholhinweis</label>
+                  <textarea name="emailPickupInfo" value={formData.emailPickupInfo || ""} onChange={handleChange} rows={2} className="w-full border-2 border-neutral-gray-200 rounded-xl px-4 py-2 text-sm focus:border-navy-500 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 uppercase tracking-wider mb-1">Zahlungshinweis</label>
+                  <textarea name="emailPaymentInfo" value={formData.emailPaymentInfo || ""} onChange={handleChange} rows={2} className="w-full border-2 border-neutral-gray-200 rounded-xl px-4 py-2 text-sm focus:border-navy-500 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 uppercase tracking-wider mb-1">AGB-Text</label>
+                  <textarea name="emailAgbText" value={formData.emailAgbText || ""} onChange={handleChange} rows={2} className="w-full border-2 border-neutral-gray-200 rounded-xl px-4 py-2 text-sm focus:border-navy-500 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 uppercase tracking-wider mb-1">Zusätzliche Hinweise</label>
+                  <textarea name="emailAdditionalNotes" value={formData.emailAdditionalNotes || ""} onChange={handleChange} rows={2} className="w-full border-2 border-neutral-gray-200 rounded-xl px-4 py-2 text-sm focus:border-navy-500 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-navy-900 uppercase tracking-wider mb-1">Signatur / Footer</label>
+                  <textarea name="emailFooter" value={formData.emailFooter || ""} onChange={handleChange} rows={3} className="w-full border-2 border-neutral-gray-200 rounded-xl px-4 py-2 text-sm focus:border-navy-500 focus:outline-none" />
+                </div>
+              </div>
+              
+              <div className="bg-neutral-gray-50 p-6 rounded-2xl border border-neutral-gray-200">
+                <h4 className="text-sm font-bold text-navy-900 mb-4 uppercase tracking-wider">Live Vorschau</h4>
+                <div className="bg-white p-6 rounded-xl border border-neutral-gray-200 text-sm text-gray-800 space-y-4 shadow-sm">
+                  <p>{formData.emailGreeting || "Sehr geehrte Damen und Herren,"}</p>
+                  <p>{formData.emailPickupInfo || "Ihr Auftrag ist fertig und kann abgeholt werden."}</p>
+                  <div className="bg-gray-50 border-l-4 border-navy-900 p-3 my-4">
+                    <strong>Auftragsdetails:</strong><br/>
+                    Auftragsnummer: A-202600-0001<br/>
+                    Artikel: 1x Musterteil
+                  </div>
+                  {formData.emailPaymentInfo && <p>{formData.emailPaymentInfo}</p>}
+                  {formData.emailAdditionalNotes && <p>{formData.emailAdditionalNotes}</p>}
+                  <p className="whitespace-pre-wrap mt-6">{formData.emailFooter || "Mit freundlichen Grüßen,\nIhr Team"}</p>
+                  <hr className="my-4 border-gray-200" />
+                  <div className="text-xs text-gray-500">
+                    <strong>{formData.companyName}</strong><br/>
+                    {formData.street}, {formData.zip} {formData.city}<br/>
+                    {formData.website}<br/><br/>
+                    {formData.emailAgbText}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
           
