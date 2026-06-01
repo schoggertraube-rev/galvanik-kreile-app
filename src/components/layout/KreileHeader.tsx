@@ -11,6 +11,7 @@ import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { logout } from "@/app/actions/auth";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { getCompanySettings } from "@/app/actions/company.actions";
 
 interface KreileHeaderProps {
@@ -201,6 +202,10 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-danger-red rounded-full text-[9px] text-white font-black flex items-center justify-center">
             3
           </span>
+        </div>
+        {/* Theme Switcher (Desktop & Mobile) */}
+        <div className="ml-2">
+          <ThemeToggle />
         </div>
 
         {/* Profilbild rund (Kreis 48px) */}
