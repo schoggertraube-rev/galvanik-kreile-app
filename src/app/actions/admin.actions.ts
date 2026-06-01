@@ -4,7 +4,7 @@ import { db } from '@/db'
 import { appUsers, featureFlags, importJobs, importJobRows } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 import { createClient } from '@supabase/supabase-js'
-import { requireRole } from '@/lib/auth/roles'
+import { requireAdminOrDeveloper } from '@/lib/auth/permissions'
 
 // Admin client using Service Role Key (MUST ONLY BE USED IN SERVER ACTIONS)
 const getAdminSupabase = () => {
@@ -26,13 +26,13 @@ const getAdminSupabase = () => {
 // ── Users ──────────────────────────────────────────────────────────────
 
 export async function getUsers() {
-  await requireRole(['developer']);
+  await requireAdminOrDeveloper();
   const users = await db.select().from(appUsers)
   return users
 }
 
 export async function createUser(data: { email: string, fullName: string, role: string, location?: string, language?: string }) {
-  await requireRole(['developer']);
+  await requireAdminOrDeveloper();
   const supabase = getAdminSupabase()
   
   // 1. Create user in Supabase Auth
@@ -70,13 +70,13 @@ export async function createUser(data: { email: string, fullName: string, role: 
 }
 
 export async function updateUserRole(userId: string, newRole: string) {
-  await requireRole(['developer']);
+  await requireAdminOrDeveloper();
   await db.update(appUsers).set({ role: newRole }).where(eq(appUsers.id, userId))
   return { success: true }
 }
 
 export async function toggleUserStatus(userId: string, active: boolean) {
-  await requireRole(['developer']);
+  await requireAdminOrDeveloper();
   await db.update(appUsers).set({ active }).where(eq(appUsers.id, userId))
   return { success: true }
 }
@@ -84,18 +84,18 @@ export async function toggleUserStatus(userId: string, active: boolean) {
 // ── Feature Flags ───────────────────────────────────────────────────────
 
 export async function getFeatureFlags() {
-  await requireRole(['developer']);
+  await requireAdminOrDeveloper();
   return await db.select().from(featureFlags)
 }
 
 export async function toggleFeatureFlag(id: string, enabled: boolean) {
-  await requireRole(['developer']);
+  await requireAdminOrDeveloper();
   await db.update(featureFlags).set({ enabled }).where(eq(featureFlags.id, id))
   return { success: true }
 }
 
 export async function initializeDefaultFlags() {
-  await requireRole(['developer']);
+  await requireAdminOrDeveloper();
   const defaults = [
     { id: 'module_performance', name: 'Performance Dashboard', description: 'Erweiterte Statistiken', enabled: true },
     { id: 'module_archiv', name: 'Archiv', description: 'Zugriff auf abgeschlossene Aufträge', enabled: true },

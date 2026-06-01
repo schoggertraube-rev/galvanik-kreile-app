@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 
+import { getCurrentRole } from '@/lib/auth/roles'
+
 export async function login(formData: FormData) {
   const supabase = await createClient()
 
@@ -18,8 +20,15 @@ export async function login(formData: FormData) {
     redirect('/start?message=E-Mail oder Passwort falsch')
   }
 
+  // Security Check: Is this an Admin/Developer?
+  const role = await getCurrentRole()
+  if (role !== 'admin' && role !== 'developer') {
+    await supabase.auth.signOut()
+    redirect('/start?message=Dieser Login ist Administratoren vorbehalten. Bitte nutzen Sie den PIN-Login.')
+  }
+
   revalidatePath('/', 'layout')
-  redirect('/')
+  redirect('/admin')
 }
 
 export async function logout() {

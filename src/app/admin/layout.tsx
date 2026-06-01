@@ -1,9 +1,9 @@
-import { requireRole } from "@/lib/auth/roles";
+import { requireAdminOrDeveloper } from "@/lib/auth/permissions";
 import { ReactNode } from "react";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
-  // Only developers can access any /admin routes
-  await requireRole(["developer"]);
+  // Only admins or developers can access any /admin routes
+  await requireAdminOrDeveloper();
 
   return (
     <>

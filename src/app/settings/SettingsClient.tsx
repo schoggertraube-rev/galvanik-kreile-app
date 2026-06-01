@@ -13,7 +13,7 @@ import { Server, Users, Shield, Power, Database, Settings, Building2 } from "luc
 
 type Tab = "status" | "company" | "users" | "roles" | "features" | "import" | "system";
 
-export function SettingsClient({ isDeveloper }: { isDeveloper: boolean }) {
+export function SettingsClient({ isAdmin }: { isAdmin: boolean }) {
   usePageView();
   const [activeTab, setActiveTab] = useState<Tab>("status");
 
@@ -26,10 +26,10 @@ export function SettingsClient({ isDeveloper }: { isDeveloper: boolean }) {
 
       <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide border-b border-neutral-gray-200">
         <TabButton active={activeTab === "status"} onClick={() => setActiveTab("status")} icon={<Server />} label="Status & Diagnose" />
-        <TabButton active={activeTab === "company"} onClick={() => setActiveTab("company")} icon={<Building2 />} label="Firmendaten" />
         
-        {isDeveloper && (
+        {isAdmin && (
           <>
+            <TabButton active={activeTab === "company"} onClick={() => setActiveTab("company")} icon={<Building2 />} label="Firmendaten" />
             <TabButton active={activeTab === "users"} onClick={() => setActiveTab("users")} icon={<Users />} label="Benutzer" />
             <TabButton active={activeTab === "roles"} onClick={() => setActiveTab("roles")} icon={<Shield />} label="Rollen & Rechte" />
             <TabButton active={activeTab === "features"} onClick={() => setActiveTab("features")} icon={<Power />} label="Feature-Toggles" />
@@ -41,10 +41,10 @@ export function SettingsClient({ isDeveloper }: { isDeveloper: boolean }) {
 
       <div className="pt-2">
         {activeTab === "status" && <AdminDashboard />}
-        {activeTab === "company" && <CompanySettingsForm />}
         
-        {isDeveloper && (
+        {isAdmin && (
           <>
+            {activeTab === "company" && <CompanySettingsForm />}
             {activeTab === "users" && <UserManagement />}
             {activeTab === "roles" && <RoleMatrix />}
             {activeTab === "features" && <FeatureToggles />}
