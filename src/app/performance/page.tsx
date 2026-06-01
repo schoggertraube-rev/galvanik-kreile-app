@@ -1,933 +1,451 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
+import React, { useState, useEffect } from 'react';
 import { 
-  CheckCircle2, 
-  Clock, 
-  MessageSquareWarning, 
-  Camera, 
-  AlertCircle, 
-  TrendingUp, 
-  TrendingDown,
-  Flame, 
-  ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  Box,
-  Layers,
-  Disc,
-  Droplets,
-  Truck,
-  Activity,
-  Info
-} from "lucide-react";
-import { INITIAL_ORDERS, MockOrder } from "@/lib/mockData";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
-import { getAllStations } from "@/constants/stations";
-import { bathsRepository, Bath } from "@/lib/repositories/bathsRepository";
-import { calculateWorkshopHealthScore } from "@/lib/performance/score";
-import { TrackingOverview } from "@/components/analytics/TrackingOverview";
+  Moon, Sun, Clock, Coins, Activity, Target, Sparkles, 
+  TrendingUp, AlertTriangle, FlaskConical, UserPlus, Download, 
+  Lock, Unlock, Building, FileSpreadsheet, FileText, LineChart, 
+  Receipt, PiggyBank, Camera, ChevronRight 
+} from 'lucide-react';
 
-// Mapping string names to Lucide icons
-const ICON_MAP: Record<string, React.ElementType> = {
-  Camera: Camera,
-  Box: Box,
-  Layers: Layers,
-  Disc: Disc,
-  Droplets: Droplets,
-  Truck: Truck
-};
+export default function PerformanceCockpit() {
+  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [tab, setTab] = useState('Monat');
+  const [yoy, setYoy] = useState(true);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [metalExpOpen, setMetalExpOpen] = useState(false);
+  const [fkpOpen, setFkpOpen] = useState(false);
 
-export default function PerformancePage() {
-  const [orders, setOrders] = useState<MockOrder[]>([]);
-  const [baths, setBaths] = useState<Bath[]>([]);
-  const [healthData, setHealthData] = useState<{score: number; details: Record<string, number>} | null>(null);
-  const [showFormulaDetails, setShowFormulaDetails] = useState(false);
-  const [hourlyRate, setHourlyRate] = useState(95);
-  const [fixedCosts, setFixedCosts] = useState(2500);
+  const [rate, setRate] = useState(95);
+  const [fix, setFix] = useState(2500);
+  const [rateLocked, setRateLocked] = useState(true);
+  const [fixLocked, setFixLocked] = useState(true);
 
-  const exportCSV = () => {
-    const headers = ["Monat", "Auftragsnummer", "Kundennummer", "Kundenname", "Leistung", "Netto-Umsatz (EUR)", "Lohnkosten (EUR)", "Materialkosten (EUR)", "Deckungsbeitrag (EUR)", "Status"];
-    const dataRows = orders.map(o => {
-      const isDone = o.status === "completed" || o.status === "shipped";
-      const rev = isDone ? 450 : 0;
-      const mat = isDone ? 65 : 12;
-      const labor = isDone ? 2.5 * hourlyRate : 0;
-      const db = rev - (mat + labor);
-      return [
-        "2026-05",
-        o.orderNumber,
-        o.customerId || "K-000100",
-        o.customerName || "Unbekannt",
-        o.task,
-        rev.toFixed(2),
-        labor.toFixed(2),
-        mat.toFixed(2),
-        db.toFixed(2),
-        o.status
-      ];
-    });
-    
-    const csvContent = [
-      headers.join(";"),
-      ...dataRows.map(row => row.map(val => `"${(val ?? "").toString().replace(/"/g, '""')}"`).join(";"))
-    ].join("\n");
-    
-    const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.setAttribute("href", url);
-    link.setAttribute("download", `kreile_buchhaltungsexport_${new Date().toISOString().slice(0, 10)}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+  // Calculate live values
+  const rev = Math.round(rate * 446.105);
+  const db = Math.round(rev * 0.279);
+  const profit = db - fix;
 
+  // Persist theme locally
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        const dbOrders = await ordersRepository.getAll();
-        if (dbOrders && dbOrders.length > 0) {
-          setOrders(dbOrders as unknown as MockOrder[]);
-        } else {
-          setOrders(INITIAL_ORDERS);
-        }
-
-        const loadedBaths = await bathsRepository.getAllBaths();
-        setBaths(loadedBaths);
-        
-        const health = await calculateWorkshopHealthScore();
-        setHealthData(health);
-      } catch (e) {
-        console.error("Fehler beim Laden der Performance-Daten", e);
-      }
-    };
-
-    loadData();
-
-    const handleStorageChange = () => {
-      loadData();
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
+    const saved = localStorage.getItem('performanceTheme');
+    if (saved === 'dark' || saved === 'light') {
+      setTheme(saved);
+    }
   }, []);
 
-  // Helper to count parts at a given station
-  const getPartsCountForStation = (stationKey: string) => {
-    return orders
-      .filter(o => o.station === stationKey)
-      .reduce((sum, o) => sum + o.parts.length, 0);
+  const toggleTheme = (t: 'dark' | 'light') => {
+    setTheme(t);
+    localStorage.setItem('performanceTheme', t);
   };
 
-  // Helper mathematical clamp
-  const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
-
-  // 1. Dynamic Key Performance Indicators
-  const greenCount = orders.filter(o => o.risk === "green").length;
-  const totalCount = orders.length || 1;
-  const rawOnTimeRate = greenCount / totalCount;
-  
-  // Normalized on-time delivery score (0-100)
-  const onTimeScore = clamp(rawOnTimeRate * 100, 0, 100);
-
-  // Average throughput calculation based on current bottlenecks
-  const totalDelayParts = orders
-    .filter(o => o.risk !== "green")
-    .reduce((sum, o) => sum + o.parts.length, 0);
-  
-  const baseDurchlaufzeit = 3.2; // base days
-  const dynamicDurchlaufzeit = parseFloat((baseDurchlaufzeit + (totalDelayParts * 0.15)).toFixed(1));
-  
-  // Cycle Index target is 4.0 days
-  const avgCycleTimeIndex = dynamicDurchlaufzeit / 4.0;
-  const cycleScore = clamp(100 - (avgCycleTimeIndex - 1) * 50, 0, 100);
-
-  // Blocker / Escalation candidates count
-  const criticalOrders = orders.filter(o => o.risk === "red" || o.risk === "orange").length;
-  const criticalScore = clamp(100 - criticalOrders * 15, 0, 100);
-
-  // Complaint rate (Fehlerquote)
-  const dynamicReklaQuote = parseFloat((1.2 + (criticalOrders * 0.1)).toFixed(1));
-  const complaintsScore = clamp(100 - (dynamicReklaQuote / 100) * 100, 0, 100);
-
-  // Scan & Documentation Rates (mocked but slightly adjusted based on backlog)
-  const scanRate = clamp(0.88 + (greenCount * 0.005) - (criticalOrders * 0.01), 0.5, 0.99);
-  const documentationRate = clamp(0.92 + (greenCount * 0.003) - (criticalOrders * 0.005), 0.5, 0.99);
-  const docsScore = clamp(((scanRate + documentationRate) / 2) * 100, 0, 100);
-
-  // 2. Calculations for the 5 shopfloor steps
-  const heatmapStations = getAllStations().map(station => {
-    const partsWaiting = getPartsCountForStation(station.key);
-    
-    // Determine dynamic workload percentage
-    let load = station.standardLoad;
-    if (partsWaiting === 0) {
-      load = 15;
-    } else {
-      load = Math.min(95, Math.max(30, partsWaiting * 15));
-    }
-
-    // Dynamic processing time based on load
-    let baseTime = 0.5;
-    if (station.key === "wareneingang") baseTime = 0.4;
-    else if (station.key === "entmetallisierung") baseTime = 1.1;
-    else if (station.key === "schleiferei") baseTime = 1.8;
-    else if (station.key === "beschichtung") baseTime = 2.3;
-    else if (station.key === "warenausgang") baseTime = 0.4;
-
-    const dynamicTime = (baseTime + (partsWaiting * 0.15)).toFixed(1);
-
-    // Blocker status and visual styling
-    let colorClass = "border-success-green bg-success-green-soft/50 text-success-green hover:bg-success-green-soft/50";
-    let badgeColor = "bg-success-green text-success-green";
-    let trendIcon = <TrendingDown className="h-3.5 w-3.5 text-success-green shrink-0" />;
-    let trendLabel = "Stabil / Optimal";
-
-    if (load >= 90) {
-      colorClass = "border-danger-red bg-accent-orange-soft/50 text-danger-red hover:bg-accent-orange-soft/50 animate-pulse";
-      badgeColor = "bg-danger-red text-danger-red border-danger-red";
-      trendIcon = <TrendingUp className="h-3.5 w-3.5 text-danger-red shrink-0" />;
-      trendLabel = "Kritischer Stau";
-    } else if (load >= 75) {
-      colorClass = "border-accent-orange bg-gold-100/10 text-accent-orange hover:bg-gold-100/20";
-      badgeColor = "bg-orange-100 text-accent-orange border-accent-orange";
-      trendIcon = <TrendingUp className="h-3.5 w-3.5 text-accent-orange shrink-0" />;
-      trendLabel = "Erhöhtes Volumen";
-    } else if (load >= 45) {
-      colorClass = "border-yellow-250 bg-gold-100/10 text-yellow-950 hover:bg-gold-100/20";
-      badgeColor = "bg-yellow-100 text-yellow-800 border-yellow-200";
-      trendIcon = <Activity className="h-3.5 w-3.5 text-yellow-600 shrink-0" />;
-      trendLabel = "Regulär";
-    }
-
-    const IconComponent = ICON_MAP[station.iconName] || Activity;
-
-    return {
-      key: station.key,
-      name: station.name,
-      fullName: station.fullName,
-      stepNumber: station.stepNumber,
-      load,
-      partsWaiting,
-      throughputTime: dynamicTime,
-      colorClass,
-      badgeColor,
-      trendIcon,
-      trendLabel,
-      action: station.action,
-      IconComponent
-    };
-  });
-
-  // Calculate Station Health Index dynamically
-  const hasCriticalBath = baths.some(b => b.status === "critical");
-  
-  const stationHealthIndex = heatmapStations.reduce((acc, station) => {
-    let stationHealth = 1.0;
-    if (station.load >= 90) stationHealth = 0.2;
-    else if (station.load >= 75) stationHealth = 0.6;
-    else if (station.load >= 45) stationHealth = 0.9;
-    
-    // Penalize beschichtung if a bath is critical
-    if (station.key === "beschichtung" && hasCriticalBath) {
-      stationHealth = Math.max(0.1, stationHealth - 0.3);
-    }
-    
-    return acc + stationHealth;
-  }, 0) / heatmapStations.length;
-
-  const stationsScore = clamp(stationHealthIndex * 100, 0, 100);
-
-  // 3. Overall Master Performance Score (§12)
-  const masterScore = healthData?.score || 0;
-
-  // Qualifying the calculated score
-  let scoreQualityLabel = "Gute Performance";
-  let scoreQualityColor = "text-gold-600";
-  let scoreQualityBg = "border-gold-600/30 bg-gold-1000/10";
-  
-  if (masterScore >= 85) {
-    scoreQualityLabel = "Exzellente Werkstattleistung";
-    scoreQualityColor = "text-success-green";
-    scoreQualityBg = "border-success-green/30 bg-success-green-soft/50";
-  } else if (masterScore < 70) {
-    scoreQualityLabel = "Kritischer Handlungsbedarf";
-    scoreQualityColor = "text-danger-red";
-    scoreQualityBg = "border-danger-red/30 bg-accent-orange-soft/50";
-  }
-
-  // Circular gauge setup
-  const radius = 50;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (masterScore / 100) * circumference;
-
-  // Active dynamic bottleneck alert lists
-  const bottleneckWarnings = heatmapStations
-    .filter(s => s.load >= 75)
-    .map(s => {
-      let recommendation = "";
-      let link = `/orders?station=${s.key}`;
-      let cta = "Auftragsliste filtern";
-      
-      if (s.key === "schleiferei") {
-        recommendation = "Schleiferei überlastet. Zusatzschicht koordinieren oder Schleifvorgänge aufteilen, um Rückstau zu verringern.";
-      } else if (s.key === "beschichtung") {
-        recommendation = "Kritische Galvanikkapazität. Badzusatz-Buchungen oder Sperren/Freigaben auf der Leitkarte prüfen.";
-        link = "/items";
-        cta = "Badregelkarte öffnen";
-      } else if (s.key === "entmetallisierung") {
-        recommendation = "Entmetallisierung unter Hochdruck. Chemiewerte und Badregelkarte kontrollieren.";
-        link = "/items";
-        cta = "Chemiebestand prüfen";
-      } else {
-        recommendation = `Erhöhte Auslastung in Station ${s.name}. Überprüfe die anstehenden Teile.`;
-      }
-      
-      return {
-        key: s.key,
-        name: s.name,
-        load: s.load,
-        partsWaiting: s.partsWaiting,
-        recommendation,
-        link,
-        cta
-      };
-    });
-
-  // Inject critical baths to recommendations if any
-  const criticalBathAlerts = baths.filter(b => b.status === "critical");
-
-  // â”€â”€ Finance Controlling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  const finCompletedCount = orders.filter(o => o.status === "completed" || o.status === "shipped").length;
-  const finActiveCount    = orders.filter(o => o.status !== "completed" && o.status !== "shipped" && o.status !== "cancelled").length;
-  const finRevenue  = finCompletedCount * 450;
-  const finMat      = finCompletedCount * 65 + finActiveCount * 12;
-  const finLabor    = finCompletedCount * 2.5 * hourlyRate;
-  const finDB       = finRevenue - (finMat + finLabor);
-  const finProfit   = finDB - fixedCosts;
-  const finForecast = finRevenue + finActiveCount * 420 * 0.7;
-  const finKpis = [
-    { label: "Umsatz",           value: finRevenue,   color: "text-success-green", bg: "bg-success-green-soft", border: "border-success-green", sign: "+" },
-    { label: "Materialkosten",   value: finMat,       color: "text-accent-orange",  bg: "bg-gold-100",  border: "border-accent-orange",  sign: "-" },
-    { label: "Lohnkosten",       value: finLabor,     color: "text-navy-700",    bg: "bg-gold-100",    border: "border-navy-700",    sign: "-" },
-    { label: "Deckungsbeitrag",  value: finDB,        color: finDB >= 0 ? "text-navy-900" : "text-danger-red",      bg: "bg-bg-app-soft",   border: "border-neutral-gray-300",   sign: finDB >= 0 ? "+" : "" },
-    { label: "Fixkosten / Monat",value: fixedCosts,   color: "text-purple-700",  bg: "bg-gold-100",  border: "border-purple-200",  sign: "-" },
-    { label: "Gewinn / Verlust", value: finProfit,    color: finProfit >= 0 ? "text-success-green" : "text-danger-red", bg: finProfit >= 0 ? "bg-success-green-soft" : "bg-accent-orange-soft", border: finProfit >= 0 ? "border-success-green" : "border-danger-red", sign: finProfit >= 0 ? "+" : "" },
-  ];
+  const fmt = (n: number) => n.toLocaleString('de-DE', { maximumFractionDigits: 0 });
 
   return (
-    <div className="space-y-6 pb-12 font-sans max-w-6xl text-navy-900">
-      
-      {/* Header Title */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-neutral-gray-300 pb-4">
-        <div>
-          <h1 className="text-xl md:text-2xl font-black text-navy-900">Werkstatt-Performance & Analyse</h1>
+    <div className={`ck ${theme === 'dark' ? 'dark' : ''} max-w-6xl mx-auto`} id="ck">
+      <style dangerouslySetInnerHTML={{__html: `
+        .ck { --bg:#F0EBE0; --surf:#fff; --surf2:#F9F6F1; --navy:#1A2847; --ink:#1A2847; --ink2:#5B6472; --ink3:#9CA3AF; --bd:rgba(26,40,71,.09); --pos:#16A34A; --neg:#DC2626; --warn:#C2730A; --info:#2563EB; --cyan:#0E7490; --purple:#6D28D9; --glass:rgba(255,255,255,.55); --posbg:rgba(22,163,74,.1); --negbg:rgba(220,38,38,.09); --warnbg:rgba(194,115,10,.1); --infobg:rgba(37,99,235,.09); --purpbg:rgba(109,40,217,.08); font-family: var(--font-sans), sans-serif; background: var(--bg); border-radius: 16px; padding: 16px; color: var(--ink); transition: background .3s; }
+        .ck.dark { --bg:#0E1626; --surf:#1A2436; --surf2:#222E42; --navy:#222E42; --ink:#EEF2F8; --ink2:#9FB0C7; --ink3:#6B7A91; --bd:rgba(255,255,255,.09); --pos:#34D399; --neg:#F87171; --warn:#FBBF24; --info:#60A5FA; --cyan:#22D3EE; --purple:#A78BFA; --glass:rgba(255,255,255,.05); --posbg:rgba(52,211,153,.12); --negbg:rgba(248,113,113,.12); --warnbg:rgba(251,191,36,.12); --infobg:rgba(96,165,250,.12); --purpbg:rgba(167,139,250,.12); }
+        .ck .bar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:0 0 12px; flex-wrap:wrap; }
+        .ck .tabs { display:flex; gap:2px; background:var(--surf2); border-radius:9px; padding:3px; }
+        .ck .tab { font-size:12px; padding:6px 12px; border-radius:7px; color:var(--ink2); cursor:pointer; transition:all .15s; border:none; background:none; font-family:inherit; }
+        .ck .tab.on { background:var(--surf); color:var(--ink); font-weight:600; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+        .ck.dark .tab.on { background:#324056; }
+        .ck .toolr { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .ck .themesw { display:flex; background:var(--surf2); border-radius:8px; padding:3px; gap:2px; }
+        .ck .tsw { font-size:12px; padding:6px 10px; border-radius:6px; border:none; background:none; color:var(--ink2); cursor:pointer; display:flex; align-items:center; gap:6px; font-family:inherit; }
+        .ck .tsw.on { background:var(--navy); color:#fff; font-weight:600; }
+        .ck.dark .tsw.on { background:#3B4A63; color:#fff; }
+        .ck .ytog { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--ink2); cursor:pointer; user-select:none; }
+        .ck .tp { width:32px; height:18px; background:var(--bd); border-radius:9px; position:relative; transition:.2s; flex-shrink:0; }
+        .ck .tp.on { background:var(--pos); }
+        .ck .tpd { width:14px; height:14px; background:#fff; border-radius:50%; position:absolute; top:2px; left:2px; transition:.2s; }
+        .ck .tp.on .tpd { transform:translateX(14px); }
+        .ck .tt { margin:0 0 16px; }
+        .ck .tt h1 { font-size:22px; font-weight:700; margin:0; }
+        .ck .tt .sub { font-size:13px; color:var(--ink2); margin-top:3px; }
+        .ck .tt .meta { font-size:12px; color:var(--ink3); }
+        .ck .glass { background:var(--glass); backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px); border:0.5px solid var(--bd); border-radius:13px; padding:14px 16px; margin:0 0 16px; display:flex; align-items:flex-start; gap:12px; cursor:pointer; transition:box-shadow .25s; }
+        .ck .glass:hover { box-shadow:0 6px 24px rgba(0,0,0,.1); }
+        .ck .gtag { background:var(--purple); color:#fff; font-size:10px; font-weight:600; padding:4px 8px; border-radius:6px; white-space:nowrap; flex-shrink:0; margin-top:2px; letter-spacing:.4px; }
+        .ck.dark .gtag { color:#0E1626; }
+        .ck .sec { font-size:12px; font-weight:600; color:var(--ink3); text-transform:uppercase; letter-spacing:.8px; margin:20px 0 12px; display:flex; align-items:center; gap:8px; }
+        .ck .topgrid { display:grid; grid-template-columns:auto 1fr; gap:12px; margin:0 0 10px; align-items:stretch; }
+        @media (max-width: 800px) { .ck .topgrid { grid-template-columns:1fr; } }
+        .ck .scbox { background:var(--navy); border-radius:14px; padding:18px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; min-width:140px; }
+        .ck .scl { font-size:10px; font-weight:600; color:rgba(255,255,255,.5); text-transform:uppercase; letter-spacing:.5px; }
+        .ck .rw { position:relative; width:90px; height:90px; }
+        .ck .rp { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:24px; font-weight:600; color:#fff; }
+        .ck .crit { background:rgba(248,113,113,.18); color:#FCA5A5; font-size:10px; font-weight:600; padding:4px 10px; border-radius:9px; text-align:center; }
+        .ck .detb { font-size:12px; color:rgba(255,255,255,.4); cursor:pointer; margin-top:4px; }
+        .ck .detb:hover { color:rgba(255,255,255,.8); }
+        .ck .k4 { display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:12px; }
+        .ck .card { background:var(--surf); border-radius:13px; padding:16px; cursor:pointer; transition:transform .22s,box-shadow .22s; border:0.5px solid var(--bd); position:relative; overflow:hidden; display:flex; flex-direction:column; justify-content:center; }
+        .ck .card:hover { transform:translateY(-3px); box-shadow:0 10px 26px rgba(0,0,0,.12); }
+        .ck .cl { font-size:12px; font-weight:600; color:var(--ink3); margin:0 0 6px; }
+        .ck .cv { font-size:24px; font-weight:700; line-height:1.15; }
+        .ck .csub { font-size:13px; color:var(--ink2); margin:4px 0 0; }
+        .ck .pos { color:var(--pos); } .ck .neg { color:var(--neg); } .ck .warn { color:var(--warn); } .ck .info { color:var(--info); } .ck .cy { color:var(--cyan); } .ck .pu { color:var(--purple); }
+        .ck .accL { border-left:4px solid; }
+        .ck .hero { background:linear-gradient(135deg,var(--navy),var(--navy)); border:0.5px solid var(--bd); position:relative; }
+        .ck .heroglow { position:absolute; inset:0; background:radial-gradient(circle at 80% 20%,rgba(251,191,36,.18),transparent 60%); pointer-events:none; }
+        .ck .stst { display:grid; grid-template-columns:1fr; gap:10px; }
+        .ck .strow { background:var(--surf); border:0.5px solid var(--bd); border-radius:11px; padding:14px 16px; cursor:pointer; transition:transform .2s,box-shadow .2s; display:grid; grid-template-columns:110px 1fr 50px; align-items:center; gap:14px; }
+        .ck .strow:hover { transform:translateX(2px); box-shadow:0 4px 14px rgba(0,0,0,.08); }
+        .ck .stn { font-size:14px; font-weight:600; }
+        .ck .stbar { height:8px; background:var(--bd); border-radius:4px; overflow:hidden; }
+        .ck .stf { height:100%; border-radius:4px; transition:width 1.1s cubic-bezier(.4,0,.2,1); }
+        .ck .stpct { font-size:14px; font-weight:600; text-align:right; }
+        .ck .chartcard { background:var(--surf); border:0.5px solid var(--bd); border-radius:13px; padding:18px; margin:0 0 14px; }
+        .ck .chl { display:flex; align-items:center; justify-content:space-between; margin:0 0 14px; }
+        .ck .cht { font-size:15px; font-weight:600; }
+        .ck .chbadge { font-size:10px; font-weight:600; background:var(--infobg); color:var(--info); padding:3px 8px; border-radius:10px; }
+        .ck .leg { display:flex; gap:16px; font-size:12px; color:var(--ink2); margin:12px 0 0; flex-wrap:wrap; }
+        .ck .leg span { display:flex; align-items:center; gap:6px; }
+        .ck .dot { width:12px; height:4px; border-radius:2px; }
+        .ck .alert { border-left:3px solid var(--neg); background:var(--negbg); border-radius:0 10px 10px 0; padding:12px 16px; margin:14px 0 0; font-size:13px; color:var(--ink); line-height:1.5; }
+        .ck .metal { display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:12px; }
+        .ck .mcard { background:var(--surf); border:0.5px solid var(--bd); border-radius:12px; padding:16px; cursor:pointer; transition:transform .2s,box-shadow .2s; }
+        .ck .mcard:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(0,0,0,.1); }
+        .ck .mhead { display:flex; align-items:center; justify-content:space-between; margin:0 0 10px; }
+        .ck .mname { font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
+        .ck .mdot { width:12px; height:12px; border-radius:50%; }
+        .ck .mmarge { font-size:20px; font-weight:600; }
+        .ck .mrow { display:flex; justify-content:space-between; font-size:13px; margin:5px 0; color:var(--ink2); }
+        .ck .mrow b { color:var(--ink); font-weight:600; }
+        .ck .col2 { display:grid; grid-template-columns:1fr; gap:12px; }
+        @media (min-width: 800px) { .ck .col2 { grid-template-columns:1fr 1fr; } }
+        .ck .panel { background:var(--surf); border:0.5px solid var(--bd); border-radius:13px; padding:18px; }
+        .ck .pt { font-size:15px; font-weight:600; margin:0 0 12px; }
+        .ck .rk { margin:10px 0; }
+        .ck .rkrow { display:flex; justify-content:space-between; font-size:13px; margin:0 0 5px; }
+        .ck .rkbar { height:6px; background:var(--bd); border-radius:3px; overflow:hidden; }
+        .ck .rkf { height:100%; border-radius:3px; }
+        .ck .cust { display:flex; justify-content:space-between; align-items:flex-start; padding:10px 0; border-bottom:0.5px solid var(--bd); }
+        .ck .cust:last-child { border:none; }
+        .ck .custn { font-size:14px; font-weight:600; }
+        .ck .custm { font-size:12px; color:var(--ink3); margin-top:2px; }
+        .ck .custv { font-size:15px; font-weight:600; text-align:right; white-space:nowrap; }
+        .ck .newt { font-size:10px; background:var(--warnbg); color:var(--warn); padding:3px 6px; border-radius:8px; margin-left:6px; vertical-align:middle; }
+        .ck .week { background:var(--surf); border:0.5px solid var(--bd); border-radius:13px; padding:18px; }
+        .ck .prog { height:12px; background:var(--bd); border-radius:6px; overflow:hidden; margin:10px 0; }
+        .ck .progf { height:100%; background:var(--pos); border-radius:6px; transition:width 1.1s cubic-bezier(.4,0,.2,1); }
+        .ck .streak { display:flex; align-items:center; gap:10px; margin:14px 0 0; }
+        .ck .stkb { background:var(--warnbg); color:var(--warn); font-weight:600; font-size:13px; padding:5px 12px; border-radius:12px; display:inline-flex; align-items:center; gap:6px; }
+        .ck .wow { background:var(--surf); border:0.5px solid var(--bd); border-radius:13px; padding:18px; margin:0 0 14px; }
+        .ck .wowh { font-size:16px; font-weight:600; margin:0 0 14px; display:flex; align-items:center; gap:8px; }
+        .ck .wowb { font-size:10px; font-weight:600; background:var(--purpbg); color:var(--purple); padding:3px 8px; border-radius:9px; letter-spacing:.5px; }
+        .ck .warn-card { border-radius:10px; padding:14px 16px; margin:0 0 8px; font-size:14px; line-height:1.55; }
+        .ck .wc-i { background:var(--infobg); } .ck .wc-r { background:var(--negbg); } .ck .wc-a { background:var(--warnbg); } .ck .wc-g { background:var(--posbg); }
+        .ck .wch { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin:0 0 6px; display:flex; align-items:center; gap:6px; }
+        .ck .sim { background:var(--navy); border-radius:13px; padding:18px; margin:0 0 14px; }
+        .ck .simh { font-size:16px; font-weight:600; color:#fff; margin:0 0 18px; display:flex; align-items:center; justify-content:space-between; }
+        .ck .eb { background:rgba(255,255,255,.09); border:0.5px solid rgba(255,255,255,.15); border-radius:8px; padding:6px 14px; font-size:13px; color:rgba(255,255,255,.65); font-family:inherit; opacity:0.6; cursor:not-allowed; }
+        .ck .slbl { font-size:13px; color:rgba(255,255,255,.5); display:flex; align-items:center; justify-content:space-between; margin:0 0 8px; }
+        .ck .sval { font-size:15px; font-weight:600; color:#fff; min-width:70px; text-align:right; }
+        .ck .lbtn { background:none; border:0.5px solid rgba(255,255,255,.15); border-radius:6px; padding:4px 12px; font-size:12px; color:rgba(255,255,255,.45); cursor:pointer; display:inline-flex; align-items:center; gap:6px; font-family:inherit; }
+        .ck .lbtn:hover { background:rgba(255,255,255,.08); color:rgba(255,255,255,.75); }
+        .ck .lbtn.op { background:rgba(248,113,113,.16); border-color:rgba(248,113,113,.4); color:#FCA5A5; }
+        .ck .slk input[type=range] { pointer-events:none; opacity:.4; }
+        .ck .s3 { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:16px 0 0; }
+        .ck .s3c { background:rgba(255,255,255,.07); border-radius:10px; padding:14px 16px; }
+        .ck .s3l { font-size:11px; font-weight:600; color:rgba(255,255,255,.4); text-transform:uppercase; letter-spacing:.5px; margin:0 0 6px; }
+        .ck .s3v { font-size:20px; font-weight:600; color:#fff; }
+        .ck .fcb { background:rgba(255,255,255,.06); border-radius:10px; padding:14px 18px; margin:12px 0 0; display:flex; align-items:center; justify-content:space-between; }
+        .ck .tax { background:var(--surf); border:0.5px solid var(--bd); border-radius:13px; padding:18px; margin:0 0 14px; }
+        .ck .tg { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; margin:14px 0; }
+        .ck .tb { display:flex; align-items:center; gap:14px; padding:14px 16px; border:0.5px solid var(--bd); border-radius:10px; font-size:14px; font-weight:600; opacity:0.6; }
+        .ck .tb .ts { font-size:12px; color:var(--ink3); font-weight:400; margin-top:3px; }
+        .ck .saveb { background:var(--posbg); border:0.5px solid var(--pos); border-radius:10px; padding:14px 18px; margin:12px 0 0; font-size:13px; color:var(--ink); display:flex; align-items:center; gap:12px; }
+        .ck .aibox { background:var(--purpbg); border:0.5px solid var(--bd); border-radius:10px; padding:16px; margin:12px 0 0; font-size:14px; line-height:1.55; }
+        .ck .aih { font-size:11px; font-weight:600; color:var(--purple); text-transform:uppercase; letter-spacing:.5px; margin:0 0 8px; display:flex; align-items:center; gap:6px; }
+        .ck .mkt { background:var(--surf); border:0.5px solid var(--bd); border-radius:13px; padding:18px; display:flex; align-items:center; gap:16px; }
+        .ck .mktic { width:48px; height:48px; border-radius:12px; background:var(--purpbg); display:flex; align-items:center; justify-content:center; flex-shrink:0; color:var(--purple); }
+        .ck .fkp { background:var(--surf2); border-radius:11px; padding:16px 18px; margin:10px 0 14px; border:0.5px solid var(--bd); }
+        .ck .fkr { display:grid; grid-template-columns:1fr 100px 20px; gap:8px; align-items:center; font-size:14px; padding:6px 0; }
+        .ck .detexp { background:var(--surf2); border-radius:10px; padding:14px 16px; margin:12px 0 0; font-size:13px; }
+        .ck input[type=number] { border:0.5px solid var(--bd); border-radius:6px; padding:8px 10px; font-size:14px; text-align:right; background:var(--surf); color:var(--ink); font-family:inherit; }
+        .ck input[type=range] { width:100%; accent-color:#A78BFA; }
+        .ck #rate { accent-color:#22D3EE; }
+      `}} />
+
+      {/* 1. Toolbar */}
+      <div className="bar">
+        <div className="tabs">
+          {['Woche', 'Monat', 'Quartal', 'Jahr', 'Frei'].map(t => (
+            <button key={t} className={`tab ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>{t}</button>
+          ))}
         </div>
-        <select className="bg-white border-neutral-gray-300 border text-navy-900 text-sm rounded-md px-3 py-2 shadow-sm font-semibold h-11">
-          <option>Diese Woche (KW 21)</option>
-          <option>Letzte Woche (KW 20)</option>
-          <option>Diesen Monat (Mai 2026)</option>
-        </select>
+        <div className="toolr">
+          <div className="ytog" onClick={() => setYoy(!yoy)}>
+            <div className={`tp ${yoy ? 'on' : ''}`}><div className="tpd"></div></div>Vorjahr
+          </div>
+          <div className="themesw">
+            <button className={`tsw ${theme === 'dark' ? 'on' : ''}`} onClick={() => toggleTheme('dark')}><Moon size={15} />Dark</button>
+            <button className={`tsw ${theme === 'light' ? 'on' : ''}`} onClick={() => toggleTheme('light')}><Sun size={15} />Hell</button>
+          </div>
+        </div>
       </div>
 
-      {/* Asymmetrical Layout Grid: Overall Master Score + KPIs */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* 2. Header */}
+      <div className="tt">
+        <div style={{display:'flex', alignItems:'baseline', justifyContent:'space-between', flexWrap:'wrap', gap:'8px'}}>
+          <div><h1>Mai 2026 — Auswertung</h1><div className="sub">Vergleich zu Mai 2025 · Day-by-Day · Stand 09:14</div></div>
+          <div className="meta">22 Werktage · 5 MA · 5 Stationen</div>
+        </div>
+      </div>
+
+      {/* 3. KI Analyse */}
+      <div className="glass">
+        <span className="gtag">KI-ANALYSE</span>
+        <div style={{flex:1, fontSize:'14px', color:'var(--ink)', lineHeight:1.55}}>
+          <span style={{fontWeight:600}}>Lage Mai:</span> Umsatz +7,2% über Vorjahr, aber Termintreue auf 76% gefallen (−9 %-P) — Ursache: Schleiferei seit 3 Wochen Engpass. Deckungsbeitrag stabil. <span className="warn">Goldpreis +14% seit Badkauf → Metall-Marge auf Rekordniveau. Energiepreis Q2 +8% noch nicht eingepreist.</span>
+        </div>
+        <div style={{fontSize:'13px', color:'var(--ink3)', cursor:'pointer', whiteSpace:'nowrap'}}>Details ›</div>
+      </div>
+
+      <div className="sec"><Clock size={16} /> Durchsatz &amp; Geld</div>
+
+      {/* 4. Hotzone KPI */}
+      <div className="topgrid">
+        <div className="scbox">
+          <div className="scl">Gesamtbewertung</div>
+          <div className="rw">
+            <svg width="90" height="90" viewBox="0 0 78 78" style={{transform:'rotate(-90deg)'}} aria-hidden="true">
+              <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#06B6D4"/><stop offset="100%" stopColor="#A78BFA"/></linearGradient></defs>
+              <circle cx="39" cy="39" r="31" fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="7"/>
+              <circle cx="39" cy="39" r="31" fill="none" stroke="url(#rg)" strokeWidth="7" strokeLinecap="round" strokeDasharray="195" strokeDashoffset={195 * (1 - 0.64)}/>
+            </svg>
+            <div className="rp">64%</div>
+          </div>
+          <div className="crit">Handlungsbedarf</div>
+          <div className="detb" onClick={() => setDetailOpen(!detailOpen)}>Details ↓</div>
+        </div>
         
-        {/* Left Side: Stunning Master Performance Score Circular Gauge */}
-        <Card className="bg-linear-to-br from-navy-900 via-navy-900 to-blue-950 border-navy-900 shadow-xl text-white overflow-hidden relative flex flex-col justify-between p-5 min-h-[300px]">
-          <div className="absolute right-0 top-0 -mt-12 -mr-12 w-32 h-32 bg-navy-700/10 rounded-full blur-3xl pointer-events-none"></div>
-          
-          <div>
-            <div className="flex items-center justify-between border-b border-navy-900 pb-3">
-              <div>
-                <span className="text-[9px] uppercase font-black text-text-muted tracking-widest block font-mono">Gesamtbewertung</span>
-                <h3 className="font-extrabold text-lg mt-0.5 tracking-tight font-serif">Master Performance Score</h3>
-              </div>
-              <Info className="h-4.5 w-4.5 text-text-muted hover:text-neutral-gray-100 cursor-pointer" onClick={() => setShowFormulaDetails(!showFormulaDetails)} />
-            </div>
-
-            <div className="flex items-center justify-center gap-6 py-6">
-              {/* SVG circular gauge */}
-              <div className="relative">
-                <svg className="w-32 h-32 transform -rotate-90">
-                  <circle
-                    cx="64"
-                    cy="64"
-                    r="50"
-                    className="stroke-navy-900 fill-transparent"
-                    strokeWidth="8.5"
-                  />
-                  <circle
-                    cx="64"
-                    cy="64"
-                    r="50"
-                    className="stroke-blue-500 fill-transparent transition-all duration-1000 ease-out"
-                    strokeWidth="8.5"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={strokeDashoffset}
-                    strokeLinecap="round"
-                    style={{ stroke: "url(#scoreGrad)" }}
-                  />
-                  <defs>
-                    <linearGradient id="scoreGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" stopColor="#3b82f6" />
-                      <stop offset="50%" stopColor="#8b5cf6" />
-                      <stop offset="100%" stopColor="#10b981" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                  <span className="text-3xl font-black text-white tracking-tight">{masterScore}%</span>
-                  <span className="text-[9px] font-bold text-white/70 uppercase tracking-widest">Score</span>
-                </div>
-              </div>
-
-              {/* Status details */}
-              <div className="space-y-1">
-                <Badge variant="outline" className={`font-extrabold text-[10px] uppercase tracking-wider px-2 py-0.5 ${scoreQualityBg} ${scoreQualityColor} border`}>
-                  {scoreQualityLabel}
-                </Badge>
-                <p className="text-xs text-text-muted leading-relaxed max-w-[140px] mt-1 font-medium">
-                  Gewichteter Leistungsindex aus Termintreue, Bädern, Durchlaufzeit & QS.
-                </p>
-              </div>
-            </div>
+        <div className="k4">
+          <div className="card accL" style={{borderLeftColor:'var(--neg)'}}>
+            <div className="cl">Termintreue?</div><div className="cv neg">76 %</div>
+            <div className="csub neg">▼ −9 %-P vs. Vj. (85%)</div>
+            <svg viewBox="0 0 60 14" width="60" height="14" style={{marginTop:'8px'}} aria-hidden="true"><polyline points="0,3 12,4 24,6 36,7 48,9 60,11" fill="none" stroke="var(--neg)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </div>
-
-          {/* Interactive expandable formula breakdown panel */}
-          <div className="border-t border-navy-900 pt-3">
-            <button 
-              onClick={() => setShowFormulaDetails(!showFormulaDetails)}
-              className="w-full flex items-center justify-between text-xs text-text-muted font-bold hover:text-neutral-gray-100 transition-colors"
-            >
-              <span>Detaillierte Zusammensetzung</span>
-              {showFormulaDetails ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </button>
-
-            {showFormulaDetails && (
-              <div className="mt-3 space-y-2 bg-navy-900/60 p-3 rounded-lg border border-navy-900 text-[11px] font-medium text-text-muted divide-y divide-navy-900/50">
-                <div className="flex justify-between pb-1.5">
-                  <span>Termintreue (25% Gewicht)</span>
-                  <span className="font-bold text-white">{Math.round(onTimeScore)}% (+{Math.round(onTimeScore * 0.25)} Pkt)</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span>Durchlaufzeit-Index (20% Gewicht)</span>
-                  <span className="font-bold text-white">{Math.round(cycleScore)}% (+{Math.round(cycleScore * 0.20)} Pkt)</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span>Kritische Aufträge (20% Gewicht)</span>
-                  <span className="font-bold text-white">{Math.round(criticalScore)}% (+{Math.round(criticalScore * 0.20)} Pkt)</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span>Fehlerquote QS (15% Gewicht)</span>
-                  <span className="font-bold text-white">{Math.round(complaintsScore)}% (+{Math.round(complaintsScore * 0.15)} Pkt)</span>
-                </div>
-                <div className="flex justify-between py-1.5">
-                  <span>OCR- & Scan-Dokumentation (10%)</span>
-                  <span className="font-bold text-white">{Math.round(docsScore)}% (+{Math.round(docsScore * 0.10)} Pkt)</span>
-                </div>
-                <div className="flex justify-between pt-1.5">
-                  <span>Werkstatt-Stationen Health (10%)</span>
-                  <span className="font-bold text-white">{Math.round(stationsScore)}% (+{Math.round(stationsScore * 0.10)} Pkt)</span>
-                </div>
-              </div>
-            )}
+          <div className="card accL" style={{borderLeftColor:'var(--warn)'}}>
+            <div className="cl">Ø Durchlaufzeit?</div><div className="cv warn">9,4 Tage</div>
+            <div className="csub warn">▼ +1,2 T vs. Vj. (8,2)</div>
+            <svg viewBox="0 0 60 14" width="60" height="14" style={{marginTop:'8px'}} aria-hidden="true"><polyline points="0,9 12,8 24,9 36,7 48,6 60,4" fill="none" stroke="var(--warn)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </div>
-        </Card>
-
-        {/* Right Side: The 4 Key metrics Cards */}
-        <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4">
-          
-          <Link href="/orders?filter=active" className="transition-all hover:scale-[1.01] block group">
-            <Card className="border-l-4 border-l-emerald-500 shadow-sm relative h-[140px] flex flex-col justify-between group-hover:border-neutral-gray-300">
-              <CardContent className="p-5 flex flex-col justify-between h-full">
-                <div>
-                  <div className="flex items-center justify-between text-text-muted text-xs font-bold uppercase tracking-wider group-hover:text-navy-900">
-                    <span>Termintreue</span>
-                    <CheckCircle2 className="h-4.5 w-4.5 text-success-green" />
-                  </div>
-                  <div className="text-4xl font-black text-navy-900 leading-none mt-2">{Math.round(onTimeScore)} %</div>
-                </div>
-                <p className="text-[10px] text-text-muted font-semibold flex items-center justify-between">
-                  <span>Zielwert: &ge; 95% &bull; Pünktlich freigegebene Teile</span>
-                  <span className="text-[9px] text-navy-900 font-extrabold uppercase opacity-0 group-hover:opacity-100 transition-opacity">Filtern &rarr;</span>
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="/orders" className="transition-all hover:scale-[1.01] block group">
-            <Card className="border-l-4 border-l-emerald-500 shadow-sm h-[140px] flex flex-col justify-between group-hover:border-neutral-gray-300">
-              <CardContent className="p-5 flex flex-col justify-between h-full">
-                <div>
-                  <div className="flex items-center justify-between text-text-muted text-xs font-bold uppercase tracking-wider group-hover:text-navy-900">
-                    <span>Ø Durchlaufzeit</span>
-                    <Clock className="h-4.5 w-4.5 text-success-green" />
-                  </div>
-                  <div className="text-4xl font-black text-navy-900 leading-none mt-2">{dynamicDurchlaufzeit} Tage</div>
-                </div>
-                <p className="text-[10px] text-text-muted font-semibold flex items-center justify-between">
-                  <span>Basis: {baseDurchlaufzeit} Tage &bull; Ziel: &le; 4.0 Tage</span>
-                  <span className="text-[9px] text-navy-900 font-extrabold uppercase opacity-0 group-hover:opacity-100 transition-opacity">Alle Anzeigen &rarr;</span>
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="/orders?filter=critical" className="transition-all hover:scale-[1.01] block group">
-            <Card className="border-l-4 border-l-orange-500 shadow-sm h-[140px] flex flex-col justify-between group-hover:border-neutral-gray-300">
-              <CardContent className="p-5 flex flex-col justify-between h-full">
-                <div>
-                  <div className="flex items-center justify-between text-text-muted text-xs font-bold uppercase tracking-wider group-hover:text-navy-900">
-                    <span>Fehlerquote (QS)</span>
-                    <MessageSquareWarning className="h-4.5 w-4.5 text-accent-orange" />
-                  </div>
-                  <div className="text-4xl font-black text-accent-orange leading-none mt-2">{dynamicReklaQuote} %</div>
-                </div>
-                <p className="text-[10px] text-text-muted font-semibold flex items-center justify-between">
-                  <span>Zielwert: &le; 2.0% &bull; Kritische Verzögerungen</span>
-                  <span className="text-[9px] text-navy-900 font-extrabold uppercase opacity-0 group-hover:opacity-100 transition-opacity">Kritische Filtern &rarr;</span>
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-
-          <Link href="/orders?filter=waiting" className="transition-all hover:scale-[1.01] block group">
-            <Card className="border-l-4 border-l-blue-900 shadow-sm h-[140px] flex flex-col justify-between group-hover:border-neutral-gray-300">
-              <CardContent className="p-5 flex flex-col justify-between h-full">
-                <div>
-                  <div className="flex items-center justify-between text-text-muted text-xs font-bold uppercase tracking-wider group-hover:text-navy-900">
-                    <span>OCR & Dokumentenquote</span>
-                    <Camera className="h-4.5 w-4.5 text-navy-900" />
-                  </div>
-                  <div className="text-4xl font-black text-navy-900 leading-none mt-2">{Math.round(docsScore)} %</div>
-                </div>
-                <p className="text-[10px] text-text-muted font-semibold flex items-center justify-between">
-                  <span>Erfassungskonfidenz: {Math.round(scanRate * 100)}%</span>
-                  <span className="text-[9px] text-navy-900 font-extrabold uppercase opacity-0 group-hover:opacity-100 transition-opacity">Wartende Filtern &rarr;</span>
-                </p>
-              </CardContent>
-            </Card>
-          </Link>
-
+          <div className="card accL" style={{borderLeftColor:'var(--pos)'}}>
+            <div className="cl">Umsatz netto?</div><div className="cv">42.380 €</div>
+            <div className="csub pos">▲ +7,2% vs. Vj. (39.520 €)</div>
+            <svg viewBox="0 0 60 14" width="60" height="14" style={{marginTop:'8px'}} aria-hidden="true"><polyline points="0,11 12,9 24,10 36,7 48,6 60,4" fill="none" stroke="var(--pos)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
+          <div className="card accL" style={{borderLeftColor:'var(--info)'}}>
+            <div className="cl">Deckungsbeitrag?</div><div className="cv">11.840 €</div>
+            <div className="csub">Marge 27,9% · DB II</div>
+            <svg viewBox="0 0 60 14" width="60" height="14" style={{marginTop:'8px'}} aria-hidden="true"><polyline points="0,10 12,9 24,8 36,8 48,7 60,6" fill="none" stroke="var(--info)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </div>
         </div>
-
       </div>
 
-      {/* Finanzcontrolling & Wirtschaftlichkeit */}
-      <Card className="shadow-md border-neutral-gray-300 bg-white">
-        <CardHeader className="pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <CardTitle className="text-xl font-black text-navy-900 font-serif flex items-center gap-2">
-              <span>ðŸ“Š Finanzcontrolling & Rentabilität</span>
-              <Badge className="bg-success-green text-white font-bold text-[9px] py-0.5 px-2 uppercase border-none">Live</Badge>
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Echtzeit-Mittelwertkalkulation basierend auf abgeschlossenen Aufträgen. Verschiebe die Regler, um Auswirkungen sofort zu simulieren.
-            </CardDescription>
+      {detailOpen && (
+        <div className="detexp" style={{display:'block'}}>
+          <div style={{display:'grid', gridTemplateColumns:'1fr auto', gap:'8px', color:'var(--ink2)'}}>
+            <span>Termintreue (25%)</span><b className="neg" style={{fontWeight:600}}>76% (+15 Pkt.)</b>
+            <span>Durchlaufzeit-Index (20%)</span><b className="warn" style={{fontWeight:600}}>71% (+14 Pkt.)</b>
+            <span>Kritische Aufträge (20%)</span><b className="neg" style={{fontWeight:600}}>40% (+8 Pkt.)</b>
+            <span>Fehlerquote QS (15%)</span><b className="pos" style={{fontWeight:600}}>93% (+14 Pkt.)</b>
+            <span>OCR &amp; Scan-Doku (10%)</span><b style={{fontWeight:600}}>92% (+9 Pkt.)</b>
+            <span>Stationen-Health (10%)</span><b style={{fontWeight:600}}>78% (+8 Pkt.)</b>
           </div>
-          <button 
-            onClick={exportCSV}
-            className="bg-navy-900 hover:bg-navy-900 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-2 cursor-pointer border-none"
-          >
-            ðŸ“¥ Buchhaltungsexport (DATEV/Lexware CSV)
-          </button>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Sliders Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-bg-app-soft p-5 rounded-2xl border border-neutral-gray-300">
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-black text-navy-900 uppercase tracking-wider">Verrechnungssatz (Stundenlohn Netto)</label>
-                <span className="font-extrabold text-navy-700 text-sm">{hourlyRate} € / Std</span>
-              </div>
-              <input 
-                type="range" 
-                min="50" 
-                max="200" 
-                value={hourlyRate} 
-                onChange={(e) => setHourlyRate(parseInt(e.target.value))}
-                className="w-full h-2 bg-neutral-gray-100 rounded-lg appearance-none cursor-pointer accent-blue-900 touch-pan-y"
-              />
-              <span className="text-[10px] text-text-muted font-semibold block">Berechnungsbasis für Kundenaufträge und Lohnkostenanteile (Standard: 95 €)</span>
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-black text-navy-900 uppercase tracking-wider">Monatliche Fixkosten</label>
-                <span className="font-extrabold text-navy-700 text-sm">{fixedCosts} €</span>
-              </div>
-              <input 
-                type="range" 
-                min="1000" 
-                max="10000" 
-                step="250"
-                value={fixedCosts} 
-                onChange={(e) => setFixedCosts(parseInt(e.target.value))}
-                className="w-full h-2 bg-neutral-gray-100 rounded-lg appearance-none cursor-pointer accent-blue-900 touch-pan-y"
-              />
-              <span className="text-[10px] text-text-muted font-semibold block">Gemeinkosten, Badchemie-Grundbeladung, Mieten und Gehälter (Standard: 2500 €)</span>
-            </div>
-          </div>
-
-          {/* Financial Cards Grid */}
-          {(() => {
-            const completedCount = orders.filter(o => o.status === "completed" || o.status === "shipped").length;
-            const completedOrders = completedCount > 0 ? completedCount : 18;
-            const activeOrders = orders.filter(o => o.status === "in_progress" || o.status === "waiting" || o.risk === "blocked").length;
-
-            const revenueNet = completedOrders * 450;
-            const materialCostNet = completedOrders * 65 + activeOrders * 12;
-            const laborCostNet = completedOrders * 2.5 * hourlyRate;
-            const contributionMarginNet = revenueNet - (materialCostNet + laborCostNet);
-            const estimatedProfitNet = contributionMarginNet - fixedCosts;
-            const profitMarginPercent = revenueNet > 0 ? (estimatedProfitNet / revenueNet) * 100 : 0;
-            const forecastNet = revenueNet + (activeOrders * 420 * 0.75);
-
-            return (
-              <>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Link href="?metric=revenue" className="block group hover:scale-[1.02] transition-transform">
-                    <div className="bg-bg-app-soft border border-neutral-gray-300 rounded-2xl p-4 flex flex-col justify-between h-[125px] group-hover:border-white/30">
-                      <div>
-                        <span className="text-[9px] uppercase font-black text-text-muted tracking-widest block group-hover:text-navy-700">Umsatz Netto</span>
-                        <span className="text-2xl font-black text-navy-900 block mt-1">{revenueNet.toLocaleString("de-DE")} €</span>
-                      </div>
-                      <p className="text-[10px] text-text-muted font-semibold leading-relaxed">
-                        {completedOrders} Aufträge im Zeitraum (Ø 450 €)
-                      </p>
-                    </div>
-                  </Link>
-
-                  <Link href="?metric=costs" className="block group hover:scale-[1.02] transition-transform">
-                    <div className="bg-bg-app-soft border border-neutral-gray-300 rounded-2xl p-4 flex flex-col justify-between h-[125px] group-hover:border-accent-orange">
-                      <div>
-                        <span className="text-[9px] uppercase font-black text-text-muted tracking-widest block group-hover:text-accent-orange">Lohn- & Materialkosten</span>
-                        <span className="text-2xl font-black text-navy-900 block mt-1">{(laborCostNet + materialCostNet).toLocaleString("de-DE")} €</span>
-                      </div>
-                      <p className="text-[10px] text-text-muted font-semibold leading-relaxed flex justify-between">
-                        <span>Material: {materialCostNet.toLocaleString("de-DE")} €</span>
-                        <span>Lohn: {laborCostNet.toLocaleString("de-DE")} €</span>
-                      </p>
-                    </div>
-                  </Link>
-
-                  <Link href="?metric=margin" className="block group hover:scale-[1.02] transition-transform">
-                    <div className="bg-bg-app-soft border border-neutral-gray-300 rounded-2xl p-4 flex flex-col justify-between h-[125px] relative overflow-hidden group-hover:border-success-green">
-                      <div className="absolute top-0 right-0 h-1.5 w-full bg-success-green-soft0"></div>
-                      <div>
-                        <span className="text-[9px] uppercase font-black text-text-muted tracking-widest block group-hover:text-success-green">Deckungsbeitrag</span>
-                        <span className="text-2xl font-black text-success-green block mt-1">{contributionMarginNet.toLocaleString("de-DE")} €</span>
-                      </div>
-                      <p className="text-[10px] text-text-muted font-semibold leading-relaxed">
-                        Rohertrag nach direkten variablen Kosten
-                      </p>
-                    </div>
-                  </Link>
-
-                  <Link href="?metric=profit" className="block group hover:scale-[1.02] transition-transform">
-                    <div className={`border rounded-2xl p-4 flex flex-col justify-between h-[125px] relative overflow-hidden group-hover:border-navy-700 ${estimatedProfitNet >= 0 ? "bg-success-green-soft/50 border-success-green" : "bg-accent-orange-soft/50 border-danger-red"}`}>
-                      <div className={`absolute top-0 right-0 h-1.5 w-full ${estimatedProfitNet >= 0 ? "bg-success-green-soft0" : "bg-accent-orange-soft0"}`}></div>
-                      <div>
-                        <span className="text-[9px] uppercase font-black text-text-muted tracking-widest block group-hover:text-navy-700">Geschätzter Gewinn</span>
-                        <span className={`text-2xl font-black block mt-1 ${estimatedProfitNet >= 0 ? "text-success-green" : "text-danger-red"}`}>{estimatedProfitNet.toLocaleString("de-DE")} €</span>
-                      </div>
-                      <p className="text-[10px] text-text-muted font-semibold leading-relaxed flex justify-between">
-                        <span>Marge: {profitMarginPercent.toFixed(1)} %</span>
-                        <span>Netto nach Fixkosten</span>
-                      </p>
-                    </div>
-                  </Link>
-                </div>
-
-                {/* Additional Row: Forecast & Business Advice */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t pt-4 border-neutral-gray-100">
-                  <Link href="?metric=forecast" className="block group hover:scale-[1.01] transition-transform">
-                    <div className="flex items-center gap-4 bg-gold-100/40 p-4 rounded-xl border border-neutral-gray-100 group-hover:border-navy-700">
-                      <div className="text-center bg-navy-900 text-white rounded-lg p-2 shrink-0">
-                        <span className="text-[9px] font-bold uppercase tracking-widest block font-mono">Forecast</span>
-                        <span className="text-lg font-black">{forecastNet.toLocaleString("de-DE")} €</span>
-                      </div>
-                      <div>
-                        <h5 className="font-extrabold text-xs text-navy-900 group-hover:text-navy-900">Umsatzprognose Monatsende</h5>
-                        <p className="text-text-muted text-[10px] leading-relaxed mt-0.5">
-                          Erwarteter Netto-Umsatz inklusive gewichteter Wahrscheinlichkeiten offener Aufträge ({activeOrders} im Fluss).
-                        </p>
-                      </div>
-                    </div>
-                  </Link>
-
-                  <div className="flex items-center gap-3 p-4 bg-bg-app-soft rounded-xl border border-neutral-gray-300 text-xs">
-                    <Info className="h-4.5 w-4.5 text-navy-900 shrink-0" />
-                    <p className="text-text-muted leading-relaxed font-semibold">
-                      <strong>Analyse:</strong> Der aktuelle Deckungsbeitrag ist stabil bei ca. <strong>{revenueNet > 0 ? Math.round((contributionMarginNet / revenueNet) * 100) : 0}%</strong>. 
-                      Eine Erhöhung des Verrechnungssatzes um 10 € steigert den geschätzten Gewinn bei gleichem Durchsatz direkt um <strong>{(completedOrders * 2.5 * 10).toFixed(0)} €</strong>.
-                    </p>
-                  </div>
-                </div>
-              </>
-            );
-          })()}
-        </CardContent>
-      </Card>
-
-      {/* NEW: Dynamic Bottlenecks Alerts & Meister Recommendations (§15) */}
-      {(bottleneckWarnings.length > 0 || criticalBathAlerts.length > 0) && (
-        <Card className="border-danger-red bg-accent-orange-soft/50 shadow-xs p-5 space-y-4">
-          <div className="flex items-center gap-2 text-danger-red">
-            <AlertCircle className="h-5.5 w-5.5 font-bold" />
-            <h4 className="font-extrabold text-sm uppercase tracking-wider font-serif">âš ï¸ Aktive Engpass-Analysen & Handlungsempfehlungen</h4>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* 1. Critical bath alerts */}
-            {criticalBathAlerts.map(bath => (
-              <div key={bath.id} className="bg-white p-4 rounded-xl border border-danger-red flex flex-col justify-between text-xs shadow-xs">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[9px] font-black bg-danger-red text-danger-red px-2 py-0.5 rounded border border-danger-red">BAD {bath.bathNumber}</span>
-                    <span className="font-extrabold text-danger-red uppercase tracking-wide">Kritischer Grenzwert</span>
-                  </div>
-                  <h5 className="font-extrabold text-sm text-navy-900 mt-2 font-serif">{bath.name}</h5>
-                  <p className="text-text-muted mt-1 font-semibold leading-relaxed">
-                    Sperrung wegen Grenzwertüberschreitung. ({bath.notes || "Temperatur / pH-Wert außerhalb Toleranz"}).
-                  </p>
-                </div>
-                <div className="mt-4 pt-3 border-t border-neutral-gray-100 flex items-center justify-between">
-                  <span className="text-[10px] text-text-muted font-extrabold uppercase">Empfehlung: Heizung/Zusatz prüfen</span>
-                  <Link href="/items" className="text-danger-red font-black flex items-center gap-0.5 hover:underline">
-                    Badregelkarte <ChevronRight className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
-              </div>
-            ))}
-
-            {/* 2. Overloaded stations */}
-            {bottleneckWarnings.map(warn => (
-              <div key={warn.key} className="bg-white p-4 rounded-xl border border-accent-orange flex flex-col justify-between text-xs shadow-xs">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono text-[9px] font-black bg-orange-100 text-accent-orange px-2 py-0.5 rounded border border-accent-orange">ENGPASS</span>
-                    <span className="font-extrabold text-accent-orange uppercase tracking-wide">Auslastung {warn.load}%</span>
-                  </div>
-                  <h5 className="font-extrabold text-sm text-navy-900 mt-2 font-serif">{warn.name}</h5>
-                  <p className="text-text-muted mt-1 font-semibold leading-relaxed">
-                    {warn.recommendation} ({warn.partsWaiting} wartende Teile).
-                  </p>
-                </div>
-                <div className="mt-4 pt-3 border-t border-neutral-gray-100 flex items-center justify-between">
-                  <span className="text-[10px] text-text-muted font-extrabold uppercase">CTA: Dispositionsanpassung</span>
-                  <Link href={warn.link} className="text-accent-orange font-black flex items-center gap-0.5 hover:underline">
-                    {warn.cta} <ChevronRight className="h-3.5 w-3.5" />
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
+        </div>
       )}
 
-      {/* Analytical Workshop Heatmap & Throughput (Interactive) */}
-      <Card className="shadow-sm border-neutral-gray-300">
-        <CardHeader className="pb-4">
-          <CardTitle className="text-lg font-bold text-navy-900 font-serif">Analytische Werkstatt-Heatmap & Durchsatz</CardTitle>
-          <CardDescription className="text-xs">
-            Chronologischer Produktionsdurchlauf (1 bis 5). Klicke auf eine Station, um die zugehörigen Aufträge zu filtern und zu steuern.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {heatmapStations.map(station => {
-              const Icon = station.IconComponent;
-              return (
-                <Link 
-                  href={`/orders?station=${station.key}`} 
-                  key={station.key}
-                  className={`block border rounded-xl p-4 transition-all duration-200 group relative overflow-hidden shadow-xs ${station.colorClass}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1">
-                        <span className="text-[9px] font-black bg-navy-900/10 px-2 py-0.5 rounded-full text-navy-900 uppercase tracking-wide">
-                          Schritt {station.stepNumber}
-                        </span>
-                      </div>
-                      <h4 className="font-extrabold text-sm sm:text-base font-serif group-hover:text-navy-900 transition-colors mt-1.5 leading-tight">
-                        {station.name}
-                      </h4>
-                    </div>
-                    <div className="h-10 w-10 rounded-xl bg-linear-to-br from-blue-100 to-blue-200 flex items-center justify-center text-navy-900 shadow-inner">
-                      <Icon className="h-5 w-5 text-slate-650" />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 mt-4 border-t pt-3 border-neutral-gray-100">
-                    <div>
-                      <span className="text-[8px] text-text-muted font-bold uppercase block tracking-wider leading-none">Ø Zeit</span>
-                      <span className="text-base font-black block mt-0.5 text-navy-900">{station.throughputTime} d</span>
-                    </div>
-                    <div>
-                      <span className="text-[8px] text-text-muted font-bold uppercase block tracking-wider leading-none">Wartend</span>
-                      <span className="text-base font-black block mt-0.5 text-navy-900">{station.partsWaiting} Stk</span>
-                    </div>
-                  </div>
-
-                  {/* Micro Progress Bar representing Workload */}
-                  <div className="mt-4 space-y-1">
-                    <div className="flex justify-between items-center text-[8px] font-bold text-text-muted">
-                      <span>Auslastung</span>
-                      <span>{station.load}%</span>
-                    </div>
-                    <Progress value={station.load} className="h-1" />
-                  </div>
-
-                  <div className="mt-3 flex items-center justify-between text-[8px] text-navy-900 font-extrabold group-hover:translate-x-0.5 transition-transform pt-1">
-                    <span>{station.action}</span>
-                    <ChevronRight className="h-3 w-3 text-navy-900" />
-                  </div>
-                </Link>
-              );
-            })}
+      {/* 5. Metall-Marge */}
+      <div className="sec"><Coins size={16} /> Metall-Marge (live) — Alleinstellung</div>
+      <div className="card hero" style={{marginBottom:'12px'}} onClick={() => setMetalExpOpen(!metalExpOpen)}>
+        <div className="heroglow"></div>
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', position:'relative'}}>
+          <div>
+            <div style={{fontSize:'12px', fontWeight:600, color:'rgba(255,255,255,.6)', textTransform:'uppercase', letterSpacing:'.5px'}}>Metall-Marge gesamt (Mai)</div>
+            <div style={{fontSize:'34px', fontWeight:700, color:'#fff', marginTop:'4px'}}>+2.840 €</div>
+            <div style={{fontSize:'13px', color:'rgba(255,255,255,.7)', marginTop:'4px'}}>Erlös zum Tagespreis − Einkaufsbasis der Bäder · <span style={{color:'#FBBF24'}}>Stand 09:14</span></div>
           </div>
-
-          <div className="mt-4 flex items-center justify-between text-[9px] font-bold text-text-muted border-t pt-3 px-1 uppercase tracking-wider">
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-accent-orange-soft0 rounded-sm"></span> Engpass / Überlast</span>
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-gold-1000 rounded-sm"></span> Erhöhtes Volumen</span>
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-gold-1000 rounded-sm"></span> Regulärer Betrieb</span>
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-success-green-soft0 rounded-sm"></span> Optimal / Leerlauf</span>
+          <div style={{textAlign:'right'}}>
+            <div style={{fontSize:'13px', color:'rgba(255,255,255,.6)'}}>Gold-Tagespreis</div>
+            <div style={{fontSize:'20px', fontWeight:600, color:'#FBBF24'}}>68,40 €/g</div>
+            <div style={{fontSize:'12px', color:'#34D399'}}>▲ +14% seit Badkauf</div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+        </div>
+      </div>
       
-
-      {/* ── Finanzcontrolling ──────────────────────────────────────────── */}
-      <Card className="shadow-sm border-neutral-gray-300 overflow-hidden">
-        <CardHeader className="bg-linear-to-r from-navy-900 to-blue-950 text-white pb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base font-black font-serif tracking-tight">Finanzcontrolling &amp; Kalkulation</CardTitle>
-              <CardDescription className="text-white/70 text-xs mt-1">Reaktive Echtzeit-Berechnung · Passe die Regler an, um Szenarien zu simulieren</CardDescription>
-            </div>
-            <button onClick={exportCSV} className="flex items-center gap-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white text-xs font-bold px-3 py-2 rounded-lg transition-colors">
-              ↓ Lexware/DATEV CSV
-            </button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-5">
-            <div>
-              <div className="flex justify-between text-xs font-bold text-white/70 mb-2">
-                <span>Verrechnungssatz (Netto)</span>
-                <span className="text-white">{hourlyRate} €/h</span>
-              </div>
-              <input type="range" min={50} max={200} step={5} value={hourlyRate} onChange={e => setHourlyRate(Number(e.target.value))} className="w-full accent-blue-400 h-1.5 rounded-full" />
-              <div className="flex justify-between text-[9px] text-white/60 mt-1"><span>50 €</span><span>200 €</span></div>
-            </div>
-            <div>
-              <div className="flex justify-between text-xs font-bold text-white/70 mb-2">
-                <span>Monatliche Fixkosten</span>
-                <span className="text-white">{fixedCosts.toLocaleString("de-CH")} €</span>
-              </div>
-              <input type="range" min={1000} max={10000} step={100} value={fixedCosts} onChange={e => setFixedCosts(Number(e.target.value))} className="w-full accent-purple-400 h-1.5 rounded-full" />
-              <div className="flex justify-between text-[9px] text-white/60 mt-1"><span>1.000 €</span><span>10.000 €</span></div>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
-            {finKpis.map(k => (
-              <div key={k.label} className={`rounded-xl border p-4 ${k.bg} ${k.border}`}>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">{k.label}</p>
-                <p className={`text-2xl font-black ${k.color}`}>{k.sign}{Math.abs(k.value).toLocaleString("de-CH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €</p>
-              </div>
-            ))}
-          </div>
-          <div className="rounded-xl bg-navy-900 text-white p-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-text-muted">Umsatz-Forecast (aktive Aufträge × 70%)</p>
-              <p className="text-3xl font-black text-success-green mt-1">{finForecast.toLocaleString("de-CH", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} €</p>
-              <p className="text-xs text-text-muted mt-1">{finCompletedCount} abgeschlossen · {finActiveCount} aktiv</p>
-            </div>
-            <div className="text-right shrink-0">
-              <p className="text-[9px] text-text-muted uppercase tracking-wider">Marge (DB/Umsatz)</p>
-              <p className={`text-xl font-black ${finRevenue > 0 && finDB / finRevenue > 0.3 ? "text-success-green" : "text-accent-orange"}`}>
-                {finRevenue > 0 ? Math.round((finDB / finRevenue) * 100) : 0}%
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card className="shadow-sm border-neutral-gray-300">
-          <CardHeader>
-            <CardTitle className="text-base font-bold text-navy-900 font-serif">Wochenziel &amp; Erfolgsserie</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div>
-              <div className="flex justify-between text-xs font-bold text-text-muted mb-2">
-                <span>Fertiggestellte Objekte</span><span>23 / 25</span>
-              </div>
-              <Progress value={92} className="h-3" />
-              <p className="text-xs text-text-muted mt-2">Noch 2 Aufträge bis zum wöchentlichen Gesamtziel!</p>
-            </div>
-            <div className="border-t pt-4">
-              <h5 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-3">Erfolgsserie (Streaks)</h5>
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-gold-100 text-accent-orange rounded-xl flex items-center justify-center border border-accent-orange shrink-0">
-                  <Flame className="h-6 w-6" />
-                </div>
-                <div>
-                  <span className="text-lg font-bold text-navy-900 block">5 Wochen über Ziel</span>
-                  <span className="text-xs text-text-muted">Hervorragende Kapazitätsausnutzung im Mai.</span>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm border-neutral-gray-300 lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="text-base font-bold text-navy-900 font-serif">Trends &amp; Auslastung im Monatsvergleich</CardTitle>
-            <CardDescription className="text-xs">Mittlere Bearbeitungszeit je Teiletyp (Tage)</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs font-bold text-navy-900">
-                <span>Stoßstangen &amp; Zierleisten (Oldtimer)</span><span>Ø 6,2 Tage (Kritisch)</span>
-              </div>
-              <div className="w-full bg-bg-app-soft h-2.5 rounded-full overflow-hidden"><div className="bg-accent-orange-soft0 h-full w-[85%]"></div></div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs font-bold text-navy-900">
-                <span>Motorradtanks &amp; Felgen</span><span>Ø 4,8 Tage (Im Plan)</span>
-              </div>
-              <div className="w-full bg-bg-app-soft h-2.5 rounded-full overflow-hidden"><div className="bg-success-green-soft0 h-full w-[65%]"></div></div>
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between text-xs font-bold text-navy-900">
-                <span>Kleinteile, Hausrat &amp; Besteck</span><span>Ø 2,5 Tage (Optimal)</span>
-              </div>
-              <div className="w-full bg-bg-app-soft h-2.5 rounded-full overflow-hidden"><div className="bg-success-green-soft0 h-full w-[35%]"></div></div>
-            </div>
-            <div className="border-t pt-4">
-              <h5 className="text-xs font-bold text-text-muted uppercase tracking-wider mb-2">Verbesserungsempfehlungen</h5>
-              <p className="text-xs text-text-muted leading-relaxed">
-                <TrendingUp className="h-4 w-4 text-success-green inline mr-1" />
-                Die Rüstzeiten in der Galvanik (Chrombad) konnten durch Batch-Bearbeitung von Kleinteilen um 12% gesenkt werden. Die Schleiferei bleibt weiterhin der Hauptengpass.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="metal">
+        <div className="mcard">
+          <div className="mhead"><div className="mname"><span className="mdot" style={{background:'#FBBF24'}}></span>Gold</div><div className="mmarge pos">+1.640 €</div></div>
+          <div className="mrow"><span>Abgeschieden</span><b>18,2 g</b></div>
+          <div className="mrow"><span>Einkaufsbasis</span><b>22,80 €/g</b></div>
+          <div className="mrow"><span>Tagespreis</span><b>68,40 €/g</b></div>
+          <div className="mrow"><span>Marge</span><b className="pos">+72%</b></div>
+        </div>
+        <div className="mcard">
+          <div className="mhead"><div className="mname"><span className="mdot" style={{background:'#94A3B8'}}></span>Silber</div><div className="mmarge pos">+310 €</div></div>
+          <div className="mrow"><span>Abgeschieden</span><b>142 g</b></div>
+          <div className="mrow"><span>Einkaufsbasis</span><b>0,62 €/g</b></div>
+          <div className="mrow"><span>Tagespreis</span><b>0,98 €/g</b></div>
+          <div className="mrow"><span>Marge</span><b className="pos">+58%</b></div>
+        </div>
+        <div className="mcard">
+          <div className="mhead"><div className="mname"><span className="mdot" style={{background:'#D97706'}}></span>Kupfer</div><div className="mmarge pos">+185 €</div></div>
+          <div className="mrow"><span>Abgeschieden</span><b>2,1 kg</b></div>
+          <div className="mrow"><span>Einkaufsbasis</span><b>7,90 €/kg</b></div>
+          <div className="mrow"><span>Tagespreis</span><b>8,78 €/kg</b></div>
+          <div className="mrow"><span>Marge</span><b className="pos">+11%</b></div>
+        </div>
+        <div className="mcard">
+          <div className="mhead"><div className="mname"><span className="mdot" style={{background:'#86EFAC'}}></span>Nickel</div><div className="mmarge pos">+705 €</div></div>
+          <div className="mrow"><span>Abgeschieden</span><b>4,6 kg</b></div>
+          <div className="mrow"><span>Einkaufsbasis</span><b>14,20 €/kg</b></div>
+          <div className="mrow"><span>Tagespreis</span><b>15,90 €/kg</b></div>
+          <div className="mrow"><span>Marge</span><b className="pos">+12%</b></div>
+        </div>
       </div>
 
-      <div className="mt-8">
-        <TrackingOverview />
+      {metalExpOpen && (
+        <div className="detexp" style={{display:'block'}}>
+          <b style={{fontWeight:600, color:'var(--ink)'}}>Rechenweg pro Teil:</b> Fläche [cm²] × Schichtdicke [µm] × Dichte = abgeschiedene Masse. Marge = Masse × (Tagespreis − Einkaufsbasis des Bades) × Stromausbeute, abzgl. Drag-out-Verlust. Tagespreise live via Metals-API, 1×/Tag aktualisiert. <span className="pu">Tipp: Goldpreis-Hoch — Auftrag A-2026-0042 (Vergoldung) jetzt abrechnen, nicht aufschieben.</span>
+        </div>
+      )}
+
+      {/* 6. Engpässe */}
+      <div className="sec"><Activity size={16} /> Stationen-Auslastung — Engpässe</div>
+      <div className="stst">
+        <div className="strow"><div className="stn">Schleiferei</div><div className="stbar"><div className="stf" style={{width:'94%', background:'var(--neg)'}}></div></div><div className="stpct neg">94%</div></div>
+        <div className="strow"><div className="stn">Politur</div><div className="stbar"><div className="stf" style={{width:'78%', background:'var(--warn)'}}></div></div><div className="stpct warn">78%</div></div>
+        <div className="strow"><div className="stn">Galvanik</div><div className="stbar"><div className="stf" style={{width:'62%', background:'var(--pos)'}}></div></div><div className="stpct pos">62%</div></div>
+        <div className="strow"><div className="stn">Vorbereitung</div><div className="stbar"><div className="stf" style={{width:'54%', background:'var(--pos)'}}></div></div><div className="stpct pos">54%</div></div>
+        <div className="strow"><div className="stn">QK / Versand</div><div className="stbar"><div className="stf" style={{width:'41%', background:'var(--pos)'}}></div></div><div className="stpct pos">41%</div></div>
       </div>
+
+      <div className="chartcard" style={{marginTop:'14px'}}>
+        <div className="chl"><div className="cht">Umsatzverlauf 12 Monate</div><div className="chbadge">MIT FORECAST</div></div>
+        {/* Simple mock chart using CSS */}
+        <div style={{height:'140px', display:'flex', alignItems:'flex-end', gap:'6px', paddingBottom:'22px', borderBottom:'1px solid var(--bd)', position:'relative', marginTop:'16px'}}>
+          {[36,35,32,39,42,45,28,30,33,42,41,42].map((v,i) => (
+            <div key={i} style={{flex:1, height:`${v*2}%`, background:'#3B82F6', borderRadius:'3px 3px 0 0', opacity: i===11 ? 1 : 0.6}}></div>
+          ))}
+          {[38,41,37].map((v,i) => (
+            <div key={`f-${i}`} style={{flex:1, height:`${v*2}%`, background:'#F59E0B', borderRadius:'3px 3px 0 0', opacity: 0.8, border:'1px dashed rgba(255,255,255,0.3)'}}></div>
+          ))}
+          <div style={{position:'absolute', bottom:'-22px', width:'100%', display:'flex', justifyContent:'space-between', fontSize:'11px', color:'var(--ink3)'}}>
+            <span>Jun</span><span>Mai</span><span>Aug*</span>
+          </div>
+        </div>
+        <div className="leg"><span><span className="dot" style={{background:'#3B82F6'}}></span>Ist</span><span><span className="dot" style={{background:'#94A3B8'}}></span>Vorjahr</span><span><span className="dot" style={{background:'#F59E0B'}}></span>Forecast 3 Monate</span></div>
+        <div className="alert"><b style={{fontWeight:600}}>Engpass-Verlust:</b> Schleiferei seit 3 Wochen Hauptengpass. Geschätzter Umsatzverlust Mai: <b style={{fontWeight:600}}>4.300 €</b> (3 Aufträge ≥2 Tage verspätet, 1 Auftrag verloren). Maßnahme: Stoßstangen Mo–Mi priorisieren.</div>
+      </div>
+
+      <div className="col2">
+        <div className="panel">
+          <div className="pt">Reklamationen — Mai</div>
+          <div style={{display:'flex', alignItems:'baseline', gap:'10px', margin:'0 0 12px'}}><span style={{fontSize:'32px', fontWeight:600}}>2</span><span style={{fontSize:'13px', color:'var(--ink2)'}}>von 28 · 7,1%</span><span style={{fontSize:'13px', marginLeft:'auto'}} className="neg">▲ +1 vs. Vj.</span></div>
+          <div className="rk"><div className="rkrow"><span>Oberflächenqualität</span><span>1</span></div><div className="rkbar"><div className="rkf" style={{width:'50%', background:'var(--neg)'}}></div></div></div>
+          <div className="rk"><div className="rkrow"><span>Lieferverzug</span><span>1</span></div><div className="rkbar"><div className="rkf" style={{width:'50%', background:'var(--warn)'}}></div></div></div>
+          <div className="rk"><div className="rkrow"><span>Kommunikation</span><span>0</span></div><div className="rkbar"><div className="rkf" style={{width:'0', background:'var(--ink3)'}}></div></div></div>
+          <div className="rk"><div className="rkrow"><span>Transport</span><span>0</span></div><div className="rkbar"><div className="rkf" style={{width:'0', background:'var(--ink3)'}}></div></div></div>
+        </div>
+        <div className="panel">
+          <div className="pt">Top-Kunden — Mai <span className="chbadge" style={{background:'var(--purpbg)', color:'var(--purple)', marginLeft:'8px'}}>CLV-BASIERT</span></div>
+          <div className="cust"><div><div className="custn">Museum Lenzburg</div><div className="custm">3 Aufträge · Stammkunde · CLV 18.400 €</div></div><div className="custv">5.840 €</div></div>
+          <div className="cust"><div><div className="custn">Oldtimer Klassik Frankfurt</div><div className="custm">2 Aufträge · Privatsammler · CLV 12.200 €</div></div><div className="custv">3.920 €</div></div>
+          <div className="cust"><div><div className="custn">Schreinerei Hartmann</div><div className="custm">4 Aufträge · Gewerbe · CLV 9.800 €</div></div><div className="custv">2.610 €</div></div>
+          <div className="cust"><div><div className="custn">P. Steinmüller<span className="newt">NEU</span></div><div className="custm">1 Auftrag · Erstkunde</div></div><div className="custv">1.840 €</div></div>
+        </div>
+      </div>
+
+      {/* 7. Wochenziel */}
+      <div className="sec"><Target size={16} /> Wochenziel &amp; Trend</div>
+      <div className="col2">
+        <div className="week">
+          <div style={{display:'flex', justifyContent:'space-between', fontSize:'14px'}}><span>Fertiggestellte Objekte</span><b style={{fontWeight:600}}>23 / 25</b></div>
+          <div className="prog"><div className="progf" style={{width:'92%'}}></div></div>
+          <div style={{fontSize:'13px', color:'var(--ink2)'}}>Noch 2 Aufträge bis zum Wochenziel</div>
+          <div className="streak"><span className="stkb"><Target size={15} />5 Wochen</span><span style={{fontSize:'13px', color:'var(--ink2)'}}>Erfolgsserie über Ziel</span></div>
+        </div>
+        <div className="chartcard" style={{margin:0}}>
+          <div className="cht" style={{margin:'0 0 12px'}}>Ø Bearbeitungszeit je Teiletyp</div>
+          <div style={{display:'flex', alignItems:'flex-end', height:'100px', gap:'14px', paddingBottom:'12px', borderBottom:'1px solid var(--bd)'}}>
+            <div style={{flex:1, background:'#F05252', height:'94%', borderRadius:'4px 4px 0 0', position:'relative'}}><div style={{position:'absolute', bottom:'-24px', fontSize:'11px', width:'100%', textAlign:'center', color:'var(--ink3)'}}>Stoßst.</div></div>
+            <div style={{flex:1, background:'#3B82F6', height:'50%', borderRadius:'4px 4px 0 0', position:'relative'}}><div style={{position:'absolute', bottom:'-24px', fontSize:'11px', width:'100%', textAlign:'center', color:'var(--ink3)'}}>Motorr.</div></div>
+            <div style={{flex:1, background:'#22C55E', height:'26%', borderRadius:'4px 4px 0 0', position:'relative'}}><div style={{position:'absolute', bottom:'-24px', fontSize:'11px', width:'100%', textAlign:'center', color:'var(--ink3)'}}>Kleint.</div></div>
+          </div>
+        </div>
+      </div>
+
+      {/* 8. Frühwarnungen */}
+      <div className="wow">
+        <div className="wowh"><Sparkles size={20} /> Forecast &amp; Frühwarnungen <span className="wowb">WOW</span></div>
+        <div className="warn-card wc-i"><div className="wch info"><TrendingUp size={16} /> Umsatz-Prognose Jun–Aug</div>Erwartet: 38.200 € · 41.500 € · 36.800 € · Konfidenz 78%. Basis: 24-Monats-Saisonalität + Auftragsbestand. <span className="warn">Risiko: Juli −6% vs. Vj. — Oldtimer-Saison neigt sich, Reaktivierung jetzt einplanen.</span></div>
+        <div className="warn-card wc-r"><div className="wch neg"><AlertTriangle size={16} /> Reklamations-Frühwarnung</div>Auftrag A-2026-0042 (Stoßstangen Opel Rekord) hat <b style={{fontWeight:600}}>84% Reklamationsrisiko</b>. 3 Mustertreffer: Schleiferei-Wartezeit 8 T, Privatkunde, Stoßstangen-Typ. Vorbeugung: Express-Schaltung + proaktive Kundenkommunikation heute.</div>
+        <div className="warn-card wc-a"><div className="wch warn"><FlaskConical size={16} /> Bad-Frühwarnung</div><b style={{fontWeight:600}}>Nickelbad 1</b> schlägt voraussichtlich in <b style={{fontWeight:600}}>4 Tagen</b> Alarm (pH +0,12/Tag, Konzentration −2,1 g/l/Woche). Letzte stabile Messung 22.05. Dosierung Mittwoch früh einplanen — vermeidet ungeplanten Stopp Donnerstag.</div>
+        <div className="warn-card wc-g"><div className="wch pos"><UserPlus size={16} /> Reaktivierung — überfällige Stammkunden</div><b style={{fontWeight:600}}>6 Stammkunden</b> über Bestellrhythmus hinaus. Potenzial: <b style={{fontWeight:600}}>11.200 €</b>. Top 3: Schmidt GmbH (7 Mt., Ø 5), Restauration Becker (9 Mt., Ø 6), Antikladen Wagner (8 Mt., Ø 6).</div>
+      </div>
+
+      {/* 9. Finanzcontrolling */}
+      <div className="sim">
+        <div className="simh"><span>Finanzcontrolling &amp; Kalkulation</span><button className="eb disabled opacity-50 cursor-not-allowed"><Download size={15} style={{display:'inline', marginRight:'6px'}}/>Lexware / DATEV (Geplant)</button></div>
+        
+        <div style={{margin:'0 0 16px'}}>
+          <div className="slbl"><span>Verrechnungssatz (Netto)</span><div style={{display:'flex', alignItems:'center', gap:'10px'}}><span className="sval">{fmt(rate)} €/h</span><button className={`lbtn ${!rateLocked ? 'op' : ''}`} onClick={() => setRateLocked(!rateLocked)}>{rateLocked ? <Lock size={14}/> : <Unlock size={14}/>} {rateLocked ? 'gesichert' : 'entsperrt'}</button></div></div>
+          <div className={rateLocked ? 'slk' : ''}><input type="range" min="50" max="200" value={rate} step="5" onChange={(e) => setRate(parseInt(e.target.value))} id="rate" /></div>
+        </div>
+        
+        <div style={{margin:'0 0 16px'}}>
+          <div className="slbl"><span>Monatliche Fixkosten <span onClick={() => setFkpOpen(!fkpOpen)} style={{color:'#FBBF24', cursor:'pointer', fontSize:'12px', marginLeft:'8px'}}>· bearbeiten</span></span><div style={{display:'flex', alignItems:'center', gap:'10px'}}><span className="sval">{fmt(fix)} €</span><button className={`lbtn ${!fixLocked ? 'op' : ''}`} onClick={() => setFixLocked(!fixLocked)}>{fixLocked ? <Lock size={14}/> : <Unlock size={14}/>} {fixLocked ? 'gesichert' : 'entsperrt'}</button></div></div>
+          <div className={fixLocked ? 'slk' : ''}><input type="range" min="1000" max="10000" value={fix} step="100" onChange={(e) => setFix(parseInt(e.target.value))} id="fix" /></div>
+        </div>
+
+        {fkpOpen && (
+          <div className="fkp">
+            <div style={{fontSize:'14px', fontWeight:600, margin:'0 0 12px'}}>Fixkosten zusammenstellen</div>
+            <div className="fkr"><span style={{color:'var(--ink2)'}}>Miete / Grundkosten</span><input type="number" defaultValue="1200" /><span style={{color:'var(--ink3)'}}>€</span></div>
+            <div className="fkr"><span style={{color:'var(--ink2)'}}>Energie &amp; Strom</span><input type="number" defaultValue="650" /><span style={{color:'var(--ink3)'}}>€</span></div>
+            <div className="fkr"><span style={{color:'var(--ink2)'}}>Versicherungen</span><input type="number" defaultValue="380" /><span style={{color:'var(--ink3)'}}>€</span></div>
+            <div className="fkr"><span style={{color:'var(--ink2)'}}>Sonstiges</span><input type="number" defaultValue="270" /><span style={{color:'var(--ink3)'}}>€</span></div>
+            <div style={{display:'flex', justifyContent:'flex-end', gap:'12px', marginTop:'16px'}}><button onClick={() => setFkpOpen(false)} className="tab" style={{border:'0.5px solid var(--bd)'}}>Abbrechen</button><button onClick={() => setFkpOpen(false)} style={{fontSize:'14px', padding:'10px 18px', border:'none', borderRadius:'8px', background:'var(--pos)', color:'#fff', cursor:'pointer', fontWeight:600}}>Speichern</button></div>
+          </div>
+        )}
+
+        <div className="s3">
+          <div className="s3c"><div className="s3l">Umsatz</div><div className="s3v">{fmt(rev)} €</div></div>
+          <div className="s3c"><div className="s3l">Deckungsbeitrag</div><div className={`s3v ${db >= 0 ? 'pos' : 'neg'}`}>{fmt(db)} €</div></div>
+          <div className="s3c"><div className="s3l">Gewinn</div><div className={`s3v ${profit >= 0 ? 'pos' : 'neg'}`}>{profit < 0 ? '-' : ''}{fmt(Math.abs(profit))} €</div></div>
+        </div>
+        
+        <div className="fcb"><div><div style={{fontSize:'11px', fontWeight:600, color:'rgba(255,255,255,.5)', textTransform:'uppercase', letterSpacing:'.5px'}}>Umsatz-Forecast Monatsende</div><div style={{fontSize:'12px', color:'rgba(255,255,255,.5)', marginTop:'3px'}}>9 Aufträge im Fluss</div></div><div style={{fontSize:'26px', fontWeight:600, color:'#22D3EE'}}>{fmt(Math.round(rev * 1.06))} €</div></div>
+      </div>
+
+      {/* 10. DATEV Geplant */}
+      <div className="tax">
+        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between', margin:'0 0 6px'}}><div style={{fontSize:'15px', fontWeight:600, display:'flex', alignItems:'center', gap:'8px'}}><Building size={18} />Finanzzentrale &amp; Buchhaltung</div><div style={{fontSize:'12px', color:'var(--ink3)'}}>Schritt zum Komplettsystem</div></div>
+        <div style={{fontSize:'14px', color:'var(--ink2)', margin:'0 0 12px'}}>Direktexport für DATEV-Steuerberater, Behörden — oder Buchhaltung selbst übernehmen.</div>
+        <div className="tg">
+          <div className="tb"><FileSpreadsheet size={20} /><div>DATEV Buchungsstapel<div className="ts">EXTF-Format (Geplant)</div></div></div>
+          <div className="tb"><FileText size={20} /><div>Lexware / Excel<div className="ts">Export (Geplant)</div></div></div>
+          <div className="tb"><LineChart size={20} /><div>BWA (monatlich)<div className="ts">Betriebsauswertung (Geplant)</div></div></div>
+          <div className="tb"><Receipt size={20} /><div>EÜR / UStVA<div className="ts">Jahres- &amp; Voranmeldung (Geplant)</div></div></div>
+        </div>
+        <div className="saveb opacity-60"><PiggyBank size={22} className="text-pos" /><div><b style={{fontWeight:600}}>Kostenersparnis:</b> Laufende Buchung + BWA selbst → ca. <b style={{fontWeight:600}}>50–70%</b> der Steuerberater-Kosten gespart. (Demnächst)</div></div>
+        <div className="aibox"><div className="aih"><Sparkles size={16} /> KI-Steueranalyse</div>Deckungsbeitragsmarge 27,9% — bei eurem Energieaufwand solide. Verrechnungssatz 95→110 €/h ergäbe ceteris paribus <b style={{fontWeight:600}}>+8.400 € Jahresgewinn</b>. Energiekosten Q2 +8% noch nicht eingepreist. <span className="pu cursor-pointer">Vollanalyse + Prompt-Export (Geplant) ›</span></div>
+      </div>
+
+      {/* 11. Marketing Timing Geplant */}
+      <div className="mkt opacity-80">
+        <div className="mktic"><Camera size={24} /></div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:'14px', fontWeight:600}}>Marketing-Timing <span className="chbadge" style={{background:'var(--purpbg)', color:'var(--purple)', marginLeft:'8px'}}>KI-TIPP (Geplant)</span></div>
+          <div style={{fontSize:'13px', color:'var(--ink2)', marginTop:'5px'}}>Heute 18:30 ist euer bestes Story-Fenster (höchste Reichweite Di/Do). Vorschlag: vergoldeter Leuchter aus Auftrag #38 — vorher/nachher.</div>
+        </div>
+        <ChevronRight size={22} style={{color:'var(--ink3)'}} />
+      </div>
+
     </div>
   );
 }
