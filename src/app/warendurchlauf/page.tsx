@@ -1,5 +1,6 @@
 "use client";
 
+import { usePageView } from "@/hooks/usePageView";
 import { useState } from "react";
 import { IntakeEntry } from "@/components/intake/IntakeEntry";
 import { CameraCapture } from "@/components/intake/CameraCapture";
@@ -73,6 +74,7 @@ const generateAutofillDetails = (companyName: string) => {
 };
 
 export default function NewOrderWizard() {
+  usePageView();
   const [step, setStep] = useState<WizardStep>("entry");
 
   // Shared payload

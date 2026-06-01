@@ -1,11 +1,13 @@
 "use client";
 
+import { usePageView } from "@/hooks/usePageView";
 import { useState } from "react";
 import OrdersPage from "@/app/orders/page";
 import CustomersPage from "@/app/customers/page";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 
 export default function KundenAuftraegeWrapper() {
+  usePageView();
   const [activeTab, setActiveTab] = useState<"orders" | "customers">("orders");
 
   return (

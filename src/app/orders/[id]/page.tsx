@@ -1,4 +1,5 @@
 "use client";
+import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, use } from "react";
 import { OrderActionGrid } from "@/components/orders/OrderActionGrid";
 import { OrderTimeline } from "@/components/orders/OrderTimeline";
@@ -10,6 +11,7 @@ import { Clock, Box } from "lucide-react";
 import { getStationConfig } from "@/constants/stations";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  usePageView();
   const { id } = use(params);
   const [completionModalOpen, setCompletionModalOpen] = useState(false);
   const [printOpen, setPrintOpen] = useState(false);

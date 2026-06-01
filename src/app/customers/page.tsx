@@ -1,5 +1,6 @@
 "use client";
 
+import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,10 +38,12 @@ import { SearchToolbar } from "@/components/ui/SearchToolbar";
 import type { CustomerType } from "@/types/customerType";
 import { NewCustomerForm } from "@/components/customers/NewCustomerForm";
 import { customersRepository } from "@/lib/repositories/customersRepository";
+import { trackUiEvent } from "@/lib/tracking/tracking";
 
 const safe = (value: unknown) => String(value ?? "").toLowerCase();
 
 export default function CustomersPage() {
+  usePageView();
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -92,6 +95,7 @@ export default function CustomersPage() {
 
   const selectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
+    trackUiEvent("detail_open", { target: "customer", id: customer.id, name: customer.name });
   };
 
   const handleStartEdit = (customer: Customer) => {

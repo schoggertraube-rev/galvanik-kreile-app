@@ -1,5 +1,6 @@
 "use client";
 
+import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Delete, Clock, Wrench, Calculator, Sun, CloudRain, Cloud, ShieldAlert } from "lucide-react";
@@ -377,6 +378,7 @@ function StartScreenContent() {
 }
 
 export default function StartScreen() {
+  usePageView();
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-bg-app-soft flex items-center justify-center p-8">

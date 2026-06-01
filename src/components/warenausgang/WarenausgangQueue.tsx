@@ -5,7 +5,7 @@ import { Order } from "@/lib/repositories/ordersRepository";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
 import { PackageCheck, Mail, CheckCircle2, AlertCircle, FileText, Loader2 } from "lucide-react";
-import { trackUiEvent } from "@/lib/tracking/tracking";
+
 import { getUrgency } from "@/lib/orders/getUrgency";
 import { generateDeliveryNote } from "@/app/actions/pdf.actions";
 

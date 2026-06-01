@@ -1,5 +1,6 @@
 "use client";
 
+import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
@@ -24,6 +25,7 @@ import { customersRepository } from "@/lib/repositories/customersRepository";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 export default function TodayDashboard() {
+  usePageView();
   const [orders, setOrders] = useState<MockOrder[]>(INITIAL_ORDERS);
   const [customers, setCustomers] = useState<MockCustomer[]>(INITIAL_CUSTOMERS);
   const [filter, setFilter] = useState<string>("all");

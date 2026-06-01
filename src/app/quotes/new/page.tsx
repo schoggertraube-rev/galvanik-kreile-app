@@ -1,5 +1,6 @@
 "use client";
 
+import { usePageView } from "@/hooks/usePageView";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -11,6 +12,7 @@ import { createInquiry } from "@/app/actions/inquiries.actions";
 type WizardStep = "customer" | "details" | "text" | "summary";
 
 export default function NewQuotePage() {
+  usePageView();
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>("customer");
   

@@ -1,5 +1,6 @@
 "use client";
 
+import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +51,7 @@ const DELAY_METADATA: Record<string, {
 };
 
 export default function StatusDelayPage() {
+  usePageView();
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [selectedStation, setSelectedStation] = useState<string | null>(null);
   const [orders, setOrders] = useState<MockOrder[]>([]);

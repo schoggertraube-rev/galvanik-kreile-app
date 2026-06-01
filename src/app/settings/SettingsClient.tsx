@@ -9,7 +9,8 @@ import { RoleMatrix } from "@/components/admin/RoleMatrix";
 import { FeatureToggles } from "@/components/admin/FeatureToggles";
 import { DataImportCenter } from "@/components/admin/DataImportCenter";
 import { CompanySettingsForm } from "@/components/admin/CompanySettingsForm";
-import { Server, Users, Shield, Power, Database, Settings, Building2 } from "lucide-react";
+import { Server, Users, Shield, Power, Database, Settings, Building2, BarChart2 } from "lucide-react";
+import Link from "next/link";
 
 type Tab = "status" | "company" | "users" | "roles" | "features" | "import" | "system";
 
@@ -19,10 +20,18 @@ export function SettingsClient({ isAdmin }: { isAdmin: boolean }) {
 
   return (
     <div className="space-y-6 pb-12 font-sans antialiased text-navy-900 max-w-[1200px] mx-auto">
-      <PageHeader
-        title="Admin Console & Einstellungen"
-        subtitle="Verwalte Einstellungen und Systemparameter."
-      />
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+        <PageHeader
+          title="Admin Console & Einstellungen"
+          subtitle="Verwalte Einstellungen und Systemparameter."
+        />
+        {isAdmin && (
+          <Link href="/admin/analytics" className="inline-flex items-center gap-2 px-4 py-2 bg-kreile-yellow text-navy-900 font-semibold rounded-xl hover:bg-yellow-500 transition-colors shadow-sm">
+            <BarChart2 className="w-5 h-5" />
+            App-Nutzung / Analytics
+          </Link>
+        )}
+      </div>
 
       <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide border-b border-neutral-gray-200">
         <TabButton active={activeTab === "status"} onClick={() => setActiveTab("status")} icon={<Server />} label="Status & Diagnose" />

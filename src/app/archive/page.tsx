@@ -1,5 +1,6 @@
 "use client";
 
+import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +11,7 @@ import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 export default function ArchivePage() {
+  usePageView();
   const [orders, setOrders] = useState<MockOrder[]>([]);
 
   useEffect(() => {

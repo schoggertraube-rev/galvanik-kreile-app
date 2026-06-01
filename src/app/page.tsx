@@ -1,5 +1,6 @@
 "use client";
 
+import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
@@ -178,6 +179,7 @@ function TimelineItem({
 // MAIN DASHBOARD
 // ────────────────────────────────────────────────
 export default function HomeDashboard() {
+  usePageView();
   const [orders, setOrders] = useState<MockOrder[]>([]);
   const [openQuotes, setOpenQuotes] = useState(0);
   const [morningMessage, setMorningMessage] = useState("Gleich feierabend! 🍺 Salzsäure bestellen nicht vergessen.");

@@ -1,5 +1,6 @@
 "use client";
 
+import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, use } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
@@ -17,6 +18,7 @@ import { WarenausgangQueue } from "@/components/warenausgang/WarenausgangQueue";
 const VALID_SLUGS = ["wareneingang", "entmetallisierung", "schleiferei", "beschichtung", "warenausgang"];
 
 export default function StationPage({ params }: { params: Promise<{ slug: string }> }) {
+  usePageView();
   const { slug } = use(params);
 
   if (!VALID_SLUGS.includes(slug)) {

@@ -1,5 +1,6 @@
 "use client";
 
+import { usePageView } from "@/hooks/usePageView";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -24,6 +25,7 @@ function calcTotal(p: QuoteRequest["pricing"]) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function QuotesPage() {
+  usePageView();
   const [requests, setRequests] = useState<QuoteRequest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pricing, setPricing] = useState<Record<string, QuoteRequest["pricing"]>>({});

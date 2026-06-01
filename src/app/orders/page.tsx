@@ -30,12 +30,15 @@ import { getUrgency, Urgency } from "@/lib/orders/getUrgency";
 import { OrderEditModal } from "@/components/orders/OrderEditModal";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchToolbar } from "@/components/ui/SearchToolbar";
-import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
+import { DetailOverlay } from "@/components/ui/DetailOverlay";
+import { trackUiEvent } from "@/lib/tracking/tracking";
+import { usePageView } from "@/hooks/usePageView";
 
 const safe = (value: unknown) => String(value ?? "").toLowerCase();
 
 
 function OrdersPageInner() {
+  usePageView();
   const searchParams = useSearchParams();
   const stationFilter = searchParams.get("station");
   const [searchTerm, setSearchTerm] = useState("");
@@ -101,6 +104,15 @@ function OrdersPageInner() {
       window.removeEventListener('kreile-sync-focus', handleSync);
     };
   }, []);
+
+  // Search tracking — fires 800 ms after the user stops typing
+  useEffect(() => {
+    if (!searchTerm.trim()) return;
+    const timer = setTimeout(() => {
+      trackUiEvent("search", { term: searchTerm });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   const handleStatusChange = (orderId: string, newRisk: "green" | "yellow" | "orange" | "red" | "blocked") => {
     const updated = orders.map(o => {
@@ -364,6 +376,7 @@ function OrdersPageInner() {
                   onClickCapture={(e) => {
                     console.log("Card onClickCapture fired!", { id: order.id });
                     setSelectedOrderId(order.id);
+                    trackUiEvent("detail_open", { target: "order", id: order.id, orderNumber: order.orderNumber });
                   }}
                   className={`transition-all duration-200 cursor-pointer border-neutral-gray-100 shadow-sm ${itemBg} ${borderStyle} ${
                     isSelected ? "ring-2 ring-navy-900 border-transparent shadow" : "hover:border-neutral-gray-300"
@@ -414,13 +427,14 @@ function OrdersPageInner() {
         )}
       </div>
 
-      {/* Detail Drawer */}
+      {/* Detail Overlay */}
+      <DetailOverlay
+        open={!!selectedOrderId && !!selectedOrder}
+        onClose={() => setSelectedOrderId(null)}
+        title={selectedOrder ? `Auftrag ${selectedOrder.orderNumber}` : undefined}
+        subtitle={selectedOrder?.customerName}
+      >
       {selectedOrder && (
-        <ResponsiveDetailDrawer
-          isOpen={!!selectedOrderId}
-          onClose={() => setSelectedOrderId(null)}
-          title={`Auftrag ${selectedOrder.orderNumber}`}
-        >
           <div className="space-y-5 relative">
             <button
               onClick={() => setIsEditingOrder(true)}
@@ -622,8 +636,8 @@ function OrdersPageInner() {
               )}
             </div>
           </div>
-        </ResponsiveDetailDrawer>
       )}
+      </DetailOverlay>
 
       {isEditingOrder && selectedOrder && (
         <OrderEditModal

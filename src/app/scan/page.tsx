@@ -1,5 +1,6 @@
 "use client";
 
+import { usePageView } from "@/hooks/usePageView";
 import { useState } from "react";
 import { CameraCapture } from "@/components/intake/CameraCapture";
 import { OCRReviewPanel } from "@/components/intake/OCRReviewPanel";
@@ -8,6 +9,7 @@ import { OcrResult } from "@/lib/ocr/geminiOcr";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 export default function ScanPage() {
+  usePageView();
   const [scan, setScan] = useState<OcrResult | null>(null);
   const [confirmMessage, setConfirmMessage] = useState<string>("");
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,8 +25,11 @@ import {
 import { inventoryRepository, InventoryItem, StockMovement } from "@/lib/repositories/inventoryRepository";
 import { bathsRepository, Bath, BathMeasurementLog, BathAddition } from "@/lib/repositories/bathsRepository";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { trackUiEvent } from "@/lib/tracking/tracking";
+import { DetailOverlay } from "@/components/ui/DetailOverlay";
 
 export default function ItemsPage() {
+  usePageView();
   const [activeSection, setActiveSection] = useState<"inventory" | "baths">("inventory");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("all");
@@ -335,7 +339,7 @@ export default function ItemsPage() {
                       return (
                         <div
                           key={item.id}
-                          onClick={() => setSelectedItemId(item.id)}
+                          onClick={() => { setSelectedItemId(item.id); trackUiEvent("detail_open", { target: "inventory", id: item.id }); }}
                           className={`p-4 hover:bg-bg-app-soft/50 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
                             isSelected ? "bg-bg-app border-l-4 border-navy-900" : "border-l-4 border-transparent"
                           }`}
@@ -442,7 +446,7 @@ export default function ItemsPage() {
                   return (
                     <Card
                       key={bath.id}
-                      onClick={() => setSelectedBathId(bath.id)}
+                      onClick={() => { setSelectedBathId(bath.id); trackUiEvent("detail_open", { target: "bath", id: bath.id }); }}
                       className={`cursor-pointer transition-all duration-300 relative border-2 ${
                         isSelected 
                           ? "ring-2 ring-navy-900 border-navy-900 shadow-md scale-[1.01]" 
@@ -732,22 +736,15 @@ export default function ItemsPage() {
           )}
 
           {/* SECTION 2 DETAIL CARD: BATH DETAILS & DIGITAL RULE CARD ACTIONS */}
-          {activeSection === "baths" && selectedBath && (
-            <Card className="shadow-md border-neutral-gray-100 overflow-hidden sticky top-24">
-              <div className="bg-navy-900 text-white p-5 relative">
-                <div className="absolute right-0 top-0 -mt-10 -mr-10 w-28 h-28 bg-gold-1000/10 rounded-full blur-3xl pointer-events-none"></div>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="text-[9px] uppercase font-black text-text-muted tracking-widest font-mono">Prozess-Kontrollkarte</span>
-                    <h3 className="font-black text-2xl leading-none mt-1.5 font-serif text-white">{selectedBath.name}</h3>
-                  </div>
-                  <span className="font-mono text-base font-black text-white/70 bg-navy-900 border border-navy-700 px-3 py-1.5 rounded-xl">
-                    {selectedBath.bathNumber}
-                  </span>
-                </div>
-              </div>
-
-              {/* Quick Locked status block */}
+          <DetailOverlay
+            open={activeSection === "baths" && !!selectedBath}
+            onClose={() => setSelectedBathId(null)}
+            title="Prozess-Kontrollkarte"
+            subtitle={selectedBath?.name}
+            badgeContent={selectedBath ? `Bad ${selectedBath.bathNumber}` : undefined}
+          >
+            {selectedBath && (
+              <div>
               <div className="p-4 bg-bg-app-soft border-b border-neutral-gray-100 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-2">
                   <Badge className={`font-extrabold text-[10px] uppercase py-1 px-2.5 ${
@@ -998,8 +995,9 @@ export default function ItemsPage() {
                   </div>
                 </div>
               </CardContent>
-            </Card>
-          )}
+              </div>
+            )}
+          </DetailOverlay>
 
         </div>
 

@@ -1,4 +1,5 @@
 "use client";
+import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { CustomerProfileHeader } from "@/components/customers/CustomerProfileHeader";
@@ -27,6 +28,7 @@ import {
 } from "lucide-react";
 
 export default function CustomerProfilePage({ params }: { params: Promise<{ id: string }> }) {
+  usePageView();
   const { id } = use(params);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [agreements, setAgreements] = useState<PriceAgreement[]>([]);
