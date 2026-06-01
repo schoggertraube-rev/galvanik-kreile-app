@@ -24,6 +24,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const [syncQueueCount, setSyncQueueCount] = useState(0);
   const [orderCount, setOrderCount] = useState(0);
   const [logoUrl, setLogoUrl] = useState("/assets/logo/kreile-wordmark-skyline.svg");
+  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
   
   const { status: realtimeStatus } = useRealtimeStatus();
 
@@ -36,6 +37,9 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     // Load initials from local storage on mount
     const initials = localStorage.getItem("kreile_user_initials");
     if (initials) setUserInitials(initials);
+    
+    const role = localStorage.getItem("kreile_user_role");
+    if (role === "admin" || role === "developer") setIsAdminOrDev(true);
   }, []);
 
   // Click outside to close user dropdown
@@ -230,6 +234,24 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
               >
                 Einstellungen
               </Link>
+              {isAdminOrDev && (
+                <>
+                  <Link
+                    href="/admin/import"
+                    onClick={() => setUserDropdownOpen(false)}
+                    className="block w-full text-left px-3 py-2 text-sm font-bold text-accent-orange hover:bg-accent-orange/10 rounded-xl transition-colors cursor-pointer mb-1"
+                  >
+                    Datenimport
+                  </Link>
+                  <Link
+                    href="/admin/devices"
+                    onClick={() => setUserDropdownOpen(false)}
+                    className="block w-full text-left px-3 py-2 text-sm font-bold text-accent-orange hover:bg-accent-orange/10 rounded-xl transition-colors cursor-pointer mb-1"
+                  >
+                    Geräte & Sessions
+                  </Link>
+                </>
+              )}
               <button
                 onClick={handleLogout}
                 className="w-full text-left px-3 py-2 text-sm font-bold text-danger-red hover:bg-danger-red/10 rounded-xl transition-colors cursor-pointer"

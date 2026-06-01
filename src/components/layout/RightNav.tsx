@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { RightNavItem } from "./RightNavItem";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { bathsRepository } from "@/lib/repositories/bathsRepository";
-import { Home, PackageCheck, Warehouse, Archive, Users, MessageSquare } from "lucide-react";
+import { Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone } from "lucide-react";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import Link from "next/link";
 import { useFeatureFlag } from "@/lib/license/useFeatureFlag";
@@ -41,6 +41,7 @@ export function RightNav() {
   const pathname = usePathname();
   const [openQuotes, setOpenQuotes] = useState(0);
   const [hasCriticalBaths, setHasCriticalBaths] = useState(false);
+  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
   
   const performanceFeature = useFeatureFlag("performance_score");
 
@@ -48,6 +49,9 @@ export function RightNav() {
     const fetchStats = async () => {
       setOpenQuotes(await inquiriesRepository.getOpenCount());
       setHasCriticalBaths(await bathsRepository.hasCriticalBath());
+      
+      const role = localStorage.getItem("kreile_user_role");
+      if (role === "admin" || role === "developer") setIsAdminOrDev(true);
     };
     
     fetchStats();
@@ -119,9 +123,19 @@ export function RightNav() {
           icon={<Warehouse className="w-5 h-5" strokeWidth={1.5} />}
           variant="normal"
           isActive={isActive("/items")}
-          status={hasCriticalBaths ? "critical" : undefined}
           onClick={() => trackUiEvent("nav_click", { target: "/items" })}
         />
+        <div className="mt-4 w-full">
+          <RightNavItem
+            label="Bäder"
+            href="/baeder"
+            icon={<Beaker className="w-5 h-5" strokeWidth={1.5} />}
+            variant="normal"
+            isActive={isActive("/baeder")}
+            status={hasCriticalBaths ? "critical" : undefined}
+            onClick={() => trackUiEvent("nav_click", { target: "/baeder" })}
+          />
+        </div>
       </div>
 
       <div className="flex flex-col items-center w-full border-t border-neutral-gray-100 pt-4 mb-4">
@@ -133,6 +147,54 @@ export function RightNav() {
           isActive={isActive("/kontrolle") || isActive("/archive") || isActive("/performance")}
           onClick={() => trackUiEvent("nav_click", { target: "/kontrolle" })}
         />
+        
+        <div className="mt-4 w-full">
+          <RightNavItem
+            label="Kundenservice"
+            href="/kundenservice"
+            icon={<HeartHandshake className="w-5 h-5" strokeWidth={1.5} />}
+            variant="normal"
+            isActive={isActive("/kundenservice")}
+            onClick={() => trackUiEvent("nav_click", { target: "/kundenservice" })}
+          />
+        </div>
+
+        <div className="mt-4 w-full">
+          <RightNavItem
+            label="Buchhaltung"
+            href="/finanzen"
+            icon={<Banknote className="w-5 h-5" strokeWidth={1.5} />}
+            variant="normal"
+            isActive={isActive("/finanzen")}
+            onClick={() => trackUiEvent("nav_click", { target: "/finanzen" })}
+          />
+        </div>
+
+        {isAdminOrDev && (
+          <div className="mt-4 w-full">
+            <RightNavItem
+              label="Datenimport"
+              href="/admin/import"
+              icon={<Database className="w-5 h-5" strokeWidth={1.5} />}
+              variant="normal"
+              isActive={isActive("/admin/import")}
+              onClick={() => trackUiEvent("nav_click", { target: "/admin/import" })}
+            />
+          </div>
+        )}
+
+        {isAdminOrDev && (
+          <div className="mt-4 w-full">
+            <RightNavItem
+              label="Geräte"
+              href="/admin/devices"
+              icon={<MonitorSmartphone className="w-5 h-5" strokeWidth={1.5} />}
+              variant="normal"
+              isActive={isActive("/admin/devices")}
+              onClick={() => trackUiEvent("nav_click", { target: "/admin/devices" })}
+            />
+          </div>
+        )}
       </div>
       
     </aside>

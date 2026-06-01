@@ -41,8 +41,13 @@ export async function getCurrentAppUser() {
 
   if (!user) return null;
 
-  const [appUser] = await db.select().from(appUsers).where(eq(appUsers.id, user.id));
-  return appUser || null;
+  try {
+    const [appUser] = await db.select().from(appUsers).where(eq(appUsers.id, user.id));
+    return appUser || null;
+  } catch (error: any) {
+    console.error("Error fetching appUser:", error?.message || error);
+    return null;
+  }
 }
 
 /**

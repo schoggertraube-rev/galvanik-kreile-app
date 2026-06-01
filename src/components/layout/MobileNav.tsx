@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { X, Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, ChevronDown, ChevronRight } from "lucide-react";
+import { X, Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, ChevronDown, ChevronRight, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone } from "lucide-react";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { bathsRepository } from "@/lib/repositories/bathsRepository";
 
@@ -16,6 +16,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
   const pathname = usePathname();
   const [openQuotes, setOpenQuotes] = useState(0);
   const [hasCriticalBaths, setHasCriticalBaths] = useState(false);
+  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
   
   // Submenu states
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
@@ -27,6 +28,8 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
     };
     if (open) {
       fetchStats();
+      const role = localStorage.getItem("kreile_user_role");
+      if (role === "admin" || role === "developer") setIsAdminOrDev(true);
     }
   }, [open]);
 
@@ -175,6 +178,11 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
             label="Lager/Chemie"
             href="/items"
             icon={Warehouse}
+          />
+          <NavItem
+            label="Bäder"
+            href="/baeder"
+            icon={Beaker}
             status={hasCriticalBaths ? "critical" : undefined}
           />
           <NavItem
@@ -186,6 +194,30 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
               { label: "Performance", href: "/performance" }
             ]}
           />
+          <NavItem
+            label="Kundenservice"
+            href="/kundenservice"
+            icon={HeartHandshake}
+          />
+          <NavItem
+            label="Buchhaltung"
+            href="/finanzen"
+            icon={Banknote}
+          />
+          {isAdminOrDev && (
+            <>
+              <NavItem
+                label="Datenimport"
+                href="/admin/import"
+                icon={Database}
+              />
+              <NavItem
+                label="Geräte"
+                href="/admin/devices"
+                icon={MonitorSmartphone}
+              />
+            </>
+          )}
         </nav>
       </div>
     </>
