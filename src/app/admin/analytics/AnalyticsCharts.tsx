@@ -39,7 +39,7 @@ export function ActivityLineChart({ data }: { data: LineChartData[] }) {
   return (
     <Card className="shadow-sm">
       <CardHeader>
-        <CardTitle className="text-sm font-bold text-navy-900">Aktivität letzte 7 Tage</CardTitle>
+        <CardTitle className="text-sm font-bold text-navy-900">Aktivit&auml;t letzte 7 Tage</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="h-64">
