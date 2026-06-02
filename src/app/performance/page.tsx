@@ -2,14 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { DetailOverlay } from '@/components/ui/DetailOverlay';
 import { 
-  Search, Moon, Sun, ChevronDown, Sparkles, Activity, 
+  Moon, Sun, Sparkles, Activity, 
   TrendingUp, AlertTriangle, FlaskConical, Users, ArrowRight,
-  Target, Zap, AlertOctagon, TrendingDown, Clock, ShieldCheck,
-  CheckCircle2, AlertCircle, BarChart3, Factory, HeartHandshake, Banknote, Map
+  Banknote
 } from 'lucide-react';
-import { usePageView } from '@/hooks/usePageView';
 
 export default function PerformanceCockpit() {
   // Disable normal tracking since user requested: "App-Nutzungsanalyse bleibt NICHT auf /performance"
@@ -21,9 +18,6 @@ export default function PerformanceCockpit() {
   const [tab, setTab] = useState('Monat');
   const [cmpOn, setCmpOn] = useState(false);
   const [cmpPer, setCmpPer] = useState('vormonat');
-  const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
-  const [level3State, setLevel3State] = useState<string | null>(null);
-
   // Sync theme
   useEffect(() => {
     const saved = localStorage.getItem('perfTheme');
@@ -43,11 +37,6 @@ export default function PerformanceCockpit() {
       if (k === cmpPer) return `${v} vs. ${cmpPer.charAt(0).toUpperCase() + cmpPer.slice(1)}`;
     }
     return null;
-  };
-
-  const openOverlay = (id: string) => {
-    setActiveOverlay(id);
-    setLevel3State(null); // reset level 3
   };
 
   return (
@@ -223,28 +212,31 @@ export default function PerformanceCockpit() {
 
         {/* 2. KI-Kachel */}
         <div className="t-grid">
-          <div className="t-tile ki-tile" onClick={() => openOverlay('ki')}>
-            <div className="t-glow"></div>
-            <div className="t-ico" style={{background: 'var(--posbg)'}}>
-              <Sparkles className="w-5 h-5" style={{color: 'var(--pos)'}} />
-            </div>
-            <div className="t-th">
-              <div className="t-tl" style={{gap:0}}>
-                <div>
-                  <div className="t-name" style={{color: 'var(--pos)'}}>Was kann ich besser machen?</div>
-                  <div className="ki-hint">KI-Analyse · Tipps · Handlungsempfehlungen für alle Bereiche</div>
-                </div>
+          <Link href="/performance/ki-empfehlungen" style={{textDecoration:'none',color:'inherit'}}>
+            <div className="t-tile ki-tile">
+              <div className="t-glow"></div>
+              <div className="t-ico" style={{background: 'var(--posbg)'}}>
+                <Sparkles className="w-5 h-5" style={{color: 'var(--pos)'}} />
               </div>
-              <span className="t-pill t-pill-g">4 TIPPS</span>
+              <div className="t-th">
+                <div className="t-tl" style={{gap:0}}>
+                  <div>
+                    <div className="t-name" style={{color: 'var(--pos)'}}>Was kann ich besser machen?</div>
+                    <div className="ki-hint">KI-Analyse · Tipps · Handlungsempfehlungen für alle Bereiche</div>
+                  </div>
+                </div>
+                <span className="t-pill t-pill-g">6 TIPPS</span>
+              </div>
+              <div className="t-arr" style={{opacity:1, color:'var(--pos)'}}>Ansehen →</div>
             </div>
-            <div className="t-arr" style={{opacity:1, color:'var(--pos)'}}>Ansehen →</div>
-          </div>
+          </Link>
         </div>
 
         {/* 3. Hauptkacheln */}
         <div className="t-grid">
           {/* A) Werkstatt-Puls */}
-          <div className="t-tile t-hero" onClick={() => openOverlay('werkstatt')}>
+          <Link href="/performance/werkstatt-puls" style={{textDecoration:'none',color:'inherit'}}>
+          <div className="t-tile t-hero">
             <div className="t-glow" style={{background: '#22D3EE'}}></div>
             <div className="t-th">
               <div className="t-tl">
@@ -301,11 +293,13 @@ export default function PerformanceCockpit() {
             </div>
             <div className="t-arr">Details →</div>
           </div>
+          </Link>
         </div>
 
         <div className="t-grid t-g2">
           {/* B) Umsatz und Marge */}
-          <div className="t-tile" onClick={() => openOverlay('umsatz')}>
+          <Link href="/performance/umsatz-marge" style={{textDecoration:'none',color:'inherit'}}>
+          <div className="t-tile">
             <div className="t-glow" style={{background: '#34D399'}}></div>
             <div className="t-th">
               <div className="t-tl">
@@ -333,9 +327,11 @@ export default function PerformanceCockpit() {
             </div>
             <div className="t-arr">Details →</div>
           </div>
+          </Link>
 
           {/* C) Qualität und Risiko */}
-          <div className="t-tile" onClick={() => openOverlay('qualitaet')}>
+          <Link href="/performance/qualitaet-risiko" style={{textDecoration:'none',color:'inherit'}}>
+          <div className="t-tile">
             <div className="t-glow" style={{background: '#FBBF24'}}></div>
             <div className="t-th">
               <div className="t-tl">
@@ -359,9 +355,11 @@ export default function PerformanceCockpit() {
             </div>
             <div className="t-arr">Details →</div>
           </div>
+          </Link>
 
           {/* D) Bäder und Material */}
-          <div className="t-tile" onClick={() => openOverlay('baeder')}>
+          <Link href="/performance/baeder-material" style={{textDecoration:'none',color:'inherit'}}>
+          <div className="t-tile">
             <div className="t-glow" style={{background: '#FBBF24'}}></div>
             <div className="t-th">
               <div className="t-tl">
@@ -388,9 +386,11 @@ export default function PerformanceCockpit() {
             </div>
             <div className="t-arr">Details →</div>
           </div>
+          </Link>
 
           {/* E) Kunden und Markt */}
-          <div className="t-tile" onClick={() => openOverlay('kunden')}>
+          <Link href="/performance/kunden-markt" style={{textDecoration:'none',color:'inherit'}}>
+          <div className="t-tile">
             <div className="t-glow" style={{background: '#60A5FA'}}></div>
             <div className="t-th">
               <div className="t-tl">
@@ -412,340 +412,12 @@ export default function PerformanceCockpit() {
             <div className="custrow"><span>🚗 82% Abholung</span><span>📦 18% Versand</span><span>🌍 3 Länder</span></div>
             <div className="t-arr">Details →</div>
           </div>
+          </Link>
 
         </div>
       </div>
 
-      {/* OVERLAYS (Level 2 + 3) */}
-      
-      {/* KI Overlay */}
-      <DetailOverlay open={activeOverlay === 'ki'} onClose={() => setActiveOverlay(null)} title="Was kann ich besser machen? (KI)">
-        <div style={{color: 'var(--ink)'}}>
-          <p style={{marginBottom: 16, color: 'var(--ink2)'}}>Die KI hat basierend auf Echtzeitdaten 4 Handlungsempfehlungen generiert:</p>
-          
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'ki1' ? null : 'ki1')}>
-            <div className="l2-title"><AlertTriangle className="w-4 h-4 text-warn" style={{color:'var(--warn)'}}/> 1. Nickelbad-Wartung vorziehen</div>
-            <div className="l2-desc">Ausschussquote beim Vernickeln um 2% gestiegen.</div>
-            {level3State === 'ki1' && (
-              <div className="l3-panel">
-                <p><strong>Signal:</strong> Abfall der PH-Werte in Schicht 2 gemeldet.</p>
-                <p style={{marginTop:4}}><strong>Ursache:</strong> Dosieranlage filtert nicht optimal.</p>
-                <p style={{marginTop:4}}><strong>Betroffener Bereich:</strong> Galvanik, Station 4.</p>
-                <p style={{marginTop:4}}><strong>Konkrete Maßnahme:</strong> Wartung dieses Wochenende durchführen.</p>
-                <p style={{marginTop:4, color:'var(--pos)'}}><strong>Erwarteter Nutzen:</strong> Senkung der Ausschussquote auf unter 1%, Vermeidung von Komplettausfall.</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/baeder" className="cmp-btn">Bäder-Management</Link>
-                  <Link href="/kontrolle" className="cmp-btn">Qualitätskontrolle</Link>
-                </div>
-              </div>
-            )}
-          </div>
 
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'ki2' ? null : 'ki2')}>
-            <div className="l2-title"><Target className="w-4 h-4 text-pos" style={{color:'var(--pos)'}}/> 2. Kapazität für Express-Aufträge frei</div>
-            <div className="l2-desc">Vorarbeit (Schleifen) ist aktuell unterausgelastet.</div>
-            {level3State === 'ki2' && (
-              <div className="l3-panel">
-                <p><strong>Signal:</strong> Maschinenstillstand 18% über Normalmaß in Station 1.</p>
-                <p style={{marginTop:4}}><strong>Ursache:</strong> Großkunde hat planmäßige Lieferung um 2 Tage verzögert.</p>
-                <p style={{marginTop:4}}><strong>Betroffener Bereich:</strong> Vorbereitung / Schleiferei.</p>
-                <p style={{marginTop:4}}><strong>Konkrete Maßnahme:</strong> 15% Express-Kontingent freigeben und ausgewählte Kunden informieren.</p>
-                <p style={{marginTop:4, color:'var(--pos)'}}><strong>Erwarteter Nutzen:</strong> Zusätzlicher Umsatz durch Express-Zuschläge (+800 € / Tag).</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/warendurchlauf" className="cmp-btn">Warendurchlauf</Link>
-                  <Link href="/orders" className="cmp-btn">Auftragsbuch</Link>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'ki3' ? null : 'ki3')}>
-            <div className="l2-title"><TrendingDown className="w-4 h-4 text-info" style={{color:'var(--info)'}}/> 3. Gold-Einkauf pausieren</div>
-            <div className="l2-desc">Gold-Tagespreis aktuell auf Jahreshoch.</div>
-            {level3State === 'ki3' && (
-              <div className="l3-panel">
-                <p><strong>Signal:</strong> Goldpreis überschreitet Warnschwelle von 68 €/g.</p>
-                <p style={{marginTop:4}}><strong>Ursache:</strong> Globale Marktschwankungen.</p>
-                <p style={{marginTop:4}}><strong>Betroffener Bereich:</strong> Einkauf / Materiallager.</p>
-                <p style={{marginTop:4}}><strong>Konkrete Maßnahme:</strong> Keine neuen Gold-Vorräte einkaufen, aktueller Bestand reicht 14 Tage.</p>
-                <p style={{marginTop:4, color:'var(--pos)'}}><strong>Erwarteter Nutzen:</strong> Vermeidung von Margenverlusten bei Preiskorrektur nächste Woche.</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/items" className="cmp-btn">Material-Lager</Link>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'ki4' ? null : 'ki4')}>
-            <div className="l2-title"><HeartHandshake className="w-4 h-4 text-purple" style={{color:'var(--purple)'}}/> 4. Kundenbetreuung priorisieren</div>
-            <div className="l2-desc">Wichtiger Kunde droht abzuwandern.</div>
-            {level3State === 'ki4' && (
-              <div className="l3-panel">
-                <p><strong>Signal:</strong> 2 Reklamationen in Folge, Antwortzeit &gt; 48h.</p>
-                <p style={{marginTop:4}}><strong>Ursache:</strong> Urlaubsbedingter Engpass im Kundenservice.</p>
-                <p style={{marginTop:4}}><strong>Betroffener Bereich:</strong> Kundenservice / Kommunikation.</p>
-                <p style={{marginTop:4}}><strong>Konkrete Maßnahme:</strong> Persönlichen Rückruf durch Geschäftsführung planen.</p>
-                <p style={{marginTop:4, color:'var(--pos)'}}><strong>Erwarteter Nutzen:</strong> Rettung eines Top-5 Kunden (CLV: 18.000 €).</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/kommunikation" className="cmp-btn">Kommunikations-Center</Link>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </DetailOverlay>
-
-      {/* Werkstatt Puls Overlay */}
-      <DetailOverlay open={activeOverlay === 'werkstatt'} onClose={() => setActiveOverlay(null)} title="Werkstatt-Puls">
-        <div style={{color: 'var(--ink)'}}>
-          
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'w1' ? null : 'w1')}>
-            <div className="l2-title"><Activity className="w-4 h-4" /> Durchlaufzeit & Engpassstationen</div>
-            <div className="l2-desc">Ø 9,4 Tage. Schleifen bei 94% Auslastung.</div>
-            
-            <div style={{marginTop:12, display:'flex', gap:6, flexDirection:'column'}}>
-              <div style={{display:'flex', alignItems:'center', gap:8, fontSize:10}}><span style={{width:60}}>Schleifen</span><div style={{flex:1, height:6, background:'var(--bd)', borderRadius:3}}><div style={{width:'94%', height:'100%', background:'var(--neg)', borderRadius:3}}></div></div><span>94%</span></div>
-              <div style={{display:'flex', alignItems:'center', gap:8, fontSize:10}}><span style={{width:60}}>Politur</span><div style={{flex:1, height:6, background:'var(--bd)', borderRadius:3}}><div style={{width:'78%', height:'100%', background:'var(--warn)', borderRadius:3}}></div></div><span>78%</span></div>
-              <div style={{display:'flex', alignItems:'center', gap:8, fontSize:10}}><span style={{width:60}}>Galvanik</span><div style={{flex:1, height:6, background:'var(--bd)', borderRadius:3}}><div style={{width:'62%', height:'100%', background:'var(--pos)', borderRadius:3}}></div></div><span>62%</span></div>
-              <div style={{display:'flex', alignItems:'center', gap:8, fontSize:10}}><span style={{width:60}}>Vorbereitung</span><div style={{flex:1, height:6, background:'var(--bd)', borderRadius:3}}><div style={{width:'41%', height:'100%', background:'var(--info)', borderRadius:3}}></div></div><span>41%</span></div>
-            </div>
-
-            {level3State === 'w1' && (
-              <div className="l3-panel">
-                <p><strong>Ursache für Verzögerung:</strong> Erhöhter Anteil an Sonderbearbeitungen vor der Galvanik.</p>
-                <p style={{marginTop:4}}><strong>Betroffene Aufträge (Engpass Schleifen):</strong> 14 Aufträge stauen sich.</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/warendurchlauf" className="cmp-btn">Warendurchlauf</Link>
-                  <Link href="/station/schleifen" className="cmp-btn">Station ansehen (Demo)</Link>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'w2' ? null : 'w2')}>
-            <div className="l2-title"><Clock className="w-4 h-4" /> Termintreue & Wochenziel</div>
-            <div className="l2-desc">76% Termintreue. 23 / 25 Chargen erreicht (92%).</div>
-            
-            <div style={{marginTop:12, height:40, display:'flex', alignItems:'flex-end', gap:4}}>
-              <div style={{flex:1, background:'var(--pos)', height:'85%', borderRadius:'2px 2px 0 0', opacity:0.6}} title="Woche 1"></div>
-              <div style={{flex:1, background:'var(--pos)', height:'82%', borderRadius:'2px 2px 0 0', opacity:0.6}} title="Woche 2"></div>
-              <div style={{flex:1, background:'var(--warn)', height:'79%', borderRadius:'2px 2px 0 0', opacity:0.8}} title="Woche 3"></div>
-              <div style={{flex:1, background:'var(--neg)', height:'76%', borderRadius:'2px 2px 0 0'}} title="Woche 4"></div>
-            </div>
-            <div style={{fontSize:9, color:'var(--ink3)', textAlign:'center', marginTop:4}}>Trend Termintreue (letzte 4 Wochen)</div>
-
-            {level3State === 'w2' && (
-              <div className="l3-panel">
-                <p><strong>Aufträge mit Terminrisiko:</strong> 8 Aufträge sind akut gefährdet, heute abzurutschen.</p>
-                <p style={{marginTop:4}}><strong>Arbeitsvolumen:</strong> 112 Aufträge aktuell im Umlauf.</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/orders" className="cmp-btn">Auftragsbuch</Link>
-                  <Link href="/kontrolle" className="cmp-btn">Qualitätskontrolle</Link>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </DetailOverlay>
-
-      {/* Umsatz und Marge Overlay */}
-      <DetailOverlay open={activeOverlay === 'umsatz'} onClose={() => setActiveOverlay(null)} title="Umsatz und Marge">
-        <div style={{color: 'var(--ink)'}}>
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'u1' ? null : 'u1')}>
-            <div className="l2-title"><Banknote className="w-4 h-4" /> Umsatz netto und Forecast</div>
-            <div className="l2-desc">42.380 € Umsatz (+7.2%). Forecast Monatsende: 145.000 €.</div>
-            
-            <div style={{marginTop:12, position:'relative', height:40}}>
-              <div style={{position:'absolute', top:'50%', left:0, right:0, borderTop:'1px dashed var(--ink3)'}}></div>
-              <svg viewBox="0 0 200 40" width="100%" height="40" preserveAspectRatio="none">
-                <polyline points="0,35 40,28 80,30 120,20 160,15 200,5" fill="none" stroke="var(--info)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <div style={{fontSize:9, color:'var(--ink3)', textAlign:'center', marginTop:4}}>Umsatztrend kumuliert</div>
-
-            {level3State === 'u1' && (
-              <div className="l3-panel">
-                <p><strong>Stärkste Kunden diesen Monat:</strong> Museum Lenzburg (18k €), Schrauben Meier (12k €).</p>
-                <p style={{marginTop:4}}><strong>Buchhaltungshinweis:</strong> 4 Rechnungen überfällig, DATEV-Export für Mai ist bereit.</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/finanzen" className="cmp-btn">Finanz-Dashboard</Link>
-                  <Link href="/customers" className="cmp-btn">Kundenkartei</Link>
-                </div>
-              </div>
-            )}
-          </div>
-          
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'u2' ? null : 'u2')}>
-            <div className="l2-title"><TrendingUp className="w-4 h-4" /> Deckungsbeitrag und Kostenstruktur</div>
-            <div className="l2-desc">11.840 € DB (27.9% Marge). Gewinn grob: 8.200 €.</div>
-            
-            <div style={{marginTop:12, display:'flex', height:20, borderRadius:4, overflow:'hidden', border:'1px solid var(--bd)'}}>
-              <div style={{width:'40%', background:'var(--info)', fontSize:9, color:'#fff', paddingLeft:4, lineHeight:'20px'}}>Fixkosten 40%</div>
-              <div style={{width:'32%', background:'var(--warn)', fontSize:9, color:'#fff', paddingLeft:4, lineHeight:'20px'}}>Variabel 32%</div>
-              <div style={{width:'28%', background:'var(--pos)', fontSize:9, color:'#fff', textAlign:'right', paddingRight:4, lineHeight:'20px'}}>Marge 28%</div>
-            </div>
-
-            {level3State === 'u2' && (
-              <div className="l3-panel">
-                <p><strong>Fixkosten:</strong> 18.500 € | <strong>Variable Kosten:</strong> 12.040 €</p>
-                <p style={{marginTop:4}}><strong>Kalkulationshinweise:</strong> Energiekosten sind um 2% gesunken, Materialkosten (+1%) fressen dies teilweise auf.</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/orders" className="cmp-btn">Auftragsbuch</Link>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </DetailOverlay>
-
-      {/* Qualität und Risiko Overlay */}
-      <DetailOverlay open={activeOverlay === 'qualitaet'} onClose={() => setActiveOverlay(null)} title="Qualität und Risiko">
-        <div style={{color: 'var(--ink)'}}>
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'q1' ? null : 'q1')}>
-            <div className="l2-title"><ShieldCheck className="w-4 h-4" /> Reklamationsquote und Ursachen</div>
-            <div className="l2-desc">7,1% Fehlerquote. Nacharbeit kostet Ø 420 € pro Woche.</div>
-            
-            <div style={{marginTop:12, height:16, display:'flex', borderRadius:4, overflow:'hidden', border:'1px solid var(--bd)'}}>
-              <div style={{width:'92.9%', background:'var(--pos)', fontSize:9, color:'#fff', paddingLeft:4, lineHeight:'16px'}}>OK (92.9%)</div>
-              <div style={{width:'7.1%', background:'var(--neg)', fontSize:9, color:'#fff', textAlign:'right', paddingRight:4, lineHeight:'16px'}}>NOK (7.1%)</div>
-            </div>
-
-            {level3State === 'q1' && (
-              <div className="l3-panel">
-                <p><strong>Häufigste Reklamationsursachen:</strong> Pickelbildung (45%), Maßabweichung (30%), Kratzer (25%).</p>
-                <p style={{marginTop:4}}><strong>Betroffene Stationen:</strong> Galvanik-Zink (Bad 2), Politur manuell.</p>
-                <p style={{marginTop:4, color:'var(--info)'}}><strong>Präventionsmaßnahmen:</strong> Neue Bad-Filter bestellt, Eintreffen am 12.06.</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/kontrolle" className="cmp-btn">Qualitätskontrolle</Link>
-                  <Link href="/kundenservice" className="cmp-btn">Kundenservice</Link>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'q2' ? null : 'q2')}>
-            <div className="l2-title"><AlertTriangle className="w-4 h-4" /> Risikoaufträge und Kommunikation</div>
-            <div className="l2-desc">A-2026-0042 (84% Risiko) - 6 Kunden überfällig.</div>
-            
-            <div style={{marginTop:12, display:'flex', gap:2}}>
-              {Array.from({length: 10}).map((_, i) => (
-                <div key={i} style={{flex:1, height:12, background: i < 7 ? 'var(--pos)' : i < 9 ? 'var(--warn)' : 'var(--neg)', borderRadius:2}}></div>
-              ))}
-            </div>
-            <div style={{fontSize:9, color:'var(--ink3)', textAlign:'center', marginTop:4}}>Mini-Heatmap: Risiko-Score der Top 10 laufenden Aufträge</div>
-
-            {level3State === 'q2' && (
-              <div className="l3-panel">
-                <p><strong>Kommunikationsrisiken:</strong> "Autohaus Berger" wartet seit 3 Tagen auf Antwort. "Schlosserei Brunner" hat Mahnung erhalten.</p>
-                <p style={{marginTop:4}}><strong>Risikoaufträge:</strong> 3 Aufträge drohen in die Vertragsstrafe zu laufen.</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/kommunikation" className="cmp-btn">Kommunikations-Center</Link>
-                  <Link href="/orders" className="cmp-btn">Auftragsbuch</Link>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </DetailOverlay>
-
-      {/* Bäder und Material Overlay */}
-      <DetailOverlay open={activeOverlay === 'baeder'} onClose={() => setActiveOverlay(null)} title="Bäder und Material">
-        <div style={{color: 'var(--ink)'}}>
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'b1' ? null : 'b1')}>
-            <div className="l2-title"><FlaskConical className="w-4 h-4" /> Badstatus und Chemiebestand</div>
-            <div className="l2-desc">1 Bad kritisch (Nickel). Salzsäure-Bestand niedrig.</div>
-            
-            <div style={{marginTop:12, display:'flex', gap:8, flexDirection:'column'}}>
-              <div style={{display:'flex', alignItems:'center', gap:8, fontSize:10}}><span style={{width:60}}>Zinkbad</span><div style={{flex:1, height:6, background:'var(--bd)', borderRadius:3}}><div style={{width:'100%', height:'100%', background:'var(--pos)', borderRadius:3}}></div></div><span>OK</span></div>
-              <div style={{display:'flex', alignItems:'center', gap:8, fontSize:10}}><span style={{width:60}}>Chrombad</span><div style={{flex:1, height:6, background:'var(--bd)', borderRadius:3}}><div style={{width:'85%', height:'100%', background:'var(--info)', borderRadius:3}}></div></div><span>OK</span></div>
-              <div style={{display:'flex', alignItems:'center', gap:8, fontSize:10}}><span style={{width:60}}>Nickelbad</span><div style={{flex:1, height:6, background:'var(--bd)', borderRadius:3}}><div style={{width:'30%', height:'100%', background:'var(--warn)', borderRadius:3}}></div></div><span>Kritisch</span></div>
-            </div>
-
-            {level3State === 'b1' && (
-              <div className="l3-panel">
-                <p><strong>Kritische Bäder:</strong> Nickelbad 1 (PH-Wert grenzwertig, Toleranz -0.2).</p>
-                <p style={{marginTop:4}}><strong>Chemiebestand:</strong> Salzsäure reicht noch für 4 Tage. 200L Fass muss nachbestellt werden.</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/baeder" className="cmp-btn">Bäder-Management</Link>
-                  <Link href="/items" className="cmp-btn">Lager / Chemie</Link>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'b2' ? null : 'b2')}>
-            <div className="l2-title"><BarChart3 className="w-4 h-4" /> Metallverbrauch und Marge</div>
-            <div className="l2-desc">Goldmarge positiv (+2.840 €). Kupfer fällt.</div>
-            
-            <div style={{marginTop:12, padding:8, background:'var(--sf)', borderRadius:8, fontSize:10}}>
-              <div style={{display:'flex', justifyContent:'space-between', marginBottom:4}}><span>Gold EK-Preis Ø</span> <span>60.00 €/g</span></div>
-              <div style={{display:'flex', justifyContent:'space-between', color:'var(--pos)', fontWeight:600}}><span>Gold Tagespreis</span> <span>68.40 €/g</span></div>
-            </div>
-
-            {level3State === 'b2' && (
-              <div className="l3-panel">
-                <p><strong>Metallverbrauch:</strong> Goldverbrauch diese Woche: 42g (-5g vs. Vorwoche).</p>
-                <p style={{marginTop:4}}><strong>Betroffene Aufträge:</strong> 3 Großaufträge im Bereich Vergolden warten auf Freigabe.</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/finanzen" className="cmp-btn">Finanzen</Link>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </DetailOverlay>
-
-      {/* Kunden und Markt Overlay */}
-      <DetailOverlay open={activeOverlay === 'kunden'} onClose={() => setActiveOverlay(null)} title="Kunden und Markt">
-        <div style={{color: 'var(--ink)'}}>
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'k1' ? null : 'k1')}>
-            <div className="l2-title"><HeartHandshake className="w-4 h-4" /> Top-Kunden, CLV und Risiko</div>
-            <div className="l2-desc">CLV-Fokus auf Museum Lenzburg. 82% Stammkunden.</div>
-            
-            <div style={{marginTop:12, display:'flex', height:24, borderRadius:4, overflow:'hidden', border:'1px solid var(--bd)'}}>
-              <div style={{width:'82%', background:'var(--pos)', fontSize:9, color:'#fff', paddingLeft:8, display:'flex', alignItems:'center'}}>Stammkunden 82%</div>
-              <div style={{width:'18%', background:'var(--warn)', fontSize:9, color:'#fff', paddingRight:8, display:'flex', alignItems:'center', justifyContent:'flex-end'}}>Neukunden 18%</div>
-            </div>
-
-            {level3State === 'k1' && (
-              <div className="l3-panel">
-                <p><strong>Top-Kunden:</strong> 1. Lenzburg (CLV 18.400 €), 2. Autohaus Berger, 3. Schlosserei Brunner.</p>
-                <p style={{marginTop:4}}><strong>Kundenrisiko:</strong> 1 Großkunde droht abzuwandern (Lieferverzug bei Charge 409).</p>
-                <p style={{marginTop:4}}><strong>Wiederholungskunden:</strong> Bestellrate bei +4% ggü. Vorquartal.</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/customers" className="cmp-btn">Kundenkartei</Link>
-                  <Link href="/kommunikation" className="cmp-btn">Kommunikation</Link>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="l2-box" onClick={() => setLevel3State(level3State === 'k2' ? null : 'k2')}>
-            <div className="l2-title"><Map className="w-4 h-4" /> Zahlungsmoral, Versand und Regionen</div>
-            <div className="l2-desc">Ø 18 Tage Zahlungsziel. 82% Abholung / 18% Versand.</div>
-            
-            <div style={{marginTop:12, display:'flex', gap:10}}>
-              <div style={{flex:1, height:6, background:'var(--pos)', borderRadius:3}} title="Abholung 82%"></div>
-              <div style={{width:'18%', height:6, background:'var(--info)', borderRadius:3}} title="Versand 18%"></div>
-            </div>
-            <div style={{fontSize:9, color:'var(--ink3)', marginTop:4, display:'flex', justifyContent:'space-between'}}>
-              <span>🚗 Abholung (82%)</span>
-              <span>📦 Versand (18%)</span>
-            </div>
-
-            {level3State === 'k2' && (
-              <div className="l3-panel">
-                <p><strong>Regionen:</strong> DACH (95%), Rest-EU (5%).</p>
-                <p style={{marginTop:4}}><strong>Zahlungsmoral:</strong> Ø 18 Tage (Vorjahr: 22 Tage). Tendenz: Sehr gut.</p>
-                <p style={{marginTop:4}}><strong>Kundentypen:</strong> 60% B2B Industrie, 30% B2B Handwerk, 10% B2C Privat.</p>
-                <div style={{marginTop: 12, display:'flex', gap:8, flexWrap:'wrap'}}>
-                  <Link href="/finanzen" className="cmp-btn">Finanzen / Mahnwesen</Link>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </DetailOverlay>
 
     </div>
   );
