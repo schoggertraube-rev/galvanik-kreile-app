@@ -140,7 +140,12 @@ function PinDialog({ user, onClose }: { user: typeof DEMO_USERS[0]; onClose: () 
         if (localStorage.getItem("setup_done")) {
           // Setup bereits erledigt -> direkt weiter
           const isHttps = window.location.protocol === "https:";
+          
+          // WARNING: Demo Cookies (bypass-auth, kreile_role) sind nur für die lokale Entwicklung
+          // und dienen NICHT als sicheres Production-Rechtemodell. In Production werden sie ignoriert.
           document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+          document.cookie = `kreile_role=${user.role}; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+          
           window.location.href = "/";
         } else {
           initializeDemoIfNeeded().then((res) => {
@@ -150,11 +155,21 @@ function PinDialog({ user, onClose }: { user: typeof DEMO_USERS[0]; onClose: () 
               localStorage.setItem("setup_done", "true");
             }
             const isHttps = window.location.protocol === "https:";
+            
+            // WARNING: Demo Cookies (bypass-auth, kreile_role) sind nur für die lokale Entwicklung
+            // und dienen NICHT als sicheres Production-Rechtemodell. In Production werden sie ignoriert.
             document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+            document.cookie = `kreile_role=${user.role}; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+            
             window.location.href = "/";
           }).catch(() => {
             const isHttps = window.location.protocol === "https:";
+            
+            // WARNING: Demo Cookies (bypass-auth, kreile_role) sind nur für die lokale Entwicklung
+            // und dienen NICHT als sicheres Production-Rechtemodell. In Production werden sie ignoriert.
             document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+            document.cookie = `kreile_role=${user.role}; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+            
             window.location.href = "/";
           });
         }
@@ -353,7 +368,12 @@ function StartScreenContent() {
               localStorage.setItem("kreile_user_role", "Werkstatt");
               localStorage.setItem("kreile_user_initials", "CD");
               const isHttps = window.location.protocol === "https:";
+              
+              // WARNING: Demo Cookies (bypass-auth, kreile_role) sind nur für die lokale Entwicklung
+              // und dienen NICHT als sicheres Production-Rechtemodell. In Production werden sie ignoriert.
               document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+              document.cookie = `kreile_role=Werkstatt; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
+              
               window.location.href = "/";
             } catch (err: unknown) {
               alert("Fehler beim Login: " + (err as Error).message);

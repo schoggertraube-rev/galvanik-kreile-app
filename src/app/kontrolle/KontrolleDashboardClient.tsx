@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from 'react';
+import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   ShieldAlert, Activity, Archive, BarChart3, 
@@ -15,6 +16,14 @@ interface Props {
 
 export function KontrolleDashboardClient({ isDevOrAdmin }: Props) {
   const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
+  const [isAdminOrDevLocal, setIsAdminOrDevLocal] = useState(isDevOrAdmin);
+
+  useEffect(() => {
+    const role = localStorage.getItem("kreile_user_role");
+    if (role === "admin" || role === "developer" || isDevOrAdmin) {
+      setIsAdminOrDevLocal(true);
+    }
+  }, [isDevOrAdmin]);
 
   const closeOverlay = () => setActiveOverlay(null);
 
@@ -52,7 +61,7 @@ export function KontrolleDashboardClient({ isDevOrAdmin }: Props) {
           <p className="text-xs text-text-muted">Abgeschlossene historische Vorgänge</p>
         </Link>
 
-        {isDevOrAdmin && (
+        {isAdminOrDevLocal && (
           <Link href="/admin/analytics" className="bg-navy-900 hover:bg-navy-800 rounded-2xl p-6 border border-navy-900 shadow-sm hover:shadow-md transition-all relative overflow-hidden flex flex-col justify-between h-40 group cursor-pointer">
             <div>
               <BarChart3 className="w-8 h-8 text-white mb-3 group-hover:scale-110 transition-transform" />
@@ -416,6 +425,7 @@ export function KontrolleDashboardClient({ isDevOrAdmin }: Props) {
         </div>
       </DetailOverlay>
 
+      <FeedbackFooter pageTitle="Kontrolle" route="/kontrolle" variant="full" />
     </div>
   );
 }

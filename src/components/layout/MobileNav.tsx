@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { X, Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, ChevronDown, ChevronRight, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone } from "lucide-react";
+import { X, Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, ChevronDown, ChevronRight, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3 } from "lucide-react";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { bathsRepository } from "@/lib/repositories/bathsRepository";
 
@@ -210,6 +210,11 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
                 label="Datenimport"
                 href="/admin/import"
                 icon={Database}
+              />
+              <NavItem
+                label="Analytics"
+                href="/admin/analytics"
+                icon={BarChart3}
               />
               <NavItem
                 label="Geräte"

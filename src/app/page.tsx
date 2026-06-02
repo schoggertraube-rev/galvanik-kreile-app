@@ -7,6 +7,7 @@ import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { MockOrder } from "@/lib/mockData";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
+import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import {
   UserPlus, FilePlus, Camera, AlertTriangle, HeadphonesIcon, Settings,
   CheckCircle, Circle, Clock, AlertOctagon, Send, Activity, Info
@@ -34,9 +35,6 @@ export default function HomeDashboard() {
     { id: 10, title: "Tagesrundgang Warendurchlauf", reason: "Einmal prüfen, ob alle Stationen sauber weiterlaufen", area: "Warendurchlauf", urgency: "Normal", action: "Stationen prüfen", done: false }
   ]);
 
-  const [feedback, setFeedback] = useState("");
-  const [feedbackSent, setFeedbackSent] = useState(false);
-
   useEffect(() => {
     const load = async () => {
       const dbOrders = await ordersRepository.getAll();
@@ -56,13 +54,6 @@ export default function HomeDashboard() {
 
   const toggleTodo = (id: number) => {
     setTodos(todos.map(t => t.id === id ? { ...t, done: !t.done } : t));
-  };
-
-  const handleFeedback = () => {
-    if (!feedback.trim()) return;
-    setFeedbackSent(true);
-    setFeedback("");
-    setTimeout(() => setFeedbackSent(false), 3000);
   };
 
   const activeTodos = todos.filter(t => !t.done);
@@ -138,8 +129,8 @@ export default function HomeDashboard() {
         {/* 2. HEUTE ZUERST - TAGES CHECKLISTE */}
         <section className="lg:col-span-2">
           <div className="bg-white border border-neutral-gray-200 rounded-3xl p-6 shadow-sm h-full flex flex-col">
-             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold font-serif text-navy-900">Heute zuerst</h2>
+             <div className="flex justify-between items-center mb-6 bg-gray-200 p-2 rounded">
+                <h2 className="text-xl font-bold font-serif text-navy-900">Deine Checkliste für Heute</h2>
                 <span className="bg-bg-app-soft text-text-muted text-xs px-2 py-1 rounded font-bold uppercase tracking-wider">Demo-Auswertung</span>
              </div>
              
@@ -277,27 +268,7 @@ export default function HomeDashboard() {
       </div>
 
       {/* 7. FEEDBACKFELD */}
-      <section className="bg-bg-app-soft border border-neutral-gray-200 rounded-3xl p-6 text-center max-w-2xl mx-auto mt-8">
-        <h3 className="text-lg font-bold font-serif text-navy-900 mb-2">Was fehlt auf dieser Seite?</h3>
-        <p className="text-xs text-text-muted mb-4">Feedback-Speicherung wird später angebunden (Demo-Modus).</p>
-        
-        <div className="flex gap-2">
-          <input 
-            type="text" 
-            value={feedback}
-            onChange={e => setFeedback(e.target.value)}
-            placeholder="Z.B. Ich brauche einen Knopf für..." 
-            className="flex-1 rounded-xl border border-neutral-gray-300 px-4 py-3 text-sm focus:outline-none focus:border-navy-900 focus:ring-1 focus:ring-navy-900"
-            onKeyDown={e => e.key === 'Enter' && handleFeedback()}
-          />
-          <button 
-            onClick={handleFeedback}
-            className="bg-navy-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-navy-800 transition-colors shrink-0 cursor-pointer"
-          >
-            {feedbackSent ? "Gemerkt!" : "Merken"}
-          </button>
-        </div>
-      </section>
+      <FeedbackFooter pageTitle="Home" route="/" variant="full" />
 
       {/* OVERLAY FOR NOT IMPLEMENTED FEATURES */}
       <DetailOverlay open={!!activeOverlay} onClose={() => setActiveOverlay(null)} title={activeOverlay?.title || ""}>

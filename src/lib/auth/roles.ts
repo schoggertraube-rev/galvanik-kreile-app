@@ -45,8 +45,16 @@ export async function getCurrentAppUser() {
     const [appUser] = await db.select().from(appUsers).where(eq(appUsers.id, user.id));
     return appUser || null;
   } catch (error: any) {
-    console.error("Error fetching appUser:", error?.message || error);
-    return null;
+    const errorMsg = error?.message || "Unknown error";
+    console.error("Error fetching appUser:", {
+      message: errorMsg,
+      details: error?.details || error?.detail || "No details",
+      hint: error?.hint || "No hint",
+      code: error?.code || "No code",
+      cause: error?.cause || "No cause",
+    });
+    // Throw so that requireAdminOrDeveloper fails loudly instead of a silent redirect
+    throw new Error(`DATABASE_ERROR: ${errorMsg}`);
   }
 }
 
@@ -54,8 +62,43 @@ export async function getCurrentAppUser() {
  * Gets the role of the current user. Returns null if not logged in or no role found.
  */
 export async function getCurrentRole(): Promise<string | null> {
-  const user = await getCurrentAppUser();
-  return user?.role || null;
+  let user = null;
+  let dbError: any = null;
+  
+  try {
+    user = await getCurrentAppUser();
+  } catch (error: any) {
+    if (error.message.startsWith("DATABASE_ERROR")) {
+      dbError = error;
+    } else {
+      throw error;
+    }
+  }
+
+  if (user?.role) return user.role;
+  
+  // Fallback for local demo mode if DB query fails or user not linked
+  const cookieStore = await cookies();
+  const bypassAuth = cookieStore.get("bypass-auth")?.value;
+  const localRole = cookieStore.get("kreile_role")?.value;
+  
+  const isDevEnv = process.env.NODE_ENV !== "production";
+  
+  if (isDevEnv && bypassAuth === "true" && localRole) {
+    if (localRole === "admin" || localRole === "developer") {
+      console.warn("DEMO MODE FALLBACK: Using kreile_role cookie for admin/developer verification.");
+    }
+    return localRole.toLowerCase();
+  } else if (!isDevEnv && dbError && bypassAuth === "true") {
+    console.error("Admin role DB check failed in production. Demo cookie fallback disabled.");
+  }
+  
+  // If no fallback is available (or allowed), and there was a DB error, we must re-throw it so we don't fail silently
+  if (dbError) {
+    throw dbError;
+  }
+
+  return null;
 }
 
 /**

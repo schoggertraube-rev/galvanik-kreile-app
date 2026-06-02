@@ -13,20 +13,38 @@ export async function getCurrentAuthUser() {
 
 /**
  * Returns true if the user has an admin or developer role.
+ * Catches DB errors safely so UI doesn't crash.
  */
 export async function isAdminOrDeveloper(): Promise<boolean> {
-  const role = await getCurrentRole();
-  return role === "admin" || role === "developer";
+  try {
+    const role = await getCurrentRole();
+    return role === "admin" || role === "developer";
+  } catch (error: any) {
+    if (error?.message?.startsWith("DATABASE_ERROR")) {
+      return false; // Safely hide UI elements if DB is down
+    }
+    return false;
+  }
 }
 
 /**
  * Asserts that the current user has the admin or developer role.
- * Throws an error or redirects if unauthorized.
+ * Throws an error for DB failures or redirects if unauthorized.
  */
 export async function requireAdminOrDeveloper() {
-  const isAuthorized = await isAdminOrDeveloper();
-  if (!isAuthorized) {
-    redirect("/"); // or throw new Error("Unauthorized");
+  try {
+    const role = await getCurrentRole();
+    if (role !== "admin" && role !== "developer") {
+      redirect("/");
+    }
+  } catch (error: any) {
+    // If the DB is unavailable we want a clear error, not a silent 404.
+    if (error?.message?.startsWith("DATABASE_ERROR")) {
+      console.error("Admin check failed (DB error):", error);
+      redirect('/start?message=Systemfehler%3A+Datenbank+nicht+erreichbar+%28Admin+Pr%C3%BCfung%29');
+    } else {
+      redirect('/');
+    }
   }
 }
 

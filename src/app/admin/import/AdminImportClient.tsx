@@ -1,5 +1,6 @@
 "use client";
 
+import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import React, { useState, useRef } from 'react';
 import Link from 'next/link';
 import { 
@@ -468,6 +469,7 @@ export function AdminImportClient() {
         </div>
       </DetailOverlay>
 
+      <FeedbackFooter pageTitle="Datenimport" route="/admin/import" variant="full" />
     </div>
   );
 }

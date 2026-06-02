@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { RightNavItem } from "./RightNavItem";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { bathsRepository } from "@/lib/repositories/bathsRepository";
-import { Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone } from "lucide-react";
+import { Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3 } from "lucide-react";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import Link from "next/link";
 import { useFeatureFlag } from "@/lib/license/useFeatureFlag";
@@ -179,6 +179,19 @@ export function RightNav() {
               variant="normal"
               isActive={isActive("/admin/import")}
               onClick={() => trackUiEvent("nav_click", { target: "/admin/import" })}
+            />
+          </div>
+        )}
+
+        {isAdminOrDev && (
+          <div className="mt-4 w-full">
+            <RightNavItem
+              label="Analytics"
+              href="/admin/analytics"
+              icon={<BarChart3 className="w-5 h-5" strokeWidth={1.5} />}
+              variant="normal"
+              isActive={isActive("/admin/analytics")}
+              onClick={() => trackUiEvent("nav_click", { target: "/admin/analytics" })}
             />
           </div>
         )}

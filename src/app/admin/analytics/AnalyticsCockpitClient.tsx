@@ -1,5 +1,6 @@
 "use client";
 
+import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import React, { useState } from 'react';
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
@@ -228,6 +229,7 @@ export function AnalyticsCockpitClient({ data }: { data: DeveloperCockpitData })
         )}
       </DetailOverlay>
 
+      <FeedbackFooter pageTitle="Analytics" route="/admin/analytics" variant="full" />
     </div>
   );
 }

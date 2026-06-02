@@ -1,5 +1,6 @@
 "use client";
 
+import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
@@ -384,6 +385,7 @@ export function BaederDashboardClient() {
         </div>
       </DetailOverlay>
 
+      <FeedbackFooter pageTitle="Bäder" route="/baeder" variant="full" />
     </div>
   );
 }

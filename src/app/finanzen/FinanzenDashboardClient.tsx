@@ -1,5 +1,6 @@
 "use client";
 
+import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import React, { useState } from 'react';
 import { 
   Banknote, Receipt, FileSpreadsheet, Building, 
@@ -409,6 +410,7 @@ export function FinanzenDashboardClient() {
         </div>
       </DetailOverlay>
 
+      <FeedbackFooter pageTitle="Finanzen" route="/finanzen" variant="full" />
     </div>
   );
 }

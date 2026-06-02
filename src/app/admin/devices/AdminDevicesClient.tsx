@@ -1,5 +1,6 @@
 "use client";
 
+import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import React, { useState } from 'react';
 import { 
   MonitorSmartphone, Laptop, Smartphone, Globe, 
@@ -369,6 +370,7 @@ export function AdminDevicesClient() {
         </div>
       </DetailOverlay>
 
+      <FeedbackFooter pageTitle="Geräte" route="/admin/devices" variant="full" />
     </div>
   );
 }
