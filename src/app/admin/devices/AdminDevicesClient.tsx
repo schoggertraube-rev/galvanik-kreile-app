@@ -11,25 +11,95 @@ import {
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
 import Link from 'next/link';
 
+interface Device {
+  id: string;
+  name: string;
+  type: 'Tablet' | 'Desktop' | 'Mobile';
+  browser: string;
+  lastAccess: string;
+  role: string;
+  status: 'freigegeben' | 'unbekannt' | 'gesperrt' | 'prüfen';
+}
+
 export function AdminDevicesClient() {
   const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
+  const [demoNotification, setDemoNotification] = useState<string | null>(null);
+  
+  // Interactive mock devices state
+  const [devices, setDevices] = useState<Device[]>([
+    { id: '1', name: 'Meister-Tablet Halle 1', type: 'Tablet', browser: 'Safari (iPadOS)', lastAccess: 'Vor 12 Min.', role: 'Werkstatt', status: 'freigegeben' },
+    { id: '2', name: 'Büro Desktop (Frau S.)', type: 'Desktop', browser: 'Chrome (Windows)', lastAccess: 'Vor 2 Min.', role: 'Büro', status: 'freigegeben' },
+    { id: '3', name: 'Unbekanntes iPhone', type: 'Mobile', browser: 'Safari (iOS)', lastAccess: 'Vor 1 Std.', role: 'Admin', status: 'prüfen' },
+    { id: '4', name: 'Alt-Terminal Beschichtung', type: 'Desktop', browser: 'Edge (Windows)', lastAccess: 'Vor 3 Tagen', role: 'Werkstatt', status: 'gesperrt' },
+  ]);
+
+  // Handover checklist state
+  const [checklist, setChecklist] = useState({
+    email: false,
+    supabaseOwner: false,
+    vercelTeam: false,
+    domains: false,
+    apiKeys: false,
+    backupConcept: false,
+    clearDemoData: false,
+    adminCredentials: false,
+    documentation: false,
+  });
 
   const closeOverlay = () => setActiveOverlay(null);
+
+  const toggleChecklistItem = (key: keyof typeof checklist) => {
+    setChecklist(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
+  const handlePrepareAction = (type: 'approve' | 'lock') => {
+    if (type === 'approve') {
+      setDemoNotification(
+        "Vorbereitet: Freigabe-Aktion registriert. Eine echte Freigabe erfordert die künftige Datenbank-Kopplung über die device_id in Supabase."
+      );
+    } else {
+      setDemoNotification(
+        "Vorbereitet: Sperrungs-Aktion registriert. Die harte Sperrlogik wird später per Device-ID und Session-Tabelle client- und serverseitig erzwungen."
+      );
+    }
+    setTimeout(() => setDemoNotification(null), 7000);
+  };
+
+  // Demo Metrics calculation
+  const totalAllowed = 15;
+  const utilizedCount = devices.filter(d => d.status === 'freigegeben').length;
+  const freeSlotsCount = Math.max(0, totalAllowed - utilizedCount);
+  const unknownCount = devices.filter(d => d.status === 'prüfen' || d.status === 'unbekannt').length;
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 lg:p-8 font-sans antialiased text-navy-900 min-h-screen bg-[#F0EBE0]">
       <header className="mb-8">
         <h1 className="text-3xl font-bold text-navy-900 mb-2 font-serif flex items-center gap-3">
           <MonitorSmartphone className="w-8 h-8" />
-          Geräte, Lizenzen & Sicherheit
+          Geräte, Lizenzen und Sicherheit
         </h1>
-        <p className="text-text-muted text-sm md:text-base">Zentrale Plattform-Verwaltung für den Mandanten (Admin/Developer).</p>
+        <p className="text-text-muted text-sm md:text-base">
+          Zentrale Plattform-Verwaltung für den Mandanten (Admin und Developer).
+        </p>
       </header>
 
-      {/* SECTION 1: Zugriffsüberwachung & Geräte */}
+      {demoNotification && (
+        <div className="mb-6 bg-navy-900 text-white p-4 rounded-xl shadow-md border-l-4 border-accent-orange flex gap-3 items-start animate-fade-in">
+          <Info className="w-5 h-5 text-accent-orange shrink-0 mt-0.5" />
+          <div className="text-sm font-medium">
+            <p className="font-bold mb-1">Demo-Modus / Konzept-Vorschau</p>
+            <p>{demoNotification}</p>
+          </div>
+        </div>
+      )}
+
+      {/* SECTION 1: Zugriffsüberwachung und Geräte */}
       <section className="mb-12">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-navy-900 font-serif">1. Zugriffsüberwachung & Geräte</h2>
+          <h2 className="text-2xl font-bold text-navy-900 font-serif">1. Zugriffsüberwachung und Geräte</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {/* Aktive Zugriffe */}
@@ -61,7 +131,7 @@ export function AdminDevicesClient() {
               <p className="text-sm text-text-muted font-medium">Liste bekannter Endgeräte</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
-              Geräte prüfen <ArrowRight className="w-4 h-4" />
+              Geräte prüfen und verwalten <ArrowRight className="w-4 h-4" />
             </div>
           </button>
 
@@ -73,36 +143,20 @@ export function AdminDevicesClient() {
                   <MonitorSmartphone className="w-6 h-6" />
                 </div>
               </div>
-              <h3 className="font-bold text-navy-900 text-lg mb-1">Gerätetypen & Browser</h3>
+              <h3 className="font-bold text-navy-900 text-lg mb-1">Gerätetypen und Browser</h3>
               <p className="text-sm text-text-muted font-medium">Desktop / Tablet / Mobile</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
               Verteilung prüfen <ArrowRight className="w-4 h-4" />
             </div>
           </button>
-
-          {/* Auffällige Nutzung */}
-          <button onClick={() => setActiveOverlay("suspicious_activity")} className="text-left bg-white rounded-2xl p-5 border border-warning-yellow/30 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer">
-            <div>
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 bg-warning-yellow/10 rounded-xl flex items-center justify-center text-warning-yellow">
-                  <AlertTriangle className="w-6 h-6" />
-                </div>
-              </div>
-              <h3 className="font-bold text-navy-900 text-lg mb-1">Auffällige Nutzung</h3>
-              <p className="text-sm text-warning-yellow/80 font-bold">Hinweise auf geteilte Accounts</p>
-            </div>
-            <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
-              Warnungen prüfen <ArrowRight className="w-4 h-4" />
-            </div>
-          </button>
         </div>
       </section>
 
-      {/* SECTION 2: Lizenzen & Betrieb */}
+      {/* SECTION 2: Lizenzen und Betrieb */}
       <section className="mb-12">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-navy-900 font-serif">2. Lizenzen & Betrieb</h2>
+          <h2 className="text-2xl font-bold text-navy-900 font-serif">2. Lizenzen und Betrieb</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
           {/* Gerätelizenz */}
@@ -112,7 +166,7 @@ export function AdminDevicesClient() {
                 <div className="w-12 h-12 bg-accent-orange/10 rounded-xl flex items-center justify-center text-accent-orange">
                   <KeyRound className="w-6 h-6" />
                 </div>
-                <span className="text-xl font-bold text-navy-900">12 / 15</span>
+                <span className="text-xl font-bold text-navy-900">{utilizedCount} / {totalAllowed}</span>
               </div>
               <h3 className="font-bold text-navy-900 text-lg mb-1">Gerätelizenz</h3>
               <p className="text-sm text-text-muted font-medium">Slots genutzt</p>
@@ -131,7 +185,7 @@ export function AdminDevicesClient() {
                 </div>
               </div>
               <h3 className="font-bold text-navy-900 text-lg mb-1">Lizenzmodell</h3>
-              <p className="text-sm text-text-muted font-medium">Konditionen & Pakete</p>
+              <p className="text-sm text-text-muted font-medium">Konditionen und Pakete</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
               Optionen prüfen <ArrowRight className="w-4 h-4" />
@@ -147,7 +201,7 @@ export function AdminDevicesClient() {
                 </div>
               </div>
               <h3 className="font-bold text-navy-900 text-lg mb-1">Wartungsvertrag</h3>
-              <p className="text-sm text-text-muted font-medium">SLA & Updates</p>
+              <p className="text-sm text-text-muted font-medium">SLA und Updates</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
               Inhalte ansehen <ArrowRight className="w-4 h-4" />
@@ -163,7 +217,7 @@ export function AdminDevicesClient() {
                 </div>
               </div>
               <h3 className="font-bold text-navy-900 text-lg mb-1">Betriebskosten</h3>
-              <p className="text-sm text-text-muted font-medium">Server & Hosting</p>
+              <p className="text-sm text-text-muted font-medium">Server und Hosting</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
               Details prüfen <ArrowRight className="w-4 h-4" />
@@ -172,10 +226,10 @@ export function AdminDevicesClient() {
         </div>
       </section>
 
-      {/* SECTION 3: Mandanten & Sicherheit */}
+      {/* SECTION 3: Mandanten und Sicherheit */}
       <section>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-navy-900 font-serif">3. Mandanten & Sicherheit</h2>
+          <h2 className="text-2xl font-bold text-navy-900 font-serif">3. Mandanten und Sicherheit</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {/* Mandanten-Sicherheit */}
@@ -187,7 +241,7 @@ export function AdminDevicesClient() {
                 </div>
               </div>
               <h3 className="font-bold text-navy-900 text-lg mb-1">Mandanten-Sicherheit</h3>
-              <p className="text-sm text-text-muted font-medium">Datentrennung & Prinzipien</p>
+              <p className="text-sm text-text-muted font-medium">Datentrennung und Prinzipien</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
               Konzept ansehen <ArrowRight className="w-4 h-4" />
@@ -228,7 +282,9 @@ export function AdminDevicesClient() {
         </div>
       </section>
 
-      {/* OVERLAYS */}
+      {/* ========================================================
+          OVERLAYS
+          ======================================================== */}
 
       {/* Aktive Zugriffe */}
       <DetailOverlay open={activeOverlay === "active_access"} onClose={closeOverlay} title="Aktive Zugriffe" subtitle="Nutzer, die in den letzten 15 Minuten in der App aktiv waren.">
@@ -282,53 +338,66 @@ export function AdminDevicesClient() {
       <DetailOverlay open={activeOverlay === "approved_devices"} onClose={closeOverlay} title="Freigegebene Geräte" subtitle="Liste der verknüpften Endgeräte.">
         <div className="space-y-6 text-navy-900">
           <div className="bg-white rounded-xl border border-neutral-gray-200 overflow-hidden">
-            <div className="p-3 bg-bg-app-soft font-bold text-sm border-b border-neutral-gray-200 flex gap-4">
-              <div className="flex-1">Gerät</div>
-              <div className="w-24">Status</div>
-              <div className="w-10"></div>
+            <div className="p-3 bg-bg-app-soft font-bold text-xs border-b border-neutral-gray-200 flex gap-4 uppercase tracking-wider text-text-muted">
+              <div className="flex-[2]">Gerät und Typ</div>
+              <div className="flex-1">Rolle</div>
+              <div className="flex-1">Letzter Zugriff</div>
+              <div className="w-28 text-right">Status</div>
             </div>
             <div className="divide-y divide-neutral-gray-100">
-              <div className="p-3 flex items-center gap-4">
-                <div className="flex-1">
-                  <p className="font-bold">Meister-Tablet Halle 1</p>
-                  <p className="text-xs text-text-muted">iPad / Safari • Rolle: Werkstatt • Gestern</p>
+              {devices.map((device) => (
+                <div key={device.id} className="p-3 flex items-center gap-4 text-sm">
+                  <div className="flex-[2]">
+                    <p className="font-bold text-navy-900">{device.name}</p>
+                    <p className="text-xs text-text-muted">{device.type} • {device.browser}</p>
+                  </div>
+                  <div className="flex-1">
+                    <span className="text-xs bg-neutral-gray-100 text-navy-900 px-2 py-0.5 rounded font-medium">
+                      {device.role}
+                    </span>
+                  </div>
+                  <div className="flex-1 text-xs text-text-muted">
+                    {device.lastAccess}
+                  </div>
+                  <div className="w-28 text-right">
+                    <span className={`text-xs font-bold px-2 py-1 rounded ${
+                      device.status === 'freigegeben' ? 'bg-success-green/10 text-success-green' :
+                      device.status === 'gesperrt' ? 'bg-error-red/10 text-error-red' :
+                      device.status === 'prüfen' ? 'bg-warning-yellow/20 text-warning-yellow' :
+                      'bg-neutral-gray-100 text-text-muted'
+                    }`}>
+                      {device.status.charAt(0).toUpperCase() + device.status.slice(1)}
+                    </span>
+                  </div>
                 </div>
-                <div className="w-24"><span className="text-xs bg-success-green/10 text-success-green font-bold px-2 py-1 rounded">Freigegeben</span></div>
-                <div className="w-10"><button className="text-text-muted hover:text-error-red transition-colors" title="Sperren (Vorbereitet)"><Ban className="w-4 h-4"/></button></div>
-              </div>
-              <div className="p-3 flex items-center gap-4">
-                <div className="flex-1">
-                  <p className="font-bold">Büro Desktop (Frau S.)</p>
-                  <p className="text-xs text-text-muted">Windows / Chrome • Rolle: Büro • Vor 12 Min.</p>
-                </div>
-                <div className="w-24"><span className="text-xs bg-success-green/10 text-success-green font-bold px-2 py-1 rounded">Freigegeben</span></div>
-                <div className="w-10"><button className="text-text-muted hover:text-error-red transition-colors" title="Sperren (Vorbereitet)"><Ban className="w-4 h-4"/></button></div>
-              </div>
-              <div className="p-3 flex items-center gap-4 bg-warning-yellow/5">
-                <div className="flex-1">
-                  <p className="font-bold">Unbekanntes iPhone</p>
-                  <p className="text-xs text-text-muted">iOS / Safari • Rolle: Admin • Vor 1 Std.</p>
-                </div>
-                <div className="w-24"><span className="text-xs bg-warning-yellow/20 text-warning-yellow font-bold px-2 py-1 rounded">Prüfen</span></div>
-                <div className="w-10"><button className="text-text-muted hover:text-error-red transition-colors" title="Sperren (Vorbereitet)"><Ban className="w-4 h-4"/></button></div>
-              </div>
+              ))}
             </div>
           </div>
           
-          <div className="flex gap-2">
-            <button className="flex-1 border-2 border-navy-900 text-navy-900 font-bold p-3 rounded-xl hover:bg-bg-app-soft transition-colors opacity-70 cursor-not-allowed">
-              Gerät freigeben (Backend später)
+          <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-200 text-xs text-text-muted">
+            <p className="font-bold text-navy-900 mb-1">Architektur-Hinweis:</p>
+            <p>Backend-Sperrlogik später per Device-ID und Session-Tabelle. Alle Sperren und Zugriffsrechte werden über RLS Policies in Supabase und ein Middleware-Token-Check abgesichert.</p>
+          </div>
+
+          <div className="flex gap-3">
+            <button 
+              onClick={() => handlePrepareAction('approve')}
+              className="flex-1 border-2 border-navy-900 text-navy-900 font-bold p-3 rounded-xl hover:bg-bg-app-soft transition-colors text-sm text-center"
+            >
+              Freigabe vorbereiten
             </button>
-            <button className="flex-1 bg-error-red text-white font-bold p-3 rounded-xl hover:bg-red-700 transition-colors opacity-70 cursor-not-allowed">
-              Gerät sperren (Backend später)
+            <button 
+              onClick={() => handlePrepareAction('lock')}
+              className="flex-1 bg-error-red text-white font-bold p-3 rounded-xl hover:bg-red-700 transition-colors text-sm text-center"
+            >
+              Sperre vorbereiten
             </button>
           </div>
-          <p className="text-xs text-center text-text-muted">Sperrlogik wird später per Device-ID und Session-Tabelle in Supabase abgebildet.</p>
         </div>
       </DetailOverlay>
 
-      {/* Gerätetypen & Browser */}
-      <DetailOverlay open={activeOverlay === "device_types"} onClose={closeOverlay} title="Gerätetypen & Browser" subtitle="Hardware & Software Verteilung.">
+      {/* Gerätetypen und Browser */}
+      <DetailOverlay open={activeOverlay === "device_types"} onClose={closeOverlay} title="Gerätetypen und Browser" subtitle="Hardware und Software Verteilung.">
         <div className="space-y-6 text-navy-900">
           <div className="grid grid-cols-3 gap-4 text-center">
             <div className="bg-white p-4 rounded-xl border border-neutral-gray-200">
@@ -349,279 +418,406 @@ export function AdminDevicesClient() {
           </div>
           <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-200">
             <h4 className="font-bold mb-2">Hinweis für UI-Optimierung</h4>
-            <p className="text-sm text-text-muted">Da Tablets in der Werkstatt über 35% der Nutzung ausmachen, sollten Touch-Targets (Buttons) weiterhin auf mindestens 48x48px (Tailwind w-12 h-12) gehalten werden. Listenansichten wie in "/warendurchlauf" müssen zwingend auf Landscape-Tablets getestet werden.</p>
+            <p className="text-sm text-text-muted">Da Tablets in der Werkstatt über 35% der Nutzung ausmachen, sollten Touch-Targets (Buttons) weiterhin auf mindestens 48x48px gehalten werden. Listenansichten wie in "/warendurchlauf" müssen zwingend auf Landscape-Tablets getestet werden.</p>
           </div>
-        </div>
-      </DetailOverlay>
-
-      {/* Browser & Systeme */}
-      <DetailOverlay open={activeOverlay === "browsers"} onClose={closeOverlay} title="Browser & Systeme" subtitle="Auswertung der genutzten Software-Umgebungen.">
-        <div className="space-y-6 text-navy-900">
-          <div className="bg-neutral-gray-100 border border-neutral-gray-200 rounded-xl p-4 flex gap-3">
-            <Info className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
-            <div>
-              <h4 className="font-bold text-navy-900">Noch nicht vollständig angebunden</h4>
-              <p className="text-sm text-text-muted">Der "User-Agent" wird in den `ui_events` noch nicht konsistent erfasst. Nachfolgend simulierte Daten.</p>
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="font-bold mb-3 border-b border-neutral-gray-200 pb-2">Top Browser</h4>
-            <ul className="space-y-2 text-sm">
-              <li className="flex justify-between p-2 hover:bg-white rounded"><span>Google Chrome</span> <span className="font-bold">68%</span></li>
-              <li className="flex justify-between p-2 hover:bg-white rounded"><span>Safari (iOS/iPadOS)</span> <span className="font-bold">22%</span></li>
-              <li className="flex justify-between p-2 hover:bg-white rounded"><span>Microsoft Edge</span> <span className="font-bold">10%</span></li>
-            </ul>
-          </div>
-
-          <div>
-            <h4 className="font-bold mb-3 border-b border-neutral-gray-200 pb-2">Top Betriebssysteme</h4>
-            <ul className="space-y-2 text-sm">
-              <li className="flex justify-between p-2 hover:bg-white rounded"><span>Windows 11 / 10</span> <span className="font-bold">55%</span></li>
-              <li className="flex justify-between p-2 hover:bg-white rounded"><span>iPadOS / iOS</span> <span className="font-bold">35%</span></li>
-              <li className="flex justify-between p-2 hover:bg-white rounded"><span>Android</span> <span className="font-bold">10%</span></li>
-            </ul>
-          </div>
-        </div>
-      </DetailOverlay>
-
-      {/* Auffällige Nutzung */}
-      <DetailOverlay open={activeOverlay === "suspicious_activity"} onClose={closeOverlay} title="Auffällige Nutzung" subtitle="Automatische Erkennung potenzieller Sicherheitsrisiken.">
-        <div className="space-y-6 text-navy-900">
-          <div className="bg-warning-yellow/10 border border-warning-yellow/30 rounded-xl p-4 flex gap-3">
-            <AlertTriangle className="w-5 h-5 text-warning-yellow shrink-0 mt-0.5" />
-            <div>
-              <h4 className="font-bold text-navy-900">Hinweis</h4>
-              <p className="text-sm text-text-muted">Dies sind nur algorithmische Hinweise, keine harten Bewertungen. Ein "geteilter Account" kann auch legitim sein, wenn z.B. ein Meister-Tablet in der Schicht wandert.</p>
-            </div>
-          </div>
-          
-          <div className="space-y-4">
-            <div className="bg-white p-4 rounded-xl border border-error-red/30">
-              <h4 className="font-bold text-error-red flex items-center gap-2"><Globe className="w-4 h-4" /> Geteilter Account Verdacht</h4>
-              <p className="text-sm text-text-muted mt-1">Die Rolle <span className="font-bold">"Werkstatt"</span> ist aktuell gleichzeitig auf <span className="font-bold">4 verschiedenen Geräten</span> aktiv. Empfehlung: Künftig personalisierte PINs statt generischer Rolle nutzen.</p>
-            </div>
-
-            <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-200">
-              <h4 className="font-bold text-navy-900 flex items-center gap-2"><Clock className="w-4 h-4" /> Außerhalb Normalzeit</h4>
-              <p className="text-sm text-text-muted mt-1">Ein Login-Versuch ("Büro") um 03:14 Uhr wurde erfolgreich durchgeführt (Tablet). Prüfen, ob Nachtschicht aktiv war.</p>
-            </div>
-          </div>
-        </div>
-      </DetailOverlay>
-
-      {/* Session-Prüfung */}
-      <DetailOverlay open={activeOverlay === "session_check"} onClose={closeOverlay} title="Session-Prüfung" subtitle="Verwaltung der aktiven Login-Sitzungen (Cookies/Tokens).">
-        <div className="space-y-6 text-navy-900">
-          <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-200">
-            <p className="text-sm text-text-muted">Aktuell ist die App im Bypass-Auth bzw. LocalStorage-Mock-Modus. Echte Supabase Auth-Sessions existieren in dieser Demo nicht.</p>
-          </div>
-          
-          <div className="bg-white border border-neutral-gray-200 rounded-xl overflow-hidden">
-            <div className="p-3 bg-navy-900 text-white font-bold text-sm">Lokale Session (Du)</div>
-            <div className="p-4 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-text-muted">Rolle:</span> <span className="font-bold text-accent-orange">Admin / Developer</span></div>
-              <div className="flex justify-between"><span className="text-text-muted">Session Start:</span> <span>Heute</span></div>
-              <div className="flex justify-between"><span className="text-text-muted">Auth-Typ:</span> <span>Bypass-Cookie / LocalStorage</span></div>
-            </div>
-          </div>
-
-          <button className="w-full bg-error-red/10 text-error-red border border-error-red/20 font-bold p-3 rounded-xl opacity-50 cursor-not-allowed">
-            Gerät sperren (Backend fehlt)
-          </button>
         </div>
       </DetailOverlay>
 
       {/* Gerätelizenz */}
-      <DetailOverlay open={activeOverlay === "device_license"} onClose={closeOverlay} title="Gerätelizenz" subtitle="Übersicht der lizenzierten Endgeräte.">
+      <DetailOverlay open={activeOverlay === "device_license"} onClose={closeOverlay} title="Gerätelizenzierung" subtitle="Übersicht der lizenzierten Endgeräte.">
         <div className="space-y-6 text-navy-900">
-          <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-200 text-sm">
-            <p className="font-bold">Lizenzmodell: <span className="text-accent-orange">Gerätebasiert</span></p>
-            <p className="text-text-muted mt-1">Kunden können nicht selbst beliebig Geräte hinzufügen. Ein Admin muss Geräte freigeben, wenn das Limit überschritten wird.</p>
+          <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-200 text-sm space-y-2">
+            <p className="font-bold">Modell-Definition:</p>
+            <p className="text-text-muted">
+              Um unkontrollierten Wildwuchs zu vermeiden, wird ein striktes Limit-Verfahren angewendet.
+            </p>
+            <ul className="list-disc pl-5 text-text-muted space-y-1">
+              <li><strong>Lizenz pro Gerät:</strong> Jedes Endgerät registriert sich mit einer eindeutigen UUID.</li>
+              <li><strong>Lizenz pro Betrieb:</strong> Der Mandant kauft ein Paket mit einer maximalen Geräteanzahl.</li>
+              <li><strong>Admin-Freigabe:</strong> Nur der Administrator kann neue Geräte aktivieren. Der Kunde kann nicht selbst beliebig Geräte hinzufügen.</li>
+            </ul>
           </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white border border-neutral-gray-200 rounded-xl p-4 text-center">
-              <div className="text-3xl font-black text-navy-900">12</div>
+              <div className="text-3xl font-black text-navy-900">{utilizedCount}</div>
               <div className="text-xs font-bold text-text-muted uppercase mt-1">Genutzte Geräte</div>
             </div>
             <div className="bg-white border border-neutral-gray-200 rounded-xl p-4 text-center">
-              <div className="text-3xl font-black text-navy-900">15</div>
+              <div className="text-3xl font-black text-navy-900">{totalAllowed}</div>
               <div className="text-xs font-bold text-text-muted uppercase mt-1">Erlaubte Geräte</div>
             </div>
             <div className="bg-white border border-neutral-gray-200 rounded-xl p-4 text-center">
-              <div className="text-3xl font-black text-success-green">3</div>
+              <div className="text-3xl font-black text-success-green">{freeSlotsCount}</div>
               <div className="text-xs font-bold text-text-muted uppercase mt-1">Freie Slots</div>
             </div>
             <div className="bg-white border border-neutral-gray-200 rounded-xl p-4 text-center">
-              <div className="text-3xl font-black text-warning-yellow">1</div>
-              <div className="text-xs font-bold text-text-muted uppercase mt-1">Unbekannt / Neu</div>
+              <div className="text-3xl font-black text-warning-yellow">{unknownCount}</div>
+              <div className="text-xs font-bold text-text-muted uppercase mt-1">Unbekannt / Prüfen</div>
             </div>
           </div>
         </div>
       </DetailOverlay>
 
       {/* Lizenzmodell */}
-      <DetailOverlay open={activeOverlay === "license_model"} onClose={closeOverlay} title="Lizenzmodelle" subtitle="Konditionen und geplante Verkaufspakete.">
+      <DetailOverlay open={activeOverlay === "license_model"} onClose={closeOverlay} title="Lizenzmodell" subtitle="Konditionen und geplante Abrechnungspakete.">
         <div className="space-y-4 text-navy-900">
+          <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-200 text-sm mb-2">
+            <p className="font-bold mb-1">Flexibles Verwertungssystem (Preise nicht fest verdrahtet)</p>
+            <p className="text-text-muted">
+              Die Vergütung kann modular angepasst werden. Nachfolgend ist die vorbereitete Paketstruktur aufgeführt:
+            </p>
+          </div>
+
           <div className="bg-white border border-neutral-gray-200 rounded-xl p-4">
-            <h4 className="font-bold mb-1 flex justify-between">Einmaliger Verkauf <span className="text-text-muted">Demo</span></h4>
-            <p className="text-sm text-text-muted">Software geht in den Besitz des Kunden über (On-Premise oder dedizierter Cloud-Host). Wartung separat.</p>
+            <h4 className="font-bold mb-1 text-navy-900">1. Einmaliger Verkauf</h4>
+            <p className="text-sm text-text-muted">Kauf der Softwarelizenz zur Eigennutzung (On-Premise oder dedizierte Instanz). Optionale Wartung separat.</p>
           </div>
           <div className="bg-white border border-neutral-gray-200 rounded-xl p-4">
-            <h4 className="font-bold mb-1 flex justify-between">Einrichtungspaket <span className="text-text-muted">Demo</span></h4>
-            <p className="text-sm text-text-muted">Einmalige Kosten für Datenimport (Kundenstamm, Artikel), Anpassung des Brandings und Schulung vor Ort.</p>
+            <h4 className="font-bold mb-1 text-navy-900">2. Einrichtungspaket</h4>
+            <p className="text-sm text-text-muted">Einmalige Dienstleistung für Datenimport (Kundenstamm, Artikelkatalog), Anpassung des Layouts und Schulung vor Ort.</p>
           </div>
           <div className="bg-white border border-neutral-gray-200 rounded-xl p-4">
-            <h4 className="font-bold mb-1 flex justify-between">SaaS / Gerätepauschale <span className="text-text-muted">Demo</span></h4>
-            <p className="text-sm text-text-muted">Monatliche Lizenzgebühr pro aktivem Gerät inkl. Cloud-Hosting und Support.</p>
+            <h4 className="font-bold mb-1 text-navy-900">3. Wartungsvertrag (monatlich / jährlich)</h4>
+            <p className="text-sm text-text-muted">Regelmäßige Pflegevereinbarung für garantierte Fehlerbehebung, Telefon-Support und gesetzliche Aktualisierungen.</p>
           </div>
           <div className="bg-white border border-neutral-gray-200 rounded-xl p-4">
-            <h4 className="font-bold mb-1 flex justify-between">Zusatzmodule <span className="text-text-muted">Demo</span></h4>
-            <p className="text-sm text-text-muted">Optionale Module (z.B. Datev-Export, erweiterte Maschinen-Telemetrie) können separat lizenziert werden.</p>
+            <h4 className="font-bold mb-1 text-navy-900">4. Gerätepauschale</h4>
+            <p className="text-sm text-text-muted">SaaS-Modell mit monatlichen Gebühren, gestaffelt nach der Anzahl der aktivierten Endgeräte in der Werkstatt.</p>
+          </div>
+          <div className="bg-white border border-neutral-gray-200 rounded-xl p-4">
+            <h4 className="font-bold mb-1 text-navy-900">5. Zusatzmodule</h4>
+            <p className="text-sm text-text-muted">Zusatzfunktionen (z.B. Datev-Export, OCR-Erkennung, erweiterte Sensorik) können einzeln freigeschaltet werden.</p>
           </div>
         </div>
       </DetailOverlay>
 
       {/* Wartungsvertrag */}
-      <DetailOverlay open={activeOverlay === "maintenance"} onClose={closeOverlay} title="Wartungsvertrag (SLA)" subtitle="Übersicht der laufenden Betreuungsleistungen.">
+      <DetailOverlay open={activeOverlay === "maintenance"} onClose={closeOverlay} title="Wartungsvertrag" subtitle="Umfang der technischen und betrieblichen Betreuung.">
         <div className="space-y-6 text-navy-900">
-          <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-            <p className="text-sm font-bold text-blue-900 text-center">Status: Konzept vorbereitet</p>
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-center">
+            <p className="text-sm font-bold text-blue-900">Status: Konzept vorbereitet</p>
+            <p className="text-xs text-blue-700 mt-1">Pflichtenheft und Service-Level-Agreements für den Endkunden.</p>
           </div>
-          <ul className="space-y-2">
-            <li className="flex gap-3 bg-white p-3 rounded-lg border border-neutral-gray-200"><CheckCircle className="w-5 h-5 text-success-green shrink-0"/> <span className="text-sm font-medium">Updates & Sicherheits-Patches</span></li>
-            <li className="flex gap-3 bg-white p-3 rounded-lg border border-neutral-gray-200"><CheckCircle className="w-5 h-5 text-success-green shrink-0"/> <span className="text-sm font-medium">Support (Ticketing & Telefon)</span></li>
-            <li className="flex gap-3 bg-white p-3 rounded-lg border border-neutral-gray-200"><CheckCircle className="w-5 h-5 text-success-green shrink-0"/> <span className="text-sm font-medium">Tägliche Backup-Prüfung</span></li>
-            <li className="flex gap-3 bg-white p-3 rounded-lg border border-neutral-gray-200"><CheckCircle className="w-5 h-5 text-success-green shrink-0"/> <span className="text-sm font-medium">24/7 Monitoring (Uptime)</span></li>
-            <li className="flex gap-3 bg-white p-3 rounded-lg border border-neutral-gray-200"><CheckCircle className="w-5 h-5 text-success-green shrink-0"/> <span className="text-sm font-medium">Kleine UI/UX Anpassungen (bis 2h/Monat)</span></li>
-            <li className="flex gap-3 bg-white p-3 rounded-lg border border-neutral-gray-200"><CheckCircle className="w-5 h-5 text-success-green shrink-0"/> <span className="text-sm font-medium">Jahreswechsel / Steuer- / Export-Prüfung</span></li>
-          </ul>
+
+          <div className="space-y-3">
+            <h4 className="font-bold text-sm text-navy-900 uppercase tracking-wider">Inklusiv-Leistungen:</h4>
+            <ul className="space-y-2">
+              <li className="flex gap-3 bg-white p-3 rounded-lg border border-neutral-gray-200">
+                <CheckCircle className="w-5 h-5 text-success-green shrink-0 mt-0.5"/> 
+                <div>
+                  <p className="text-sm font-bold">Updates und Sicherheitsupdates</p>
+                  <p className="text-xs text-text-muted">Einspielen von Patches, Performance-Verbesserungen und Schutz vor neuen Sicherheitsrisiken.</p>
+                </div>
+              </li>
+              <li className="flex gap-3 bg-white p-3 rounded-lg border border-neutral-gray-200">
+                <CheckCircle className="w-5 h-5 text-success-green shrink-0 mt-0.5"/> 
+                <div>
+                  <p className="text-sm font-bold">Support</p>
+                  <p className="text-xs text-text-muted">Zuverlässiger Ansprechpartner bei Bedienfragen oder Störungen per E-Mail und Telefon.</p>
+                </div>
+              </li>
+              <li className="flex gap-3 bg-white p-3 rounded-lg border border-neutral-gray-200">
+                <CheckCircle className="w-5 h-5 text-success-green shrink-0 mt-0.5"/> 
+                <div>
+                  <p className="text-sm font-bold">Backup-Prüfung</p>
+                  <p className="text-xs text-text-muted">Automatisierte tägliche Backups der Datenbank inklusive Wiederherstellungs-Tests.</p>
+                </div>
+              </li>
+              <li className="flex gap-3 bg-white p-3 rounded-lg border border-neutral-gray-200">
+                <CheckCircle className="w-5 h-5 text-success-green shrink-0 mt-0.5"/> 
+                <div>
+                  <p className="text-sm font-bold">Kleine Anpassungen</p>
+                  <p className="text-xs text-text-muted">Optimierungen an Layouts, kleine Textänderungen oder Anpassungen von PDF-Exportvorlagen.</p>
+                </div>
+              </li>
+              <li className="flex gap-3 bg-white p-3 rounded-lg border border-neutral-gray-200">
+                <CheckCircle className="w-5 h-5 text-success-green shrink-0 mt-0.5"/> 
+                <div>
+                  <p className="text-sm font-bold">Monitoring</p>
+                  <p className="text-xs text-text-muted">24/7 Überwachung der Server-Verfügbarkeit und API-Schnittstellen.</p>
+                </div>
+              </li>
+              <li className="flex gap-3 bg-white p-3 rounded-lg border border-neutral-gray-200">
+                <CheckCircle className="w-5 h-5 text-success-green shrink-0 mt-0.5"/> 
+                <div>
+                  <p className="text-sm font-bold">Schnittstellenpflege</p>
+                  <p className="text-xs text-text-muted">Überwachung und Anpassung von Schnittstellen bei Versions-Upgrades externer Dienste.</p>
+                </div>
+              </li>
+              <li className="flex gap-3 bg-white p-3 rounded-lg border border-neutral-gray-200">
+                <CheckCircle className="w-5 h-5 text-success-green shrink-0 mt-0.5"/> 
+                <div>
+                  <p className="text-sm font-bold">Jahreswechsel / Steuer- / Exportprüfung</p>
+                  <p className="text-xs text-text-muted">Kontrolle der Berechnungslogiken und Exporte zum Jahresende zur Einhaltung rechtlicher Standards.</p>
+                </div>
+              </li>
+            </ul>
+          </div>
         </div>
       </DetailOverlay>
 
       {/* Betriebskosten */}
-      <DetailOverlay open={activeOverlay === "server_costs"} onClose={closeOverlay} title="Betriebs- & Serverkosten" subtitle="Zentrale Infrastruktur-Aufwände.">
+      <DetailOverlay open={activeOverlay === "server_costs"} onClose={closeOverlay} title="Serverkosten und Betriebskosten" subtitle="Zentrale Aufwände und Abrechnungsschlüssel.">
         <div className="space-y-6 text-navy-900">
-          <p className="text-sm text-text-muted">Kosten für die Bereitstellung, die entweder pauschal an den Mandanten weiterberechnet oder pro Mandant isoliert kalkuliert werden.</p>
-          
+          <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-200 text-sm space-y-2">
+            <p className="font-bold">Betriebskosten-Logik:</p>
+            <p className="text-text-muted">
+              Die laufenden Kosten der genutzten Dienste können auf verschiedene Weisen abgerechnet werden:
+            </p>
+            <ul className="list-disc pl-5 text-text-muted space-y-1">
+              <li><strong>Pauschal weiterberechnen:</strong> Der Kunde zahlt eine feste monatliche Infrastrukturgebühr.</li>
+              <li><strong>Pro Mandant kalkulieren:</strong> Jeder Mandant erhält eine genaue Abrechnung basierend auf dem realen Speicher- und API-Verbrauch.</li>
+              <li><strong>Zentrale Plattform:</strong> Eine geteilte Hauptinstanz minimiert die Grundgebühren massiv, erfordert jedoch eine strikte Datentrennung (RLS).</li>
+            </ul>
+          </div>
+
           <div className="space-y-3">
-            <div className="flex justify-between items-center bg-white border border-neutral-gray-200 p-3 rounded-lg">
-              <span className="font-bold text-sm">Vercel (Hosting & Edge)</span>
+            <h4 className="font-bold text-xs uppercase tracking-wider text-text-muted mb-2">Erfasste Dienste:</h4>
+            
+            <div className="flex justify-between items-center bg-white border border-neutral-gray-200 p-3 rounded-lg text-sm">
+              <span className="font-bold">Vercel</span>
+              <span className="text-xs text-text-muted">Hosting und Edge Routing</span>
             </div>
-            <div className="flex justify-between items-center bg-white border border-neutral-gray-200 p-3 rounded-lg">
-              <span className="font-bold text-sm">Supabase (DB, Auth, Storage)</span>
+            <div className="flex justify-between items-center bg-white border border-neutral-gray-200 p-3 rounded-lg text-sm">
+              <span className="font-bold">Supabase</span>
+              <span className="text-xs text-text-muted">Postgres-Datenbank und Authentifizierung</span>
             </div>
-            <div className="flex justify-between items-center bg-white border border-neutral-gray-200 p-3 rounded-lg">
-              <span className="font-bold text-sm">Resend / Brevo (E-Mail)</span>
+            <div className="flex justify-between items-center bg-white border border-neutral-gray-200 p-3 rounded-lg text-sm">
+              <span className="font-bold">E-Mail / Resend / Brevo</span>
+              <span className="text-xs text-text-muted">Transaktionsmails und Status-Updates</span>
             </div>
-            <div className="flex justify-between items-center bg-white border border-neutral-gray-200 p-3 rounded-lg">
-              <span className="font-bold text-sm">Mollie / Stripe (Payment)</span>
+            <div className="flex justify-between items-center bg-white border border-neutral-gray-200 p-3 rounded-lg text-sm">
+              <span className="font-bold">Storage / Backup-Speicher</span>
+              <span className="text-xs text-text-muted">S3 Bucket für Lieferscheine und Schadensbilder</span>
             </div>
-            <div className="flex justify-between items-center bg-white border border-neutral-gray-200 p-3 rounded-lg">
-              <span className="font-bold text-sm">Domains & SSL</span>
+            <div className="flex justify-between items-center bg-white border border-neutral-gray-200 p-3 rounded-lg text-sm">
+              <span className="font-bold">Payment Provider</span>
+              <span className="text-xs text-text-muted">Transaktionsgebühren für Online-Zahlung</span>
+            </div>
+            <div className="flex justify-between items-center bg-white border border-neutral-gray-200 p-3 rounded-lg text-sm">
+              <span className="font-bold">Domains und SSL</span>
+              <span className="text-xs text-text-muted">Registrierungsgebühren und Zertifikate</span>
+            </div>
+            <div className="flex justify-between items-center bg-white border border-neutral-gray-200 p-3 rounded-lg text-sm">
+              <span className="font-bold">Monitoring</span>
+              <span className="text-xs text-text-muted">Fehlerüberwachung und Uptime-Alerting</span>
+            </div>
+            <div className="flex justify-between items-center bg-white border border-neutral-gray-200 p-3 rounded-lg text-sm">
+              <span className="font-bold">Supportzeit</span>
+              <span className="text-xs text-text-muted">Bereitschaftszeit des Entwicklers</span>
             </div>
           </div>
-          
-          <Link href="/finanzen" className="w-full bg-navy-900 text-white font-bold p-3 rounded-xl flex items-center justify-center gap-2 hover:bg-navy-800 transition-colors">
-            Zu den Finanzen wechseln <ArrowRight className="w-4 h-4"/>
-          </Link>
+
+          <div className="pt-2">
+            <Link href="/finanzen" className="w-full bg-navy-900 text-white font-bold p-3 rounded-xl flex items-center justify-center gap-2 hover:bg-navy-800 transition-colors text-sm">
+              Kalkulations-Grundlagen in Finanzen einsehen <ArrowRight className="w-4 h-4"/>
+            </Link>
+          </div>
         </div>
       </DetailOverlay>
 
       {/* Mandanten-Sicherheit */}
-      <DetailOverlay open={activeOverlay === "tenant_security"} onClose={closeOverlay} title="Mandanten-Sicherheit" subtitle="Daten-Isolierung und Auditierung.">
+      <DetailOverlay open={activeOverlay === "tenant_security"} onClose={closeOverlay} title="Mandanten-Sicherheit" subtitle="Isolierung, Rechte und Auditierung auf Plattform-Ebene.">
         <div className="space-y-6 text-navy-900">
-          <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-200 text-sm">
-            <p className="font-bold mb-2">Prinzipien der Multi-Tenancy (Vorbereitung)</p>
-            <ul className="list-disc pl-4 space-y-1 text-text-muted">
-              <li>Keine Datenvermischung: Alle relevanten Tabellen (Kunden, Aufträge, Logs) benötigen zwingend eine `tenant_id`.</li>
-              <li>RLS Policies (Row Level Security) garantieren harte Trennung auf Datenbankebene.</li>
-              <li>Admin- und Developer-Rollen werden strikt vom operativen Mandanten-Login getrennt.</li>
+          <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-200 text-sm space-y-3">
+            <h4 className="font-bold text-navy-900 flex items-center gap-2">
+              <Shield className="w-5 h-5 text-accent-orange shrink-0" />
+              Sicherheits- und Trennungs-Prinzipien
+            </h4>
+            <ul className="list-disc pl-5 text-text-muted space-y-2">
+              <li>
+                <strong>Keine Datenvermischung:</strong> Durchgängige Absicherung aller Datenbankabfragen. Jede Tabelle erfordert zwingend das Feld <code className="bg-neutral-gray-200 px-1 py-0.5 rounded text-navy-900 text-xs font-mono">tenant_id</code>.
+              </li>
+              <li>
+                <strong>Row Level Security (RLS):</strong> Supabase erfordert explizite Policies, die den Zugriff auf Datensätze ohne gültigen Mandanten-Key blockieren.
+              </li>
+              <li>
+                <strong>Rollen je Mandant:</strong> Nutzer erhalten Berechtigungen, die ausschließlich innerhalb ihres Mandanten gültig sind.
+              </li>
+              <li>
+                <strong>Admin und Developer getrennt:</strong> Plattform-Administratoren nutzen gesonderte Zugänge mit weitreichenden Rechten, die strikt vom operativen Mandanten-Betrieb isoliert sind.
+              </li>
             </ul>
           </div>
 
-          <h4 className="font-bold border-b border-neutral-gray-200 pb-2">Erforderliche Bausteine</h4>
-          <ul className="space-y-3">
-            <li className="flex items-start gap-3">
-              <div className="w-6 h-6 rounded-full bg-neutral-gray-200 flex items-center justify-center shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold text-sm">Audit-Log</p>
-                <p className="text-xs text-text-muted">Protokollierung von Löschungen und Rechteänderungen pro Mandant.</p>
+          <div className="space-y-3">
+            <h4 className="font-bold text-sm text-navy-900 uppercase tracking-wider">Geplante Architektur-Bausteine im UI:</h4>
+            
+            <div className="bg-white p-4 rounded-xl border border-neutral-gray-200 space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-sm text-navy-900">1. Audit-Log</span>
+                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold">Vorbereitet</span>
               </div>
-            </li>
-            <li className="flex items-start gap-3">
-              <div className="w-6 h-6 rounded-full bg-neutral-gray-200 flex items-center justify-center shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold text-sm">Demo-Daten Handler</p>
-                <p className="text-xs text-text-muted">Sichere Löschung oder Archivierung aller initialen Dummy-Daten.</p>
+              <p className="text-xs text-text-muted">Protokollierung aller sicherheitsrelevanten Aktionen (z.B. Stammdaten-Löschung, Rechte-Änderungen) mit Zeitstempel und User-ID.</p>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-neutral-gray-200 space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-sm text-navy-900">2. Demo-Daten trennbar und löschbar</span>
+                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold">Vorbereitet</span>
               </div>
-            </li>
-            <li className="flex items-start gap-3">
-              <div className="w-6 h-6 rounded-full bg-neutral-gray-200 flex items-center justify-center shrink-0 mt-0.5" />
-              <div>
-                <p className="font-bold text-sm">Backup Management</p>
-                <p className="text-xs text-text-muted">Isoliertes Backup (PITR) pro Mandant auf Supabase Ebene sicherstellen.</p>
+              <p className="text-xs text-text-muted">Eine automatisierte Routine, um sämtliche initialen Demodatensätze spurlos zu entfernen, bevor der Mandant produktiv geht.</p>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-neutral-gray-200 space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-sm text-navy-900">3. Backup-Konzept</span>
+                <span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold">Vorbereitet</span>
               </div>
-            </li>
-          </ul>
+              <p className="text-xs text-text-muted">Tägliche, verschlüsselte Sicherung in eine getrennte Cloud-Region mit einer Aufbewahrungsfrist von 30 Tagen (Point-in-Time Recovery).</p>
+            </div>
+          </div>
         </div>
       </DetailOverlay>
 
       {/* Zugriffsregeln */}
-      <DetailOverlay open={activeOverlay === "access_rules"} onClose={closeOverlay} title="Zugriffsregeln" subtitle="Rollen und Berechtigungen.">
+      <DetailOverlay open={activeOverlay === "access_rules"} onClose={closeOverlay} title="Zugriffsregeln" subtitle="Rollen und Berechtigungen im Betrieb.">
         <div className="space-y-4 text-navy-900">
           <div className="bg-white border border-neutral-gray-200 rounded-xl p-4">
-            <h4 className="font-bold border-b border-neutral-gray-100 pb-2 mb-2">Rolle: Admin / Developer</h4>
-            <p className="text-sm text-text-muted">Vollzugriff. Verwalten von Lizenzen, Tenants, Finanzen und globalen Settings.</p>
+            <h4 className="font-bold border-b border-neutral-gray-100 pb-2 mb-2 text-navy-900">Rolle: Admin / Developer</h4>
+            <p className="text-sm text-text-muted">Vollzugriff auf alle Bereiche der App. Berechtigt zur Lizenzverwaltung, Änderung der Systemparameter und Einsicht in alle Mandantendaten.</p>
           </div>
           <div className="bg-white border border-neutral-gray-200 rounded-xl p-4">
-            <h4 className="font-bold border-b border-neutral-gray-100 pb-2 mb-2">Rolle: Büro</h4>
-            <p className="text-sm text-text-muted">Zugriff auf Angebote, Aufträge, Kundenverwaltung, Kommunikation.</p>
+            <h4 className="font-bold border-b border-neutral-gray-100 pb-2 mb-2 text-navy-900">Rolle: Büro</h4>
+            <p className="text-sm text-text-muted">Schreib- und Leserechte für Angebote, Auftragsdetails, Kundenkartei und Rechnungsstellung. Eingeschränkter Systemzugriff.</p>
           </div>
           <div className="bg-white border border-neutral-gray-200 rounded-xl p-4">
-            <h4 className="font-bold border-b border-neutral-gray-100 pb-2 mb-2">Rolle: Werkstatt</h4>
-            <p className="text-sm text-text-muted">Limitiert auf Warendurchlauf, Scan, Bädersteuerung und Checklisten. Kein Zugriff auf Preise.</p>
+            <h4 className="font-bold border-b border-neutral-gray-100 pb-2 mb-2 text-navy-900">Rolle: Werkstatt</h4>
+            <p className="text-sm text-text-muted">Optimiert für Tablets. Nur Zugriff auf Warendurchlauf, Barcode-Scanner, Bädersteuerung und Checklisten. Sensible Finanzdaten sind ausgeblendet.</p>
           </div>
         </div>
       </DetailOverlay>
 
       {/* Übergabe-Check */}
-      <DetailOverlay open={activeOverlay === "handover"} onClose={closeOverlay} title="Übergabe-Check" subtitle="Checkliste vor Live-Gang oder Verkauf.">
+      <DetailOverlay open={activeOverlay === "handover"} onClose={closeOverlay} title="Übergabe-Check" subtitle="Checkliste für den Verkauf und Launch der App.">
         <div className="space-y-4 text-navy-900">
-          <p className="text-sm text-text-muted mb-4">Dient als roter Faden für die spätere Projektabnahme und Übergabe der Betriebsverantwortung.</p>
+          <p className="text-sm text-text-muted mb-4">
+            Diese Kontrollpunkte müssen vor der finalen Abnahme und dem Übergang in den Produktivbetrieb durchlaufen werden.
+          </p>
           
-          <label className="flex items-center gap-3 p-3 bg-white border border-neutral-gray-200 rounded-lg cursor-pointer hover:bg-bg-app-soft transition-colors">
-            <input type="checkbox" className="w-5 h-5 accent-navy-900" />
-            <span className="text-sm font-bold">Neutrale Projekt-E-Mail eingerichtet (z.B. IT@kunde.de)</span>
-          </label>
-          <label className="flex items-center gap-3 p-3 bg-white border border-neutral-gray-200 rounded-lg cursor-pointer hover:bg-bg-app-soft transition-colors">
-            <input type="checkbox" className="w-5 h-5 accent-navy-900" />
-            <span className="text-sm font-bold">Supabase Owner-Rechte übertragen</span>
-          </label>
-          <label className="flex items-center gap-3 p-3 bg-white border border-neutral-gray-200 rounded-lg cursor-pointer hover:bg-bg-app-soft transition-colors">
-            <input type="checkbox" className="w-5 h-5 accent-navy-900" />
-            <span className="text-sm font-bold">Vercel Team / Projekt-Rechte übertragen</span>
-          </label>
-          <label className="flex items-center gap-3 p-3 bg-white border border-neutral-gray-200 rounded-lg cursor-pointer hover:bg-bg-app-soft transition-colors">
-            <input type="checkbox" className="w-5 h-5 accent-navy-900" />
-            <span className="text-sm font-bold">API-Keys rotiert (Resend, Payment, OCR)</span>
-          </label>
-          <label className="flex items-center gap-3 p-3 bg-white border border-neutral-gray-200 rounded-lg cursor-pointer hover:bg-bg-app-soft transition-colors">
-            <input type="checkbox" className="w-5 h-5 accent-navy-900" />
-            <span className="text-sm font-bold">Demo-Daten vollständig bereinigt</span>
-          </label>
-          <label className="flex items-center gap-3 p-3 bg-white border border-neutral-gray-200 rounded-lg cursor-pointer hover:bg-bg-app-soft transition-colors">
-            <input type="checkbox" className="w-5 h-5 accent-navy-900" />
-            <span className="text-sm font-bold">Initiale Admin-Zugänge finalisiert</span>
-          </label>
-          <label className="flex items-center gap-3 p-3 bg-white border border-neutral-gray-200 rounded-lg cursor-pointer hover:bg-bg-app-soft transition-colors">
-            <input type="checkbox" className="w-5 h-5 accent-navy-900" />
-            <span className="text-sm font-bold">Kundendokumentation & Handbuch übergeben</span>
-          </label>
+          <div className="space-y-3">
+            <label className="flex items-start gap-3 p-3 bg-white border border-neutral-gray-200 rounded-xl cursor-pointer hover:bg-bg-app-soft transition-colors">
+              <input 
+                type="checkbox" 
+                checked={checklist.email} 
+                onChange={() => toggleChecklistItem('email')}
+                className="w-5 h-5 accent-navy-900 shrink-0 mt-0.5 rounded" 
+              />
+              <div>
+                <span className="text-sm font-bold block text-navy-900">Neutrale Projekt-E-Mail einrichten</span>
+                <span className="text-xs text-text-muted block mt-0.5">Nutzung einer betriebseigenen Adresse (z.B. support@betrieb.de) für Benachrichtigungen.</span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3 bg-white border border-neutral-gray-200 rounded-xl cursor-pointer hover:bg-bg-app-soft transition-colors">
+              <input 
+                type="checkbox" 
+                checked={checklist.supabaseOwner} 
+                onChange={() => toggleChecklistItem('supabaseOwner')}
+                className="w-5 h-5 accent-navy-900 shrink-0 mt-0.5 rounded" 
+              />
+              <div>
+                <span className="text-sm font-bold block text-navy-900">Supabase Owner prüfen und übertragen</span>
+                <span className="text-xs text-text-muted block mt-0.5">Übergabe der primären Eigentümerrechte an den Haupt-Account des Kunden.</span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3 bg-white border border-neutral-gray-200 rounded-xl cursor-pointer hover:bg-bg-app-soft transition-colors">
+              <input 
+                type="checkbox" 
+                checked={checklist.vercelTeam} 
+                onChange={() => toggleChecklistItem('vercelTeam')}
+                className="w-5 h-5 accent-navy-900 shrink-0 mt-0.5 rounded" 
+              />
+              <div>
+                <span className="text-sm font-bold block text-navy-900">Vercel-Team und Projekt-Rechte übertragen</span>
+                <span className="text-xs text-text-muted block mt-0.5">Einrichtung des produktiven Vercel-Projektes im Kunden-Account.</span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3 bg-white border border-neutral-gray-200 rounded-xl cursor-pointer hover:bg-bg-app-soft transition-colors">
+              <input 
+                type="checkbox" 
+                checked={checklist.domains} 
+                onChange={() => toggleChecklistItem('domains')}
+                className="w-5 h-5 accent-navy-900 shrink-0 mt-0.5 rounded" 
+              />
+              <div>
+                <span className="text-sm font-bold block text-navy-900">Domains und DNS-Einträge finalisieren</span>
+                <span className="text-xs text-text-muted block mt-0.5">Aufschalten der finalen Domain inklusive SSL-Absicherung.</span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3 bg-white border border-neutral-gray-200 rounded-xl cursor-pointer hover:bg-bg-app-soft transition-colors">
+              <input 
+                type="checkbox" 
+                checked={checklist.apiKeys} 
+                onChange={() => toggleChecklistItem('apiKeys')}
+                className="w-5 h-5 accent-navy-900 shrink-0 mt-0.5 rounded" 
+              />
+              <div>
+                <span className="text-sm font-bold block text-navy-900">API-Keys und Secrets rotieren</span>
+                <span className="text-xs text-text-muted block mt-0.5">Sicheres Austauschen aller Entwicklungsschlüssel gegen produktive Anmeldedaten.</span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3 bg-white border border-neutral-gray-200 rounded-xl cursor-pointer hover:bg-bg-app-soft transition-colors">
+              <input 
+                type="checkbox" 
+                checked={checklist.backupConcept} 
+                onChange={() => toggleChecklistItem('backupConcept')}
+                className="w-5 h-5 accent-navy-900 shrink-0 mt-0.5 rounded" 
+              />
+              <div>
+                <span className="text-sm font-bold block text-navy-900">Backupkonzept aktivieren</span>
+                <span className="text-xs text-text-muted block mt-0.5">Aktivieren und Testen der automatischen Datenbank- und Datei-Backups.</span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3 bg-white border border-neutral-gray-200 rounded-xl cursor-pointer hover:bg-bg-app-soft transition-colors">
+              <input 
+                type="checkbox" 
+                checked={checklist.clearDemoData} 
+                onChange={() => toggleChecklistItem('clearDemoData')}
+                className="w-5 h-5 accent-navy-900 shrink-0 mt-0.5 rounded" 
+              />
+              <div>
+                <span className="text-sm font-bold block text-navy-900">Demo-Daten vollständig löschen</span>
+                <span className="text-xs text-text-muted block mt-0.5">Sicheres Bereinigen der Beispieldatensätze aus der Live-Datenbank.</span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3 bg-white border border-neutral-gray-200 rounded-xl cursor-pointer hover:bg-bg-app-soft transition-colors">
+              <input 
+                type="checkbox" 
+                checked={checklist.adminCredentials} 
+                onChange={() => toggleChecklistItem('adminCredentials')}
+                className="w-5 h-5 accent-navy-900 shrink-0 mt-0.5 rounded" 
+              />
+              <div>
+                <span className="text-sm font-bold block text-navy-900">Admin-Zugänge finalisieren</span>
+                <span className="text-xs text-text-muted block mt-0.5">Einrichten personalisierter, sicherer Administrations-Accounts für den Kunden.</span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-3 p-3 bg-white border border-neutral-gray-200 rounded-xl cursor-pointer hover:bg-bg-app-soft transition-colors">
+              <input 
+                type="checkbox" 
+                checked={checklist.documentation} 
+                onChange={() => toggleChecklistItem('documentation')}
+                className="w-5 h-5 accent-navy-900 shrink-0 mt-0.5 rounded" 
+              />
+              <div>
+                <span className="text-sm font-bold block text-navy-900">Kundendokumentation übergeben</span>
+                <span className="text-xs text-text-muted block mt-0.5">Aushändigen des Handbuchs und Einweisung der Mitarbeiter.</span>
+              </div>
+            </label>
+          </div>
         </div>
       </DetailOverlay>
 
-      <FeedbackFooter pageTitle="Geräte & Lizenzen" route="/admin/devices" variant="full" />
+      <FeedbackFooter pageTitle="Geräte und Lizenzen" route="/admin/devices" variant="full" />
     </div>
   );
 }
