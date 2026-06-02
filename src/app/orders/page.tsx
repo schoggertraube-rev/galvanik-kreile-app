@@ -33,6 +33,7 @@ import { SearchToolbar } from "@/components/ui/SearchToolbar";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import { usePageView } from "@/hooks/usePageView";
+import { OrderWideCard, type UrgencyType } from "@/components/orders/OrderWideCard";
 
 const safe = (value: unknown) => String(value ?? "").toLowerCase();
 
@@ -45,6 +46,7 @@ function OrdersPageInner() {
   
   const statusParam = searchParams.get("status") || searchParams.get("filter");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [surfaceFilter, setSurfaceFilter] = useState<string | null>(null);
   const [prevStatusParam, setPrevStatusParam] = useState<string | null>(null);
 
   if (statusParam !== prevStatusParam) {
@@ -257,8 +259,21 @@ function OrdersPageInner() {
       if (u !== "kritisch" && u !== "gefaehrdet") return false;
     }
 
+    // 5. Surface filter
+    if (surfaceFilter) {
+      const text = (o.task + " " + (o.parts?.map(p => p.surfaceRequested || p.finish).join(" "))).toLowerCase();
+      if (!text.includes(surfaceFilter.toLowerCase())) return false;
+    }
+
     return true;
   });
+
+  const counts = {
+    red: orders.filter(o => o.risk === 'red').length,
+    orange: orders.filter(o => o.risk === 'orange').length,
+    blocked: orders.filter(o => o.risk === 'blocked').length,
+    green: orders.filter(o => o.risk === 'green' || o.risk === 'yellow').length,
+  };
 
   // Sort by urgency, then dueDate
   filteredOrders.sort((a, b) => {
@@ -298,134 +313,158 @@ function OrdersPageInner() {
   };
 
   return (
-    <div className="space-y-5 pb-12 max-w-6xl">
-      <PageHeader
-        title={getStationHeadline()}
-        subtitle={
-          stationFilter
-            ? `Stationsspezifische Übersicht: ${stationFilter.toUpperCase()}`
-            : "Alle Werkstattaufträge — wähle einen Auftrag für Details."
-        }
-        backHref={stationFilter ? "/orders" : undefined}
-        action={{
-          label: "Zurücksetzen",
-          variant: "outline",
-          onClick: () => { setSearchTerm(""); setStatusFilter("all"); setSelectedOrderId(null); },
-        }}
-      />
-      <SearchToolbar
-        value={searchTerm}
-        onChange={setSearchTerm}
-        placeholder="Suchen nach Auftragsnummer, Kunde, Arbeit..."
-        filters={[
-          { id: "all",      label: "Alle Status" },
-          { id: "active",  label: "Aktiv" },
-          { id: "waiting", label: "Wartend" },
-          { id: "critical",label: "Kritisch", count: orders.filter(o => o.risk === "red" || o.risk === "orange").length },
-          { id: "verzug",  label: "Nur Verzug", count: orders.filter(o => { const u = getUrgency(o.dueDate); return u === "kritisch" || u === "gefaehrdet"; }).length },
-        ]}
-        activeFilter={statusFilter}
-        onFilterChange={setStatusFilter}
-      />
+    <div className="pb-12 max-w-[1400px] mx-auto px-4 md:px-6 mt-6 font-sans">
+      <style dangerouslySetInnerHTML={{__html: `
+        .topbar { display: flex; align-items: center; height: 44px; margin-bottom: 16px; }
+        .top-tabs { display: flex; background: #faf8f4; border: 1.5px solid #d8d0c4; border-radius: 24px; padding: 3px; }
+        .top-tab { padding: 6px 18px; border-radius: 20px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; background: transparent; color: #5e5850; transition: all 0.15s; }
+        .top-tab.active { background: #2c2c2c; color: #fff; }
+        .topbar-title { flex: 1; text-align: center; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; color: #1a1a1a; }
+        .btn-new { padding: 7px 18px; background: #2c2c2c; color: #fff; border: none; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+        .btn-new:hover { background: #444; }
 
-      {/* Main Content Layout */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between text-xs text-text-muted font-semibold px-1">
-          <span>{filteredOrders.length} Aufträge an dieser Station</span>
-          <span>Klicke für Details</span>
+        .status-strip { display: flex; gap: 3px; height: 10px; border-radius: 5px; overflow: hidden; margin-bottom: 14px; }
+        .status-strip div { border-radius: 5px; transition: flex 0.3s; }
+        .sr { background: #c0392b; }
+        .sa { background: #d4850a; }
+        .sb { background: #2471a3; }
+        .sg { background: #1e7e45; }
+
+        .filter-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+        .search-box { width: 240px; padding: 8px 14px 8px 36px; border: 1.5px solid #d8d0c4; border-radius: 10px; background: #faf8f4; font-size: 13px; color: #1a1a1a; outline: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='%239e9689' viewBox='0 0 16 16'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85zm-5.242.156a5 5 0 1 1 0-10 5 5 0 0 1 0 10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: 12px center; transition: border-color 0.15s; }
+        .search-box:focus { border-color: #b0a898; }
+        .search-box::placeholder { color: #9e9689; }
+
+        .sep { width: 1px; height: 24px; background: #d8d0c4; margin: 0 2px; }
+
+        .f-pill { display: flex; align-items: center; gap: 5px; padding: 6px 12px; border: 1.5px solid #d8d0c4; border-radius: 18px; background: #faf8f4; font-size: 12px; font-weight: 500; color: #5e5850; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+        .f-pill:hover { border-color: #b0a898; }
+        .f-pill.active { background: #2c2c2c; color: #fff; border-color: #2c2c2c; }
+        .pdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+        .f-pill.active .pdot { box-shadow: 0 0 0 2px rgba(255,255,255,0.25); }
+        .pcnt { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; background: rgba(0,0,0,0.06); padding: 1px 6px; border-radius: 8px; }
+        .f-pill.active .pcnt { background: rgba(255,255,255,0.18); }
+
+        .sdot-f { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.12); }
+        .sf-zink { background: linear-gradient(135deg, #8a9ea8, #b0c4ce); }
+        .sf-chrom { background: linear-gradient(135deg, #c0c0c0, #eaeaea); }
+        .sf-nickel { background: linear-gradient(135deg, #b0a890, #d4c9a8); }
+        .sf-gold { background: linear-gradient(135deg, #d4a017, #f0d060); }
+        .sf-kupfer { background: linear-gradient(135deg, #b87333, #da9a5b); }
+
+        .count-line { font-size: 12px; color: #9e9689; margin-bottom: 10px; font-weight:500; }
+        
+        .card-list { display: flex; flex-direction: column; gap: 8px; }
+      `}} />
+
+      <div className="topbar hidden sm:flex">
+        <div className="top-tabs">
+          <button className="top-tab active">Alle Aufträge</button>
+          <button className="top-tab" onClick={() => window.location.href='/customers'}>Kundenkartei</button>
         </div>
-
-        {filteredOrders.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filteredOrders.map((order) => {
-              const isSelected = selectedOrderId === order.id;
-              const isRed = order.risk === "red";
-              const isOrange = order.risk === "orange";
-              const isYellow = order.risk === "yellow";
-              const isBlocked = order.risk === "blocked";
-
-              const evalRes = evaluateOrderPriority({
-                dueDate: order.dueValue,
-                risk: order.risk,
-              });
-              let borderStyle = evalRes.config.leftBorderClass;
-              let badgeStyle = evalRes.config.badgeClass;
-              let itemBg = "bg-white hover:bg-bg-app-soft/50";
-
-              if (isRed) {
-                borderStyle = `${evalRes.config.leftBorderClass} border-l-[8px] ring-1 ring-red-500/25`;
-                badgeStyle = evalRes.config.badgeClass;
-                itemBg = isSelected ? "bg-accent-orange-soft/50" : "bg-accent-orange-soft/50";
-              } else if (isOrange) {
-                borderStyle = `${evalRes.config.leftBorderClass} border-l-[6px]`;
-                badgeStyle = evalRes.config.badgeClass;
-                itemBg = isSelected ? "bg-gold-100/20" : "bg-white";
-              } else if (isYellow) {
-                borderStyle = `${evalRes.config.leftBorderClass} border-l-[6px]`;
-                badgeStyle = evalRes.config.badgeClass;
-                itemBg = isSelected ? "bg-gold-100/20" : "bg-white";
-              } else if (isBlocked) {
-                borderStyle = `${evalRes.config.leftBorderClass} border-l-4`;
-                badgeStyle = evalRes.config.badgeClass;
-                itemBg = isSelected ? "bg-neutral-gray-100/40" : "bg-bg-app-soft/70";
-              }
-
-              return (
-                <Card
-                  key={order.id}
-                  onClickCapture={(e) => {
-                    console.log("Card onClickCapture fired!", { id: order.id });
-                    setSelectedOrderId(order.id);
-                    trackUiEvent("detail_open", { target: "order", id: order.id, orderNumber: order.orderNumber });
-                  }}
-                  className={`transition-all duration-200 cursor-pointer border-neutral-gray-100 shadow-sm ${itemBg} ${borderStyle} ${
-                    isSelected ? "ring-2 ring-navy-900 border-transparent shadow" : "hover:border-neutral-gray-300"
-                  }`}
-                >
-                  <CardContent className="p-4 flex flex-col justify-between h-full gap-4">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        {(() => {
-                          const u = getUrgency(order.dueDate);
-                          const dotColor = u === "kritisch" ? "bg-danger-red" : u === "gefaehrdet" ? "bg-accent-orange" : "bg-success-green";
-                          return <div className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />;
-                        })()}
-                        <span className="font-mono font-extrabold text-navy-900 text-base">{order.orderNumber}</span>
-                        <span className="text-xs text-text-muted">• {order.customerName}</span>
-                      </div>
-                      <Badge variant="outline" className={`text-[9px] font-bold tracking-wider py-0 px-1.5 w-fit ${badgeStyle}`}>
-                        {order.statusText}
-                      </Badge>
-                      <h4 className="font-bold text-navy-900 text-sm md:text-base font-serif mt-2 line-clamp-2">{order.task}</h4>
-                      <div className="flex items-center gap-3 text-xs text-text-muted font-semibold pt-0.5">
-                        <span>Eingang: {order.intakeDate}</span>
-                        <span>•</span>
-                        <span>Teile: {order.parts?.length || 0}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-right shrink-0 border-t border-neutral-gray-100 pt-3 mt-2">
-                      <div className="flex flex-col items-start">
-                        <span className="text-[10px] text-text-muted font-bold uppercase">{order.dueLabel}</span>
-                        <span className={`font-black text-lg ${isRed ? "text-danger-red" : isOrange ? "text-accent-orange" : "text-slate-750"}`}>
-                          {order.dueValue}
-                        </span>
-                      </div>
-                      <ChevronRight className={`h-5 w-5 transition-transform ${isSelected ? "text-navy-900 translate-x-1" : "text-text-muted"}`} />
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="p-12 text-center text-text-muted bg-white border border-neutral-gray-300 rounded-xl space-y-2">
-            <Package className="h-8 w-8 mx-auto text-text-muted animate-pulse" />
-            <p className="font-bold text-text-muted">Keine Aufträge in dieser Station</p>
-            <p className="text-xs">Ändere den Filter, passe den Suchbegriff an oder wähle eine andere Station.</p>
-          </div>
-        )}
+        <div className="topbar-title">{getStationHeadline()}</div>
+        <button className="btn-new" onClick={() => window.location.href='/orders/new'}>+ Neuer Auftrag</button>
       </div>
+      
+      {/* Mobile topbar fallback */}
+      <div className="flex sm:hidden justify-between items-center mb-4">
+        <div className="font-bold text-lg">{getStationHeadline()}</div>
+        <button className="btn-new py-1.5 px-3 text-xs" onClick={() => window.location.href='/orders/new'}>+ Neu</button>
+      </div>
+
+      <div className="status-strip">
+        <div className="sr" style={{ flex: counts.red || 0.1 }}></div>
+        <div className="sa" style={{ flex: counts.orange || 0.1 }}></div>
+        <div className="sb" style={{ flex: counts.blocked || 0.1 }}></div>
+        <div className="sg" style={{ flex: counts.green || 0.1 }}></div>
+      </div>
+
+      <div className="filter-row">
+        <input 
+          className="search-box" 
+          type="text" 
+          placeholder="Suchen nach Auftragsnummer, Kunde..." 
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+        
+        <button className={`f-pill ${statusFilter === 'all' ? 'active' : ''}`} onClick={() => setStatusFilter('all')}>
+          Alle <span className="pcnt">{orders.length}</span>
+        </button>
+        <button className={`f-pill ${statusFilter === 'critical' ? 'active' : ''}`} onClick={() => setStatusFilter('critical')}>
+          <span className="pdot" style={{background: '#c0392b'}}></span> Überfällig <span className="pcnt">{counts.red}</span>
+        </button>
+        <button className={`f-pill ${statusFilter === 'verzug' ? 'active' : ''}`} onClick={() => setStatusFilter('verzug')}>
+          <span className="pdot" style={{background: '#d4850a'}}></span> Diese Woche <span className="pcnt">{counts.orange}</span>
+        </button>
+        <button className={`f-pill ${statusFilter === 'waiting' ? 'active' : ''}`} onClick={() => setStatusFilter('waiting')}>
+          <span className="pdot" style={{background: '#2471a3'}}></span> Wartend <span className="pcnt">{counts.blocked}</span>
+        </button>
+
+        <div className="sep hidden md:block"></div>
+
+        <button className={`f-pill ${surfaceFilter === 'zink' ? 'active' : ''} hidden md:flex`} onClick={() => setSurfaceFilter(surfaceFilter === 'zink' ? null : 'zink')}>
+          <span className="sdot-f sf-zink"></span> Zink
+        </button>
+        <button className={`f-pill ${surfaceFilter === 'chrom' ? 'active' : ''} hidden md:flex`} onClick={() => setSurfaceFilter(surfaceFilter === 'chrom' ? null : 'chrom')}>
+          <span className="sdot-f sf-chrom"></span> Chrom
+        </button>
+        <button className={`f-pill ${surfaceFilter === 'nickel' ? 'active' : ''} hidden md:flex`} onClick={() => setSurfaceFilter(surfaceFilter === 'nickel' ? null : 'nickel')}>
+          <span className="sdot-f sf-nickel"></span> Nickel
+        </button>
+      </div>
+
+      <div className="count-line">{filteredOrders.length} Aufträge gefunden</div>
+
+      {filteredOrders.length > 0 ? (
+        <div className="card-list">
+          {filteredOrders.map((order) => {
+            const u = getUrgency(order.dueDate);
+            let urgencyType: UrgencyType = "ok";
+            if (order.risk === "red") urgencyType = "crit";
+            else if (order.risk === "orange" || u === "gefaehrdet") urgencyType = "soon";
+            else if (order.risk === "blocked") urgencyType = "wait";
+
+            const textForSurface = (order.task + " " + (order.parts?.map(p => p.surfaceRequested || p.finish).join(" "))).toLowerCase();
+            let surfaceKey: "chrom" | "nickel" | "gold" | "kupfer" | "zink" | "offen" = "offen";
+            if (textForSurface.includes("chrom")) surfaceKey = "chrom";
+            else if (textForSurface.includes("nickel")) surfaceKey = "nickel";
+            else if (textForSurface.includes("gold")) surfaceKey = "gold";
+            else if (textForSurface.includes("kupfer")) surfaceKey = "kupfer";
+            else if (textForSurface.includes("zink")) surfaceKey = "zink";
+            
+            let surfaceLabel = surfaceKey !== "offen" ? surfaceKey.charAt(0).toUpperCase() + surfaceKey.slice(1) : "Oberfläche offen";
+            if (surfaceKey === "chrom") surfaceLabel = "Vernickeln → Chrom";
+            if (surfaceKey === "zink") surfaceLabel = "Verzinken";
+
+            return (
+              <OrderWideCard
+                key={order.id}
+                id={order.id}
+                orderNumber={order.orderNumber}
+                customerName={order.customerName || "Unbekannter Kunde"}
+                article={order.task}
+                surface={surfaceLabel}
+                surfaceKey={surfaceKey}
+                badgeText={order.statusText}
+                urgency={urgencyType}
+                dueValue={order.dueValue || "14 T"}
+                dueLabel={order.dueLabel || "Fällig in"}
+                onClick={() => {
+                  setSelectedOrderId(order.id);
+                  trackUiEvent("detail_open", { target: "order", id: order.id, orderNumber: order.orderNumber });
+                }}
+              />
+            );
+          })}
+        </div>
+      ) : (
+        <div className="p-12 text-center text-text-muted bg-[#faf8f4] border border-[#d8d0c4] rounded-xl space-y-2 mt-4">
+          <Package className="h-8 w-8 mx-auto text-[#9e9689] animate-pulse" />
+          <p className="font-bold text-[#5e5850]">Keine Aufträge in dieser Ansicht</p>
+          <p className="text-xs">Passe den Filter oder den Suchbegriff an.</p>
+        </div>
+      )}
 
       {/* Detail Overlay */}
       <DetailOverlay
