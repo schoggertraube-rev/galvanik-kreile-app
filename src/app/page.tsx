@@ -337,7 +337,36 @@ export default function HomeDashboard() {
              </ul>
           </section>
 
-          {/* 6. KUNDENSERVICE-HINWEIS */}
+          {/* 6. URLAUB / KALENDER-HINWEIS */}
+          <section className="bg-white border border-neutral-gray-200 rounded-3xl p-6 shadow-sm">
+             <div className="flex justify-between items-center mb-4">
+                <h2 className="text-lg font-bold font-serif text-navy-900">Demnächst Urlaub</h2>
+                <span className="bg-bg-app-soft text-text-muted text-xs px-2 py-1 rounded font-bold">Demo</span>
+             </div>
+             
+             <ul className="space-y-3 mb-4">
+               <li className="flex items-center justify-between border-b border-neutral-gray-100 pb-2">
+                 <div>
+                   <p className="text-sm font-bold text-navy-900">M. Müller (Admin)</p>
+                   <p className="text-xs text-text-muted">12.08. - 26.08. (KW 33-34)</p>
+                 </div>
+                 <span className="text-xs font-bold text-accent-orange bg-accent-orange/10 px-2 py-1 rounded">In 2 Wochen</span>
+               </li>
+               <li className="flex items-center justify-between">
+                 <div>
+                   <p className="text-sm font-bold text-navy-900">S. Schmidt (Büro)</p>
+                   <p className="text-xs text-text-muted">05.09. - 12.09. (KW 36)</p>
+                 </div>
+                 <span className="text-xs font-bold text-text-muted bg-bg-app-soft px-2 py-1 rounded">In 5 Wochen</span>
+               </li>
+             </ul>
+             
+             <button onClick={() => setActiveOverlay({title: "Kalender-Integration", desc: "Geplant: Google Kalender Kompatibilität. Import/Export von Terminen & Urlauben wird später nachgereicht.", targetLink: ""})} className="w-full bg-bg-app-soft text-navy-900 font-bold text-xs py-2 rounded-xl hover:bg-neutral-gray-200 transition-colors flex items-center justify-center gap-2">
+               <Clock className="w-4 h-4" /> Kalenderimport später
+             </button>
+          </section>
+
+          {/* 7. KUNDENSERVICE-HINWEIS */}
           <Link href="/kundenservice" className="bg-white border border-accent-orange/30 rounded-3xl p-6 shadow-sm block hover:border-accent-orange transition-colors group cursor-pointer">
              <div className="flex justify-between items-center mb-3">
                 <div className="flex items-center gap-2 text-accent-orange">
@@ -357,7 +386,7 @@ export default function HomeDashboard() {
         </div>
       </div>
 
-      {/* 7. FEEDBACKFELD & KVP */}
+      {/* 8. FEEDBACKFELD & KVP */}
       <section className="bg-bg-app-soft border border-neutral-gray-200 rounded-3xl p-6 text-center max-w-2xl mx-auto mt-8">
         <h3 className="text-lg font-bold font-serif text-navy-900 mb-2">Was fehlt auf dieser Seite?</h3>
         <p className="text-xs text-text-muted mb-4">Feedback-Speicherung wird später angebunden (Demo-Modus).</p>
@@ -379,8 +408,10 @@ export default function HomeDashboard() {
           </button>
         </div>
 
-        <div className="mt-4 pt-4 border-t border-neutral-gray-200">
-          <Link href="/kvp" className="text-sm font-bold text-accent-orange hover:underline">Zum KVP-Cockpit (Kontinuierlicher Verbesserungsprozess)</Link>
+        <div className="mt-4 pt-4 border-t border-neutral-gray-200 flex flex-col sm:flex-row items-center justify-center gap-4">
+          <Link href="/kvp" className="text-sm font-bold text-text-muted hover:text-navy-900 hover:underline">App verbessern (Developer KVP)</Link>
+          <span className="hidden sm:inline text-neutral-gray-300">•</span>
+          <Link href="/betrieb-kvp" className="text-sm font-bold text-accent-orange hover:underline">Zum Betriebs-KVP (Werkstatt/Büro)</Link>
         </div>
       </section>
 

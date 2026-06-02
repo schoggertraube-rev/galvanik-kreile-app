@@ -128,7 +128,7 @@ export function UserManagement() {
                   <option value="developer">Developer (Voller Zugriff)</option>
                   <option value="admin">Admin (Alle Daten)</option>
                   <option value="meister">Meister (Produktion)</option>
-                  <option value="office">Büro (Kunden & Rechnungen)</option>
+                  <option value="office">Büro (Kunden und Rechnungen)</option>
                   <option value="workshop">Werkstatt (Status & Fotos)</option>
                   <option value="readonly">Nur Lesen</option>
                 </select>

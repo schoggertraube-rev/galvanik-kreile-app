@@ -6,10 +6,10 @@ import React from "react";
 
 const roles = [
   { id: 'developer', name: 'Developer', description: 'Voller Systemzugriff' },
-  { id: 'admin', name: 'Admin', description: 'Alle Daten & Einstellungen' },
-  { id: 'meister', name: 'Meister', description: 'Produktion & Leitstand' },
-  { id: 'office', name: 'Büro', description: 'Kunden & Rechnungen' },
-  { id: 'workshop', name: 'Werkstatt', description: 'Status & Fotos' },
+  { id: 'admin', name: 'Admin', description: 'Alle Daten und Einstellungen' },
+  { id: 'meister', name: 'Meister', description: 'Produktion und Leitstand' },
+  { id: 'office', name: 'Büro', description: 'Kunden und Rechnungen' },
+  { id: 'workshop', name: 'Werkstatt', description: 'Status und Fotos' },
   { id: 'readonly', name: 'Nur Lesen', description: 'Keine Änderungen' },
 ];
 
@@ -33,7 +33,7 @@ const permissions = [
   { category: 'Ansicht', items: [
     { name: 'Leitstand sehen', access: ['developer', 'admin', 'meister', 'office', 'workshop', 'readonly'] },
     { name: 'Kundendaten sehen', access: ['developer', 'admin', 'meister', 'office', 'workshop', 'readonly'] },
-    { name: 'Preise & Rechnungen sehen', access: ['developer', 'admin', 'office'] },
+    { name: 'Preise und Rechnungen sehen', access: ['developer', 'admin', 'office'] },
   ]},
 ];
 
@@ -41,7 +41,7 @@ export function RoleMatrix() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5"/> Rollen & Rechte</CardTitle>
+        <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5"/> Rollen und Rechte</CardTitle>
         <CardDescription>Übersicht der Berechtigungen im System</CardDescription>
       </CardHeader>
       <CardContent>

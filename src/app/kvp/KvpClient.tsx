@@ -155,9 +155,9 @@ export function KvpClient() {
         <div>
           <h1 className="text-2xl md:text-3xl font-black font-serif tracking-tight text-navy-900 flex items-center gap-3">
             <Lightbulb className="w-8 h-8 text-accent-orange" />
-            KVP-Cockpit
+            Developer-KVP / App-Verbesserung
           </h1>
-          <p className="text-text-muted mt-2 font-medium">Kontinuierlicher Verbesserungsprozess & Selbstanalyse der App.</p>
+          <p className="text-text-muted mt-2 font-medium">Technischer Verbesserungsprozess & Selbstanalyse der App.</p>
         </div>
         <div className="bg-bg-app-soft px-3 py-1.5 rounded-lg border border-neutral-gray-200 text-xs font-bold flex items-center gap-2 self-start">
           <Info className="w-4 h-4 text-accent-orange" />

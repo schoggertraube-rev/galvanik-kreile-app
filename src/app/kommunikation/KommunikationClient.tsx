@@ -5,7 +5,7 @@ import {
   Inbox, MessageSquare, Mail, Phone, Globe, Camera,
   AlertOctagon, CheckSquare, Clock, ArrowRight, Link as LinkIcon,
   Copy, CheckCircle2, User, FileText, Banknote, ExternalLink,
-  Mic, X, Edit2, Play, Save, ChevronRight
+  Mic, X, Edit2, Play, Save, ChevronRight, Activity
 } from "lucide-react";
 import Link from "next/link";
 import { usePageView } from "@/hooks/usePageView";
@@ -82,7 +82,7 @@ const DEMO_THREADS: Thread[] = [
   }
 ];
 
-function PhoneNoteEditor({ onClose }: { onClose: () => void }) {
+function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => void }) {
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState(false);
   const [fields, setFields] = useState({
@@ -109,22 +109,23 @@ function PhoneNoteEditor({ onClose }: { onClose: () => void }) {
 
   const handleParse = () => {
     // Simple demo logic to "parse" the text
+    const lower = text.toLowerCase();
     setFields({
-      kunde: text.toLowerCase().includes("maier") ? "Herr Zill" : "Unbekannt",
-      firma: text.toLowerCase().includes("maier") ? "Maier GmbH" : "Unbekannt",
+      kunde: lower.includes("schmidt") ? "Herr Schmidt" : lower.includes("maier") ? "Herr Zill" : "Unbekannt",
+      firma: lower.includes("schmidt") ? "Schmidt AG" : lower.includes("maier") ? "Maier GmbH" : "Unbekannt",
       telefon: "0151 12345678",
-      auftrag: text.toLowerCase().includes("8102") ? "A-2026-8102" : "",
+      auftrag: lower.includes("zink") ? "A-2026-0042 (Zinkteile)" : lower.includes("8102") ? "A-2026-8102" : "",
       thema: text.slice(0, 50) + "...",
-      kategorie: text.toLowerCase().includes("reklamation") || text.toLowerCase().includes("kaputt") ? "Reklamation" : "Neuanfrage",
-      dringlichkeit: text.toLowerCase().includes("dringend") || text.toLowerCase().includes("schnell") ? "Hoch" : "Normal",
-      reklamation: text.toLowerCase().includes("reklamation") || text.toLowerCase().includes("kaputt") ? "Ja" : "Nein",
+      kategorie: lower.includes("reklamation") || lower.includes("kaputt") ? "Reklamation" : lower.includes("bearbeitungsstand") ? "Rückfrage" : "Neuanfrage",
+      dringlichkeit: lower.includes("dringend") || lower.includes("schnell") ? "Hoch" : "Normal",
+      reklamation: lower.includes("reklamation") || lower.includes("kaputt") ? "Ja" : "Nein",
       aktion: "Kunde zurückrufen",
     });
     setParsed(true);
   };
 
   const handleSave = () => {
-    // In a real app we'd save it to the DB here.
+    // Übernehmen
     localStorage.removeItem("kreile_phone_note_draft");
     onClose();
   };
@@ -136,129 +137,166 @@ function PhoneNoteEditor({ onClose }: { onClose: () => void }) {
     onClose();
   };
 
+  if (!open) return null;
+
   return (
-    <div className="flex-1 bg-white border border-neutral-gray-200 rounded-2xl flex flex-col overflow-hidden animate-in fade-in duration-300">
-      <div className="p-4 border-b border-neutral-gray-100 font-bold text-sm uppercase tracking-wider text-text-muted flex justify-between items-center bg-bg-app-soft">
-        <span className="flex items-center gap-2"><Phone className="w-4 h-4 text-navy-900"/> Telefonnotiz erfassen</span>
-        <button onClick={handleCancel} className="text-text-muted hover:text-navy-900"><X className="w-5 h-5"/></button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-6 space-y-6">
-        {!parsed ? (
-          <div className="space-y-4">
-            <div className="flex gap-4">
-              <button disabled className="flex-1 flex flex-col items-center justify-center p-6 border-2 border-dashed border-neutral-gray-300 rounded-2xl bg-gray-50 opacity-60 cursor-not-allowed group">
-                <div className="w-12 h-12 rounded-full bg-accent-orange/10 flex items-center justify-center mb-3">
-                  <Mic className="w-6 h-6 text-accent-orange" />
-                </div>
-                <span className="font-bold text-navy-900">Sprachnotiz aufnehmen</span>
-                <span className="text-xs text-text-muted mt-1">(Vorbereitet)</span>
-              </button>
-              <div className="flex-1 flex flex-col items-center justify-center p-6 border-2 border-navy-900 rounded-2xl bg-white shadow-sm group">
-                <div className="w-12 h-12 rounded-full bg-navy-900/10 flex items-center justify-center mb-3">
-                  <Edit2 className="w-6 h-6 text-navy-900" />
-                </div>
-                <span className="font-bold text-navy-900">Freitext eingeben</span>
-                <span className="text-xs text-success-green mt-1">Aktiv</span>
-              </div>
-            </div>
-
-            <textarea 
-              value={text}
-              onChange={(e) => handleChange(e.target.value)}
-              className="w-full h-48 p-4 bg-bg-app-soft rounded-xl border border-neutral-gray-200 focus:border-navy-900 focus:ring-1 focus:ring-navy-900 outline-none text-navy-900 resize-none"
-              placeholder="Notizen aus dem Telefonat hier eintippen..."
-            />
-
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-text-muted flex items-center gap-1"><Save className="w-3 h-3"/> Entwurf wird lokal gespeichert</span>
-              <button 
-                onClick={handleParse} 
-                disabled={!text.trim()}
-                className="bg-navy-900 text-white font-bold px-6 py-3 rounded-xl hover:bg-navy-800 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-2"
-              >
-                Notiz auswerten <ChevronRight className="w-4 h-4"/>
-              </button>
-            </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-12 animate-in fade-in duration-300">
+      <div className="absolute inset-0 bg-navy-900/60 backdrop-blur-sm" onClick={handleCancel} />
+      
+      <div className="relative w-full max-w-5xl h-[85vh] bg-white rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden border border-neutral-gray-200">
+        
+        {/* LEFT/MAIN COLUMN */}
+        <div className="flex-1 flex flex-col h-full bg-[#F0EBE0]">
+          <div className="p-4 md:p-6 flex justify-between items-center border-b border-neutral-gray-200 bg-white">
+            <h2 className="text-xl font-bold font-serif text-navy-900 flex items-center gap-2">
+              <Phone className="w-5 h-5 text-accent-orange" />
+              Neue Telefonnotiz
+            </h2>
+            <button onClick={handleCancel} className="p-2 hover:bg-neutral-gray-100 rounded-full transition-colors text-text-muted">
+              <X className="w-6 h-6" />
+            </button>
           </div>
-        ) : (
-          <div className="space-y-6">
-            <div className="bg-success-green/10 border border-success-green/20 p-4 rounded-xl flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-success-green shrink-0 mt-0.5" />
-              <div>
-                <h4 className="font-bold text-success-green">Auswertung erfolgreich</h4>
-                <p className="text-sm text-success-green/80">Bitte prüfen Sie die erkannten Felder und korrigieren Sie diese bei Bedarf.</p>
-              </div>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-text-muted uppercase mb-1">Kunde / Anrufer</label>
-                <input value={fields.kunde} onChange={e => setFields({...fields, kunde: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-2 text-sm font-medium focus:border-navy-900 outline-none" />
+          <div className="flex-1 p-4 md:p-8 flex flex-col overflow-y-auto">
+            {!parsed ? (
+              <div className="flex-1 flex flex-col h-full relative">
+                <textarea 
+                  value={text}
+                  onChange={(e) => handleChange(e.target.value)}
+                  className="w-full flex-1 p-6 text-xl md:text-2xl leading-relaxed bg-white rounded-2xl border-2 border-neutral-gray-200 focus:border-navy-900 outline-none text-navy-900 resize-none shadow-sm placeholder:text-neutral-gray-300"
+                  placeholder="Einfach mittippen..."
+                  autoFocus
+                />
+                
+                {/* Voice Input Mock */}
+                <button 
+                  className="absolute bottom-6 right-6 w-14 h-14 bg-navy-900 rounded-full flex items-center justify-center shadow-lg hover:bg-navy-800 transition-colors group"
+                  title="Sprachaufnahme starten (Demo)"
+                >
+                  <Mic className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
+                </button>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-text-muted uppercase mb-1">Firma</label>
-                <input value={fields.firma} onChange={e => setFields({...fields, firma: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-2 text-sm font-medium focus:border-navy-900 outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-text-muted uppercase mb-1">Telefonnummer</label>
-                <input value={fields.telefon} onChange={e => setFields({...fields, telefon: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-2 text-sm font-medium focus:border-navy-900 outline-none" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-text-muted uppercase mb-1">Auftrag (optional)</label>
-                <input value={fields.auftrag} onChange={e => setFields({...fields, auftrag: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-2 text-sm font-medium focus:border-navy-900 outline-none" />
-              </div>
-              <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-text-muted uppercase mb-1">Zusammenfassung / Thema</label>
-                <input value={fields.thema} onChange={e => setFields({...fields, thema: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-2 text-sm font-medium focus:border-navy-900 outline-none" />
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-               <div className="bg-bg-app-soft border border-neutral-gray-200 px-3 py-1.5 rounded-lg flex items-center gap-2">
-                 <span className="text-xs font-bold text-text-muted">Kategorie:</span>
-                 <select value={fields.kategorie} onChange={e => setFields({...fields, kategorie: e.target.value})} className="bg-transparent text-sm font-bold text-navy-900 outline-none">
-                   <option>Neuanfrage</option>
-                   <option>Reklamation</option>
-                   <option>Terminfrage</option>
-                   <option>Rückruf</option>
-                 </select>
-               </div>
-               <div className="bg-bg-app-soft border border-neutral-gray-200 px-3 py-1.5 rounded-lg flex items-center gap-2">
-                 <span className="text-xs font-bold text-text-muted">Dringlichkeit:</span>
-                 <select value={fields.dringlichkeit} onChange={e => setFields({...fields, dringlichkeit: e.target.value})} className="bg-transparent text-sm font-bold text-navy-900 outline-none">
-                   <option>Niedrig</option>
-                   <option>Normal</option>
-                   <option>Hoch</option>
-                 </select>
-               </div>
-            </div>
-
-            <div className="md:col-span-2">
-                <label className="block text-xs font-bold text-text-muted uppercase mb-1">Original Notiztext</label>
-                <textarea value={text} onChange={e => handleChange(e.target.value)} className="w-full h-24 bg-white border border-neutral-gray-200 rounded-lg p-2 text-sm focus:border-navy-900 outline-none resize-none" />
-            </div>
-
-            {fields.auftrag && (
-              <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl flex items-center justify-between">
-                <div>
-                  <span className="text-xs font-bold text-blue-800">Verknüpfter Auftrag: {fields.auftrag}</span>
-                  <p className="text-[11px] text-blue-600">Status: In Galvanik • Erwartet: Morgen</p>
+            ) : (
+              <div className="space-y-6 flex-1">
+                <div className="bg-success-green/10 border border-success-green/20 p-4 rounded-xl flex items-start gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-success-green shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="font-bold text-success-green">Auswertung erfolgreich</h4>
+                    <p className="text-sm text-success-green/80">Diese Felder werden bei Übernahme in die Zentrale importiert.</p>
+                  </div>
                 </div>
-                <Link href={`/orders/${fields.auftrag}`} className="text-xs font-bold bg-white text-blue-800 px-3 py-1.5 rounded border border-blue-200">Auftrag öffnen</Link>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-text-muted uppercase mb-1">Kunde / Anrufer</label>
+                    <input value={fields.kunde} onChange={e => setFields({...fields, kunde: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-3 text-sm font-bold focus:border-navy-900 outline-none shadow-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-text-muted uppercase mb-1">Kategorie</label>
+                    <select value={fields.kategorie} onChange={e => setFields({...fields, kategorie: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-3 text-sm font-bold focus:border-navy-900 outline-none shadow-sm">
+                       <option>Neuanfrage</option>
+                       <option>Reklamation</option>
+                       <option>Rückfrage</option>
+                       <option>Rückruf</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-text-muted uppercase mb-1">Verknüpfter Auftrag</label>
+                    <input value={fields.auftrag} onChange={e => setFields({...fields, auftrag: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-3 text-sm font-bold focus:border-navy-900 outline-none shadow-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-text-muted uppercase mb-1">Dringlichkeit</label>
+                    <select value={fields.dringlichkeit} onChange={e => setFields({...fields, dringlichkeit: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-3 text-sm font-bold focus:border-navy-900 outline-none shadow-sm">
+                       <option>Niedrig</option>
+                       <option>Normal</option>
+                       <option>Hoch</option>
+                    </select>
+                  </div>
+                </div>
               </div>
             )}
-
-            <div className="pt-4 border-t border-neutral-gray-200 flex justify-between items-center">
-              <button onClick={() => setParsed(false)} className="text-sm font-bold text-text-muted hover:text-navy-900">Zurück zur Eingabe</button>
-              <div className="flex gap-2">
-                <button onClick={handleSave} className="bg-white border border-neutral-gray-200 text-navy-900 font-bold px-4 py-2 rounded-xl hover:bg-gray-50 transition">Als Entwurf speichern</button>
-                <button onClick={handleSave} className="bg-navy-900 text-white font-bold px-4 py-2 rounded-xl hover:bg-navy-800 transition flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/> Telefonnotiz speichern</button>
-              </div>
-            </div>
-
           </div>
-        )}
+
+          <div className="p-4 md:p-6 bg-white border-t border-neutral-gray-200 flex justify-between items-center">
+            {!parsed ? (
+              <>
+                <span className="text-xs text-text-muted flex items-center gap-1 font-bold">
+                  <Save className="w-4 h-4"/> Gesichert
+                </span>
+                <button 
+                  onClick={handleParse} 
+                  disabled={!text.trim()}
+                  className="bg-navy-900 text-white font-bold px-8 py-3 rounded-xl hover:bg-navy-800 disabled:opacity-50 transition"
+                >
+                  Auswerten
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => setParsed(false)} className="text-sm font-bold text-text-muted hover:text-navy-900 px-4 py-2">
+                  Zurück zum Text
+                </button>
+                <button onClick={handleSave} className="bg-accent-orange text-white font-bold px-8 py-3 rounded-xl hover:bg-orange-600 transition shadow-md">
+                  Übernehmen
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN: LIVE VORSCHLÄGE & KI ANTWORT */}
+        <div className="w-full md:w-80 bg-white border-l border-neutral-gray-200 flex flex-col h-full overflow-y-auto">
+          <div className="p-6 border-b border-neutral-gray-100 bg-bg-app-soft">
+            <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted flex items-center gap-2">
+              <Activity className="w-4 h-4" /> Live-Vorschläge
+            </h3>
+            <p className="text-[10px] text-text-muted mt-1">Demo / Echte Suche später</p>
+          </div>
+          
+          <div className="p-6 space-y-6 flex-1">
+            {text.toLowerCase().includes("schmidt") && (
+              <div className="animate-in slide-in-from-right-4 duration-300">
+                <p className="text-xs font-bold text-text-muted uppercase mb-2">Erkannter Kunde</p>
+                <button className="w-full text-left bg-blue-50 border border-blue-200 p-3 rounded-xl hover:bg-blue-100 transition-colors group">
+                  <p className="font-bold text-blue-900">Schmidt AG</p>
+                  <p className="text-xs text-blue-700">Letzter Kontakt: Gestern</p>
+                </button>
+              </div>
+            )}
+            
+            {(text.toLowerCase().includes("zink") || text.toLowerCase().includes("bearbeitungsstand")) && (
+              <div className="animate-in slide-in-from-right-4 duration-300">
+                <p className="text-xs font-bold text-text-muted uppercase mb-2">Möglicher Auftrag</p>
+                <button className="w-full text-left bg-purple-50 border border-purple-200 p-3 rounded-xl hover:bg-purple-100 transition-colors group">
+                  <p className="font-bold text-purple-900">A-2026-0042 (Zink)</p>
+                  <p className="text-xs text-purple-700">Status: In Beschichtung</p>
+                </button>
+              </div>
+            )}
+            
+            {text.length > 20 && !text.toLowerCase().includes("schmidt") && !text.toLowerCase().includes("zink") && (
+               <div className="text-center p-6 border-2 border-dashed border-neutral-gray-200 rounded-xl">
+                 <p className="text-xs text-text-muted">Keine passenden Datensätze gefunden.</p>
+               </div>
+            )}
+          </div>
+          
+          {/* AUSGABE FELD */}
+          <div className="p-6 bg-bg-app-soft border-t border-neutral-gray-200 mt-auto">
+            <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted flex items-center gap-2 mb-3">
+              <MessageSquare className="w-4 h-4" /> Ausgabe für Anrufer
+            </h3>
+            <div className="bg-white border border-neutral-gray-200 rounded-xl p-4 text-sm font-medium text-navy-900 shadow-sm">
+              {text.toLowerCase().includes("schmidt") && text.toLowerCase().includes("zink") ? (
+                <span>"Herr Schmidt, ich sehe den Auftrag zu den Zinkteilen. Der aktuelle Bearbeitungsstand ist: In Beschichtung. Voraussichtlich morgen fertig."</span>
+              ) : text.length > 15 ? (
+                <span className="text-text-muted italic">Status noch nicht eindeutig. Bitte Kunde oder Auftrag im Text erwähnen.</span>
+              ) : (
+                <span className="text-text-muted italic">Tippen Sie mit, um automatische Antworten zu generieren...</span>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -407,109 +445,109 @@ export function KommunikationClient() {
         </div>
 
         {/* COL 3: ARBEITSBEREICH */}
-        {isPhoneNoteMode ? (
-          <PhoneNoteEditor onClose={() => {
-            setIsPhoneNoteMode(false);
-            // Optionally remove the ?mode=telefonnotiz from URL
-            if (typeof window !== 'undefined') {
-              window.history.replaceState({}, '', '/kommunikation');
-            }
-          }} />
-        ) : (
-          <div className="flex-1 bg-white border border-neutral-gray-200 rounded-2xl flex flex-col overflow-hidden">
-            {activeThread ? (
-            <>
-              {/* Bereich 1: Nachricht ansehen */}
-              <div className="p-6 border-b border-neutral-gray-100">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h2 className="text-xl font-bold font-serif mb-1">{activeThread.subject}</h2>
-                    <div className="flex items-center gap-3 text-sm text-text-muted">
-                      <span className="font-medium text-navy-900">{activeThread.sender}</span>
-                      <span>•</span>
-                      <span>{activeThread.time}</span>
-                      <span>•</span>
-                      <span className="flex items-center gap-1">{getChannelIcon(activeThread.channel)} {activeThread.channel}</span>
-                    </div>
+        <div className="flex-1 bg-white border border-neutral-gray-200 rounded-2xl flex flex-col overflow-hidden">
+          {activeThread ? (
+          <>
+            {/* Bereich 1: Nachricht ansehen */}
+            <div className="p-6 border-b border-neutral-gray-100">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h2 className="text-xl font-bold font-serif mb-1">{activeThread.subject}</h2>
+                  <div className="flex items-center gap-3 text-sm text-text-muted">
+                    <span className="font-medium text-navy-900">{activeThread.sender}</span>
+                    <span>•</span>
+                    <span>{activeThread.time}</span>
+                    <span>•</span>
+                    <span className="flex items-center gap-1">{getChannelIcon(activeThread.channel)} {activeThread.channel}</span>
                   </div>
-                  {getStatusBadge(activeThread.status)}
                 </div>
-                <div className="bg-gray-50 rounded-xl p-4 text-sm leading-relaxed border border-neutral-gray-200 whitespace-pre-wrap">
-                  {activeThread.content}
-                </div>
+                {getStatusBadge(activeThread.status)}
               </div>
-
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                
-                {/* Bereich 2: Zuordnung */}
-                <div>
-                  <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted mb-3 flex items-center gap-2">
-                    <LinkIcon className="w-4 h-4" /> 2. Zuordnung (Demo)
-                  </h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div className="border border-neutral-gray-200 rounded-xl p-3 bg-white">
-                      <div className="text-xs text-text-muted mb-1">Erkannter Kunde</div>
-                      <div className="font-bold text-sm flex justify-between items-center">
-                        {activeThread.sender.includes("Maier") ? "Maier GmbH" : activeThread.sender.includes("Berger") ? "Autohaus Berger" : "Unbekannt"}
-                        <Link href="/customers" className="text-accent-orange"><ExternalLink className="w-3 h-3"/></Link>
-                      </div>
-                    </div>
-                    <div className="border border-neutral-gray-200 rounded-xl p-3 bg-white">
-                      <div className="text-xs text-text-muted mb-1">Möglicher Auftrag</div>
-                      <div className="font-bold text-sm flex justify-between items-center">
-                        {activeThread.status === "reclamation" ? "A-2026-0042" : "Keine Zuweisung"}
-                        <Link href="/orders" className="text-accent-orange"><ExternalLink className="w-3 h-3"/></Link>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Bereich 3: Antwortvorlage */}
-                <div>
-                  <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted mb-3 flex items-center gap-2">
-                    <CheckSquare className="w-4 h-4" /> 3. Antwortvorlage wählen
-                  </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {[
-                      "Reklamation bestätigen", "Liefertermin nennen", "Freigabe anfordern", 
-                      "Angaben anfordern", "Abholung ankündigen", "Zahlungslink senden"
-                    ].map(tpl => (
-                      <button 
-                        key={tpl}
-                        onClick={() => handleCopy(`Vorlage: ${tpl}\n\nSehr geehrte(r)...`)}
-                        className="text-xs font-medium border border-neutral-gray-200 rounded-lg p-2 hover:bg-bg-app-soft hover:border-navy-900 transition flex items-center justify-between group"
-                      >
-                        <span className="text-left line-clamp-1">{tpl}</span>
-                        {copied === `Vorlage: ${tpl}\n\nSehr geehrte(r)...` ? <CheckCircle2 className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3 text-text-muted group-hover:text-navy-900" />}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Bereich 4: Ablage */}
-                <div>
-                  <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted mb-3 flex items-center gap-2">
-                    <FileText className="w-4 h-4" /> 4. Ablage / Nächste Aktion
-                  </h3>
-                  <div className="flex flex-wrap gap-2">
-                    <Link href="/kundenservice" className="text-xs font-bold bg-white border border-neutral-gray-200 px-3 py-2 rounded-lg hover:bg-bg-app-soft transition">In Kundenservice ablegen</Link>
-                    <Link href="/finanzen" className="text-xs font-bold bg-white border border-neutral-gray-200 px-3 py-2 rounded-lg hover:bg-bg-app-soft transition">An Buchhaltung leiten</Link>
-                    <Link href="/quotes" className="text-xs font-bold bg-white border border-neutral-gray-200 px-3 py-2 rounded-lg hover:bg-bg-app-soft transition">Neues Angebot anlegen</Link>
-                  </div>
-                </div>
-
+              <div className="bg-gray-50 rounded-xl p-4 text-sm leading-relaxed border border-neutral-gray-200 whitespace-pre-wrap">
+                {activeThread.content}
               </div>
-            </>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center text-text-muted p-8 text-center">
-              <MessageSquare className="w-12 h-12 mb-4 opacity-20" />
-              <p className="font-bold">Keine Nachricht ausgewählt</p>
-              <p className="text-sm mt-1">Wähle eine Nachricht in der Liste, um sie zu bearbeiten.</p>
             </div>
-          )}
-        </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              
+              {/* Bereich 2: Zuordnung */}
+              <div>
+                <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted mb-3 flex items-center gap-2">
+                  <LinkIcon className="w-4 h-4" /> 2. Zuordnung (Demo)
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="border border-neutral-gray-200 rounded-xl p-3 bg-white">
+                    <div className="text-xs text-text-muted mb-1">Erkannter Kunde</div>
+                    <div className="font-bold text-sm flex justify-between items-center">
+                      {activeThread.sender.includes("Maier") ? "Maier GmbH" : activeThread.sender.includes("Berger") ? "Autohaus Berger" : "Unbekannt"}
+                      <Link href="/customers" className="text-accent-orange"><ExternalLink className="w-3 h-3"/></Link>
+                    </div>
+                  </div>
+                  <div className="border border-neutral-gray-200 rounded-xl p-3 bg-white">
+                    <div className="text-xs text-text-muted mb-1">Möglicher Auftrag</div>
+                    <div className="font-bold text-sm flex justify-between items-center">
+                      {activeThread.status === "reclamation" ? "A-2026-0042" : "Keine Zuweisung"}
+                      <Link href="/orders" className="text-accent-orange"><ExternalLink className="w-3 h-3"/></Link>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bereich 3: Antwortvorlage */}
+              <div>
+                <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted mb-3 flex items-center gap-2">
+                  <CheckSquare className="w-4 h-4" /> 3. Antwortvorlage wählen
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    "Reklamation bestätigen", "Liefertermin nennen", "Freigabe anfordern", 
+                    "Angaben anfordern", "Abholung ankündigen", "Zahlungslink senden"
+                  ].map(tpl => (
+                    <button 
+                      key={tpl}
+                      onClick={() => handleCopy(`Vorlage: ${tpl}\n\nSehr geehrte(r)...`)}
+                      className="text-xs font-medium border border-neutral-gray-200 rounded-lg p-2 hover:bg-bg-app-soft hover:border-navy-900 transition flex items-center justify-between group"
+                    >
+                      <span className="text-left line-clamp-1">{tpl}</span>
+                      {copied === `Vorlage: ${tpl}\n\nSehr geehrte(r)...` ? <CheckCircle2 className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3 text-text-muted group-hover:text-navy-900" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Bereich 4: Ablage */}
+              <div>
+                <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted mb-3 flex items-center gap-2">
+                  <FileText className="w-4 h-4" /> 4. Ablage / Nächste Aktion
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  <Link href="/kundenservice" className="text-xs font-bold bg-white border border-neutral-gray-200 px-3 py-2 rounded-lg hover:bg-bg-app-soft transition">In Kundenservice ablegen</Link>
+                  <Link href="/finanzen" className="text-xs font-bold bg-white border border-neutral-gray-200 px-3 py-2 rounded-lg hover:bg-bg-app-soft transition">An Buchhaltung leiten</Link>
+                  <Link href="/quotes" className="text-xs font-bold bg-white border border-neutral-gray-200 px-3 py-2 rounded-lg hover:bg-bg-app-soft transition">Neues Angebot anlegen</Link>
+                </div>
+              </div>
+
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 flex flex-col items-center justify-center text-text-muted p-8 text-center">
+            <MessageSquare className="w-12 h-12 mb-4 opacity-20" />
+            <p className="font-bold">Keine Nachricht ausgewählt</p>
+            <p className="text-sm mt-1">Wähle eine Nachricht in der Liste, um sie zu bearbeiten.</p>
+          </div>
         )}
+        </div>
       </div>
+
+      <PhoneNoteOverlay 
+        open={isPhoneNoteMode} 
+        onClose={() => {
+          setIsPhoneNoteMode(false);
+          if (typeof window !== 'undefined') {
+            window.history.replaceState({}, '', '/kommunikation');
+          }
+        }} 
+      />
     </div>
   );
 }

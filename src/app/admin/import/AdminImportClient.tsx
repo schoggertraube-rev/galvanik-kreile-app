@@ -63,7 +63,7 @@ export function AdminImportClient() {
       <header className="mb-8">
         <h1 className="text-3xl font-bold text-navy-900 mb-2 font-serif flex items-center gap-3">
           <Database className="w-8 h-8" />
-          Datenimport & Bestand
+          Datenimport und Bestand
         </h1>
         <p className="text-text-muted text-sm md:text-base">Zentrale für den sicheren Import von Altdaten, PDFs und Scans (Admin/Developer).</p>
       </header>
@@ -126,7 +126,7 @@ export function AdminImportClient() {
                   <FileText className="w-6 h-6" />
                 </div>
               </div>
-              <h3 className="font-bold text-navy-900 text-lg mb-1">Preislisten & Kalkulation</h3>
+              <h3 className="font-bold text-navy-900 text-lg mb-1">Preislisten und Kalkulation</h3>
               <p className="text-sm text-text-muted font-medium">Zuschläge, Pauschalen</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
@@ -142,7 +142,7 @@ export function AdminImportClient() {
                   <FlaskConical className="w-6 h-6" />
                 </div>
               </div>
-              <h3 className="font-bold text-navy-900 text-lg mb-1">Bäder & Chemie</h3>
+              <h3 className="font-bold text-navy-900 text-lg mb-1">Bäder und Chemie</h3>
               <p className="text-sm text-text-muted font-medium">Stammdaten, Sollwerte</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
@@ -270,7 +270,7 @@ export function AdminImportClient() {
       </DetailOverlay>
 
       {/* 3: Preislisten / Kalkulation */}
-      <DetailOverlay open={activeOverlay === "import_prices"} onClose={closeOverlay} title="Preislisten & Kalkulation" subtitle="Übernahme von Pauschalen, Zuschlägen und Basispreisen.">
+      <DetailOverlay open={activeOverlay === "import_prices"} onClose={closeOverlay} title="Preislisten und Kalkulation" subtitle="Übernahme von Pauschalen, Zuschlägen und Basispreisen.">
         <div className="space-y-6 text-navy-900">
           <div className="bg-white border border-neutral-gray-200 rounded-xl overflow-hidden mb-4">
             <div className="p-3 bg-navy-900 text-white font-bold text-sm">Beispielstruktur: Preisliste</div>
@@ -312,8 +312,8 @@ export function AdminImportClient() {
         </div>
       </DetailOverlay>
 
-      {/* 4: Bäder & Chemie-Stammdaten */}
-      <DetailOverlay open={activeOverlay === "import_baths"} onClose={closeOverlay} title="Bäder & Chemie" subtitle="Import von Anlagenparametern und Chemikalien-Stammdaten.">
+      {/* 4: Bäder und Chemie-Stammdaten */}
+      <DetailOverlay open={activeOverlay === "import_baths"} onClose={closeOverlay} title="Bäder und Chemie" subtitle="Import von Anlagenparametern und Chemikalien-Stammdaten.">
         <div className="space-y-6 text-navy-900">
           <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-200">
             <h4 className="font-bold mb-2">Erwartete Bad-Parameter:</h4>

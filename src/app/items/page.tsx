@@ -251,7 +251,7 @@ export default function ItemsPage() {
     <div className="space-y-6 pb-12 font-sans antialiased text-navy-900">
       
       <PageHeader
-        title="Lager & Chemieverwaltung"
+        title="Lager und Chemieverwaltung"
         subtitle="Tablet-Leitstand für Bestände, Materialbewegungen und chemische Beschichtung"
       />
 

@@ -304,13 +304,13 @@ export default function PerformanceCockpit() {
         </div>
 
         <div className="t-grid t-g2">
-          {/* B) Umsatz & Marge */}
+          {/* B) Umsatz und Marge */}
           <div className="t-tile" onClick={() => openOverlay('umsatz')}>
             <div className="t-glow" style={{background: '#34D399'}}></div>
             <div className="t-th">
               <div className="t-tl">
                 <div className="t-ico" style={{background: 'var(--posbg)'}}><Banknote className="w-5 h-5" style={{color: 'var(--pos)'}} /></div>
-                <div><div className="t-name">Umsatz & Marge</div><div className="t-sub">Finanzen · Forecast · Controlling</div></div>
+                <div><div className="t-name">Umsatz und Marge</div><div className="t-sub">Finanzen · Forecast · Controlling</div></div>
               </div>
               <span className="t-pill t-pill-g">STABIL</span>
             </div>
@@ -334,13 +334,13 @@ export default function PerformanceCockpit() {
             <div className="t-arr">Details →</div>
           </div>
 
-          {/* C) Qualität & Risiko */}
+          {/* C) Qualität und Risiko */}
           <div className="t-tile" onClick={() => openOverlay('qualitaet')}>
             <div className="t-glow" style={{background: '#FBBF24'}}></div>
             <div className="t-th">
               <div className="t-tl">
                 <div className="t-ico" style={{background: 'var(--warnbg)'}}><AlertTriangle className="w-5 h-5" style={{color: 'var(--warn)'}} /></div>
-                <div><div className="t-name">Qualität & Risiko</div><div className="t-sub">Reklamationen · Frühwarnungen</div></div>
+                <div><div className="t-name">Qualität und Risiko</div><div className="t-sub">Reklamationen · Frühwarnungen</div></div>
               </div>
               <span className="t-pill t-pill-y">2 AKTIV</span>
             </div>
@@ -360,13 +360,13 @@ export default function PerformanceCockpit() {
             <div className="t-arr">Details →</div>
           </div>
 
-          {/* D) Bäder & Material */}
+          {/* D) Bäder und Material */}
           <div className="t-tile" onClick={() => openOverlay('baeder')}>
             <div className="t-glow" style={{background: '#FBBF24'}}></div>
             <div className="t-th">
               <div className="t-tl">
                 <div className="t-ico" style={{background: 'var(--warnbg)'}}><FlaskConical className="w-5 h-5" style={{color: 'var(--warn)'}} /></div>
-                <div><div className="t-name">Bäder & Material</div><div className="t-sub">Metallpreise · Einkauf · Marge</div></div>
+                <div><div className="t-name">Bäder und Material</div><div className="t-sub">Metallpreise · Einkauf · Marge</div></div>
               </div>
               <span className="t-pill t-pill-y">1 BEOBACHTEN</span>
             </div>
@@ -389,13 +389,13 @@ export default function PerformanceCockpit() {
             <div className="t-arr">Details →</div>
           </div>
 
-          {/* E) Kunden & Markt */}
+          {/* E) Kunden und Markt */}
           <div className="t-tile" onClick={() => openOverlay('kunden')}>
             <div className="t-glow" style={{background: '#60A5FA'}}></div>
             <div className="t-th">
               <div className="t-tl">
                 <div className="t-ico" style={{background: 'var(--infobg)'}}><Users className="w-5 h-5" style={{color: 'var(--info)'}} /></div>
-                <div><div className="t-name">Kunden & Markt</div><div className="t-sub">CLV · Zahlung · Regionen</div></div>
+                <div><div className="t-name">Kunden und Markt</div><div className="t-sub">CLV · Zahlung · Regionen</div></div>
               </div>
               <span className="t-pill t-pill-g">STABIL</span>
             </div>
@@ -548,11 +548,11 @@ export default function PerformanceCockpit() {
         </div>
       </DetailOverlay>
 
-      {/* Umsatz & Marge Overlay */}
-      <DetailOverlay open={activeOverlay === 'umsatz'} onClose={() => setActiveOverlay(null)} title="Umsatz & Marge">
+      {/* Umsatz und Marge Overlay */}
+      <DetailOverlay open={activeOverlay === 'umsatz'} onClose={() => setActiveOverlay(null)} title="Umsatz und Marge">
         <div style={{color: 'var(--ink)'}}>
           <div className="l2-box" onClick={() => setLevel3State(level3State === 'u1' ? null : 'u1')}>
-            <div className="l2-title"><Banknote className="w-4 h-4" /> Umsatz netto & Forecast</div>
+            <div className="l2-title"><Banknote className="w-4 h-4" /> Umsatz netto und Forecast</div>
             <div className="l2-desc">42.380 € Umsatz (+7.2%). Forecast Monatsende: 145.000 €.</div>
             
             <div style={{marginTop:12, position:'relative', height:40}}>
@@ -576,7 +576,7 @@ export default function PerformanceCockpit() {
           </div>
           
           <div className="l2-box" onClick={() => setLevel3State(level3State === 'u2' ? null : 'u2')}>
-            <div className="l2-title"><TrendingUp className="w-4 h-4" /> Deckungsbeitrag & Kostenstruktur</div>
+            <div className="l2-title"><TrendingUp className="w-4 h-4" /> Deckungsbeitrag und Kostenstruktur</div>
             <div className="l2-desc">11.840 € DB (27.9% Marge). Gewinn grob: 8.200 €.</div>
             
             <div style={{marginTop:12, display:'flex', height:20, borderRadius:4, overflow:'hidden', border:'1px solid var(--bd)'}}>
@@ -598,11 +598,11 @@ export default function PerformanceCockpit() {
         </div>
       </DetailOverlay>
 
-      {/* Qualität & Risiko Overlay */}
-      <DetailOverlay open={activeOverlay === 'qualitaet'} onClose={() => setActiveOverlay(null)} title="Qualität & Risiko">
+      {/* Qualität und Risiko Overlay */}
+      <DetailOverlay open={activeOverlay === 'qualitaet'} onClose={() => setActiveOverlay(null)} title="Qualität und Risiko">
         <div style={{color: 'var(--ink)'}}>
           <div className="l2-box" onClick={() => setLevel3State(level3State === 'q1' ? null : 'q1')}>
-            <div className="l2-title"><ShieldCheck className="w-4 h-4" /> Reklamationsquote & Ursachen</div>
+            <div className="l2-title"><ShieldCheck className="w-4 h-4" /> Reklamationsquote und Ursachen</div>
             <div className="l2-desc">7,1% Fehlerquote. Nacharbeit kostet Ø 420 € pro Woche.</div>
             
             <div style={{marginTop:12, height:16, display:'flex', borderRadius:4, overflow:'hidden', border:'1px solid var(--bd)'}}>
@@ -624,7 +624,7 @@ export default function PerformanceCockpit() {
           </div>
 
           <div className="l2-box" onClick={() => setLevel3State(level3State === 'q2' ? null : 'q2')}>
-            <div className="l2-title"><AlertTriangle className="w-4 h-4" /> Risikoaufträge & Kommunikation</div>
+            <div className="l2-title"><AlertTriangle className="w-4 h-4" /> Risikoaufträge und Kommunikation</div>
             <div className="l2-desc">A-2026-0042 (84% Risiko) - 6 Kunden überfällig.</div>
             
             <div style={{marginTop:12, display:'flex', gap:2}}>
@@ -648,11 +648,11 @@ export default function PerformanceCockpit() {
         </div>
       </DetailOverlay>
 
-      {/* Bäder & Material Overlay */}
-      <DetailOverlay open={activeOverlay === 'baeder'} onClose={() => setActiveOverlay(null)} title="Bäder & Material">
+      {/* Bäder und Material Overlay */}
+      <DetailOverlay open={activeOverlay === 'baeder'} onClose={() => setActiveOverlay(null)} title="Bäder und Material">
         <div style={{color: 'var(--ink)'}}>
           <div className="l2-box" onClick={() => setLevel3State(level3State === 'b1' ? null : 'b1')}>
-            <div className="l2-title"><FlaskConical className="w-4 h-4" /> Badstatus & Chemiebestand</div>
+            <div className="l2-title"><FlaskConical className="w-4 h-4" /> Badstatus und Chemiebestand</div>
             <div className="l2-desc">1 Bad kritisch (Nickel). Salzsäure-Bestand niedrig.</div>
             
             <div style={{marginTop:12, display:'flex', gap:8, flexDirection:'column'}}>
@@ -674,7 +674,7 @@ export default function PerformanceCockpit() {
           </div>
 
           <div className="l2-box" onClick={() => setLevel3State(level3State === 'b2' ? null : 'b2')}>
-            <div className="l2-title"><BarChart3 className="w-4 h-4" /> Metallverbrauch & Marge</div>
+            <div className="l2-title"><BarChart3 className="w-4 h-4" /> Metallverbrauch und Marge</div>
             <div className="l2-desc">Goldmarge positiv (+2.840 €). Kupfer fällt.</div>
             
             <div style={{marginTop:12, padding:8, background:'var(--sf)', borderRadius:8, fontSize:10}}>
@@ -695,11 +695,11 @@ export default function PerformanceCockpit() {
         </div>
       </DetailOverlay>
 
-      {/* Kunden & Markt Overlay */}
-      <DetailOverlay open={activeOverlay === 'kunden'} onClose={() => setActiveOverlay(null)} title="Kunden & Markt">
+      {/* Kunden und Markt Overlay */}
+      <DetailOverlay open={activeOverlay === 'kunden'} onClose={() => setActiveOverlay(null)} title="Kunden und Markt">
         <div style={{color: 'var(--ink)'}}>
           <div className="l2-box" onClick={() => setLevel3State(level3State === 'k1' ? null : 'k1')}>
-            <div className="l2-title"><HeartHandshake className="w-4 h-4" /> Top-Kunden, CLV & Risiko</div>
+            <div className="l2-title"><HeartHandshake className="w-4 h-4" /> Top-Kunden, CLV und Risiko</div>
             <div className="l2-desc">CLV-Fokus auf Museum Lenzburg. 82% Stammkunden.</div>
             
             <div style={{marginTop:12, display:'flex', height:24, borderRadius:4, overflow:'hidden', border:'1px solid var(--bd)'}}>
@@ -721,7 +721,7 @@ export default function PerformanceCockpit() {
           </div>
 
           <div className="l2-box" onClick={() => setLevel3State(level3State === 'k2' ? null : 'k2')}>
-            <div className="l2-title"><Map className="w-4 h-4" /> Zahlungsmoral, Versand & Regionen</div>
+            <div className="l2-title"><Map className="w-4 h-4" /> Zahlungsmoral, Versand und Regionen</div>
             <div className="l2-desc">Ø 18 Tage Zahlungsziel. 82% Abholung / 18% Versand.</div>
             
             <div style={{marginTop:12, display:'flex', gap:10}}>

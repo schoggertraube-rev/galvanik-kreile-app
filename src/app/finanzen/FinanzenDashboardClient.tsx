@@ -106,14 +106,14 @@ export function FinanzenDashboardClient() {
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 lg:p-8 font-sans antialiased text-navy-900 min-h-screen bg-[#F0EBE0]">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-navy-900 mb-2 font-serif">Buchhaltung & Finanzen</h1>
+        <h1 className="text-3xl font-bold text-navy-900 mb-2 font-serif">Buchhaltung und Finanzen</h1>
         <p className="text-text-muted text-sm md:text-base">Finanzielle Übersicht, Steuern und Exporte für die Buchhaltung.</p>
       </header>
 
-      {/* Zahlungsmanagement & Checkout */}
+      {/* Zahlungsmanagement und Checkout */}
       <div className="mb-12">
         <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-navy-900 font-serif">Zahlungsmanagement & Checkout</h2>
+          <h2 className="text-2xl font-bold text-navy-900 font-serif">Zahlungsmanagement und Checkout</h2>
           <span className="bg-accent-orange/10 text-accent-orange text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">In Vorbereitung</span>
         </div>
 
@@ -141,7 +141,7 @@ export function FinanzenDashboardClient() {
                   <QrCode className="w-6 h-6" />
                 </div>
               </div>
-              <h3 className="font-bold text-navy-900 text-lg mb-1">Zahlungslink & QR</h3>
+              <h3 className="font-bold text-navy-900 text-lg mb-1">Zahlungslink und QR-Code</h3>
               <p className="text-sm text-text-muted font-medium">Rechnung direkt per Link zahlen.</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
@@ -186,7 +186,7 @@ export function FinanzenDashboardClient() {
                   <PieChart className="w-6 h-6" />
                 </div>
               </div>
-              <h3 className="font-bold text-navy-900 text-lg mb-1">Moral & Arten</h3>
+              <h3 className="font-bold text-navy-900 text-lg mb-1">Zahlungsmoral und Zahlungsarten</h3>
               <p className="text-sm text-text-muted font-medium">Zahlungsmoral und meistgenutzte Arten.</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
@@ -223,7 +223,7 @@ export function FinanzenDashboardClient() {
             </div>
           </button>
 
-          {/* 2. Rechnungen & Zahlungsstatus */}
+          {/* 2. Rechnungsübersicht und Statistik */}
           <button onClick={() => setActiveOverlay("invoices_status")} className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer">
             <div>
               <div className="flex items-start justify-between mb-4">
@@ -232,7 +232,7 @@ export function FinanzenDashboardClient() {
                 </div>
                 <span className="text-2xl font-bold text-navy-900">42</span>
               </div>
-              <h3 className="font-bold text-navy-900 text-lg mb-1">Rechnungen</h3>
+              <h3 className="font-bold text-navy-900 text-lg mb-1">Rechnungsübersicht und Statistik</h3>
               <p className="text-sm text-text-muted font-medium">Laufender Monat</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
@@ -283,38 +283,6 @@ export function FinanzenDashboardClient() {
               </div>
               <h3 className="font-bold text-navy-900 text-lg mb-1">Steuerprofil</h3>
               <p className="text-sm text-text-muted font-medium">19% / 7% / 0%</p>
-            </div>
-            <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
-              Details ansehen <ArrowRight className="w-4 h-4" />
-            </div>
-          </button>
-
-          {/* Fixkosten */}
-          <button onClick={() => setActiveOverlay("fixed_costs")} className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer">
-            <div>
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 bg-navy-900/10 rounded-xl flex items-center justify-center text-navy-900">
-                  <BarChart4 className="w-6 h-6" />
-                </div>
-              </div>
-              <h3 className="font-bold text-navy-900 text-lg mb-1">Fixkosten</h3>
-              <p className="text-sm text-text-muted font-medium">Feste monatliche Ausgaben.</p>
-            </div>
-            <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
-              Details ansehen <ArrowRight className="w-4 h-4" />
-            </div>
-          </button>
-
-          {/* Variable Kosten */}
-          <button onClick={() => setActiveOverlay("variable_costs")} className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer">
-            <div>
-              <div className="flex items-start justify-between mb-4">
-                <div className="w-12 h-12 bg-accent-orange/10 rounded-xl flex items-center justify-center text-accent-orange">
-                  <PieChart className="w-6 h-6" />
-                </div>
-              </div>
-              <h3 className="font-bold text-navy-900 text-lg mb-1">Variable Kosten</h3>
-              <p className="text-sm text-text-muted font-medium">Dynamische Kosten.</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
               Details ansehen <ArrowRight className="w-4 h-4" />
@@ -435,8 +403,8 @@ export function FinanzenDashboardClient() {
         </div>
       </DetailOverlay>
 
-      {/* 2: Rechnungen & Zahlungsstatus */}
-      <DetailOverlay open={activeOverlay === "invoices_status"} onClose={closeOverlay} title="Rechnungen & Zahlungsstatus" subtitle="Übersicht aller Ausgangsrechnungen im System.">
+      {/* 2: Rechnungen und Zahlungsstatus */}
+      <DetailOverlay open={activeOverlay === "invoices_status"} onClose={closeOverlay} title="Rechnungsübersicht und Statistik" subtitle="Übersicht aller Ausgangsrechnungen im System.">
         <div className="space-y-6 text-navy-900">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="bg-success-green/10 p-3 rounded-xl border border-success-green/20 text-center">
@@ -467,57 +435,7 @@ export function FinanzenDashboardClient() {
           </div>
         </div>
       </DetailOverlay>
-        {/* Fixed Costs Overlay */}
-        <DetailOverlay open={activeOverlay === 'fixed_costs'} onClose={closeOverlay} title="Fixkosten" subtitle="Detaillierte Auflistung der festen Kostenpositionen.">
-          <div className="space-y-6 text-navy-900">
-            {/* List of positions */}
-            <ul className="space-y-2">
-              {fixedCosts.map((c, i) => (
-                <li key={i} className="flex justify-between items-center bg-bg-app-soft p-2 rounded">
-                  <span>{c.name}</span>
-                  <span>{c.amount} € ({c.interval})</span>
-                  <span className="text-xs text-muted">{c.status}</span>
-                </li>
-              ))}
-            </ul>
-            {/* Add new position */}
-            <AddCostForm
-              category="fix"
-              onAdd={(item) => setFixedCosts((prev) => [...prev, item])}
-            />
-            <p className="text-sm text-text-muted mt-2">
-              Lokale Vormerkung, noch nicht in Supabase gespeichert.
-            </p>
-            <p className="text-xs text-text-muted mt-4">
-              Fixkosten fließen später in BWA, Monatsgewinn, Mindestumsatz und Deckungsbeitrag ein.
-            </p>
-          </div>
-        </DetailOverlay>
-
-        {/* Variable Costs Overlay */}
-        <DetailOverlay open={activeOverlay === 'variable_costs'} onClose={closeOverlay} title="Variable / dynamische Kosten" subtitle="Kosten abhängig von Menge / Prozess.">
-          <div className="space-y-6 text-navy-900">
-            <ul className="space-y-2">
-              {variableCosts.map((c, i) => (
-                <li key={i} className="flex justify-between items-center bg-bg-app-soft p-2 rounded">
-                  <span>{c.name}</span>
-                  <span>{c.amount} € ({c.interval})</span>
-                  <span className="text-xs text-muted">{c.status}</span>
-                </li>
-              ))}
-            </ul>
-            <AddCostForm
-              category="variabel"
-              onAdd={(item) => setVariableCosts((prev) => [...prev, item])}
-            />
-            <p className="text-sm text-text-muted mt-2">
-              Lokale Vormerkung, noch nicht in Supabase gespeichert.
-            </p>
-            <p className="text-xs text-text-muted mt-4">
-              Variable Kosten fließen später in Kalkulation, Marge, Metallmarge und Auftragsprofitabilität ein.
-            </p>
-          </div>
-        </DetailOverlay>
+        {/* Konsolidierte Overlays befinden sich weiter unten */}
 
       {/* 3: DATEV Export */}
       <DetailOverlay open={activeOverlay === "datev_export"} onClose={closeOverlay} title="DATEV Export (Vorbereitung)" subtitle="Buchungsdatenservice / ASCII-Export">
@@ -743,8 +661,8 @@ export function FinanzenDashboardClient() {
         </div>
       </DetailOverlay>
 
-      {/* NEU: Zahlungslink & QR */}
-      <DetailOverlay open={activeOverlay === "payment_links"} onClose={closeOverlay} title="Zahlungslink & QR-Code" subtitle="Nahtlose Bezahlung für Kunden.">
+      {/* NEU: Zahlungslink und QR-Code */}
+      <DetailOverlay open={activeOverlay === "payment_links"} onClose={closeOverlay} title="Zahlungslink und QR-Code" subtitle="Nahtlose Bezahlung für Kunden.">
         <div className="space-y-6 text-navy-900">
           <div>
             <h4 className="font-bold mb-3 border-b border-neutral-gray-200 pb-2">Geplanter Ablauf</h4>
@@ -827,7 +745,7 @@ export function FinanzenDashboardClient() {
       </DetailOverlay>
 
       {/* NEU: Zahlungsmoral */}
-      <DetailOverlay open={activeOverlay === "payment_analytics"} onClose={closeOverlay} title="Zahlungsmoral & Zahlungsarten" subtitle="Analysen für das Performance-Cockpit.">
+      <DetailOverlay open={activeOverlay === "payment_analytics"} onClose={closeOverlay} title="Zahlungsmoral und Zahlungsarten" subtitle="Analysen für das Performance-Cockpit.">
         <div className="space-y-6 text-navy-900">
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white p-4 rounded-xl border border-neutral-gray-200 text-center">
@@ -852,7 +770,7 @@ export function FinanzenDashboardClient() {
 
           <div className="bg-navy-900/5 p-4 rounded-xl text-sm text-navy-900 border border-neutral-gray-200">
             <Info className="w-5 h-5 text-navy-900 mb-2" />
-            <p>Diese echten Zahlungsstatistiken ("pünktlich vs. verspätet") werden später direkt in die Kacheln <strong>"Kunden & Markt"</strong> und <strong>"Umsatz & Marge"</strong> im <span className="font-bold font-mono">/performance</span> Cockpit einfließen.</p>
+            <p>Diese echten Zahlungsstatistiken ("pünktlich vs. verspätet") werden später direkt in die Kacheln <strong>"Kunden und Markt"</strong> und <strong>"Umsatz und Marge"</strong> im <span className="font-bold font-mono">/performance</span> Cockpit einfließen.</p>
           </div>
         </div>
       </DetailOverlay>
@@ -880,7 +798,7 @@ export function FinanzenDashboardClient() {
 
           <div className="bg-navy-900/5 p-4 rounded-xl text-sm text-navy-900 mt-6 border border-neutral-gray-200">
             <Info className="w-5 h-5 text-navy-900 mb-2" />
-            <p>Fixkosten fließen später in BWA, Monatsgewinn, Mindestumsatz und Deckungsbeitrag ein. Diese Werte speisen später die Performance-Kategorien <span className="font-bold">Umsatz & Marge</span>.</p>
+            <p>Fixkosten fließen später in BWA, Monatsgewinn, Mindestumsatz und Deckungsbeitrag ein. Diese Werte speisen später die Performance-Kategorien <span className="font-bold">Umsatz und Marge</span>.</p>
           </div>
         </div>
       </DetailOverlay>
@@ -908,7 +826,7 @@ export function FinanzenDashboardClient() {
 
           <div className="bg-navy-900/5 p-4 rounded-xl text-sm text-navy-900 mt-6 border border-neutral-gray-200">
             <Info className="w-5 h-5 text-navy-900 mb-2" />
-            <p>Variable Kosten fließen später in Kalkulation, Marge, Metallmarge und Auftragsprofitabilität ein. Diese Werte speisen später die Performance-Kategorien <span className="font-bold">Bäder & Material</span>.</p>
+            <p>Variable Kosten fließen später in Kalkulation, Marge, Metallmarge und Auftragsprofitabilität ein. Diese Werte speisen später die Performance-Kategorien <span className="font-bold">Bäder und Material</span>.</p>
           </div>
         </div>
       </DetailOverlay>

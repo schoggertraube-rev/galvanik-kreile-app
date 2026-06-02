@@ -107,7 +107,7 @@ export function RightNav() {
 
       <div className="flex flex-col items-center w-full border-t border-neutral-gray-100 pt-4">
         <RightNavItem
-          label="Kunden & Aufträge"
+          label="Kunden und Aufträge"
           href="/kunden-auftraege"
           icon={<Users className="w-5 h-5" strokeWidth={1.5} />}
           variant="normal"
@@ -118,7 +118,7 @@ export function RightNav() {
 
       <div className="flex flex-col items-center w-full">
         <RightNavItem
-          label="Lager & Chemie"
+          label="Lager und Chemie"
           href="/items"
           icon={<Warehouse className="w-5 h-5" strokeWidth={1.5} />}
           variant="normal"

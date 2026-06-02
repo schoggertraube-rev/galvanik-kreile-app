@@ -17,7 +17,7 @@ export function BaederDashboardClient() {
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 lg:p-8 font-sans antialiased text-navy-900 min-h-screen bg-[#F0EBE0]">
       <header className="mb-8">
-        <h1 className="text-3xl font-bold text-navy-900 mb-2 font-serif">Bäder & Chemie</h1>
+        <h1 className="text-3xl font-bold text-navy-900 mb-2 font-serif">Bäder und Chemie</h1>
         <p className="text-text-muted text-sm md:text-base">Zentrale für Galvanik-Bäder, Messwerte und Betriebsstoffe.</p>
       </header>
 
@@ -81,7 +81,7 @@ export function BaederDashboardClient() {
             </div>
           </button>
 
-          {/* 4. Chemie & Bestand */}
+          {/* 4. Chemie und Bestand */}
           <button onClick={() => setActiveOverlay("chemicals_inventory")} className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer">
             <div>
               <div className="flex items-start justify-between mb-4">
@@ -89,7 +89,7 @@ export function BaederDashboardClient() {
                   <FlaskConical className="w-6 h-6" />
                 </div>
               </div>
-              <h3 className="font-bold text-navy-900 text-lg mb-1">Chemie & Bestand</h3>
+              <h3 className="font-bold text-navy-900 text-lg mb-1">Chemie und Bestand</h3>
               <p className="text-sm text-text-muted font-medium">Elektrolyte, Zusätze, Säuren</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
@@ -106,7 +106,7 @@ export function BaederDashboardClient() {
                 </div>
               </div>
               <h3 className="font-bold text-navy-900 text-lg mb-1">Metallverbrauch</h3>
-              <p className="text-sm text-text-muted font-medium">Hochrechnung & Logik</p>
+              <p className="text-sm text-text-muted font-medium">Hochrechnung und Logik</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
               Verbrauch zeigen <ArrowRight className="w-4 h-4" />
@@ -129,7 +129,7 @@ export function BaederDashboardClient() {
             </div>
           </button>
 
-          {/* 7. Sperrungen & Risiken */}
+          {/* 7. Sperrungen und Risiken */}
           <button onClick={() => setActiveOverlay("bath_locks")} className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer md:col-span-2 lg:col-span-3">
             <div>
               <div className="flex items-start justify-between mb-4">
@@ -138,7 +138,7 @@ export function BaederDashboardClient() {
                 </div>
                 <span className="text-sm font-bold bg-neutral-gray-100 text-navy-900 px-3 py-1 rounded-full">Sicherheit</span>
               </div>
-              <h3 className="font-bold text-navy-900 text-lg mb-1">Sperrungen & Betriebsrisiken</h3>
+              <h3 className="font-bold text-navy-900 text-lg mb-1">Sperrungen und Betriebsrisiken</h3>
               <p className="text-sm text-text-muted font-medium">Verriegelte Anlagen und betroffene Aufträge.</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
@@ -273,8 +273,8 @@ export function BaederDashboardClient() {
         </div>
       </DetailOverlay>
 
-      {/* 4: Chemie & Bestand */}
-      <DetailOverlay open={activeOverlay === "chemicals_inventory"} onClose={closeOverlay} title="Chemie & Bestand" subtitle="Verfügbare Vorräte und Reichweite.">
+      {/* 4: Chemie und Bestand */}
+      <DetailOverlay open={activeOverlay === "chemicals_inventory"} onClose={closeOverlay} title="Chemie und Bestand" subtitle="Verfügbare Vorräte und Reichweite.">
         <div className="space-y-6 text-navy-900">
           <div>
             <h4 className="font-bold mb-3 border-b border-neutral-gray-200 pb-2">Kritische Bestände</h4>
@@ -343,7 +343,7 @@ export function BaederDashboardClient() {
       </DetailOverlay>
 
       {/* 6: Badkosten / Metallmarge */}
-      <DetailOverlay open={activeOverlay === "metal_margins"} onClose={closeOverlay} title="Badkosten & Marge" subtitle="Vorbereitung für finanzielle Performance-Rechnung.">
+      <DetailOverlay open={activeOverlay === "metal_margins"} onClose={closeOverlay} title="Badkosten und Marge" subtitle="Vorbereitung für finanzielle Performance-Rechnung.">
         <div className="space-y-6 text-navy-900">
           <div className="bg-success-green/10 border border-success-green/20 rounded-xl p-4">
             <h4 className="font-bold text-success-green mb-1">Preis-/Mengenlogik vorbereitet</h4>
@@ -364,8 +364,8 @@ export function BaederDashboardClient() {
         </div>
       </DetailOverlay>
 
-      {/* 7: Sperrungen & Risiken */}
-      <DetailOverlay open={activeOverlay === "bath_locks"} onClose={closeOverlay} title="Sperrungen & Risiken" subtitle="Anlagen, die derzeit nicht für die Produktion freigegeben sind.">
+      {/* 7: Sperrungen und Risiken */}
+      <DetailOverlay open={activeOverlay === "bath_locks"} onClose={closeOverlay} title="Sperrungen und Risiken" subtitle="Anlagen, die derzeit nicht für die Produktion freigegeben sind.">
         <div className="space-y-6 text-navy-900">
           <div className="bg-bg-app-soft p-5 rounded-xl border border-neutral-gray-200 text-center">
             <CheckCircle2 className="w-12 h-12 text-success-green mx-auto mb-3" />

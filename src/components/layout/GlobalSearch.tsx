@@ -267,7 +267,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                 >
                   <Package className="w-4 h-4 text-text-muted shrink-0" />
                   <div>
-                    <span className="block">Lager & Badregelkarte</span>
+                    <span className="block">Lager und Badregelkarte</span>
                     <span className="text-[10px] text-slate-450 font-normal">Säuren, Kupfer & Anoden</span>
                   </div>
                 </Link>
