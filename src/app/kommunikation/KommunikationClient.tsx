@@ -237,7 +237,7 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
                   Zurück zum Text
                 </button>
                 <button onClick={handleSave} className="bg-accent-orange text-white font-bold px-8 py-3 rounded-xl hover:bg-orange-600 transition shadow-md">
-                  Übernehmen
+                  Lokal vormerken
                 </button>
               </>
             )}
