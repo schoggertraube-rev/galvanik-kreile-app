@@ -183,12 +183,12 @@ export function RightNav() {
 
         <div className="mt-4 w-full">
           <RightNavItem
-            label="KVP"
-            href="/kvp"
+            label="Betriebs-KVP"
+            href="/betrieb-kvp"
             icon={<Lightbulb className="w-5 h-5" strokeWidth={1.5} />}
             variant="normal"
-            isActive={isActive("/kvp")}
-            onClick={() => trackUiEvent("nav_click", { target: "/kvp" })}
+            isActive={isActive("/betrieb-kvp")}
+            onClick={() => trackUiEvent("nav_click", { target: "/betrieb-kvp" })}
           />
         </div>
 
@@ -201,6 +201,19 @@ export function RightNav() {
               variant="normal"
               isActive={isActive("/admin/import")}
               onClick={() => trackUiEvent("nav_click", { target: "/admin/import" })}
+            />
+          </div>
+        )}
+
+        {isAdminOrDev && (
+          <div className="mt-4 w-full">
+            <RightNavItem
+              label="App-KVP (Dev)"
+              href="/kvp"
+              icon={<Lightbulb className="w-5 h-5" strokeWidth={1.5} />}
+              variant="normal"
+              isActive={isActive("/kvp")}
+              onClick={() => trackUiEvent("nav_click", { target: "/kvp" })}
             />
           </div>
         )}

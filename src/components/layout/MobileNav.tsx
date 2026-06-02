@@ -210,8 +210,8 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
             icon={Banknote}
           />
           <NavItem
-            label="KVP"
-            href="/kvp"
+            label="Betriebs-KVP"
+            href="/betrieb-kvp"
             icon={Lightbulb}
           />
           {isAdminOrDev && (
@@ -220,6 +220,11 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
                 label="Datenimport"
                 href="/admin/import"
                 icon={Database}
+              />
+              <NavItem
+                label="App-KVP (Dev)"
+                href="/kvp"
+                icon={Lightbulb}
               />
               <NavItem
                 label="Analytics"

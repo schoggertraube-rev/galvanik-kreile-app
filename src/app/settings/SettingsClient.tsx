@@ -9,7 +9,7 @@ import { RoleMatrix } from "@/components/admin/RoleMatrix";
 import { FeatureToggles } from "@/components/admin/FeatureToggles";
 import { DataImportCenter } from "@/components/admin/DataImportCenter";
 import { CompanySettingsForm } from "@/components/admin/CompanySettingsForm";
-import { Server, Users, Shield, Power, Database, Settings, Building2, BarChart2 } from "lucide-react";
+import { Server, Users, Shield, Power, Database, Settings, Building2, BarChart2, Lightbulb } from "lucide-react";
 import Link from "next/link";
 
 type Tab = "status" | "company" | "users" | "roles" | "features" | "import" | "system";
@@ -26,10 +26,16 @@ export function SettingsClient({ isAdmin }: { isAdmin: boolean }) {
           subtitle="Verwalte Einstellungen und Systemparameter."
         />
         {isAdmin && (
-          <Link href="/admin/analytics" className="inline-flex items-center gap-2 px-4 py-2 bg-kreile-yellow text-navy-900 font-semibold rounded-xl hover:bg-yellow-500 transition-colors shadow-sm">
-            <BarChart2 className="w-5 h-5" />
-            App-Nutzung / Analytics
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link href="/admin/analytics" className="inline-flex items-center gap-2 px-4 py-2 bg-kreile-yellow text-navy-900 font-semibold rounded-xl hover:bg-yellow-500 transition-colors shadow-sm">
+              <BarChart2 className="w-5 h-5" />
+              App-Nutzung / Analytics
+            </Link>
+            <Link href="/kvp" className="inline-flex items-center gap-2 px-4 py-2 bg-neutral-gray-100 text-navy-900 font-semibold rounded-xl hover:bg-neutral-gray-200 transition-colors shadow-sm">
+              <Lightbulb className="w-5 h-5" />
+              App verbessern (Dev-KVP)
+            </Link>
+          </div>
         )}
       </div>
 

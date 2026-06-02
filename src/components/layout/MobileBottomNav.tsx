@@ -65,7 +65,7 @@ export function MobileBottomNav({ className = "" }: { className?: string }) {
               <SheetLink href="/station" icon={<Factory />} label="Stationen" onClick={() => setMoreOpen(false)} />
               <SheetLink href="/kontrolle" icon={<ShieldCheck />} label="Kontrolle" onClick={() => setMoreOpen(false)} />
               <SheetLink href="/performance" icon={<TrendingUp />} label="Metriken" onClick={() => setMoreOpen(false)} />
-              <SheetLink href="/kvp" icon={<Lightbulb />} label="KVP" onClick={() => setMoreOpen(false)} />
+              <SheetLink href="/betrieb-kvp" icon={<Lightbulb />} label="KVP" onClick={() => setMoreOpen(false)} />
               <SheetLink href="/settings" icon={<Settings />} label="Setup" onClick={() => setMoreOpen(false)} />
             </div>
           </div>
