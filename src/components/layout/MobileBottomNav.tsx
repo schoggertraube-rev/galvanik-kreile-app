@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, PackageCheck, Scan, Search, Menu, Users, ClipboardList, TrendingUp, Settings, MessageSquare, ShieldCheck, Factory } from "lucide-react";
+import { Home, PackageCheck, Scan, Search, Menu, Users, ClipboardList, TrendingUp, Settings, MessageSquare, ShieldCheck, Factory, Lightbulb } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -65,6 +65,7 @@ export function MobileBottomNav({ className = "" }: { className?: string }) {
               <SheetLink href="/station" icon={<Factory />} label="Stationen" onClick={() => setMoreOpen(false)} />
               <SheetLink href="/kontrolle" icon={<ShieldCheck />} label="Kontrolle" onClick={() => setMoreOpen(false)} />
               <SheetLink href="/performance" icon={<TrendingUp />} label="Metriken" onClick={() => setMoreOpen(false)} />
+              <SheetLink href="/kvp" icon={<Lightbulb />} label="KVP" onClick={() => setMoreOpen(false)} />
               <SheetLink href="/settings" icon={<Settings />} label="Setup" onClick={() => setMoreOpen(false)} />
             </div>
           </div>

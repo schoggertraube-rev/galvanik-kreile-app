@@ -350,7 +350,7 @@ export default function HomeDashboard() {
         </div>
       </div>
 
-      {/* 7. FEEDBACKFELD */}
+      {/* 7. FEEDBACKFELD & KVP */}
       <section className="bg-bg-app-soft border border-neutral-gray-200 rounded-3xl p-6 text-center max-w-2xl mx-auto mt-8">
         <h3 className="text-lg font-bold font-serif text-navy-900 mb-2">Was fehlt auf dieser Seite?</h3>
         <p className="text-xs text-text-muted mb-4">Feedback-Speicherung wird später angebunden (Demo-Modus).</p>
@@ -370,6 +370,10 @@ export default function HomeDashboard() {
           >
             {feedbackSent ? "Gemerkt!" : "Merken"}
           </button>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-neutral-gray-200">
+          <Link href="/kvp" className="text-sm font-bold text-accent-orange hover:underline">Zum KVP-Cockpit (Kontinuierlicher Verbesserungsprozess)</Link>
         </div>
       </section>
 

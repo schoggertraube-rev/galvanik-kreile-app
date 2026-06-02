@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { RightNavItem } from "./RightNavItem";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { bathsRepository } from "@/lib/repositories/bathsRepository";
-import { Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3 } from "lucide-react";
+import { Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3, Lightbulb } from "lucide-react";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import Link from "next/link";
 import { useFeatureFlag } from "@/lib/license/useFeatureFlag";
@@ -178,6 +178,17 @@ export function RightNav() {
             variant="normal"
             isActive={isActive("/finanzen")}
             onClick={() => trackUiEvent("nav_click", { target: "/finanzen" })}
+          />
+        </div>
+
+        <div className="mt-4 w-full">
+          <RightNavItem
+            label="KVP"
+            href="/kvp"
+            icon={<Lightbulb className="w-5 h-5" strokeWidth={1.5} />}
+            variant="normal"
+            isActive={isActive("/kvp")}
+            onClick={() => trackUiEvent("nav_click", { target: "/kvp" })}
           />
         </div>
 

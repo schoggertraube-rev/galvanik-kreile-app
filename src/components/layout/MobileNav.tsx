@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { X, Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, ChevronDown, ChevronRight, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3 } from "lucide-react";
+import { X, Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, ChevronDown, ChevronRight, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3, Lightbulb } from "lucide-react";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { bathsRepository } from "@/lib/repositories/bathsRepository";
 
@@ -208,6 +208,11 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
             label="Buchhaltung"
             href="/finanzen"
             icon={Banknote}
+          />
+          <NavItem
+            label="KVP"
+            href="/kvp"
+            icon={Lightbulb}
           />
           {isAdminOrDev && (
             <>
