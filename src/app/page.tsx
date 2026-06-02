@@ -7,33 +7,52 @@ import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { MockOrder } from "@/lib/mockData";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
-import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
+import { useRouter } from "next/navigation";
 import {
   UserPlus, FilePlus, Camera, AlertTriangle, HeadphonesIcon, Settings,
   CheckCircle, Circle, Clock, AlertOctagon, Send, Activity, Info
 } from "lucide-react";
 
+// Task model definition
+interface ChecklistTask {
+  id: number;
+  title: string;
+  reason: string;
+  area: string;
+  urgency: string;
+  action: string;
+  targetHref?: string;
+  completionType: "live" | "demo" | "auto";
+  completionHint?: string;
+  source: "live" | "demo" | "fallback";
+  done: boolean;
+}
+
 export default function HomeDashboard() {
   usePageView();
+  const router = useRouter();
   const [orders, setOrders] = useState<MockOrder[]>([]);
   const [openQuotes, setOpenQuotes] = useState(0);
   
   // Drilldown Overlay State
   const [activeOverlay, setActiveOverlay] = useState<{title: string, desc: string, targetLink?: string} | null>(null);
 
-  // Todo List State (Local only)
-  const [todos, setTodos] = useState([
-    { id: 1, title: "Überfällige Auslieferungen klären", reason: "3 Aufträge sind seit gestern fertig aber nicht abgeholt", area: "Warenausgang", urgency: "Hoch", action: "Kunde anrufen", done: false },
-    { id: 2, title: "Salzsäure nachbestellen", reason: "Bestand unter 20%", area: "Chemie / Lager", urgency: "Hoch", action: "Lieferant kontaktieren", done: false },
-    { id: 3, title: "Kundenfreigabe Maier GmbH", reason: "Wartet seit 2 Tagen auf Preisbestätigung", area: "Büro", urgency: "Mittel", action: "Nachfassen", done: false },
-    { id: 4, title: "Material fehlt für Auftrag #8102", reason: "Rohteile nicht auffindbar", area: "Wareneingang", urgency: "Mittel", action: "Palette suchen", done: false },
-    { id: 5, title: "QS: Teile nacharbeiten", reason: "2 Trommeln Nickel fehlerhaft", area: "Galvanik", urgency: "Mittel", action: "Entlacken starten", done: false },
-    { id: 6, title: "Versand vorbereiten", reason: "14 Pakete müssen heute raus", area: "Warenausgang", urgency: "Normal", action: "Lieferscheine drucken", done: false },
-    { id: 7, title: "Offene Anfragen sichten", reason: "5 neue E-Mails im Postfach", area: "Büro", urgency: "Normal", action: "Angebote schreiben", done: false },
-    { id: 8, title: "Bad-Protokolle eintragen", reason: "Routineprüfung fällig", area: "Labor", urgency: "Normal", action: "Messen", done: false },
-    { id: 9, title: "Leergut sortieren", reason: "Kisten stapeln sich", area: "Hof", urgency: "Niedrig", action: "Aufräumen", done: false },
-    { id: 10, title: "Tagesrundgang Warendurchlauf", reason: "Einmal prüfen, ob alle Stationen sauber weiterlaufen", area: "Warendurchlauf", urgency: "Normal", action: "Stationen prüfen", done: false }
+  // Todo List State (Enriched Task Model)
+  const [todos, setTodos] = useState<ChecklistTask[]>([
+    { id: 1, title: "Überfällige Auslieferungen klären", reason: "3 Aufträge sind seit gestern fertig aber nicht abgeholt", area: "Warenausgang", urgency: "Hoch", action: "Kunde anrufen", targetHref: "/warendurchlauf", completionType: "live", source: "live", done: false },
+    { id: 2, title: "Salzsäure nachbestellen", reason: "Bestand unter 20%", area: "Chemie / Lager", urgency: "Hoch", action: "Lieferant kontaktieren", targetHref: "/items", completionType: "live", source: "live", done: false },
+    { id: 3, title: "Kundenfreigabe Maier GmbH", reason: "Wartet seit 2 Tagen auf Preisbestätigung", area: "Büro", urgency: "Mittel", action: "Nachfassen", targetHref: "/quotes", completionType: "live", source: "live", done: false },
+    { id: 4, title: "Material fehlt für Auftrag #8102", reason: "Rohteile nicht auffindbar", area: "Wareneingang", urgency: "Mittel", action: "Palette suchen", targetHref: "/items", completionType: "live", source: "live", done: false },
+    { id: 5, title: "QS: Teile nacharbeiten", reason: "2 Trommeln Nickel fehlerhaft", area: "Galvanik", urgency: "Mittel", action: "Entlacken starten", targetHref: "/kundenservice", completionType: "live", source: "live", done: false },
+    { id: 6, title: "Versand vorbereiten", reason: "14 Pakete müssen heute raus", area: "Warenausgang", urgency: "Normal", action: "Lieferscheine drucken", targetHref: "/warendurchlauf", completionType: "live", source: "live", done: false },
+    { id: 7, title: "Offene Anfragen sichten", reason: "5 neue E-Mails im Postfach", area: "Büro", urgency: "Normal", action: "Angebote schreiben", targetHref: "/kundenservice", completionType: "live", source: "live", done: false },
+    { id: 8, title: "Bad-Protokolle eintragen", reason: "Routineprüfung fällig", area: "Labor", urgency: "Normal", action: "Messen", targetHref: "/baeder", completionType: "demo", source: "demo", done: false },
+    { id: 9, title: "Leergut sortieren", reason: "Kisten stapeln sich", area: "Hof", urgency: "Niedrig", action: "Aufräumen", completionType: "demo", source: "demo", done: false },
+    { id: 10, title: "Tagesrundgang Warendurchlauf", reason: "Einmal prüfen, ob alle Stationen sauber weiterlaufen", area: "Warendurchlauf", urgency: "Normal", action: "Stationen prüfen", targetHref: "/warendurchlauf", completionType: "live", source: "live", done: false }
   ]);
+
+  const [feedback, setFeedback] = useState("");
+  const [feedbackSent, setFeedbackSent] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -52,8 +71,52 @@ export default function HomeDashboard() {
     };
   }, []);
 
+  // Auto-completion logic
+  useEffect(() => {
+    setTodos(prev =>
+      prev.map(t => {
+        if (t.done) return t;
+        if (t.completionType === "auto") return { ...t, done: true, completionHint: "Auto-erledigt" };
+        if (t.id === 1 && orders.length > 0 && orders.filter(o => o.station === 'warenausgang').length === 0) return { ...t, done: true, completionHint: "Alle Auslieferungen erledigt" };
+        if (t.id === 3 && openQuotes === 0) return { ...t, done: true, completionHint: "Keine offenen Anfragen" };
+        if (t.id === 6 && orders.filter(o => o.risk === "red").length === 0) return { ...t, done: true, completionHint: "Keine kritischen Aufträge" };
+        return t;
+      })
+    );
+  }, [orders, openQuotes]);
+
+  // Checkbox handling (only Demo tasks can be toggled manually)
   const toggleTodo = (id: number) => {
-    setTodos(todos.map(t => t.id === id ? { ...t, done: !t.done } : t));
+    setTodos(prev =>
+      prev.map(t => (t.id === id && t.source === "demo" ? { ...t, done: !t.done } : t))
+    );
+  };
+
+  // Click handling for a task
+  const handleTaskClick = (task: ChecklistTask) => {
+    if (task.targetHref) {
+      router.push(task.targetHref);
+    } else {
+      setActiveOverlay({
+        title: task.title,
+        desc: task.completionHint || "Weitere Informationen fehlen. Bitte prüfen Sie die jeweiligen Bereiche.",
+        targetLink: task.targetHref,
+      });
+    }
+  };
+
+  // Determine a focus message based on current data
+  const focusMessage = (() => {
+    if (orders.filter(o => o.risk === "red").length > 0) return "Kritische Aufträge zuerst entschärfen";
+    if (openQuotes > 0) return "Kundenrückfragen bündeln";
+    return "Warendurchlauf kurz prüfen und Engpässe vermeiden";
+  })();
+
+  const handleFeedback = () => {
+    if (!feedback.trim()) return;
+    setFeedbackSent(true);
+    setFeedback("");
+    setTimeout(() => setFeedbackSent(false), 3000);
   };
 
   const activeTodos = todos.filter(t => !t.done);
@@ -63,9 +126,9 @@ export default function HomeDashboard() {
     <div className="space-y-8 pb-12 font-sans antialiased text-navy-900 w-full max-w-7xl mx-auto animate-in fade-in duration-400">
       
       {/* HEADER */}
-      <div className="mb-6">
+      <div className="mb-6 flex flex-col md:flex-row md:items-baseline gap-2">
         <h1 className="text-2xl md:text-3xl font-black font-serif tracking-tight text-navy-900">Guten Morgen!</h1>
-        <p className="text-text-muted mt-1 font-medium">Dein Tag im Überblick. Gehirn aus, Checkliste an.</p>
+        <p className="text-text-muted font-medium">Dein Tag im Überblick. Gehirn aus, Checkliste an.</p>
       </div>
 
       {/* 1. USP-SCHNELLSTART-KACHELN */}
@@ -128,20 +191,29 @@ export default function HomeDashboard() {
         
         {/* 2. HEUTE ZUERST - TAGES CHECKLISTE */}
         <section className="lg:col-span-2">
-          <div className="bg-white border border-neutral-gray-200 rounded-3xl p-6 shadow-sm h-full flex flex-col">
+          <div className="bg-gray-200 border border-neutral-gray-200 rounded-3xl p-6 shadow-sm h-full flex flex-col">
              <div className="flex justify-between items-center mb-6 bg-gray-200 p-2 rounded">
                 <h2 className="text-xl font-bold font-serif text-navy-900">Deine Checkliste für Heute</h2>
                 <span className="bg-bg-app-soft text-text-muted text-xs px-2 py-1 rounded font-bold uppercase tracking-wider">Demo-Auswertung</span>
              </div>
              
+             {/* Focus line */}
+             <div className="mb-4 p-3 bg-white rounded-xl shadow-sm text-sm font-bold text-navy-900 flex items-center gap-2 border border-neutral-gray-200">
+               <Activity className="w-5 h-5 text-accent-orange" />
+               Heute wichtigster Hebel: <span className="text-accent-orange">{focusMessage}</span>
+             </div>
+
              <div className="flex-1 overflow-hidden flex flex-col gap-3">
                {[...activeTodos, ...doneTodos].map(todo => (
                  <div 
                    key={todo.id} 
-                   onClick={() => toggleTodo(todo.id)}
+                   onClick={() => handleTaskClick(todo)}
                    className={`flex items-start gap-4 p-4 rounded-2xl border transition-all cursor-pointer ${todo.done ? 'bg-bg-app-soft border-neutral-gray-100 opacity-60' : 'bg-white border-neutral-gray-200 hover:border-navy-900 hover:shadow-sm'}`}
                  >
-                   <button className="mt-1 shrink-0 cursor-pointer">
+                   <button 
+                     className="mt-1 shrink-0 cursor-pointer"
+                     onClick={e => { e.stopPropagation(); toggleTodo(todo.id); }}
+                   >
                      {todo.done ? (
                        <CheckCircle className="w-6 h-6 text-success-green" />
                      ) : (
@@ -151,9 +223,14 @@ export default function HomeDashboard() {
                    <div className="flex-1 min-w-0">
                      <div className="flex justify-between items-start gap-2">
                        <h3 className={`font-bold ${todo.done ? 'text-text-muted line-through' : 'text-navy-900'}`}>{todo.title}</h3>
-                       {!todo.done && todo.urgency === "Hoch" && (
-                         <span className="shrink-0 bg-error-red/10 text-error-red text-[10px] font-black uppercase px-2 py-0.5 rounded">Hoch</span>
-                       )}
+                       <div className="flex gap-2">
+                         {!todo.done && todo.urgency === "Hoch" && (
+                           <span className="shrink-0 bg-error-red/10 text-error-red text-[10px] font-black uppercase px-2 py-0.5 rounded">Hoch</span>
+                         )}
+                         <span className={`shrink-0 text-[10px] font-black uppercase px-2 py-0.5 rounded ${todo.source === "live" ? "bg-navy-900 text-white" : todo.source === "demo" ? "bg-accent-orange text-white" : "bg-gray-400 text-white"}`}>
+                           {todo.source}
+                         </span>
+                       </div>
                      </div>
                      <p className={`text-xs mt-1 ${todo.done ? 'text-text-muted/60' : 'text-text-muted'}`}>{todo.reason}</p>
                      
@@ -163,6 +240,12 @@ export default function HomeDashboard() {
                          <span className="text-xs font-medium text-accent-orange flex items-center gap-1">
                            <Activity className="w-3 h-3" /> Nächste Aktion: {todo.action}
                          </span>
+                         <button 
+                           className="text-xs font-bold text-navy-900 underline hover:text-navy-800 ml-auto"
+                           onClick={e => { e.stopPropagation(); handleTaskClick(todo); }}
+                         >
+                           Öffnen
+                         </button>
                        </div>
                      )}
                    </div>
@@ -268,7 +351,27 @@ export default function HomeDashboard() {
       </div>
 
       {/* 7. FEEDBACKFELD */}
-      <FeedbackFooter pageTitle="Home" route="/" variant="full" />
+      <section className="bg-bg-app-soft border border-neutral-gray-200 rounded-3xl p-6 text-center max-w-2xl mx-auto mt-8">
+        <h3 className="text-lg font-bold font-serif text-navy-900 mb-2">Was fehlt auf dieser Seite?</h3>
+        <p className="text-xs text-text-muted mb-4">Feedback-Speicherung wird später angebunden (Demo-Modus).</p>
+        
+        <div className="flex gap-2">
+          <input 
+            type="text" 
+            value={feedback}
+            onChange={e => setFeedback(e.target.value)}
+            placeholder="Z.B. Ich brauche einen Knopf für..." 
+            className="flex-1 rounded-xl border border-neutral-gray-300 px-4 py-3 text-sm focus:outline-none focus:border-navy-900 focus:ring-1 focus:ring-navy-900"
+            onKeyDown={e => e.key === 'Enter' && handleFeedback()}
+          />
+          <button 
+            onClick={handleFeedback}
+            className="bg-navy-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-navy-800 transition-colors shrink-0 cursor-pointer"
+          >
+            {feedbackSent ? "Gemerkt!" : "Merken"}
+          </button>
+        </div>
+      </section>
 
       {/* OVERLAY FOR NOT IMPLEMENTED FEATURES */}
       <DetailOverlay open={!!activeOverlay} onClose={() => setActiveOverlay(null)} title={activeOverlay?.title || ""}>
