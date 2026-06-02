@@ -101,7 +101,7 @@ export const itemsRepository = {
         .single();
         
       if (orderError || !orderData) {
-        console.error("Supabase itemsRepository.create failed to fetch customer_id from order:", orderError);
+        console.error("Supabase itemsRepository.create failed to fetch customer_id from order:", orderError?.message, orderError?.details, orderError?.hint);
         throw new Error("Cannot create item: Order not found or missing customer_id");
       }
 

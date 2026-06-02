@@ -36,19 +36,19 @@ export const ordersRepository = {
       const supabase = createClient();
       const { data: dbOrders, error: ordersError } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
       if (ordersError) {
-        console.error("Supabase ordersRepository.getAll (orders) error:", ordersError);
+        console.error("Supabase ordersRepository.getAll (orders) error:", ordersError?.message, ordersError?.details, ordersError?.hint);
         return [];
       }
       
       const { data: dbItems, error: itemsError } = await supabase.from('items').select('*');
       if (itemsError) {
-        console.error("Supabase ordersRepository.getAll (items) error:", itemsError);
+        console.error("Supabase ordersRepository.getAll (items) error:", itemsError?.message, itemsError?.details, itemsError?.hint);
         return [];
       }
       
       const { data: dbCustomers, error: customersError } = await supabase.from('customers').select('id, name');
       if (customersError) {
-        console.error("Supabase ordersRepository.getAll (customers) error:", customersError);
+        console.error("Supabase ordersRepository.getAll (customers) error:", customersError?.message, customersError?.details, customersError?.hint);
         return [];
       }
 
@@ -177,7 +177,7 @@ export const ordersRepository = {
       if (mappedParts.length > 0) {
         const { error: itemsError } = await supabase.from('items').insert(mappedParts);
         if (itemsError) {
-          console.error("Supabase ordersRepository.create (items) error:", itemsError);
+          console.error("Supabase ordersRepository.create (items) error:", itemsError?.message, itemsError?.details, itemsError?.hint);
           throw itemsError;
         }
       }

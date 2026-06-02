@@ -212,14 +212,14 @@ export const inventoryRepository = {
       // A: Insert Bewegung (Historie ist wichtiger)
       const { error: moveError } = await supabase.from('stock_movements').insert(newMovementDb);
       if (moveError) {
-        console.error("Supabase createMovement (insert movement) failed:", moveError);
+        console.error("Supabase createMovement (insert movement) failed:", moveError?.message, moveError?.details, moveError?.hint);
         throw moveError;
       }
 
       // B: Update Lagerbestand
       const { error: updateError } = await supabase.from('inventory_items').update({ current_stock: newStock }).eq('id', data.inventoryItemId);
       if (updateError) {
-        console.error("CRITICAL: Movement inserted, but stock update failed! Inventory out of sync.", updateError);
+        console.error("CRITICAL: Movement inserted, but stock update failed! Inventory out of sync.", updateError?.message, updateError?.details, updateError?.hint);
         throw updateError;
       }
 
