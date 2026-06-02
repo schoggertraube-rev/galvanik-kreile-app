@@ -8,7 +8,7 @@ export function PwaRegister() {
       if (process.env.NODE_ENV === 'development') {
         // Im Development: Service Worker entschärfen/entfernen, um Caching-Probleme zu vermeiden
         navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          for(let registration of registrations) {
+          for(const registration of registrations) {
             registration.unregister();
             console.log('👷 PWA: Service Worker unregistered in dev mode');
           }

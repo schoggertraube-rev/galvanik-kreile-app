@@ -27,7 +27,7 @@ export function CustomerMemoryCard({ customer }: CustomerMemoryCardProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 relative z-10">
         {insights.map((insight) => {
           let bgColor = "bg-white/10 border-white/20";
-          let textColor = "text-white";
+          const textColor = "text-white";
           let titleColor = "text-white";
           let Icon = Info;
 
