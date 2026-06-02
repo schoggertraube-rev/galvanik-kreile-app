@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Inbox, MessageSquare, Mail, Phone, Globe, Camera,
   AlertOctagon, CheckSquare, Clock, ArrowRight, Link as LinkIcon,
-  Copy, CheckCircle2, User, FileText, Banknote, ExternalLink
+  Copy, CheckCircle2, User, FileText, Banknote, ExternalLink,
+  Mic, X, Edit2, Play, Save, ChevronRight
 } from "lucide-react";
 import Link from "next/link";
 import { usePageView } from "@/hooks/usePageView";
@@ -81,11 +82,203 @@ const DEMO_THREADS: Thread[] = [
   }
 ];
 
+function PhoneNoteEditor({ onClose }: { onClose: () => void }) {
+  const [text, setText] = useState("");
+  const [parsed, setParsed] = useState(false);
+  const [fields, setFields] = useState({
+    kunde: "",
+    firma: "",
+    telefon: "",
+    auftrag: "",
+    thema: "",
+    kategorie: "Neuanfrage",
+    dringlichkeit: "Normal",
+    reklamation: "Nein",
+    aktion: "",
+  });
+
+  useEffect(() => {
+    const draft = localStorage.getItem("kreile_phone_note_draft");
+    if (draft) setText(draft);
+  }, []);
+
+  const handleChange = (val: string) => {
+    setText(val);
+    localStorage.setItem("kreile_phone_note_draft", val);
+  };
+
+  const handleParse = () => {
+    // Simple demo logic to "parse" the text
+    setFields({
+      kunde: text.toLowerCase().includes("maier") ? "Herr Zill" : "Unbekannt",
+      firma: text.toLowerCase().includes("maier") ? "Maier GmbH" : "Unbekannt",
+      telefon: "0151 12345678",
+      auftrag: text.toLowerCase().includes("8102") ? "A-2026-8102" : "",
+      thema: text.slice(0, 50) + "...",
+      kategorie: text.toLowerCase().includes("reklamation") || text.toLowerCase().includes("kaputt") ? "Reklamation" : "Neuanfrage",
+      dringlichkeit: text.toLowerCase().includes("dringend") || text.toLowerCase().includes("schnell") ? "Hoch" : "Normal",
+      reklamation: text.toLowerCase().includes("reklamation") || text.toLowerCase().includes("kaputt") ? "Ja" : "Nein",
+      aktion: "Kunde zurückrufen",
+    });
+    setParsed(true);
+  };
+
+  const handleSave = () => {
+    // In a real app we'd save it to the DB here.
+    localStorage.removeItem("kreile_phone_note_draft");
+    onClose();
+  };
+
+  const handleCancel = () => {
+    if (text.trim() && !window.confirm("Achtung: Telefonnotiz noch nicht gespeichert! Wirklich schließen?")) {
+      return;
+    }
+    onClose();
+  };
+
+  return (
+    <div className="flex-1 bg-white border border-neutral-gray-200 rounded-2xl flex flex-col overflow-hidden animate-in fade-in duration-300">
+      <div className="p-4 border-b border-neutral-gray-100 font-bold text-sm uppercase tracking-wider text-text-muted flex justify-between items-center bg-bg-app-soft">
+        <span className="flex items-center gap-2"><Phone className="w-4 h-4 text-navy-900"/> Telefonnotiz erfassen</span>
+        <button onClick={handleCancel} className="text-text-muted hover:text-navy-900"><X className="w-5 h-5"/></button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        {!parsed ? (
+          <div className="space-y-4">
+            <div className="flex gap-4">
+              <button disabled className="flex-1 flex flex-col items-center justify-center p-6 border-2 border-dashed border-neutral-gray-300 rounded-2xl bg-gray-50 opacity-60 cursor-not-allowed group">
+                <div className="w-12 h-12 rounded-full bg-accent-orange/10 flex items-center justify-center mb-3">
+                  <Mic className="w-6 h-6 text-accent-orange" />
+                </div>
+                <span className="font-bold text-navy-900">Sprachnotiz aufnehmen</span>
+                <span className="text-xs text-text-muted mt-1">(Vorbereitet)</span>
+              </button>
+              <div className="flex-1 flex flex-col items-center justify-center p-6 border-2 border-navy-900 rounded-2xl bg-white shadow-sm group">
+                <div className="w-12 h-12 rounded-full bg-navy-900/10 flex items-center justify-center mb-3">
+                  <Edit2 className="w-6 h-6 text-navy-900" />
+                </div>
+                <span className="font-bold text-navy-900">Freitext eingeben</span>
+                <span className="text-xs text-success-green mt-1">Aktiv</span>
+              </div>
+            </div>
+
+            <textarea 
+              value={text}
+              onChange={(e) => handleChange(e.target.value)}
+              className="w-full h-48 p-4 bg-bg-app-soft rounded-xl border border-neutral-gray-200 focus:border-navy-900 focus:ring-1 focus:ring-navy-900 outline-none text-navy-900 resize-none"
+              placeholder="Notizen aus dem Telefonat hier eintippen..."
+            />
+
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-text-muted flex items-center gap-1"><Save className="w-3 h-3"/> Entwurf wird lokal gespeichert</span>
+              <button 
+                onClick={handleParse} 
+                disabled={!text.trim()}
+                className="bg-navy-900 text-white font-bold px-6 py-3 rounded-xl hover:bg-navy-800 disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center gap-2"
+              >
+                Notiz auswerten <ChevronRight className="w-4 h-4"/>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <div className="bg-success-green/10 border border-success-green/20 p-4 rounded-xl flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 text-success-green shrink-0 mt-0.5" />
+              <div>
+                <h4 className="font-bold text-success-green">Auswertung erfolgreich</h4>
+                <p className="text-sm text-success-green/80">Bitte prüfen Sie die erkannten Felder und korrigieren Sie diese bei Bedarf.</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-text-muted uppercase mb-1">Kunde / Anrufer</label>
+                <input value={fields.kunde} onChange={e => setFields({...fields, kunde: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-2 text-sm font-medium focus:border-navy-900 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-text-muted uppercase mb-1">Firma</label>
+                <input value={fields.firma} onChange={e => setFields({...fields, firma: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-2 text-sm font-medium focus:border-navy-900 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-text-muted uppercase mb-1">Telefonnummer</label>
+                <input value={fields.telefon} onChange={e => setFields({...fields, telefon: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-2 text-sm font-medium focus:border-navy-900 outline-none" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-text-muted uppercase mb-1">Auftrag (optional)</label>
+                <input value={fields.auftrag} onChange={e => setFields({...fields, auftrag: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-2 text-sm font-medium focus:border-navy-900 outline-none" />
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-text-muted uppercase mb-1">Zusammenfassung / Thema</label>
+                <input value={fields.thema} onChange={e => setFields({...fields, thema: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-2 text-sm font-medium focus:border-navy-900 outline-none" />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+               <div className="bg-bg-app-soft border border-neutral-gray-200 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                 <span className="text-xs font-bold text-text-muted">Kategorie:</span>
+                 <select value={fields.kategorie} onChange={e => setFields({...fields, kategorie: e.target.value})} className="bg-transparent text-sm font-bold text-navy-900 outline-none">
+                   <option>Neuanfrage</option>
+                   <option>Reklamation</option>
+                   <option>Terminfrage</option>
+                   <option>Rückruf</option>
+                 </select>
+               </div>
+               <div className="bg-bg-app-soft border border-neutral-gray-200 px-3 py-1.5 rounded-lg flex items-center gap-2">
+                 <span className="text-xs font-bold text-text-muted">Dringlichkeit:</span>
+                 <select value={fields.dringlichkeit} onChange={e => setFields({...fields, dringlichkeit: e.target.value})} className="bg-transparent text-sm font-bold text-navy-900 outline-none">
+                   <option>Niedrig</option>
+                   <option>Normal</option>
+                   <option>Hoch</option>
+                 </select>
+               </div>
+            </div>
+
+            <div className="md:col-span-2">
+                <label className="block text-xs font-bold text-text-muted uppercase mb-1">Original Notiztext</label>
+                <textarea value={text} onChange={e => handleChange(e.target.value)} className="w-full h-24 bg-white border border-neutral-gray-200 rounded-lg p-2 text-sm focus:border-navy-900 outline-none resize-none" />
+            </div>
+
+            {fields.auftrag && (
+              <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-bold text-blue-800">Verknüpfter Auftrag: {fields.auftrag}</span>
+                  <p className="text-[11px] text-blue-600">Status: In Galvanik • Erwartet: Morgen</p>
+                </div>
+                <Link href={`/orders/${fields.auftrag}`} className="text-xs font-bold bg-white text-blue-800 px-3 py-1.5 rounded border border-blue-200">Auftrag öffnen</Link>
+              </div>
+            )}
+
+            <div className="pt-4 border-t border-neutral-gray-200 flex justify-between items-center">
+              <button onClick={() => setParsed(false)} className="text-sm font-bold text-text-muted hover:text-navy-900">Zurück zur Eingabe</button>
+              <div className="flex gap-2">
+                <button onClick={handleSave} className="bg-white border border-neutral-gray-200 text-navy-900 font-bold px-4 py-2 rounded-xl hover:bg-gray-50 transition">Als Entwurf speichern</button>
+                <button onClick={handleSave} className="bg-navy-900 text-white font-bold px-4 py-2 rounded-xl hover:bg-navy-800 transition flex items-center gap-2"><CheckCircle2 className="w-4 h-4"/> Telefonnotiz speichern</button>
+              </div>
+            </div>
+
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function KommunikationClient() {
   usePageView();
   const [activeChannel, setActiveChannel] = useState<Channel>("all");
   const [activeThreadId, setActiveThreadId] = useState<string>("t1");
   const [copied, setCopied] = useState<string | null>(null);
+  const [isPhoneNoteMode, setIsPhoneNoteMode] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const search = window.location.search;
+      if (search.includes("mode=telefonnotiz")) {
+        setIsPhoneNoteMode(true);
+      }
+    }
+  }, []);
 
   const filteredThreads = DEMO_THREADS.filter(t => activeChannel === "all" || t.channel === activeChannel);
   const activeThread = DEMO_THREADS.find(t => t.id === activeThreadId);
@@ -214,8 +407,17 @@ export function KommunikationClient() {
         </div>
 
         {/* COL 3: ARBEITSBEREICH */}
-        <div className="flex-1 bg-white border border-neutral-gray-200 rounded-2xl flex flex-col overflow-hidden">
-          {activeThread ? (
+        {isPhoneNoteMode ? (
+          <PhoneNoteEditor onClose={() => {
+            setIsPhoneNoteMode(false);
+            // Optionally remove the ?mode=telefonnotiz from URL
+            if (typeof window !== 'undefined') {
+              window.history.replaceState({}, '', '/kommunikation');
+            }
+          }} />
+        ) : (
+          <div className="flex-1 bg-white border border-neutral-gray-200 rounded-2xl flex flex-col overflow-hidden">
+            {activeThread ? (
             <>
               {/* Bereich 1: Nachricht ansehen */}
               <div className="p-6 border-b border-neutral-gray-100">
@@ -306,6 +508,7 @@ export function KommunikationClient() {
             </div>
           )}
         </div>
+        )}
       </div>
     </div>
   );

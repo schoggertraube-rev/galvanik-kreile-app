@@ -16,6 +16,7 @@ import {
   ChevronRight,
   X,
   ChevronLeft,
+  Phone
 } from "lucide-react";
 import Link from "next/link";
 
@@ -58,6 +59,22 @@ export function IntakeEntry({
         <h2 className="text-2xl font-black text-navy-900 tracking-tight text-center">Neue Annahme erfassen</h2>
         <div className="h-1 w-14 bg-gold-600 rounded-full mt-2" />
       </div>
+
+      {/* ── TELEFONNOTIZ SHORTCUT ── */}
+      <Link href="/kommunikation?mode=telefonnotiz" className="flex items-center justify-between w-full bg-navy-900 rounded-3xl p-6 hover:bg-navy-800 transition-all shadow-md group cursor-pointer">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center shrink-0">
+            <Phone className="w-6 h-6 text-white" strokeWidth={1.5} />
+          </div>
+          <div>
+            <p className="text-xl font-black text-white leading-snug">Telefonnotiz anlegen</p>
+            <p className="text-sm text-white/70 mt-0.5">Schnellerfassung starten</p>
+          </div>
+        </div>
+        <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0 group-hover:bg-white/20 transition-all duration-200">
+          <ChevronRight className="w-5 h-5 text-white" strokeWidth={2} />
+        </div>
+      </Link>
 
       {/* ── ACTION GRID ── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
