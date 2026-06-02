@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { X, Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, ChevronDown, ChevronRight, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3, Lightbulb } from "lucide-react";
+import { X, Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, ChevronDown, ChevronRight, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3, Lightbulb, Settings } from "lucide-react";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { bathsRepository } from "@/lib/repositories/bathsRepository";
 
@@ -148,95 +148,50 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
         </div>
 
         <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 pb-24">
-          <NavItem
-            label="Home"
-            href="/"
-            icon={Home}
-          />
-          <NavItem
-            label="Warendurchlauf"
-            href="/warendurchlauf"
-            icon={PackageCheck}
+          <NavItem label="Home" href="/" icon={Home} />
+          <NavItem label="Warendurchlauf" href="/warendurchlauf" icon={PackageCheck} />
+          
+          <NavItem 
+            label="Kunden und Aufträge" 
+            href="/orders" 
+            icon={Users} 
             submenu={[
-              { label: "Wareneingang", href: "/warendurchlauf" },
-              { label: "Galvanik", href: "/station/beschichtung" },
-              { label: "Warenausgang", href: "/station/warenausgang" },
-            ]}
+              { label: "Aufträge", href: "/orders" }, 
+              { label: "Kunden", href: "/customers" }, 
+              { label: "Angebote und Freigaben", href: "/quotes" }
+            ]} 
           />
-          <NavItem
-            label="Anfragen"
-            href="/quotes"
-            icon={MessageSquare}
-            badge={openQuotes}
-          />
-          <NavItem
-            label="Kunden/Aufträge"
-            href="/kunden-auftraege"
-            icon={Users}
-          />
-          <NavItem
-            label="Lager/Chemie"
-            href="/items"
-            icon={Warehouse}
-          />
-          <NavItem
-            label="Bäder"
-            href="/baeder"
-            icon={Beaker}
-            status={hasCriticalBaths ? "critical" : undefined}
-          />
-          <NavItem
-            label="Kontrolle"
-            href="/kontrolle"
-            icon={Archive}
+          
+          <NavItem 
+            label="Betrieb" 
+            href="/kontrolle" 
+            icon={Archive} 
             submenu={[
-              { label: "Archiv", href: "/archive" },
-              { label: "Performance", href: "/performance" }
-            ]}
+              { label: "Kontrolle", href: "/kontrolle" }, 
+              { label: "Kommunikation", href: "/kommunikation" }, 
+              { label: "Kundenservice", href: "/kundenservice" }, 
+              { label: "Betriebs-KVP", href: "/betrieb-kvp" }, 
+              { label: "Bäder", href: "/baeder" }, 
+              { label: "Lager und Teile", href: "/items" }
+            ]} 
           />
-          <NavItem
-            label="Kundenservice"
-            href="/kundenservice"
-            icon={HeartHandshake}
-          />
-          <NavItem
-            label="Kommunikation"
-            href="/kommunikation"
-            icon={MessageSquare}
-          />
-          <NavItem
-            label="Buchhaltung"
-            href="/finanzen"
-            icon={Banknote}
-          />
-          <NavItem
-            label="Betriebs-KVP"
-            href="/betrieb-kvp"
-            icon={Lightbulb}
-          />
+          
+          <NavItem label="Analyse" href="/performance" icon={BarChart3} />
+          
           {isAdminOrDev && (
-            <>
-              <NavItem
-                label="Datenimport"
-                href="/admin/import"
-                icon={Database}
-              />
-              <NavItem
-                label="App-KVP (Dev)"
-                href="/kvp"
-                icon={Lightbulb}
-              />
-              <NavItem
-                label="Analytics"
-                href="/admin/analytics"
-                icon={BarChart3}
-              />
-              <NavItem
-                label="Geräte"
-                href="/admin/devices"
-                icon={MonitorSmartphone}
-              />
-            </>
+            <NavItem 
+              label="Verwaltung" 
+              href="/finanzen" 
+              icon={Settings} 
+              submenu={[
+                { label: "Buchhaltung und Finanzen", href: "/finanzen" }, 
+                { label: "Datenimport", href: "/admin/import" }, 
+                { label: "Geräte und Lizenzen", href: "/admin/devices" }, 
+                { label: "Einstellungen", href: "/settings" }, 
+                { label: "App-KVP", href: "/kvp" }, 
+                { label: "Developer Analytics", href: "/admin/analytics" }
+              ]} 
+            />
           )}
         </nav>
       </div>

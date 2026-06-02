@@ -230,7 +230,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
               <div className="px-2">
                 <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider flex items-center gap-1">
                   <Sparkles className="w-3.5 h-3.5 text-navy-900" />
-                  Schnellzugriff & Verknüpfungen
+                  Schnellzugriff und Verknüpfungen
                 </span>
                 <p className="text-xs text-navy-500 mt-0.5">Navigiere direkt zu den wichtigsten Stationen und Bereichen.</p>
               </div>
@@ -244,7 +244,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                   <LayoutGrid className="w-4 h-4 text-navy-900 shrink-0" />
                   <div>
                     <span className="block">1. Wareneingang</span>
-                    <span className="text-[10px] text-slate-450 font-normal">Aufträge erfassen & drucken</span>
+                    <span className="text-[10px] text-slate-450 font-normal">Aufträge erfassen und drucken</span>
                   </div>
                 </Link>
 
@@ -256,7 +256,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                   <Droplets className="w-4 h-4 text-navy-700 shrink-0" />
                   <div>
                     <span className="block">4. Galvanik / Beschichtung</span>
-                    <span className="text-[10px] text-slate-450 font-normal">Beschichtung & Badwerte</span>
+                    <span className="text-[10px] text-slate-450 font-normal">Beschichtung und Badwerte</span>
                   </div>
                 </Link>
 
@@ -268,7 +268,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                   <Package className="w-4 h-4 text-text-muted shrink-0" />
                   <div>
                     <span className="block">Lager und Badregelkarte</span>
-                    <span className="text-[10px] text-slate-450 font-normal">Säuren, Kupfer & Anoden</span>
+                    <span className="text-[10px] text-slate-450 font-normal">Säuren, Kupfer und Anoden</span>
                   </div>
                 </Link>
 
@@ -280,7 +280,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                   <Activity className="w-4 h-4 text-success-green shrink-0" />
                   <div>
                     <span className="block">Performance Cockpit</span>
-                    <span className="text-[10px] text-slate-450 font-normal">Durchlaufzeit & Fehlerquoten</span>
+                    <span className="text-[10px] text-slate-450 font-normal">Durchlaufzeit und Fehlerquoten</span>
                   </div>
                 </Link>
               </div>

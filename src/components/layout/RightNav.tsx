@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { RightNavItem } from "./RightNavItem";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { bathsRepository } from "@/lib/repositories/bathsRepository";
-import { Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3, Lightbulb } from "lucide-react";
+import { Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3, Lightbulb, Settings } from "lucide-react";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import Link from "next/link";
 import { useFeatureFlag } from "@/lib/license/useFeatureFlag";
@@ -44,6 +44,7 @@ export function RightNav() {
   const [isAdminOrDev, setIsAdminOrDev] = useState(false);
   
   const performanceFeature = useFeatureFlag("performance_score");
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -72,178 +73,57 @@ export function RightNav() {
     <aside className="w-[112px] bg-white border-l border-neutral-gray-100 flex flex-col py-4 gap-4 h-full overflow-y-auto overflow-x-hidden shadow-[-4px_0_24px_rgba(14,26,46,0.02)] scrollbar-hide">
       
       <div className="flex flex-col items-center w-full">
-        <RightNavItem
-          label="Home"
-          href="/"
-          icon={<Home className="w-6 h-6" strokeWidth={1.5} />}
-          variant="primary"
-          isActive={isActive("/")}
-          onClick={() => trackUiEvent("nav_click", { target: "/" })}
-        />
+        <RightNavItem label="Home" href="/" icon={<Home className="w-6 h-6" strokeWidth={1.5} />} variant="primary" isActive={isActive("/")} onClick={() => trackUiEvent("nav_click", { target: "/" })} />
       </div>
 
       <div className="flex flex-col items-center w-full border-t border-neutral-gray-100 pt-4">
-        <RightNavItem
-          label="Warendurchlauf"
-          href="/warendurchlauf"
-          icon={<PackageCheck className="w-6 h-6" strokeWidth={1.5} />}
-          variant="primary"
-          isActive={isActive("/station") || isActive("/warendurchlauf")}
-          onClick={() => trackUiEvent("nav_click", { target: "/warendurchlauf" })}
-        />
+        <RightNavItem label="Warendurchlauf" href="/warendurchlauf" icon={<PackageCheck className="w-6 h-6" strokeWidth={1.5} />} variant="primary" isActive={isActive("/station") || isActive("/warendurchlauf")} onClick={() => trackUiEvent("nav_click", { target: "/warendurchlauf" })} />
       </div>
 
-      <div className="flex flex-col items-center w-full">
-        <RightNavItem
-          label="Anfragen"
-          href="/quotes"
-          icon={<MessageSquare className="w-5 h-5" strokeWidth={1.5} />}
-          variant="normal"
-          badge={openQuotes}
-          isActive={isActive("/quotes")}
-          onClick={() => trackUiEvent("nav_click", { target: "/quotes" })}
-        />
-      </div>
-
-      <div className="flex flex-col items-center w-full border-t border-neutral-gray-100 pt-4">
-        <RightNavItem
-          label="Kunden und Aufträge"
-          href="/kunden-auftraege"
-          icon={<Users className="w-5 h-5" strokeWidth={1.5} />}
-          variant="normal"
-          isActive={isActive("/kunden-auftraege") || isActive("/orders") || isActive("/customers")}
-          onClick={() => trackUiEvent("nav_click", { target: "/kunden-auftraege" })}
-        />
-      </div>
-
-      <div className="flex flex-col items-center w-full">
-        <RightNavItem
-          label="Lager und Chemie"
-          href="/items"
-          icon={<Warehouse className="w-5 h-5" strokeWidth={1.5} />}
-          variant="normal"
-          isActive={isActive("/items")}
-          onClick={() => trackUiEvent("nav_click", { target: "/items" })}
-        />
-        <div className="mt-4 w-full">
-          <RightNavItem
-            label="Bäder"
-            href="/baeder"
-            icon={<Beaker className="w-5 h-5" strokeWidth={1.5} />}
-            variant="normal"
-            isActive={isActive("/baeder")}
-            status={hasCriticalBaths ? "critical" : undefined}
-            onClick={() => trackUiEvent("nav_click", { target: "/baeder" })}
-          />
-        </div>
-      </div>
-
-      <div className="flex flex-col items-center w-full border-t border-neutral-gray-100 pt-4 mb-4">
-        <RightNavItem
-          label="Kontrolle"
-          href="/kontrolle"
-          icon={<Archive className="w-5 h-5" strokeWidth={1.5} />}
-          variant="normal"
-          isActive={isActive("/kontrolle") || isActive("/archive") || isActive("/performance")}
-          onClick={() => trackUiEvent("nav_click", { target: "/kontrolle" })}
-        />
-        
-        <div className="mt-4 w-full">
-          <RightNavItem
-            label="Kundenservice"
-            href="/kundenservice"
-            icon={<HeartHandshake className="w-5 h-5" strokeWidth={1.5} />}
-            variant="normal"
-            isActive={isActive("/kundenservice")}
-            onClick={() => trackUiEvent("nav_click", { target: "/kundenservice" })}
-          />
-        </div>
-
-        <div className="mt-4 w-full">
-          <RightNavItem
-            label="Kommunikation"
-            href="/kommunikation"
-            icon={<MessageSquare className="w-5 h-5" strokeWidth={1.5} />}
-            variant="normal"
-            isActive={isActive("/kommunikation")}
-            onClick={() => trackUiEvent("nav_click", { target: "/kommunikation" })}
-          />
-        </div>
-
-        <div className="mt-4 w-full">
-          <RightNavItem
-            label="Buchhaltung"
-            href="/finanzen"
-            icon={<Banknote className="w-5 h-5" strokeWidth={1.5} />}
-            variant="normal"
-            isActive={isActive("/finanzen")}
-            onClick={() => trackUiEvent("nav_click", { target: "/finanzen" })}
-          />
-        </div>
-
-        <div className="mt-4 w-full">
-          <RightNavItem
-            label="Betriebs-KVP"
-            href="/betrieb-kvp"
-            icon={<Lightbulb className="w-5 h-5" strokeWidth={1.5} />}
-            variant="normal"
-            isActive={isActive("/betrieb-kvp")}
-            onClick={() => trackUiEvent("nav_click", { target: "/betrieb-kvp" })}
-          />
-        </div>
-
-        {isAdminOrDev && (
-          <div className="mt-4 w-full">
-            <RightNavItem
-              label="Datenimport"
-              href="/admin/import"
-              icon={<Database className="w-5 h-5" strokeWidth={1.5} />}
-              variant="normal"
-              isActive={isActive("/admin/import")}
-              onClick={() => trackUiEvent("nav_click", { target: "/admin/import" })}
-            />
-          </div>
-        )}
-
-        {isAdminOrDev && (
-          <div className="mt-4 w-full">
-            <RightNavItem
-              label="App-KVP (Dev)"
-              href="/kvp"
-              icon={<Lightbulb className="w-5 h-5" strokeWidth={1.5} />}
-              variant="normal"
-              isActive={isActive("/kvp")}
-              onClick={() => trackUiEvent("nav_click", { target: "/kvp" })}
-            />
-          </div>
-        )}
-
-        {isAdminOrDev && (
-          <div className="mt-4 w-full">
-            <RightNavItem
-              label="Analytics"
-              href="/admin/analytics"
-              icon={<BarChart3 className="w-5 h-5" strokeWidth={1.5} />}
-              variant="normal"
-              isActive={isActive("/admin/analytics")}
-              onClick={() => trackUiEvent("nav_click", { target: "/admin/analytics" })}
-            />
-          </div>
-        )}
-
-        {isAdminOrDev && (
-          <div className="mt-4 w-full">
-            <RightNavItem
-              label="Geräte"
-              href="/admin/devices"
-              icon={<MonitorSmartphone className="w-5 h-5" strokeWidth={1.5} />}
-              variant="normal"
-              isActive={isActive("/admin/devices")}
-              onClick={() => trackUiEvent("nav_click", { target: "/admin/devices" })}
-            />
+      <div className="flex flex-col items-center w-full mt-2">
+        <RightNavItem label="Kunden und Aufträge" href="/orders" icon={<Users className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/orders") || isActive("/customers") || isActive("/quotes")} onClick={() => setExpandedGroup(expandedGroup === "kunden" ? null : "kunden")} />
+        {(expandedGroup === "kunden" || isActive("/orders") || isActive("/customers") || isActive("/quotes")) && (
+          <div className="flex flex-col w-full mt-2 space-y-1">
+            <SubMenuLink label="Aufträge" href="/orders" isAvailable={true} />
+            <SubMenuLink label="Kunden" href="/customers" isAvailable={true} />
+            <SubMenuLink label="Angebote und Freigaben" href="/quotes" isAvailable={true} />
           </div>
         )}
       </div>
+
+      <div className="flex flex-col items-center w-full mt-2 border-t border-neutral-gray-100 pt-4">
+        <RightNavItem label="Betrieb" href="/kontrolle" icon={<Archive className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/kontrolle") || isActive("/kommunikation") || isActive("/kundenservice") || isActive("/betrieb-kvp") || isActive("/baeder") || isActive("/items")} onClick={() => setExpandedGroup(expandedGroup === "betrieb" ? null : "betrieb")} />
+        {(expandedGroup === "betrieb" || isActive("/kontrolle") || isActive("/kommunikation") || isActive("/kundenservice") || isActive("/betrieb-kvp") || isActive("/baeder") || isActive("/items")) && (
+          <div className="flex flex-col w-full mt-2 space-y-1">
+            <SubMenuLink label="Kontrolle" href="/kontrolle" isAvailable={true} />
+            <SubMenuLink label="Kommunikation" href="/kommunikation" isAvailable={true} />
+            <SubMenuLink label="Kundenservice" href="/kundenservice" isAvailable={true} />
+            <SubMenuLink label="Betriebs-KVP" href="/betrieb-kvp" isAvailable={true} />
+            <SubMenuLink label="Bäder" href="/baeder" isAvailable={true} />
+            <SubMenuLink label="Lager und Teile" href="/items" isAvailable={true} />
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col items-center w-full mt-2 border-t border-neutral-gray-100 pt-4">
+        <RightNavItem label="Analyse" href="/performance" icon={<BarChart3 className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/performance")} onClick={() => trackUiEvent("nav_click", { target: "/performance" })} />
+      </div>
+
+      {isAdminOrDev && (
+        <div className="flex flex-col items-center w-full mt-2 border-t border-neutral-gray-100 pt-4 mb-8">
+          <RightNavItem label="Verwaltung" href="/finanzen" icon={<Settings className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/finanzen") || isActive("/admin/import") || isActive("/admin/devices") || isActive("/settings") || isActive("/kvp") || isActive("/admin/analytics")} onClick={() => setExpandedGroup(expandedGroup === "verwaltung" ? null : "verwaltung")} />
+          {(expandedGroup === "verwaltung" || isActive("/finanzen") || isActive("/admin/import") || isActive("/admin/devices") || isActive("/settings") || isActive("/kvp") || isActive("/admin/analytics")) && (
+            <div className="flex flex-col w-full mt-2 space-y-1">
+              <SubMenuLink label="Buchhaltung und Finanzen" href="/finanzen" isAvailable={true} />
+              <SubMenuLink label="Datenimport" href="/admin/import" isAvailable={true} />
+              <SubMenuLink label="Geräte und Lizenzen" href="/admin/devices" isAvailable={true} />
+              <SubMenuLink label="Einstellungen" href="/settings" isAvailable={true} />
+              <SubMenuLink label="App-KVP" href="/kvp" isAvailable={true} />
+              <SubMenuLink label="Developer Analytics" href="/admin/analytics" isAvailable={true} />
+            </div>
+          )}
+        </div>
+      )}
       
     </aside>
   );

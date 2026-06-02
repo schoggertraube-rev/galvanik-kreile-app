@@ -248,7 +248,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
                     onClick={() => setUserDropdownOpen(false)}
                     className="block w-full text-left px-3 py-2 text-sm font-bold text-accent-orange hover:bg-accent-orange/10 rounded-xl transition-colors cursor-pointer mb-1"
                   >
-                    Geräte & Sessions
+                    Geräte und Sessions
                   </Link>
                 </>
               )}
