@@ -200,6 +200,11 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
             icon={HeartHandshake}
           />
           <NavItem
+            label="Kommunikation"
+            href="/kommunikation"
+            icon={MessageSquare}
+          />
+          <NavItem
             label="Buchhaltung"
             href="/finanzen"
             icon={Banknote}

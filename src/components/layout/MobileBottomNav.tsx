@@ -61,6 +61,7 @@ export function MobileBottomNav({ className = "" }: { className?: string }) {
               <SheetLink href="/quotes" icon={<MessageSquare />} label="Anfragen" onClick={() => setMoreOpen(false)} />
               <SheetLink href="/orders" icon={<ClipboardList />} label="Aufträge" onClick={() => setMoreOpen(false)} />
               <SheetLink href="/customers" icon={<Users />} label="Kunden" onClick={() => setMoreOpen(false)} />
+              <SheetLink href="/kommunikation" icon={<MessageSquare />} label="Messenger" onClick={() => setMoreOpen(false)} />
               <SheetLink href="/station" icon={<Factory />} label="Stationen" onClick={() => setMoreOpen(false)} />
               <SheetLink href="/kontrolle" icon={<ShieldCheck />} label="Kontrolle" onClick={() => setMoreOpen(false)} />
               <SheetLink href="/performance" icon={<TrendingUp />} label="Metriken" onClick={() => setMoreOpen(false)} />

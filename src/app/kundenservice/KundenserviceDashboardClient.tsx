@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { 
   HeartHandshake, MessageCircleWarning, MailQuestion, 
-  FileText, Activity, AlertCircle, ArrowRight, Info, CheckCircle2, Copy
+  FileText, Activity, AlertCircle, ArrowRight, Info, CheckCircle2, Copy, MessageSquare
 } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
 
@@ -24,6 +24,10 @@ export function KundenserviceDashboardClient() {
       <header className="mb-8">
         <h1 className="text-3xl font-bold text-navy-900 mb-2 font-serif">Kundenservice</h1>
         <p className="text-text-muted text-sm md:text-base">Zentrale für Reklamationen, Rückfragen und Kundenkommunikation.</p>
+        <Link href="/kommunikation" className="inline-flex items-center gap-2 mt-4 text-sm font-bold text-navy-900 hover:text-accent-orange transition-colors bg-white px-4 py-2 rounded-xl shadow-sm border border-neutral-gray-200 group">
+          <MessageSquare className="w-4 h-4" />
+          Zur Kommunikationszentrale (Messenger) <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+        </Link>
       </header>
 
       {/* Kundenservice Kontrollbereich */}

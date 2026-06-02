@@ -161,6 +161,17 @@ export function RightNav() {
 
         <div className="mt-4 w-full">
           <RightNavItem
+            label="Kommunikation"
+            href="/kommunikation"
+            icon={<MessageSquare className="w-5 h-5" strokeWidth={1.5} />}
+            variant="normal"
+            isActive={isActive("/kommunikation")}
+            onClick={() => trackUiEvent("nav_click", { target: "/kommunikation" })}
+          />
+        </div>
+
+        <div className="mt-4 w-full">
+          <RightNavItem
             label="Buchhaltung"
             href="/finanzen"
             icon={<Banknote className="w-5 h-5" strokeWidth={1.5} />}
