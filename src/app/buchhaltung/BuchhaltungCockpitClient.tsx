@@ -39,14 +39,11 @@ function Tile({ title, description, icon, iconColor, href, kpi, status, footer }
   const inner = (
     <>
       {/* Watermark */}
-      <div className="absolute -right-2 -bottom-2 pointer-events-none opacity-[0.04] grayscale brightness-0 transform scale-[7] -rotate-12 origin-bottom-right">
+      <div className="absolute -right-2 -bottom-2 pointer-events-none opacity-10 transform scale-[7] -rotate-12 origin-bottom-right">
         {icon}
       </div>
 
-      <div className="relative z-10 flex items-start justify-between gap-3">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${iconColor}`}>
-          {icon}
-        </div>
+      <div className="relative z-10 flex items-start justify-end gap-3 min-h-[24px]">
         {kpi && (
           <span className="text-xl font-extrabold text-navy-900 tracking-tight">{kpi}</span>
         )}
