@@ -34,8 +34,23 @@ export const ordersRepository = {
   async getAll(): Promise<Order[]> {
     if (isSupabase) {
       const supabase = createClient();
-      const { data: dbOrders, error: ordersError } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
-      if (ordersError) {
+      let dbOrders = null;
+      let ordersError = null;
+      
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+        dbOrders = data;
+        ordersError = error;
+        
+        if (ordersError && ordersError.message?.includes("JWT issued at future")) {
+          console.warn(`Supabase clock drift detected (JWT future). Retrying attempt ${attempt}...`);
+          await new Promise(r => setTimeout(r, 1000));
+          continue;
+        }
+        break;
+      }
+
+      if (ordersError || !dbOrders) {
         console.error("Supabase ordersRepository.getAll (orders) error:", ordersError?.message, ordersError?.details, ordersError?.hint);
         return [];
       }
