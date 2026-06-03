@@ -85,8 +85,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   }, []);
 
   return (
-    <header className="h-[72px] shrink-0 bg-bg-app flex items-center px-4 md:px-6 gap-4 z-40 relative">
-
+    <header className="h-[72px] shrink-0 bg-transparent flex items-center px-4 md:px-6 gap-4 z-40 relative">
       {/* Hamburger Menu Mobile */}
       <button 
         className="flex md:hidden p-3 -ml-2 text-navy-900 hover:bg-neutral-gray-100 rounded-full min-w-[48px] min-h-[48px] items-center justify-center shrink-0"
