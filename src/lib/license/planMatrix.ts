@@ -11,7 +11,12 @@ const ALL_FEATURES: FeatureKey[] = [
   "steuerberater_paket",
   "materialverbrauch_report",
   "reklamations_dossier",
-  "umsatz_forecast"
+  "umsatz_forecast",
+  // Buchhaltung Stufe 1
+  "buchhaltung_belege",
+  "buchhaltung_export",
+  "buchhaltung_ustva",
+  "buchhaltung_erechnung",
 ];
 
 export const PLAN_MATRIX: Record<LicensePlan, FeatureKey[]> = {

@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { X, Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, ChevronDown, ChevronRight, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3, Lightbulb, Settings } from "lucide-react";
+import { X, Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, ChevronDown, ChevronRight, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3, Lightbulb, Settings, FileText } from "lucide-react";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { bathsRepository } from "@/lib/repositories/bathsRepository";
 
@@ -178,13 +178,14 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
           
           <NavItem label="Analyse" href="/performance" icon={BarChart3} />
           
+          <NavItem label="Buchhaltung" href="/buchhaltung" icon={FileText} />
+          
           {isAdminOrDev && (
             <NavItem 
               label="Verwaltung" 
-              href="/finanzen" 
+              href="/admin/import" 
               icon={Settings} 
               submenu={[
-                { label: "Buchhaltung und Finanzen", href: "/finanzen" }, 
                 { label: "Datenimport", href: "/admin/import" }, 
                 { label: "Geräte und Lizenzen", href: "/admin/devices" }, 
                 { label: "Einstellungen", href: "/settings" }, 

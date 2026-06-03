@@ -14,7 +14,16 @@ export const DEFAULT_READINESS: Record<FeatureKey, DataReadiness> = {
   steuerberater_paket: "bereit",
   materialverbrauch_report: "bereit",
   reklamations_dossier: "bereit",
-  umsatz_forecast: "bereit"
+  umsatz_forecast: "bereit",
+  // Buchhaltung Stufe 1
+  buchhaltung_belege: "bereit",
+  buchhaltung_export: "bereit",
+  buchhaltung_ustva: "bereit",
+  buchhaltung_erechnung: "bereit",
+  // Buchhaltung Stufe 2 (noch nicht live)
+  bank_anbindung: "noch_keine_daten",
+  elster_direkt: "noch_keine_daten",
+  zahlungsdienstleister: "noch_keine_daten",
 };
 
 export const DEFAULT_OVERRIDES: FeatureOverride[] = [];

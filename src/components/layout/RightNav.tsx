@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { RightNavItem } from "./RightNavItem";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { bathsRepository } from "@/lib/repositories/bathsRepository";
-import { Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3, Lightbulb, Settings } from "lucide-react";
+import { Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3, Lightbulb, Settings, FileText } from "lucide-react";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import Link from "next/link";
 import { useFeatureFlag } from "@/lib/license/useFeatureFlag";
@@ -110,11 +110,15 @@ export function RightNav() {
       </div>
 
       {isAdminOrDev && (
+        <>
+        <div className="flex flex-col items-center w-full mt-2 border-t border-neutral-gray-100 pt-4">
+          <RightNavItem label="Buchhaltung" href="/buchhaltung" icon={<FileText className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/buchhaltung")} onClick={() => trackUiEvent("nav_click", { target: "/buchhaltung" })} />
+        </div>
+
         <div className="flex flex-col items-center w-full mt-2 border-t border-neutral-gray-100 pt-4 mb-8">
-          <RightNavItem label="Verwaltung" href="/finanzen" icon={<Settings className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/finanzen") || isActive("/admin/import") || isActive("/admin/devices") || isActive("/settings") || isActive("/kvp") || isActive("/admin/analytics")} onClick={() => setExpandedGroup(expandedGroup === "verwaltung" ? null : "verwaltung")} />
-          {(expandedGroup === "verwaltung" || isActive("/finanzen") || isActive("/admin/import") || isActive("/admin/devices") || isActive("/settings") || isActive("/kvp") || isActive("/admin/analytics")) && (
+          <RightNavItem label="Verwaltung" href="/admin/import" icon={<Settings className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/admin/import") || isActive("/admin/devices") || isActive("/settings") || isActive("/kvp") || isActive("/admin/analytics")} onClick={() => setExpandedGroup(expandedGroup === "verwaltung" ? null : "verwaltung")} />
+          {(expandedGroup === "verwaltung" || isActive("/admin/import") || isActive("/admin/devices") || isActive("/settings") || isActive("/kvp") || isActive("/admin/analytics")) && (
             <div className="flex flex-col w-full mt-2 space-y-1">
-              <SubMenuLink label="Buchhaltung und Finanzen" href="/finanzen" isAvailable={true} />
               <SubMenuLink label="Datenimport" href="/admin/import" isAvailable={true} />
               <SubMenuLink label="Geräte und Lizenzen" href="/admin/devices" isAvailable={true} />
               <SubMenuLink label="Einstellungen" href="/settings" isAvailable={true} />
@@ -123,6 +127,7 @@ export function RightNav() {
             </div>
           )}
         </div>
+        </>
       )}
       
     </aside>

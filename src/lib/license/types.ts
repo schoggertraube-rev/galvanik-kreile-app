@@ -12,7 +12,16 @@ export type FeatureKey =
   | "steuerberater_paket"
   | "materialverbrauch_report"
   | "reklamations_dossier"
-  | "umsatz_forecast";
+  | "umsatz_forecast"
+  // Buchhaltung Stufe 1
+  | "buchhaltung_belege"
+  | "buchhaltung_export"
+  | "buchhaltung_ustva"
+  | "buchhaltung_erechnung"
+  // Buchhaltung Stufe 2 (Feature-Flag gesteuert)
+  | "bank_anbindung"
+  | "elster_direkt"
+  | "zahlungsdienstleister";
 
 export type DataReadiness = "noch_keine_daten" | "in_aufbau" | "bereit";
 

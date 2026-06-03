@@ -14,6 +14,13 @@ describe("resolveFeatures", () => {
     materialverbrauch_report: "bereit",
     reklamations_dossier: "bereit",
     umsatz_forecast: "bereit",
+    buchhaltung_belege: "bereit",
+    buchhaltung_export: "bereit",
+    buchhaltung_ustva: "bereit",
+    buchhaltung_erechnung: "bereit",
+    bank_anbindung: "bereit",
+    elster_direkt: "bereit",
+    zahlungsdienstleister: "bereit",
   };
 
   const allBuilding: Record<FeatureKey, DataReadiness> = {
@@ -28,6 +35,13 @@ describe("resolveFeatures", () => {
     materialverbrauch_report: "in_aufbau",
     reklamations_dossier: "in_aufbau",
     umsatz_forecast: "in_aufbau",
+    buchhaltung_belege: "in_aufbau",
+    buchhaltung_export: "in_aufbau",
+    buchhaltung_ustva: "in_aufbau",
+    buchhaltung_erechnung: "in_aufbau",
+    bank_anbindung: "in_aufbau",
+    elster_direkt: "in_aufbau",
+    zahlungsdienstleister: "in_aufbau",
   };
 
   it("basis sperrt alles (lockReason 'plan')", () => {
