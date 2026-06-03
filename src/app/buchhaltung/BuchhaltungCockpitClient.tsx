@@ -156,14 +156,14 @@ export function BuchhaltungCockpitClient() {
           </p>
         </div>
         <div className="flex gap-3">
-          <button className="flex items-center gap-2 px-4 py-3 bg-navy-900 text-white rounded-xl font-bold text-sm hover:bg-navy-800 transition-colors shadow-sm active:scale-[0.98]">
+          <Link href="/buchhaltung/belege" className="flex items-center gap-2 px-4 py-3 bg-navy-900 text-white rounded-xl font-bold text-sm hover:bg-navy-800 transition-colors shadow-sm active:scale-[0.98]">
             <Camera className="w-4.5 h-4.5" strokeWidth={2} />
             Beleg fotografieren
-          </button>
-          <button className="flex items-center gap-2 px-4 py-3 bg-white text-text-muted rounded-xl font-semibold text-sm border border-neutral-gray-200 hover:text-navy-900 transition-colors shadow-sm active:scale-[0.98]">
+          </Link>
+          <Link href="/buchhaltung/einstellungen" className="flex items-center gap-2 px-4 py-3 bg-white text-text-muted rounded-xl font-semibold text-sm border border-neutral-gray-200 hover:text-navy-900 transition-colors shadow-sm active:scale-[0.98]">
             <Settings className="w-4.5 h-4.5" strokeWidth={1.8} />
             Voreinstellungen
-          </button>
+          </Link>
         </div>
       </div>
 
@@ -207,12 +207,12 @@ export function BuchhaltungCockpitClient() {
           </div>
           
           <div className="flex flex-wrap gap-3 relative z-10">
-            <button className="flex items-center gap-2 px-4 py-2.5 bg-navy-900 text-white rounded-xl font-bold text-sm hover:bg-navy-800 transition-colors active:scale-[0.98]">
+            <Link href="/buchhaltung/steuerprofil?tab=ustva" className="flex items-center gap-2 px-4 py-2.5 bg-navy-900 text-white rounded-xl font-bold text-sm hover:bg-navy-800 transition-colors active:scale-[0.98]">
               <Sparkles className="w-4 h-4" /> Prüfen & freigeben
-            </button>
-            <button className="px-4 py-2.5 bg-white text-text-muted rounded-xl font-semibold text-sm border border-neutral-gray-200 hover:text-navy-900 transition-colors active:scale-[0.98]">
+            </Link>
+            <Link href="/buchhaltung/export?format=steuerberater" className="px-4 py-2.5 bg-white text-text-muted rounded-xl font-semibold text-sm border border-neutral-gray-200 hover:text-navy-900 transition-colors active:scale-[0.98]">
               An Steuerberater
-            </button>
+            </Link>
           </div>
           
           <p className="text-xs text-text-muted mt-4 relative z-10">
@@ -272,7 +272,7 @@ export function BuchhaltungCockpitClient() {
           description="3 Zahlungen überfällig. Mahnstufen & Zahlungserinnerung automatisch."
           icon={<AlertCircle className="w-5 h-5 text-red-500" strokeWidth={1.8} />}
           iconColor="bg-red-50"
-          href="/buchhaltung/rechnungen"
+          href="/buchhaltung/rechnungen?filter=offen"
           kpi="12.450 €"
           status={{ label: "3 überfällig", variant: "action" }}
           footer="Details"
@@ -291,6 +291,7 @@ export function BuchhaltungCockpitClient() {
           description="Anbieter für Checkout & Kartenzahlung. Optionen & Konditionen prüfen."
           icon={<CreditCard className="w-5 h-5 text-teal-600" strokeWidth={1.8} />}
           iconColor="bg-teal-50"
+          href="/buchhaltung/zahlung?tab=provider"
           status={{ label: "In Vorbereitung", variant: "prep" }}
           footer="Optionen prüfen"
         />
@@ -299,6 +300,7 @@ export function BuchhaltungCockpitClient() {
           description="Rechnung direkt per Link oder QR zahlen lassen. Ablauf anzeigen."
           icon={<QrCode className="w-5 h-5 text-teal-600" strokeWidth={1.8} />}
           iconColor="bg-teal-50"
+          href="/buchhaltung/zahlung?tab=links"
           status={{ label: "In Vorbereitung", variant: "prep" }}
           footer="Ablauf anzeigen"
         />
@@ -307,6 +309,7 @@ export function BuchhaltungCockpitClient() {
           description="Terminal oder Tap-to-Pay bei Abholung. Szenario prüfen."
           icon={<Smartphone className="w-5 h-5 text-teal-600" strokeWidth={1.8} />}
           iconColor="bg-teal-50"
+          href="/buchhaltung/zahlung?tab=vor-ort"
           status={{ label: "In Vorbereitung", variant: "prep" }}
           footer="Szenario prüfen"
         />
@@ -315,6 +318,7 @@ export function BuchhaltungCockpitClient() {
           description="Wer zahlt pünktlich, welche Arten dominieren. Auswertung öffnen."
           icon={<BarChart3 className="w-5 h-5 text-neutral-gray-500" strokeWidth={1.8} />}
           iconColor="bg-neutral-gray-100"
+          href="/buchhaltung/zahlung?tab=moral"
           status={{ label: "In Vorbereitung", variant: "prep" }}
           footer="Auswertung"
         />
@@ -337,7 +341,7 @@ export function BuchhaltungCockpitClient() {
           description="Feste monatliche Ausgaben: Miete, Strom-Grund, Abos, Versicherungen."
           icon={<PieChart className="w-5 h-5 text-emerald-600" strokeWidth={1.8} />}
           iconColor="bg-emerald-50"
-          href="/buchhaltung/kosten"
+          href="/buchhaltung/kosten?art=fix"
           kpi="fix"
           footer="Details"
         />
@@ -346,7 +350,7 @@ export function BuchhaltungCockpitClient() {
           description="Dynamische Kosten: Material, Kraftstoff, Fremdleistung — nach Auslastung."
           icon={<TrendingUp className="w-5 h-5 text-amber-600" strokeWidth={1.8} />}
           iconColor="bg-amber-50"
-          href="/buchhaltung/kosten"
+          href="/buchhaltung/kosten?art=variabel"
           kpi="variabel"
           footer="Details"
         />
@@ -369,7 +373,7 @@ export function BuchhaltungCockpitClient() {
           description="Buchungsstapel (EXTF, SKR03) + Belegbilder. Vorschau & ein-Klick-Übergabe."
           icon={<Download className="w-5 h-5 text-emerald-600" strokeWidth={1.8} />}
           iconColor="bg-emerald-50"
-          href="/buchhaltung/export"
+          href="/buchhaltung/export?format=datev"
           status={{ label: "Bereit", variant: "ready" }}
           footer="Vorschau öffnen"
         />
@@ -378,7 +382,7 @@ export function BuchhaltungCockpitClient() {
           description="Einfacher CSV-Export für Lexware oder Tabellenkalkulation."
           icon={<FileCheck className="w-5 h-5 text-emerald-600" strokeWidth={1.8} />}
           iconColor="bg-emerald-50"
-          href="/buchhaltung/export"
+          href="/buchhaltung/export?format=lexware"
           status={{ label: "Bereit", variant: "ready" }}
           footer="Vorschau öffnen"
         />
@@ -403,7 +407,7 @@ export function BuchhaltungCockpitClient() {
           <p className="text-xs text-text-muted">Digitaler Aktenordner für die Monatsübergabe: kontierte Buchungen, Belege, Auswertungen — ein ZIP, ein Klick.</p>
         </div>
         <span className="text-[10px] font-bold uppercase tracking-wider text-accent-orange">Premium-Modul</span>
-        <Link href="/buchhaltung/export" className="text-xs font-bold text-accent-orange flex items-center gap-1 whitespace-nowrap hover:gap-2 transition-all">
+        <Link href="/buchhaltung/export?format=steuerberater" className="text-xs font-bold text-accent-orange flex items-center gap-1 whitespace-nowrap hover:gap-2 transition-all">
           Paket-Inhalte prüfen <ChevronRight className="w-3.5 h-3.5" />
         </Link>
       </div>

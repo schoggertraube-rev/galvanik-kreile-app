@@ -161,11 +161,11 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         </button>
 
         {/* Datum-Pill */}
-        <div className="hidden lg:flex items-center gap-2 bg-white border border-neutral-gray-100 rounded-full px-3 h-9 text-sm font-semibold text-navy-900 shadow-sm">
+        <Link href="/kalender" className="hidden lg:flex items-center gap-2 bg-white border border-neutral-gray-100 rounded-full px-3 h-9 text-sm font-semibold text-navy-900 shadow-sm hover:border-neutral-gray-300 transition-colors">
           <Calendar className="w-4 h-4 text-text-muted" />
           <span>Heute · {dateString}</span>
           <span className="w-2 h-2 rounded-full bg-accent-orange animate-pulse" />
-        </div>
+        </Link>
 
         {/* Online/Offline Pill mit Zähler */}
         <button
