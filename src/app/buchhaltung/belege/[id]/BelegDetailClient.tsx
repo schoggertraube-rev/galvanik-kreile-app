@@ -6,96 +6,34 @@ import Link from "next/link";
 import { ChevronRight, ArrowLeft, Save, ShieldCheck, XCircle, FileText, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
+import { useOfflineManager } from "@/hooks/useOfflineManager";
+import type { BelegDetail } from "@/lib/buchhaltung/types";
+import { freigebenBelegAction, stornoBelegAction } from "@/app/buchhaltung/actions";
+import Image from "next/image";
+
 interface BelegDetailClientProps {
   id: string;
+  initialBeleg: BelegDetail | null;
 }
 
-interface MockBeleg {
-  id: string;
-  name: string;
-  date: string;
-  brutto: number;
-  netto: number;
-  ustSatz: number;
-  ustBetrag: number;
-  categoryId: string;
-  categoryName: string;
-  skrKonto: string;
-  absetzbarProzent: number;
-  absetzbarGrund: string;
-  belegart: string;
-  confidence: number;
-  status: "pruefen" | "erfasst" | "festgeschrieben" | "storniert";
-  icon: string;
-  info: string;
-  belegnummer: string;
-  notiz: string;
-  kiHinweise: { regel: string; text: string; paragraf: string; typ: "warning" | "info" | "success" }[];
-  audit: { aktion: string; zeitpunkt: string; benutzer: string }[];
-}
-
-const MOCK_BELEGE: Record<string, MockBeleg> = {
-  "shell-frankfurt-ost": {
-    id: "shell-frankfurt-ost", name: "Shell - Frankfurt-Ost", date: "2026-06-02", brutto: 78.40, netto: 65.88, ustSatz: 19, ustBetrag: 12.52,
-    categoryId: "kraftstoff", categoryName: "Kraftstoff", skrKonto: "4530", absetzbarProzent: 100, absetzbarGrund: "Betrieblicher Fuhrpark",
-    belegart: "Tankbeleg", confidence: 96.1, status: "erfasst", icon: "FOTO", info: "Diesel 45,8 l", belegnummer: "SH-2026-4829", notiz: "",
-    kiHinweise: [
-      { regel: "Kraftstoff plausibel", text: "Verbrauch und Betrag passen zum Fuhrpark. Keine Auffälligkeiten.", paragraf: "", typ: "success" },
-      { regel: "Vorsteuer", text: "Voller Vorsteuerabzug bei betrieblichem Fahrzeug möglich.", paragraf: "§ 15 UStG", typ: "info" },
-    ],
-    audit: [
-      { aktion: "Erfasst (Foto)", zeitpunkt: "02.06.2026, 08:14", benutzer: "MK" },
-      { aktion: "OCR verarbeitet", zeitpunkt: "02.06.2026, 08:14", benutzer: "System" },
-      { aktion: "Automatisch zugeordnet", zeitpunkt: "02.06.2026, 08:14", benutzer: "KI" },
-    ],
-  },
-  "gasthaus-adler": {
-    id: "gasthaus-adler", name: "Gasthaus Adler", date: "2026-05-31", brutto: 64.00, netto: 53.78, ustSatz: 19, ustBetrag: 10.22,
-    categoryId: "bewirtung", categoryName: "Bewirtung", skrKonto: "4650", absetzbarProzent: 70, absetzbarGrund: "Bewirtung (§ 4 Abs. 5 Nr. 2 EStG)",
-    belegart: "Bewirtungsbeleg", confidence: 72.5, status: "pruefen", icon: "FOTO", info: "Anlass fehlt", belegnummer: "GA-2026-0531", notiz: "",
-    kiHinweise: [
-      { regel: "Bewirtung 70 %", text: "Nur 70 % der Bewirtungskosten sind absetzbar. Anlass und Teilnehmer müssen auf der Rückseite vermerkt sein.", paragraf: "§ 4 Abs. 5 Nr. 2 EStG", typ: "warning" },
-      { regel: "Pflichtangaben fehlen", text: "Anlass der Bewirtung und Teilnehmerliste fehlen. Bitte ergänzen, sonst droht Nichtanerkennung.", paragraf: "", typ: "warning" },
-    ],
-    audit: [
-      { aktion: "Erfasst (Foto)", zeitpunkt: "31.05.2026, 19:45", benutzer: "MK" },
-      { aktion: "OCR verarbeitet", zeitpunkt: "31.05.2026, 19:45", benutzer: "System" },
-      { aktion: "Zur Prüfung markiert", zeitpunkt: "31.05.2026, 19:46", benutzer: "KI" },
-    ],
-  },
-  "riedel-chemie": {
-    id: "riedel-chemie", name: "Riedel Chemie GmbH", date: "2026-05-30", brutto: 1190.00, netto: 1000.00, ustSatz: 19, ustBetrag: 190.00,
-    categoryId: "material", categoryName: "Material & Chemie", skrKonto: "3400", absetzbarProzent: 100, absetzbarGrund: "Betriebsausgabe",
-    belegart: "E-Rechnung (ZUGFeRD)", confidence: 98.3, status: "erfasst", icon: "PDF", info: "E-Rechnung (ZUGFeRD)", belegnummer: "RC-2026-1847", notiz: "",
-    kiHinweise: [
-      { regel: "E-Rechnung validiert", text: "ZUGFeRD-Struktur wurde geprüft und ist gültig. Alle Pflichtfelder vorhanden.", paragraf: "", typ: "success" },
-    ],
-    audit: [
-      { aktion: "E-Rechnung importiert", zeitpunkt: "30.05.2026, 10:30", benutzer: "System" },
-      { aktion: "ZUGFeRD geparst", zeitpunkt: "30.05.2026, 10:30", benutzer: "System" },
-      { aktion: "Automatisch zugeordnet", zeitpunkt: "30.05.2026, 10:30", benutzer: "KI" },
-    ],
-  },
-};
-
-export function BelegDetailClient({ id }: BelegDetailClientProps) {
+export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) {
   usePageView();
+  const offlineManager = useOfflineManager();
 
-  const beleg = useMemo(() => MOCK_BELEGE[id] ?? null, [id]);
+  const beleg = initialBeleg;
 
-  // Editable form state
   const [form, setForm] = useState(() => beleg ? {
-    lieferant: beleg.name,
-    datum: beleg.date,
-    belegnummer: beleg.belegnummer,
-    brutto: beleg.brutto.toString(),
-    netto: beleg.netto.toString(),
-    ustSatz: beleg.ustSatz.toString(),
-    ustBetrag: beleg.ustBetrag.toString(),
-    kategorie: beleg.categoryName,
-    skrKonto: beleg.skrKonto,
-    absetzbar: beleg.absetzbarProzent.toString(),
-    notiz: beleg.notiz,
+    lieferant: beleg.lieferantText || beleg.lieferant?.name || "Unbekannt",
+    datum: beleg.belegdatum ? new Date(beleg.belegdatum).toISOString().split('T')[0] : new Date(beleg.erfasstAm).toISOString().split('T')[0],
+    belegnummer: "",
+    brutto: (beleg.brutto || 0).toString(),
+    netto: (beleg.netto || 0).toString(),
+    ustSatz: (beleg.ustSatz || 0).toString(),
+    ustBetrag: (beleg.ustBetrag || 0).toString(),
+    kategorie: beleg.kategorie?.name || beleg.kategorieId || "Büro",
+    skrKonto: beleg.skrKonto || "",
+    absetzbar: (beleg.absetzbarProzent || 100).toString(),
+    notiz: beleg.absetzbarGrund || "",
   } : null);
 
   const [status, setStatus] = useState<string>(beleg?.status ?? "erfasst");
@@ -132,27 +70,80 @@ export function BelegDetailClient({ id }: BelegDetailClientProps) {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.lieferant || !form.brutto) {
       showToast("Pflichtfelder fehlen: Lieferant und Brutto sind erforderlich.");
       return;
     }
-    showToast("Korrektur gespeichert. Im GoBD-Modus wird jede Korrektur über Audit-Log nachvollzogen.");
+    
+    const korrektur = {
+      lieferantId: form.lieferant,
+      brutto: parseFloat(form.brutto),
+      netto: parseFloat(form.netto),
+      ustBetrag: parseFloat(form.ustBetrag)
+    };
+    
+    try {
+      await freigebenBelegAction(id, korrektur);
+      setStatus("erfasst");
+      showToast("Korrektur gespeichert. Im GoBD-Modus wird jede Korrektur über Audit-Log nachvollzogen.");
+    } catch (err) {
+      console.warn("Korrektur failed", err);
+      offlineManager.enqueueAction({
+        id: crypto.randomUUID(),
+        type: "BUCHHALTUNG_BELEG_UPDATE",
+        payload: { id, korrektur },
+        timestamp: new Date().toISOString(),
+        status: "pending"
+      });
+      setStatus("erfasst");
+      showToast("Offline gespeichert: Korrektur wird später synchronisiert.");
+    }
   };
 
-  const handleFreigabe = () => {
-    setStatus("festgeschrieben");
-    showToast("Beleg freigegeben. Spätere GoBD-Festschreibung erfolgt mit Backend-Trigger.");
+  const handleFreigabe = async () => {
+    try {
+      await freigebenBelegAction(id);
+      setStatus("festgeschrieben");
+      showToast("Beleg freigegeben. Spätere GoBD-Festschreibung erfolgt mit Backend-Trigger.");
+    } catch (err) {
+      console.warn("Freigabe failed", err);
+      offlineManager.enqueueAction({
+        id: crypto.randomUUID(),
+        type: "BUCHHALTUNG_BELEG_FREIGABE",
+        payload: { id },
+        timestamp: new Date().toISOString(),
+        status: "pending"
+      });
+      setStatus("festgeschrieben");
+      showToast("Offline gespeichert: Freigabe wird später synchronisiert.");
+    }
   };
 
-  const handleStorno = () => {
+  const handleStorno = async () => {
     if (!stornoGrund.trim()) {
       showToast("Bitte Storno-Grund angeben.");
       return;
     }
-    setStatus("storniert");
-    setStornoOpen(false);
-    showToast("Storno vorbereitet. Gegenbuchung wird im Mock erzeugt. Keine echte Datenlöschung.");
+    
+    try {
+      await stornoBelegAction(id, stornoGrund);
+      setStatus("storniert");
+      setStornoOpen(false);
+      showToast("Storno vorbereitet. Gegenbuchung wird im Backend erzeugt.");
+    } catch (err) {
+      console.warn("Storno failed", err);
+      offlineManager.enqueueAction({
+        id: crypto.randomUUID(),
+        type: "BUCHHALTUNG_BELEG_STORNO",
+        payload: { id, grund: stornoGrund },
+        timestamp: new Date().toISOString(),
+        status: "pending"
+      });
+      setStatus("storniert");
+      setStornoOpen(false);
+      showToast("Offline gespeichert: Storno wird später synchronisiert.");
+    }
   };
 
   const statusLabel = status === "pruefen" ? "Prüfung erforderlich" : status === "erfasst" ? "Erfasst" : status === "festgeschrieben" ? "Freigegeben" : "Storniert";
@@ -175,7 +166,7 @@ export function BelegDetailClient({ id }: BelegDetailClientProps) {
         <ChevronRight className="w-3 h-3" />
         <Link href="/buchhaltung/belege" className="hover:text-navy-900 transition-colors">Belege</Link>
         <ChevronRight className="w-3 h-3" />
-        <span className="text-navy-900 truncate max-w-[200px]">{beleg.name}</span>
+        <span className="text-navy-900 truncate max-w-[200px]">{beleg.lieferantText || beleg.lieferant?.name || "Unbekannter Lieferant"}</span>
       </div>
 
       {/* Back + Title */}
@@ -185,16 +176,16 @@ export function BelegDetailClient({ id }: BelegDetailClientProps) {
             <ArrowLeft className="w-4 h-4 text-[#1e1b18]" />
           </Link>
           <div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-[#1e1b18] tracking-tight">{beleg.name}</h1>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-[#1e1b18] tracking-tight">{beleg.lieferantText || beleg.lieferant?.name || "Unbekannter Lieferant"}</h1>
             <div className="flex items-center gap-3 mt-1">
               <span className={`px-2.5 py-1 rounded text-[10px] font-extrabold tracking-wide uppercase ${statusColorClass}`}>{statusLabel}</span>
-              <span className="text-xs text-neutral-500">{beleg.belegart} · {beleg.belegnummer}</span>
+              <span className="text-xs text-neutral-500">{beleg.belegart} · {beleg.id.substring(0,8)}</span>
             </div>
           </div>
         </div>
         <div className="text-right">
-          <div className="text-2xl sm:text-3xl font-extrabold text-[#1e1b18]">{beleg.brutto.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</div>
-          <div className="text-xs text-neutral-400 mt-0.5">Confidence: {beleg.confidence.toFixed(1)} %</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-[#1e1b18]">{(beleg.brutto || 0).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</div>
+          <div className="text-xs text-neutral-400 mt-0.5">Confidence: {(beleg.ocrConfidence || 0).toFixed(1)} %</div>
         </div>
       </div>
 
@@ -208,9 +199,17 @@ export function BelegDetailClient({ id }: BelegDetailClientProps) {
           <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">
             <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">Original-Beleg</h3>
             <div className="bg-neutral-50 rounded-2xl p-8 flex flex-col items-center justify-center min-h-[120px] border border-neutral-100">
-              <FileText className="w-16 h-16 text-neutral-200 mb-3" />
-              <p className="text-xs text-neutral-400 font-bold">{beleg.icon} — {beleg.belegart}</p>
-              <p className="text-[10px] text-neutral-400 mt-1">Original wird später GoBD-sicher im Storage abgelegt.</p>
+              {beleg.originalDatei && beleg.originalDatei.startsWith('http') ? (
+                <div className="relative w-full h-96 overflow-hidden">
+                  <Image src={beleg.originalDatei} alt="Original Beleg" fill className="object-contain" />
+                </div>
+              ) : (
+                <>
+                  <FileText className="w-16 h-16 text-neutral-200 mb-3" />
+                  <p className="text-xs text-neutral-400 font-bold">{beleg.originalFormat?.includes('pdf') ? 'PDF' : 'FOTO'} — {beleg.belegart}</p>
+                  <p className="text-[10px] text-neutral-400 mt-1">Original wird später GoBD-sicher im Storage abgelegt.</p>
+                </>
+              )}
             </div>
           </div>
 
@@ -244,16 +243,18 @@ export function BelegDetailClient({ id }: BelegDetailClientProps) {
           <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">
             <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">KI-/Regelhinweise</h3>
             <div className="space-y-3">
-              {beleg.kiHinweise.map((h, i) => (
-                <div key={i} className={`rounded-xl p-3 text-xs ${h.typ === "warning" ? "bg-amber-50 border border-amber-200" : h.typ === "success" ? "bg-emerald-50 border border-emerald-200" : "bg-blue-50 border border-blue-200"}`}>
+              {beleg.kiHinweise?.length > 0 ? beleg.kiHinweise.map((h, i) => (
+                <div key={i} className={`rounded-xl p-3 text-xs ${h.typ === "plausibilitaet" ? "bg-amber-50 border border-amber-200" : h.typ === "absetzbarkeit" ? "bg-emerald-50 border border-emerald-200" : "bg-blue-50 border border-blue-200"}`}>
                   <div className="flex items-center gap-2 mb-1">
-                    {h.typ === "warning" ? <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> : h.typ === "success" ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />}
-                    <span className={`font-extrabold ${h.typ === "warning" ? "text-amber-800" : h.typ === "success" ? "text-emerald-800" : "text-blue-800"}`}>{h.regel}</span>
+                    {h.typ === "plausibilitaet" ? <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> : h.typ === "absetzbarkeit" ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />}
+                    <span className={`font-extrabold ${h.typ === "plausibilitaet" ? "text-amber-800" : h.typ === "absetzbarkeit" ? "text-emerald-800" : "text-blue-800"}`}>{h.regel}</span>
                   </div>
-                  <p className={`${h.typ === "warning" ? "text-amber-700" : h.typ === "success" ? "text-emerald-700" : "text-blue-700"}`}>{h.text}</p>
+                  <p className={`${h.typ === "plausibilitaet" ? "text-amber-700" : h.typ === "absetzbarkeit" ? "text-emerald-700" : "text-blue-700"}`}>{h.text}</p>
                   {h.paragraf && <p className="text-[10px] text-neutral-400 mt-1">{h.paragraf}</p>}
                 </div>
-              ))}
+              )) : (
+                <p className="text-xs text-neutral-400">Keine KI-Hinweise gefunden.</p>
+              )}
             </div>
           </div>
 
@@ -261,15 +262,13 @@ export function BelegDetailClient({ id }: BelegDetailClientProps) {
           <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">
             <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">Audit-Historie</h3>
             <div className="space-y-3">
-              {beleg.audit.map((a, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <Clock className="w-3.5 h-3.5 text-neutral-400 mt-0.5 shrink-0" />
-                  <div>
-                    <p className="text-xs font-bold text-[#1e1b18]">{a.aktion}</p>
-                    <p className="text-[10px] text-neutral-400">{a.zeitpunkt} · {a.benutzer}</p>
-                  </div>
+              <div className="flex items-start gap-3">
+                <Clock className="w-3.5 h-3.5 text-neutral-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-xs font-bold text-[#1e1b18]">Erfasst</p>
+                  <p className="text-[10px] text-neutral-400">{new Date(beleg.erfasstAm).toLocaleString("de-DE")} · {beleg.erstelltVon}</p>
                 </div>
-              ))}
+              </div>
               {status === "festgeschrieben" && (
                 <div className="flex items-start gap-3">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />

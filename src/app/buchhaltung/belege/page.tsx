@@ -1,5 +1,9 @@
 import { BelegeClient } from "./BelegeClient";
+import { getBuchhaltungProvider } from "@/lib/buchhaltung";
 
-export default function BelegePage() {
-  return <BelegeClient />;
+export default async function BelegePage() {
+  const provider = getBuchhaltungProvider();
+  const belege = await provider.listBelege();
+  
+  return <BelegeClient initialBelege={belege} />;
 }

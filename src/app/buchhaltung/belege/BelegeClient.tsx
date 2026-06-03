@@ -1,12 +1,14 @@
 "use client";
 
 import { usePageView } from "@/hooks/usePageView";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { ChevronRight, Camera, Upload, CheckCircle2, Calendar as CalendarIcon, ReceiptText } from "lucide-react";
+import { ChevronRight, Camera, Upload, CheckCircle2, Calendar as CalendarIcon, ReceiptText, WifiOff } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { BelegUploadOverlay } from "@/components/buchhaltung/BelegUploadOverlay";
-import type { OcrResult } from "@/lib/buchhaltung/types";
+import type { OcrResult, Beleg } from "@/lib/buchhaltung/types";
+import { createBelegAction } from "@/app/buchhaltung/actions";
+import { useOfflineManager } from "@/hooks/useOfflineManager";
 
 const CATEGORIES = [
   { id: "alle", label: "Alle", color: "bg-black" },
@@ -46,60 +48,99 @@ function slugify(name: string): string {
     .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-const INITIAL_BELEGE: BelegEntry[] = [
-  { id: "shell-frankfurt-ost", name: "Shell - Frankfurt-Ost", date: "02.06.2026", info: "Diesel 45,8 l", categoryId: "kraftstoff", status: "100 % absetzbar", statusColor: "bg-emerald-50 text-emerald-700", amount: 78.40, vst: 12.52, icon: "FOTO" },
-  { id: "gasthaus-adler", name: "Gasthaus Adler", date: "31.05.2026", info: "Anlass fehlt", categoryId: "bewirtung", status: "70 % - prüfen", statusColor: "bg-amber-50 text-amber-700", amount: 64.00, vst: 10.22, icon: "FOTO", warning: true },
-  { id: "riedel-chemie", name: "Riedel Chemie GmbH", date: "30.05.2026", info: "E-Rechnung (ZUGFeRD)", categoryId: "material", status: "100 % absetzbar", statusColor: "bg-emerald-50 text-emerald-700", amount: 1190.00, vst: 190.00, icon: "PDF" },
-  { id: "microsoft-365", name: "Microsoft 365", date: "28.05.2026", info: "Abo - monatlich", categoryId: "buero", status: "100 % absetzbar", statusColor: "bg-emerald-50 text-emerald-700", amount: 12.60, vst: 2.01, icon: "PDF" },
-  { id: "aral-hanau", name: "Aral - Hanau", date: "24.05.2026", info: "Diesel 41,2 l", categoryId: "kraftstoff", status: "100 % absetzbar", statusColor: "bg-emerald-50 text-emerald-700", amount: 70.90, vst: 11.32, icon: "FOTO" },
-  { id: "reifen-mueller", name: "Reifen Müller", date: "19.05.2026", info: "Werkstattrechnung", categoryId: "kfz", status: "100 % absetzbar", statusColor: "bg-emerald-50 text-emerald-700", amount: 420.00, vst: 67.06, icon: "FOTO" },
-  { id: "mainova-ag", name: "Mainova AG", date: "15.05.2026", info: "Stromabschlag", categoryId: "energie", status: "100 % absetzbar", statusColor: "bg-emerald-50 text-emerald-700", amount: 1960.00, vst: 312.94, icon: "PDF" },
-];
+function formatStatus(status: string) {
+  if (status === 'pruefen') return 'Prüfen';
+  if (status === 'erfasst') return 'Erfasst';
+  if (status === 'festgeschrieben') return 'Festgeschrieben';
+  if (status === 'storniert') return 'Storniert';
+  return status;
+}
 
-export function BelegeClient() {
+function getStatusColor(status: string) {
+  if (status === 'pruefen') return 'bg-amber-50 text-amber-700';
+  if (status === 'storniert') return 'bg-rose-50 text-rose-700';
+  return 'bg-emerald-50 text-emerald-700';
+}
+
+function mapBelegToEntry(b: Beleg): BelegEntry {
+  return {
+    id: b.id,
+    name: b.lieferantText || "Unbekannter Lieferant",
+    date: b.belegdatum ? new Date(b.belegdatum).toLocaleDateString("de-DE") : new Date(b.erfasstAm).toLocaleDateString("de-DE"),
+    info: b.belegart === 'tankbeleg' ? 'Tankbeleg' : b.belegart === 'bewirtung' ? 'Bewirtung' : 'Rechnung',
+    categoryId: b.kategorieId || "buero",
+    status: formatStatus(b.status),
+    statusColor: getStatusColor(b.status),
+    amount: b.brutto || 0,
+    vst: b.ustBetrag || 0,
+    icon: b.originalFormat?.includes('pdf') ? 'PDF' : 'FOTO',
+    warning: b.status === 'pruefen'
+  };
+}
+
+export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }) {
   usePageView();
   const [activeFilter, setActiveFilter] = useState("alle");
-  const [belege, setBelege] = useState<BelegEntry[]>(INITIAL_BELEGE);
+  const [belege, setBelege] = useState<Beleg[]>(initialBelege);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [overlayMode, setOverlayMode] = useState<"foto" | "upload">("upload");
+  const offlineManager = useOfflineManager();
+  
+  const belegeEntries = useMemo(() => belege.map(mapBelegToEntry), [belege]);
 
   const openOverlay = useCallback((mode: "foto" | "upload") => {
     setOverlayMode(mode);
     setOverlayOpen(true);
   }, []);
 
-  const handleUploadSubmit = useCallback((result: OcrResult, filename: string, mode: "erfasst" | "entwurf") => {
-    const catId = result.belegart ? BELEGART_TO_CATEGORY[result.belegart] ?? "buero" : "buero";
-    const isLow = result.confidence < 85;
-    const today = new Date();
-    const dateStr = `${String(today.getDate()).padStart(2, "0")}.${String(today.getMonth() + 1).padStart(2, "0")}.${today.getFullYear()}`;
-
-    const newBeleg: BelegEntry = {
-      id: slugify(result.lieferant ?? "beleg") + "-" + Date.now(),
-      name: result.lieferant ?? "Unbekannt",
-      date: dateStr,
-      info: result.belegart === "tankbeleg" && result.kraftstoff
-        ? `${result.kraftstoff.sorte === "diesel" ? "Diesel" : "Super"} ${result.kraftstoff.liter} l`
-        : result.belegart === "bewirtung" ? "Bewirtung"
-        : result.belegart === "abo" ? "Abo"
-        : filename.endsWith(".pdf") ? "E-Rechnung" : "Beleg",
-      categoryId: catId,
-      status: isLow || mode === "entwurf" ? (result.belegart === "bewirtung" ? "70 % - prüfen" : "prüfen") : "100 % absetzbar",
-      statusColor: isLow || mode === "entwurf" ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700",
-      amount: result.brutto ?? 0,
-      vst: result.ustBetrag ?? 0,
-      icon: filename.endsWith(".pdf") ? "PDF" : "FOTO",
-      warning: isLow,
+  const handleUploadSubmit = useCallback(async (result: OcrResult, filename: string, mode: "erfasst" | "entwurf", rawFile?: File) => {
+    const fallbackId = slugify(result.lieferant ?? "beleg") + "-" + Date.now();
+    const tempBeleg: Beleg = {
+      id: fallbackId,
+      erfasstAm: new Date().toISOString(),
+      lieferantText: result.lieferant,
+      brutto: result.brutto || 0,
+      netto: result.netto || 0,
+      ustBetrag: result.ustBetrag || 0,
+      kategorieId: result.belegart ? BELEGART_TO_CATEGORY[result.belegart] ?? "buero" : "buero",
+      belegart: result.belegart,
+      status: 'pruefen',
+      originalDatei: filename,
+      erstelltVon: 'local',
+      vorsteuerAbzug: true,
+      absetzbarProzent: 100
     };
 
-    setBelege(prev => [newBeleg, ...prev]);
-  }, []);
+    // Optimistic UI update
+    setBelege(prev => [tempBeleg, ...prev]);
+    
+    if (rawFile) {
+      const formData = new FormData();
+      formData.append('file', rawFile);
+      formData.append('filename', filename);
+      formData.append('mimeType', rawFile.type || 'application/octet-stream');
+      
+      try {
+        const createdBeleg = await createBelegAction(formData);
+        setBelege(prev => prev.map(b => b.id === fallbackId ? createdBeleg : b));
+      } catch (err) {
+        console.warn("Upload failed, queueing offline outbox", err);
+        offlineManager.enqueueAction({
+          id: crypto.randomUUID(),
+          type: "BUCHHALTUNG_BELEG_UPLOAD",
+          payload: { filename, result },
+          timestamp: new Date().toISOString(),
+          status: "pending"
+        });
+      }
+    }
+  }, [offlineManager]);
 
   const filteredBelege = activeFilter === "alle"
-    ? belege
-    : belege.filter(b => b.categoryId === activeFilter);
+    ? belegeEntries
+    : belegeEntries.filter(b => b.categoryId === activeFilter);
 
-  const recentBelege = belege.slice(0, 3);
+  const recentBelege = belegeEntries.slice(0, 3);
 
   return (
     <div className="w-full pb-24 px-4 sm:px-6 xl:px-8 min-h-screen">
@@ -120,8 +161,13 @@ export function BelegeClient() {
             <ReceiptText className="w-7 h-7 text-rose-500" />
             <h1 className="text-2xl sm:text-3xl font-extrabold text-[#2a2420] tracking-tight">Belege & Ausgaben</h1>
           </div>
-          <p className="text-xs font-semibold text-neutral-500 mt-2">
-            2026 · Jan–Mai · {belege.length} Belege erfasst · 94 % automatisch zugeordnet
+          <p className="text-xs font-semibold text-neutral-500 mt-2 flex items-center gap-2">
+            2026 · Jan–Mai · {belegeEntries.length} Belege erfasst
+            {!navigator.onLine && (
+              <span className="flex items-center gap-1 text-amber-600 bg-amber-50 px-2 py-0.5 rounded">
+                <WifiOff className="w-3 h-3" /> Lokale Ansicht aktiv
+              </span>
+            )}
           </p>
         </div>
         <div className="flex gap-3">

@@ -8,7 +8,7 @@ import type { OcrResult } from "@/lib/buchhaltung/types";
 interface BelegUploadOverlayProps {
   open: boolean;
   onClose: () => void;
-  onSubmit: (result: OcrResult, filename: string, mode: "erfasst" | "entwurf") => void;
+  onSubmit: (result: OcrResult, filename: string, mode: "erfasst" | "entwurf", rawFile?: File) => void;
   mode: "foto" | "upload";
 }
 
@@ -26,6 +26,7 @@ export function BelegUploadOverlay({ open, onClose, onSubmit, mode }: BelegUploa
   const [phase, setPhase] = useState<Phase>("idle");
   const [filename, setFilename] = useState("");
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
+  const [rawFile, setRawFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ocrProvider = useRef(new MockOcrProvider());
 
@@ -51,6 +52,7 @@ export function BelegUploadOverlay({ open, onClose, onSubmit, mode }: BelegUploa
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setRawFile(file);
       handleFileSelect(file.name);
     }
   };
@@ -65,12 +67,13 @@ export function BelegUploadOverlay({ open, onClose, onSubmit, mode }: BelegUploa
     setPhase("idle");
     setFilename("");
     setOcrResult(null);
+    setRawFile(null);
     onClose();
   };
 
   const handleSubmit = (submitMode: "erfasst" | "entwurf") => {
     if (ocrResult) {
-      onSubmit(ocrResult, filename, submitMode);
+      onSubmit(ocrResult, filename, submitMode, rawFile || undefined);
       handleClose();
     }
   };
