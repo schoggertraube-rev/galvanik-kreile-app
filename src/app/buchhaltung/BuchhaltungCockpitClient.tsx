@@ -38,7 +38,12 @@ function Tile({ title, description, icon, iconColor, href, kpi, status, footer }
 
   const inner = (
     <>
-      <div className="flex items-start justify-between gap-3">
+      {/* Watermark */}
+      <div className="absolute -right-2 -bottom-2 pointer-events-none opacity-[0.04] grayscale brightness-0 transform scale-[7] -rotate-12 origin-bottom-right">
+        {icon}
+      </div>
+
+      <div className="relative z-10 flex items-start justify-between gap-3">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${iconColor}`}>
           {icon}
         </div>
@@ -51,9 +56,9 @@ function Tile({ title, description, icon, iconColor, href, kpi, status, footer }
           </span>
         )}
       </div>
-      <h3 className="text-[15px] font-bold text-navy-900 leading-snug">{title}</h3>
-      <p className="text-xs text-text-muted leading-relaxed">{description}</p>
-      <div className="flex items-center justify-between mt-auto pt-1">
+      <h3 className="relative z-10 text-lg font-extrabold text-navy-900 leading-snug">{title}</h3>
+      <p className="relative z-10 text-[13px] text-text-muted leading-relaxed">{description}</p>
+      <div className="relative z-10 flex items-center justify-between mt-auto pt-1">
         <span className="text-xs font-bold text-accent-orange flex items-center gap-1 group-hover:gap-2 transition-all">
           {footer ?? "Öffnen"} <ChevronRight className="w-3.5 h-3.5" />
         </span>
@@ -61,7 +66,7 @@ function Tile({ title, description, icon, iconColor, href, kpi, status, footer }
     </>
   );
 
-  const className = "group bg-white border border-neutral-gray-100 rounded-2xl shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 p-5 flex flex-col gap-3 min-h-[140px] cursor-pointer";
+  const className = "group relative overflow-hidden bg-white border border-neutral-gray-100 rounded-2xl shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 p-5 flex flex-col gap-3 min-h-[140px] cursor-pointer";
 
   if (href) {
     return <Link href={href} className={className}>{inner}</Link>;
