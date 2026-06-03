@@ -2,7 +2,7 @@
 import { usePageView } from "@/hooks/usePageView";
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Settings, Shield, FileText, Cpu, Lock, Info } from "lucide-react";
+import { ChevronRight, Settings, Shield, FileText, Cpu, Lock } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 export default function EinstellungenPage() {
@@ -72,7 +72,7 @@ export default function EinstellungenPage() {
             <input type="range" min={50} max={99} value={confidenceSchwelle} onChange={e => setConfidenceSchwelle(+e.target.value)} className="flex-1 accent-navy-900" />
             <span className="text-lg font-extrabold text-navy-900 w-16 text-center">{confidenceSchwelle} %</span>
           </div>
-          <p className="text-xs text-text-muted mt-1">Belege unter dieser Schwelle erhalten den Status „prüfen".</p>
+          <p className="text-xs text-text-muted mt-1">Belege unter dieser Schwelle erhalten den Status &bdquo;prüfen&ldquo;.</p>
         </Card>
 
         {/* ELSTER Stufe 2 */}

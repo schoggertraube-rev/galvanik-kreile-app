@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+// Image from next/image available but not used for dynamic logo URLs
 import { Search, Camera, Bell, Calendar, Menu } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
-import { MobileNav } from "./MobileNav";
 import { useState, useEffect, useRef } from "react";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
@@ -21,26 +20,23 @@ interface KreileHeaderProps {
 export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
-  const [syncQueueCount, setSyncQueueCount] = useState(0);
   const [orderCount, setOrderCount] = useState(0);
   const [logoUrl, setLogoUrl] = useState("/assets/logo/kreile-wordmark-skyline.svg");
-  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
+  const [isAdminOrDev, setIsAdminOrDev] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const role = localStorage.getItem("kreile_user_role");
+    return role === "admin" || role === "developer";
+  });
   
   const { status: realtimeStatus } = useRealtimeStatus();
 
   // User Dropdown State
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [userInitials, setUserInitials] = useState<string>("?");
+  const [userInitials, setUserInitials] = useState<string>(() => {
+    if (typeof window === "undefined") return "?";
+    return localStorage.getItem("kreile_user_initials") ?? "?";
+  });
   const userDropdownRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    // Load initials from local storage on mount
-    const initials = localStorage.getItem("kreile_user_initials");
-    if (initials) setUserInitials(initials);
-    
-    const role = localStorage.getItem("kreile_user_role");
-    if (role === "admin" || role === "developer") setIsAdminOrDev(true);
-  }, []);
 
   // Click outside to close user dropdown
   useEffect(() => {
@@ -72,8 +68,6 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   useEffect(() => {
     const updateState = async () => {
       setIsOffline(OfflineManager.isOffline());
-      const count = await OfflineManager.getPendingCount();
-      setSyncQueueCount(count);
       const orders = await ordersRepository.getAll();
       setOrderCount(orders?.length ?? 0);
       try {

@@ -1,92 +1,120 @@
 "use client";
 
 import { usePageView } from "@/hooks/usePageView";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { getBuchhaltungProvider } from "@/lib/buchhaltung";
-import { useEffect } from "react";
-import type { Beleg } from "@/lib/buchhaltung/types";
-import { pruefeBelegHinweise } from "@/lib/buchhaltung/regeln";
-import { ChevronRight, Receipt, Upload, Camera, Filter, Search } from "lucide-react";
+import { ChevronRight, Camera, Upload, CheckCircle2, Calendar as CalendarIcon, Filter, ReceiptText } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
-const KATEGORIE_CHIPS = [
-  { id: "alle", label: "Alle" },
-  { id: "kat-kraftstoff", label: "Kraftstoff" },
-  { id: "kat-material", label: "Material & Chemie" },
-  { id: "kat-bewirtung", label: "Bewirtung" },
-  { id: "kat-versicherung", label: "Versicherungen" },
-  { id: "kat-miete", label: "Miete" },
-  { id: "kat-sonstiges", label: "Sonstiges" },
+const CATEGORIES = [
+  { id: "alle", label: "Alle", color: "bg-black" },
+  { id: "kraftstoff", label: "Kraftstoff", color: "bg-blue-500", iconBg: "bg-blue-50", iconColor: "text-blue-500" },
+  { id: "material", label: "Material & Chemie", color: "bg-rose-500", iconBg: "bg-rose-50", iconColor: "text-rose-500" },
+  { id: "bewirtung", label: "Bewirtung", color: "bg-amber-500", iconBg: "bg-amber-50", iconColor: "text-amber-600" },
+  { id: "buero", label: "Büro", color: "bg-emerald-500", iconBg: "bg-emerald-50", iconColor: "text-emerald-500" },
+  { id: "kfz", label: "Kfz", color: "bg-purple-500", iconBg: "bg-purple-50", iconColor: "text-purple-500" },
+  { id: "energie", label: "Energie", color: "bg-teal-500", iconBg: "bg-teal-50", iconColor: "text-teal-500" },
 ];
 
-const STATUS_COLORS: Record<string, string> = {
-  pruefen: "bg-amber-50 text-amber-700 border-amber-200",
-  erfasst: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  festgeschrieben: "bg-blue-50 text-blue-700 border-blue-200",
-  storniert: "bg-red-50 text-red-700 border-red-200",
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  pruefen: "Prüfen",
-  erfasst: "Erfasst",
-  festgeschrieben: "Festgeschrieben",
-  storniert: "Storniert",
-};
+const BELEGE_DATA = [
+  {
+    id: 1,
+    name: "Shell - Frankfurt-Ost",
+    date: "02.06.2026",
+    info: "Diesel 45,8 l",
+    categoryId: "kraftstoff",
+    status: "100 % absetzbar",
+    statusColor: "bg-emerald-50 text-emerald-700",
+    amount: 78.40,
+    vst: 12.52,
+    icon: "FOTO"
+  },
+  {
+    id: 2,
+    name: "Gasthaus Adler",
+    date: "31.05.2026",
+    info: "Anlass fehlt",
+    categoryId: "bewirtung",
+    status: "70 % - prüfen",
+    statusColor: "bg-amber-50 text-amber-700",
+    amount: 64.00,
+    vst: 10.22,
+    icon: "FOTO",
+    warning: true
+  },
+  {
+    id: 3,
+    name: "Riedel Chemie GmbH",
+    date: "30.05.2026",
+    info: "E-Rechnung (ZUGFeRD)",
+    categoryId: "material",
+    status: "100 % absetzbar",
+    statusColor: "bg-emerald-50 text-emerald-700",
+    amount: 1190.00,
+    vst: 190.00,
+    icon: "PDF"
+  },
+  {
+    id: 4,
+    name: "Microsoft 365",
+    date: "28.05.2026",
+    info: "Abo - monatlich",
+    categoryId: "buero",
+    status: "100 % absetzbar",
+    statusColor: "bg-emerald-50 text-emerald-700",
+    amount: 12.60,
+    vst: 2.01,
+    icon: "PDF"
+  },
+  {
+    id: 5,
+    name: "Aral - Hanau",
+    date: "24.05.2026",
+    info: "Diesel 41,2 l",
+    categoryId: "kraftstoff",
+    status: "100 % absetzbar",
+    statusColor: "bg-emerald-50 text-emerald-700",
+    amount: 70.90,
+    vst: 11.32,
+    icon: "FOTO"
+  },
+  {
+    id: 6,
+    name: "Reifen Müller",
+    date: "19.05.2026",
+    info: "Werkstattrechnung",
+    categoryId: "kfz",
+    status: "100 % absetzbar",
+    statusColor: "bg-emerald-50 text-emerald-700",
+    amount: 420.00,
+    vst: 67.06,
+    icon: "FOTO"
+  },
+  {
+    id: 7,
+    name: "Mainova AG",
+    date: "15.05.2026",
+    info: "Stromabschlag",
+    categoryId: "energie",
+    status: "100 % absetzbar",
+    statusColor: "bg-emerald-50 text-emerald-700",
+    amount: 1960.00,
+    vst: 312.94,
+    icon: "PDF"
+  }
+];
 
 export function BelegeClient() {
   usePageView();
-  const [belege, setBelege] = useState<Beleg[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeKategorie, setActiveKategorie] = useState("alle");
-  const [suchbegriff, setSuchbegriff] = useState("");
-  const [showUpload, setShowUpload] = useState(false);
+  const [activeFilter, setActiveFilter] = useState("alle");
 
-  useEffect(() => {
-    const load = async () => {
-      const provider = getBuchhaltungProvider();
-      const data = await provider.listBelege();
-      setBelege(data);
-      setLoading(false);
-    };
-    load();
-  }, []);
-
-  const filtered = useMemo(() => {
-    let result = [...belege];
-    if (activeKategorie !== "alle") {
-      result = result.filter(b => b.kategorieId === activeKategorie);
-    }
-    if (suchbegriff) {
-      const q = suchbegriff.toLowerCase();
-      result = result.filter(b => b.lieferantText?.toLowerCase().includes(q) || b.skrKonto?.includes(q));
-    }
-    return result;
-  }, [belege, activeKategorie, suchbegriff]);
-
-  const gesamtBrutto = belege.reduce((s, b) => s + (b.brutto ?? 0), 0);
-  const gesamtNetto = belege.reduce((s, b) => s + (b.netto ?? 0), 0);
-  const unsicherCount = belege.filter(b => b.status === "pruefen").length;
-
-  const handleMockUpload = async () => {
-    const provider = getBuchhaltungProvider();
-    const newBeleg = await provider.createBelegFromUpload({
-      data: "", filename: "foto-upload.jpg", mimeType: "image/jpeg",
-    });
-    setBelege(prev => [newBeleg, ...prev]);
-    setShowUpload(false);
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="w-8 h-8 border-3 border-accent-orange/20 border-t-accent-orange rounded-full animate-spin" />
-      </div>
-    );
-  }
+  const filteredBelege = activeFilter === "alle" 
+    ? BELEGE_DATA 
+    : BELEGE_DATA.filter(b => b.categoryId === activeFilter);
 
   return (
-    <div className="w-full pb-24 px-4 sm:px-6 xl:px-8">
+    <div className="w-full pb-24 px-4 sm:px-6 xl:px-8 bg-[#fdfcf9] min-h-screen">
+      
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs font-semibold text-text-muted mt-4 mb-3">
         <Link href="/" className="hover:text-navy-900 transition-colors">Home</Link>
@@ -97,125 +125,260 @@ export function BelegeClient() {
       </div>
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-extrabold text-navy-900 tracking-tight">Belege & Ausgaben</h1>
-          <p className="text-sm text-text-muted mt-1">
-            {belege.length} Belege · {unsicherCount > 0 && <span className="text-amber-600 font-bold">{unsicherCount} prüfen</span>}
-            {unsicherCount > 0 && " · "}
-            Summe: {gesamtBrutto.toLocaleString("de-DE")} € brutto · {gesamtNetto.toLocaleString("de-DE")} € netto
+          <div className="flex items-center gap-3">
+            <ReceiptText className="w-7 h-7 text-rose-500" />
+            <h1 className="text-3xl font-extrabold text-[#2a2420] tracking-tight">Belege & Ausgaben</h1>
+          </div>
+          <p className="text-xs font-semibold text-neutral-500 mt-2">
+            2026 · Jan–Mai · 142 Belege erfasst · 94 % automatisch zugeordnet
           </p>
         </div>
         <div className="flex gap-3">
-          <button onClick={() => setShowUpload(true)} className="flex items-center gap-2 px-4 py-3 bg-navy-900 text-white rounded-xl font-bold text-sm hover:bg-navy-800 transition-colors shadow-sm active:scale-[0.98]">
+          <button className="flex items-center gap-2 px-5 py-2.5 bg-[#1e1b18] text-white rounded-xl font-bold text-sm hover:bg-black transition-colors shadow-sm">
             <Camera className="w-4 h-4" /> Beleg fotografieren
           </button>
-          <button onClick={handleMockUpload} className="flex items-center gap-2 px-4 py-3 bg-white text-text-muted rounded-xl font-semibold text-sm border border-neutral-gray-200 hover:text-navy-900 transition-colors shadow-sm active:scale-[0.98]">
+          <button className="flex items-center gap-2 px-5 py-2.5 bg-white text-[#1e1b18] rounded-xl font-bold text-sm border border-neutral-200 hover:bg-neutral-50 transition-colors shadow-sm">
             <Upload className="w-4 h-4" /> Hochladen
           </button>
         </div>
       </div>
 
-      {/* KI-Hinweise */}
-      {unsicherCount > 0 && (
-        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-6 flex items-start gap-3">
-          <Receipt className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-sm font-bold text-amber-800">{unsicherCount} Belege brauchen deinen Blick</p>
-            <p className="text-xs text-amber-700 mt-1">Die OCR-Erkennung ist bei diesen Belegen unsicher. Bitte prüfe die Daten manuell.</p>
+      {/* Top Dashboards */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
+        
+        {/* KPI Bar Chart Card */}
+        <div className="lg:col-span-2 bg-white rounded-3xl p-6 shadow-sm border border-neutral-100">
+          <div className="flex justify-between items-end mb-6">
+            <div className="flex gap-8">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span className="text-xs font-bold text-neutral-500 uppercase tracking-wide">Einnahmen</span>
+                </div>
+                <div className="text-2xl font-extrabold text-[#1e1b18]">68.400 €</div>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-2 h-2 rounded-full bg-rose-500" />
+                  <span className="text-xs font-bold text-neutral-500 uppercase tracking-wide">Ausgaben</span>
+                </div>
+                <div className="text-2xl font-extrabold text-[#1e1b18]">49.200 €</div>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-xs font-semibold text-neutral-400 mb-1">Saldo - vorläufig</div>
+              <div className="text-2xl font-extrabold text-emerald-600">+19.200 €</div>
+              <div className="flex items-center justify-end gap-1 text-[10px] font-bold text-emerald-600 mt-0.5">
+                <CheckCircle2 className="w-3 h-3" /> im Griff
+              </div>
+            </div>
+          </div>
+
+          {/* Bar Chart */}
+          <div className="h-4 w-full flex rounded-full overflow-hidden mb-4">
+            <div className="h-full bg-rose-500" style={{ width: '37%' }} />
+            <div className="h-full bg-teal-500" style={{ width: '20%' }} />
+            <div className="h-full bg-purple-500" style={{ width: '4%' }} />
+            <div className="h-full bg-blue-500" style={{ width: '3%' }} />
+            <div className="h-full bg-emerald-500" style={{ width: '3%' }} />
+            <div className="h-full bg-amber-500" style={{ width: '1%' }} />
+            <div className="h-full bg-neutral-400" style={{ width: '32%' }} />
+          </div>
+
+          {/* Legend */}
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px]">
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-rose-500" /><span className="text-neutral-500">Material & Chemie</span><span className="font-bold text-[#1e1b18]">18.400 €</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-teal-500" /><span className="text-neutral-500">Energie</span><span className="font-bold text-[#1e1b18]">9.800 €</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-purple-500" /><span className="text-neutral-500">Kfz & Wartung</span><span className="font-bold text-[#1e1b18]">2.100 €</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-neutral-500">Kraftstoff</span><span className="font-bold text-[#1e1b18]">1.240 €</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500" /><span className="text-neutral-500">Büro & Software</span><span className="font-bold text-[#1e1b18]">1.480 €</span></div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500" /><span className="text-neutral-500">Bewirtung</span><span className="font-bold text-[#1e1b18]">340 €</span></div>
           </div>
         </div>
-      )}
 
-      {/* Filter */}
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="flex items-center gap-2 bg-white border border-neutral-gray-100 rounded-xl px-3 py-2 shadow-sm flex-1 max-w-sm">
-          <Search className="w-4 h-4 text-text-muted" />
-          <input
-            type="text"
-            placeholder="Lieferant, Beleg, Konto..."
-            value={suchbegriff}
-            onChange={(e) => setSuchbegriff(e.target.value)}
-            className="text-sm bg-transparent outline-none flex-1 text-navy-900 placeholder:text-text-muted"
-          />
+        {/* Zuletzt automatisch erfasst */}
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100 flex flex-col">
+          <div className="flex items-center gap-2 mb-5">
+            <div className="w-2 h-2 rounded-full bg-emerald-500" />
+            <h2 className="text-xs font-bold text-[#1e1b18]">Zuletzt automatisch erfasst</h2>
+          </div>
+          
+          <div className="space-y-4 flex-1">
+            <div className="flex items-start justify-between">
+              <div className="flex gap-3">
+                <div className="px-2 py-1 bg-neutral-100 text-neutral-400 text-[9px] font-extrabold rounded">FOTO</div>
+                <div>
+                  <div className="text-xs font-extrabold text-[#1e1b18]">Shell - Frankfurt-Ost</div>
+                  <div className="text-[10px] text-neutral-400 mt-0.5">02.06. · <span className="text-emerald-600 font-medium">erkannt: Kraftstoff - Diesel - 100 % Vorsteuer</span></div>
+                </div>
+              </div>
+              <div className="text-xs font-extrabold text-[#1e1b18]">78,40 €</div>
+            </div>
+            
+            <div className="w-full h-px bg-neutral-100" />
+            
+            <div className="flex items-start justify-between">
+              <div className="flex gap-3">
+                <div className="px-2 py-1 bg-neutral-100 text-neutral-400 text-[9px] font-extrabold rounded">FOTO</div>
+                <div>
+                  <div className="text-xs font-extrabold text-[#1e1b18]">Gasthaus Adler</div>
+                  <div className="text-[10px] text-neutral-400 mt-0.5">31.05. · <span className="text-emerald-600 font-medium">erkannt: Bewirtung - 70 % absetzbar</span></div>
+                </div>
+              </div>
+              <div className="text-xs font-extrabold text-[#1e1b18]">64,00 €</div>
+            </div>
+
+            <div className="w-full h-px bg-neutral-100" />
+
+            <div className="flex items-start justify-between">
+              <div className="flex gap-3">
+                <div className="px-2 py-1 bg-neutral-100 text-neutral-400 text-[9px] font-extrabold rounded">PDF</div>
+                <div>
+                  <div className="text-xs font-extrabold text-[#1e1b18]">Riedel Chemie GmbH</div>
+                  <div className="text-[10px] text-neutral-400 mt-0.5">30.05. · <span className="text-emerald-600 font-medium">E-Rechnung · Material & Chemie</span></div>
+                </div>
+              </div>
+              <div className="text-xs font-extrabold text-[#1e1b18]">1.190,00 €</div>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {KATEGORIE_CHIPS.map(chip => (
+
+      </div>
+
+      {/* KI Ratgeber Section */}
+      <h2 className="text-sm font-semibold text-neutral-600 mb-3">Was die KI dir rät — geprüft an den Steuerregeln</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+        
+        {/* Card 1 */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-neutral-100 flex flex-col">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-emerald-600 font-bold">$</span>
+            <h3 className="text-sm font-extrabold text-[#1e1b18]">Bewirtung optimal nutzen</h3>
+          </div>
+          <div className="flex items-center gap-1 mb-3">
+            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+            <span className="text-[10px] font-bold text-emerald-600 tracking-wider">VERIFIZIERT</span>
+          </div>
+          <p className="text-xs text-neutral-600 leading-relaxed flex-1">
+            Geschäftsessen sind zu <strong className="text-[#1e1b18]">70 % absetzbar</strong>. Von deinen 340 € wirken <strong className="text-[#1e1b18]">238 €</strong> steuermindernd, die Vorsteuer ziehst du voll. Bei <strong className="text-[#1e1b18]">2 Belegen</strong> fehlt noch Anlass & Teilnehmer auf der Rückseite.
+          </p>
+          <div className="text-[10px] text-neutral-400 mt-4 font-medium">§ 4 Abs. 5 Nr. 2 EStG - 2 Belege ergänzen</div>
+        </div>
+
+        {/* Card 2 */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-neutral-100 flex flex-col">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-blue-500 font-bold">⛽</span>
+            <h3 className="text-sm font-extrabold text-[#1e1b18]">Kraftstoff — plausibel</h3>
+          </div>
+          <div className="flex items-center gap-1 mb-3">
+            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+            <span className="text-[10px] font-bold text-emerald-600 tracking-wider">VERIFIZIERT</span>
+          </div>
+          <p className="text-xs text-neutral-600 leading-relaxed flex-1">
+            Diesel <strong className="text-[#1e1b18]">1.240 € = 1,8 % vom Umsatz</strong>. Für deinen Fuhrpark im normalen Rahmen — kein Auffälligkeitsrisiko. Achtung: zwischen <strong className="text-[#1e1b18]">12.-19. Mai</strong> fehlt eine Tankung. Vermutlich Beleg noch im Auto.
+          </p>
+          <div className="text-[10px] text-neutral-400 mt-4 font-medium">Vollständigkeit prüfen - 1 Beleg vermutlich offen</div>
+        </div>
+
+        {/* Card 3 */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-neutral-100 flex flex-col">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-amber-500 font-bold">🎁</span>
+            <h3 className="text-sm font-extrabold text-[#1e1b18]">Geschenk-Grenze</h3>
+          </div>
+          <div className="flex items-center gap-1 mb-3">
+            <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+            <span className="text-[10px] font-bold text-emerald-600 tracking-wider">VERIFIZIERT</span>
+          </div>
+          <p className="text-xs text-neutral-600 leading-relaxed flex-1">
+            <strong className="text-[#1e1b18]">2 Geschenke</strong> an Kunden lagen über <strong className="text-[#1e1b18]">50 € pro Person/Jahr</strong> — die werden nicht anerkannt. Künftig drunter bleiben, dann voll absetzbar. Differenz dieses Jahr: <strong className="text-[#1e1b18]">- 90 € verschenkt</strong>.
+          </p>
+          <div className="text-[10px] text-neutral-400 mt-4 font-medium">§ 4 Abs. 5 Nr. 1 EStG - Grenze 50 € seit 2024</div>
+        </div>
+
+      </div>
+
+      {/* List Section Header */}
+      <h2 className="text-sm font-semibold text-neutral-600 mb-3">Alle Belege — filterbar wie im Banking</h2>
+      
+      {/* Filter Bar */}
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {CATEGORIES.map(cat => (
             <button
-              key={chip.id}
-              onClick={() => setActiveKategorie(chip.id)}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${
-                activeKategorie === chip.id
-                  ? "bg-navy-900 text-white"
-                  : "bg-white border border-neutral-gray-200 text-text-muted hover:text-navy-900"
+              key={cat.id}
+              onClick={() => setActiveFilter(cat.id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors ${
+                activeFilter === cat.id && cat.id === "alle" ? "bg-[#1e1b18] text-white" :
+                activeFilter === cat.id ? "bg-white border border-neutral-200 text-[#1e1b18] shadow-sm" :
+                "bg-white border border-transparent text-neutral-500 hover:text-[#1e1b18] hover:border-neutral-200"
               }`}
             >
-              {chip.label}
+              {cat.id !== "alle" && <div className={`w-1.5 h-1.5 rounded-full ${cat.color}`} />}
+              {cat.label}
             </button>
           ))}
         </div>
+        <button className="flex items-center gap-2 bg-white border border-neutral-200 rounded-full px-4 py-2 text-[11px] font-bold text-neutral-500 hover:text-[#1e1b18] shadow-sm whitespace-nowrap">
+          <CalendarIcon className="w-3.5 h-3.5" /> 2026 · Jan–Mai
+        </button>
       </div>
 
-      {/* Belegliste */}
-      <div className="space-y-3">
-        {filtered.map(beleg => {
-          const hinweise = pruefeBelegHinweise(beleg);
-          return (
-            <Link
-              key={beleg.id}
-              href={`/buchhaltung/belege/${beleg.id}`}
-              className="group bg-white rounded-2xl border border-neutral-gray-100 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 p-5 flex items-center gap-5 cursor-pointer"
-            >
-              <div className="w-12 h-12 rounded-xl bg-neutral-gray-50 flex items-center justify-center shrink-0">
-                <Receipt className="w-5 h-5 text-text-muted" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-navy-900 truncate">{beleg.lieferantText ?? "Unbekannt"}</span>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${STATUS_COLORS[beleg.status]}`}>
-                    {STATUS_LABELS[beleg.status]}
-                  </span>
+      {/* List Container */}
+      <div className="bg-white rounded-[2rem] border border-neutral-100 p-2 sm:p-5 shadow-sm">
+        <div className="flex flex-col">
+          {filteredBelege.map((beleg, idx) => {
+            const cat = CATEGORIES.find(c => c.id === beleg.categoryId);
+            return (
+              <div key={beleg.id}>
+                <div className="flex items-center gap-4 p-3 hover:bg-neutral-50 rounded-2xl transition-colors cursor-pointer group">
+                  
+                  {/* Icon */}
+                  <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 border border-neutral-100 ${cat?.iconBg}`}>
+                    <ReceiptText className={`w-4 h-4 ${cat?.iconColor}`} />
+                  </div>
+                  
+                  {/* Name & Date */}
+                  <div className="flex-1 min-w-0 flex items-center">
+                    <div className="w-[35%] min-w-[200px] pr-4">
+                      <div className="text-sm font-extrabold text-[#1e1b18] truncate">{beleg.name}</div>
+                      <div className="text-[11px] text-neutral-500 mt-0.5 truncate">{beleg.date} · {beleg.info}</div>
+                    </div>
+                    
+                    {/* Category */}
+                    <div className="w-[20%] min-w-[120px] px-4 hidden md:flex items-center gap-2">
+                      <div className={`w-1.5 h-1.5 rounded-full ${cat?.color}`} />
+                      <span className="text-xs font-bold text-[#1e1b18]">{cat?.label}</span>
+                    </div>
+
+                    {/* Status */}
+                    <div className="flex-1 px-4 flex justify-end md:justify-center">
+                      <span className={`px-2.5 py-1 rounded text-[10px] font-extrabold tracking-wide ${beleg.statusColor} ${beleg.warning ? 'animate-pulse' : ''}`}>
+                        {beleg.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Amount */}
+                  <div className="text-right shrink-0 min-w-[100px]">
+                    <div className="text-base font-extrabold text-[#1e1b18]">{beleg.amount.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</div>
+                    <div className="text-[10px] font-medium text-neutral-400">{beleg.vst.toLocaleString("de-DE", { minimumFractionDigits: 2 })} € VSt</div>
+                  </div>
+
                 </div>
-                <p className="text-xs text-text-muted mt-0.5">
-                  {beleg.belegdatum ? new Date(beleg.belegdatum).toLocaleDateString("de-DE") : "—"} · {beleg.belegart ?? "—"} · {beleg.skrKonto ?? "—"}
-                  {beleg.ocrConfidence !== undefined && ` · ${beleg.ocrConfidence.toFixed(0)} % Confidence`}
-                </p>
-                {hinweise.length > 0 && (
-                  <p className="text-[11px] text-amber-600 font-semibold mt-1">{hinweise[0].text}</p>
-                )}
+                {idx < filteredBelege.length - 1 && <div className="w-full h-px bg-neutral-100 my-1 ml-14" />}
               </div>
-              <div className="text-right shrink-0">
-                <div className="text-lg font-extrabold text-navy-900">{beleg.brutto?.toLocaleString("de-DE")} €</div>
-                <div className="text-xs text-text-muted">{beleg.netto?.toLocaleString("de-DE")} € netto</div>
-              </div>
-              <ChevronRight className="w-4 h-4 text-neutral-gray-300 group-hover:text-accent-orange transition-colors shrink-0" />
-            </Link>
-          );
-        })}
-
-        {filtered.length === 0 && (
-          <div className="text-center py-12 text-text-muted text-sm">Keine Belege gefunden.</div>
-        )}
-      </div>
-
-      {/* Upload Overlay */}
-      {showUpload && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl shadow-elevated border border-neutral-gray-100 w-full max-w-md p-8 animate-in zoom-in-95 duration-200">
-            <h3 className="text-lg font-extrabold text-navy-900 mb-4">Beleg fotografieren / hochladen</h3>
-            <p className="text-sm text-text-muted mb-6">Wähle ein Foto oder PDF aus. Die KI erkennt Lieferant, Betrag, Datum und Kategorie automatisch.</p>
-            <div className="flex gap-3">
-              <button onClick={handleMockUpload} className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-navy-900 text-white rounded-xl font-bold text-sm hover:bg-navy-800 transition-colors">
-                <Camera className="w-4 h-4" /> Demo: Beleg simulieren
-              </button>
-              <button onClick={() => setShowUpload(false)} className="px-4 py-3 bg-neutral-gray-100 text-navy-900 rounded-xl font-semibold text-sm hover:bg-neutral-gray-200 transition-colors">
-                Abbrechen
-              </button>
-            </div>
-            <p className="text-[10px] text-text-muted mt-4 text-center">Demo-Modus: Beleg wird mit Beispieldaten erzeugt.</p>
-          </div>
+            );
+          })}
+          
+          {filteredBelege.length === 0 && (
+            <div className="text-center py-12 text-neutral-400 text-sm">Keine Belege für diesen Filter gefunden.</div>
+          )}
         </div>
-      )}
+      </div>
 
       <FeedbackFooter pageTitle="Belege" route="/buchhaltung/belege" variant="full" />
     </div>

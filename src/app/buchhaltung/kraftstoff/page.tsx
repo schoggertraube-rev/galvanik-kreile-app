@@ -1,37 +1,32 @@
 "use client";
 import { usePageView } from "@/hooks/usePageView";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { getBuchhaltungProvider } from "@/lib/buchhaltung";
-import type { KraftstoffReport } from "@/lib/buchhaltung/types";
-import { ChevronRight, Fuel, MapPin, Calendar } from "lucide-react";
+import { ChevronRight, Fuel, AlertTriangle, CheckCircle2, Navigation, TrendingUp } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
+
+const TANKUNGEN = [
+  { id: 1, kfz: "F-GK 101 (Sprinter)", date: "02.06.2026", liter: 45.8, amount: 78.40, sorte: "Diesel", ort: "Shell - Frankfurt-Ost", absetzbar: true },
+  { id: 2, kfz: "F-GK 102 (Caddy)", date: "24.05.2026", liter: 41.2, amount: 70.90, sorte: "Diesel", ort: "Aral - Hanau", absetzbar: true },
+  { id: 3, kfz: "F-GK 101 (Sprinter)", date: "11.05.2026", liter: 62.0, amount: 105.40, sorte: "Diesel", ort: "Esso - Offenbach", absetzbar: true },
+  { id: 4, kfz: "Privat-PKW Chef", date: "08.05.2026", liter: 35.0, amount: 65.50, sorte: "Super 95", ort: "Jet - Frankfurt", absetzbar: false },
+];
 
 export default function KraftstoffPage() {
   usePageView();
-  const [report, setReport] = useState<KraftstoffReport | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("alle");
 
-  useEffect(() => {
-    const load = async () => {
-      const provider = getBuchhaltungProvider();
-      const now = new Date();
-      const data = await provider.getKraftstoffAuswertung({
-        von: `${now.getFullYear()}-01-01`,
-        bis: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`,
-      });
-      setReport(data);
-      setLoading(false);
-    };
-    load();
-  }, []);
+  const filtered = filter === "alle" 
+    ? TANKUNGEN 
+    : TANKUNGEN.filter(t => t.kfz.includes(filter));
 
-  if (loading || !report) {
-    return <div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-3 border-accent-orange/20 border-t-accent-orange rounded-full animate-spin" /></div>;
-  }
+  const gesamtLiter = TANKUNGEN.filter(t => t.absetzbar).reduce((s, t) => s + t.liter, 0);
+  const gesamtKosten = TANKUNGEN.filter(t => t.absetzbar).reduce((s, t) => s + t.amount, 0);
 
   return (
-    <div className="w-full pb-24 px-4 sm:px-6 xl:px-8">
+    <div className="w-full pb-24 px-4 sm:px-6 xl:px-8 bg-[#fdfcf9] min-h-screen">
+      
+      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs font-semibold text-text-muted mt-4 mb-3">
         <Link href="/" className="hover:text-navy-900 transition-colors">Home</Link>
         <ChevronRight className="w-3 h-3" />
@@ -40,79 +35,151 @@ export default function KraftstoffPage() {
         <span className="text-navy-900">Kraftstoff & Kfz</span>
       </div>
 
-      <h1 className="text-2xl font-extrabold text-navy-900 mb-1">Kraftstoff & Kfz</h1>
-      <p className="text-sm text-text-muted mb-8">{report.anzahlTankungen} Tankungen · Ø {report.durchschnittPreisProLiter.toFixed(2)} €/l · {report.gesamtLiter.toFixed(0)} Liter gesamt</p>
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <KPI label="Gesamtkosten" value={`${report.gesamtkosten.toLocaleString("de-DE")} €`} icon={<Fuel className="w-5 h-5 text-blue-500" />} />
-        <KPI label="Liter gesamt" value={report.gesamtLiter.toFixed(0)} icon={<Fuel className="w-5 h-5 text-teal-500" />} />
-        <KPI label="Ø Preis/Liter" value={`${report.durchschnittPreisProLiter.toFixed(2)} €`} icon={<Fuel className="w-5 h-5 text-amber-500" />} />
-        <KPI label="Tankungen" value={String(report.anzahlTankungen)} icon={<MapPin className="w-5 h-5 text-emerald-500" />} />
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div>
+          <div className="flex items-center gap-3">
+            <Fuel className="w-7 h-7 text-blue-500" />
+            <h1 className="text-3xl font-extrabold text-[#1e1b18] tracking-tight">Kraftstoff & Fuhrpark</h1>
+          </div>
+          <p className="text-xs font-semibold text-neutral-500 mt-2">
+            Verbrauchsauswertung, Plausibilität und Fahrtenbuch-Checks
+          </p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Nach Sorte */}
-        <div className="bg-white rounded-2xl border border-neutral-gray-100 shadow-sm p-6">
-          <h2 className="text-base font-extrabold text-navy-900 mb-4">Nach Kraftstoffsorte</h2>
-          <div className="space-y-3">
-            {report.nachSorte.map(s => (
-              <div key={s.sorte} className="flex items-center justify-between">
-                <div>
-                  <span className="font-bold text-navy-900 capitalize">{s.sorte}</span>
-                  <span className="text-xs text-text-muted ml-2">{s.liter.toFixed(0)} l</span>
-                </div>
-                <span className="font-extrabold text-navy-900">{s.kosten.toLocaleString("de-DE")} €</span>
+      {/* Top Dashboards */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-10">
+        
+        {/* KPI Card */}
+        <div className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100 flex flex-col justify-center relative overflow-hidden lg:col-span-1">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-3xl -mr-10 -mt-10 opacity-60" />
+          <div className="relative">
+            <div className="flex justify-between items-end mb-4">
+              <div>
+                <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-1">Kraftstoffkosten (Betrieblich)</div>
+                <div className="text-3xl font-extrabold text-[#1e1b18]">{gesamtKosten.toLocaleString("de-DE", {minimumFractionDigits: 2})} €</div>
               </div>
-            ))}
+            </div>
+            <div className="flex items-center gap-4 text-xs font-bold">
+              <div className="text-blue-600">{gesamtLiter.toFixed(1)} Liter gesamt</div>
+              <div className="text-neutral-400">ø 1,71 €/L</div>
+            </div>
           </div>
         </div>
 
-        {/* Nach Ort */}
-        <div className="bg-white rounded-2xl border border-neutral-gray-100 shadow-sm p-6">
-          <h2 className="text-base font-extrabold text-navy-900 mb-4">Nach Ort</h2>
-          <div className="space-y-3">
-            {report.nachOrt.map(o => (
-              <div key={o.ort} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-text-muted" />
-                  <span className="font-bold text-navy-900">{o.ort}</span>
-                  <span className="text-xs text-text-muted">{o.anzahl}×</span>
-                </div>
-                <span className="font-extrabold text-navy-900">{o.kosten.toLocaleString("de-DE")} €</span>
-              </div>
-            ))}
-          </div>
+        {/* KI Advice Cards */}
+        <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-5">
+           {/* Card 1 */}
+           <div className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100 flex flex-col">
+             <div className="flex items-center gap-2 mb-2">
+               <span className="text-blue-500 font-bold">⛽</span>
+               <h3 className="text-sm font-extrabold text-[#1e1b18]">Verbrauch — plausibel</h3>
+             </div>
+             <div className="flex items-center gap-1 mb-3">
+               <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+               <span className="text-[10px] font-bold text-emerald-600 tracking-wider">VERIFIZIERT</span>
+             </div>
+             <p className="text-xs text-neutral-600 leading-relaxed flex-1">
+               Dieselkosten liegen bei <strong className="text-[#1e1b18]">1,8 % vom Umsatz</strong>. Für deinen Fuhrpark (2 Transporter) absolut im Rahmen.
+             </p>
+           </div>
+           
+           {/* Card 2 */}
+           <div className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100 flex flex-col">
+             <div className="flex items-center gap-2 mb-2">
+               <AlertTriangle className="w-4 h-4 text-amber-500" />
+               <h3 className="text-sm font-extrabold text-[#1e1b18]">Tanklücke erkannt</h3>
+             </div>
+             <div className="flex items-center gap-1 mb-3">
+               <span className="text-[10px] font-bold text-amber-600 tracking-wider bg-amber-50 px-2 py-0.5 rounded">HINWEIS</span>
+             </div>
+             <p className="text-xs text-neutral-600 leading-relaxed flex-1">
+               Zwischen <strong className="text-[#1e1b18]">12.-19. Mai</strong> fehlt eine Tankung beim F-GK 101. Die Fahrleistung laut GPS-Daten erfordert hier eigentlich Kraftstoff.
+             </p>
+           </div>
         </div>
 
-        {/* Nach Monat */}
-        <div className="bg-white rounded-2xl border border-neutral-gray-100 shadow-sm p-6 lg:col-span-2">
-          <h2 className="text-base font-extrabold text-navy-900 mb-4">Monatsverlauf</h2>
-          <div className="flex gap-4 overflow-x-auto pb-2">
-            {report.nachMonat.map(m => (
-              <div key={m.monat} className="flex-1 min-w-[120px] bg-neutral-gray-50 rounded-xl p-4 text-center">
-                <div className="text-xs text-text-muted font-bold">{new Date(m.monat + "-01").toLocaleDateString("de-DE", { month: "short", year: "2-digit" })}</div>
-                <div className="text-lg font-extrabold text-navy-900 mt-1">{m.kosten.toLocaleString("de-DE")} €</div>
-                <div className="text-xs text-text-muted">{m.liter.toFixed(0)} l</div>
+      </div>
+
+      {/* Filter Bar */}
+      <h2 className="text-sm font-semibold text-neutral-600 mb-3">Tankungen</h2>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+          {[
+            { id: "alle", label: "Alle Fahrzeuge", color: "bg-black" },
+            { id: "101", label: "F-GK 101", color: "bg-blue-500" },
+            { id: "102", label: "F-GK 102", color: "bg-teal-500" },
+            { id: "Privat", label: "Privat-PKW", color: "bg-neutral-400" },
+          ].map(f => (
+            <button
+              key={f.id}
+              onClick={() => setFilter(f.id)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-full text-[11px] font-bold whitespace-nowrap transition-colors ${
+                filter === f.id && f.id === "alle" ? "bg-[#1e1b18] text-white" :
+                filter === f.id ? "bg-white border border-neutral-200 text-[#1e1b18] shadow-sm" :
+                "bg-white border border-transparent text-neutral-500 hover:text-[#1e1b18] hover:border-neutral-200"
+              }`}
+            >
+              {f.id !== "alle" && <div className={`w-1.5 h-1.5 rounded-full ${f.color}`} />}
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* List Container */}
+      <div className="bg-white rounded-[2rem] border border-neutral-100 p-2 sm:p-5 shadow-sm">
+        <div className="flex flex-col">
+          {filtered.map((t, idx) => {
+            return (
+              <div key={t.id}>
+                <div className="flex items-center gap-4 p-3 hover:bg-neutral-50 rounded-2xl transition-colors cursor-pointer group">
+                  
+                  {/* Icon */}
+                  <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 border border-neutral-100 ${t.absetzbar ? 'bg-blue-50' : 'bg-neutral-50'}`}>
+                    <Navigation className={`w-4 h-4 ${t.absetzbar ? 'text-blue-500' : 'text-neutral-400'}`} />
+                  </div>
+                  
+                  {/* Name & Date */}
+                  <div className="flex-1 min-w-0 flex items-center">
+                    <div className="w-[35%] min-w-[200px] pr-4">
+                      <div className="text-sm font-extrabold text-[#1e1b18] truncate">{t.kfz}</div>
+                      <div className="text-[11px] font-semibold text-neutral-500 mt-0.5 truncate">{t.date} · {t.ort}</div>
+                    </div>
+                    
+                    {/* Liter / Sorte */}
+                    <div className="w-[20%] min-w-[120px] px-4 hidden md:flex flex-col">
+                      <span className={`text-xs font-bold text-[#1e1b18]`}>{t.sorte}</span>
+                      <span className="text-[10px] text-neutral-400">{t.liter} Liter</span>
+                    </div>
+
+                    {/* Status Pill */}
+                    <div className="flex-1 px-4 flex justify-end md:justify-center">
+                      <span className={`px-2.5 py-1 rounded text-[10px] font-extrabold tracking-wide uppercase ${t.absetzbar ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-500'}`}>
+                        {t.absetzbar ? 'Betrieblich' : 'Privat / Nicht absetzbar'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Amount */}
+                  <div className="text-right shrink-0 min-w-[100px]">
+                    <div className="text-base font-extrabold text-[#1e1b18]">{t.amount.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</div>
+                  </div>
+
+                </div>
+                {idx < filtered.length - 1 && <div className="w-full h-px bg-neutral-100 my-1 ml-14" />}
               </div>
-            ))}
-          </div>
+            );
+          })}
+          
+          {filtered.length === 0 && (
+            <div className="text-center py-12 text-neutral-400 text-sm">Keine Tankungen für diesen Filter gefunden.</div>
+          )}
         </div>
       </div>
 
       <FeedbackFooter pageTitle="Kraftstoff" route="/buchhaltung/kraftstoff" variant="full" />
-    </div>
-  );
-}
-
-function KPI({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-2xl border border-neutral-gray-100 shadow-sm p-5 flex items-center gap-4">
-      <div className="w-10 h-10 rounded-xl bg-neutral-gray-50 flex items-center justify-center shrink-0">{icon}</div>
-      <div>
-        <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted">{label}</div>
-        <div className="text-lg font-extrabold text-navy-900">{value}</div>
-      </div>
     </div>
   );
 }
