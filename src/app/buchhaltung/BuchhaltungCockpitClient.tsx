@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   FileText, Camera, Fuel, TrendingUp, CreditCard,
-  Receipt, FileCheck, Download, Settings, ChevronRight,
-  CheckCircle2, Briefcase, CalendarClock, Sparkles, Banknote,
-  Wallet, ArrowRight
+  BarChart3, PieChart, Receipt, FileCheck,
+  Download, AlertCircle, Settings, ChevronRight, CheckCircle2,
+  Briefcase, CalendarClock, Sparkles, Banknote, Wallet,
+  ArrowRight, Globe, Users
 } from "lucide-react";
 import { getBuchhaltungProvider } from "@/lib/buchhaltung";
 import type { UstvaWerte, Ersparnis, KategorieSumme } from "@/lib/buchhaltung/types";
@@ -13,68 +15,100 @@ import { pruefeFristen } from "@/lib/buchhaltung/regeln";
 import Link from "next/link";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
-// ── Category Card Component ──────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────────────────────
 
-function CategoryCard({ icon, iconBg, title, description, href, badge, stats }: {
-  icon: React.ReactNode;
-  iconBg: string;
+type TileProps = {
   title: string;
   description: string;
-  href: string;
-  badge?: { label: string; variant: "action" | "ready" | "prep" };
-  stats?: { label: string; value: string }[];
-}) {
-  const badgeColors = {
+  icon: React.ReactNode;
+  iconColor: string;
+  href?: string;
+  kpi?: string;
+  status?: { label: string; variant: "action" | "ready" | "prep" | "default" };
+  footer?: string;
+  analyseLink?: { label: string; href: string };
+};
+
+// ── Tile Component ───────────────────────────────────────────────────────
+
+function Tile({ title, description, icon, iconColor, href, kpi, status, footer, analyseLink }: TileProps) {
+  const router = useRouter();
+  const statusColors = {
     action: "bg-red-50 text-red-600 border-red-100",
     ready: "bg-emerald-50 text-emerald-600 border-emerald-100",
     prep: "bg-amber-50 text-amber-600 border-amber-100",
+    default: "bg-neutral-gray-100 text-text-muted border-neutral-gray-200",
   };
 
-  return (
-    <Link
-      href={href}
-      className="group relative bg-white border border-neutral-gray-100 rounded-3xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 p-6 sm:p-8 flex flex-col gap-4 overflow-hidden cursor-pointer min-h-[200px]"
-    >
-      {/* Watermark Icon */}
-      <div className="absolute -right-4 -bottom-4 pointer-events-none opacity-[0.04] transform scale-[10] -rotate-12 origin-bottom-right">
+  const inner = (
+    <>
+      {/* Watermark */}
+      <div className="absolute -right-2 -bottom-2 pointer-events-none opacity-[0.06] transform scale-[7] -rotate-12 origin-bottom-right">
         {icon}
       </div>
 
-      {/* Top: Icon + Badge */}
-      <div className="relative z-10 flex items-start justify-between">
-        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${iconBg} group-hover:scale-110 transition-transform`}>
-          {icon}
-        </div>
-        {badge && (
-          <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${badgeColors[badge.variant]}`}>
-            {badge.label}
+      <div className="relative z-10 flex items-start justify-end gap-3 min-h-[24px]">
+        {kpi && (
+          <span className="text-xl font-extrabold text-navy-900 tracking-tight">{kpi}</span>
+        )}
+        {status && (
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${statusColors[status.variant]}`}>
+            {status.label}
           </span>
         )}
       </div>
-
-      {/* Title + Description */}
-      <div className="relative z-10">
-        <h3 className="text-xl font-extrabold text-navy-900 leading-tight mb-1.5">{title}</h3>
-        <p className="text-[13px] text-text-muted leading-relaxed">{description}</p>
+      <h3 className="relative z-10 text-lg font-extrabold text-navy-900 leading-snug">{title}</h3>
+      <p className="relative z-10 text-[13px] text-text-muted leading-relaxed">{description}</p>
+      <div className="relative z-10 flex items-center justify-between mt-auto pt-1 gap-3">
+        <span className="text-xs font-bold text-accent-orange flex items-center gap-1 group-hover:gap-2 transition-all">
+          {footer ?? "Öffnen"} <ChevronRight className="w-3.5 h-3.5" />
+        </span>
+        {analyseLink && (
+          <Link
+            href={analyseLink.href}
+            onClick={(e) => e.stopPropagation()}
+            className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-full flex items-center gap-1 transition-colors border border-blue-100 shrink-0"
+          >
+            <BarChart3 className="w-3 h-3" /> {analyseLink.label}
+          </Link>
+        )}
       </div>
+    </>
+  );
 
-      {/* Stats Row */}
-      {stats && stats.length > 0 && (
-        <div className="relative z-10 flex flex-wrap gap-4 mt-auto">
-          {stats.map((s, i) => (
-            <div key={i}>
-              <div className="text-lg font-extrabold text-navy-900 tracking-tight">{s.value}</div>
-              <div className="text-[10px] text-text-muted font-semibold uppercase tracking-wider">{s.label}</div>
-            </div>
-          ))}
-        </div>
+  const cls = "group relative overflow-hidden bg-white border border-neutral-gray-100 rounded-2xl shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 p-5 flex flex-col gap-3 min-h-[140px] cursor-pointer";
+
+  // If tile has both href AND analyseLink, render as <div> with onClick
+  // to avoid nested <a> tags (Link inside Link = hydration error)
+  if (href && analyseLink) {
+    return <div className={cls} onClick={() => router.push(href)}>{inner}</div>;
+  }
+  if (href) {
+    return <Link href={href} className={cls}>{inner}</Link>;
+  }
+  return <div className={cls}>{inner}</div>;
+}
+
+// ── Section Header with Tile Icon ────────────────────────────────────────
+
+function SectionHeader({ icon, iconBg, title, badge }: {
+  icon: React.ReactNode;
+  iconBg: string;
+  title: string;
+  badge?: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 mt-10 mb-5 px-1">
+      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${iconBg}`}>
+        {icon}
+      </div>
+      <span className="text-base font-extrabold text-navy-900">{title}</span>
+      {badge && (
+        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-100">
+          {badge}
+        </span>
       )}
-
-      {/* Open Arrow */}
-      <div className="relative z-10 flex items-center gap-1 text-xs font-bold text-accent-orange group-hover:gap-2 transition-all mt-auto">
-        Öffnen <ArrowRight className="w-3.5 h-3.5" />
-      </div>
-    </Link>
+    </div>
   );
 }
 
@@ -159,7 +193,7 @@ export function BuchhaltungCockpitClient() {
       </div>
 
       {/* ── Hero-Band: UStVA + Sparzähler ────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-4 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-4 mb-2">
         {/* UStVA Hero */}
         <div className="relative bg-white border border-neutral-gray-100 rounded-2xl shadow-sm p-6 overflow-hidden">
           <div className="absolute -right-12 -top-12 w-56 h-56 rounded-full bg-linear-to-br from-emerald-50 to-transparent pointer-events-none" />
@@ -207,7 +241,7 @@ export function BuchhaltungCockpitClient() {
           </div>
           
           <p className="text-xs text-text-muted mt-4 relative z-10">
-            3 Belege brauchen noch deinen Blick. ELSTER-Direktversand wird scharfgeschaltet, sobald dein Zertifikat hinterlegt ist.
+            3 Belege brauchen noch deinen Blick. ELSTER-Direktversand wird scharfgeschaltet, sobald dein Zertifikat hinterlegt ist — bis dahin: Export für den ELSTER-Upload.
           </p>
         </div>
 
@@ -224,68 +258,153 @@ export function BuchhaltungCockpitClient() {
         </div>
       </div>
 
-      {/* ── 4 Kategorie-Kacheln ──────────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-8">
-
-        {/* 01 — Belege & Ausgaben */}
-        <CategoryCard
-          icon={<Receipt className="w-7 h-7 text-rose-500" strokeWidth={1.8} />}
-          iconBg="bg-rose-50"
-          title="Belege & Ausgaben"
-          description="Belege fotografieren, KI-Erkennung, Ausgaben nach Kategorie, Fix- & variable Kosten, Kraftstoff & Kfz."
+      {/* ── Abschnitt: Belege & Ausgaben ──────────────────────────────── */}
+      <SectionHeader
+        icon={<Receipt className="w-4.5 h-4.5 text-rose-500" strokeWidth={2} />}
+        iconBg="bg-rose-50"
+        title="Belege & Ausgaben"
+      />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <Tile
+          title="Belege erfassen & prüfen"
+          description="Foto rein, Inhalt automatisch erkannt & kategorisiert. 3 von 142 unsicher."
+          icon={<Receipt className="w-5 h-5 text-accent-orange" strokeWidth={1.8} />}
+          iconColor="bg-accent-orange/10"
           href="/buchhaltung/belege"
-          badge={{ label: "3 prüfen", variant: "action" }}
-          stats={[
-            { label: "Belege", value: "142" },
-            { label: "Ausgaben", value: `${gesamtAusgaben.toLocaleString("de-DE")} €` },
-          ]}
+          status={{ label: "3 prüfen", variant: "action" }}
         />
+        <Tile
+          title="Kraftstoff & Kfz"
+          description="Diesel auf einen Blick: 18 Tankungen, Ø 1,71 €/l. Filterbar nach Ort & Zeit."
+          icon={<Fuel className="w-5 h-5 text-blue-600" strokeWidth={1.8} />}
+          iconColor="bg-blue-50"
+          href="/buchhaltung/kraftstoff"
+          kpi="1.240 €"
+          footer="Auswertung"
+        />
+        <Tile
+          title="Ausgaben & Kostenstruktur"
+          description="Fix- und variable Kosten auf einen Blick. Filterbar nach Typ, Zeitraum und Kategorie."
+          icon={<Wallet className="w-5 h-5 text-amber-600" strokeWidth={1.8} />}
+          iconColor="bg-amber-50"
+          href="/buchhaltung/kosten"
+          kpi={`${gesamtAusgaben.toLocaleString("de-DE")} €`}
+          footer="Kosten & Ausgaben"
+        />
+      </div>
 
-        {/* 02 — Einnahmen & Rechnungen */}
-        <CategoryCard
-          icon={<FileCheck className="w-7 h-7 text-emerald-600" strokeWidth={1.8} />}
-          iconBg="bg-emerald-50"
-          title="Einnahmen & Rechnungen"
-          description="Ausgangsrechnungen, offene Posten, Mahnwesen, E-Rechnung (ZUGFeRD/XRechnung)."
+      {/* ── Abschnitt: Einnahmen & Rechnungen ────────────────────────── */}
+      <SectionHeader
+        icon={<FileCheck className="w-4.5 h-4.5 text-emerald-600" strokeWidth={2} />}
+        iconBg="bg-emerald-50"
+        title="Einnahmen & Rechnungen"
+      />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <Tile
+          title="Offene Posten"
+          description="3 Zahlungen überfällig. Mahnstufen & Zahlungserinnerung automatisch."
+          icon={<AlertCircle className="w-5 h-5 text-red-500" strokeWidth={1.8} />}
+          iconColor="bg-red-50"
+          href="/buchhaltung/rechnungen?filter=offen"
+          kpi="12.450 €"
+          status={{ label: "3 überfällig", variant: "action" }}
+          footer="Details"
+        />
+        <Tile
+          title="Rechnungen & Statistik"
+          description="Ausgangsrechnungen laufender Monat. Schreiben, E-Rechnung (ZUGFeRD/XRechnung)."
+          icon={<FileCheck className="w-5 h-5 text-emerald-600" strokeWidth={1.8} />}
+          iconColor="bg-emerald-50"
           href="/buchhaltung/rechnungen"
-          badge={{ label: "3 überfällig", variant: "action" }}
-          stats={[
-            { label: "Rechnungen", value: "42" },
-            { label: "Offen", value: "12.450 €" },
-          ]}
+          kpi="42"
+          footer="Details"
         />
-
-        {/* 03 — Zahlungsbereich */}
-        <CategoryCard
-          icon={<CreditCard className="w-7 h-7 text-teal-600" strokeWidth={1.8} />}
-          iconBg="bg-teal-50"
+        <Tile
           title="Zahlungsbereich"
-          description="Zahlungsdienstleister, QR-Codes, Vor-Ort-Terminal, Zahlungsmoral & Zahlungsstatistik."
+          description="Dienstleister, Zahlungslinks, QR, Vor-Ort-Terminal. Zahlungsmoral & Zahlungsstatistik."
+          icon={<CreditCard className="w-5 h-5 text-teal-600" strokeWidth={1.8} />}
+          iconColor="bg-teal-50"
           href="/buchhaltung/zahlung"
-          badge={{ label: "In Vorbereitung", variant: "prep" }}
-          stats={[
-            { label: "Zahlungsarten", value: "5" },
-            { label: "Pünktlich", value: "82 %" },
-          ]}
+          status={{ label: "In Vorbereitung", variant: "prep" }}
+          footer="Optionen & Statistik"
+          analyseLink={{ label: "Analyse", href: "/buchhaltung/zahlung?tab=statistik" }}
         />
+      </div>
 
-        {/* 04 — Auswertung & Export */}
-        <CategoryCard
-          icon={<TrendingUp className="w-7 h-7 text-blue-600" strokeWidth={1.8} />}
-          iconBg="bg-blue-50"
-          title="Auswertung & Export"
-          description="BWA, Steuerprofil, UStVA, DATEV, Lexware, Steuerberater-Paket, Fristen & Pflichten."
-          href="/buchhaltung/export"
-          badge={{ label: "Bereit", variant: "ready" }}
-          stats={[
-            { label: "Ergebnis", value: "+19.200 €" },
-            { label: "Nächste Frist", value: `${Math.max(0, 10 - new Date().getDate())}d` },
-          ]}
+      {/* ── Abschnitt: Auswertung & Steuerprofil ─────────────────────── */}
+      <SectionHeader
+        icon={<TrendingUp className="w-4.5 h-4.5 text-teal-600" strokeWidth={2} />}
+        iconBg="bg-teal-50"
+        title="Auswertung & Steuerprofil"
+      />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <Tile
+          title="BWA / Monatsübersicht"
+          description="Betriebswirtschaftliche Auswertung. Einnahmen, Ausgaben, Ergebnis."
+          icon={<TrendingUp className="w-5 h-5 text-teal-600" strokeWidth={1.8} />}
+          iconColor="bg-teal-50"
+          href="/buchhaltung/bwa"
+          kpi="+19.200 €"
+          footer="Details"
+        />
+        <Tile
+          title="Steuerprofil & UStVA"
+          description="USt-Sätze, Voranmeldungs-Rhythmus, Berater-Nr. ELSTER-Einstellungen."
+          icon={<Banknote className="w-5 h-5 text-purple-600" strokeWidth={1.8} />}
+          iconColor="bg-purple-50"
+          href="/buchhaltung/steuerprofil"
+          kpi="DE"
+          footer="Details"
+        />
+        <Tile
+          title="Ausgaben nach Kategorie"
+          description="Laufender Monat nach Kategorie. KI-Hinweise zur Absetzbarkeit inklusive."
+          icon={<PieChart className="w-5 h-5 text-emerald-600" strokeWidth={1.8} />}
+          iconColor="bg-emerald-50"
+          href="/buchhaltung/ausgaben"
+          kpi={`${kategorien.length} Kategorien`}
+          footer="Details"
+        />
+      </div>
+
+      {/* ── Abschnitt: Export & Steuerberater ─────────────────────────── */}
+      <SectionHeader
+        icon={<Download className="w-4.5 h-4.5 text-blue-600" strokeWidth={2} />}
+        iconBg="bg-blue-50"
+        title="Export & Steuerberater"
+      />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <Tile
+          title="DATEV-Export"
+          description="Buchungsstapel (EXTF, SKR03) + Belegbilder. Vorschau & ein-Klick-Übergabe."
+          icon={<Download className="w-5 h-5 text-emerald-600" strokeWidth={1.8} />}
+          iconColor="bg-emerald-50"
+          href="/buchhaltung/export?format=datev"
+          status={{ label: "Bereit", variant: "ready" }}
+          footer="Vorschau öffnen"
+        />
+        <Tile
+          title="Lexware / Excel"
+          description="Einfacher CSV-Export für Lexware oder Tabellenkalkulation."
+          icon={<FileCheck className="w-5 h-5 text-emerald-600" strokeWidth={1.8} />}
+          iconColor="bg-emerald-50"
+          href="/buchhaltung/export?format=lexware"
+          status={{ label: "Bereit", variant: "ready" }}
+          footer="Vorschau öffnen"
+        />
+        <Tile
+          title="Fristen & Pflichten"
+          description="UStVA, GewSt, Rundfunkbeitrag. Rechtzeitige Erinnerung, nie verpassen."
+          icon={<CalendarClock className="w-5 h-5 text-accent-orange" strokeWidth={1.8} />}
+          iconColor="bg-accent-orange/10"
+          href="/buchhaltung/fristen"
+          status={{ label: "Überwacht", variant: "ready" }}
+          footer="Kalender"
         />
       </div>
 
       {/* ── Premium: Steuerberater-Paket ──────────────────────────────── */}
-      <div className="bg-white border border-neutral-gray-100 rounded-2xl shadow-sm p-5 flex flex-col sm:flex-row items-center gap-5">
+      <div className="bg-white border border-neutral-gray-100 rounded-2xl shadow-sm p-5 flex flex-col sm:flex-row items-center gap-5 mt-8">
         <div className="w-12 h-12 rounded-xl bg-accent-orange/10 flex items-center justify-center shrink-0">
           <Briefcase className="w-6 h-6 text-accent-orange" strokeWidth={1.7} />
         </div>
