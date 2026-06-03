@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePageView } from "@/hooks/usePageView";
+import { INITIAL_CUSTOMERS, INITIAL_ORDERS } from "@/lib/mockData";
+import { createPhoneNote, getRecentPhoneNotes } from "@/app/actions/phoneNotes.actions";
 
 type Channel = "all" | "email" | "whatsapp" | "instagram" | "website" | "phone" | "billing";
 
@@ -85,6 +87,16 @@ const DEMO_THREADS: Thread[] = [
 function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => void }) {
   const [text, setText] = useState("");
   const [parsed, setParsed] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  
+  // Live Matches
+  const [matchedCustomer, setMatchedCustomer] = useState<any>(null);
+  const [matchedOrder, setMatchedOrder] = useState<any>(null);
+  const [matchedMaterial, setMatchedMaterial] = useState<string | null>(null);
+  const [matchedKeywords, setMatchedKeywords] = useState<string[]>([]);
+  
   const [fields, setFields] = useState({
     kunde: "",
     firma: "",
@@ -99,42 +111,154 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
 
   useEffect(() => {
     const draft = localStorage.getItem("kreile_phone_note_draft");
-    if (draft) setText(draft);
+    if (draft) {
+      setText(draft);
+      analyzeText(draft);
+    }
   }, []);
+
+  const analyzeText = (val: string) => {
+    const lower = val.toLowerCase();
+    
+    // 1. Kunden-Suche
+    let foundCust = null;
+    for (const cust of INITIAL_CUSTOMERS) {
+      if (cust.name && lower.includes(cust.name.toLowerCase())) {
+        foundCust = cust;
+        break; // take first match
+      }
+    }
+    setMatchedCustomer(foundCust);
+
+    // 2. Auftrags-Suche
+    let foundOrd = null;
+    for (const ord of INITIAL_ORDERS) {
+      if (lower.includes(ord.id.toLowerCase())) {
+        foundOrd = ord;
+        break;
+      }
+    }
+    setMatchedOrder(foundOrd);
+
+    // 3. Material-Erkennung
+    const materials = ["zink", "chrom", "nickel", "messing", "kupfer", "gold", "silber", "eloxal", "alu"];
+    const foundMat = materials.find(m => lower.includes(m));
+    setMatchedMaterial(foundMat || null);
+
+    // 4. Keyword/Intent-Erkennung
+    const keywords = [];
+    if (lower.includes("reklamation") || lower.includes("beschädigt") || lower.includes("kratzer") || lower.includes("kaputt")) keywords.push("Reklamation");
+    if (lower.includes("rechnung") || lower.includes("zahlung") || lower.includes("bezahlen") || lower.includes("überweisung")) keywords.push("Buchhaltung/Zahlung");
+    if (lower.includes("versand") || lower.includes("abholung") || lower.includes("spedition") || lower.includes("lieferung") || lower.includes("fertig")) keywords.push("Termin/Logistik");
+    if (lower.includes("angebot") || lower.includes("preis") || lower.includes("kosten")) keywords.push("Angebot");
+    setMatchedKeywords(keywords);
+  };
 
   const handleChange = (val: string) => {
     setText(val);
     localStorage.setItem("kreile_phone_note_draft", val);
+    analyzeText(val);
   };
 
   const handleParse = () => {
-    // Simple demo logic to "parse" the text
-    const lower = text.toLowerCase();
     setFields({
-      kunde: lower.includes("schmidt") ? "Herr Schmidt" : lower.includes("maier") ? "Herr Zill" : "Unbekannt",
-      firma: lower.includes("schmidt") ? "Schmidt AG" : lower.includes("maier") ? "Maier GmbH" : "Unbekannt",
-      telefon: "0151 12345678",
-      auftrag: lower.includes("zink") ? "A-2026-0042 (Zinkteile)" : lower.includes("8102") ? "A-2026-8102" : "",
+      kunde: matchedCustomer ? matchedCustomer.name : "",
+      firma: matchedCustomer ? matchedCustomer.name : "",
+      telefon: matchedCustomer?.phone || "",
+      auftrag: matchedOrder ? matchedOrder.id : "",
       thema: text.slice(0, 50) + "...",
-      kategorie: lower.includes("reklamation") || lower.includes("kaputt") ? "Reklamation" : lower.includes("bearbeitungsstand") ? "Rückfrage" : "Neuanfrage",
-      dringlichkeit: lower.includes("dringend") || lower.includes("schnell") ? "Hoch" : "Normal",
-      reklamation: lower.includes("reklamation") || lower.includes("kaputt") ? "Ja" : "Nein",
-      aktion: "Kunde zurückrufen",
+      kategorie: matchedKeywords.includes("Reklamation") ? "Reklamation" : matchedKeywords.includes("Buchhaltung/Zahlung") ? "Buchhaltung" : "Rückfrage",
+      dringlichkeit: text.toLowerCase().includes("dringend") || text.toLowerCase().includes("schnell") || text.toLowerCase().includes("asap") ? "Hoch" : "Normal",
+      reklamation: matchedKeywords.includes("Reklamation") ? "Ja" : "Nein",
+      aktion: "Kunde kontaktieren",
     });
     setParsed(true);
   };
 
-  const handleSave = () => {
-    // Übernehmen
-    localStorage.removeItem("kreile_phone_note_draft");
-    onClose();
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+
+    try {
+      const result = await createPhoneNote({
+        rawText: text,
+        generatedAnswer: matchedOrder ? `Auftrag ${matchedOrder.id} - Status: ${matchedOrder.status}` : undefined,
+        category: matchedKeywords.includes("Reklamation") ? "Reklamation" : matchedKeywords.includes("Buchhaltung/Zahlung") ? "Buchhaltung" : "Neuanfrage",
+        urgency: text.toLowerCase().includes("dringend") || text.toLowerCase().includes("schnell") || text.toLowerCase().includes("asap") ? "Hoch" : "Normal",
+        customerId: matchedCustomer?.id,
+        orderId: matchedOrder?.id,
+        callerName: matchedCustomer?.name,
+        company: matchedCustomer?.name,
+        phone: matchedCustomer?.phone,
+        extractionJson: { keywords: matchedKeywords, material: matchedMaterial },
+        linksJson: []
+      });
+
+      if (result.success) {
+        localStorage.removeItem("kreile_phone_note_draft");
+        setSaveSuccess(true);
+        setTimeout(() => {
+          onClose();
+          setText("");
+          setParsed(false);
+          setSaveSuccess(false);
+        }, 1500);
+      } else {
+        setSaveError(result.error || "Ein unbekannter Fehler ist aufgetreten.");
+      }
+    } catch (err: any) {
+      setSaveError(err.message || "Fehler beim Speichern der Notiz.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCancel = () => {
-    if (text.trim() && !window.confirm("Achtung: Telefonnotiz noch nicht gespeichert! Wirklich schließen?")) {
+    if (text.trim() && !saveSuccess && !window.confirm("Achtung: Telefonnotiz noch nicht gespeichert! Wirklich schließen?")) {
       return;
     }
     onClose();
+  };
+
+  // Helper für Highlight Rendering
+  const renderHighlightedText = () => {
+    if (!text) return null;
+    let parts: any[] = [text];
+
+    const highlightWord = (word: string, colorClass: string, href?: string) => {
+      if (!word) return;
+      const regex = new RegExp(`(${word})`, "gi");
+      parts = parts.flatMap(part => {
+        if (typeof part !== "string") return [part];
+        const split = part.split(regex);
+        return split.map((s, i) => {
+          if (i % 2 === 1) {
+            if (href && parsed) {
+              return <Link key={`${word}-${i}`} href={href} target="_blank" className={`${colorClass} px-1 rounded-md shadow-sm border hover:opacity-80 transition cursor-pointer underline decoration-dotted underline-offset-2`}>{s}</Link>;
+            }
+            return <span key={`${word}-${i}`} className={`${colorClass} px-1 rounded-md shadow-sm border`}>{s}</span>;
+          }
+          return s;
+        });
+      });
+    };
+
+    if (matchedCustomer) {
+      const href = `/customers/${matchedCustomer.id}`;
+      if (matchedCustomer.name) highlightWord(matchedCustomer.name, "bg-blue-100 text-blue-900 border-blue-200", href);
+    }
+    if (matchedOrder) {
+      highlightWord(matchedOrder.id, "bg-purple-100 text-purple-900 border-purple-200", `/orders/${matchedOrder.id}`);
+    }
+    if (matchedMaterial) {
+      highlightWord(matchedMaterial, "bg-amber-100 text-amber-900 border-amber-200");
+    }
+    ["reklamation", "beschädigt", "kratzer", "kaputt"].forEach(w => highlightWord(w, "bg-red-100 text-red-900 border-red-200 font-bold"));
+    ["rechnung", "zahlung", "bezahlen"].forEach(w => highlightWord(w, "bg-green-100 text-green-900 border-green-200"));
+    ["versand", "abholung", "spedition", "fertig", "lieferung"].forEach(w => highlightWord(w, "bg-indigo-100 text-indigo-900 border-indigo-200"));
+
+    return parts;
   };
 
   if (!open) return null;
@@ -143,7 +267,7 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-12 animate-in fade-in duration-300">
       <div className="absolute inset-0 bg-navy-900/60 backdrop-blur-sm" onClick={handleCancel} />
       
-      <div className="relative w-full max-w-5xl h-[85vh] bg-white rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden border border-neutral-gray-200">
+      <div className="relative w-full max-w-6xl h-[85vh] bg-white rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden border border-neutral-gray-200">
         
         {/* LEFT/MAIN COLUMN */}
         <div className="flex-1 flex flex-col h-full bg-[#F0EBE0]">
@@ -157,27 +281,46 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
             </button>
           </div>
 
-          <div className="flex-1 p-4 md:p-8 flex flex-col overflow-y-auto">
+          <div className="flex-1 p-4 md:p-8 flex flex-col overflow-y-auto relative">
             {!parsed ? (
-              <div className="flex-1 flex flex-col h-full relative">
-                <textarea 
-                  value={text}
-                  onChange={(e) => handleChange(e.target.value)}
-                  className="w-full flex-1 p-6 text-xl md:text-2xl leading-relaxed bg-white rounded-2xl border-2 border-neutral-gray-200 focus:border-navy-900 outline-none text-navy-900 resize-none shadow-sm placeholder:text-neutral-gray-300"
-                  placeholder="Einfach mittippen..."
-                  autoFocus
-                />
+              <div className="flex-1 flex flex-col h-full relative group">
+                <div className="relative flex-1 w-full h-full bg-white rounded-2xl border-2 border-neutral-gray-200 focus-within:border-navy-900 shadow-sm overflow-hidden">
+                  {/* Highlight Layer */}
+                  <div 
+                    className="absolute inset-0 p-6 text-xl md:text-2xl leading-relaxed whitespace-pre-wrap break-words pointer-events-none z-10"
+                    style={{ color: 'transparent', fontFamily: 'inherit' }}
+                    aria-hidden="true"
+                  >
+                    {renderHighlightedText()}
+                  </div>
+                  {/* Text Layer */}
+                  <textarea 
+                    value={text}
+                    onChange={(e) => handleChange(e.target.value)}
+                    className="absolute inset-0 w-full h-full p-6 text-xl md:text-2xl leading-relaxed bg-transparent text-navy-900 outline-none resize-none z-20 placeholder:text-neutral-gray-300"
+                    style={{ caretColor: '#1a1a1a' }}
+                    placeholder="Einfach mittippen... (Kunden, Aufträge und Signalwörter werden automatisch erkannt)"
+                    autoFocus
+                    spellCheck={false}
+                  />
+                </div>
                 
                 {/* Voice Input Mock */}
                 <button 
-                  className="absolute bottom-6 right-6 w-14 h-14 bg-navy-900 rounded-full flex items-center justify-center shadow-lg hover:bg-navy-800 transition-colors group"
-                  title="Sprachaufnahme starten (Demo)"
+                  disabled
+                  className="w-12 h-12 rounded-full bg-navy-900/50 flex items-center justify-center cursor-not-allowed hover:bg-navy-900/50"
+                  title="Sprachnotiz in Vorbereitung"
                 >
-                  <Mic className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
+                  <Mic className="w-6 h-6 text-white/50" />
                 </button>
               </div>
             ) : (
-              <div className="space-y-6 flex-1">
+              <div className="space-y-6 flex-1 flex flex-col h-full">
+                {/* Parsed Text with Clickable Links */}
+                <div className="bg-white p-6 rounded-2xl border-2 border-neutral-gray-200 shadow-sm text-xl md:text-2xl leading-relaxed whitespace-pre-wrap break-words text-navy-900 overflow-y-auto">
+                  {renderHighlightedText()}
+                </div>
+
                 <div className="bg-success-green/10 border border-success-green/20 p-4 rounded-xl flex items-start gap-3">
                   <CheckCircle2 className="w-5 h-5 text-success-green shrink-0 mt-0.5" />
                   <div>
@@ -198,6 +341,7 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
                        <option>Reklamation</option>
                        <option>Rückfrage</option>
                        <option>Rückruf</option>
+                       <option>Buchhaltung</option>
                     </select>
                   </div>
                   <div>
@@ -221,78 +365,131 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
             {!parsed ? (
               <>
                 <span className="text-xs text-text-muted flex items-center gap-1 font-bold">
-                  <Save className="w-4 h-4"/> Gesichert
+                  {text ? <><Save className="w-4 h-4"/> Entwurf gesichert</> : ""}
                 </span>
                 <button 
                   onClick={handleParse} 
                   disabled={!text.trim()}
                   className="bg-navy-900 text-white font-bold px-8 py-3 rounded-xl hover:bg-navy-800 disabled:opacity-50 transition"
                 >
-                  Auswerten
+                  Text auswerten
                 </button>
               </>
             ) : (
               <>
-                <button onClick={() => setParsed(false)} className="text-sm font-bold text-text-muted hover:text-navy-900 px-4 py-2">
+                <button onClick={() => setParsed(false)} disabled={isSaving || saveSuccess} className="text-sm font-bold text-text-muted hover:text-navy-900 px-4 py-2 disabled:opacity-50">
                   Zurück zum Text
                 </button>
-                <button onClick={handleSave} className="bg-accent-orange text-white font-bold px-8 py-3 rounded-xl hover:bg-orange-600 transition shadow-md">
-                  Lokal vormerken
+                <button 
+                  onClick={handleSave} 
+                  disabled={isSaving || saveSuccess} 
+                  className={`font-bold px-8 py-3 rounded-xl transition shadow-md ${saveSuccess ? 'bg-success-green text-white' : 'bg-accent-orange text-white hover:bg-orange-600'} disabled:opacity-70`}
+                >
+                  {isSaving ? "Speichert..." : saveSuccess ? "Gespeichert!" : "Telefonnotiz speichern"}
                 </button>
               </>
             )}
           </div>
+          {saveError && (
+             <div className="p-4 bg-error-red/10 text-error-red text-sm font-bold border-t border-error-red/20">
+               {saveError}
+             </div>
+          )}
         </div>
 
         {/* RIGHT COLUMN: LIVE VORSCHLÄGE & KI ANTWORT */}
-        <div className="w-full md:w-80 bg-white border-l border-neutral-gray-200 flex flex-col h-full overflow-y-auto">
+        <div className="w-full md:w-96 bg-white border-l border-neutral-gray-200 flex flex-col h-full overflow-y-auto">
           <div className="p-6 border-b border-neutral-gray-100 bg-bg-app-soft">
             <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted flex items-center gap-2">
-              <Activity className="w-4 h-4" /> Live-Vorschläge
+              <Activity className="w-4 h-4" /> Live-Kontext
             </h3>
-            <p className="text-[10px] text-text-muted mt-1">Demo / Echte Suche später</p>
+            <p className="text-[10px] text-text-muted mt-1">Echtzeit-Suche in Kundendatenbank & Aufträgen</p>
           </div>
           
-          <div className="p-6 space-y-6 flex-1">
-            {text.toLowerCase().includes("schmidt") && (
+          <div className="p-6 space-y-6 flex-1 bg-neutral-gray-50/50">
+            {matchedCustomer && (
               <div className="animate-in slide-in-from-right-4 duration-300">
                 <p className="text-xs font-bold text-text-muted uppercase mb-2">Erkannter Kunde</p>
-                <button className="w-full text-left bg-blue-50 border border-blue-200 p-3 rounded-xl hover:bg-blue-100 transition-colors group">
-                  <p className="font-bold text-blue-900">Schmidt AG</p>
-                  <p className="text-xs text-blue-700">Letzter Kontakt: Gestern</p>
-                </button>
+                <Link href={`/customers/${matchedCustomer.id}`} target="_blank" className="block w-full text-left bg-blue-50 border border-blue-200 p-4 rounded-xl hover:bg-blue-100 transition-colors group shadow-sm">
+                  <p className="font-bold text-blue-900">{matchedCustomer.name}</p>
+                  <p className="text-xs text-blue-700 mt-1 flex items-center justify-between">
+                    <span>{matchedCustomer.city || "Unbekannt"}</span>
+                    <ExternalLink className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+                  </p>
+                </Link>
               </div>
             )}
             
-            {(text.toLowerCase().includes("zink") || text.toLowerCase().includes("bearbeitungsstand")) && (
+            {matchedOrder && (
               <div className="animate-in slide-in-from-right-4 duration-300">
-                <p className="text-xs font-bold text-text-muted uppercase mb-2">Möglicher Auftrag</p>
-                <button className="w-full text-left bg-purple-50 border border-purple-200 p-3 rounded-xl hover:bg-purple-100 transition-colors group">
-                  <p className="font-bold text-purple-900">A-2026-0042 (Zink)</p>
-                  <p className="text-xs text-purple-700">Status: In Beschichtung</p>
-                </button>
+                <p className="text-xs font-bold text-text-muted uppercase mb-2">Gefundener Auftrag</p>
+                <Link href={`/orders/${matchedOrder.id}`} target="_blank" className="block w-full text-left bg-purple-50 border border-purple-200 p-4 rounded-xl hover:bg-purple-100 transition-colors group shadow-sm">
+                  <div className="flex justify-between items-start">
+                    <p className="font-bold text-purple-900">{matchedOrder.id}</p>
+                    <ExternalLink className="w-3 h-3 text-purple-700 opacity-50 group-hover:opacity-100" />
+                  </div>
+                  <p className="text-xs text-purple-700 mt-1">{matchedOrder.articleName}</p>
+                  <div className="mt-2 inline-block bg-purple-200/50 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase">
+                    Status: {matchedOrder.status}
+                  </div>
+                </Link>
+              </div>
+            )}
+
+            {matchedMaterial && !matchedOrder && (
+              <div className="animate-in slide-in-from-right-4 duration-300">
+                <p className="text-xs font-bold text-text-muted uppercase mb-2">Material / Oberfläche</p>
+                <div className="w-full text-left bg-amber-50 border border-amber-200 p-3 rounded-xl shadow-sm">
+                  <p className="font-bold text-amber-900 capitalize">{matchedMaterial}</p>
+                </div>
+              </div>
+            )}
+
+            {matchedKeywords.length > 0 && (
+              <div className="animate-in slide-in-from-right-4 duration-300">
+                <p className="text-xs font-bold text-text-muted uppercase mb-2">Erkannte Themen</p>
+                <div className="flex flex-wrap gap-2">
+                  {matchedKeywords.map(kw => (
+                    <span key={kw} className="bg-neutral-gray-200 text-navy-900 text-xs font-bold px-3 py-1.5 rounded-lg border border-neutral-gray-300 shadow-sm">
+                      {kw}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
             
-            {text.length > 20 && !text.toLowerCase().includes("schmidt") && !text.toLowerCase().includes("zink") && (
+            {text.length > 20 && !matchedCustomer && !matchedOrder && !matchedMaterial && matchedKeywords.length === 0 && (
                <div className="text-center p-6 border-2 border-dashed border-neutral-gray-200 rounded-xl">
-                 <p className="text-xs text-text-muted">Keine passenden Datensätze gefunden.</p>
+                 <p className="text-xs font-medium text-text-muted">Tippen Sie Kundennamen, Auftragsnummern oder Themen ein, um Live-Treffer zu sehen.</p>
                </div>
             )}
           </div>
           
           {/* AUSGABE FELD */}
-          <div className="p-6 bg-bg-app-soft border-t border-neutral-gray-200 mt-auto">
-            <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted flex items-center gap-2 mb-3">
-              <MessageSquare className="w-4 h-4" /> Ausgabe für Anrufer
+          <div className="p-6 bg-navy-900 text-white mt-auto rounded-tl-3xl shadow-[0_-10px_30px_rgba(0,0,0,0.1)]">
+            <h3 className="font-bold text-sm uppercase tracking-wider text-white/50 flex items-center gap-2 mb-3">
+              <MessageSquare className="w-4 h-4" /> Antwortvorschlag <span className="text-[10px] normal-case bg-white/10 px-2 py-0.5 rounded">(aus App-Daten abgeleitet)</span>
             </h3>
-            <div className="bg-white border border-neutral-gray-200 rounded-xl p-4 text-sm font-medium text-navy-900 shadow-sm">
-              {text.toLowerCase().includes("schmidt") && text.toLowerCase().includes("zink") ? (
-                <span>"Herr Schmidt, ich sehe den Auftrag zu den Zinkteilen. Der aktuelle Bearbeitungsstand ist: In Beschichtung. Voraussichtlich morgen fertig."</span>
+            <div className="text-sm font-medium leading-relaxed">
+              {matchedOrder ? (
+                <span>
+                  „{matchedCustomer ? `Herr/Frau von ${matchedCustomer.name}, ` : ''}ich habe den Auftrag <strong className="text-accent-orange">{matchedOrder.id}</strong> ({matchedOrder.articleName}) vor mir.
+                  Der aktuelle Stand ist: <strong className="text-accent-orange uppercase">{matchedOrder.status}</strong>. 
+                  {matchedOrder.status === 'in_beschichtung' || matchedOrder.status === 'vorbehandlung' ? ' Er wird voraussichtlich in Kürze fertig.' : ''}
+                  {matchedOrder.status === 'fertig' ? ' Sie können die Ware abholen.' : ''}“
+                </span>
+              ) : matchedCustomer ? (
+                <span>
+                  „Guten Tag {matchedCustomer.name}, ich habe Ihre Kundenakte aufgerufen. Um welchen Auftrag geht es genau?“
+                </span>
+              ) : matchedKeywords.includes("Reklamation") ? (
+                <span>
+                  „Es tut mir leid, dass es ein Problem gibt. Ich nehme das sofort als Reklamation auf. Haben Sie eine Auftragsnummer für mich?“
+                </span>
               ) : text.length > 15 ? (
-                <span className="text-text-muted italic">Status noch nicht eindeutig. Bitte Kunde oder Auftrag im Text erwähnen.</span>
+                <span className="text-white/50 italic">Status noch nicht eindeutig. Erwähnen Sie einen Kunden oder Auftrag.</span>
               ) : (
-                <span className="text-text-muted italic">Tippen Sie mit, um automatische Antworten zu generieren...</span>
+                <span className="text-white/50 italic">Tippen Sie mit, um automatische Antworten zu generieren...</span>
               )}
             </div>
           </div>
@@ -303,20 +500,33 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
 }
 
 export function KommunikationClient() {
-  usePageView();
   const [activeChannel, setActiveChannel] = useState<Channel>("all");
-  const [activeThreadId, setActiveThreadId] = useState<string>("t1");
-  const [copied, setCopied] = useState<string | null>(null);
+  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [isPhoneNoteMode, setIsPhoneNoteMode] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [recentNotes, setRecentNotes] = useState<any[]>([]);
+
+  usePageView();
 
   useEffect(() => {
+    // URL Check
     if (typeof window !== 'undefined') {
-      const search = window.location.search;
-      if (search.includes("mode=telefonnotiz")) {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('mode') === 'telefonnotiz') {
         setIsPhoneNoteMode(true);
       }
     }
+
+    // Fetch recent notes
+    getRecentPhoneNotes(5).then(notes => setRecentNotes(notes));
   }, []);
+
+  // Update notes when modal closes to show new ones
+  useEffect(() => {
+    if (!isPhoneNoteMode) {
+      getRecentPhoneNotes(5).then(notes => setRecentNotes(notes));
+    }
+  }, [isPhoneNoteMode]);
 
   const filteredThreads = DEMO_THREADS.filter(t => activeChannel === "all" || t.channel === activeChannel);
   const activeThread = DEMO_THREADS.find(t => t.id === activeThreadId);
@@ -392,11 +602,17 @@ export function KommunikationClient() {
             <button onClick={() => setActiveChannel("email")} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${activeChannel === "email" ? "bg-bg-app-soft text-navy-900 font-bold" : "text-text-muted hover:bg-gray-50"}`}>
               <Mail className="w-4 h-4" /> E-Mail
             </button>
-            <button onClick={() => setActiveChannel("whatsapp")} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${activeChannel === "whatsapp" ? "bg-bg-app-soft text-navy-900 font-bold" : "text-text-muted hover:bg-gray-50"}`}>
-              <MessageSquare className="w-4 h-4" /> WhatsApp
+            <button disabled className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-medium text-text-muted opacity-50 cursor-not-allowed" title="In Vorbereitung">
+              <div className="flex items-center gap-3">
+                <MessageSquare className="w-4 h-4" /> WhatsApp
+              </div>
+              <span className="text-[9px] uppercase font-bold bg-neutral-gray-200 px-1.5 py-0.5 rounded">Demo</span>
             </button>
-            <button onClick={() => setActiveChannel("instagram")} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${activeChannel === "instagram" ? "bg-bg-app-soft text-navy-900 font-bold" : "text-text-muted hover:bg-gray-50"}`}>
-              <Camera className="w-4 h-4" /> Instagram
+            <button disabled className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-medium text-text-muted opacity-50 cursor-not-allowed" title="In Vorbereitung">
+              <div className="flex items-center gap-3">
+                <Camera className="w-4 h-4" /> Instagram
+              </div>
+              <span className="text-[9px] uppercase font-bold bg-neutral-gray-200 px-1.5 py-0.5 rounded">Demo</span>
             </button>
             <button onClick={() => setActiveChannel("website")} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${activeChannel === "website" ? "bg-bg-app-soft text-navy-900 font-bold" : "text-text-muted hover:bg-gray-50"}`}>
               <Globe className="w-4 h-4" /> Website
@@ -408,6 +624,22 @@ export function KommunikationClient() {
               <Banknote className="w-4 h-4" /> Rechnungen
             </button>
           </div>
+
+          {recentNotes.length > 0 && (
+            <div className="mt-4 border-t border-neutral-gray-100 p-2">
+              <div className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
+                <Phone className="w-3 h-3" /> Letzte Notizen
+              </div>
+              <div className="space-y-1 mt-1">
+                {recentNotes.map((note) => (
+                  <div key={note.id} className="px-3 py-2 rounded-lg bg-gray-50 border border-neutral-gray-100 text-xs">
+                    <div className="font-bold text-navy-900 mb-1">{note.category}</div>
+                    <div className="text-text-muted line-clamp-2">{note.rawText}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* COL 2: NACHRICHTEN/THREADS */}

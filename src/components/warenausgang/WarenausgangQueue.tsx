@@ -132,13 +132,14 @@ export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
                       {isGeneratingNote === customer ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
                       Lieferschein erstellen
                     </button>
-                    <button 
-                      onClick={() => handleSendMail(customer)}
-                      className="flex items-center gap-2 bg-navy-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold hover:bg-navy-700 transition-all active:scale-95 shadow-md"
-                    >
-                      <Mail className="w-4 h-4" />
-                      Zahlungs-QR Mail
-                    </button>
+                      <button 
+                        disabled
+                        className="flex items-center gap-2 bg-navy-900 text-white px-5 py-2.5 rounded-xl text-xs font-bold opacity-50 cursor-not-allowed shadow-md"
+                        title="Zahlungslink-Versand in Vorbereitung"
+                      >
+                        <Mail className="w-4 h-4" />
+                        Zahlungs-QR anfordern (Demo)
+                      </button>
                   </div>
                 )}
               </div>
@@ -170,13 +171,14 @@ export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
               </div>
               
               {isComplete && (
-                <button 
-                  onClick={() => handleSendMail(customer)}
-                  className="sm:hidden w-full mt-4 flex items-center justify-center gap-2 bg-navy-900 text-white px-4 py-3.5 rounded-xl text-xs font-bold hover:bg-navy-700 transition-all active:scale-95 shadow-md"
-                >
-                  <Mail className="w-4 h-4" />
-                  Zahlungs-QR Mail
-                </button>
+                  <button 
+                    disabled
+                    className="sm:hidden w-full mt-4 flex items-center justify-center gap-2 bg-navy-900 text-white px-4 py-3.5 rounded-xl text-xs font-bold opacity-50 cursor-not-allowed shadow-md"
+                    title="Zahlungslink-Versand in Vorbereitung"
+                  >
+                    <Mail className="w-4 h-4" />
+                    Zahlungs-QR anfordern (Demo)
+                  </button>
               )}
             </div>
           );

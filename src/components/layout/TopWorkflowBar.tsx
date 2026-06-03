@@ -6,7 +6,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { Package, FlaskConical, Truck, ArrowRight } from 'lucide-react';
 
 const STATIONS = [
-  { name: 'Wareneingang', path: '/warendurchlauf', icon: Package },
+  { name: 'Wareneingang', path: '/warendurchlauf/neu', icon: Package },
   { name: 'Galvanik', path: '/station/beschichtung', icon: FlaskConical },
   { name: 'Warenausgang', path: '/station/warenausgang', icon: Truck },
 ];
@@ -33,7 +33,7 @@ function TopWorkflowBarContent() {
         {STATIONS.map((station, i) => {
           const isWareneingangActive = station.name === 'Wareneingang' && (
             pathname === '/orders/new' || 
-            pathname === '/warendurchlauf' ||
+            pathname === '/warendurchlauf/neu' ||
             (searchParams?.get('station') === 'wareneingang')
           );
           const isActive = pathname === station.path || 

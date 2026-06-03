@@ -70,9 +70,7 @@ export function DataImportCenter() {
   };
 
   const executeImport = () => {
-    // Mock implementation for UI
-    setRows(rows.map(r => r.status === 'pending' ? { ...r, status: 'success' } : r));
-    alert("Import gestartet! (Mock)");
+    // Disabled in UI
   };
 
   const pendingCount = rows.filter(r => r.status === 'pending').length;
@@ -173,9 +171,9 @@ export function DataImportCenter() {
             </div>
 
             <div className="flex justify-end pt-4 border-t">
-              <Button onClick={executeImport} className="gap-2" disabled={pendingCount === 0}>
+              <Button disabled className="gap-2 cursor-not-allowed opacity-50" title="Import-Schnittstelle in Vorbereitung">
                 <Play className="w-4 h-4" />
-                {pendingCount} Datensätze importieren
+                {pendingCount} Datensätze importieren (Demo)
               </Button>
             </div>
           </div>

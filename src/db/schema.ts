@@ -244,3 +244,25 @@ export const companySettingsTable = pgTable("company_settings", {
   emailAdditionalNotes: text("email_additional_notes").default(""),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const phoneNotes = pgTable("phone_notes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull().default("galvanik-kreile"),
+  threadId: uuid("thread_id"),
+  customerId: text("customer_id").references(() => customers.id),
+  orderId: text("order_id").references(() => orders.id),
+  rawText: text("raw_text"),
+  generatedAnswer: text("generated_answer"),
+  callerName: text("caller_name"),
+  company: text("company"),
+  phone: text("phone"),
+  category: text("category"),
+  urgency: text("urgency"),
+  status: text("status").default("draft"),
+  extractionJson: jsonb("extraction_json").default({}),
+  linksJson: jsonb("links_json").default([]),
+  createdBy: uuid("created_by").references(() => appUsers.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+

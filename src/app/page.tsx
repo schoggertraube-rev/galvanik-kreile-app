@@ -153,7 +153,7 @@ export default function HomeDashboard() {
           </button>
 
           <button 
-            onClick={() => setActiveOverlay({title: "Neuer Auftrag", desc: "Auftragserfassung wird im Warendurchlauf angebunden. Bis dahin über Warendurchlauf oder Auftragsliste prüfen.", targetLink: "/warendurchlauf"})}
+            onClick={() => setActiveOverlay({title: "Neuer Auftrag", desc: "Auftragserfassung ist jetzt unter Warendurchlauf -> Neuer Auftrag angebunden.", targetLink: "/warendurchlauf/neu"})}
             className="bg-white border border-neutral-gray-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center hover:border-navy-900 hover:shadow-md transition-all active:scale-95 group cursor-pointer"
           >
             <div className="w-12 h-12 bg-bg-app-soft rounded-full flex items-center justify-center mb-3 group-hover:bg-navy-900 transition-colors">

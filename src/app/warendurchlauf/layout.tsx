@@ -1,4 +1,4 @@
-import { TopWorkflowBar } from "@/components/layout/TopWorkflowBar";
+import { WarendurchlaufStationNav } from "@/components/warendurchlauf/WarendurchlaufStationNav";
 
 export default function WarendurchlaufLayout({
   children,
@@ -6,8 +6,8 @@ export default function WarendurchlaufLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col h-full w-full">
-      <TopWorkflowBar />
+    <div className="flex flex-col min-h-full w-full">
+      <WarendurchlaufStationNav />
       <div className="flex-1 w-full relative">
         {children}
       </div>

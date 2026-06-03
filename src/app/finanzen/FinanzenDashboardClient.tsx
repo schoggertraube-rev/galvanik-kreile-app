@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   Banknote, Receipt, FileSpreadsheet, Building, 
   BarChart4, Briefcase, FileText, ArrowRight, Info, AlertTriangle, CheckCircle2,
-  CreditCard, QrCode, SmartphoneNfc, Wallet, PieChart, DollarSign
+  CreditCard, QrCode, SmartphoneNfc, Wallet, PieChart
 } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
 
@@ -671,13 +671,19 @@ export function FinanzenDashboardClient() {
               <li>Zahlungslink (z.B. Stripe Checkout) wird via API generiert</li>
               <li>Individueller QR-Code wird auf PDF-Rechnung gedruckt</li>
               <li>Link wird zusätzlich per E-Mail oder Messenger an Kunden gesendet</li>
-              <li>Nach erfolgreicher Zahlung meldet Webhook den Status "bezahlt" zurück</li>
+              <li>Nach erfolgreicher Zahlung meldet Webhook den Status &bdquo;bezahlt&ldquo; zurück</li>
             </ol>
           </div>
           <div className="bg-white border-2 border-dashed border-neutral-gray-300 p-6 rounded-xl flex flex-col items-center justify-center text-center">
             <QrCode className="w-16 h-16 text-neutral-gray-400 mb-2" />
             <span className="font-bold text-navy-900">Demo-QR-Code</span>
             <span className="text-xs text-text-muted mt-1">Ein echter Checkout ist noch nicht angebunden.</span>
+          </div>
+          
+          <div className="pt-4 border-t border-neutral-gray-200 flex justify-end">
+            <button disabled className="w-full bg-navy-900 text-white font-bold py-3 rounded-xl opacity-50 cursor-not-allowed" title="Zahlung vorbereiten (in Entwicklung)">
+              Zahlung vorbereiten (Demo)
+            </button>
           </div>
         </div>
       </DetailOverlay>
@@ -697,7 +703,7 @@ export function FinanzenDashboardClient() {
           <div className="bg-warning-yellow/10 border border-warning-yellow/30 p-4 rounded-xl flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-warning-yellow shrink-0 mt-0.5" />
             <div className="text-sm text-navy-900">
-              <span className="font-bold">Tap to Pay / Terminal-Anbindung später prüfen</span>
+              <span className="font-bold">Tap to Pay / Terminal-Anbindung in Vorbereitung</span>
               <p className="mt-1 text-text-muted">Noch kein echter Payment-Button integriert. Hardware-Kompatibilität wird evaluiert.</p>
             </div>
           </div>
@@ -727,7 +733,7 @@ export function FinanzenDashboardClient() {
                   <span className="text-xs bg-white border border-neutral-gray-200 px-2 py-1 rounded">Noch 150 € offen</span>
                 </div>
                 <div className="flex gap-2">
-                  <button disabled className="text-xs font-bold bg-navy-900 text-white px-3 py-1.5 rounded-lg opacity-50 cursor-not-allowed">Zahlung klären</button>
+                  <button disabled className="text-xs font-bold bg-navy-900 text-white px-3 py-1.5 rounded-lg opacity-50 cursor-not-allowed" title="In Vorbereitung">Zahlung klären (Demo)</button>
                 </div>
               </li>
               <li className="bg-bg-app-soft p-3 rounded-xl border border-neutral-gray-200">
@@ -770,7 +776,7 @@ export function FinanzenDashboardClient() {
 
           <div className="bg-navy-900/5 p-4 rounded-xl text-sm text-navy-900 border border-neutral-gray-200">
             <Info className="w-5 h-5 text-navy-900 mb-2" />
-            <p>Diese echten Zahlungsstatistiken ("pünktlich vs. verspätet") werden später direkt in die Kacheln <strong>"Kunden und Markt"</strong> und <strong>"Umsatz und Marge"</strong> im <span className="font-bold font-mono">/performance</span> Cockpit einfließen.</p>
+            <p>Diese echten Zahlungsstatistiken (&bdquo;pünktlich vs. verspätet&ldquo;) werden später direkt in die Kacheln <strong>&bdquo;Kunden und Markt&ldquo;</strong> und <strong>&bdquo;Umsatz und Marge&ldquo;</strong> im <span className="font-bold font-mono">/performance</span> Cockpit einfließen.</p>
           </div>
         </div>
       </DetailOverlay>
