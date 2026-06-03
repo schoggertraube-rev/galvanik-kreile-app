@@ -51,8 +51,8 @@ export function RightNav() {
       setOpenQuotes(await inquiriesRepository.getOpenCount());
       setHasCriticalBaths(await bathsRepository.hasCriticalBath());
       
-      const role = localStorage.getItem("kreile_user_role");
-      if (role === "admin" || role === "developer") setIsAdminOrDev(true);
+      const role = localStorage.getItem("kreile_user_role")?.toLowerCase();
+      if (role === "admin" || role === "developer" || role === "inhaber") setIsAdminOrDev(true);
     };
     
     fetchStats();

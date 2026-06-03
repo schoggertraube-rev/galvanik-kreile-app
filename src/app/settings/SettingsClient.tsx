@@ -19,7 +19,7 @@ export function SettingsClient({ isAdmin }: { isAdmin: boolean }) {
   const [activeTab, setActiveTab] = useState<Tab>("status");
 
   return (
-    <div className="space-y-6 pb-12 font-sans antialiased text-navy-900 max-w-[1200px] mx-auto">
+    <div className="space-y-6 pb-12 font-sans antialiased text-navy-900 w-full px-4 sm:px-6 xl:px-8">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <PageHeader
           title="Admin Console & Einstellungen"

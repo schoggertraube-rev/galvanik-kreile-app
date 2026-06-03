@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kreile – Buchhaltung &amp; Finanzen (integriert)</title>
+<style>
+  :root{
+    --bg:#F4EEE3;--bg-2:#EFE7D8;--rail:#FBF8F2;--card:#FFFFFF;--card-2:#FBF9F5;
+    --ink:#23201C;--ink-soft:#6E665B;--ink-faint:#A39B8D;--line:#E7DECF;--line-soft:#EFE9DC;
+    --good:#2E9E6B;--good-bg:#E7F4ED;--watch:#C98A12;--watch-bg:#FBF1DC;--act:#D8453C;--act-bg:#FBE6E4;
+    --brand:#C2185B;--brand-soft:#FBE9F1;--teal:#0E8C8C;--teal-soft:#E1F1F1;--diesel:#3A6EA5;--diesel-bg:#E4ECF5;
+    --shadow:0 1px 2px rgba(40,33,22,.04),0 8px 24px rgba(40,33,22,.06);
+    --shadow-hover:0 2px 4px rgba(40,33,22,.06),0 18px 42px rgba(40,33,22,.12);
+    --radius:22px;--radius-sm:14px;
+    --font:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  html[data-theme="dark"]{
+    --bg:#16140F;--bg-2:#1C1A14;--rail:#1B1813;--card:#211E18;--card-2:#1A1813;
+    --ink:#F1EBDF;--ink-soft:#B3AB9C;--ink-faint:#7C7567;--line:#322D24;--line-soft:#2A261F;
+    --good-bg:#152A20;--watch-bg:#2C2310;--act-bg:#2E1815;--brand-soft:#2A141E;--teal-soft:#10241F;--diesel-bg:#16243A;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);--shadow-hover:0 2px 4px rgba(0,0,0,.5),0 18px 42px rgba(0,0,0,.5);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;letter-spacing:-.01em}
+  .app{display:grid;grid-template-columns:96px 1fr;grid-template-rows:72px 1fr;grid-template-areas:"rail top" "rail main";height:100vh}
+
+  .rail{grid-area:rail;background:var(--rail);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;padding:14px 0 18px;gap:2px}
+  .logo{font-weight:800;font-size:13px;letter-spacing:.12em;color:var(--brand);margin-bottom:16px;text-align:center;line-height:1.1}
+  .logo small{display:block;font-size:7.5px;font-weight:600;color:var(--ink-faint);letter-spacing:.18em}
+  .nav{display:flex;flex-direction:column;gap:2px;width:100%;align-items:center;flex:1}
+  .navi{width:72px;padding:9px 4px 8px;border-radius:16px;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;color:var(--ink-soft);transition:.18s;border:1px solid transparent;position:relative}
+  .navi svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.7}
+  .navi span{font-size:9.5px;font-weight:600;text-align:center;line-height:1.15}
+  .navi:hover{background:var(--card);color:var(--ink)}
+  .navi.active{background:var(--brand-soft);color:var(--brand)}
+  .navi.active::before{content:"";position:absolute;left:-1px;top:18%;bottom:18%;width:3px;border-radius:3px;background:var(--brand)}
+
+  .top{grid-area:top;background:var(--bg);display:flex;align-items:center;gap:14px;padding:0 22px;border-bottom:1px solid var(--line-soft)}
+  .search{flex:1;max-width:560px;margin:0 auto;position:relative}
+  .search input{width:100%;height:42px;border-radius:999px;border:1px solid var(--line);background:var(--card);padding:0 46px 0 44px;font-family:var(--font);font-size:14px;color:var(--ink);box-shadow:var(--shadow)}
+  .search input::placeholder{color:var(--ink-faint)}
+  .search .ic-l{position:absolute;left:15px;top:11px;width:20px;height:20px;stroke:var(--ink-faint);fill:none;stroke-width:1.8}
+  .search .ic-r{position:absolute;right:15px;top:11px;width:20px;height:20px;stroke:var(--ink-soft);fill:none;stroke-width:1.8;cursor:pointer}
+  .pill{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 13px;border-radius:999px;background:var(--card);border:1px solid var(--line);font-size:12.5px;font-weight:600;color:var(--ink-soft);white-space:nowrap}
+  .pill .on{width:7px;height:7px;border-radius:50%;background:var(--good)}.pill .live{width:7px;height:7px;border-radius:50%;background:var(--good);box-shadow:0 0 0 3px var(--good-bg)}
+  .iconbtn{width:34px;height:34px;border-radius:50%;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative;color:var(--ink-soft)}
+  .iconbtn svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8}
+  .iconbtn .badge{position:absolute;top:-4px;right:-4px;background:var(--act);color:#fff;font-size:9px;font-weight:700;width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid var(--bg)}
+  .avatar{width:34px;height:34px;border-radius:50%;background:var(--ink);color:var(--bg);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;cursor:pointer}
+
+  .main{grid-area:main;overflow-y:auto;padding:22px 26px 40px}
+  .crumb{font-size:12px;color:var(--ink-faint);font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+  .crumb svg{width:13px;height:13px;stroke:var(--ink-faint);fill:none;stroke-width:2}
+  .head{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:12px}
+  .head h1{font-size:24px;font-weight:800;letter-spacing:-.02em;display:flex;align-items:center;gap:11px}
+  .head h1 .hi{width:40px;height:40px;border-radius:13px;background:var(--brand-soft);display:flex;align-items:center;justify-content:center}
+  .head h1 .hi svg{width:22px;height:22px;stroke:var(--brand);fill:none;stroke-width:1.8}
+  .head .sub{font-size:13px;color:var(--ink-soft);margin-top:6px}
+  .head .sub .auto{color:var(--good);font-weight:700}
+  .head-actions{display:flex;gap:10px}
+  .btn{border:0;font-family:var(--font);font-weight:700;font-size:13.5px;border-radius:13px;padding:12px 17px;cursor:pointer;white-space:nowrap;transition:.15s;display:inline-flex;align-items:center;gap:8px}
+  .btn svg{width:17px;height:17px;fill:none;stroke-width:2}
+  .btn-primary{background:var(--ink);color:var(--bg)}.btn-primary svg{stroke:var(--bg)}.btn-primary:hover{transform:translateY(-1px)}
+  .btn-soft{background:var(--card);color:var(--ink-soft);font-weight:600;border:1px solid var(--line)}.btn-soft svg{stroke:var(--ink-soft)}.btn-soft:hover{color:var(--ink)}
+
+  /* TOP-BAND */
+  .band{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;margin-bottom:20px}
+  @media(max-width:1040px){.band{grid-template-columns:1fr}}
+  .hero{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:22px;position:relative;overflow:hidden}
+  .hero::after{content:"";position:absolute;right:-50px;top:-50px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,var(--good-bg),transparent 70%);pointer-events:none}
+  .hero .tag{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--good);display:flex;align-items:center;gap:7px;margin-bottom:12px}
+  .hero .tag .ck{width:15px;height:15px;border-radius:50%;background:var(--good);display:inline-flex;align-items:center;justify-content:center}
+  .hero .tag .ck svg{width:9px;height:9px;stroke:#fff;stroke-width:2.8;fill:none}
+  .hero h2{font-size:19px;font-weight:800;margin-bottom:3px}
+  .hero .meta{font-size:13px;color:var(--ink-soft);margin-bottom:16px}
+  .hero-nums{display:flex;gap:28px;margin-bottom:18px;position:relative;z-index:1;flex-wrap:wrap}
+  .hn .v{font-size:27px;font-weight:800;letter-spacing:-.03em;line-height:1}.hn .v small{font-size:15px}
+  .hn .l{font-size:11.5px;color:var(--ink-faint);margin-top:6px}.hn .due{color:var(--watch);font-weight:700}
+  .hero-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;position:relative;z-index:1}
+  .hero .src{font-size:11px;color:var(--ink-faint);margin-top:13px;position:relative;z-index:1}
+  .save{background:linear-gradient(150deg,var(--good) 0%,#1f8757 100%);color:#fff;border-radius:var(--radius);padding:22px;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden}
+  .save::after{content:"";position:absolute;right:-30px;bottom:-30px;width:160px;height:160px;border-radius:50%;background:rgba(255,255,255,.08)}
+  .save .l{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;opacity:.85;margin-bottom:8px}
+  .save .big{font-size:36px;font-weight:800;letter-spacing:-.03em;line-height:1}.save .big small{font-size:19px}
+  .save .why{font-size:12.5px;opacity:.92;margin-top:10px;line-height:1.45;position:relative;z-index:1}.save .why b{font-weight:800}
+
+  /* SECTION-HEAD */
+  .sec-h{font-size:15px;font-weight:800;letter-spacing:-.01em;margin:24px 2px 13px;display:flex;align-items:center;gap:10px}
+  .sec-h .pre{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint)}
+  .sec-h .badge-prep{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--watch);background:var(--watch-bg);padding:3px 9px;border-radius:999px}
+
+  /* KACHEL-GRID */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+  @media(max-width:1180px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:680px){.grid{grid-template-columns:1fr}}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:var(--radius-sm);box-shadow:var(--shadow);padding:17px;cursor:pointer;transition:.18s;display:flex;flex-direction:column;gap:11px;min-height:128px}
+  .tile:hover{transform:translateY(-2px);box-shadow:var(--shadow-hover)}
+  .tile-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+  .ti{width:36px;height:36px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .ti svg{width:19px;height:19px;fill:none;stroke-width:1.8}
+  .ti.brand{background:var(--brand-soft)}.ti.brand svg{stroke:var(--brand)}
+  .ti.teal{background:var(--teal-soft)}.ti.teal svg{stroke:var(--teal)}
+  .ti.good{background:var(--good-bg)}.ti.good svg{stroke:var(--good)}
+  .ti.watch{background:var(--watch-bg)}.ti.watch svg{stroke:var(--watch)}
+  .ti.diesel{background:var(--diesel-bg)}.ti.diesel svg{stroke:var(--diesel)}
+  .ti.ink{background:var(--bg-2)}.ti.ink svg{stroke:var(--ink-soft)}
+  .tile .kpi{font-size:21px;font-weight:800;letter-spacing:-.02em;text-align:right}
+  .tile .kpi small{font-size:13px}
+  .tile h3{font-size:14.5px;font-weight:700}
+  .tile p{font-size:12px;color:var(--ink-soft);line-height:1.4}
+  .tile .foot{display:flex;align-items:center;justify-content:space-between;margin-top:auto;padding-top:6px}
+  .tile .go{font-size:12px;font-weight:700;color:var(--brand);display:flex;align-items:center;gap:4px}
+  .tile .go svg{width:13px;height:13px;stroke:var(--brand);fill:none;stroke-width:2.2}
+  .tile .st{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;padding:3px 8px;border-radius:999px}
+  .st.act{background:var(--act-bg);color:var(--act)}.st.ready{background:var(--good-bg);color:var(--good)}.st.prep{background:var(--watch-bg);color:var(--watch)}.st.de{background:var(--bg-2);color:var(--ink-soft)}
+
+  /* PREMIUM-LEISTE Steuerberater */
+  .premium{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px 22px;display:flex;align-items:center;gap:18px;margin-top:14px}
+  .premium .li{width:46px;height:46px;border-radius:13px;background:var(--brand-soft);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  .premium .li svg{width:24px;height:24px;stroke:var(--brand);fill:none;stroke-width:1.7}
+  .premium .c{flex:1}.premium .c h3{font-size:15px;font-weight:700;margin-bottom:3px}.premium .c p{font-size:12.5px;color:var(--ink-soft)}
+  .premium .pr{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--brand);align-self:flex-start}
+  .premium .go{font-size:12.5px;font-weight:700;color:var(--brand);display:flex;align-items:center;gap:5px;white-space:nowrap}
+  .premium .go svg{width:14px;height:14px;stroke:var(--brand);fill:none;stroke-width:2.2}
+
+  .foot-note{margin-top:24px;font-size:11.5px;color:var(--ink-faint);text-align:center;line-height:1.6}.foot-note b{color:var(--ink-soft)}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- LINKE LEISTE (Rahmen) – Buchhaltung fix -->
+  <aside class="rail">
+    <div class="logo">KREILE<small>WERKSTATT</small></div>
+    <nav class="nav">
+      <div class="navi"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/></svg><span>Home</span></div>
+      <div class="navi"><svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg><span>Waren&shy;durchlauf</span></div>
+      <div class="navi"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Anfragen</span></div>
+      <div class="navi"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 4.5a3 3 0 010 6M22 20c0-2.4-1.3-4.5-3.5-5.4"/></svg><span>Kunden &amp; Aufträge</span></div>
+      <div class="navi"><svg viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6L5 8zM8 8V6a4 4 0 018 0v2"/></svg><span>Lager &amp; Chemie</span></div>
+      <div class="navi"><svg viewBox="0 0 24 24"><path d="M4 7h16v6a5 5 0 01-5 5H9a5 5 0 01-5-5V7zM8 4v3M12 4v3M16 4v3"/></svg><span>Bäder</span></div>
+      <div class="navi"><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8M21 12v6a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2h11"/></svg><span>Kontrolle</span></div>
+      <div class="navi active"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zM15 2v5h5M9 13h6M9 17h6M9 9h2"/></svg><span>Buch&shy;haltung</span></div>
+      <div class="navi"><svg viewBox="0 0 24 24"><path d="M12 21s-7-4.4-9.5-8.5C.9 9.7 2.3 6 5.5 6 7.5 6 9 7.2 12 10c3-2.8 4.5-4 6.5-4 3.2 0 4.6 3.7 3 6.5C19 16.6 12 21 12 21z"/></svg><span>Kunden&shy;service</span></div>
+    </nav>
+    <div class="avatar">N</div>
+  </aside>
+
+  <!-- OBERE LEISTE (Rahmen) -->
+  <header class="top">
+    <div class="search">
+      <svg class="ic-l" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+      <input type="text" placeholder="Beleg, Rechnung, Lieferant, Konto oder Betrag suchen …">
+      <svg class="ic-r" viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h3l2-3h8l2 3h3a2 2 0 012 2z"/><circle cx="12" cy="13" r="3.5"/></svg>
+    </div>
+    <div class="pill"><span class="on"></span>Heute · Di., 02.06.</div>
+    <div class="pill"><span class="on"></span>Online</div>
+    <div class="pill"><span class="live"></span>Live</div>
+    <div class="iconbtn"><span class="badge">3</span><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/></svg></div>
+    <div class="iconbtn" id="themeBtn" title="Hell / Dunkel"><svg id="themeIcon" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/></svg></div>
+    <div class="iconbtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 014.7 1.2c0 1.7-2.2 2-2.2 3.3M12 17h.01"/></svg></div>
+  </header>
+
+  <!-- INHALT -->
+  <main class="main">
+    <div class="crumb">Home <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg> Buchhaltung &amp; Finanzen</div>
+
+    <div class="head">
+      <div>
+        <h1><span class="hi"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zM15 2v5h5M9 13h6M9 17h6M9 9h2"/></svg></span>Buchhaltung &amp; Finanzen</h1>
+        <div class="sub"><span class="auto">● Automatik aktiv</span> · Mai 2026 · SKR03 · revisionssicher (GoBD) · 142 Belege · 94 % automatisch</div>
+      </div>
+      <div class="head-actions">
+        <button class="btn btn-primary"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h3l2-3h8l2 3h3a2 2 0 012 2z"/><circle cx="12" cy="13" r="3.5"/></svg>Beleg fotografieren</button>
+        <button class="btn btn-soft"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 13a7.7 7.7 0 000-2l2-1.5-2-3.4-2.3 1a7 7 0 00-1.7-1l-.3-2.6h-4l-.3 2.6a7 7 0 00-1.7 1l-2.3-1-2 3.4L4.6 11a7.7 7.7 0 000 2l-2 1.5 2 3.4 2.3-1a7 7 0 001.7 1l.3 2.6h4l.3-2.6a7 7 0 001.7-1l2.3 1 2-3.4z"/></svg>Voreinstellungen</button>
+      </div>
+    </div>
+
+    <!-- TOP-BAND: eine Aktion + Sparzähler -->
+    <div class="band">
+      <section class="hero">
+        <div class="tag"><span class="ck"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-11"/></svg></span>Fertig vorbereitet &amp; geprüft</div>
+        <h2>Umsatzsteuer-Voranmeldung · Mai 2026</h2>
+        <div class="meta">KI-kontiert · Werte berechnet · bereit zur Freigabe</div>
+        <div class="hero-nums">
+          <div class="hn"><div class="v">3.180&nbsp;<small>€</small></div><div class="l">Zahllast ans Finanzamt</div></div>
+          <div class="hn"><div class="v">142</div><div class="l">Belege · 94 % automatisch</div></div>
+          <div class="hn"><div class="v due">10. Juni</div><div class="l">Frist · in 8 Tagen</div></div>
+        </div>
+        <div class="hero-actions">
+          <button class="btn btn-primary"><svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>Prüfen &amp; freigeben</button>
+          <button class="btn btn-soft">An Steuerberater</button>
+        </div>
+        <div class="src">3 Belege brauchen noch deinen Blick. ELSTER-Direktversand wird scharfgeschaltet, sobald dein Zertifikat hinterlegt ist — bis dahin: Export für den ELSTER-Upload.</div>
+      </section>
+
+      <section class="save">
+        <div class="l">Gespart 2026</div>
+        <div class="big">2.840&nbsp;<small>€</small></div>
+        <div class="why">weil <b>94 %</b> automatisch vorbereitet wird und dein Steuerberater nur noch <b>freigibt</b> statt zu sortieren.</div>
+      </section>
+    </div>
+
+    <!-- ABSCHNITT 1: BELEGE & AUSGABEN -->
+    <div class="sec-h"><span class="pre">01</span> Belege &amp; Ausgaben</div>
+    <div class="grid">
+      <div class="tile">
+        <div class="tile-top"><div class="ti brand"><svg viewBox="0 0 24 24"><path d="M4 7h16v13H4zM4 7l2-3h12l2 3M8 11h8M8 15h5"/></svg></div><div class="st act">3 prüfen</div></div>
+        <h3>Belege erfassen &amp; prüfen</h3>
+        <p>Foto rein, Inhalt automatisch erkannt &amp; kategorisiert. 3 von 142 unsicher.</p>
+        <div class="foot"><span class="go">Öffnen <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+      <div class="tile">
+        <div class="tile-top"><div class="ti diesel"><svg viewBox="0 0 24 24"><path d="M3 22h12V8l-2-2V3H5v3L3 8zM7 8h6M15 12h2a2 2 0 012 2v3a1.5 1.5 0 003 0V9l-3-3"/></svg></div><div class="kpi">1.240&nbsp;<small>€</small></div></div>
+        <h3>Kraftstoff &amp; Kfz</h3>
+        <p>Diesel auf einen Blick: 18 Tankungen, Ø 1,71 €/l. Filterbar nach Ort &amp; Zeit.</p>
+        <div class="foot"><span class="go">Auswertung <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+      <div class="tile">
+        <div class="tile-top"><div class="ti watch"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><div class="kpi">11.420&nbsp;<small>€</small></div></div>
+        <h3>Ausgaben gesamt</h3>
+        <p>Laufender Monat nach Kategorie. KI-Hinweise zur Absetzbarkeit inklusive.</p>
+        <div class="foot"><span class="go">Details <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+    </div>
+
+    <!-- ABSCHNITT 2: EINNAHMEN, RECHNUNGEN & ZAHLUNG -->
+    <div class="sec-h"><span class="pre">02</span> Einnahmen, Rechnungen &amp; Zahlung</div>
+    <div class="grid">
+      <div class="tile">
+        <div class="tile-top"><div class="ti act" style="background:var(--act-bg)"><svg style="stroke:var(--act)" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg></div><div class="kpi">12.450&nbsp;<small>€</small></div></div>
+        <h3>Offene Posten</h3>
+        <p>3 Zahlungen überfällig. Mahnstufen &amp; Zahlungserinnerung automatisch.</p>
+        <div class="foot"><span class="st act">3 überfällig</span><span class="go">Details <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+      <div class="tile">
+        <div class="tile-top"><div class="ti good"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zM9 12h6M9 16h6"/></svg></div><div class="kpi">42</div></div>
+        <h3>Rechnungsübersicht &amp; Statistik</h3>
+        <p>Ausgangsrechnungen laufender Monat. Schreiben, E-Rechnung (ZUGFeRD).</p>
+        <div class="foot"><span class="go">Details <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+      <div class="tile">
+        <div class="tile-top"><div class="ti teal"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></svg></div><div class="st prep">In Vorbereitung</div></div>
+        <h3>Zahlungsdienstleister</h3>
+        <p>Anbieter für Checkout &amp; Kartenzahlung. Optionen &amp; Konditionen prüfen.</p>
+        <div class="foot"><span class="go">Optionen prüfen <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+      <div class="tile">
+        <div class="tile-top"><div class="ti teal"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM21 14v7h-4"/></svg></div><div class="st prep">In Vorbereitung</div></div>
+        <h3>Zahlungslink &amp; QR-Code</h3>
+        <p>Rechnung direkt per Link oder QR zahlen lassen. Ablauf anzeigen.</p>
+        <div class="foot"><span class="go">Ablauf anzeigen <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+      <div class="tile">
+        <div class="tile-top"><div class="ti teal"><svg viewBox="0 0 24 24"><path d="M8 2h8a2 2 0 012 2v16a2 2 0 01-2 2H8a2 2 0 01-2-2V4a2 2 0 012-2zM10 6h4"/></svg></div><div class="st prep">In Vorbereitung</div></div>
+        <h3>Vor-Ort-Zahlung</h3>
+        <p>Terminal oder Tap-to-Pay bei Abholung. Szenario prüfen.</p>
+        <div class="foot"><span class="go">Szenario prüfen <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+      <div class="tile">
+        <div class="tile-top"><div class="ti ink"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 11-6.2-8.5M21 4v5h-5"/></svg></div><div class="st prep">In Vorbereitung</div></div>
+        <h3>Zahlungsmoral &amp; Zahlungsarten</h3>
+        <p>Wer zahlt pünktlich, welche Arten dominieren. Auswertung öffnen.</p>
+        <div class="foot"><span class="go">Auswertung <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+    </div>
+
+    <!-- ABSCHNITT 3: AUSWERTUNG & STEUERPROFIL -->
+    <div class="sec-h"><span class="pre">03</span> Auswertung &amp; Steuerprofil</div>
+    <div class="grid">
+      <div class="tile">
+        <div class="tile-top"><div class="ti teal"><svg viewBox="0 0 24 24"><path d="M3 3v18h18M7 14l4-4 3 3 5-6"/></svg></div><div class="kpi" style="font-size:13px">+19.200 €</div></div>
+        <h3>BWA / Monatsübersicht</h3>
+        <p>Betriebswirtschaftliche Auswertung. Einnahmen, Ausgaben, Ergebnis.</p>
+        <div class="foot"><span class="go">Details <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+      <div class="tile">
+        <div class="tile-top"><div class="ti good"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v9l6 3"/></svg></div><div class="kpi" style="font-size:13px">fix</div></div>
+        <h3>Fixkosten</h3>
+        <p>Feste monatliche Ausgaben: Miete, Strom-Grund, Abos, Versicherungen.</p>
+        <div class="foot"><span class="go">Details <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+      <div class="tile">
+        <div class="tile-top"><div class="ti watch"><svg viewBox="0 0 24 24"><path d="M5 19l4-9 3 5 3-8 4 12"/></svg></div><div class="kpi" style="font-size:13px">variabel</div></div>
+        <h3>Variable Kosten</h3>
+        <p>Dynamische Kosten: Material, Kraftstoff, Fremdleistung — nach Auslastung.</p>
+        <div class="foot"><span class="go">Details <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+      <div class="tile">
+        <div class="tile-top"><div class="ti ink"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8M8 15h5"/></svg></div><div class="kpi" style="font-size:13px">DE</div></div>
+        <h3>Steuerprofil</h3>
+        <p>USt-Sätze 19 % / 7 % / 0 %, Kleinunternehmer-Status, Voranmeldungs-Rhythmus.</p>
+        <div class="foot"><span class="go">Details <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+    </div>
+
+    <!-- ABSCHNITT 4: EXPORT & STEUERBERATER -->
+    <div class="sec-h"><span class="pre">04</span> Export &amp; Steuerberater</div>
+    <div class="grid">
+      <div class="tile">
+        <div class="tile-top"><div class="ti good"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zM15 2v5h5M9 13l3 3 3-3M12 16V9"/></svg></div><div class="st ready">Bereit</div></div>
+        <h3>DATEV-Export</h3>
+        <p>Buchungsstapel (EXTF, SKR03) + Belegbilder. Vorschau &amp; ein-Klick-Übergabe.</p>
+        <div class="foot"><span class="go">Vorschau öffnen <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+      <div class="tile">
+        <div class="tile-top"><div class="ti good"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6zM15 2v5h5M9 12h6M9 16h6"/></svg></div><div class="st ready">Bereit</div></div>
+        <h3>Lexware / Excel</h3>
+        <p>Einfacher CSV-Export für Lexware oder Tabellenkalkulation.</p>
+        <div class="foot"><span class="go">Vorschau öffnen <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+      <div class="tile">
+        <div class="tile-top"><div class="ti brand"><svg viewBox="0 0 24 24"><path d="M19 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M14 21a2 2 0 01-4 0"/></svg></div><div class="st ready">Überwacht</div></div>
+        <h3>Fristen &amp; Pflichten</h3>
+        <p>UStVA, GewSt, Rundfunkbeitrag. Rechtzeitige Erinnerung, nie verpassen.</p>
+        <div class="foot"><span class="go">Kalender <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span></div>
+      </div>
+    </div>
+
+    <!-- PREMIUM: Steuerberater-Paket -->
+    <div class="premium">
+      <div class="li"><svg viewBox="0 0 24 24"><path d="M3 7h18v13H3zM8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M3 13h18"/></svg></div>
+      <div class="c"><h3>Steuerberater-Paket</h3><p>Digitaler Aktenordner für die Monatsübergabe: kontierte Buchungen, Belege, Auswertungen — ein ZIP, ein Klick.</p></div>
+      <span class="pr">Premium-Modul</span>
+      <span class="go">Paket-Inhalte prüfen <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></span>
+    </div>
+
+    <div class="foot-note">
+      <b>Stufe 1 (Livegang):</b> erfassen, kategorisieren, auswerten, exportieren — alles funktioniert. &nbsp;
+      <b>Stufe 2:</b> ELSTER-Direktversand, Live-Bank &amp; Lohn-Meldung docken an, sobald Zertifikat &amp; Zugänge da sind.<br>
+      Einmal Regeln einstellen — danach läuft die Buchhaltung im Hintergrund.
+    </div>
+  </main>
+</div>
+
+<script>
+  const root=document.documentElement,btn=document.getElementById('themeBtn'),ic=document.getElementById('themeIcon');
+  const sun='<path d="M12 4V2M12 22v-2M4 12H2M22 12h-2M5.6 5.6L4.2 4.2M19.8 19.8l-1.4-1.4M18.4 5.6l1.4-1.4M4.2 19.8l1.4-1.4"/><circle cx="12" cy="12" r="4"/>';
+  const moon='<path d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z"/>';
+  btn.addEventListener('click',()=>{const d=root.getAttribute('data-theme')==='dark';root.setAttribute('data-theme',d?'light':'dark');ic.innerHTML=d?moon:sun;});
+  document.querySelectorAll('.tile,.navi,.btn,.premium').forEach(el=>el.addEventListener('click',function(){this.style.transform='scale(.99)';setTimeout(()=>this.style.transform='',110);}));
+</script>
+</body>
+</html>

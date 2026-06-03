@@ -18,7 +18,9 @@ export async function getCurrentAuthUser() {
 export async function isAdminOrDeveloper(): Promise<boolean> {
   try {
     const role = await getCurrentRole();
-    return role === "admin" || role === "developer";
+    if (!role) return false;
+    const normalizedRole = role.toLowerCase();
+    return normalizedRole === "admin" || normalizedRole === "developer" || normalizedRole === "inhaber";
   } catch (error: any) {
     if (error?.message?.startsWith("DATABASE_ERROR")) {
       return false; // Safely hide UI elements if DB is down
@@ -34,7 +36,8 @@ export async function isAdminOrDeveloper(): Promise<boolean> {
 export async function requireAdminOrDeveloper() {
   try {
     const role = await getCurrentRole();
-    if (role !== "admin" && role !== "developer") {
+    const normalizedRole = role?.toLowerCase() || "";
+    if (normalizedRole !== "admin" && normalizedRole !== "developer" && normalizedRole !== "inhaber") {
       redirect("/");
     }
   } catch (error: any) {

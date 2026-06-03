@@ -126,7 +126,7 @@ export function BuchhaltungCockpitClient() {
   }
 
   return (
-    <div className="max-w-[1200px] mx-auto pb-24 px-4 sm:px-6">
+    <div className="w-full pb-24 px-4 sm:px-6 xl:px-8">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs font-semibold text-text-muted mt-4 mb-3">
         <Link href="/" className="hover:text-navy-900 transition-colors">Home</Link>

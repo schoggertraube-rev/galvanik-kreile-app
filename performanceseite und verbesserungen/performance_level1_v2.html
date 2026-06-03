@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kreile Performance — Level 1 v2</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#0E1626;--sf:#1A2436;--sf2:#222E42;--sf3:#2A3650;--ink:#EEF2F8;--ink2:#9FB0C7;--ink3:#6B7A91;--bd:rgba(255,255,255,.09);--bd2:rgba(255,255,255,.14);--pos:#34D399;--neg:#F87171;--warn:#FBBF24;--info:#60A5FA;--cyan:#22D3EE;--purple:#A78BFA;--posbg:rgba(52,211,153,.12);--negbg:rgba(248,113,113,.12);--warnbg:rgba(251,191,36,.12);--infobg:rgba(96,165,250,.12);--purpbg:rgba(167,139,250,.1);--glass:rgba(255,255,255,.04);--font:'DM Sans',system-ui,sans-serif}
+.light{--bg:#EDEBE4;--sf:#FFFFFF;--sf2:#F4F1EB;--sf3:#EBE8E0;--ink:#1A2847;--ink2:#4B5563;--ink3:#6E7A8A;--bd:rgba(26,40,71,.1);--bd2:rgba(26,40,71,.16);--pos:#059669;--neg:#DC2626;--warn:#B45309;--info:#2563EB;--cyan:#0E7490;--purple:#6D28D9;--posbg:rgba(5,150,105,.1);--negbg:rgba(220,38,38,.08);--warnbg:rgba(180,83,9,.09);--infobg:rgba(37,99,235,.08);--purpbg:rgba(109,40,217,.08);--glass:rgba(255,255,255,.55)}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);transition:background .4s,color .4s;min-height:100vh;padding:16px}
+.wrap{max-width:740px;margin:0 auto}
+.hd{display:flex;align-items:center;gap:10px;margin:0 0 8px;flex-wrap:wrap}
+.sr{flex:1;min-width:180px;position:relative}
+.sr input{width:100%;padding:10px 14px 10px 38px;border:1px solid var(--bd);border-radius:12px;background:var(--sf);color:var(--ink);font-size:13px;font-family:var(--font);outline:none;transition:border .2s,box-shadow .2s}
+.sr input:focus{border-color:var(--info);box-shadow:0 0 0 3px rgba(96,165,250,.15)}
+.sr svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--ink3);pointer-events:none}
+.ctrls{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tabs{display:flex;gap:1px;background:var(--sf2);border-radius:10px;padding:3px}
+.tabb{font-size:11px;padding:6px 11px;border-radius:8px;border:none;background:none;color:var(--ink2);cursor:pointer;font-family:var(--font);font-weight:500;transition:.15s}
+.tabb.on{background:var(--sf);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.tsw{display:flex;background:var(--sf2);border-radius:10px;padding:3px;gap:1px}
+.tw{font-size:11px;padding:6px 10px;border-radius:8px;border:none;background:none;color:var(--ink2);cursor:pointer;font-family:var(--font);font-weight:500;transition:.15s}
+.tw.on{background:var(--sf);color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.1)}
+.stamp{font-size:11px;color:var(--ink3);margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.stamp b{font-weight:500;color:var(--ink2)}
+
+/* COMPARISON ROW */
+.cmp-row{display:flex;align-items:center;gap:8px;margin:0 0 14px;flex-wrap:wrap}
+.cmp-btn{display:flex;align-items:center;gap:7px;padding:8px 14px;border:1px solid var(--bd);border-radius:10px;background:var(--sf);color:var(--ink2);font-size:12px;font-family:var(--font);font-weight:500;cursor:pointer;transition:all .25s;white-space:nowrap}
+.cmp-btn:hover{border-color:var(--info);color:var(--ink)}
+.cmp-btn.active{background:var(--infobg);border-color:var(--info);color:var(--info)}
+.cmp-dd{display:flex;gap:1px;background:var(--sf2);border-radius:8px;padding:2px}
+.cmp-opt{font-size:10px;padding:5px 10px;border-radius:6px;border:none;background:none;color:var(--ink3);cursor:pointer;font-family:var(--font);font-weight:500;transition:.15s}
+.cmp-opt.on{background:var(--sf);color:var(--ink)}
+.cmp-opt:hover{color:var(--ink2)}
+.cmp-lbl{font-size:11px;color:var(--info);font-weight:600;display:none;align-items:center;gap:5px}
+.cmp-lbl.show{display:flex}
+.cmp-x{cursor:pointer;opacity:.6;transition:opacity .2s;font-size:13px}
+.cmp-x:hover{opacity:1}
+
+/* DELTA BADGES */
+.delta{display:none;margin-top:4px;padding:3px 9px;border-radius:6px;font-size:10px;font-weight:600;width:fit-content;animation:fadeIn .35s ease}
+.delta.show{display:inline-block}
+.d-pos{background:var(--posbg);color:var(--pos)}
+.d-neg{background:var(--negbg);color:var(--neg)}
+.d-warn{background:var(--warnbg);color:var(--warn)}
+.d-neutral{background:var(--sf2);color:var(--ink2)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:translateY(0)}}
+
+/* TILES */
+.grid{display:grid;gap:12px;margin:0 0 12px}.g2{grid-template-columns:1fr 1fr}
+@media(max-width:560px){.g2{grid-template-columns:1fr}}
+.tile{background:var(--sf);border:.5px solid var(--bd);border-radius:16px;padding:18px 20px;cursor:pointer;position:relative;overflow:hidden;transition:transform .3s cubic-bezier(.4,0,.2,1),box-shadow .3s,border-color .3s}
+.tile:hover{transform:translateY(-5px);box-shadow:0 20px 50px rgba(0,0,0,.2);border-color:var(--bd2)}
+.light .tile:hover{box-shadow:0 16px 40px rgba(0,0,0,.08)}
+.tile .arr{position:absolute;bottom:16px;right:18px;font-size:10px;color:var(--ink3);opacity:0;transition:opacity .25s,transform .25s;display:flex;align-items:center;gap:4px}
+.tile:hover .arr{opacity:1;transform:translateX(3px)}
+.tile.hero{grid-column:1/-1}
+.tglow{position:absolute;top:-20px;right:-20px;width:140px;height:140px;border-radius:50%;filter:blur(60px);opacity:.12;pointer-events:none;transition:opacity .3s}
+.tile:hover .tglow{opacity:.2}
+.th{display:flex;align-items:center;justify-content:space-between;margin:0 0 14px;gap:8px}
+.tl{display:flex;align-items:center;gap:10px}
+.tico{width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:transform .25s}
+.tile:hover .tico{transform:scale(1.08)}
+.tname{font-size:15px;font-weight:600;line-height:1.2}
+.tsub{font-size:10px;color:var(--ink2);margin-top:2px}
+.pill{font-size:9px;font-weight:600;padding:4px 10px;border-radius:8px;white-space:nowrap;letter-spacing:.3px}
+.pill-g{background:var(--posbg);color:var(--pos)}.pill-y{background:var(--warnbg);color:var(--warn)}.pill-p{background:var(--purpbg);color:var(--purple)}
+.metrics{display:flex;flex-wrap:wrap;gap:8px 20px}
+.m{min-width:0}
+.ml{font-size:10px;color:var(--ink3);margin:0 0 2px;font-weight:500;text-transform:uppercase;letter-spacing:.3px}
+.mv{font-size:20px;font-weight:600;line-height:1.15}.mv.sm{font-size:16px}
+.md{font-size:10px;margin-top:2px;font-weight:500}
+.pos{color:var(--pos)}.neg{color:var(--neg)}.warn{color:var(--warn)}.info{color:var(--info)}.pu{color:var(--purple)}
+.mbars{display:flex;align-items:flex-end;gap:4px;height:32px;margin-top:12px}
+.mbar{flex:1;border-radius:3px 3px 0 0;transition:height 1.2s cubic-bezier(.4,0,.2,1)}
+.mbar-labels{display:flex;gap:4px;margin-top:3px}
+.mbar-labels span{flex:1;font-size:8px;color:var(--ink3);text-align:center;font-weight:500}
+.hero .body{display:flex;align-items:flex-start;gap:28px;flex-wrap:wrap}
+.hero .left{flex:1;min-width:200px}
+.ring{position:relative;width:80px;height:80px;flex-shrink:0}
+.rval{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:19px;font-weight:700}
+.wgoal{display:flex;align-items:center;gap:8px;margin-top:4px}
+.wprog{width:90px;height:6px;background:var(--bd);border-radius:3px;overflow:hidden}
+.wpf{height:100%;background:linear-gradient(90deg,var(--pos),var(--cyan));border-radius:3px;width:0;transition:width 1.2s cubic-bezier(.4,0,.2,1)}
+.spk{margin-top:10px}
+.chips{margin-top:10px;display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-size:10px;padding:5px 10px;background:var(--sf2);border-radius:8px;display:flex;align-items:center;gap:6px;font-weight:500;transition:background .2s}
+.chip:hover{background:var(--sf3)}
+.cdot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.alertbox{margin-top:10px;padding:8px 12px;border-radius:9px;font-size:11px;line-height:1.5}
+.custrow{margin-top:10px;display:flex;gap:12px;font-size:10px;color:var(--ink2);flex-wrap:wrap;font-weight:500}
+
+/* KI TILE — schlank, grün */
+.ki-tile{background:linear-gradient(135deg,rgba(52,211,153,.08) 0%,rgba(6,182,212,.06) 100%);border:.5px solid rgba(52,211,153,.3);grid-column:1/-1;padding:16px 20px!important;display:flex;align-items:center;gap:14px;transition:transform .3s,box-shadow .3s,border-color .3s}
+.ki-tile:hover{border-color:rgba(52,211,153,.5)}
+.ki-tile .tglow{background:var(--pos)!important;opacity:.15}
+.ki-tile .th{margin:0!important;flex:1}
+.ki-tile .ki-hint{font-size:11px;color:var(--ink2);margin-top:2px}
+.light .ki-tile{background:linear-gradient(135deg,rgba(5,150,105,.06) 0%,rgba(14,116,144,.04) 100%);border-color:rgba(5,150,105,.2)}
+.light .ki-tile:hover{border-color:rgba(5,150,105,.4)}
+
+.nav{font-size:10px;color:var(--ink3);margin:4px 0 14px;text-align:center;display:flex;align-items:center;justify-content:center;gap:16px}
+.nav span{display:flex;align-items:center;gap:4px}
+.footer{background:var(--sf2);border-radius:12px;padding:12px 16px;display:flex;align-items:center;gap:12px}
+.footer label{font-size:12px;color:var(--ink3);white-space:nowrap;font-weight:500}
+.footer input{flex:1;border:none;background:none;color:var(--ink);font-size:12px;font-family:var(--font);outline:none}
+.footer input::placeholder{color:var(--ink3)}
+.footer button{background:linear-gradient(135deg,var(--info),var(--cyan));color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:11px;font-family:var(--font);cursor:pointer;font-weight:600;transition:transform .15s,box-shadow .15s;white-space:nowrap}
+.footer button:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(96,165,250,.3)}
+@keyframes press{0%{transform:scale(1)}50%{transform:scale(.97)}100%{transform:scale(1)}}
+.tile.pressed{animation:press .3s ease}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="hd">
+  <div class="sr"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="Suche: Frage, Begriff, Auftrag, Kunde …"></div>
+  <div class="ctrls">
+    <div class="tabs"><button class="tabb" onclick="pt(this)">Woche</button><button class="tabb on" onclick="pt(this)">Monat</button><button class="tabb" onclick="pt(this)">Quartal</button><button class="tabb" onclick="pt(this)">Jahr</button></div>
+    <div class="tsw"><button class="tw on" id="td" onclick="setT('dark')">☾ Dark</button><button class="tw" id="tl" onclick="setT('light')">☀ Hell</button></div>
+  </div>
+</div>
+<div class="stamp"><b>Mai 2026</b><span>·</span>Stand 09:14<span>·</span>22 Werktage · 5 MA</div>
+
+<!-- COMPARISON ROW -->
+<div class="cmp-row">
+  <button class="cmp-btn" id="cmpBtn" onclick="toggleCmp()">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    Zeig mir die Veränderungen zu
+  </button>
+  <div class="cmp-dd" id="cmpDd">
+    <button class="cmp-opt" onclick="setCmp(this,'vorwoche')">Vorwoche</button>
+    <button class="cmp-opt on" onclick="setCmp(this,'vormonat')">Vormonat</button>
+    <button class="cmp-opt" onclick="setCmp(this,'vorquartal')">Vorquartal</button>
+    <button class="cmp-opt" onclick="setCmp(this,'vorjahr')">Vorjahr</button>
+  </div>
+  <div class="cmp-lbl" id="cmpLbl"><span id="cmpTxt">Vergleich: Vormonat</span><span class="cmp-x" onclick="toggleCmp()" title="Ausblenden">✕</span></div>
+</div>
+
+<!-- KI TILE — schlank, grün, ganz oben -->
+<div class="grid" style="margin-bottom:12px">
+<div class="tile ki-tile" onclick="tileClick(this)">
+  <div class="tglow" style="background:var(--pos)"></div>
+  <div class="tico" style="background:var(--posbg);flex-shrink:0">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--pos)" stroke-width="2" stroke-linecap="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+  </div>
+  <div class="th">
+    <div class="tl" style="gap:0">
+      <div><div class="tname" style="color:var(--pos)">Was kann ich besser machen?</div><div class="ki-hint">KI-Analyse · Tipps · Handlungsempfehlungen für alle Bereiche</div></div>
+    </div>
+    <span class="pill pill-g">4 TIPPS</span>
+  </div>
+  <div class="arr" style="opacity:1;color:var(--pos)">→</div>
+</div>
+</div>
+
+<!-- HERO -->
+<div class="grid" style="margin-bottom:12px">
+<div class="tile hero" onclick="tileClick(this)">
+  <div class="tglow" style="background:#22D3EE"></div>
+  <div class="th">
+    <div class="tl">
+      <div class="tico" style="background:rgba(34,211,238,.12)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--cyan)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+      <div><div class="tname">Werkstatt-Puls</div><div class="tsub">Durchsatz · Stationen · Wochenziel</div></div>
+    </div>
+    <span class="pill pill-y">HANDLUNGSBEDARF</span>
+  </div>
+  <div class="body">
+    <div class="left">
+      <div class="metrics">
+        <div class="m"><div class="ml">Termintreue</div><div class="mv neg">76 %</div><div class="md neg">▼ −9 Pkt. vs. Vj.</div><div class="delta d-neg" data-cmp="vormonat:−4 Pkt.|vorwoche:−2 Pkt.|vorquartal:−7 Pkt.|vorjahr:−9 Pkt."></div></div>
+        <div class="m"><div class="ml">Ø Durchlaufzeit</div><div class="mv warn">9,4 T</div><div class="md warn">▲ +1,2 T vs. Vj.</div><div class="delta d-warn" data-cmp="vormonat:+0,6 Tage|vorwoche:+0,2 Tage|vorquartal:+1,0 Tage|vorjahr:+1,2 Tage"></div></div>
+        <div class="m"><div class="ml">Wochenziel</div><div class="mv">23<span style="font-size:14px;font-weight:400;color:var(--ink2)"> / 25</span></div><div class="wgoal"><div class="wprog"><div class="wpf" id="wp"></div></div><span style="font-size:10px;font-weight:600;color:var(--pos)">92%</span></div><div class="delta d-pos" data-cmp="vormonat:+3 mehr|vorwoche:+1 mehr|vorquartal:+5 mehr|vorjahr:+2 mehr"></div></div>
+      </div>
+      <div class="mbars" id="bars">
+        <div class="mbar" style="background:linear-gradient(to top,var(--neg),#fb7185);height:0" data-h="94"></div>
+        <div class="mbar" style="background:linear-gradient(to top,var(--warn),#fcd34d);height:0" data-h="78"></div>
+        <div class="mbar" style="background:linear-gradient(to top,var(--pos),#6ee7b7);height:0" data-h="62"></div>
+        <div class="mbar" style="background:linear-gradient(to top,var(--pos),#6ee7b7);height:0" data-h="54"></div>
+        <div class="mbar" style="background:linear-gradient(to top,var(--info),#93c5fd);height:0" data-h="41"></div>
+      </div>
+      <div class="mbar-labels"><span>Schleifen</span><span>Politur</span><span>Galvanik</span><span>Vorber.</span><span>QK/Vers.</span></div>
+    </div>
+    <div class="right" style="display:flex;align-items:center">
+      <div class="ring"><svg width="80" height="80" viewBox="0 0 80 80" style="transform:rotate(-90deg)"><defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#06B6D4"/><stop offset="100%" stop-color="#A78BFA"/></linearGradient></defs><circle cx="40" cy="40" r="32" fill="none" stroke="var(--bd)" stroke-width="6"/><circle id="arc" cx="40" cy="40" r="32" fill="none" stroke="url(#rg)" stroke-width="6" stroke-linecap="round" stroke-dasharray="201" stroke-dashoffset="201"/></svg><div class="rval" id="rv">0%</div></div>
+    </div>
+  </div>
+  <div class="arr">Stationen, Durchsatz, Trend →</div>
+</div>
+</div>
+
+<!-- 4 DOMAIN TILES -->
+<div class="grid g2">
+
+<div class="tile" onclick="tileClick(this)">
+  <div class="tglow" style="background:#34D399"></div>
+  <div class="th"><div class="tl"><div class="tico" style="background:var(--posbg)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--pos)" stroke-width="2" stroke-linecap="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div><div class="tname">Umsatz & Marge</div><div class="tsub">Finanzen · Forecast · Controlling</div></div></div><span class="pill pill-g">STABIL</span></div>
+  <div class="metrics">
+    <div class="m"><div class="ml">Umsatz netto</div><div class="mv">42.380 €</div><div class="md pos">▲ +7,2% vs. Vj.</div><div class="delta d-pos" data-cmp="vormonat:+3.120 €|vorwoche:+820 €|vorquartal:+4.580 €|vorjahr:+2.860 €"></div></div>
+    <div class="m"><div class="ml">Deckungsbeitrag</div><div class="mv sm">11.840 €</div><div class="md" style="color:var(--ink2)">27,9% Marge</div><div class="delta d-pos" data-cmp="vormonat:+940 €|vorwoche:+210 €|vorquartal:+1.240 €|vorjahr:+680 €"></div></div>
+  </div>
+  <div class="spk"><svg viewBox="0 0 140 28" width="140" height="28"><defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--pos)" stop-opacity=".22"/><stop offset="100%" stop-color="var(--pos)" stop-opacity="0"/></linearGradient></defs><path d="M0,22 16,19 32,20 48,16 64,14 80,13 96,11 112,10 128,7 140,5 140,28 0,28Z" fill="url(#sg)"/><polyline points="0,22 16,19 32,20 48,16 64,14 80,13 96,11 112,10 128,7 140,5" fill="none" stroke="var(--pos)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+  <div class="arr">Forecast, DATEV, Kalkulation →</div>
+</div>
+
+<div class="tile" onclick="tileClick(this)">
+  <div class="tglow" style="background:#FBBF24"></div>
+  <div class="th"><div class="tl"><div class="tico" style="background:var(--warnbg)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><div><div class="tname">Qualität & Risiko</div><div class="tsub">Reklamationen · Frühwarnungen</div></div></div><span class="pill pill-y">2 AKTIV</span></div>
+  <div class="metrics">
+    <div class="m"><div class="ml">Reklamationen</div><div class="mv warn">2 <span style="font-size:13px;font-weight:400;color:var(--ink2)">von 28</span></div><div class="md neg">▲ +1 vs. Vj. · 7,1%</div><div class="delta d-neg" data-cmp="vormonat:+1 mehr|vorwoche:±0|vorquartal:+1 mehr|vorjahr:+1 mehr"></div></div>
+    <div class="m"><div class="ml">Frühwarnungen</div><div class="mv sm neg">1 aktiv</div><div class="md" style="color:var(--ink2)">Nickelbad: 4 Tage</div><div class="delta d-warn" data-cmp="vormonat:neu|vorwoche:neu|vorquartal:+1 neu|vorjahr:+1 neu"></div></div>
+  </div>
+  <div class="alertbox" style="background:var(--negbg)"><span style="font-weight:600">A-2026-0042:</span> 84% Risiko · 6 Kunden überfällig (11.200 €)</div>
+  <div class="arr">Reklamationen, Ursachen, Prävention →</div>
+</div>
+
+<div class="tile" onclick="tileClick(this)">
+  <div class="tglow" style="background:#FBBF24"></div>
+  <div class="th"><div class="tl"><div class="tico" style="background:var(--warnbg)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--warn)" stroke-width="2" stroke-linecap="round"><path d="M9 3h6l3 7H6L9 3z"/><path d="M6 10v8a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3v-8"/><line x1="12" y1="14" x2="12" y2="17"/></svg></div><div><div class="tname">Bäder & Material</div><div class="tsub">Metallpreise · Einkauf · Marge</div></div></div><span class="pill pill-y">1 BEOBACHTEN</span></div>
+  <div class="metrics">
+    <div class="m"><div class="ml">Metall-Marge (Mai)</div><div class="mv pos">+2.840 €</div><div class="md pos">Gold +14% seit Badkauf</div><div class="delta d-pos" data-cmp="vormonat:+620 €|vorwoche:+180 €|vorquartal:+1.240 €|vorjahr:+2.100 €"></div></div>
+    <div class="m"><div class="ml">Einkauf-Ergebnis</div><div class="mv sm pos">+1.640 €</div><div class="md" style="color:var(--ink2)">Marktwert > Einkauf</div><div class="delta d-pos" data-cmp="vormonat:+380 €|vorwoche:+90 €|vorquartal:+840 €|vorjahr:+1.640 €"></div></div>
+  </div>
+  <div class="chips">
+    <div class="chip"><span class="cdot" style="background:#FBBF24"></span>Gold 68,40</div>
+    <div class="chip"><span class="cdot" style="background:#94A3B8"></span>Silber 0,98</div>
+    <div class="chip"><span class="cdot" style="background:#D97706"></span>Kupfer 8,78/kg</div>
+    <div class="chip"><span class="cdot" style="background:#86EFAC"></span>Nickel 15,90/kg</div>
+  </div>
+  <div class="arr">Bäder anlegen, Preise, Gewinn/Verlust →</div>
+</div>
+
+<div class="tile" onclick="tileClick(this)">
+  <div class="tglow" style="background:#60A5FA"></div>
+  <div class="th"><div class="tl"><div class="tico" style="background:var(--infobg)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="var(--info)" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><div><div class="tname">Kunden & Markt</div><div class="tsub">CLV · Zahlung · Regionen</div></div></div><span class="pill pill-g">STABIL</span></div>
+  <div class="metrics">
+    <div class="m"><div class="ml">Top-Kunde</div><div class="mv sm">Museum Lenzburg</div><div class="md" style="color:var(--ink2)">5.840 € · CLV 18.400 €</div><div class="delta d-neutral" data-cmp="vormonat:unverändert|vorwoche:unverändert|vorquartal:neu in Top 1|vorjahr:unverändert"></div></div>
+    <div class="m"><div class="ml">Zahlungsmoral</div><div class="mv sm pos">Ø 18 T</div><div class="md" style="color:var(--ink2)">82% pünktlich</div><div class="delta d-pos" data-cmp="vormonat:−2 T besser|vorwoche:−1 T|vorquartal:−3 T|vorjahr:−4 T besser"></div></div>
+  </div>
+  <div class="custrow"><span>🚗 82% Abholung</span><span>📦 18% Versand</span><span>🌍 3 Länder</span></div>
+  <div class="arr">CLV-Ranking, Karte, Zahlungsarten →</div>
+</div>
+
+</div>
+
+
+
+<div class="nav"><span>▸ Kachel → Themen-Seite</span><span>▸ Dort → Detail & Verknüpfungen</span></div>
+<div class="footer"><label>Was fehlt?</label><input type="text" placeholder="Idee, Wunsch, fehlendes Feature …"><button>Senden</button></div>
+</div>
+
+<script>
+function setT(t){if(t==='light'){document.body.classList.add('light');document.getElementById('tl').classList.add('on');document.getElementById('td').classList.remove('on');}else{document.body.classList.remove('light');document.getElementById('td').classList.add('on');document.getElementById('tl').classList.remove('on');}}
+function pt(e){e.parentNode.querySelectorAll('.tabb').forEach(function(t){t.classList.remove('on');});e.classList.add('on');}
+function tileClick(el){el.classList.add('pressed');setTimeout(function(){el.classList.remove('pressed');},300);}
+
+var cmpOn=false,cmpPer='vormonat';
+function toggleCmp(){cmpOn=!cmpOn;document.getElementById('cmpBtn').classList.toggle('active',cmpOn);document.getElementById('cmpLbl').classList.toggle('show',cmpOn);upD();}
+function setCmp(el,p){cmpPer=p;el.parentNode.querySelectorAll('.cmp-opt').forEach(function(o){o.classList.remove('on');});el.classList.add('on');document.getElementById('cmpTxt').textContent='Vergleich: '+p.charAt(0).toUpperCase()+p.slice(1);if(cmpOn)upD();}
+function upD(){document.querySelectorAll('.delta').forEach(function(d){if(!cmpOn){d.classList.remove('show');return;}d.classList.add('show');var m=d.dataset.cmp;if(!m)return;m.split('|').forEach(function(s){var kv=s.split(':');if(kv[0]===cmpPer)d.textContent=kv[1]+' vs. '+cmpPer.charAt(0).toUpperCase()+cmpPer.slice(1);});});}
+
+(function(){var a=document.getElementById('arc'),n=document.getElementById('rv'),T=201,tgt=Math.round(T*(1-.64)),s=null;function f(ts){if(!s)s=ts;var p=Math.min((ts-s)/1500,1),e=1-Math.pow(1-p,3);a.setAttribute('stroke-dashoffset',Math.round(T-(T-tgt)*e));n.textContent=Math.round(64*e)+'%';if(p<1)requestAnimationFrame(f);}requestAnimationFrame(f);})();
+setTimeout(function(){document.querySelectorAll('.mbar').forEach(function(b){b.style.height=b.dataset.h+'%';});document.getElementById('wp').style.width='92%';},500);
+</script>
+</body>
+</html>

@@ -28,8 +28,8 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
     };
     if (open) {
       fetchStats();
-      const role = localStorage.getItem("kreile_user_role");
-      if (role === "admin" || role === "developer") setIsAdminOrDev(true);
+      const role = localStorage.getItem("kreile_user_role")?.toLowerCase();
+      if (role === "admin" || role === "developer" || role === "inhaber") setIsAdminOrDev(true);
     }
   }, [open]);
 
