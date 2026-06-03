@@ -101,7 +101,7 @@ async function runSeed() {
   if (!isDryRun) {
     await db.delete(phoneNotes).where(sql`${phoneNotes.tenantId} = 'demo-galvanik-kreile'`);
     for (const pn of demoPhoneNotes) {
-      await db.insert(phoneNotes).values(pn as any);
+      await db.insert(phoneNotes).values(pn as typeof phoneNotes.$inferInsert);
     }
   }
 

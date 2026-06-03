@@ -1,10 +1,9 @@
 "use client";
 
-import { Home, PackageCheck, Scan, Search, Menu, Users, ClipboardList, TrendingUp, Settings, MessageSquare, ShieldCheck, Factory, Lightbulb, HeartHandshake, Beaker, Warehouse, Database } from "lucide-react";
+import { Home, PackageCheck, Scan, Search, Menu, Users, ClipboardList, TrendingUp, Settings, MessageSquare, ShieldCheck, Lightbulb, HeartHandshake, Beaker, Warehouse, Database } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
-import { trackUiEvent } from "@/lib/tracking/tracking";
 
 export function MobileBottomNav({ className = "" }: { className?: string }) {
   const pathname = usePathname();
@@ -13,7 +12,9 @@ export function MobileBottomNav({ className = "" }: { className?: string }) {
 
   useEffect(() => {
     const role = localStorage.getItem("kreile_user_role");
-    if (role === "admin" || role === "developer") setIsAdminOrDev(true);
+    if (role === "admin" || role === "developer") {
+      setTimeout(() => setIsAdminOrDev(true), 0);
+    }
   }, []);
 
   const isActive = (path: string) =>
@@ -21,7 +22,7 @@ export function MobileBottomNav({ className = "" }: { className?: string }) {
 
   return (
     <>
-      <nav className={`bg-white border-t border-neutral-gray-100 flex items-center justify-around h-[64px] shrink-0 pb-[var(--safe-area-bottom)] ${className}`}>
+      <nav className={`bg-white border-t border-neutral-gray-100 flex items-center justify-around h-[64px] shrink-0 pb-(--safe-area-bottom) ${className}`}>
         
         <Link href="/" className={`flex flex-col items-center justify-center flex-1 h-full gap-1 ${isActive("/") ? "text-navy-900" : "text-text-muted"}`}>
           <Home className="w-6 h-6" strokeWidth={isActive("/") ? 2 : 1.5} />

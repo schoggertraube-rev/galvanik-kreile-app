@@ -263,7 +263,7 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
                 <div className="relative flex-1 w-full h-full bg-white rounded-2xl border-2 border-neutral-gray-200 focus-within:border-navy-900 shadow-sm overflow-hidden">
                   {/* Highlight Layer */}
                   <div 
-                    className="absolute inset-0 p-6 text-xl md:text-2xl leading-relaxed whitespace-pre-wrap break-words pointer-events-none z-10"
+                    className="absolute inset-0 p-6 text-xl md:text-2xl leading-relaxed whitespace-pre-wrap wrap-break-word pointer-events-none z-10"
                     style={{ color: 'transparent', fontFamily: 'inherit' }}
                     aria-hidden="true"
                   >
@@ -293,7 +293,7 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
             ) : (
               <div className="space-y-6 flex-1 flex flex-col h-full">
                 {/* Parsed Text with Clickable Links */}
-                <div className="bg-white p-6 rounded-2xl border-2 border-neutral-gray-200 shadow-sm text-xl md:text-2xl leading-relaxed whitespace-pre-wrap break-words text-navy-900 overflow-y-auto">
+                <div className="bg-white p-6 rounded-2xl border-2 border-neutral-gray-200 shadow-sm text-xl md:text-2xl leading-relaxed whitespace-pre-wrap wrap-break-word text-navy-900 overflow-y-auto">
                   {renderHighlightedText()}
                 </div>
 

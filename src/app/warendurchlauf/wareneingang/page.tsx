@@ -231,7 +231,7 @@ function CheckItem({
         <div className="text-[10px] text-[#9e9689]">{subtitle}</div>
         <div className="flex gap-1 items-center mt-0.5 flex-wrap">
           {tags.map(t => (
-            <span key={t} className="text-[8px] font-bold px-[5px] py-[1px] rounded-[3px] bg-[#f4f0e8] text-[#5e5850] border border-[#d8d0c4]">{t}</span>
+            <span key={t} className="text-[8px] font-bold px-[5px] py-px rounded-[3px] bg-[#f4f0e8] text-[#5e5850] border border-[#d8d0c4]">{t}</span>
           ))}
           <span className="text-[9px] text-[#c8922a] font-semibold flex items-center gap-0.5">
             <Zap className="w-2.5 h-2.5" /> {action}
@@ -240,10 +240,10 @@ function CheckItem({
       </div>
       <div className="flex gap-[3px] shrink-0 mt-0.5">
         {priority && (
-          <span className="text-[8px] font-bold px-[5px] py-[1px] rounded-[3px] bg-[rgba(192,57,43,.1)] text-[#c0392b]">{priority}</span>
+          <span className="text-[8px] font-bold px-[5px] py-px rounded-[3px] bg-[rgba(192,57,43,.1)] text-[#c0392b]">{priority}</span>
         )}
         {live && (
-          <span className="text-[8px] font-bold px-[5px] py-[1px] rounded-[3px] bg-[#1e7e45] text-white">Live</span>
+          <span className="text-[8px] font-bold px-[5px] py-px rounded-[3px] bg-[#1e7e45] text-white">Live</span>
         )}
       </div>
     </div>

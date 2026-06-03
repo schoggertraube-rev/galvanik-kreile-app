@@ -3,10 +3,10 @@
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import React, { useState } from 'react';
 import { 
-  MonitorSmartphone, Laptop, Smartphone, Globe, 
-  AlertTriangle, Shield, ShieldCheck, KeyRound, 
-  ArrowRight, Info, Activity, Clock, 
-  Server, CheckSquare, FileSignature, Receipt, Ban, CheckCircle, Database
+  MonitorSmartphone, Laptop, Smartphone, 
+  Shield, ShieldCheck, KeyRound, 
+  ArrowRight, Info, Activity, 
+  Server, CheckSquare, FileSignature, Receipt, CheckCircle, Database
 } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
 import Link from 'next/link';
@@ -26,7 +26,7 @@ export function AdminDevicesClient() {
   const [demoNotification, setDemoNotification] = useState<string | null>(null);
   
   // Interactive mock devices state
-  const [devices, setDevices] = useState<Device[]>([
+  const [devices] = useState<Device[]>([
     { id: '1', name: 'Meister-Tablet Halle 1', type: 'Tablet', browser: 'Safari (iPadOS)', lastAccess: 'Vor 12 Min.', role: 'Werkstatt', status: 'freigegeben' },
     { id: '2', name: 'Büro Desktop (Frau S.)', type: 'Desktop', browser: 'Chrome (Windows)', lastAccess: 'Vor 2 Min.', role: 'Büro', status: 'freigegeben' },
     { id: '3', name: 'Unbekanntes iPhone', type: 'Mobile', browser: 'Safari (iOS)', lastAccess: 'Vor 1 Std.', role: 'Admin', status: 'prüfen' },
@@ -339,7 +339,7 @@ export function AdminDevicesClient() {
         <div className="space-y-6 text-navy-900">
           <div className="bg-white rounded-xl border border-neutral-gray-200 overflow-hidden">
             <div className="p-3 bg-bg-app-soft font-bold text-xs border-b border-neutral-gray-200 flex gap-4 uppercase tracking-wider text-text-muted">
-              <div className="flex-[2]">Gerät und Typ</div>
+              <div className="flex-2">Gerät und Typ</div>
               <div className="flex-1">Rolle</div>
               <div className="flex-1">Letzter Zugriff</div>
               <div className="w-28 text-right">Status</div>
@@ -347,7 +347,7 @@ export function AdminDevicesClient() {
             <div className="divide-y divide-neutral-gray-100">
               {devices.map((device) => (
                 <div key={device.id} className="p-3 flex items-center gap-4 text-sm">
-                  <div className="flex-[2]">
+                  <div className="flex-2">
                     <p className="font-bold text-navy-900">{device.name}</p>
                     <p className="text-xs text-text-muted">{device.type} • {device.browser}</p>
                   </div>
@@ -418,7 +418,7 @@ export function AdminDevicesClient() {
           </div>
           <div className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-200">
             <h4 className="font-bold mb-2">Hinweis für UI-Optimierung</h4>
-            <p className="text-sm text-text-muted">Da Tablets in der Werkstatt über 35% der Nutzung ausmachen, sollten Touch-Targets (Buttons) weiterhin auf mindestens 48x48px gehalten werden. Listenansichten wie in "/warendurchlauf" müssen zwingend auf Landscape-Tablets getestet werden.</p>
+            <p className="text-sm text-text-muted">Da Tablets in der Werkstatt über 35% der Nutzung ausmachen, sollten Touch-Targets (Buttons) weiterhin auf mindestens 48x48px gehalten werden. Listenansichten wie in &quot;/warendurchlauf&quot; müssen zwingend auf Landscape-Tablets getestet werden.</p>
           </div>
         </div>
       </DetailOverlay>
