@@ -5,6 +5,8 @@ import { Lightbulb, PlusCircle, Target, Activity, AlertOctagon, CheckCircle2, Li
 import { usePageView } from "@/hooks/usePageView";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
+import { OfflineManager } from "@/lib/offline/OfflineManager";
+import { OfflineSyncBadge } from "@/components/offline/OfflineSyncBadge";
 
 interface KvpItem {
   id: string;
@@ -132,6 +134,8 @@ export function KvpClient() {
     currentArr.unshift(newItem);
     localStorage.setItem("kreile_kvp_items", JSON.stringify(currentArr));
 
+    OfflineManager.enqueueAction("APP_KVP_CREATE", newItem).catch(console.error);
+
     setItems([newItem, ...items]);
     setNewTitle("");
     setNewProblem("");
@@ -149,6 +153,7 @@ export function KvpClient() {
 
   return (
     <div className="space-y-6 pb-8 font-sans antialiased text-navy-900 w-full max-w-7xl mx-auto animate-in fade-in duration-400">
+      <OfflineSyncBadge />
       
       {/* HEADER */}
       <div className="mb-6 flex flex-col md:flex-row md:items-baseline justify-between gap-4">

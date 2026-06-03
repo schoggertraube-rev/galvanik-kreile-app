@@ -8,6 +8,7 @@ import {
   CreditCard, QrCode, SmartphoneNfc, Wallet, PieChart
 } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
+import Link from 'next/link';
 
 // ----- Cost handling -----
 interface CostItem {
@@ -179,7 +180,7 @@ export function FinanzenDashboardClient() {
             </div>
           </button>
 
-          <button onClick={() => setActiveOverlay("payment_analytics")} className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer">
+          <Link href="/buchhaltung/zahlung?tab=statistik" className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer">
             <div>
               <div className="flex items-start justify-between mb-4">
                 <div className="w-12 h-12 bg-navy-900/10 rounded-xl flex items-center justify-center text-navy-900">
@@ -192,7 +193,7 @@ export function FinanzenDashboardClient() {
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
               Auswertung öffnen <ArrowRight className="w-4 h-4" />
             </div>
-          </button>
+          </Link>
 
         </div>
       </div>
