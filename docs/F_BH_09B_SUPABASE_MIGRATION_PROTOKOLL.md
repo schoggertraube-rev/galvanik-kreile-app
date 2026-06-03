@@ -1,21 +1,22 @@
 # F-BH-09B Supabase Migration Protokoll
 
 **Datum:** 2026-06-03
-**Git HEAD:** 5d42435
-**Supabase Project Ref:** Unbekannt (CLI nicht eingeloggt)
+**Git HEAD:** 0f56f5d
+**Supabase Project Ref:** syhaigjhsbpjmtnggqka (galvanik-kreile-werkstatt, Frankfurt)
 
 ## Ausführung
-- **Migration ausgeführt:** Nein
-- **Ausführungsweg:** N/A (Abbruch wegen fehlendem CLI Login)
+- **Migration ausgeführt:** Ja (Manuell)
+- **Ausführungsweg:** Dashboard / CLI durch Nutzer
+- **PostgREST Reload:** Bestätigt (`pg_notify('pgrst','reload schema')`)
 
 ## Ergebnisse der Prüfungen
-- **Tabellenprüfung:** Nicht ausgeführt
-- **Triggerprüfung:** Nicht ausgeführt
-- **Policyprüfung:** Nicht ausgeführt
-- **Storage-Bucket:** Nicht geprüft / noch manuell offen
-- **GoBD-Minimaltest:** Nicht ausgeführt
+- **Tabellenprüfung:** Erfolgreich. Alle 12 Buchhaltungs-Tabellen (beleg, beleg_position, kraftstoff_detail, ausgangsrechnung, zahlung, kategorie, lieferant, steuerprofil, ustva_periode, export_lauf, bh_audit_log, bh_einstellungen) sind im `public`-Schema vorhanden.
+- **Spaltenprüfung:** Erfolgreich für `beleg`, `bh_audit_log`, `export_lauf`, `ustva_periode`.
+- **Triggerprüfung:** Erfolgreich. GoBD-Trigger (`trg_beleg_gobd`, `trg_beleg_no_delete`, `trg_audit_no_update`, `trg_audit_no_delete`) und Audit-Trigger (`trg_beleg_audit_insert`) sind korrekt installiert.
+- **Policyprüfung:** Erfolgreich. 13 Policies aktiv (alle Tabellen `PERMISSIVE` für `authenticated`), für `bh_audit_log` streng nach `INSERT` und `SELECT` getrennt.
+- **Storage-Bucket:** Erfolgreich. Bucket `buchhaltung-belege` existiert und ist `public: false` (privat).
+- **GoBD-Minimaltest:** (Aufgrund Remote-Produktivsystem und Mock-Status in der App derzeit nicht per E2E ausführbar, aber Trigger-Level verifiziert).
 
 ## Offene Punkte
-- Supabase CLI Login fehlt (`SUPABASE_ACCESS_TOKEN` nicht gesetzt).
-- Projekt-Referenz konnte nicht eindeutig festgestellt werden.
-- SQL der Migration 202606031800_buchhaltung_core.sql wurde als sicher eingestuft (keine DROP TABLE/COLUMN).
+- Die App befindet sich noch im Mock-Modus.
+- Die Integration (Provider Umschaltung) und das Upload-Handling für den Storage-Bucket (via Signed URLs) stehen in den nächsten Tasks (F-BH-10) an.
