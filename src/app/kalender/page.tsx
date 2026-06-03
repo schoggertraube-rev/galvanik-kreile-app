@@ -2,10 +2,22 @@
 import { usePageView } from "@/hooks/usePageView";
 import Link from "next/link";
 import { pruefeFristen } from "@/lib/buchhaltung/regeln";
-import { ChevronRight, Calendar, CalendarClock, Truck, Phone, Users, Globe, Info } from "lucide-react";
+import { ChevronRight, Calendar, CalendarClock, Truck, Phone, Users, Globe, Info, ReceiptText } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 const TERMIN_QUELLEN = [
+  {
+    quelle: "Zuletzt gebuchte Belege",
+    icon: ReceiptText,
+    color: "text-rose-500",
+    bg: "bg-rose-50",
+    status: "aktiv",
+    termine: [
+      { titel: "Shell - Frankfurt-Ost (78,40 €)", datum: "Heute", wichtig: false },
+      { titel: "Gasthaus Adler (64,00 €)", datum: "Gestern", wichtig: false },
+      { titel: "Riedel Chemie GmbH (1.190,00 €)", datum: "30.05.2026", wichtig: false },
+    ],
+  },
   {
     quelle: "Buchhaltung / Fristen",
     icon: CalendarClock,
