@@ -7,7 +7,9 @@ import { StationCompletionModal } from "@/components/orders/StationCompletionMod
 import { LabelPrintView } from "@/components/orders/LabelPrintView";
 import { timelineRepository, TimelineEntry } from "@/lib/repositories/timelineRepository";
 import { ordersRepository, Order } from "@/lib/repositories/ordersRepository";
-import { Clock, Box } from "lucide-react";
+import { Clock, Box, PhoneCall } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import { getStationConfig } from "@/constants/stations";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -108,8 +110,26 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </div>
 
         {/* Right Column (Timeline & Docs) */}
-        <div className="lg:col-span-5 bg-white border-2 border-neutral-gray-300 rounded-3xl p-6 md:p-8 shadow-sm">
-          <OrderTimeline entries={timeline} />
+        <div className="lg:col-span-5 space-y-8">
+          <div className="bg-white border-2 border-neutral-gray-300 rounded-3xl p-6 md:p-8 shadow-sm">
+            <OrderTimeline entries={timeline} />
+          </div>
+
+          <div className="bg-blue-50 border-2 border-blue-200 rounded-3xl p-6 md:p-8 shadow-sm">
+            <div className="flex items-center gap-2 mb-3">
+              <PhoneCall className="w-5 h-5 text-blue-600" />
+              <h3 className="font-bold font-serif text-blue-900 text-lg">Telefonnotizen (Vorbereitet)</h3>
+            </div>
+            <p className="text-sm text-blue-800 leading-relaxed mb-4">
+              Die Integration echter Telefonnotizen aus der Kommunikationszentrale ist vorbereitet. 
+              Sobald das System vollständig mit echten Auftragsdaten verknüpft ist, werden Anrufe zu diesem Auftrag hier protokolliert.
+            </p>
+            <Link href="/kommunikation?mode=telefonnotiz">
+              <Button variant="outline" className="w-full text-xs bg-white border-blue-300 text-blue-700 hover:bg-blue-100">
+                Zur Kommunikationszentrale
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
       {completionModalOpen && (

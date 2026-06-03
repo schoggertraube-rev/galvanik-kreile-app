@@ -75,3 +75,54 @@ export async function getRecentPhoneNotes(limit = 5) {
     return [];
   }
 }
+
+export async function updatePhoneNote(id: string, input: Partial<CreatePhoneNoteInput> & { status?: string }) {
+  if (!db) throw new Error("Database connection not available.");
+  
+  try {
+    const isMockCustomer = input.customerId?.startsWith("inst_") || input.customerId?.startsWith("cust_");
+    const isMockOrder = input.orderId?.startsWith("ord_");
+    
+    let updateData: any = {};
+    if (input.rawText) updateData.rawText = input.rawText;
+    if (input.generatedAnswer !== undefined) updateData.generatedAnswer = input.generatedAnswer;
+    if (input.category) updateData.category = input.category;
+    if (input.urgency) updateData.urgency = input.urgency;
+    if (input.status) updateData.status = input.status;
+    if (input.callerName !== undefined) updateData.callerName = input.callerName;
+    if (input.company !== undefined) updateData.company = input.company;
+    if (input.phone !== undefined) updateData.phone = input.phone;
+    
+    if (input.customerId !== undefined) {
+      updateData.customerId = isMockCustomer ? null : input.customerId;
+    }
+    if (input.orderId !== undefined) {
+      updateData.orderId = isMockOrder ? null : input.orderId;
+    }
+    
+    if (input.extractionJson) {
+      updateData.extractionJson = {
+        ...input.extractionJson,
+        mockCustomerId: isMockCustomer ? input.customerId : undefined,
+        mockOrderId: isMockOrder ? input.orderId : undefined
+      };
+    }
+    
+    if (input.linksJson) updateData.linksJson = input.linksJson;
+    
+    updateData.updatedAt = new Date();
+
+    // Use eq from drizzle-orm
+    const { eq } = await import("drizzle-orm");
+    const updated = await db.update(phoneNotes)
+      .set(updateData)
+      .where(eq(phoneNotes.id, id))
+      .returning();
+
+    return { success: true, data: updated[0] };
+  } catch (error: any) {
+    console.error("Failed to update phone note:", error.message || error);
+    return { success: false, error: error.message || "Failed to update phone note" };
+  }
+}
+

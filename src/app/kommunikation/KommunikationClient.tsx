@@ -1,6 +1,7 @@
 "use client";
+import React from "react";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { 
   Inbox, MessageSquare, Mail, Phone, Globe, Camera,
   AlertOctagon, CheckSquare, Clock, ArrowRight, Link as LinkIcon,
@@ -9,8 +10,10 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePageView } from "@/hooks/usePageView";
-import { INITIAL_CUSTOMERS, INITIAL_ORDERS } from "@/lib/mockData";
+import { INITIAL_CUSTOMERS, INITIAL_ORDERS, MockCustomer, MockOrder } from "@/lib/mockData";
 import { createPhoneNote, getRecentPhoneNotes } from "@/app/actions/phoneNotes.actions";
+import { smartMatchText, MatchResult } from "./smartMatcher";
+import { PhoneNoteDetailView } from "./PhoneNoteDetailView";
 
 type Channel = "all" | "email" | "whatsapp" | "instagram" | "website" | "phone" | "billing";
 
@@ -92,8 +95,8 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
   const [saveSuccess, setSaveSuccess] = useState(false);
   
   // Live Matches
-  const [matchedCustomer, setMatchedCustomer] = useState<any>(null);
-  const [matchedOrder, setMatchedOrder] = useState<any>(null);
+  const [matchedCustomer, setMatchedCustomer] = useState<MockCustomer | null>(null);
+  const [matchedOrder, setMatchedOrder] = useState<MockOrder | null>(null);
   const [matchedMaterial, setMatchedMaterial] = useState<string | null>(null);
   const [matchedKeywords, setMatchedKeywords] = useState<string[]>([]);
   
@@ -109,50 +112,22 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
     aktion: "",
   });
 
+  const analyzeText = useCallback((val: string) => {
+    const match = smartMatchText(val);
+    setMatchedCustomer(match.matchedCustomer);
+    setMatchedOrder(match.matchedOrder);
+    setMatchedMaterial(match.matchedMaterial);
+    setMatchedKeywords(match.matchedKeywords);
+  }, []);
+
   useEffect(() => {
     const draft = localStorage.getItem("kreile_phone_note_draft");
     if (draft) {
+      // eslint-disable-next-line
       setText(draft);
       analyzeText(draft);
     }
-  }, []);
-
-  const analyzeText = (val: string) => {
-    const lower = val.toLowerCase();
-    
-    // 1. Kunden-Suche
-    let foundCust = null;
-    for (const cust of INITIAL_CUSTOMERS) {
-      if (cust.name && lower.includes(cust.name.toLowerCase())) {
-        foundCust = cust;
-        break; // take first match
-      }
-    }
-    setMatchedCustomer(foundCust);
-
-    // 2. Auftrags-Suche
-    let foundOrd = null;
-    for (const ord of INITIAL_ORDERS) {
-      if (lower.includes(ord.id.toLowerCase())) {
-        foundOrd = ord;
-        break;
-      }
-    }
-    setMatchedOrder(foundOrd);
-
-    // 3. Material-Erkennung
-    const materials = ["zink", "chrom", "nickel", "messing", "kupfer", "gold", "silber", "eloxal", "alu"];
-    const foundMat = materials.find(m => lower.includes(m));
-    setMatchedMaterial(foundMat || null);
-
-    // 4. Keyword/Intent-Erkennung
-    const keywords = [];
-    if (lower.includes("reklamation") || lower.includes("beschädigt") || lower.includes("kratzer") || lower.includes("kaputt")) keywords.push("Reklamation");
-    if (lower.includes("rechnung") || lower.includes("zahlung") || lower.includes("bezahlen") || lower.includes("überweisung")) keywords.push("Buchhaltung/Zahlung");
-    if (lower.includes("versand") || lower.includes("abholung") || lower.includes("spedition") || lower.includes("lieferung") || lower.includes("fertig")) keywords.push("Termin/Logistik");
-    if (lower.includes("angebot") || lower.includes("preis") || lower.includes("kosten")) keywords.push("Angebot");
-    setMatchedKeywords(keywords);
-  };
+  }, [analyzeText]);
 
   const handleChange = (val: string) => {
     setText(val);
@@ -207,8 +182,8 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
       } else {
         setSaveError(result.error || "Ein unbekannter Fehler ist aufgetreten.");
       }
-    } catch (err: any) {
-      setSaveError(err.message || "Fehler beim Speichern der Notiz.");
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Fehler beim Speichern der Notiz.");
     } finally {
       setIsSaving(false);
     }
@@ -224,6 +199,7 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
   // Helper für Highlight Rendering
   const renderHighlightedText = () => {
     if (!text) return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let parts: any[] = [text];
 
     const highlightWord = (word: string, colorClass: string, href?: string) => {
@@ -428,7 +404,7 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
                     <p className="font-bold text-purple-900">{matchedOrder.id}</p>
                     <ExternalLink className="w-3 h-3 text-purple-700 opacity-50 group-hover:opacity-100" />
                   </div>
-                  <p className="text-xs text-purple-700 mt-1">{matchedOrder.articleName}</p>
+                  <p className="text-xs text-purple-700 mt-1">{matchedOrder.task}</p>
                   <div className="mt-2 inline-block bg-purple-200/50 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase">
                     Status: {matchedOrder.status}
                   </div>
@@ -473,7 +449,7 @@ function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => voi
             <div className="text-sm font-medium leading-relaxed">
               {matchedOrder ? (
                 <span>
-                  „{matchedCustomer ? `Herr/Frau von ${matchedCustomer.name}, ` : ''}ich habe den Auftrag <strong className="text-accent-orange">{matchedOrder.id}</strong> ({matchedOrder.articleName}) vor mir.
+                  Hallo {matchedCustomer?.name ? "Herr/Frau " + matchedCustomer.name.split(" ").pop() : "zusammen"},\n\nich habe gerade den Vorgang <strong className="underline">{matchedOrder.id}</strong> ({matchedOrder.task}) vor mir.
                   Der aktuelle Stand ist: <strong className="text-accent-orange uppercase">{matchedOrder.status}</strong>. 
                   {matchedOrder.status === 'in_beschichtung' || matchedOrder.status === 'vorbehandlung' ? ' Er wird voraussichtlich in Kürze fertig.' : ''}
                   {matchedOrder.status === 'fertig' ? ' Sie können die Ware abholen.' : ''}“
@@ -513,6 +489,7 @@ export function KommunikationClient() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       if (params.get('mode') === 'telefonnotiz') {
+        // eslint-disable-next-line
         setIsPhoneNoteMode(true);
       }
     }
@@ -528,8 +505,22 @@ export function KommunikationClient() {
     }
   }, [isPhoneNoteMode]);
 
-  const filteredThreads = DEMO_THREADS.filter(t => activeChannel === "all" || t.channel === activeChannel);
-  const activeThread = DEMO_THREADS.find(t => t.id === activeThreadId);
+  const mappedPhoneNotes = recentNotes.map(n => ({
+    id: `pn_${n.id}`,
+    sender: n.callerName || n.company || "Unbekannter Anrufer",
+    subject: `Notiz: ${n.category}`,
+    time: new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    channel: "phone" as Channel,
+    status: n.status === "open" ? "open" : "new",
+    priority: n.urgency === "Hoch" ? "high" : "medium",
+    content: n.rawText,
+    category: n.category,
+    rawNote: n
+  }));
+
+  const allThreads = [...DEMO_THREADS, ...mappedPhoneNotes];
+  const filteredThreads = allThreads.filter(t => activeChannel === "all" || t.channel === activeChannel);
+  const activeThread = allThreads.find(t => t.id === activeThreadId);
 
   const getStatusBadge = (status: string) => {
     switch(status) {
@@ -632,7 +623,7 @@ export function KommunikationClient() {
               </div>
               <div className="space-y-1 mt-1">
                 {recentNotes.map((note) => (
-                  <div key={note.id} className="px-3 py-2 rounded-lg bg-gray-50 border border-neutral-gray-100 text-xs">
+                  <div key={note.id} onClick={() => setActiveThreadId(`pn_${note.id}`)} className="px-3 py-2 rounded-lg bg-gray-50 border border-neutral-gray-100 text-xs cursor-pointer hover:bg-neutral-gray-200 transition">
                     <div className="font-bold text-navy-900 mb-1">{note.category}</div>
                     <div className="text-text-muted line-clamp-2">{note.rawText}</div>
                   </div>
@@ -679,6 +670,13 @@ export function KommunikationClient() {
         {/* COL 3: ARBEITSBEREICH */}
         <div className="flex-1 bg-white border border-neutral-gray-200 rounded-2xl flex flex-col overflow-hidden">
           {activeThread ? (
+            activeThread.id.startsWith("pn_") ? (
+              <PhoneNoteDetailView 
+                note={(activeThread as any).rawNote} 
+                onUpdate={() => getRecentPhoneNotes(5).then(notes => setRecentNotes(notes))}
+                onClose={() => setActiveThreadId(null)}
+              />
+            ) : (
           <>
             {/* Bereich 1: Nachricht ansehen */}
             <div className="p-6 border-b border-neutral-gray-100">
@@ -761,6 +759,7 @@ export function KommunikationClient() {
 
             </div>
           </>
+          )
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-text-muted p-8 text-center">
             <MessageSquare className="w-12 h-12 mb-4 opacity-20" />

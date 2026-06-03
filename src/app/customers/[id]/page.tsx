@@ -405,9 +405,21 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                 </div>
 
                 <div className="space-y-4">
-                  <p className="text-text-muted text-sm font-semibold text-center italic py-4 bg-bg-app-soft/30 border border-neutral-gray-100 rounded-xl">
-                    Noch keine Einträge.
-                  </p>
+                  <div className="p-5 bg-blue-50 border border-blue-200 rounded-2xl space-y-2">
+                    <div className="flex items-center gap-2">
+                      <PhoneCall className="w-5 h-5 text-blue-600" />
+                      <h4 className="font-bold text-blue-900">Telefonnotizen (Vorbereitet)</h4>
+                    </div>
+                    <p className="text-sm text-blue-800 leading-relaxed">
+                      Die Anbindung der echten Telefonnotizen aus der Kommunikationszentrale ist für diesen Demo-Kunden vorbereitet. 
+                      Sobald echte Kundendaten verknüpft sind, erscheinen hier alle relevanten Anrufe und Notizen automatisch.
+                    </p>
+                    <Link href="/kommunikation?mode=telefonnotiz">
+                      <Button variant="outline" className="mt-2 text-xs bg-white border-blue-300 text-blue-700 hover:bg-blue-100">
+                        Zur Kommunikationszentrale
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               </CardContent>
             </Card>
