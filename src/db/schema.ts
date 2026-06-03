@@ -266,3 +266,6 @@ export const phoneNotes = pgTable("phone_notes", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+
+// 11. Buchhaltung & Finanzen
+export * from "./schema_buchhaltung";
