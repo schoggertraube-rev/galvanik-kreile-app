@@ -92,15 +92,17 @@ export function RightNav() {
       </div>
 
       <div className="flex flex-col items-center w-full mt-2 border-t border-neutral-gray-100 pt-4">
-        <RightNavItem label="Betrieb" href="/kontrolle" icon={<Archive className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/kontrolle") || isActive("/kommunikation") || isActive("/kundenservice") || isActive("/betrieb-kvp") || isActive("/baeder") || isActive("/items")} onClick={() => setExpandedGroup(expandedGroup === "betrieb" ? null : "betrieb")} />
-        {(expandedGroup === "betrieb" || isActive("/kontrolle") || isActive("/kommunikation") || isActive("/kundenservice") || isActive("/betrieb-kvp") || isActive("/baeder") || isActive("/items")) && (
+        <RightNavItem label="Betrieb" href="/betrieb" icon={<Archive className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/betrieb") || isActive("/kontrolle") || isActive("/kommunikation") || isActive("/kundenservice") || isActive("/betrieb-kvp") || isActive("/baeder") || isActive("/items") || isActive("/buchhaltung")} onClick={() => setExpandedGroup(expandedGroup === "betrieb" ? null : "betrieb")} />
+        {(expandedGroup === "betrieb" || isActive("/betrieb") || isActive("/kontrolle") || isActive("/kommunikation") || isActive("/kundenservice") || isActive("/betrieb-kvp") || isActive("/baeder") || isActive("/items") || isActive("/buchhaltung")) && (
           <div className="flex flex-col w-full mt-2 space-y-1">
+            <SubMenuLink label="Betriebs-Cockpit" href="/betrieb" isAvailable={true} />
             <SubMenuLink label="Kontrolle" href="/kontrolle" isAvailable={true} />
             <SubMenuLink label="Kommunikation" href="/kommunikation" isAvailable={true} />
             <SubMenuLink label="Kundenservice" href="/kundenservice" isAvailable={true} />
             <SubMenuLink label="Betriebs-KVP" href="/betrieb-kvp" isAvailable={true} />
             <SubMenuLink label="Bäder" href="/baeder" isAvailable={true} />
             <SubMenuLink label="Lager und Teile" href="/items" isAvailable={true} />
+            <SubMenuLink label="Buchhaltung" href="/buchhaltung" isAvailable={isAdminOrDev} />
           </div>
         )}
       </div>
@@ -111,10 +113,6 @@ export function RightNav() {
 
       {isAdminOrDev && (
         <>
-        <div className="flex flex-col items-center w-full mt-2 border-t border-neutral-gray-100 pt-4">
-          <RightNavItem label="Buchhaltung" href="/buchhaltung" icon={<FileText className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/buchhaltung")} onClick={() => trackUiEvent("nav_click", { target: "/buchhaltung" })} />
-        </div>
-
         <div className="flex flex-col items-center w-full mt-2 border-t border-neutral-gray-100 pt-4 mb-8">
           <RightNavItem label="Verwaltung" href="/admin/import" icon={<Settings className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/admin/import") || isActive("/admin/devices") || isActive("/settings") || isActive("/kvp") || isActive("/admin/analytics")} onClick={() => setExpandedGroup(expandedGroup === "verwaltung" ? null : "verwaltung")} />
           {(expandedGroup === "verwaltung" || isActive("/admin/import") || isActive("/admin/devices") || isActive("/settings") || isActive("/kvp") || isActive("/admin/analytics")) && (

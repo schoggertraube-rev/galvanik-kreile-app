@@ -12,7 +12,7 @@ const DEMO_USERS = [
   {
     id: "1",
     initials: "MK",
-    role: "Meister",
+    role: "Admin",
     pin: "1234",
     icon: Wrench,
   },

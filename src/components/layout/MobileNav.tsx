@@ -164,21 +164,21 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
           
           <NavItem 
             label="Betrieb" 
-            href="/kontrolle" 
+            href="/betrieb" 
             icon={Archive} 
             submenu={[
+              { label: "Betriebs-Cockpit", href: "/betrieb" }, 
               { label: "Kontrolle", href: "/kontrolle" }, 
               { label: "Kommunikation", href: "/kommunikation" }, 
               { label: "Kundenservice", href: "/kundenservice" }, 
               { label: "Betriebs-KVP", href: "/betrieb-kvp" }, 
               { label: "Bäder", href: "/baeder" }, 
-              { label: "Lager und Teile", href: "/items" }
+              { label: "Lager und Teile", href: "/items" },
+              ...(isAdminOrDev ? [{ label: "Buchhaltung", href: "/buchhaltung" }] : [])
             ]} 
           />
           
           <NavItem label="Analyse" href="/performance" icon={BarChart3} />
-          
-          <NavItem label="Buchhaltung" href="/buchhaltung" icon={FileText} />
           
           {isAdminOrDev && (
             <NavItem 

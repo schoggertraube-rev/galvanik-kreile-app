@@ -1,7 +1,8 @@
-import { isAdminOrDeveloper } from "@/lib/auth/permissions";
+import { isAdminOrDeveloper, isDeveloper } from "@/lib/auth/permissions";
 import { SettingsClient } from "./SettingsClient";
 
 export default async function SettingsPage() {
   const isAdmin = await isAdminOrDeveloper();
-  return <SettingsClient isAdmin={isAdmin} />;
+  const isDev = await isDeveloper();
+  return <SettingsClient isAdmin={isAdmin} isDeveloper={isDev} />;
 }

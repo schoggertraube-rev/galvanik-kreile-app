@@ -14,7 +14,7 @@ import Link from "next/link";
 
 type Tab = "status" | "company" | "users" | "roles" | "features" | "import" | "system";
 
-export function SettingsClient({ isAdmin }: { isAdmin: boolean }) {
+export function SettingsClient({ isAdmin, isDeveloper }: { isAdmin: boolean, isDeveloper: boolean }) {
   usePageView();
   const [activeTab, setActiveTab] = useState<Tab>("status");
 
@@ -25,7 +25,7 @@ export function SettingsClient({ isAdmin }: { isAdmin: boolean }) {
           title="Admin Console & Einstellungen"
           subtitle="Verwalte Einstellungen und Systemparameter."
         />
-        {isAdmin && (
+        {isDeveloper && (
           <div className="flex items-center gap-3">
             <Link href="/admin/analytics" className="inline-flex items-center gap-2 px-4 py-2 bg-kreile-yellow text-navy-900 font-semibold rounded-xl hover:bg-yellow-500 transition-colors shadow-sm">
               <BarChart2 className="w-5 h-5" />
@@ -47,7 +47,7 @@ export function SettingsClient({ isAdmin }: { isAdmin: boolean }) {
             <TabButton active={activeTab === "company"} onClick={() => setActiveTab("company")} icon={<Building2 />} label="Firmendaten" />
             <TabButton active={activeTab === "users"} onClick={() => setActiveTab("users")} icon={<Users />} label="Benutzer" />
             <TabButton active={activeTab === "roles"} onClick={() => setActiveTab("roles")} icon={<Shield />} label="Rollen & Rechte" />
-            <TabButton active={activeTab === "features"} onClick={() => setActiveTab("features")} icon={<Power />} label="Feature-Toggles" />
+            {isDeveloper && <TabButton active={activeTab === "features"} onClick={() => setActiveTab("features")} icon={<Power />} label="Feature-Toggles" />}
             <TabButton active={activeTab === "import"} onClick={() => setActiveTab("import")} icon={<Database />} label="Daten-Import" />
             <TabButton active={activeTab === "system"} onClick={() => setActiveTab("system")} icon={<Settings />} label="System" />
           </>
@@ -62,7 +62,7 @@ export function SettingsClient({ isAdmin }: { isAdmin: boolean }) {
             {activeTab === "company" && <CompanySettingsForm />}
             {activeTab === "users" && <UserManagement />}
             {activeTab === "roles" && <RoleMatrix />}
-            {activeTab === "features" && <FeatureToggles />}
+            {isDeveloper && activeTab === "features" && <FeatureToggles />}
             {activeTab === "import" && <DataImportCenter />}
             {activeTab === "system" && (
               <div className="p-12 text-center border-2 border-dashed border-neutral-gray-200 rounded-2xl text-text-muted space-y-2">
