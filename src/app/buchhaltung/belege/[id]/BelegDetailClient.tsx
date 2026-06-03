@@ -1,170 +1,379 @@
 "use client";
 
 import { usePageView } from "@/hooks/usePageView";
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
-import { getBuchhaltungProvider } from "@/lib/buchhaltung";
-import type { BelegDetail } from "@/lib/buchhaltung/types";
-import { ChevronRight, FileText, CheckCircle2, XCircle, Edit3, ArrowLeft } from "lucide-react";
+import { ChevronRight, ArrowLeft, Save, ShieldCheck, XCircle, FileText, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
+import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
-export function BelegDetailClient({ id }: { id: string }) {
+interface BelegDetailClientProps {
+  id: string;
+}
+
+interface MockBeleg {
+  id: string;
+  name: string;
+  date: string;
+  brutto: number;
+  netto: number;
+  ustSatz: number;
+  ustBetrag: number;
+  categoryId: string;
+  categoryName: string;
+  skrKonto: string;
+  absetzbarProzent: number;
+  absetzbarGrund: string;
+  belegart: string;
+  confidence: number;
+  status: "pruefen" | "erfasst" | "festgeschrieben" | "storniert";
+  icon: string;
+  info: string;
+  belegnummer: string;
+  notiz: string;
+  kiHinweise: { regel: string; text: string; paragraf: string; typ: "warning" | "info" | "success" }[];
+  audit: { aktion: string; zeitpunkt: string; benutzer: string }[];
+}
+
+const MOCK_BELEGE: Record<string, MockBeleg> = {
+  "shell-frankfurt-ost": {
+    id: "shell-frankfurt-ost", name: "Shell - Frankfurt-Ost", date: "2026-06-02", brutto: 78.40, netto: 65.88, ustSatz: 19, ustBetrag: 12.52,
+    categoryId: "kraftstoff", categoryName: "Kraftstoff", skrKonto: "4530", absetzbarProzent: 100, absetzbarGrund: "Betrieblicher Fuhrpark",
+    belegart: "Tankbeleg", confidence: 96.1, status: "erfasst", icon: "FOTO", info: "Diesel 45,8 l", belegnummer: "SH-2026-4829", notiz: "",
+    kiHinweise: [
+      { regel: "Kraftstoff plausibel", text: "Verbrauch und Betrag passen zum Fuhrpark. Keine Auffälligkeiten.", paragraf: "", typ: "success" },
+      { regel: "Vorsteuer", text: "Voller Vorsteuerabzug bei betrieblichem Fahrzeug möglich.", paragraf: "§ 15 UStG", typ: "info" },
+    ],
+    audit: [
+      { aktion: "Erfasst (Foto)", zeitpunkt: "02.06.2026, 08:14", benutzer: "MK" },
+      { aktion: "OCR verarbeitet", zeitpunkt: "02.06.2026, 08:14", benutzer: "System" },
+      { aktion: "Automatisch zugeordnet", zeitpunkt: "02.06.2026, 08:14", benutzer: "KI" },
+    ],
+  },
+  "gasthaus-adler": {
+    id: "gasthaus-adler", name: "Gasthaus Adler", date: "2026-05-31", brutto: 64.00, netto: 53.78, ustSatz: 19, ustBetrag: 10.22,
+    categoryId: "bewirtung", categoryName: "Bewirtung", skrKonto: "4650", absetzbarProzent: 70, absetzbarGrund: "Bewirtung (§ 4 Abs. 5 Nr. 2 EStG)",
+    belegart: "Bewirtungsbeleg", confidence: 72.5, status: "pruefen", icon: "FOTO", info: "Anlass fehlt", belegnummer: "GA-2026-0531", notiz: "",
+    kiHinweise: [
+      { regel: "Bewirtung 70 %", text: "Nur 70 % der Bewirtungskosten sind absetzbar. Anlass und Teilnehmer müssen auf der Rückseite vermerkt sein.", paragraf: "§ 4 Abs. 5 Nr. 2 EStG", typ: "warning" },
+      { regel: "Pflichtangaben fehlen", text: "Anlass der Bewirtung und Teilnehmerliste fehlen. Bitte ergänzen, sonst droht Nichtanerkennung.", paragraf: "", typ: "warning" },
+    ],
+    audit: [
+      { aktion: "Erfasst (Foto)", zeitpunkt: "31.05.2026, 19:45", benutzer: "MK" },
+      { aktion: "OCR verarbeitet", zeitpunkt: "31.05.2026, 19:45", benutzer: "System" },
+      { aktion: "Zur Prüfung markiert", zeitpunkt: "31.05.2026, 19:46", benutzer: "KI" },
+    ],
+  },
+  "riedel-chemie": {
+    id: "riedel-chemie", name: "Riedel Chemie GmbH", date: "2026-05-30", brutto: 1190.00, netto: 1000.00, ustSatz: 19, ustBetrag: 190.00,
+    categoryId: "material", categoryName: "Material & Chemie", skrKonto: "3400", absetzbarProzent: 100, absetzbarGrund: "Betriebsausgabe",
+    belegart: "E-Rechnung (ZUGFeRD)", confidence: 98.3, status: "erfasst", icon: "PDF", info: "E-Rechnung (ZUGFeRD)", belegnummer: "RC-2026-1847", notiz: "",
+    kiHinweise: [
+      { regel: "E-Rechnung validiert", text: "ZUGFeRD-Struktur wurde geprüft und ist gültig. Alle Pflichtfelder vorhanden.", paragraf: "", typ: "success" },
+    ],
+    audit: [
+      { aktion: "E-Rechnung importiert", zeitpunkt: "30.05.2026, 10:30", benutzer: "System" },
+      { aktion: "ZUGFeRD geparst", zeitpunkt: "30.05.2026, 10:30", benutzer: "System" },
+      { aktion: "Automatisch zugeordnet", zeitpunkt: "30.05.2026, 10:30", benutzer: "KI" },
+    ],
+  },
+};
+
+export function BelegDetailClient({ id }: BelegDetailClientProps) {
   usePageView();
-  const [beleg, setBeleg] = useState<BelegDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saved, setSaved] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      const provider = getBuchhaltungProvider();
-      const data = await provider.getBeleg(id);
-      setBeleg(data);
-      setLoading(false);
-    };
-    load();
-  }, [id]);
+  const beleg = useMemo(() => MOCK_BELEGE[id] ?? null, [id]);
 
-  const handleFreigeben = async () => {
-    if (!beleg) return;
-    const provider = getBuchhaltungProvider();
-    const updated = await provider.freigebenBeleg(beleg.id);
-    setBeleg({ ...beleg, ...updated, positionen: beleg.positionen, kiHinweise: beleg.kiHinweise });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
+  // Editable form state
+  const [form, setForm] = useState(() => beleg ? {
+    lieferant: beleg.name,
+    datum: beleg.date,
+    belegnummer: beleg.belegnummer,
+    brutto: beleg.brutto.toString(),
+    netto: beleg.netto.toString(),
+    ustSatz: beleg.ustSatz.toString(),
+    ustBetrag: beleg.ustBetrag.toString(),
+    kategorie: beleg.categoryName,
+    skrKonto: beleg.skrKonto,
+    absetzbar: beleg.absetzbarProzent.toString(),
+    notiz: beleg.notiz,
+  } : null);
 
-  if (loading || !beleg) {
+  const [status, setStatus] = useState<string>(beleg?.status ?? "erfasst");
+  const [toast, setToast] = useState<string | null>(null);
+  const [stornoOpen, setStornoOpen] = useState(false);
+  const [stornoGrund, setStornoGrund] = useState("");
+
+  if (!beleg || !form) {
     return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="w-8 h-8 border-3 border-accent-orange/20 border-t-accent-orange rounded-full animate-spin" />
+      <div className="w-full pb-24 px-4 sm:px-6 xl:px-8 min-h-screen">
+        <div className="flex items-center gap-2 text-xs font-semibold text-text-muted mt-4 mb-3">
+          <Link href="/betrieb" className="hover:text-navy-900 transition-colors">Betrieb</Link>
+          <ChevronRight className="w-3 h-3" />
+          <Link href="/buchhaltung" className="hover:text-navy-900 transition-colors">Buchhaltung</Link>
+          <ChevronRight className="w-3 h-3" />
+          <Link href="/buchhaltung/belege" className="hover:text-navy-900 transition-colors">Belege</Link>
+          <ChevronRight className="w-3 h-3" />
+          <span className="text-navy-900">Nicht gefunden</span>
+        </div>
+        <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-8 text-center mt-8">
+          <FileText className="w-12 h-12 text-neutral-300 mx-auto mb-4" />
+          <h2 className="text-lg font-extrabold text-[#1e1b18] mb-2">Beleg nicht gefunden</h2>
+          <p className="text-sm text-neutral-500 mb-6">Der Beleg mit der ID &ldquo;{id}&rdquo; existiert nicht oder wurde noch nicht erfasst.</p>
+          <Link href="/buchhaltung/belege" className="inline-flex items-center gap-2 px-5 py-2.5 bg-[#1e1b18] text-white rounded-xl font-bold text-sm hover:bg-black transition-colors">
+            <ArrowLeft className="w-4 h-4" /> Zurück zu Belegen
+          </Link>
+        </div>
       </div>
     );
   }
 
-  const STATUS_COLORS: Record<string, string> = {
-    pruefen: "bg-amber-50 text-amber-700 border-amber-200",
-    erfasst: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    festgeschrieben: "bg-blue-50 text-blue-700 border-blue-200",
-    storniert: "bg-red-50 text-red-700 border-red-200",
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
   };
 
+  const handleSave = () => {
+    if (!form.lieferant || !form.brutto) {
+      showToast("Pflichtfelder fehlen: Lieferant und Brutto sind erforderlich.");
+      return;
+    }
+    showToast("Korrektur gespeichert. Im GoBD-Modus wird jede Korrektur über Audit-Log nachvollzogen.");
+  };
+
+  const handleFreigabe = () => {
+    setStatus("festgeschrieben");
+    showToast("Beleg freigegeben. Spätere GoBD-Festschreibung erfolgt mit Backend-Trigger.");
+  };
+
+  const handleStorno = () => {
+    if (!stornoGrund.trim()) {
+      showToast("Bitte Storno-Grund angeben.");
+      return;
+    }
+    setStatus("storniert");
+    setStornoOpen(false);
+    showToast("Storno vorbereitet. Gegenbuchung wird im Mock erzeugt. Keine echte Datenlöschung.");
+  };
+
+  const statusLabel = status === "pruefen" ? "Prüfung erforderlich" : status === "erfasst" ? "Erfasst" : status === "festgeschrieben" ? "Freigegeben" : "Storniert";
+  const statusColorClass = status === "pruefen" ? "bg-amber-50 text-amber-700" : status === "erfasst" ? "bg-blue-50 text-blue-700" : status === "festgeschrieben" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700";
+
   return (
-    <div className="w-full pb-24 px-4 sm:px-6 xl:px-8">
+    <div className="w-full pb-24 px-4 sm:px-6 xl:px-8 min-h-screen">
+      {/* Toast */}
+      {toast && (
+        <div className="fixed top-4 right-4 z-50 bg-[#1e1b18] text-white text-sm font-bold rounded-xl px-5 py-3 shadow-lg max-w-sm animate-in slide-in-from-top-2 fade-in">
+          {toast}
+        </div>
+      )}
+
+      {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs font-semibold text-text-muted mt-4 mb-3">
-        <Link href="/" className="hover:text-navy-900 transition-colors">Home</Link>
+        <Link href="/betrieb" className="hover:text-navy-900 transition-colors">Betrieb</Link>
         <ChevronRight className="w-3 h-3" />
         <Link href="/buchhaltung" className="hover:text-navy-900 transition-colors">Buchhaltung</Link>
         <ChevronRight className="w-3 h-3" />
         <Link href="/buchhaltung/belege" className="hover:text-navy-900 transition-colors">Belege</Link>
         <ChevronRight className="w-3 h-3" />
-        <span className="text-navy-900">Detail</span>
+        <span className="text-navy-900 truncate max-w-[200px]">{beleg.name}</span>
       </div>
 
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/buchhaltung/belege" className="flex items-center gap-2 text-sm font-bold text-text-muted hover:text-navy-900 transition-colors">
-          <ArrowLeft className="w-4 h-4" /> Zurück zu Belegen
-        </Link>
-      </div>
-
-      {saved && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-4 text-sm font-bold text-emerald-700 flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4" /> Änderungen gespeichert
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-6">
-        {/* Vorschau */}
-        <div className="bg-white border border-neutral-gray-100 rounded-2xl shadow-sm p-6">
-          <h2 className="text-sm font-bold text-text-muted uppercase tracking-wider mb-3">Originalbeleg</h2>
-          <div className="aspect-[3/4] bg-neutral-gray-50 rounded-xl flex items-center justify-center border-2 border-dashed border-neutral-gray-200">
-            <div className="text-center">
-              <FileText className="w-12 h-12 text-neutral-gray-300 mx-auto mb-2" />
-              <p className="text-xs text-text-muted">{beleg.originalDatei}</p>
-              <p className="text-[10px] text-text-muted mt-1">Format: {beleg.originalFormat?.toUpperCase()}</p>
-              <p className="text-[10px] text-accent-orange font-bold mt-2">Demo — kein echtes Bild hinterlegt</p>
+      {/* Back + Title */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <Link href="/buchhaltung/belege" className="w-10 h-10 rounded-full bg-white border border-neutral-200 flex items-center justify-center hover:bg-neutral-50 transition-colors shrink-0">
+            <ArrowLeft className="w-4 h-4 text-[#1e1b18]" />
+          </Link>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-extrabold text-[#1e1b18] tracking-tight">{beleg.name}</h1>
+            <div className="flex items-center gap-3 mt-1">
+              <span className={`px-2.5 py-1 rounded text-[10px] font-extrabold tracking-wide uppercase ${statusColorClass}`}>{statusLabel}</span>
+              <span className="text-xs text-neutral-500">{beleg.belegart} · {beleg.belegnummer}</span>
             </div>
           </div>
         </div>
+        <div className="text-right">
+          <div className="text-2xl sm:text-3xl font-extrabold text-[#1e1b18]">{beleg.brutto.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</div>
+          <div className="text-xs text-neutral-400 mt-0.5">Confidence: {beleg.confidence.toFixed(1)} %</div>
+        </div>
+      </div>
 
-        {/* OCR-Felder */}
-        <div className="bg-white border border-neutral-gray-100 rounded-2xl shadow-sm p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-extrabold text-navy-900">Erkannte Daten</h2>
-            <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border ${STATUS_COLORS[beleg.status]}`}>
-              {beleg.status}
-            </span>
+      {/* Main Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        {/* Left: Preview + Form */}
+        <div className="lg:col-span-2 space-y-6">
+
+          {/* Preview */}
+          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">
+            <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">Original-Beleg</h3>
+            <div className="bg-neutral-50 rounded-2xl p-8 flex flex-col items-center justify-center min-h-[120px] border border-neutral-100">
+              <FileText className="w-16 h-16 text-neutral-200 mb-3" />
+              <p className="text-xs text-neutral-400 font-bold">{beleg.icon} — {beleg.belegart}</p>
+              <p className="text-[10px] text-neutral-400 mt-1">Original wird später GoBD-sicher im Storage abgelegt.</p>
+            </div>
           </div>
 
-          <div className="space-y-4">
-            <Field label="Lieferant" value={beleg.lieferantText ?? "—"} />
-            <Field label="Datum" value={beleg.belegdatum ? new Date(beleg.belegdatum).toLocaleDateString("de-DE") : "—"} />
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Brutto" value={beleg.brutto ? `${beleg.brutto.toLocaleString("de-DE")} €` : "—"} />
-              <Field label="Netto" value={beleg.netto ? `${beleg.netto.toLocaleString("de-DE")} €` : "—"} />
+          {/* OCR Form */}
+          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">
+            <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">Erkannte / Bearbeitbare Felder</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <FormField label="Lieferant" value={form.lieferant} onChange={v => setForm({ ...form, lieferant: v })} />
+              <FormField label="Datum" value={form.datum} onChange={v => setForm({ ...form, datum: v })} type="date" />
+              <FormField label="Belegnummer" value={form.belegnummer} onChange={v => setForm({ ...form, belegnummer: v })} />
+              <FormField label="Brutto (€)" value={form.brutto} onChange={v => setForm({ ...form, brutto: v })} />
+              <FormField label="Netto (€)" value={form.netto} onChange={v => setForm({ ...form, netto: v })} />
+              <FormField label="USt-Satz (%)" value={form.ustSatz} onChange={v => setForm({ ...form, ustSatz: v })} />
+              <FormField label="USt-Betrag (€)" value={form.ustBetrag} onChange={v => setForm({ ...form, ustBetrag: v })} />
+              <FormField label="Kategorie" value={form.kategorie} onChange={v => setForm({ ...form, kategorie: v })} />
+              <FormField label="SKR-Konto" value={form.skrKonto} onChange={v => setForm({ ...form, skrKonto: v })} />
+              <FormField label="Absetzbarkeit (%)" value={form.absetzbar} onChange={v => setForm({ ...form, absetzbar: v })} />
+              <div className="sm:col-span-2">
+                <FormField label="Notiz" value={form.notiz} onChange={v => setForm({ ...form, notiz: v })} multiline />
+              </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="USt-Satz" value={beleg.ustSatz ? `${beleg.ustSatz} %` : "—"} />
-              <Field label="USt-Betrag" value={beleg.ustBetrag ? `${beleg.ustBetrag.toLocaleString("de-DE")} €` : "—"} />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Kategorie" value={beleg.kategorie?.name ?? beleg.kategorieId ?? "—"} />
-              <Field label="SKR-Konto" value={beleg.skrKonto ?? "—"} />
-            </div>
-            <Field label="OCR Confidence" value={beleg.ocrConfidence ? `${beleg.ocrConfidence.toFixed(1)} %` : "—"} highlight={beleg.ocrConfidence !== undefined && beleg.ocrConfidence < 85} />
-            <Field label="Absetzbar" value={`${beleg.absetzbarProzent} %`} sub={beleg.absetzbarGrund} />
-          </div>
 
-          {/* KI-Hinweise */}
-          {beleg.kiHinweise.length > 0 && (
-            <div className="mt-6 space-y-2">
-              <h3 className="text-sm font-bold text-navy-900">KI-Hinweise</h3>
+            <p className="text-[10px] text-neutral-400 mt-4">Im späteren GoBD-Modus wird jede Korrektur über Audit-Log/Storno nachvollzogen.</p>
+          </div>
+        </div>
+
+        {/* Right: KI + Audit + Actions */}
+        <div className="space-y-6">
+
+          {/* KI Hinweise */}
+          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">
+            <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">KI-/Regelhinweise</h3>
+            <div className="space-y-3">
               {beleg.kiHinweise.map((h, i) => (
-                <div key={i} className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs">
-                  <span className="font-bold text-amber-800">{h.regel}</span>
-                  {h.paragraf && <span className="text-amber-600 ml-2">({h.paragraf})</span>}
-                  <p className="text-amber-700 mt-1">{h.text}</p>
+                <div key={i} className={`rounded-xl p-3 text-xs ${h.typ === "warning" ? "bg-amber-50 border border-amber-200" : h.typ === "success" ? "bg-emerald-50 border border-emerald-200" : "bg-blue-50 border border-blue-200"}`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    {h.typ === "warning" ? <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> : h.typ === "success" ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />}
+                    <span className={`font-extrabold ${h.typ === "warning" ? "text-amber-800" : h.typ === "success" ? "text-emerald-800" : "text-blue-800"}`}>{h.regel}</span>
+                  </div>
+                  <p className={`${h.typ === "warning" ? "text-amber-700" : h.typ === "success" ? "text-emerald-700" : "text-blue-700"}`}>{h.text}</p>
+                  {h.paragraf && <p className="text-[10px] text-neutral-400 mt-1">{h.paragraf}</p>}
                 </div>
               ))}
             </div>
-          )}
+          </div>
 
-          {/* Kraftstoff-Detail */}
-          {beleg.kraftstoffDetail && (
-            <div className="mt-6 bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <h3 className="text-sm font-bold text-blue-800 mb-2">Tankbeleg-Details</h3>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <span className="text-blue-600">Sorte: <strong>{beleg.kraftstoffDetail.sorte}</strong></span>
-                <span className="text-blue-600">Liter: <strong>{beleg.kraftstoffDetail.liter}</strong></span>
-                <span className="text-blue-600">€/l: <strong>{beleg.kraftstoffDetail.preisProLiter}</strong></span>
-                <span className="text-blue-600">Tankstelle: <strong>{beleg.kraftstoffDetail.tankstelle}</strong></span>
-                <span className="text-blue-600">Ort: <strong>{beleg.kraftstoffDetail.ort}</strong></span>
-              </div>
+          {/* Audit */}
+          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">
+            <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">Audit-Historie</h3>
+            <div className="space-y-3">
+              {beleg.audit.map((a, i) => (
+                <div key={i} className="flex items-start gap-3">
+                  <Clock className="w-3.5 h-3.5 text-neutral-400 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-[#1e1b18]">{a.aktion}</p>
+                    <p className="text-[10px] text-neutral-400">{a.zeitpunkt} · {a.benutzer}</p>
+                  </div>
+                </div>
+              ))}
+              {status === "festgeschrieben" && (
+                <div className="flex items-start gap-3">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-emerald-700">Freigegeben</p>
+                    <p className="text-[10px] text-neutral-400">Soeben · Benutzer</p>
+                  </div>
+                </div>
+              )}
+              {status === "storniert" && (
+                <div className="flex items-start gap-3">
+                  <XCircle className="w-3.5 h-3.5 text-rose-500 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-bold text-rose-700">Storno vorbereitet</p>
+                    <p className="text-[10px] text-neutral-400">Soeben · Benutzer · Grund: {stornoGrund}</p>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          </div>
 
           {/* Actions */}
-          <div className="flex flex-wrap gap-3 mt-6 pt-6 border-t border-neutral-gray-100">
-            <button onClick={handleFreigeben} className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-colors active:scale-[0.98]">
-              <CheckCircle2 className="w-4 h-4" /> Freigeben
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2.5 bg-white text-navy-900 rounded-xl font-semibold text-sm border border-neutral-gray-200 hover:bg-neutral-gray-50 transition-colors active:scale-[0.98]">
-              <Edit3 className="w-4 h-4" /> Korrektur speichern
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2.5 bg-white text-red-600 rounded-xl font-semibold text-sm border border-red-200 hover:bg-red-50 transition-colors active:scale-[0.98]">
-              <XCircle className="w-4 h-4" /> Storno vorbereiten
-            </button>
+          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">
+            <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">Aktionen</h3>
+            <div className="space-y-3">
+              <button
+                onClick={handleSave}
+                disabled={status === "storniert"}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e1b18] text-white rounded-xl font-bold text-sm hover:bg-black transition-colors min-h-[48px] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Save className="w-4 h-4" /> Korrektur speichern
+              </button>
+              <button
+                onClick={handleFreigabe}
+                disabled={status === "festgeschrieben" || status === "storniert"}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-colors min-h-[48px] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <ShieldCheck className="w-4 h-4" /> Freigeben
+              </button>
+              <button
+                onClick={() => setStornoOpen(true)}
+                disabled={status === "storniert"}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white text-rose-600 border border-rose-200 rounded-xl font-bold text-sm hover:bg-rose-50 transition-colors min-h-[48px] disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <XCircle className="w-4 h-4" /> Storno vorbereiten
+              </button>
+              <Link
+                href="/buchhaltung/belege"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-white text-neutral-600 border border-neutral-200 rounded-xl font-bold text-sm hover:bg-neutral-50 transition-colors min-h-[48px]"
+              >
+                <ArrowLeft className="w-4 h-4" /> Zurück zu Belegen
+              </Link>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Storno Dialog */}
+      {stornoOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setStornoOpen(false)} />
+          <div className="relative bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 z-10 mx-4">
+            <h3 className="text-lg font-extrabold text-[#1e1b18] mb-4">Storno vorbereiten</h3>
+            <p className="text-xs text-neutral-500 mb-4">Der Beleg wird nicht gelöscht, sondern durch eine Gegenbuchung storniert. Im GoBD-Modus wird dies revisionssicher dokumentiert.</p>
+            <label className="block text-xs font-bold text-neutral-600 mb-2">Storno-Grund (Pflichtfeld)</label>
+            <textarea
+              value={stornoGrund}
+              onChange={e => setStornoGrund(e.target.value)}
+              className="w-full border border-neutral-200 rounded-xl p-3 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-300"
+              placeholder="Grund für die Stornierung eingeben…"
+            />
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setStornoOpen(false)} className="flex-1 px-4 py-3 text-sm font-bold text-neutral-500 hover:bg-neutral-50 rounded-xl transition-colors min-h-[48px]">
+                Abbrechen
+              </button>
+              <button onClick={handleStorno} className="flex-1 px-4 py-3 text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-colors min-h-[48px]">
+                Storno bestätigen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <FeedbackFooter pageTitle="Belegdetail" route={`/buchhaltung/belege/${id}`} variant="full" />
     </div>
   );
 }
 
-function Field({ label, value, sub, highlight }: { label: string; value: string; sub?: string; highlight?: boolean }) {
+function FormField({ label, value, onChange, type = "text", multiline = false }: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  multiline?: boolean;
+}) {
+  const cls = "w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm text-[#1e1b18] focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 min-h-[44px]";
   return (
     <div>
-      <div className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-0.5">{label}</div>
-      <div className={`text-sm font-semibold ${highlight ? "text-amber-600" : "text-navy-900"}`}>{value}</div>
-      {sub && <div className="text-[10px] text-text-muted">{sub}</div>}
+      <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1">{label}</label>
+      {multiline ? (
+        <textarea value={value} onChange={e => onChange(e.target.value)} className={cls} rows={2} />
+      ) : (
+        <input type={type} value={value} onChange={e => onChange(e.target.value)} className={cls} />
+      )}
     </div>
   );
 }

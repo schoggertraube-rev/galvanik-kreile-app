@@ -13,9 +13,9 @@ const TERMIN_QUELLEN = [
     bg: "bg-rose-50",
     status: "aktiv",
     termine: [
-      { titel: "Shell - Frankfurt-Ost (78,40 €)", datum: "Heute", wichtig: false },
-      { titel: "Gasthaus Adler (64,00 €)", datum: "Gestern", wichtig: false },
-      { titel: "Riedel Chemie GmbH (1.190,00 €)", datum: "30.05.2026", wichtig: false },
+      { titel: "Shell - Frankfurt-Ost (78,40 €)", datum: "Heute", wichtig: false, link: "/buchhaltung/belege/shell-frankfurt-ost" },
+      { titel: "Gasthaus Adler (64,00 €)", datum: "Gestern", wichtig: false, link: "/buchhaltung/belege/gasthaus-adler" },
+      { titel: "Riedel Chemie GmbH (1.190,00 €)", datum: "30.05.2026", wichtig: false, link: "/buchhaltung/belege/riedel-chemie" },
     ],
   },
   {
@@ -138,14 +138,25 @@ export default function KalenderPage() {
                   }`}>{q.status}</span>
                 </div>
                 <div className="space-y-1.5">
-                  {q.termine.map((t, j) => (
-                    <div key={j} className="flex items-center justify-between text-xs">
-                      <span className={`${t.wichtig ? "font-bold text-navy-900" : "text-text-muted"}`}>
-                        {t.wichtig && "⚡ "}{t.titel}
-                      </span>
-                      <span className="text-text-muted font-semibold">{t.datum}</span>
-                    </div>
-                  ))}
+                  {q.termine.map((t, j) => {
+                    const inner = (
+                      <>
+                        <span className={`${t.wichtig ? "font-bold text-navy-900" : "text-text-muted"} ${"link" in t ? "hover:text-navy-900 transition-colors" : ""}`}>
+                          {t.wichtig && "⚡ "}{t.titel}
+                        </span>
+                        <span className="text-text-muted font-semibold">{t.datum}</span>
+                      </>
+                    );
+                    return "link" in t && (t as { link?: string }).link ? (
+                      <Link key={j} href={(t as { link: string }).link} className="flex items-center justify-between text-xs hover:bg-neutral-50 rounded-lg px-1 -mx-1 py-0.5 transition-colors">
+                        {inner}
+                      </Link>
+                    ) : (
+                      <div key={j} className="flex items-center justify-between text-xs">
+                        {inner}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
