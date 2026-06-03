@@ -5,6 +5,9 @@
   "scripts": {
     "dev": "next dev -p 3001",
     "build": "next build",
+    "demo:seed": "npx tsx -r dotenv/config scripts/seed-demo-data.ts dotenv_config_path=.env.local",
+    "demo:cleanup": "npx tsx -r dotenv/config scripts/cleanup-demo-data.ts dotenv_config_path=.env.local",
+    "demo:reset": "npm run demo:cleanup -- --confirm && npm run demo:seed -- --confirm",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
