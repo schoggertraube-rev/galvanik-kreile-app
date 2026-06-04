@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Phone, Edit2, Mic, MicOff, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, ArrowLeft } from "lucide-react";
+import { Phone, Edit2, Mic, MicOff, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, ArrowLeft, PackageOpen } from "lucide-react";
 import Link from "next/link";
 import { usePhoneNoteAnalysis, AnalysisResult } from "@/hooks/usePhoneNoteAnalysis";
 import { useLiveContext } from "@/hooks/useLiveContext";
@@ -19,11 +19,8 @@ const STEPS = [
 /* ===== Mirror Highlight Helper ===== */
 function buildHighlightedHtml(text: string, highlights: AnalysisResult["highlights"]): string {
   if (!text || highlights.length === 0) return escapeHtml(text);
-
-  // Sort highlights by length (longest first) to avoid partial matches
   const sorted = [...highlights].sort((a, b) => b.word.length - a.word.length);
   let result = text;
-
   for (const h of sorted) {
     const escaped = h.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const regex = new RegExp(`(${escaped})`, "gi");
@@ -43,6 +40,22 @@ export function TelefonnotizDesktop() {
   const source = searchParams.get("source") || "home";
   const returnTo = searchParams.get("returnTo");
 
+  // Compute return path
+  const returnPath = useMemo(() => {
+    if (returnTo) return returnTo;
+    if (source === "kommunikation") return "/kommunikation";
+    if (source === "warendurchlauf") return "/warendurchlauf/wareneingang";
+    return "/";
+  }, [returnTo, source]);
+
+  const returnLabel = useMemo(() => {
+    if (returnPath.includes("wareneingang")) return "Zurück zum Wareneingang";
+    if (returnPath.includes("kommunikation")) return "Zurück zur Kommunikation";
+    return "Zurück";
+  }, [returnPath]);
+
+  const showReturnOrb = !!returnTo || source === "warendurchlauf";
+
   // State
   const [text, setText] = useState("");
   const [mode, setMode] = useState<"type" | "voice">("type");
@@ -56,64 +69,115 @@ export function TelefonnotizDesktop() {
   const [showReminder, setShowReminder] = useState(false);
   const [reminderTime, setReminderTime] = useState("Heute 17:00");
 
-  // Speech Recognition State
-  const [isRecording, setIsRecording] = useState(false);
+  // Disambiguation state
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+
+  // ===== SPEECH RECOGNITION (Stable) =====
+  const [recordingWanted, setRecordingWanted] = useState(false);
+  const [recognitionActive, setRecognitionActive] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
+  const [speechSupported, setSpeechSupported] = useState(true);
+  const recordingWantedRef = useRef(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+
+  function startRecognitionSafely() {
+    if (!recognitionRef.current) return;
+    try {
+      recognitionRef.current.start();
+      setRecognitionActive(true);
+      setSpeechError(null);
+    } catch (err) {
+      console.error("Failed to start recognition:", err);
+      // Already running — ignore
+    }
+  }
 
   useEffect(() => {
     if (typeof window !== "undefined") {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = false; // iOS Safari is buggy with continuous=true
-        recognitionRef.current.interimResults = false; // Prevents duplicate text loops
-        recognitionRef.current.lang = "de-DE";
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        recognitionRef.current.onresult = (event: any) => {
-          let finalTranscript = "";
-          for (let i = event.resultIndex; i < event.results.length; ++i) {
-            if (event.results[i].isFinal) {
-              finalTranscript += event.results[i][0].transcript;
-            }
-          }
-          if (finalTranscript) {
-            setText(prev => prev + (prev.endsWith(" ") || prev === "" ? "" : " ") + finalTranscript);
-          }
-        };
-
-        recognitionRef.current.onend = () => {
-          setIsRecording(false);
-        };
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        recognitionRef.current.onerror = (event: any) => {
-          console.error("Speech recognition error", event.error);
-          setIsRecording(false);
-        };
+      if (!SpeechRecognition) {
+        setSpeechSupported(false);
+        return;
       }
+      
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "de-DE";
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognition.onresult = (event: any) => {
+        let finalTranscript = "";
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          }
+        }
+        if (finalTranscript) {
+          setText(prev => prev + (prev.endsWith(" ") || prev === "" ? "" : " ") + finalTranscript);
+        }
+      };
+
+      recognition.onend = () => {
+        setRecognitionActive(false);
+        // Auto-restart if user still wants to record
+        if (recordingWantedRef.current) {
+          setTimeout(() => {
+            if (recordingWantedRef.current) {
+              startRecognitionSafely();
+            }
+          }, 350);
+        }
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      recognition.onerror = (event: any) => {
+        console.error("Speech recognition error:", event.error);
+        setRecognitionActive(false);
+        if (event.error === "not-allowed" || event.error === "audio-capture") {
+          recordingWantedRef.current = false;
+          setRecordingWanted(false);
+          setSpeechError("Mikrofon nicht verfügbar — bitte tippen");
+        } else if (event.error === "no-speech") {
+          // no-speech is normal, auto-restart handles it
+        } else {
+          setSpeechError(`Fehler: ${event.error}`);
+        }
+      };
+
+      recognitionRef.current = recognition;
     }
-  }, [setText]);
+  }, []);
 
   const toggleRecording = useCallback(() => {
-    if (!recognitionRef.current) {
-      alert("Spracherkennung wird von deinem Browser (iOS Safari / Chrome) evtl. nicht vollständig unterstützt oder es fehlen Rechte.");
+    if (!speechSupported || !recognitionRef.current) {
+      setSpeechError("Sprachaufnahme hier nicht verfügbar — bitte tippen");
       return;
     }
-    if (isRecording) {
+    if (recordingWanted) {
+      // Stop
+      recordingWantedRef.current = false;
+      setRecordingWanted(false);
       recognitionRef.current.stop();
-      setIsRecording(false);
     } else {
-      try {
-        recognitionRef.current.start();
-        setIsRecording(true);
-      } catch (err) {
-        console.error("Failed to start recording:", err);
-      }
+      // Start
+      recordingWantedRef.current = true;
+      setRecordingWanted(true);
+      setSpeechError(null);
+      startRecognitionSafely();
     }
-  }, [isRecording]);
+  }, [recordingWanted, speechSupported]);
+
+  // Voice button label
+  const voiceButtonLabel = useMemo(() => {
+    if (!speechSupported) return "Sprachaufnahme hier nicht verfügbar — bitte tippen";
+    if (speechError) return speechError;
+    if (recordingWanted) return "Aufnahme läuft — zum Beenden tippen";
+    return "Aufnahme starten";
+  }, [speechSupported, speechError, recordingWanted]);
 
   // Hooks
   const { result, analyze, isAnalyzing } = usePhoneNoteAnalysis();
@@ -125,8 +189,10 @@ export function TelefonnotizDesktop() {
     result?.matchedTime || null,
   );
 
-  // Analyze on text change
-  useEffect(() => { analyze(text); }, [text, analyze]);
+  // Analyze on text change (with disambiguation overrides)
+  useEffect(() => {
+    analyze(text, selectedCustomerId || undefined, selectedOrderIds.length > 0 ? selectedOrderIds : undefined);
+  }, [text, analyze, selectedCustomerId, selectedOrderIds]);
 
   // Date for header
   const dateStr = useMemo(() => {
@@ -148,10 +214,10 @@ export function TelefonnotizDesktop() {
   // Handlers
   const handleAnalyze = useCallback(() => {
     if (!text.trim()) return;
-    setStep(3); // Skip to "Prüfen" since analysis is instant
+    setStep(3);
   }, [text]);
 
-  const handleSave = useCallback(async (mode: "auto" | "park") => {
+  const handleSave = useCallback(async (saveMode: "auto" | "park") => {
     setIsSaving(true);
     try {
       await createPhoneNote({
@@ -165,7 +231,7 @@ export function TelefonnotizDesktop() {
         extractionJson: {
           fields: result?.fields,
           actions: result?.proposedActions,
-          mode,
+          mode: saveMode,
         },
       });
       clearDraft();
@@ -185,15 +251,37 @@ export function TelefonnotizDesktop() {
     if (text.trim() && step < 4) {
       setShowExitDialog(true);
     } else {
-      router.push(returnTo || (source === "kommunikation" ? "/kommunikation" : "/"));
+      router.push(returnPath);
     }
-  }, [text, step, source, returnTo, router]);
+  }, [text, step, returnPath, router]);
+
+  const handleReturnAttempt = useCallback(() => {
+    if (text.trim() && step < 4) {
+      setShowExitDialog(true);
+    } else {
+      router.push(returnPath);
+    }
+  }, [text, step, returnPath, router]);
 
   const handleDiscard = useCallback(() => {
     clearDraft();
     setShowExitDialog(false);
-    router.push(returnTo || (source === "kommunikation" ? "/kommunikation" : "/"));
-  }, [clearDraft, source, returnTo, router]);
+    router.push(returnPath);
+  }, [clearDraft, returnPath, router]);
+
+  // Handle customer selection
+  const handleSelectCustomer = useCallback((customerId: string) => {
+    setSelectedCustomerId(customerId);
+    setSelectedOrderIds([]); // Reset order selection
+  }, []);
+
+  // Handle order selection
+  const handleSelectOrder = useCallback((orderId: string) => {
+    setSelectedOrderIds(prev => {
+      if (prev.includes(orderId)) return prev.filter(id => id !== orderId);
+      return [...prev, orderId];
+    });
+  }, []);
 
   // Backdrop HTML for mirror highlighting
   const backdropHtml = useMemo(() => {
@@ -209,20 +297,28 @@ export function TelefonnotizDesktop() {
       }}
     >
       <div className="relative w-full h-full flex flex-col">
+        {/* ===== RETURN ORB (floating, outside panel) ===== */}
+        {showReturnOrb && (
+          <div className="tn-return-orb-wrap">
+            <button
+              type="button"
+              className="tn-return-orb"
+              onClick={handleReturnAttempt}
+              aria-label={returnLabel}
+              title={returnLabel}
+            >
+              <PackageOpen className="h-6 w-6" />
+            </button>
+          </div>
+        )}
+
         <div 
           className="flex-1 w-full h-full flex flex-col overflow-hidden md:rounded-4xl md:shadow-2xl md:ring-1 md:ring-white/10"
-          style={{ 
-            fontFamily: "'Manrope', sans-serif", 
-            background: "var(--tn-cream)", 
-            color: "var(--tn-ink)", 
-            WebkitFontSmoothing: "antialiased",
-            maskImage: (!isMobile && returnTo?.includes("wareneingang")) ? "radial-gradient(circle at 0px 0px, transparent 68px, black 69px)" : "none",
-            WebkitMaskImage: (!isMobile && returnTo?.includes("wareneingang")) ? "radial-gradient(circle at 0px 0px, transparent 68px, black 69px)" : "none",
-          }}
+          style={{ fontFamily: "'Manrope', sans-serif", background: "var(--tn-cream)", color: "var(--tn-ink)", WebkitFontSmoothing: "antialiased" }}
         >
 
       {/* ===== HEADER ===== */}
-      <header style={{ background: "var(--tn-cream)", borderBottom: "1px solid var(--tn-line)", padding: isMobile ? "12px 16px" : "14px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexShrink: 0 }}>
+      <header className={showReturnOrb && !isMobile ? "tn-focus-header" : ""} style={{ background: "var(--tn-cream)", borderBottom: "1px solid var(--tn-line)", padding: isMobile ? "12px 16px" : "14px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
           <div style={{ width: 34, height: 34, background: "var(--tn-orange)", borderRadius: 8, display: "grid", placeItems: "center", color: "white", flexShrink: 0 }}>
             <Phone size={18} />
@@ -257,50 +353,25 @@ export function TelefonnotizDesktop() {
         )}
 
         <button onClick={handleExit} style={{
-          background: "var(--tn-paper)", border: "1px solid var(--tn-line)", borderRadius: 8,
-          padding: "8px 14px", fontFamily: "inherit", fontSize: 13, fontWeight: 600, color: "var(--tn-ink-soft)",
-          cursor: "pointer", display: "flex", alignItems: "center", gap: 7, flexShrink: 0
+          width: 34, height: 34, borderRadius: "50%", border: "1px solid var(--tn-line)", background: "var(--tn-paper)",
+          display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0, color: "var(--tn-ink-mute)",
+          transition: "all 0.2s"
         }}>
-          <X size={14} /> Beenden
+          <X size={14} />
         </button>
       </header>
 
-      {/* Mobile step dots */}
-      {isMobile && (
-        <div style={{ display: "flex", justifyContent: "center", gap: 6, padding: "10px 0", background: "var(--tn-cream)" }}>
-          {STEPS.map(s => (
-            <div key={s.id} style={{
-              width: step === s.id ? 22 : 6, height: 6, borderRadius: step === s.id ? 3 : "50%",
-              background: step > s.id ? "var(--tn-green-bright)" : step === s.id ? "var(--tn-ink)" : "var(--tn-cream-3)",
-              transition: "all 0.3s"
-            }} />
-          ))}
-        </div>
-      )}
-
-      {/* ===== BODY: 2-column (desktop/tablet) or stacked (mobile) ===== */}
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 360px", overflow: "hidden" }}>
-
-        {/* ===== LEFT PANE: Input + Eval ===== */}
-        <div style={{ padding: isMobile ? "18px 18px 10px" : "24px 28px", overflowY: "auto", display: "flex", flexDirection: "column" }}>
-
-          {step < 3 && (
+      {/* ===== BODY ===== */}
+      <div style={{ flex: 1, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 340px", overflow: "auto" }}>
+        {/* ===== LEFT PANE: Input / Eval ===== */}
+        <div style={{ padding: isMobile ? "16px" : "22px 26px", overflowY: "auto" }}>
+          {/* ===== INPUT VIEW (Step 1-2) ===== */}
+          {step < 3 && !showSuccess && (
             <>
-              {/* Intro */}
-              <div style={{ marginBottom: 18 }}>
-                <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: isMobile ? 19 : 22, fontWeight: 400, lineHeight: 1.15, margin: 0, marginBottom: 4 }}>
-                  Tippen oder sprechen.<br />Den Rest erledige ich.
-                </h2>
-                <p style={{ fontSize: 12.5, color: "var(--tn-ink-mute)", margin: 0 }}>
-                  Schreib mit, während du telefonierst — ich erkenne Kunde, Auftrag, Material und Termin und lege alles automatisch ab.
-                </p>
-              </div>
-
               {/* Mode toggle */}
               <div className="tn-mode-toggle" style={{ marginBottom: 18 }}>
                 <button className={`tn-mode-opt ${mode === "type" ? "active" : ""}`} onClick={() => setMode("type")}>
                   <Edit2 size={14} /> Tippen
-                  <span style={{ fontSize: 9, background: "var(--tn-green-soft)", color: "var(--tn-green)", padding: "1px 6px", borderRadius: 4, fontWeight: 700, letterSpacing: "0.03em" }}>Festnetz</span>
                 </button>
                 <button className={`tn-mode-opt ${mode === "voice" ? "active" : ""}`} onClick={() => setMode("voice")}>
                   <Mic size={14} /> Sprechen
@@ -336,19 +407,19 @@ export function TelefonnotizDesktop() {
                       onClick={toggleRecording}
                       style={{
                         width: "100%", height: "100%", borderRadius: "50%", border: "none",
-                        background: isRecording ? "var(--tn-red)" : "linear-gradient(145deg, var(--tn-orange), #9A330A)", color: "white",
+                        background: recordingWanted ? "var(--tn-red)" : "linear-gradient(145deg, var(--tn-orange), #9A330A)", color: "white",
                         display: "grid", placeItems: "center", cursor: "pointer",
-                        boxShadow: isRecording ? "0 16px 32px -10px rgba(220,38,38,0.5)" : "0 16px 32px -10px rgba(194,65,12,0.5), inset 0 -3px 6px rgba(0,0,0,0.2)",
-                        animation: isRecording ? "pulse 2s infinite" : "none"
+                        boxShadow: recordingWanted ? "0 16px 32px -10px rgba(220,38,38,0.5)" : "0 16px 32px -10px rgba(194,65,12,0.5), inset 0 -3px 6px rgba(0,0,0,0.2)",
+                        animation: recordingWanted ? "pulse 2s infinite" : "none"
                       }}
                     >
-                      {isRecording ? <MicOff size={38} /> : <Mic size={38} />}
+                      {recordingWanted ? <MicOff size={38} /> : <Mic size={38} />}
                     </button>
-                    <div style={{ position: "absolute", bottom: -26, left: "50%", transform: "translateX(-50%)", fontSize: 11.5, fontWeight: 600, color: "var(--tn-ink-soft)", whiteSpace: "nowrap" }}>
-                      {isRecording ? "Aufnahme läuft... (Tippen zum Stoppen)" : "Tippen zum Aufnehmen"}
+                    <div style={{ position: "absolute", bottom: -26, left: "50%", transform: "translateX(-50%)", fontSize: 11.5, fontWeight: 600, color: speechError ? "var(--tn-red)" : "var(--tn-ink-soft)", whiteSpace: "nowrap" }}>
+                      {voiceButtonLabel}
                     </div>
                   </div>
-                  {isRecording && (
+                  {recordingWanted && (
                     <style>{`
                       @keyframes pulse {
                         0% { transform: scale(1); }
@@ -511,7 +582,7 @@ export function TelefonnotizDesktop() {
           )}
         </div>
 
-        {/* ===== RIGHT PANE: Live Context ===== */}
+        {/* ===== RIGHT PANE: Live Context (Callcenter-optimized order) ===== */}
         <aside style={{
           background: "var(--tn-paper)", borderLeft: isMobile ? "none" : "1px solid var(--tn-line)",
           borderTop: isMobile ? "1px solid var(--tn-line)" : "none",
@@ -525,9 +596,96 @@ export function TelefonnotizDesktop() {
             <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--tn-ink-mute)" }}>
               Live · zum Vorlesen
             </span>
+            {isAnalyzing && <Activity size={12} className="animate-spin" style={{ color: "var(--tn-orange)" }} />}
           </div>
 
-          {/* Customer card */}
+          {/* ===== 1. CUSTOMER DISAMBIGUATION (highest priority) ===== */}
+          {result?.needsCustomerSelection && result.customerCandidates.length > 1 && (
+            <div className="tn-disambig-card">
+              <div className="tn-disambig-title">
+                <AlertTriangle size={14} /> KUNDE NICHT EINDEUTIG — bitte auswählen
+              </div>
+              {result.customerCandidates.map(cc => (
+                <div
+                  key={cc.id}
+                  className={`tn-disambig-option ${selectedCustomerId === cc.id ? "selected" : ""}`}
+                  onClick={() => handleSelectCustomer(cc.id)}
+                >
+                  <div style={{
+                    width: 40, height: 40, borderRadius: "50%", display: "grid", placeItems: "center", fontWeight: 600, fontSize: 14, flexShrink: 0,
+                    background: selectedCustomerId === cc.id ? "var(--tn-green-bright)" : "linear-gradient(135deg, #1E3A8A, #1E40AF)",
+                    color: "white"
+                  }}>
+                    {selectedCustomerId === cc.id ? <Check size={18} /> : cc.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{cc.name}</div>
+                    <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 2 }}>
+                      {cc.city} · {cc.phone} · {cc.openOrdersCount} offene Aufträge
+                    </div>
+                    <div style={{ fontSize: 10, color: "var(--tn-orange)", marginTop: 1 }}>{cc.matchReason}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ===== 2. ORDER DISAMBIGUATION ===== */}
+          {result?.needsOrderSelection && result.orderCandidates.length > 1 && (
+            <div className="tn-disambig-card">
+              <div className="tn-disambig-title">
+                <FileText size={14} /> {result.matchedCustomer?.name || "Kunde"} HAT {result.orderCandidates.length} OFFENE AUFTRÄGE
+              </div>
+              {result.orderCandidates.map(oc => (
+                <div
+                  key={oc.id}
+                  className={`tn-disambig-option ${selectedOrderIds.includes(oc.id) ? "selected" : ""}`}
+                  onClick={() => handleSelectOrder(oc.id)}
+                >
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 10, display: "grid", placeItems: "center", fontWeight: 700, fontSize: 10, flexShrink: 0,
+                    background: selectedOrderIds.includes(oc.id) ? "var(--tn-green-soft)" : "var(--tn-violet-soft)",
+                    color: selectedOrderIds.includes(oc.id) ? "var(--tn-green)" : "var(--tn-violet)",
+                    letterSpacing: "0.03em"
+                  }}>
+                    {selectedOrderIds.includes(oc.id) ? <Check size={18} /> : oc.orderNumber.slice(-4)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{oc.orderNumber} · {oc.task}</div>
+                    <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 2 }}>
+                      {oc.status} · {oc.station} · {oc.dueDate}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ===== 3. PROMINENT APPOINTMENT CARD ===== */}
+          {result?.matchedTime && (
+            <div className={`tn-appointment-card ${result.matchedTime.isFree ? "free" : "conflict"}`}>
+              <div className="tn-appt-label">
+                {result.matchedTime.isFree ? "✓ TERMIN FREI" : "⚠ TERMINKONFLIKT"}
+              </div>
+              <div className="tn-appt-value">{result.matchedTime.label}</div>
+              <div className="tn-appt-hint">
+                {result.matchedTime.isFree
+                  ? "Frei und möglich — kann direkt zugesagt werden"
+                  : "Wochenende / geschlossen — Alternative vorschlagen"}
+              </div>
+            </div>
+          )}
+
+          {/* ===== 4. SUGGESTED ANSWER (moved up, more prominent) ===== */}
+          <div className="tn-suggest">
+            <div style={{ fontSize: 10, letterSpacing: "0.1em", opacity: 0.6, marginBottom: 6, textTransform: "uppercase", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+              Antwort-Vorschlag
+              {isAnalyzing && <Activity size={10} className="animate-spin" />}
+            </div>
+            <p>{result?.suggestedAnswer || `„Sobald genug erkannt ist, schlage ich hier eine Antwort vor, die du direkt vorlesen kannst."`}</p>
+          </div>
+
+          {/* ===== 5. Customer card ===== */}
           <div className={`tn-ctx-card ${!ctx.customer ? "empty" : ""}`}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--tn-ink-mute)" }}>Kunde</span>
@@ -556,7 +714,7 @@ export function TelefonnotizDesktop() {
             </div>
           </div>
 
-          {/* Orders card */}
+          {/* ===== 6. Orders card ===== */}
           <div className="tn-ctx-card">
             <div style={{ marginBottom: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--tn-ink-mute)" }}>Offene Aufträge</span>
@@ -665,12 +823,6 @@ export function TelefonnotizDesktop() {
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Suggested answer */}
-          <div className="tn-suggest">
-            <div style={{ fontSize: 9, letterSpacing: "0.1em", opacity: 0.5, marginBottom: 6, textTransform: "uppercase", fontWeight: 700 }}>Antwort-Vorschlag</div>
-            <p>{result?.suggestedAnswer || `„Sobald genug erkannt ist, schlage ich hier eine Antwort vor, die du direkt vorlesen kannst."`}</p>
           </div>
         </aside>
       </div>
@@ -821,27 +973,8 @@ export function TelefonnotizDesktop() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      
-      {/* The floating return button in the cutout (only visible on desktop when coming from wareneingang) */}
-      {!isMobile && returnTo?.includes("wareneingang") && (
-        <button
-          onClick={() => router.push(returnTo)}
-          title="Zurück zum Wareneingang"
-          className="absolute z-50 flex items-center justify-center bg-white/80 backdrop-blur-md shadow-xl border border-white/60 hover:bg-white hover:scale-105 active:scale-95 transition-all"
-          style={{
-            top: 10,
-            left: 10,
-            width: 44,
-            height: 44,
-            borderRadius: "50%",
-            color: "var(--tn-ink)",
-          }}
-        >
-          <ArrowLeft size={20} />
-        </button>
-      )}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
 }

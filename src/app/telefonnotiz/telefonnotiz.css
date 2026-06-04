@@ -275,3 +275,144 @@
   color: var(--tn-ink);
   box-shadow: var(--tn-shadow-sm);
 }
+
+/* ===== Return Orb (floating back button on desktop/tablet) ===== */
+@media (min-width: 600px) {
+  .tn-return-orb-wrap {
+    position: absolute;
+    top: 18px;
+    left: 18px;
+    z-index: 40;
+    width: 76px;
+    height: 76px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: rgba(27, 27, 27, 0.22);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow:
+      0 18px 42px rgba(27, 27, 27, 0.20),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.20);
+  }
+
+  .tn-return-orb {
+    width: 58px;
+    height: 58px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    background: rgba(250, 246, 238, 0.96);
+    color: #1B1B1B;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    box-shadow:
+      0 14px 32px rgba(27, 27, 27, 0.20),
+      0 0 0 6px rgba(255, 255, 255, 0.12);
+    transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+  }
+
+  .tn-return-orb:hover {
+    transform: translateY(-1px) scale(1.03);
+    background: #ffffff;
+  }
+
+  .tn-return-orb:active {
+    transform: scale(0.96);
+  }
+
+  .tn-focus-header {
+    padding-left: 112px !important;
+  }
+}
+
+@media (max-width: 599px) {
+  .tn-return-orb-wrap {
+    display: none;
+  }
+}
+
+/* ===== Disambiguation Cards ===== */
+.tn-disambig-card {
+  background: var(--tn-paper);
+  border: 2px solid var(--tn-orange);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.tn-disambig-card .tn-disambig-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tn-orange);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tn-disambig-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--tn-cream);
+  border: 1.5px solid var(--tn-line);
+  border-radius: 12px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-height: 58px;
+}
+.tn-disambig-option:hover {
+  border-color: var(--tn-orange);
+  background: var(--tn-orange-soft);
+}
+.tn-disambig-option.selected {
+  border-color: var(--tn-green-bright);
+  background: var(--tn-green-soft);
+}
+
+/* ===== Prominent Appointment Card ===== */
+.tn-appointment-card {
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 10px;
+}
+.tn-appointment-card.free {
+  background: var(--tn-green-soft);
+  border: 2px solid var(--tn-green-bright);
+}
+.tn-appointment-card.conflict {
+  background: #FEF3C7;
+  border: 2px solid var(--tn-yellow);
+}
+.tn-appointment-card .tn-appt-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.tn-appointment-card.free .tn-appt-label { color: var(--tn-green); }
+.tn-appointment-card.conflict .tn-appt-label { color: var(--tn-yellow); }
+.tn-appointment-card .tn-appt-value {
+  font-family: 'Fraunces', serif;
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--tn-ink);
+  margin-bottom: 4px;
+}
+.tn-appointment-card .tn-appt-hint {
+  font-size: 12px;
+  font-weight: 500;
+}
+.tn-appointment-card.free .tn-appt-hint { color: var(--tn-green); }
+.tn-appointment-card.conflict .tn-appt-hint { color: var(--tn-yellow); }
+
+/* ===== Suggest card enlarged ===== */
+.tn-suggest p {
+  font-family: 'Fraunces', serif;
+  font-size: 14.5px;
+  line-height: 1.55;
+}

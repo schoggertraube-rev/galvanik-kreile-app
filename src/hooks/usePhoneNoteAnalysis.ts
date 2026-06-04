@@ -19,6 +19,27 @@ export interface ProposedAction {
   actionType: string;
 }
 
+export interface CustomerCandidate {
+  id: string;
+  name: string;
+  city: string;
+  phone: string;
+  openOrdersCount: number;
+  confidence: number;
+  matchReason: string;
+}
+
+export interface OrderCandidate {
+  id: string;
+  orderNumber: string;
+  task: string;
+  status: string;
+  station: string;
+  dueDate: string;
+  confidence: number;
+  matchReason: string;
+}
+
 export interface AnalysisResult {
   matchedCustomer: MockCustomer | null;
   matchedOrder: MockOrder | null;
@@ -33,6 +54,11 @@ export interface AnalysisResult {
   fields: AnalysisField[];
   proposedActions: ProposedAction[];
   highlights: { word: string; type: "kunde" | "auftrag" | "material" | "thema" | "zeit" }[];
+  // Disambiguation
+  customerCandidates: CustomerCandidate[];
+  needsCustomerSelection: boolean;
+  orderCandidates: OrderCandidate[];
+  needsOrderSelection: boolean;
 }
 
 /* ===== Time Phrase Parser ===== */
@@ -52,7 +78,6 @@ function parseTimePhrase(text: string): { label: string; dayOfWeek: number; isFr
     [/\bfreitag\b/, (() => { const d = (5 - now.getDay() + 7) % 7 || 7; return d; })()],
   ];
 
-  // Also match time like "10 Uhr", "10:00"
   const timeMatch = lower.match(/(\d{1,2})(?::(\d{2}))?\s*(?:uhr)?/);
   const timeStr = timeMatch ? `${timeMatch[1]}:${timeMatch[2] || "00"}` : "10:00";
 
@@ -61,7 +86,7 @@ function parseTimePhrase(text: string): { label: string; dayOfWeek: number; isFr
       const targetDate = new Date(now);
       targetDate.setDate(now.getDate() + daysAhead);
       const dow = targetDate.getDay();
-      const isFree = dow >= 1 && dow <= 5; // Mo-Fr = frei
+      const isFree = dow >= 1 && dow <= 5;
       const dayLabel = `${weekdays[dow]} ${targetDate.getDate()}.${targetDate.getMonth() + 1}. · ${timeStr}`;
       return { label: dayLabel, dayOfWeek: dow, isFree };
     }
@@ -69,26 +94,67 @@ function parseTimePhrase(text: string): { label: string; dayOfWeek: number; isFr
   return null;
 }
 
-/* ===== Payment Detection ===== */
-function detectPayment(text: string): string | null {
-  const lower = text.toLowerCase();
-  if (lower.includes("bar")) return "Bar bei Abholung";
-  if (lower.includes("rechnung")) return "Auf Rechnung";
-  if (lower.includes("überweisung")) return "Überweisung";
-  if (lower.includes("ec") || lower.includes("karte")) return "EC-Karte";
-  return null;
+/* ===== Fuzzy Customer Matching ===== */
+function findCustomerCandidates(nameHint: string): CustomerCandidate[] {
+  if (!nameHint || nameHint.length < 2) return [];
+  const lower = nameHint.toLowerCase();
+  
+  const candidates: CustomerCandidate[] = [];
+  for (const c of INITIAL_CUSTOMERS) {
+    const cLower = c.name.toLowerCase();
+    // Exact substring match
+    if (cLower.includes(lower) || lower.includes(cLower)) {
+      const openOrders = INITIAL_ORDERS.filter(o => o.customerId === c.id && o.status !== "done");
+      candidates.push({
+        id: c.id,
+        name: c.name,
+        city: c.city || "—",
+        phone: c.phone || "—",
+        openOrdersCount: openOrders.length,
+        confidence: 95,
+        matchReason: "Name erkannt",
+      });
+      continue;
+    }
+    // Fuzzy: check each word of the hint against each word of customer name
+    const hintWords = lower.split(/\s+/).filter(w => w.length >= 3);
+    const nameWords = cLower.split(/\s+/);
+    for (const hw of hintWords) {
+      for (const nw of nameWords) {
+        // Simple fuzzy: Levenshtein-like — starts with or close match
+        if (nw.startsWith(hw) || hw.startsWith(nw) || (hw.length >= 4 && nw.includes(hw.slice(0, 4)))) {
+          const openOrders = INITIAL_ORDERS.filter(o => o.customerId === c.id && o.status !== "done");
+          candidates.push({
+            id: c.id,
+            name: c.name,
+            city: c.city || "—",
+            phone: c.phone || "—",
+            openOrdersCount: openOrders.length,
+            confidence: 70,
+            matchReason: `Ähnlich: "${hw}" ≈ "${nw}"`,
+          });
+          break;
+        }
+      }
+      if (candidates.some(cc => cc.id === c.id)) break;
+    }
+  }
+  return candidates;
 }
 
-/* ===== Theme Detection ===== */
-function detectTheme(text: string, keywords: string[]): string | null {
-  if (keywords.includes("Termin/Logistik")) return "Abholtermin";
-  if (keywords.includes("Reklamation")) return "Reklamation";
-  if (keywords.includes("Buchhaltung/Zahlung")) return "Zahlungsfrage";
-  if (keywords.includes("Angebot")) return "Angebotsanfrage";
-  const lower = text.toLowerCase();
-  if (lower.includes("status") || lower.includes("stand")) return "Statusanfrage";
-  if (lower.includes("preis") || lower.includes("kosten")) return "Preisanfrage";
-  return null;
+/* ===== Build Order Candidates ===== */
+function buildOrderCandidates(customer: MockCustomer): OrderCandidate[] {
+  const orders = INITIAL_ORDERS.filter(o => o.customerId === customer.id && o.status !== "done");
+  return orders.map(o => ({
+    id: o.id,
+    orderNumber: o.orderNumber,
+    task: o.task,
+    status: o.statusText || o.status || "aktiv",
+    station: o.station || "—",
+    dueDate: o.dueLabel ? `${o.dueLabel} ${o.dueValue}` : o.dueDate,
+    confidence: 80,
+    matchReason: "Offener Auftrag",
+  }));
 }
 
 /* ===== Main Hook ===== */
@@ -97,7 +163,7 @@ export function usePhoneNoteAnalysis() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const analyze = useCallback((text: string) => {
+  const analyze = useCallback((text: string, overrideCustomerId?: string, overrideOrderIds?: string[]) => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     
     if (!text || text.trim().length < 3) {
@@ -116,72 +182,92 @@ export function usePhoneNoteAnalysis() {
           return;
         }
 
-        // 1. Customer matching
+        // === Customer disambiguation ===
         let matchedCustomer: MockCustomer | null = null;
-        if (aiData.customerName) {
-          matchedCustomer = INITIAL_CUSTOMERS.find(c => c.name.toLowerCase().includes(aiData.customerName.toLowerCase())) || null;
-        }
+        let customerCandidates: CustomerCandidate[] = [];
+        let needsCustomerSelection = false;
 
-        // 2. Order matching
-        let matchedOrder: MockOrder | null = null;
-        if (aiData.orderNumber) {
-          matchedOrder = INITIAL_ORDERS.find(o => o.orderNumber.toUpperCase() === aiData.orderNumber.toUpperCase()) || null;
-        }
-        
-        let allCustomerOrders: MockOrder[] = [];
-        if (matchedCustomer) {
-          allCustomerOrders = INITIAL_ORDERS.filter(o => o.customerId === matchedCustomer!.id);
-          if (!matchedOrder && allCustomerOrders.length > 0) {
-            const activeOrders = allCustomerOrders.filter(o => o.status !== "done");
-            if (activeOrders.length === 1) matchedOrder = activeOrders[0];
+        if (overrideCustomerId) {
+          // User already selected a customer
+          matchedCustomer = INITIAL_CUSTOMERS.find(c => c.id === overrideCustomerId) || null;
+        } else if (aiData.customerName) {
+          customerCandidates = findCustomerCandidates(aiData.customerName);
+          if (customerCandidates.length === 1 && customerCandidates[0].confidence >= 90) {
+            matchedCustomer = INITIAL_CUSTOMERS.find(c => c.id === customerCandidates[0].id) || null;
+          } else if (customerCandidates.length > 1) {
+            needsCustomerSelection = true;
+          } else if (customerCandidates.length === 1) {
+            matchedCustomer = INITIAL_CUSTOMERS.find(c => c.id === customerCandidates[0].id) || null;
           }
         }
 
-        // 8. Build fields
+        // === Order disambiguation ===
+        let matchedOrder: MockOrder | null = null;
+        let orderCandidates: OrderCandidate[] = [];
+        let needsOrderSelection = false;
+
+        if (aiData.orderNumber) {
+          matchedOrder = INITIAL_ORDERS.find(o => o.orderNumber.toUpperCase() === aiData.orderNumber.toUpperCase()) || null;
+        }
+
+        if (overrideOrderIds && overrideOrderIds.length === 1) {
+          matchedOrder = INITIAL_ORDERS.find(o => o.id === overrideOrderIds[0]) || null;
+        }
+
+        let allCustomerOrders: MockOrder[] = [];
+        if (matchedCustomer) {
+          allCustomerOrders = INITIAL_ORDERS.filter(o => o.customerId === matchedCustomer!.id);
+          orderCandidates = buildOrderCandidates(matchedCustomer);
+          
+          if (!matchedOrder && orderCandidates.length === 1) {
+            matchedOrder = INITIAL_ORDERS.find(o => o.id === orderCandidates[0].id) || null;
+          } else if (!matchedOrder && orderCandidates.length > 1 && !overrideOrderIds) {
+            needsOrderSelection = true;
+          }
+        }
+
+        // === Local time parse for calendar ===
+        const matchedTime = parseTimePhrase(text) || (aiData.timePhrase ? { label: aiData.timePhrase, dayOfWeek: 1, isFree: true } : null);
+
+        // === Build fields ===
         const fields: AnalysisField[] = [];
         if (matchedCustomer) fields.push({ label: "Kunde", value: matchedCustomer.name, confidence: 96, type: "kunde" });
+        else if (needsCustomerSelection) fields.push({ label: "Kunde", value: `${customerCandidates.length} mögliche Treffer`, confidence: 50, type: "kunde" });
         if (matchedOrder) fields.push({ label: "Auftrag", value: matchedOrder.orderNumber, confidence: 95, type: "auftrag" });
+        else if (needsOrderSelection) fields.push({ label: "Auftrag", value: `${orderCandidates.length} offene Aufträge`, confidence: 50, type: "auftrag" });
         if (aiData.theme) fields.push({ label: "Thema", value: aiData.theme, confidence: 92, type: "thema" });
         if (aiData.material) fields.push({ label: "Material", value: aiData.material, confidence: 88, type: "material" });
-        if (aiData.timePhrase) fields.push({ label: "Wunschtermin", value: aiData.timePhrase, confidence: 85, type: "zeit" });
+        if (matchedTime) fields.push({ label: "Wunschtermin", value: matchedTime.label, confidence: matchedTime.isFree ? 90 : 70, type: "zeit" });
         if (aiData.payment) fields.push({ label: "Zahlung", value: aiData.payment, confidence: 85, type: "zahlung" });
 
-        // 9. Proposed actions
+        // === Proposed actions ===
         const proposedActions: ProposedAction[] = [];
-        if (aiData.timePhrase) {
+        if (matchedTime) {
           proposedActions.push({
-            id: "cal",
-            title: "Kalendereintrag",
-            subtitle: `${aiData.timePhrase} · Abholung ${matchedCustomer?.name || "Kunde"}`,
-            type: "auto",
-            actionType: "create_calendar_event"
+            id: "cal", title: "Kalendereintrag",
+            subtitle: `${matchedTime.label} · Abholung ${matchedCustomer?.name || "Kunde"}`,
+            type: "auto", actionType: "create_calendar_event"
           });
         }
         if (matchedOrder) {
           proposedActions.push({
-            id: "ord",
-            title: `Auftrag ${matchedOrder.orderNumber}`,
-            subtitle: `${aiData.timePhrase ? "Abholtermin" : "Aktualisierung"}${aiData.payment ? " + Zahlungsart " + aiData.payment.toLowerCase() : ""}`,
-            type: "auto",
-            actionType: "update_order_pickup"
+            id: "ord", title: `Auftrag ${matchedOrder.orderNumber}`,
+            subtitle: `${matchedTime ? "Abholtermin" : "Aktualisierung"}${aiData.payment ? " + Zahlungsart " + aiData.payment.toLowerCase() : ""}`,
+            type: "auto", actionType: "update_order_pickup"
           });
         }
         if (matchedCustomer) {
           proposedActions.push({
-            id: "cust",
-            title: "Kundenkarte: Notiz",
+            id: "cust", title: "Kundenkarte: Notiz",
             subtitle: `${matchedCustomer.name} · Anruf ${new Date().toLocaleDateString("de-DE", { day: "numeric", month: "numeric" })} ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`,
-            type: "auto",
-            actionType: "add_customer_note"
+            type: "auto", actionType: "add_customer_note"
           });
         }
         if (aiData.theme === "Zahlungsfrage" || aiData.payment) {
           proposedActions.push({
-            id: "pay",
-            title: "Offene Rechnung 248 €",
+            id: "pay", title: "Offene Rechnung 248 €",
             subtitle: "Bei Abholung erwähnen — kein Mahnlauf nötig",
-            type: "review",
-            actionType: "create_invoice_reminder"
+            type: "review", actionType: "create_invoice_reminder"
           });
         }
 
@@ -191,7 +277,7 @@ export function usePhoneNoteAnalysis() {
           allCustomerOrders,
           matchedMaterial: aiData.material || null,
           matchedTheme: aiData.theme || null,
-          matchedTime: aiData.timePhrase ? { label: aiData.timePhrase, dayOfWeek: 1, isFree: true } : null,
+          matchedTime,
           matchedPayment: aiData.payment || null,
           matchedKeywords: [],
           suggestedAnswer: aiData.suggestedAnswer || "Guten Tag, wie kann ich helfen?",
@@ -199,13 +285,17 @@ export function usePhoneNoteAnalysis() {
           fields,
           proposedActions,
           highlights: aiData.highlights || [],
+          customerCandidates,
+          needsCustomerSelection,
+          orderCandidates,
+          needsOrderSelection,
         });
       } catch (error) {
         console.error("Analysis error:", error);
       } finally {
         setIsAnalyzing(false);
       }
-    }, 1000); // 1s debounce to avoid spamming the AI while speaking
+    }, 1000);
   }, []);
 
   useEffect(() => {
