@@ -12,6 +12,7 @@ import { usePageView } from "@/hooks/usePageView";
 import { INITIAL_CUSTOMERS, INITIAL_ORDERS } from "@/lib/mockData";
 import { getRecentPhoneNotes, updatePhoneNote } from "@/app/actions/phoneNotes.actions";
 import { smartMatchText, MatchResult } from "./smartMatcher";
+import { useParkedCall } from "@/contexts/ParkedCallContext";
 
 /* ═══════════════════════════════════════════════════════════════
    TYPES
@@ -166,6 +167,7 @@ export function KommunikationClient() {
   const [showCockpit, setShowCockpit] = useState(true);
   const [chatFilter, setChatFilter] = useState("all");
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const { activeParkedCall, resumeCall } = useParkedCall();
 
   usePageView();
 
@@ -312,6 +314,22 @@ export function KommunikationClient() {
                 <button style={hdrBtn}><Plus size={16} /></button>
               </div>
             </div>
+            
+            {/* Parked Call Alert */}
+            {activeParkedCall && (
+              <div style={{ margin: "0 20px 16px", padding: "12px", background: "#FEF2F2", border: "1px solid #FCA5A5", borderRadius: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, color: "#DC2626", fontWeight: 700, fontSize: 13 }}>
+                  <PhoneCall size={16} /> Offener Anruf wartet
+                </div>
+                <div style={{ fontSize: 12, color: "#7F1D1D" }}>
+                  {activeParkedCall.matchedCustomerName || "Unbekannter Anrufer"}
+                </div>
+                <button onClick={resumeCall} style={{ padding: "6px 12px", background: "#DC2626", color: "white", borderRadius: 6, fontSize: 12, fontWeight: 600, border: "none", cursor: "pointer", alignSelf: "flex-start" }}>
+                  Fortsetzen
+                </button>
+              </div>
+            )}
+
             {/* Filters */}
             <div style={{ padding: "0 20px 16px", display: "flex", gap: 6, flexWrap: "wrap" }}>
               {[

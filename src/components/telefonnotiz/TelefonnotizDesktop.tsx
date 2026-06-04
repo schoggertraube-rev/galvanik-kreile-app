@@ -1,13 +1,14 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Phone, Edit2, Mic, MicOff, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, ArrowLeft } from "lucide-react";
+import { Phone, Edit2, Mic, MicOff, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, ArrowLeft, Mail, Image as ImageIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePhoneNoteAnalysis, AnalysisResult } from "@/hooks/usePhoneNoteAnalysis";
 import { useLiveContext } from "@/hooks/useLiveContext";
 import { useAutosaveDraft } from "@/hooks/useAutosaveDraft";
 import { createPhoneNote } from "@/app/actions/phoneNotes.actions";
+import { useParkedCall } from "@/contexts/ParkedCallContext";
 
 /* ===== Step definitions ===== */
 const STEPS = [
@@ -69,6 +70,9 @@ export function TelefonnotizDesktop() {
   const [showUndo, setShowUndo] = useState(false);
   const [showReminder, setShowReminder] = useState(false);
   const [reminderTime, setReminderTime] = useState("Heute 17:00");
+
+  // Parked Call Global State
+  const { parkCall } = useParkedCall();
 
   // Disambiguation state
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -225,7 +229,7 @@ export function TelefonnotizDesktop() {
   const handleSave = useCallback(async (saveMode: "auto" | "park") => {
     setIsSaving(true);
     try {
-      await createPhoneNote({
+      const noteData = {
         rawText: text,
         generatedAnswer: result?.suggestedAnswer,
         category: result?.matchedTheme || "Rückfrage",
@@ -233,24 +237,41 @@ export function TelefonnotizDesktop() {
         customerId: result?.matchedCustomer?.id,
         orderId: result?.matchedOrder?.id,
         callerName: result?.matchedCustomer?.name,
+        status: saveMode === "park" ? "parked" : "done",
         extractionJson: {
           fields: result?.fields,
           actions: result?.proposedActions,
           mode: saveMode,
         },
-      });
-      clearDraft();
-      setShowSaveSheet(false);
-      setStep(4);
-      setShowSuccess(true);
-      setShowUndo(true);
-      setTimeout(() => setShowUndo(false), 10000);
+      };
+
+      const res = await createPhoneNote(noteData);
+
+      if (saveMode === "park" && res.data) {
+        parkCall({
+          id: res.data.id,
+          rawText: text,
+          matchedCustomerName: result?.matchedCustomer?.name,
+          matchedOrderNumber: result?.matchedOrder?.orderNumber,
+          parkedAt: Date.now()
+        });
+        clearDraft();
+        setShowExitDialog(false);
+        router.push(returnPath);
+      } else {
+        clearDraft();
+        setShowSaveSheet(false);
+        setStep(4);
+        setShowSuccess(true);
+        setShowUndo(true);
+        setTimeout(() => setShowUndo(false), 10000);
+      }
     } catch (err) {
       console.error("Save failed:", err);
     } finally {
       setIsSaving(false);
     }
-  }, [text, result, clearDraft]);
+  }, [text, result, clearDraft, parkCall, returnPath, router]);
 
   const handleExit = useCallback(() => {
     if (text.trim() && step < 4) {
@@ -391,23 +412,45 @@ export function TelefonnotizDesktop() {
                 </button>
               </div>
 
-              {/* Type zone - Mirror Editor */}
+              {/* Type zone - Side by Side with Answer */}
               {mode === "type" && (
-                <div>
-                  <div className="tn-editor-wrap">
-                    <div className="tn-editor-backdrop" dangerouslySetInnerHTML={{ __html: backdropHtml }} />
-                    <textarea
-                      className="tn-editor-input"
-                      value={text}
-                      onChange={e => setText(e.target.value)}
-                      placeholder='Beispiel: Herr Müller fragt nach den Zinkteilen, Auftrag A-2026-0107. Möchte morgen abholen, zahlt bar.'
-                      autoFocus
-                      spellCheck={false}
-                    />
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "60% 1fr", gap: 16 }}>
+                  {/* Left: Input */}
+                  <div>
+                    <div className="tn-editor-wrap">
+                      <div className="tn-editor-backdrop" dangerouslySetInnerHTML={{ __html: backdropHtml }} />
+                      <textarea
+                        className="tn-editor-input"
+                        value={text}
+                        onChange={e => setText(e.target.value)}
+                        placeholder='Beispiel: Herr Müller fragt nach den Zinkteilen, Auftrag A-2026-0107. Möchte morgen abholen, zahlt bar.'
+                        autoFocus
+                        spellCheck={false}
+                      />
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                      <Check size={12} style={{ color: "var(--tn-green-bright)" }} />
+                      Auto-Speichern aktiv.
+                    </div>
                   </div>
-                  <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                    <Check size={12} style={{ color: "var(--tn-green-bright)" }} />
-                    Auto-Speichern aktiv. Während du tippst, erscheinen rechts alle Infos zum Vorlesen.
+                  
+                  {/* Right: Answer */}
+                  <div style={{ background: "var(--tn-ink)", color: "var(--tn-cream)", borderRadius: 12, padding: "16px", display: "flex", flexDirection: "column" }}>
+                    <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700, opacity: 0.6, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                      💬 Antwort zum Vorlesen
+                      {isAnalyzing && <Activity size={10} className="animate-spin" />}
+                    </div>
+                    <p style={{ fontFamily: "'Fraunces', serif", fontSize: 15, lineHeight: 1.5, margin: 0, flex: 1 }}>
+                      {result?.suggestedAnswer || `„Sobald du sprichst oder tippst, entsteht hier eine fertige Antwort."`}
+                    </p>
+                    {!result?.usedAI && text.length > 5 && (
+                      <button 
+                        onClick={() => setForceAI(true)}
+                        style={{ marginTop: 12, width: "100%", padding: "8px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, color: "var(--tn-cream)", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+                      >
+                        <Zap size={12} /> Zu generisch? KI anfordern
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
@@ -469,7 +512,7 @@ export function TelefonnotizDesktop() {
 
               {/* ===== LIVE TILES (below Auswerten, desktop only, during Step 1-2) ===== */}
               {!isMobile && result && (
-                <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: isTablet ? "1fr" : "1fr 1fr", gap: 8 }}>
+                <div style={{ marginTop: 24, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
 
                   {/* Customer disambiguation tile */}
                   {result.needsCustomerSelection && result.customerCandidates.length > 1 && (
@@ -495,26 +538,26 @@ export function TelefonnotizDesktop() {
 
                   {/* Matched customer tile */}
                   {result.matchedCustomer && (
-                    <div style={{ background: "var(--tn-blue-soft)", borderRadius: 12, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #1E3A8A, #1E40AF)", color: "white", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+                    <div style={{ background: "var(--tn-blue-soft)", borderRadius: 14, padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, #1E3A8A, #1E40AF)", color: "white", display: "grid", placeItems: "center", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
                         {result.matchedCustomer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
                       </div>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tn-blue)" }}>{result.matchedCustomer.name}</div>
-                        <div style={{ fontSize: 10, color: "var(--tn-ink-mute)" }}>{result.matchedCustomer.city || "Kunde erkannt"}</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tn-blue)" }}>{result.matchedCustomer.name}</div>
+                        <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 4 }}>{result.matchedCustomer.city || "Kunde erkannt"}</div>
                       </div>
                     </div>
                   )}
 
                   {/* Matched order tile */}
                   {result.matchedOrder && (
-                    <div style={{ background: "var(--tn-violet-soft)", borderRadius: 12, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 8, background: "var(--tn-violet)", color: "white", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
-                        <FileText size={14} />
+                    <div style={{ background: "var(--tn-violet-soft)", borderRadius: 14, padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: "var(--tn-violet)", color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                        <FileText size={18} />
                       </div>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tn-violet)" }}>{result.matchedOrder.orderNumber}</div>
-                        <div style={{ fontSize: 10, color: "var(--tn-ink-mute)" }}>{result.matchedOrder.task}</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tn-violet)" }}>{result.matchedOrder.orderNumber}</div>
+                        <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 4 }}>{result.matchedOrder.task}</div>
                       </div>
                     </div>
                   )}
@@ -546,58 +589,49 @@ export function TelefonnotizDesktop() {
                     <div style={{
                       background: result.matchedTime.isFree ? "var(--tn-green-soft)" : "#FEF3C7",
                       border: `1.5px solid ${result.matchedTime.isFree ? "var(--tn-green-bright)" : "var(--tn-yellow)"}`,
-                      borderRadius: 12, padding: "12px 14px"
+                      borderRadius: 14, padding: "16px", display: "flex", flexDirection: "column", gap: 12
                     }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: result.matchedTime.isFree ? "var(--tn-green)" : "var(--tn-yellow)", marginBottom: 4 }}>
-                        {result.matchedTime.isFree ? "✓ Termin frei" : "⚠ Terminkonflikt"}
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: result.matchedTime.isFree ? "var(--tn-green)" : "var(--tn-yellow)", color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                        {result.matchedTime.isFree ? <Check size={18} /> : <AlertTriangle size={18} />}
                       </div>
-                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tn-ink)" }}>{result.matchedTime.label}</div>
-                      <div style={{ fontSize: 10, color: result.matchedTime.isFree ? "var(--tn-green)" : "var(--tn-yellow)", marginTop: 2 }}>
-                        {result.matchedTime.isFree ? "Kann zugesagt werden" : "Alternative vorschlagen"}
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: result.matchedTime.isFree ? "var(--tn-green)" : "var(--tn-yellow)", marginBottom: 4 }}>
+                          {result.matchedTime.isFree ? "Termin frei" : "Terminkonflikt"}
+                        </div>
+                        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--tn-ink)" }}>{result.matchedTime.label}</div>
+                        <div style={{ fontSize: 11, color: result.matchedTime.isFree ? "var(--tn-green)" : "var(--tn-yellow)", marginTop: 4 }}>
+                          {result.matchedTime.isFree ? "Kann zugesagt werden" : "Alternative vorschlagen"}
+                        </div>
                       </div>
                     </div>
                   )}
 
                   {/* Material tile */}
                   {result.matchedMaterial && (
-                    <div style={{ background: "var(--tn-yellow-soft)", borderRadius: 12, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 8, background: "var(--tn-yellow)", color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                        <Package size={14} />
+                    <div style={{ background: "var(--tn-yellow-soft)", borderRadius: 14, padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: "var(--tn-yellow)", color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                        <Package size={18} />
                       </div>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tn-yellow)" }}>{result.matchedMaterial.charAt(0).toUpperCase() + result.matchedMaterial.slice(1)}</div>
-                        <div style={{ fontSize: 10, color: "var(--tn-ink-mute)" }}>Material erkannt</div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tn-yellow)" }}>{result.matchedMaterial.charAt(0).toUpperCase() + result.matchedMaterial.slice(1)}</div>
+                        <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 4 }}>Material erkannt</div>
                       </div>
                     </div>
                   )}
 
                   {/* Payment tile */}
                   {result.matchedPayment && (
-                    <div style={{ background: "var(--tn-cream-2)", borderRadius: 12, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ width: 32, height: 32, borderRadius: 8, background: "var(--tn-ink-mute)", color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                        <CreditCard size={14} />
+                    <div style={{ background: "var(--tn-cream-2)", borderRadius: 14, padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 10, background: "var(--tn-ink-mute)", color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                        <CreditCard size={18} />
                       </div>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 600 }}>{result.matchedPayment}</div>
-                        <div style={{ fontSize: 10, color: "var(--tn-ink-mute)" }}>Zahlungsart</div>
+                        <div style={{ fontSize: 14, fontWeight: 600 }}>{result.matchedPayment}</div>
+                        <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 4 }}>Zahlungsart</div>
                       </div>
                     </div>
                   )}
 
-                  {/* Suggested Answer tile — visually distinct */}
-                  {result.suggestedAnswer && result.suggestedAnswer !== "Guten Tag, wie kann ich helfen?" && (
-                    <div style={{
-                      gridColumn: "1 / -1", background: "var(--tn-ink)", color: "var(--tn-cream)",
-                      borderRadius: 12, padding: "14px 16px"
-                    }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.5, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
-                        💬 Antwort-Vorschlag
-                      </div>
-                      <p style={{ fontFamily: "'Fraunces', serif", fontSize: 14, lineHeight: 1.55, margin: 0 }}>
-                        {result.suggestedAnswer}
-                      </p>
-                    </div>
-                  )}
                 </div>
               )}
             </>
@@ -834,21 +868,11 @@ export function TelefonnotizDesktop() {
             </div>
           )}
 
-          {/* ===== 4. SUGGESTED ANSWER (moved up, more prominent) ===== */}
-          <div className="tn-suggest">
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", opacity: 0.6, marginBottom: 6, textTransform: "uppercase", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
-              Antwort-Vorschlag
-              {isAnalyzing && <Activity size={10} className="animate-spin" />}
+          {/* ===== 4. SUGGESTED ANSWER HINT ===== */}
+          <div style={{ padding: "0 10px", marginTop: -6, marginBottom: 10 }}>
+            <div style={{ fontSize: 10, color: "var(--tn-ink-mute)", fontStyle: "italic" }}>
+              Antwort-Vorschlag wird im Hauptbereich angezeigt.
             </div>
-            <p>{result?.suggestedAnswer || `„Sobald genug erkannt ist, schlage ich hier eine Antwort vor, die du direkt vorlesen kannst."`}</p>
-            {!result?.usedAI && text.length > 5 && (
-              <button 
-                onClick={() => setForceAI(true)}
-                style={{ marginTop: 12, width: "100%", padding: "8px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, color: "var(--tn-cream)", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
-              >
-                <Zap size={12} /> Zu ungenau? KI-Scan anfordern
-              </button>
-            )}
           </div>
 
           {/* ===== 5. Customer card ===== */}
@@ -879,6 +903,34 @@ export function TelefonnotizDesktop() {
               </div>
             </div>
           </div>
+
+          {/* ===== 5b. Email & History card ===== */}
+          {ctx.customer && (
+            <div className="tn-ctx-card">
+              <div style={{ marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--tn-ink-mute)", display: "flex", alignItems: "center", gap: 4 }}><Mail size={12} /> Letzte Kommunikation</span>
+                <span style={{ fontSize: 9, color: "var(--tn-ink-mute)" }}>Vor 2 Tagen</span>
+              </div>
+              
+              <div style={{ background: "white", border: "1px solid var(--tn-line)", borderRadius: 8, padding: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Bilder zum Auftrag</div>
+                <div style={{ fontSize: 11, color: "var(--tn-ink-soft)", marginBottom: 10, lineHeight: 1.4 }}>
+                  "Guten Tag, anbei wie besprochen die Bilder der Teile. Können Sie diese noch retten?"
+                </div>
+                
+                {/* Mock Attachment */}
+                <button onClick={(e) => { e.preventDefault(); alert("Bildvorschau öffnet sich im Vollbild (Mockup)"); }} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--tn-cream-2)", border: "1px solid var(--tn-line)", borderRadius: 6, padding: "6px 10px", width: "100%", cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
+                  <div style={{ background: "var(--tn-orange-soft)", color: "var(--tn-orange)", width: 24, height: 24, borderRadius: 4, display: "grid", placeItems: "center", flexShrink: 0 }}>
+                    <ImageIcon size={12} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--tn-ink)" }}>kratzer_detail.jpg</div>
+                    <div style={{ fontSize: 9, color: "var(--tn-ink-mute)" }}>2.4 MB</div>
+                  </div>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* ===== 6. Orders card ===== */}
           <div className="tn-ctx-card">
@@ -1061,55 +1113,65 @@ export function TelefonnotizDesktop() {
       {showExitDialog && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(27,27,27,0.55)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 24 }}>
           <div style={{ background: "var(--tn-cream)", borderRadius: 18, padding: "24px 26px", maxWidth: 440, width: "100%", boxShadow: "var(--tn-shadow-lg)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--tn-yellow-soft)", borderRadius: 10, padding: "12px 14px", marginBottom: 16 }}>
-              <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--tn-yellow)", color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                <AlertTriangle size={14} />
-              </div>
-              <div style={{ fontSize: 12.5, color: "var(--tn-yellow)", fontWeight: 500 }}>
-                Dieses Thema ist noch nicht abgelegt. So lässt es sich nicht verlassen.
-              </div>
+            <div style={{ marginBottom: 16 }}>
+              <h3 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, margin: 0, marginBottom: 8 }}>Telefonnotiz ist noch offen</h3>
+              <p style={{ fontSize: 13, color: "var(--tn-ink-soft)", margin: 0, lineHeight: 1.5 }}>
+                Du kannst die Notiz als offene Konversation parken, um an anderer Stelle in der App weiterzuarbeiten.
+              </p>
             </div>
 
-            <div onClick={() => { setShowExitDialog(false); setShowSaveSheet(true); }} style={{
-              background: "var(--tn-ink)", color: "var(--tn-cream)", border: "1px solid var(--tn-ink)", borderRadius: 14,
+            <div onClick={() => handleSave("park")} style={{
+              background: "var(--tn-orange)", color: "white", borderRadius: 14,
               padding: "14px 16px", marginBottom: 8, display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 12, alignItems: "center", cursor: "pointer"
             }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.1)", display: "grid", placeItems: "center" }}>
-                <Check size={16} />
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.2)", display: "grid", placeItems: "center" }}>
+                <Clock size={16} />
               </div>
               <div>
-                <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 2 }}>Jetzt speichern & verteilen</h4>
-                <div style={{ fontSize: 11, color: "rgba(250,246,238,0.6)" }}>Empfohlen</div>
+                <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 14, fontWeight: 700, margin: 0, marginBottom: 2 }}>Als offene Konversation parken</h4>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.8)" }}>Bleibt in der App sichtbar (Empfohlen)</div>
               </div>
               <ChevronRight size={14} style={{ opacity: 0.5 }} />
             </div>
 
-            <div onClick={() => { setShowExitDialog(false); handleSave("park"); }} style={{
+            <div onClick={() => { setShowExitDialog(false); setShowSaveSheet(true); }} style={{
               background: "var(--tn-paper)", border: "1px solid var(--tn-line)", borderRadius: 14,
               padding: "14px 16px", marginBottom: 8, display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 12, alignItems: "center", cursor: "pointer"
             }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--tn-cream-2)", display: "grid", placeItems: "center", color: "var(--tn-ink-soft)" }}>
-                <Clock size={16} />
+                <Check size={16} />
               </div>
               <div>
-                <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 2 }}>Mit Erinnerung parken</h4>
-                <div style={{ fontSize: 11, color: "var(--tn-ink-mute)" }}>Erinnerung heute 17:00</div>
+                <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 2 }}>Speichern und verteilen</h4>
+                <div style={{ fontSize: 11, color: "var(--tn-ink-mute)" }}>Notiz final abschließen</div>
+              </div>
+              <ChevronRight size={14} style={{ opacity: 0.5 }} />
+            </div>
+
+            <div onClick={() => setShowExitDialog(false)} style={{
+              background: "var(--tn-paper)", border: "1px solid var(--tn-line)", borderRadius: 14,
+              padding: "14px 16px", marginBottom: 8, display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 12, alignItems: "center", cursor: "pointer"
+            }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--tn-cream-2)", display: "grid", placeItems: "center", color: "var(--tn-ink-soft)" }}>
+                <ArrowLeft size={16} />
+              </div>
+              <div>
+                <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 2 }}>Zurück zur Notiz</h4>
+                <div style={{ fontSize: 11, color: "var(--tn-ink-mute)" }}>Weiter bearbeiten</div>
               </div>
               <ChevronRight size={14} style={{ opacity: 0.5 }} />
             </div>
 
             <div onClick={handleDiscard} style={{
-              background: "var(--tn-paper)", border: "1px solid var(--tn-line)", borderRadius: 14,
-              padding: "14px 16px", display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 12, alignItems: "center", cursor: "pointer"
+              background: "transparent", border: "1px solid transparent", borderRadius: 14,
+              padding: "8px 16px", display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 12, alignItems: "center", cursor: "pointer", opacity: 0.7
             }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--tn-red-soft)", display: "grid", placeItems: "center", color: "var(--tn-red)" }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, display: "grid", placeItems: "center", color: "var(--tn-red)" }}>
                 <X size={16} />
               </div>
               <div>
-                <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 2 }}>Notiz verwerfen</h4>
-                <div style={{ fontSize: 11, color: "var(--tn-ink-mute)" }}>Fehlanruf — bewusst löschen</div>
+                <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, color: "var(--tn-red)" }}>Verwerfen</h4>
               </div>
-              <ChevronRight size={14} style={{ opacity: 0.5 }} />
             </div>
           </div>
         </div>

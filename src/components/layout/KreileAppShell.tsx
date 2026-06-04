@@ -11,6 +11,8 @@ import { useEffect, useState } from "react";
 import { getSystemStats } from "@/app/actions/systemStats";
 import { AlertTriangle } from "lucide-react";
 import { RealtimeSyncProvider } from "./RealtimeSyncManager";
+import { ParkedCallProvider } from "@/contexts/ParkedCallContext";
+import { FloatingParkedCall } from "@/components/telefonnotiz/FloatingParkedCall";
 
 export function KreileAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -29,17 +31,21 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
 
   if (isStartScreen) {
     return (
-      <RealtimeSyncProvider>
-        <div className="min-h-screen bg-bg-app text-kreile-text antialiased">
-          <PwaRegister />
-          {children}
-        </div>
-      </RealtimeSyncProvider>
+      <ParkedCallProvider>
+        <RealtimeSyncProvider>
+          <div className="min-h-screen bg-bg-app text-kreile-text antialiased">
+            <PwaRegister />
+            {children}
+            <FloatingParkedCall />
+          </div>
+        </RealtimeSyncProvider>
+      </ParkedCallProvider>
     );
   }
 
   return (
-    <RealtimeSyncProvider>
+    <ParkedCallProvider>
+      <RealtimeSyncProvider>
       <div
         className="flex flex-col bg-bg-app text-navy-900 antialiased"
         style={{ height: "100dvh" }}          // dvh für korrekte mobile Viewport-Höhe
@@ -85,7 +91,11 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
 
         {/* Mobile Bottom Nav (nur auf Handys sichtbar) */}
         <MobileBottomNav className="flex md:hidden z-40" />
+
+        {/* Global Floating Parked Call Button & Prompt */}
+        <FloatingParkedCall />
       </div>
-    </RealtimeSyncProvider>
+      </RealtimeSyncProvider>
+    </ParkedCallProvider>
   );
 }
