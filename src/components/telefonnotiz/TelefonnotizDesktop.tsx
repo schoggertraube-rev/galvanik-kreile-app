@@ -72,6 +72,7 @@ export function TelefonnotizDesktop() {
   // Disambiguation state
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [forceAI, setForceAI] = useState(false);
 
   // ===== SPEECH RECOGNITION (Stable) =====
   const [recordingWanted, setRecordingWanted] = useState(false);
@@ -191,8 +192,8 @@ export function TelefonnotizDesktop() {
 
   // Analyze on text change (with disambiguation overrides)
   useEffect(() => {
-    analyze(text, selectedCustomerId || undefined, selectedOrderIds.length > 0 ? selectedOrderIds : undefined);
-  }, [text, analyze, selectedCustomerId, selectedOrderIds]);
+    analyze(text, selectedCustomerId || undefined, selectedOrderIds.length > 0 ? selectedOrderIds : undefined, forceAI);
+  }, [text, analyze, selectedCustomerId, selectedOrderIds, forceAI]);
 
   // Date for header
   const dateStr = useMemo(() => {
@@ -593,14 +594,25 @@ export function TelefonnotizDesktop() {
           overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 14
         }}>
           {/* Title */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ width: 22, height: 22, borderRadius: 6, background: "var(--tn-cream-2)", display: "grid", placeItems: "center", color: "var(--tn-ink-soft)" }}>
-              <Activity size={11} />
-            </span>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--tn-ink-mute)" }}>
-              Live · zum Vorlesen
-            </span>
-            {isAnalyzing && <Activity size={12} className="animate-spin" style={{ color: "var(--tn-orange)" }} />}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ width: 22, height: 22, borderRadius: 6, background: "var(--tn-cream-2)", display: "grid", placeItems: "center", color: "var(--tn-ink-soft)" }}>
+                <Activity size={11} />
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--tn-ink-mute)" }}>
+                Live · zum Vorlesen
+              </span>
+              {isAnalyzing && <Activity size={12} className="animate-spin" style={{ color: "var(--tn-orange)" }} />}
+            </div>
+            {result?.usedAI ? (
+              <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "var(--tn-violet-soft)", color: "var(--tn-violet)", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }} title={result.aiReason}>
+                🤖 KI Scan
+              </span>
+            ) : (
+              <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "var(--tn-green-soft)", color: "var(--tn-green)", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                ⚡ Lokal DB
+              </span>
+            )}
           </div>
 
           {/* ===== 1. CUSTOMER DISAMBIGUATION (highest priority) ===== */}
@@ -687,6 +699,14 @@ export function TelefonnotizDesktop() {
               {isAnalyzing && <Activity size={10} className="animate-spin" />}
             </div>
             <p>{result?.suggestedAnswer || `„Sobald genug erkannt ist, schlage ich hier eine Antwort vor, die du direkt vorlesen kannst."`}</p>
+            {!result?.usedAI && text.length > 5 && (
+              <button 
+                onClick={() => setForceAI(true)}
+                style={{ marginTop: 12, width: "100%", padding: "8px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, color: "var(--tn-cream)", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
+              >
+                <Zap size={12} /> Zu ungenau? KI-Scan anfordern
+              </button>
+            )}
           </div>
 
           {/* ===== 5. Customer card ===== */}
