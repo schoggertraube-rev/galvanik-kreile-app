@@ -114,7 +114,7 @@ export default function RechnungenPage() {
       </div>
 
       {/* List Container */}
-      <div className="bg-white rounded-[2rem] border border-neutral-100 p-2 sm:p-5 shadow-sm">
+      <div className="bg-white rounded-4xl border border-neutral-100 p-2 sm:p-5 shadow-sm">
         <div className="flex flex-col">
           {filtered.map((inv, idx) => {
             return (

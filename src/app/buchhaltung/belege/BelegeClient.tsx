@@ -8,7 +8,7 @@ import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { BelegUploadOverlay } from "@/components/buchhaltung/BelegUploadOverlay";
 import type { OcrResult, Beleg } from "@/lib/buchhaltung/types";
 import { createBelegAction } from "@/app/buchhaltung/actions";
-import { useOfflineManager } from "@/hooks/useOfflineManager";
+import { useOfflineManager } from "../../../hooks/useOfflineManager";
 
 const CATEGORIES = [
   { id: "alle", label: "Alle", color: "bg-black" },
@@ -342,7 +342,7 @@ export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }
       </div>
 
       {/* List Container */}
-      <div className="bg-white rounded-[2rem] border border-neutral-100 p-2 sm:p-5 shadow-sm">
+      <div className="bg-white rounded-4xl border border-neutral-100 p-2 sm:p-5 shadow-sm">
         <div className="flex flex-col">
           {filteredBelege.map((beleg, idx) => {
             const cat = CATEGORIES.find(c => c.id === beleg.categoryId);

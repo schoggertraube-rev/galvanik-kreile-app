@@ -4,15 +4,11 @@ import { useState, useEffect } from "react";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import {
-  ArrowRight,
   Clock,
   Info,
   Camera,
   Edit3,
   MessageSquare,
-  Package,
-  FlaskConical,
-  Truck,
   ChevronRight,
   X,
   ChevronLeft,

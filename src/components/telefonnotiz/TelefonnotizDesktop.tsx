@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Phone, Edit2, Mic, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, Search, ArrowLeft } from "lucide-react";
+import { Phone, Edit2, Mic, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { usePhoneNoteAnalysis, AnalysisResult } from "@/hooks/usePhoneNoteAnalysis";
 import { useLiveContext } from "@/hooks/useLiveContext";
@@ -49,6 +49,7 @@ export function TelefonnotizDesktop() {
   const [showSaveSheet, setShowSaveSheet] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isSaving, setIsSaving] = useState(false);
   const [showUndo, setShowUndo] = useState(false);
   const [showReminder, setShowReminder] = useState(false);
@@ -141,7 +142,16 @@ export function TelefonnotizDesktop() {
 
   /* ===== RENDER ===== */
   return (
-    <div style={{ fontFamily: "'Manrope', sans-serif", background: "var(--tn-cream)", color: "var(--tn-ink)", minHeight: "100vh", display: "flex", flexDirection: "column", WebkitFontSmoothing: "antialiased" }}>
+    <div 
+      className="fixed inset-0 z-[100] flex flex-col md:p-6 lg:p-10 xl:p-14 md:bg-navy-900/60 md:backdrop-blur-md transition-all"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) handleExit();
+      }}
+    >
+      <div 
+        className="flex-1 w-full h-full flex flex-col overflow-hidden md:rounded-[2rem] md:shadow-2xl md:ring-1 md:ring-white/10"
+        style={{ fontFamily: "'Manrope', sans-serif", background: "var(--tn-cream)", color: "var(--tn-ink)", WebkitFontSmoothing: "antialiased" }}
+      >
 
       {/* ===== HEADER ===== */}
       <header style={{ background: "var(--tn-cream)", borderBottom: "1px solid var(--tn-line)", padding: isMobile ? "12px 16px" : "14px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexShrink: 0 }}>
@@ -717,6 +727,7 @@ export function TelefonnotizDesktop() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+      </div>
     </div>
   );
 }

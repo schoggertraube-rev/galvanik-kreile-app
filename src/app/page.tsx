@@ -73,16 +73,19 @@ export default function HomeDashboard() {
 
   // Auto-completion logic
   useEffect(() => {
-    setTodos(prev =>
-      prev.map(t => {
-        if (t.done) return t;
-        if (t.completionType === "auto") return { ...t, done: true, completionHint: "Auto-erledigt" };
-        if (t.id === 1 && orders.length > 0 && orders.filter(o => o.station === 'warenausgang').length === 0) return { ...t, done: true, completionHint: "Alle Auslieferungen erledigt" };
-        if (t.id === 3 && openQuotes === 0) return { ...t, done: true, completionHint: "Keine offenen Anfragen" };
-        if (t.id === 6 && orders.filter(o => o.risk === "red").length === 0) return { ...t, done: true, completionHint: "Keine kritischen Aufträge" };
-        return t;
-      })
-    );
+    const timer = setTimeout(() => {
+      setTodos(prev =>
+        prev.map(t => {
+          if (t.done) return t;
+          if (t.completionType === "auto") return { ...t, done: true, completionHint: "Auto-erledigt" };
+          if (t.id === 1 && orders.length > 0 && orders.filter(o => o.station === 'warenausgang').length === 0) return { ...t, done: true, completionHint: "Alle Auslieferungen erledigt" };
+          if (t.id === 3 && openQuotes === 0) return { ...t, done: true, completionHint: "Keine offenen Anfragen" };
+          if (t.id === 6 && orders.filter(o => o.risk === "red").length === 0) return { ...t, done: true, completionHint: "Keine kritischen Aufträge" };
+          return t;
+        })
+      );
+    }, 0);
+    return () => clearTimeout(timer);
   }, [orders, openQuotes]);
 
   // Checkbox handling (only Demo tasks can be toggled manually)

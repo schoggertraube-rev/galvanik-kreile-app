@@ -73,7 +73,7 @@ export function CustomerEditModal({
         </div>
 
         {/* Form Content */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-8 scrollbar-none [&::-webkit-scrollbar]:hidden">
           
           {/* Section: Stammdaten */}
           <div className="space-y-4">

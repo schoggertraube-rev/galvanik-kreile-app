@@ -3,7 +3,7 @@
 import Link from "next/link";
 import {
   Camera, PenLine, Phone, MessageSquare, Clock,
-  ChevronRight, Zap, Upload, X
+  ChevronRight, Zap
 } from "lucide-react";
 import { useState } from "react";
 import { WarendurchlaufIntakeWizard } from "@/components/warendurchlauf/WarendurchlaufIntakeWizard";

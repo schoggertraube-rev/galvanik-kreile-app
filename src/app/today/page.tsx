@@ -155,7 +155,7 @@ export default function TodayDashboard() {
       />
 
       {/* Cockpit Status Summary - Quiet elegance */}
-      <div className="bg-gradient-to-r from-navy-900 to-navy-700 text-white p-6 md:p-8 rounded-2xl border border-white/10 shadow-md relative overflow-hidden">
+      <div className="bg-linear-to-r from-navy-900 to-navy-700 text-white p-6 md:p-8 rounded-2xl border border-white/10 shadow-md relative overflow-hidden">
         <div className="absolute right-0 top-0 -mt-20 -mr-20 w-80 h-80 bg-gold-600/5 rounded-full blur-3xl pointer-events-none"></div>
         
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
