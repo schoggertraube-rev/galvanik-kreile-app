@@ -202,10 +202,14 @@ export function TelefonnotizDesktop() {
     return `Fokus-Modus · ${days[now.getDay()].slice(0, 2)} ${now.getDate()}. ${months[now.getMonth()]} · ${now.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`;
   }, []);
 
-  // Is mobile viewport?
+  // Responsive breakpoints
   const [isMobile, setIsMobile] = useState(false);
+  const [isTablet, setIsTablet] = useState(false);
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 600);
+    const check = () => {
+      setIsMobile(window.innerWidth < 600);
+      setIsTablet(window.innerWidth >= 600 && window.innerWidth < 1024);
+    };
     check();
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
@@ -345,7 +349,7 @@ export function TelefonnotizDesktop() {
                   }}>
                     {step > s.id ? <Check size={11} /> : s.id}
                   </div>
-                  <span style={{ fontSize: 11.5, fontWeight: 600, color: step === s.id ? "var(--tn-ink)" : "var(--tn-ink-mute)", whiteSpace: "nowrap" }}>{s.label}</span>
+                  {!isTablet && <span style={{ fontSize: 11.5, fontWeight: 600, color: step === s.id ? "var(--tn-ink)" : "var(--tn-ink-mute)", whiteSpace: "nowrap" }}>{s.label}</span>}
                 </div>
               </React.Fragment>
             ))}
@@ -362,7 +366,7 @@ export function TelefonnotizDesktop() {
       </header>
 
       {/* ===== BODY ===== */}
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 340px", overflow: "auto" }}>
+      <div style={{ flex: 1, display: "grid", gridTemplateColumns: isMobile ? "1fr" : isTablet ? "1fr 280px" : "1fr 340px", overflow: "auto" }}>
         {/* ===== LEFT PANE: Input / Eval ===== */}
         <div style={{ padding: isMobile ? "16px" : "22px 26px", overflowY: "auto" }}>
           {/* ===== INPUT VIEW (Step 1-2) ===== */}
@@ -467,7 +471,7 @@ export function TelefonnotizDesktop() {
               </div>
 
               {/* Field grid */}
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: (isMobile || isTablet) ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 16 }}>
                 {result.fields.map((field, i) => {
                   const colors: Record<string, { bg: string; fg: string }> = {
                     kunde: { bg: "var(--tn-blue-soft)", fg: "var(--tn-blue)" },

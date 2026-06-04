@@ -332,6 +332,27 @@
   }
 }
 
+/* Tablet-specific: smaller orb, less header padding */
+@media (min-width: 600px) and (max-width: 1023px) {
+  .tn-return-orb-wrap {
+    width: 60px;
+    height: 60px;
+    top: 12px;
+    left: 12px;
+  }
+  .tn-return-orb {
+    width: 46px;
+    height: 46px;
+  }
+  .tn-return-orb svg {
+    width: 20px;
+    height: 20px;
+  }
+  .tn-focus-header {
+    padding-left: 84px !important;
+  }
+}
+
 /* ===== Disambiguation Cards ===== */
 .tn-disambig-card {
   background: var(--tn-paper);
