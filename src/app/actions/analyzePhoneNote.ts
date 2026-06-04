@@ -1,21 +1,41 @@
 "use server";
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { INITIAL_CUSTOMERS, INITIAL_ORDERS } from "@/lib/mockData";
+import { MockCustomer, MockOrder } from "@/lib/mockData";
 
-export async function analyzePhoneNoteWithAI(text: string) {
-  if (!text || text.trim().length < 3) {
-    return null;
-  }
+export type PhoneNoteCategory =
+  | "pickup_request"
+  | "status_question"
+  | "payment_question"
+  | "complaint"
+  | "callback"
+  | "new_order_intake"
+  | "quote_request"
+  | "shipping_question"
+  | "technical_question"
+  | "general";
 
-  const apiKey = 
-    process.env.GEMINI_API_KEY || 
-    process.env.GOOGLE_API_KEY || 
+export interface AIAnalysisInput {
+  text: string;
+  knownFacts: {
+    customerCandidates: string[];
+    orderCandidates: string[];
+    selectedCustomer: string | null;
+    selectedOrders: string[];
+    detectedDate: string | null;
+    paymentKnown: string | null;
+  };
+}
+
+export async function analyzePhoneNoteWithAI(input: AIAnalysisInput) {
+  if (!input.text || input.text.trim().length < 3) return null;
+
+  const apiKey =
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_API_KEY ||
     process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 
   if (!apiKey) {
-    // If no API key is present and we somehow escalated to AI, we just return null. 
-    // The local analysis result will remain untouched.
     console.warn("AI Escalation requested but no GEMINI_API_KEY found.");
     return null;
   }
@@ -25,74 +45,53 @@ export async function analyzePhoneNoteWithAI(text: string) {
   const schema = {
     type: Type.OBJECT,
     properties: {
-      customerName: {
+      category: {
         type: Type.STRING,
-        description: "Der erkannte Kundenname, falls vorhanden.",
-        nullable: true,
-      },
-      orderNumber: {
-        type: Type.STRING,
-        description: "Die erkannte Auftragsnummer (z.B. A-2026-0107), falls vorhanden.",
-        nullable: true,
+        description: "Die Hauptkategorie des Anrufs.",
+        enum: [
+          "pickup_request", "status_question", "payment_question", "complaint",
+          "callback", "new_order_intake", "quote_request", "shipping_question",
+          "technical_question", "general"
+        ]
       },
       material: {
         type: Type.STRING,
-        description: "Das erkannte Material oder Verfahren (z.B. Zink, Chrom, Vernickeln).",
-        nullable: true,
-      },
-      theme: {
-        type: Type.STRING,
-        description: "Das Hauptthema des Anrufs (z.B. Reklamation, Abholtermin, Zahlungsfrage, Statusanfrage, Preisanfrage).",
-        nullable: true,
-      },
-      timePhrase: {
-        type: Type.STRING,
-        description: "Erkannte Zeitangabe (z.B. morgen 10 Uhr, Freitag, heute).",
-        nullable: true,
-      },
-      payment: {
-        type: Type.STRING,
-        description: "Erkannte Zahlungsart (z.B. Bar, Rechnung, Überweisung, EC-Karte).",
+        description: "Das erkannte Material oder Verfahren (z.B. Zink, Chrom, Vernickeln), falls aus dem Text ersichtlich.",
         nullable: true,
       },
       suggestedAnswer: {
         type: Type.STRING,
-        description: "Ein natürlicher, freundlicher und kontextbezogener Antwortsatz, den der Mitarbeiter am Telefon direkt vorlesen kann. Basierend auf den erkannten Daten.",
+        description: "Ein natürlicher, freundlicher und kontextbezogener Antwortsatz für den Mitarbeiter. Erfasse die Situation lebendig, aber bleibe streng bei den knownFacts (keine Erfindungen von Fakten!). Wenn ein Fakt (Kunde, Auftrag, Status, Zahlung) unbekannt ist, formuliere, dass das noch geklärt werden muss.",
       },
       overallConfidence: {
         type: Type.INTEGER,
-        description: "Ein Konfidenzwert von 0 bis 100, wie sicher die Erkennung ist.",
+        description: "Ein Konfidenzwert von 0 bis 100, wie sicher die Erkennung der Absicht ist.",
       },
-      highlights: {
-        type: Type.ARRAY,
-        description: "Liste von Wörtern aus dem Originaltext, die farblich hervorgehoben werden sollen.",
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            word: { type: Type.STRING },
-            type: { 
-              type: Type.STRING, 
-              enum: ["kunde", "auftrag", "material", "thema", "zeit"] 
-            }
-          }
-        }
-      }
     },
-    required: ["suggestedAnswer", "overallConfidence", "highlights"]
+    required: ["category", "suggestedAnswer", "overallConfidence"]
   };
 
   try {
-    const prompt = `Analysiere den folgenden diktierten Text einer Telefonnotiz in einer Galvanik-Werkstatt. Extrahiere die geforderten Felder.
+    const prompt = `Analysiere den folgenden diktierten Text einer Telefonnotiz in einer Galvanik-Werkstatt.
+Dein Ziel ist es, die Absicht (Kategorie) zu erkennen und einen professionellen Antwortvorschlag zu formulieren.
 
-Text: "${text}"
+Text: "${input.text}"
 
-Bekannte Kunden (als Kontext): ${INITIAL_CUSTOMERS.map(c => c.name).join(", ")}
-Bekannte Aufträge (als Kontext): ${INITIAL_ORDERS.map(o => o.orderNumber).join(", ")}
+WICHTIG - BEKANNTE FAKTEN (DATABASE FIRST):
+Du darfst NIEMALS Fakten erfinden. Nutze AUSSCHLIESSLICH diese bekannten Fakten für deinen Antwortvorschlag.
+- Eindeutiger Kunde: ${input.knownFacts.selectedCustomer || "Keiner/Unklar"}
+- Mögliche Kunden (Fuzzy): ${input.knownFacts.customerCandidates.join(", ") || "Keine"}
+- Eindeutige Aufträge: ${input.knownFacts.selectedOrders.join(", ") || "Keine"}
+- Mögliche Aufträge (Fuzzy): ${input.knownFacts.orderCandidates.join(", ") || "Keine"}
+- Erkanntes Datum/Termin: ${input.knownFacts.detectedDate || "Keins"}
+- Erkannte Zahlung: ${input.knownFacts.paymentKnown || "Keine"}
 
-WICHTIGE REGELN ZUR FAKTEN-TREUE (DATABASE FIRST):
-1. Erfinde NIEMALS Fakten. Wenn ein Kunde oder Auftrag im Text genannt wird, aber nicht in den bekannten Listen steht, dann erwähne ihn, aber erfinde keinen Status dazu.
-2. Wenn du nicht sicher bist, weise darauf hin, dass die Zuordnung unklar ist.
-3. Generiere einen sinnvollen Antwort-Vorschlag, der auf den erkannten Daten basiert und professionell klingt.
+REGELN FÜR DEN ANTWORTVORSCHLAG:
+1. Wenn es ein neuer Auftrag ist (new_order_intake): Formuliere, dass der Vorgang für den Wareneingang erfasst wird.
+2. Wenn es ein KV/Angebot ist (quote_request): Weise darauf hin, dass Foto/Teil/Material nötig sind für eine verbindliche Schätzung.
+3. Wenn es eine Abholung ist: Weise auf Prüfung von Auftrag, Termin und Zahlung hin.
+4. Wenn Reklamation: Formuliere, dass das aufgenommen und zur Klärung weitergegeben wird.
+5. Keine trockenen Standard-Phrasen wie "Ich nehme die Anfrage auf und kläre den Vorgang intern" bei jedem Fall. Sei kontextbezogen!
 `;
 
     const response = await ai.models.generateContent({
@@ -101,18 +100,15 @@ WICHTIGE REGELN ZUR FAKTEN-TREUE (DATABASE FIRST):
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
-        temperature: 0.1,
+        temperature: 0.2, // slightly higher for natural phrasing, but grounded by prompt
       }
     });
 
     if (!response.text) return null;
-    
-    const parsed = JSON.parse(response.text);
-    return parsed;
+    return JSON.parse(response.text);
 
   } catch (error) {
     console.error("Gemini AI Analysis Error:", error);
     throw new Error("Failed to analyze text with AI");
   }
 }
-

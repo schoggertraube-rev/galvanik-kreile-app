@@ -1,7 +1,7 @@
 "use client";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { INITIAL_CUSTOMERS, INITIAL_ORDERS, MockCustomer, MockOrder } from "@/lib/mockData";
-import { analyzePhoneNoteWithAI } from "@/app/actions/analyzePhoneNote";
+import { analyzePhoneNoteWithAI, AIAnalysisInput, PhoneNoteCategory } from "@/app/actions/analyzePhoneNote";
 import { performLocalAnalysis, LocalAnalysisResult } from "@/lib/localPhoneAnalysis";
 
 /* ===== Types ===== */
@@ -80,7 +80,7 @@ export function usePhoneNoteAnalysis() {
       return;
     }
 
-    // 1. FAST PATH: Synchronous Local Analysis
+    // 1. FAST PATH: Synchronous Local Analysis (DATABASE FIRST)
     const localResult = performLocalAnalysis(text);
     
     // Apply Overrides to local result
@@ -96,7 +96,7 @@ export function usePhoneNoteAnalysis() {
     const needsOrderSelection = !localResult.matchedOrder && localResult.orderCandidates.length > 1 && !overrideOrderIds;
     const allCustomerOrders = localResult.matchedCustomer ? INITIAL_ORDERS.filter(o => o.customerId === localResult.matchedCustomer!.id) : [];
 
-    const buildFieldsAndActions = (baseResult: LocalAnalysisResult, isAI: boolean): AnalysisResult => {
+    const buildFieldsAndActions = (baseResult: LocalAnalysisResult, aiCategory?: PhoneNoteCategory, isAI: boolean = false): AnalysisResult => {
       const fields: AnalysisField[] = [];
       if (baseResult.matchedCustomer) fields.push({ label: "Kunde", value: baseResult.matchedCustomer.name, confidence: 96, type: "kunde" });
       else if (needsCustomerSelection) fields.push({ label: "Kunde", value: `${baseResult.customerCandidates.length} mögliche Treffer`, confidence: 50, type: "kunde" });
@@ -104,12 +104,36 @@ export function usePhoneNoteAnalysis() {
       if (baseResult.matchedOrder) fields.push({ label: "Auftrag", value: baseResult.matchedOrder.orderNumber, confidence: 95, type: "auftrag" });
       else if (needsOrderSelection) fields.push({ label: "Auftrag", value: `${baseResult.orderCandidates.length} offene Aufträge`, confidence: 50, type: "auftrag" });
       
-      if (baseResult.matchedTheme) fields.push({ label: "Thema", value: baseResult.matchedTheme, confidence: 92, type: "thema" });
+      const displayTheme = aiCategory || baseResult.matchedTheme;
+      if (displayTheme) fields.push({ label: "Thema", value: displayTheme, confidence: 92, type: "thema" });
       if (baseResult.matchedMaterial) fields.push({ label: "Material", value: baseResult.matchedMaterial, confidence: 88, type: "material" });
       if (baseResult.matchedTime) fields.push({ label: "Wunschtermin", value: baseResult.matchedTime.label, confidence: baseResult.matchedTime.isFree ? 90 : 70, type: "zeit" });
       if (baseResult.matchedPayment) fields.push({ label: "Zahlung", value: baseResult.matchedPayment, confidence: 85, type: "zahlung" });
 
       const proposedActions: ProposedAction[] = [];
+      
+      // Intent-based actions (HYBRID AI additions)
+      if (aiCategory === "new_order_intake") {
+        proposedActions.push({
+          id: "intake", title: "Neuer Wareneingang",
+          subtitle: `Erfassung für ${baseResult.matchedCustomer?.name || "Kunde"} vorbereiten`,
+          type: "auto", actionType: "create_intake"
+        });
+      } else if (aiCategory === "quote_request") {
+        proposedActions.push({
+          id: "quote", title: "Angebot / KV vorbereiten",
+          subtitle: "Material klären, Foto anfordern",
+          type: "auto", actionType: "create_quote"
+        });
+      } else if (aiCategory === "complaint") {
+        proposedActions.push({
+          id: "complaint", title: "Reklamationsfall anlegen",
+          subtitle: `Auftrag ${baseResult.matchedOrder?.orderNumber || "prüfen"} & Qualitätsprüfung`,
+          type: "review", actionType: "create_complaint"
+        });
+      }
+
+      // Fact-based actions (LOCAL DATABASE additions)
       if (baseResult.matchedTime) {
         proposedActions.push({
           id: "cal", title: "Kalendereintrag",
@@ -117,7 +141,7 @@ export function usePhoneNoteAnalysis() {
           type: "auto", actionType: "create_calendar_event"
         });
       }
-      if (baseResult.matchedOrder) {
+      if (baseResult.matchedOrder && aiCategory !== "complaint") {
         proposedActions.push({
           id: "ord", title: `Auftrag ${baseResult.matchedOrder.orderNumber}`,
           subtitle: `${baseResult.matchedTime ? "Abholtermin" : "Aktualisierung"}${baseResult.matchedPayment ? " + Zahlungsart " + baseResult.matchedPayment.toLowerCase() : ""}`,
@@ -127,15 +151,8 @@ export function usePhoneNoteAnalysis() {
       if (baseResult.matchedCustomer) {
         proposedActions.push({
           id: "cust", title: "Kundenkarte: Notiz",
-          subtitle: `${baseResult.matchedCustomer.name} · Anruf ${new Date().toLocaleDateString("de-DE", { day: "numeric", month: "numeric" })} ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`,
+          subtitle: `${baseResult.matchedCustomer.name} · Anruf ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`,
           type: "auto", actionType: "add_customer_note"
-        });
-      }
-      if (baseResult.matchedTheme === "Zahlungsfrage" || baseResult.matchedPayment) {
-        proposedActions.push({
-          id: "pay", title: "Offene Rechnung 248 €",
-          subtitle: "Bei Abholung erwähnen — kein Mahnlauf nötig",
-          type: "review", actionType: "create_invoice_reminder"
         });
       }
 
@@ -144,7 +161,7 @@ export function usePhoneNoteAnalysis() {
         matchedOrder: baseResult.matchedOrder,
         allCustomerOrders,
         matchedMaterial: baseResult.matchedMaterial,
-        matchedTheme: baseResult.matchedTheme,
+        matchedTheme: displayTheme,
         matchedTime: baseResult.matchedTime,
         matchedPayment: baseResult.matchedPayment,
         matchedKeywords: [],
@@ -163,36 +180,44 @@ export function usePhoneNoteAnalysis() {
     };
 
     // Immediatley set local result so UI responds instantly
-    setResult(buildFieldsAndActions(localResult, false));
+    setResult(buildFieldsAndActions(localResult));
 
-    // 2. ESCALATION PATH: If AI is needed or forced, run it async
-    if (localResult.requiresAI || forceAI) {
-        debounceRef.current = setTimeout(async () => {
-          setIsAnalyzing(true);
-          try {
-            const aiData = await analyzePhoneNoteWithAI(text);
-            if (aiData) {
-              // Merge AI insights with local strict data. DB matches (customer/order overrides) always win over AI.
-              const mergedResult = {
-                  ...localResult,
-                  matchedTheme: aiData.theme || localResult.matchedTheme,
-                  matchedMaterial: aiData.material || localResult.matchedMaterial,
-                  matchedPayment: aiData.payment || localResult.matchedPayment,
-                  suggestedAnswer: aiData.suggestedAnswer || localResult.suggestedAnswer,
-                  overallConfidence: aiData.overallConfidence || localResult.overallConfidence,
-                  aiReason: forceAI ? "Manuell angefordert" : localResult.aiReason
-              };
-              setResult(buildFieldsAndActions(mergedResult, true));
-            }
-          } catch (error) {
-            console.error("AI Analysis error:", error);
-          } finally {
-            setIsAnalyzing(false);
+    // 2. HYBRID AI ESCALATION PATH: Debounced AI call to formulate intent/answer based on local facts
+    debounceRef.current = setTimeout(async () => {
+      setIsAnalyzing(true);
+      try {
+        const payload: AIAnalysisInput = {
+          text,
+          knownFacts: {
+            customerCandidates: localResult.customerCandidates.slice(0, 3).map(c => c.name),
+            orderCandidates: localResult.orderCandidates.slice(0, 3).map(o => o.orderNumber),
+            selectedCustomer: localResult.matchedCustomer?.name || null,
+            selectedOrders: localResult.matchedOrder ? [localResult.matchedOrder.orderNumber] : [],
+            detectedDate: localResult.matchedTime?.label || null,
+            paymentKnown: localResult.matchedPayment || null
           }
-        }, 800); // Small debounce for AI to save tokens while typing
-    } else {
+        };
+
+        const aiData = await analyzePhoneNoteWithAI(payload);
+        if (aiData) {
+          // Merge AI insights with local strict data. DB matches (customer/order overrides) always win over AI.
+          const mergedResult = {
+              ...localResult,
+              matchedTheme: aiData.category || localResult.matchedTheme,
+              matchedMaterial: aiData.material || localResult.matchedMaterial,
+              suggestedAnswer: aiData.suggestedAnswer || localResult.suggestedAnswer,
+              overallConfidence: aiData.overallConfidence || localResult.overallConfidence,
+              aiReason: "Hybrid AI Analyse (Absicht & Formulierung)"
+          };
+          setResult(buildFieldsAndActions(mergedResult, aiData.category, true));
+        }
+      } catch (error) {
+        console.error("AI Analysis error:", error);
+      } finally {
         setIsAnalyzing(false);
-    }
+      }
+    }, 800); // Small debounce for AI to save tokens while typing
+
   }, []);
 
   useEffect(() => {
