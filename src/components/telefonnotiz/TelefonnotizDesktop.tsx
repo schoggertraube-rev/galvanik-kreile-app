@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Phone, Edit2, Mic, MicOff, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, ArrowLeft, PackageOpen } from "lucide-react";
+import { Phone, Edit2, Mic, MicOff, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, ArrowLeft } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePhoneNoteAnalysis, AnalysisResult } from "@/hooks/usePhoneNoteAnalysis";
 import { useLiveContext } from "@/hooks/useLiveContext";
@@ -310,8 +311,16 @@ export function TelefonnotizDesktop() {
               onClick={handleReturnAttempt}
               aria-label={returnLabel}
               title={returnLabel}
+              style={{ overflow: "hidden", padding: 0 }}
             >
-              <PackageOpen className="h-6 w-6" />
+              <Image
+                src="/warendurchlauf/station-wareneingang.png"
+                alt="Wareneingang"
+                width={58}
+                height={58}
+                style={{ objectFit: "cover", borderRadius: "999px", width: "100%", height: "100%" }}
+                priority
+              />
             </button>
           </div>
         )}
@@ -449,7 +458,7 @@ export function TelefonnotizDesktop() {
                 {isAnalyzing ? (
                   <>
                     <Activity size={16} className="animate-spin" style={{ color: "var(--tn-green-bright)", marginRight: 8 }} />
-                    Analysiere mit AI...
+                    Analysiere…
                   </>
                 ) : (
                   <>
@@ -457,6 +466,140 @@ export function TelefonnotizDesktop() {
                   </>
                 )}
               </button>
+
+              {/* ===== LIVE TILES (below Auswerten, desktop only, during Step 1-2) ===== */}
+              {!isMobile && result && (
+                <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: isTablet ? "1fr" : "1fr 1fr", gap: 8 }}>
+
+                  {/* Customer disambiguation tile */}
+                  {result.needsCustomerSelection && result.customerCandidates.length > 1 && (
+                    <div style={{ gridColumn: "1 / -1", background: "var(--tn-orange-soft)", border: "1.5px solid var(--tn-orange)", borderRadius: 12, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--tn-orange)", marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
+                        <AlertTriangle size={12} /> {result.customerCandidates.length} mögliche Kunden erkannt
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {result.customerCandidates.map(cc => (
+                          <button key={cc.id} onClick={() => handleSelectCustomer(cc.id)} style={{
+                            background: selectedCustomerId === cc.id ? "var(--tn-green-bright)" : "var(--tn-paper)",
+                            color: selectedCustomerId === cc.id ? "white" : "var(--tn-ink)",
+                            border: `1px solid ${selectedCustomerId === cc.id ? "var(--tn-green-bright)" : "var(--tn-line)"}`,
+                            borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                            transition: "all 0.15s"
+                          }}>
+                            {cc.name} · {cc.city}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Matched customer tile */}
+                  {result.matchedCustomer && (
+                    <div style={{ background: "var(--tn-blue-soft)", borderRadius: 12, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: "50%", background: "linear-gradient(135deg, #1E3A8A, #1E40AF)", color: "white", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+                        {result.matchedCustomer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tn-blue)" }}>{result.matchedCustomer.name}</div>
+                        <div style={{ fontSize: 10, color: "var(--tn-ink-mute)" }}>{result.matchedCustomer.city || "Kunde erkannt"}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Matched order tile */}
+                  {result.matchedOrder && (
+                    <div style={{ background: "var(--tn-violet-soft)", borderRadius: 12, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: "var(--tn-violet)", color: "white", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                        <FileText size={14} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tn-violet)" }}>{result.matchedOrder.orderNumber}</div>
+                        <div style={{ fontSize: 10, color: "var(--tn-ink-mute)" }}>{result.matchedOrder.task}</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Order disambiguation tile */}
+                  {result.needsOrderSelection && result.orderCandidates.length > 1 && (
+                    <div style={{ gridColumn: "1 / -1", background: "var(--tn-violet-soft)", border: "1.5px solid var(--tn-violet)", borderRadius: 12, padding: "12px 14px" }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--tn-violet)", marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
+                        <FileText size={12} /> {result.orderCandidates.length} offene Aufträge
+                      </div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {result.orderCandidates.map(oc => (
+                          <button key={oc.id} onClick={() => handleSelectOrder(oc.id)} style={{
+                            background: selectedOrderIds.includes(oc.id) ? "var(--tn-green-bright)" : "var(--tn-paper)",
+                            color: selectedOrderIds.includes(oc.id) ? "white" : "var(--tn-ink)",
+                            border: `1px solid ${selectedOrderIds.includes(oc.id) ? "var(--tn-green-bright)" : "var(--tn-line)"}`,
+                            borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                            transition: "all 0.15s"
+                          }}>
+                            {oc.orderNumber} · {oc.task}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Appointment tile */}
+                  {result.matchedTime && (
+                    <div style={{
+                      background: result.matchedTime.isFree ? "var(--tn-green-soft)" : "#FEF3C7",
+                      border: `1.5px solid ${result.matchedTime.isFree ? "var(--tn-green-bright)" : "var(--tn-yellow)"}`,
+                      borderRadius: 12, padding: "12px 14px"
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: result.matchedTime.isFree ? "var(--tn-green)" : "var(--tn-yellow)", marginBottom: 4 }}>
+                        {result.matchedTime.isFree ? "✓ Termin frei" : "⚠ Terminkonflikt"}
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tn-ink)" }}>{result.matchedTime.label}</div>
+                      <div style={{ fontSize: 10, color: result.matchedTime.isFree ? "var(--tn-green)" : "var(--tn-yellow)", marginTop: 2 }}>
+                        {result.matchedTime.isFree ? "Kann zugesagt werden" : "Alternative vorschlagen"}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Material tile */}
+                  {result.matchedMaterial && (
+                    <div style={{ background: "var(--tn-yellow-soft)", borderRadius: 12, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: "var(--tn-yellow)", color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                        <Package size={14} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--tn-yellow)" }}>{result.matchedMaterial.charAt(0).toUpperCase() + result.matchedMaterial.slice(1)}</div>
+                        <div style={{ fontSize: 10, color: "var(--tn-ink-mute)" }}>Material erkannt</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Payment tile */}
+                  {result.matchedPayment && (
+                    <div style={{ background: "var(--tn-cream-2)", borderRadius: 12, padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ width: 32, height: 32, borderRadius: 8, background: "var(--tn-ink-mute)", color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                        <CreditCard size={14} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{result.matchedPayment}</div>
+                        <div style={{ fontSize: 10, color: "var(--tn-ink-mute)" }}>Zahlungsart</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Suggested Answer tile — visually distinct */}
+                  {result.suggestedAnswer && result.suggestedAnswer !== "Guten Tag, wie kann ich helfen?" && (
+                    <div style={{
+                      gridColumn: "1 / -1", background: "var(--tn-ink)", color: "var(--tn-cream)",
+                      borderRadius: 12, padding: "14px 16px"
+                    }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", opacity: 0.5, marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                        💬 Antwort-Vorschlag
+                      </div>
+                      <p style={{ fontFamily: "'Fraunces', serif", fontSize: 14, lineHeight: 1.55, margin: 0 }}>
+                        {result.suggestedAnswer}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 
