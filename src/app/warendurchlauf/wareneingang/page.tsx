@@ -15,13 +15,9 @@ import { WarendurchlaufIntakeWizard } from "@/components/warendurchlauf/Warendur
 
 function WarendurchlaufLeitstandContent() {
   const searchParams = useSearchParams();
-  const [wizardMode, setWizardMode] = useState<"camera" | "manual" | null>(null);
-
-  useEffect(() => {
-    if (searchParams.get("mode") === "new-order") {
-      setWizardMode("manual");
-    }
-  }, [searchParams]);
+  const [wizardMode, setWizardMode] = useState<"camera" | "manual" | null>(
+    searchParams.get("mode") === "new-order" ? "manual" : null
+  );
 
   return (
     <div className="w-full h-full font-sans antialiased text-[#1a1a1a]">

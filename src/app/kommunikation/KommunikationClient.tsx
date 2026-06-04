@@ -5,11 +5,11 @@ import {
   AlertOctagon, User, FileText, Banknote,
   Edit2, Activity, Search, Plus, PhoneCall, Bell, MoreVertical, Send,
   Calendar, Package, CreditCard, Settings, ChevronRight, ChevronLeft,
-  Archive, PhoneForwarded, CheckSquare, X, Paperclip, Image
+  Archive, PhoneForwarded, CheckSquare, X, Paperclip, Image as ImageIcon
 } from "lucide-react";
 import Link from "next/link";
 import { usePageView } from "@/hooks/usePageView";
-import { INITIAL_CUSTOMERS, INITIAL_ORDERS } from "@/lib/mockData";
+import { INITIAL_ORDERS } from "@/lib/mockData";
 import { getRecentPhoneNotes, updatePhoneNote } from "@/app/actions/phoneNotes.actions";
 import { smartMatchText, MatchResult } from "./smartMatcher";
 import { useParkedCall } from "@/contexts/ParkedCallContext";
@@ -586,6 +586,9 @@ export function KommunikationClient() {
                     ))}
                   </div>
                   <div style={{ display: "flex", gap: 12 }}>
+                    <div style={{ marginTop: 20 }}>
+                      <img src="/kreile_mockup_v2_bg.png" alt="" style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,.1)" }} />
+                    </div>
                     <button onClick={() => alert("Backend Aktion vorbereitet.")} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all .1s" }} onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.15)")} onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,.1)")}>Alle {actionCards.length} anwenden</button>
                     <button style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.1)", background: "transparent", color: "#EDE8DD", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Einzeln prüfen</button>
                     <button onClick={() => setShowCockpit(false)} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.1)", background: "transparent", color: "#A09889", fontSize: 13, fontWeight: 600, cursor: "pointer", marginLeft: "auto" }}>Verwerfen</button>
@@ -625,7 +628,7 @@ export function KommunikationClient() {
                     />
                     <div style={{ display: "flex", gap: 6, padding: "0 8px", marginBottom: 6 }}>
                       <button onClick={() => alert("Datei-Anhang vorbereitet. Upload-Modul wird hier geöffnet.")} title="Datei anhängen" style={iconBtn}><Paperclip size={20} /></button>
-                      <button onClick={() => alert("Foto-Anhang vorbereitet. Kamera wird hier geöffnet.")} title="Foto aufnehmen/anhängen" style={iconBtn}><Image size={20} /></button>
+                      <button onClick={() => alert("Foto-Anhang vorbereitet. Kamera wird hier geöffnet.")} title="Foto aufnehmen/anhängen" style={iconBtn}><ImageIcon size={20} /></button>
                     </div>
                   </div>
                   <button style={{ width: 48, height: 48, borderRadius: "50%", border: "none", background: "#C2410C", color: "#fff", display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0 }}><Send size={20} /></button>

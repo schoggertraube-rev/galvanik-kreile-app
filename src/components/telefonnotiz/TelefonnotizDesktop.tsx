@@ -1210,7 +1210,7 @@ export function TelefonnotizDesktop() {
 
       {/* ===== EMAIL MOCK OVERLAY ===== */}
       {showEmailMock && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-navy-900/40 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowEmailMock(false); }}>
+        <div className="fixed inset-0 z-100 flex items-center justify-center p-6 bg-navy-900/40 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowEmailMock(false); }}>
           <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 600, boxShadow: "0 20px 40px rgba(0,0,0,0.2)", overflow: "hidden" }}>
             <div style={{ background: "var(--tn-ink)", color: "white", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h3 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 18, display: "flex", alignItems: "center", gap: 8 }}><Mail size={18}/> Letzte E-Mails & Anhänge</h3>

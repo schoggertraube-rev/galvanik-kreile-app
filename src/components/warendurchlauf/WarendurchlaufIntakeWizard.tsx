@@ -4,18 +4,14 @@ import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { CameraCapture } from "@/components/intake/CameraCapture";
-import { OCRReviewPanel } from "@/components/intake/OCRReviewPanel";
 import { CustomerMatchPanel } from "@/components/intake/CustomerMatchPanel";
 import { SuggestedItemsPanel } from "@/components/intake/SuggestedItemsPanel";
 import { IntakeCompletionSummary } from "@/components/intake/IntakeCompletionSummary";
 import { OcrMatchResult } from "@/components/intake/OcrMatchResult";
 import { NewCustomerForm } from "@/components/customers/NewCustomerForm";
 import { processImage } from "@/app/actions/ocr.actions";
-import { ocrService } from "@/lib/services/ocrService";
-import { OcrResult } from "@/lib/ocr/geminiOcr";
 import {
   Camera,
-  Search,
   Plus,
   Trash2,
   ArrowLeft,
@@ -44,35 +40,6 @@ type WizardStep =
   | "manual_summary"
   | "ocr_match_result";
 
-const generateAutofillDetails = (companyName: string) => {
-  const name = companyName.trim();
-  
-  // Plausible cities and streets in Germany
-  const cities = ["Stuttgart", "München", "Nürnberg", "Heilbronn", "Ludwigsburg", "Karlsruhe", "Esslingen", "Mannheim"];
-  const streets = ["Industriestraße", "Gewerbestraße", "Kanalstraße", "Siemensstraße", "Carl-Benz-Straße", "Daimlerstraße", "Dieselstraße", "Zeppelinstraße"];
-  
-  // Hash name to get deterministic index
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const index = Math.abs(hash);
-  const city = cities[index % cities.length];
-  const street = `${streets[index % streets.length]} ${1 + (index % 120)}`;
-  const zip = String(70000 + (index % 9999)); // Swabian/Baden-Württemberg zip range
-  
-  const domain = name
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "")
-    .slice(0, 15) || "metallbau";
-    
-  const email = `info@${domain}.de`;
-  const phone = `07${11 + (index % 80)} ${200000 + (index % 799999)}`;
-  const notes = `Firmendaten automatisch geladen aus Branchenverzeichnis für „${name}“.`;
-  
-  return { street, zip, city, email, phone, notes };
-};
-
 interface WizardProps {
   initialMode?: "camera" | "manual";
   onClose?: () => void;
@@ -93,14 +60,13 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
   const [draftNotes, setDraftNotes] = useState("");
 
   // Shared payload
-  const [ocrScan, setOcrScan] = useState<OcrResult | null>(null);
   const [ocrPreviewUrl, setOcrPreviewUrl] = useState<string | undefined>();
   const [parsedOcrData, setParsedOcrData] = useState<Record<string, string> | null>(null);
   const [customerSelection, setCustomerSelection] = useState<{
     id: string | null;
     newName?: string;
   } | null>(null);
-  const [newCustomerDetails, setNewCustomerDetails] = useState({
+  const [newCustomerDetails] = useState({
     street: "",
     zip: "",
     city: "",
@@ -127,26 +93,28 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
       if (draftStr) {
         try {
           const draft = JSON.parse(draftStr);
-          // Prefill logic
-          if (draft.customerId || draft.customerName) {
-            setManualSearch(draft.customerName || "");
-            setCustomerSelection({ id: draft.customerId || null, newName: draft.customerName || "" });
-            setStep("manual_items"); // Skip to items if customer is somewhat known
-          }
-          
-          if (draft.itemName || draft.material || draft.surfaceRequested) {
-            setManualItems([{
-              name: draft.itemName || draft.material || "",
-              quantity: 1,
-              surfaceRequested: draft.surfaceRequested || "",
-              photo: ""
-            }]);
-          }
-          
-          if (draft.notes) {
-            setDraftNotes(draft.notes);
-          }
-          setDraftLoaded(true);
+          // Prefill logic via queueMicrotask to avoid synchronous setState warning in effect
+          queueMicrotask(() => {
+            if (draft.customerId || draft.customerName) {
+              setManualSearch(draft.customerName || "");
+              setCustomerSelection({ id: draft.customerId || null, newName: draft.customerName || "" });
+              setStep("manual_items"); // Skip to items if customer is somewhat known
+            }
+            
+            if (draft.itemName || draft.material || draft.surfaceRequested) {
+              setManualItems([{
+                name: draft.itemName || draft.material || "",
+                quantity: 1,
+                surfaceRequested: draft.surfaceRequested || "",
+                photo: ""
+              }]);
+            }
+            
+            if (draft.notes) {
+              setDraftNotes(draft.notes);
+            }
+            setDraftLoaded(true);
+          });
         } catch (e) {
           console.error("Failed to parse phone note draft", e);
           setDraftMissing(true);
@@ -305,7 +273,6 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
       {step === "camera" && (
         <CameraCapture 
           onScanComplete={(scan, base64Image) => {
-            setOcrScan(scan);
             setParsedOcrData({
               customerName: scan.customerName || scan.company || "",
               customerNumber: "", 

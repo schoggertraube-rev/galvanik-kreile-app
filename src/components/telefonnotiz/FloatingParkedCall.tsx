@@ -12,13 +12,13 @@ export function FloatingParkedCall() {
     <>
       {/* 1. Global Floating Button (pulsating) */}
       <div 
-        className="fixed bottom-24 right-6 z-50 flex items-center gap-3 cursor-pointer group"
+        className="fixed bottom-6 right-6 z-100 flex flex-col items-end gap-3 pointer-events-none animate-in slide-in-from-bottom-5"
         onClick={resumeCall}
       >
         <div className="bg-[#1A1714] text-[#EDE8DD] rounded-xl px-4 py-2 shadow-xl border border-white/10 opacity-0 translate-x-4 group-hover:opacity-100 group-hover:translate-x-0 transition-all pointer-events-none">
           <div className="text-xs font-bold whitespace-nowrap">Offener Anruf: {activeParkedCall.matchedCustomerName || "Unbekannt"}</div>
         </div>
-        <div className="w-14 h-14 bg-[#C2410C] text-white rounded-full shadow-2xl flex items-center justify-center relative">
+        <div className="w-14 h-14 bg-[#C2410C] text-white rounded-full shadow-2xl flex items-center justify-center relative cursor-pointer pointer-events-auto">
           <PhoneCall size={24} />
           {/* Pulsating effect */}
           <div className="absolute inset-0 rounded-full border-2 border-[#C2410C] animate-ping opacity-75"></div>
@@ -27,7 +27,7 @@ export function FloatingParkedCall() {
 
       {/* 2. Full-Screen Inactivity Resume Prompt */}
       {showResumePrompt && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+        <div className="fixed inset-0 z-100 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-[#FDFBF7] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-[#E5DFD3]">
             <div className="bg-[#1F1A14] p-4 flex justify-between items-center text-white">
               <div className="flex items-center gap-3">

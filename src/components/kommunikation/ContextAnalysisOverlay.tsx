@@ -52,7 +52,7 @@ export function ContextAnalysisOverlay({
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center lg:justify-end p-4 lg:pr-[15%]"
+      className="fixed inset-0 z-100 flex items-center justify-center lg:justify-end p-4 lg:pr-[15%]"
       style={{ backgroundColor: "rgba(15, 23, 42, 0.4)", backdropFilter: "blur(4px)" }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
