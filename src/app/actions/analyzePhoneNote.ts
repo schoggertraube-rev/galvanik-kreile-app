@@ -111,7 +111,7 @@ REGELN FÜR DEN ANTWORTVORSCHLAG:
 `;
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-1.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -132,6 +132,6 @@ REGELN FÜR DEN ANTWORTVORSCHLAG:
 
   } catch (error) {
     console.error("Gemini AI Analysis Error:", error);
-    throw new Error("Failed to analyze text with AI");
+    return null;
   }
 }
