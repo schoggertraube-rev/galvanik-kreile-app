@@ -6,14 +6,25 @@ import {
   ChevronRight, Zap, Upload, X
 } from "lucide-react";
 import { useState } from "react";
+import { WarendurchlaufIntakeWizard } from "@/components/warendurchlauf/WarendurchlaufIntakeWizard";
 
 /* ═══════════════════════════════════════════
    Warendurchlauf Leitstand — v4 Layout
    ═══════════════════════════════════════════ */
 
 export default function WarendurchlaufLeitstand() {
+  const [wizardMode, setWizardMode] = useState<"camera" | "manual" | null>(null);
+
   return (
     <div className="w-full h-full font-sans antialiased text-[#1a1a1a]">
+      {wizardMode && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/60 backdrop-blur-sm overflow-y-auto">
+          <WarendurchlaufIntakeWizard
+            initialMode={wizardMode}
+            onClose={() => setWizardMode(null)}
+          />
+        </div>
+      )}
       <div className="w-full mx-auto px-5 md:px-8 lg:px-12 xl:px-16 py-6">
 
 
@@ -33,8 +44,8 @@ export default function WarendurchlaufLeitstand() {
             {/* Aktionskarten */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
               {/* Kamera — primary */}
-              <Link
-                href="/warendurchlauf/neu?mode=camera"
+              <button
+                onClick={() => setWizardMode("camera")}
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md text-center text-white"
                 style={{ background: "#1a6b38", border: "1.5px solid #1a6b38" }}
               >
@@ -43,24 +54,24 @@ export default function WarendurchlaufLeitstand() {
                 </div>
                 <span className="text-[15px] font-bold">Kamera</span>
                 <span className="text-xs text-white/60">Foto &middot; Scan</span>
-              </Link>
+              </button>
 
-              {/* Datei-Upload */}
+              {/* Telefonnotiz (ersetzt Datei-Upload) */}
               <Link
-                href="/warendurchlauf/neu?mode=camera"
+                href="/kommunikation?mode=telefonnotiz"
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
                 style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
               >
                 <div className="w-[52px] h-[52px] rounded-[14px] bg-[#fef3e2] flex items-center justify-center">
-                  <Upload className="w-6 h-6 text-[#2471a3]" />
+                  <Phone className="w-6 h-6 text-[#2471a3]" />
                 </div>
-                <span className="text-[15px] font-bold text-[#1a1a1a]">Datei-Upload</span>
-                <span className="text-xs text-[#9e9689]">PDF &middot; Bilder</span>
+                <span className="text-[15px] font-bold text-[#1a1a1a]">Telefonnotiz</span>
+                <span className="text-xs text-[#9e9689]">Schnellerfassung</span>
               </Link>
 
               {/* Manuell anlegen */}
-              <Link
-                href="/warendurchlauf/neu?mode=manual"
+              <button
+                onClick={() => setWizardMode("manual")}
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
                 style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
               >
@@ -69,7 +80,7 @@ export default function WarendurchlaufLeitstand() {
                 </div>
                 <span className="text-[15px] font-bold text-[#1a1a1a]">Manuell anlegen</span>
                 <span className="text-xs text-[#9e9689]">Kunde &middot; Auftrag</span>
-              </Link>
+              </button>
             </div>
 
             {/* Breite Verweiskarten */}

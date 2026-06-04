@@ -2,8 +2,6 @@
 
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
-import { IntakeEntry } from "@/components/intake/IntakeEntry";
 import { CameraCapture } from "@/components/intake/CameraCapture";
 import { OCRReviewPanel } from "@/components/intake/OCRReviewPanel";
 import { CustomerMatchPanel } from "@/components/intake/CustomerMatchPanel";
@@ -33,7 +31,6 @@ import { customersRepository, Customer } from "@/lib/repositories/customersRepos
 import { orderSchema } from "@/lib/validation/orderSchema";
 
 type WizardStep =
-  | "entry"
   | "camera"
   | "ocr_review"
   | "customer_match"
@@ -74,17 +71,17 @@ const generateAutofillDetails = (companyName: string) => {
   return { street, zip, city, email, phone, notes };
 };
 
-export function WarendurchlaufIntakeWizard() {
-  usePageView();
-  const searchParams = useSearchParams();
-  
-  const [step, setStep] = useState<WizardStep>("entry");
+interface WizardProps {
+  initialMode?: "camera" | "manual";
+  onClose?: () => void;
+}
 
-  useEffect(() => {
-    const mode = searchParams.get("mode");
-    if (mode === "camera") setStep("camera");
-    if (mode === "manual") setStep("manual_customer");
-  }, [searchParams]);
+export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps = {}) {
+  usePageView();
+  
+  const [step, setStep] = useState<WizardStep>(
+    initialMode === "manual" ? "manual_customer" : "camera"
+  );
 
   // Shared payload
   const [ocrScan, setOcrScan] = useState<OcrResult | null>(null);
@@ -260,11 +257,6 @@ export function WarendurchlaufIntakeWizard() {
         </div>
       )}
 
-      {/* ── ENTRY SCREEN ── */}
-      {step === "entry" && (
-        <IntakeEntry onSelect={(mode) => setStep(mode === "camera" ? "camera" : "manual_customer")} />
-      )}
-
       {step === "camera" && (
         <CameraCapture 
           onScanComplete={(scan, base64Image) => {
@@ -281,7 +273,9 @@ export function WarendurchlaufIntakeWizard() {
             }
             setStep("ocr_match_result");
           }} 
-          onCancel={() => setStep("entry")}
+          onCancel={() => {
+              if (onClose) onClose();
+            }}
         />
       )}
 
@@ -335,11 +329,13 @@ export function WarendurchlaufIntakeWizard() {
       {step === "manual_customer" && (
         <div className="w-full max-w-3xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
           <button
-            onClick={() => setStep("entry")}
+            onClick={() => {
+              if (onClose) onClose();
+            }}
             className="flex items-center gap-2 text-text-muted hover:text-navy-900 font-bold text-sm px-3 py-2 rounded-xl hover:bg-bg-app-soft transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
-            Zurück
+            Abbrechen
           </button>
 
           <div className="text-center space-y-2">
@@ -666,7 +662,9 @@ export function WarendurchlaufIntakeWizard() {
         <div className="w-full h-full flex flex-col pt-10">
           <div className="mb-4 text-center">
             <button
-              onClick={() => setStep("entry")}
+              onClick={() => {
+                if (onClose) onClose();
+              }}
               className="inline-flex items-center gap-2 text-text-muted hover:text-navy-900 font-bold text-sm px-3 py-2 rounded-xl hover:bg-bg-app-soft transition-all"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -678,9 +676,7 @@ export function WarendurchlaufIntakeWizard() {
             previewUrl={ocrPreviewUrl}
             onComplete={() => {
               // Successfully created an order or skipped
-              setStep("entry");
-              setParsedOcrData(null);
-              setOcrPreviewUrl(undefined);
+              if (onClose) onClose();
             }}
           />
         </div>
