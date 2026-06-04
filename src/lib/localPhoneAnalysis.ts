@@ -96,7 +96,7 @@ function findCustomerCandidates(nameHint: string): LocalAnalysisResult["customer
 
 export function performLocalAnalysis(text: string): LocalAnalysisResult {
   const lower = text.toLowerCase();
-  const highlights: any[] = [];
+  const highlights: LocalAnalysisResult["highlights"] = [];
   
   // 1. Order Match
   const orderMatch = text.match(/A-\d{4}-\d{4}/i);
@@ -106,7 +106,7 @@ export function performLocalAnalysis(text: string): LocalAnalysisResult {
   if (orderNumber) highlights.push({ word: orderNumber, type: "auftrag" });
 
   // 2. Customer Match (Fallback to order's customer if not explicitly mentioned)
-  let customerCandidates: LocalAnalysisResult["customerCandidates"] = [];
+  const customerCandidates: LocalAnalysisResult["customerCandidates"] = [];
   
   // First, check if the text contains any customer name directly
   for (const c of INITIAL_CUSTOMERS) {

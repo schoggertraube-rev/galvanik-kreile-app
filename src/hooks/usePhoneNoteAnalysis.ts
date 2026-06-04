@@ -96,7 +96,7 @@ export function usePhoneNoteAnalysis() {
     const needsOrderSelection = !localResult.matchedOrder && localResult.orderCandidates.length > 1 && !overrideOrderIds;
     const allCustomerOrders = localResult.matchedCustomer ? INITIAL_ORDERS.filter(o => o.customerId === localResult.matchedCustomer!.id) : [];
 
-    const buildFieldsAndActions = (baseResult: LocalAnalysisResult | any, isAI: boolean): AnalysisResult => {
+    const buildFieldsAndActions = (baseResult: LocalAnalysisResult, isAI: boolean): AnalysisResult => {
       const fields: AnalysisField[] = [];
       if (baseResult.matchedCustomer) fields.push({ label: "Kunde", value: baseResult.matchedCustomer.name, confidence: 96, type: "kunde" });
       else if (needsCustomerSelection) fields.push({ label: "Kunde", value: `${baseResult.customerCandidates.length} mögliche Treffer`, confidence: 50, type: "kunde" });

@@ -76,9 +76,12 @@ export function TelefonnotizDesktop() {
 
   // ===== SPEECH RECOGNITION (Stable) =====
   const [recordingWanted, setRecordingWanted] = useState(false);
-  const [recognitionActive, setRecognitionActive] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
-  const [speechSupported, setSpeechSupported] = useState(true);
+  const [speechSupported] = useState(() => {
+    if (typeof window === "undefined") return false;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+  });
   const recordingWantedRef = useRef(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
@@ -87,7 +90,6 @@ export function TelefonnotizDesktop() {
     if (!recognitionRef.current) return;
     try {
       recognitionRef.current.start();
-      setRecognitionActive(true);
       setSpeechError(null);
     } catch (err) {
       console.error("Failed to start recognition:", err);
@@ -100,7 +102,6 @@ export function TelefonnotizDesktop() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (!SpeechRecognition) {
-        setSpeechSupported(false);
         return;
       }
       
@@ -123,7 +124,6 @@ export function TelefonnotizDesktop() {
       };
 
       recognition.onend = () => {
-        setRecognitionActive(false);
         // Auto-restart if user still wants to record
         if (recordingWantedRef.current) {
           setTimeout(() => {
@@ -137,7 +137,6 @@ export function TelefonnotizDesktop() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       recognition.onerror = (event: any) => {
         console.error("Speech recognition error:", event.error);
-        setRecognitionActive(false);
         if (event.error === "not-allowed" || event.error === "audio-capture") {
           recordingWantedRef.current = false;
           setRecordingWanted(false);
