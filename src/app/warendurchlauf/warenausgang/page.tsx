@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { CheckCircle2, Package, Truck, MessageSquare, CreditCard } from "lucide-react";
 
 export default function WarenausgangPage() {
@@ -16,7 +17,8 @@ export default function WarenausgangPage() {
 
         {/* Aktionskarten */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          <div
+          <Link
+            href="/orders"
             className="flex flex-col gap-2 p-5 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8]"
             style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
           >
@@ -25,9 +27,10 @@ export default function WarenausgangPage() {
             </div>
             <span className="text-[15px] font-bold text-[#1a1a1a]">Heute fertig</span>
             <span className="text-xs text-[#9e9689]">Ware aus der Produktion</span>
-          </div>
+          </Link>
 
-          <div
+          <Link
+            href="/warendurchlauf?station=warenausgang"
             className="flex flex-col gap-2 p-5 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8]"
             style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
           >
@@ -36,9 +39,10 @@ export default function WarenausgangPage() {
             </div>
             <span className="text-[15px] font-bold text-[#1a1a1a]">Abholbereit</span>
             <span className="text-xs text-[#9e9689]">Auf Kunden wartend</span>
-          </div>
+          </Link>
 
-          <div
+          <Link
+            href="/warendurchlauf?station=warenausgang"
             className="flex flex-col gap-2 p-5 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8]"
             style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
           >
@@ -47,9 +51,10 @@ export default function WarenausgangPage() {
             </div>
             <span className="text-[15px] font-bold text-[#1a1a1a]">Versand vorbereiten</span>
             <span className="text-xs text-[#9e9689]">Packen & Tracking</span>
-          </div>
+          </Link>
           
-          <div
+          <Link
+            href="/kommunikation"
             className="flex flex-col gap-2 p-5 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8]"
             style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
           >
@@ -58,9 +63,10 @@ export default function WarenausgangPage() {
             </div>
             <span className="text-[15px] font-bold text-[#1a1a1a]">Kunde informieren</span>
             <span className="text-xs text-[#9e9689]">Benachrichtigung senden</span>
-          </div>
+          </Link>
 
-          <div
+          <Link
+            href="/buchhaltung/zahlung"
             className="flex flex-col gap-2 p-5 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8]"
             style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
           >
@@ -69,7 +75,7 @@ export default function WarenausgangPage() {
             </div>
             <span className="text-[15px] font-bold text-[#1a1a1a]">Zahlstatus erfassen</span>
             <span className="text-xs text-[#9e9689]">Zahlung vorbereiten & prüfen</span>
-          </div>
+          </Link>
         </div>
 
       </div>

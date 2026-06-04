@@ -62,7 +62,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <Link href="/" className="p-2 bg-bg-app-soft hover:bg-neutral-gray-100 text-text-muted rounded-lg mr-1 transition-colors">
+            <Link href="/warendurchlauf" className="p-2 bg-bg-app-soft hover:bg-neutral-gray-100 text-text-muted rounded-lg mr-1 transition-colors">
               <ArrowLeft className="h-4 w-4" />
             </Link>
             <h1 className="text-2xl font-black text-navy-900">

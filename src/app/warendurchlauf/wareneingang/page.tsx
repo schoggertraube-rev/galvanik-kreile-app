@@ -12,14 +12,6 @@ import { useState } from "react";
    ═══════════════════════════════════════════ */
 
 export default function WarendurchlaufLeitstand() {
-  const [activeOverlay, setActiveOverlay] = useState<"foto" | "upload" | null>(null);
-  
-  const handleCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      alert("Foto/Datei erfolgreich simuliert übergeben!");
-      setActiveOverlay(null);
-    }
-  };
   return (
     <div className="w-full h-full font-sans antialiased text-[#1a1a1a]">
       <div className="w-full mx-auto px-5 md:px-8 lg:px-12 xl:px-16 py-6">
@@ -41,8 +33,8 @@ export default function WarendurchlaufLeitstand() {
             {/* Aktionskarten */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
               {/* Kamera — primary */}
-              <button
-                onClick={() => setActiveOverlay("foto")}
+              <Link
+                href="/warendurchlauf/neu?mode=camera"
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md text-center text-white"
                 style={{ background: "#1a6b38", border: "1.5px solid #1a6b38" }}
               >
@@ -51,11 +43,11 @@ export default function WarendurchlaufLeitstand() {
                 </div>
                 <span className="text-[15px] font-bold">Kamera</span>
                 <span className="text-xs text-white/60">Foto &middot; Scan</span>
-              </button>
+              </Link>
 
               {/* Datei-Upload */}
-              <button
-                onClick={() => setActiveOverlay("upload")}
+              <Link
+                href="/warendurchlauf/neu?mode=camera"
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
                 style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
               >
@@ -64,11 +56,11 @@ export default function WarendurchlaufLeitstand() {
                 </div>
                 <span className="text-[15px] font-bold text-[#1a1a1a]">Datei-Upload</span>
                 <span className="text-xs text-[#9e9689]">PDF &middot; Bilder</span>
-              </button>
+              </Link>
 
               {/* Manuell anlegen */}
               <Link
-                href="/warendurchlauf/neu"
+                href="/warendurchlauf/neu?mode=manual"
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
                 style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
               >
@@ -190,44 +182,7 @@ export default function WarendurchlaufLeitstand() {
         </div>
       </div>
 
-      {/* OVERLAY FÜR KAMERA & UPLOAD */}
-      {activeOverlay && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden shadow-2xl relative animate-in zoom-in-95 duration-200">
-            <button 
-              onClick={() => setActiveOverlay(null)}
-              className="absolute top-4 right-4 text-text-muted hover:bg-neutral-gray-100 p-1.5 rounded-full"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <div className="p-6">
-              <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center mb-4">
-                {activeOverlay === "foto" ? <Camera className="w-6 h-6 text-blue-600" /> : <Upload className="w-6 h-6 text-blue-600" />}
-              </div>
-              <h3 className="text-xl font-extrabold text-navy-900 mb-2">
-                {activeOverlay === "foto" ? "Beleg / Lieferschein fotografieren" : "Dokument hochladen"}
-              </h3>
-              <p className="text-sm text-text-muted mb-6">
-                Echte Kamera-Capture-API / Datei-Upload ist vorbereitet. Bitte Datei wählen oder Kamera-Dialog des Geräts nutzen.
-              </p>
-              
-              <div className="relative overflow-hidden w-full h-32 bg-blue-50 border-2 border-dashed border-blue-200 rounded-xl flex flex-col items-center justify-center hover:bg-blue-100 transition cursor-pointer">
-                <input 
-                  type="file" 
-                  accept={activeOverlay === "foto" ? "image/*" : "image/*,application/pdf"} 
-                  capture={activeOverlay === "foto" ? "environment" : undefined}
-                  onChange={handleCapture}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                />
-                <span className="font-bold text-blue-700 text-sm">
-                  {activeOverlay === "foto" ? "Aufnahme starten" : "Datei auswählen"}
-                </span>
-                <span className="text-xs text-blue-500 mt-1">oder hier ablegen</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Animation */}
       <style>{`

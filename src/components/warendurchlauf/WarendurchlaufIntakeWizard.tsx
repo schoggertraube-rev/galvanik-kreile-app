@@ -1,7 +1,8 @@
 "use client";
 
 import { usePageView } from "@/hooks/usePageView";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { IntakeEntry } from "@/components/intake/IntakeEntry";
 import { CameraCapture } from "@/components/intake/CameraCapture";
 import { OCRReviewPanel } from "@/components/intake/OCRReviewPanel";
@@ -75,7 +76,15 @@ const generateAutofillDetails = (companyName: string) => {
 
 export function WarendurchlaufIntakeWizard() {
   usePageView();
+  const searchParams = useSearchParams();
+  
   const [step, setStep] = useState<WizardStep>("entry");
+
+  useEffect(() => {
+    const mode = searchParams.get("mode");
+    if (mode === "camera") setStep("camera");
+    if (mode === "manual") setStep("manual_customer");
+  }, [searchParams]);
 
   // Shared payload
   const [ocrScan, setOcrScan] = useState<OcrResult | null>(null);

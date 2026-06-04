@@ -17,7 +17,8 @@ export default function GalvanikPage() {
 
         {/* Aktionskarten */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div
+          <Link
+            href="/station/beschichtung"
             className="flex flex-col gap-2 p-5 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8]"
             style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
           >
@@ -26,9 +27,10 @@ export default function GalvanikPage() {
             </div>
             <span className="text-[15px] font-bold text-[#1a1a1a]">Bereit für Galvanik</span>
             <span className="text-xs text-[#9e9689]">Ware aus Vorbereitung</span>
-          </div>
+          </Link>
 
-          <div
+          <Link
+            href="/station/beschichtung"
             className="flex flex-col gap-2 p-5 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8]"
             style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
           >
@@ -37,9 +39,10 @@ export default function GalvanikPage() {
             </div>
             <span className="text-[15px] font-bold text-[#1a1a1a]">In Bearbeitung</span>
             <span className="text-xs text-[#9e9689]">Laufende Bäder</span>
-          </div>
+          </Link>
 
-          <div
+          <Link
+            href="/station/beschichtung"
             className="flex flex-col gap-2 p-5 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8]"
             style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
           >
@@ -48,7 +51,7 @@ export default function GalvanikPage() {
             </div>
             <span className="text-[15px] font-bold text-[#1a1a1a]">Fertige Werkstücke</span>
             <span className="text-xs text-[#9e9689]">QS & Nacharbeit</span>
-          </div>
+          </Link>
 
           <Link
             href="/warendurchlauf/warenausgang"
