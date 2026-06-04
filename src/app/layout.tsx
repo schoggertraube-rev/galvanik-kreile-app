@@ -42,6 +42,8 @@ export const metadata: Metadata = {
 
 import { KreileAppShell } from "@/components/layout/KreileAppShell";
 import { LicenseProvider } from "@/lib/license/LicenseContext";
+import { DiagnosticsProvider } from "@/lib/diagnostics/DiagnosticsContext";
+import { DiagnosticsWidget } from "@/components/diagnostics/DiagnosticsWidget";
 
 export default function RootLayout({
   children,
@@ -55,11 +57,14 @@ export default function RootLayout({
     >
       <body>
 
-        <LicenseProvider>
-          <KreileAppShell>
-            {children}
-          </KreileAppShell>
-        </LicenseProvider>
+        <DiagnosticsProvider>
+          <LicenseProvider>
+            <KreileAppShell>
+              {children}
+            </KreileAppShell>
+          </LicenseProvider>
+          <DiagnosticsWidget />
+        </DiagnosticsProvider>
       </body>
     </html>
   );
