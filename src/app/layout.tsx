@@ -44,27 +44,35 @@ import { KreileAppShell } from "@/components/layout/KreileAppShell";
 import { LicenseProvider } from "@/lib/license/LicenseContext";
 import { DiagnosticsProvider } from "@/lib/diagnostics/DiagnosticsContext";
 import { DiagnosticsWidget } from "@/components/diagnostics/DiagnosticsWidget";
+import { TestpilotProvider } from "@/components/testpilot/TestpilotProvider";
+import { TestpilotFloatingButton } from "@/components/testpilot/TestpilotFloatingButton";
 
-export default function RootLayout({
+import { isAdminOrDeveloper } from "@/lib/auth/permissions";
+
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const isAdmin = await isAdminOrDeveloper();
+
   return (
     <html
       lang="de"
       className={`${playfair.variable} ${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body>
-
-        <DiagnosticsProvider>
-          <LicenseProvider>
-            <KreileAppShell>
-              {children}
-            </KreileAppShell>
-          </LicenseProvider>
-          <DiagnosticsWidget />
-        </DiagnosticsProvider>
+        <TestpilotProvider isAdmin={isAdmin}>
+          <DiagnosticsProvider>
+            <LicenseProvider>
+              <KreileAppShell>
+                {children}
+              </KreileAppShell>
+            </LicenseProvider>
+            <DiagnosticsWidget />
+            <TestpilotFloatingButton />
+          </DiagnosticsProvider>
+        </TestpilotProvider>
       </body>
     </html>
   );
