@@ -1,784 +1,818 @@
 "use client";
-import React from "react";
-
-import { useState, useEffect, useCallback } from "react";
-import { 
-  Inbox, MessageSquare, Mail, Phone, Globe, Camera,
-  AlertOctagon, CheckSquare, Clock, ArrowRight, Link as LinkIcon,
-  Copy, CheckCircle2, User, FileText, Banknote, ExternalLink,
-  Mic, X, Edit2, Play, Save, ChevronRight, Activity
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import {
+  Inbox, MessageSquare, Mail, Phone, Globe,
+  AlertOctagon, CheckCircle2, User, FileText, Banknote, ExternalLink,
+  X, Edit2, Activity, Search, Plus, PhoneCall, Bell, MoreVertical, Send,
+  Calendar, Package, CreditCard, AlertTriangle, Settings, ChevronRight,
+  Clock, Archive, PhoneForwarded, CheckSquare, MapPin
 } from "lucide-react";
 import Link from "next/link";
 import { usePageView } from "@/hooks/usePageView";
 import { INITIAL_CUSTOMERS, INITIAL_ORDERS, MockCustomer, MockOrder } from "@/lib/mockData";
-import { createPhoneNote, getRecentPhoneNotes } from "@/app/actions/phoneNotes.actions";
+import { getRecentPhoneNotes, updatePhoneNote } from "@/app/actions/phoneNotes.actions";
 import { smartMatchText, MatchResult } from "./smartMatcher";
-import { PhoneNoteDetailView } from "./PhoneNoteDetailView";
 
-type Channel = "all" | "email" | "whatsapp" | "instagram" | "website" | "phone" | "billing";
+/* ======================================================================
+   TYPES
+   ====================================================================== */
+type Channel = "all" | "email" | "phone" | "website" | "reclamation" | "callback" | "done" | "parked";
+type ChatFilter = "all" | "unresolved" | "needs" | "waiting";
+type NoteStatus = "new" | "open" | "waiting_callback" | "waiting_customer" | "done" | "archived";
+
+interface ChatMessage {
+  id: string;
+  from: "customer" | "kreile" | "system";
+  channel: "email" | "phone" | "whatsapp" | "website" | "system";
+  text: string;
+  time: string;
+  date?: string;
+}
 
 interface Thread {
   id: string;
   sender: string;
+  senderCity?: string;
+  initials: string;
+  initialsColor: string;
   subject: string;
   time: string;
   channel: Channel;
-  status: "new" | "open" | "waiting" | "reclamation" | "approval" | "billing" | "done";
+  status: NoteStatus;
   priority: "high" | "medium" | "low";
   content: string;
   category: string;
+  unread?: number;
+  customerId?: string;
+  orderId?: string;
+  isPhoneNote?: boolean;
+  rawNote?: Record<string, unknown>;
+  matchData?: MatchResult;
+  messages: ChatMessage[];
 }
 
+/* ======================================================================
+   DEMO DATA — clearly labeled, no fake real data
+   ====================================================================== */
 const DEMO_THREADS: Thread[] = [
   {
-    id: "t1",
-    sender: "Maier GmbH (Herr Zill)",
-    subject: "Beschädigt angekommen",
-    time: "08:14",
-    channel: "email",
-    status: "reclamation",
-    priority: "high",
-    content: "Guten Morgen, leider weisen 14 Teile der gestrigen Lieferung (Charge 8102) tiefe Kratzer auf. Wie gehen wir vor? Bilder anbei.",
-    category: "Reklamation"
+    id: "demo_t1", sender: "Maier GmbH · Herr Zill", senderCity: "Frankfurt", initials: "MZ", initialsColor: "#C2410C",
+    subject: "Beschädigt angekommen — Foto", time: "08:14", channel: "email",
+    status: "new", priority: "high", content: "Beschäd. angekommen — Foto",
+    category: "Reklamation", unread: 2,
+    messages: [
+      { id: "m1a", from: "customer", channel: "email", text: "Guten Morgen, leider weisen 14 Teile der gestrigen Lieferung (Charge 8102) tiefe Kratzer auf. Wie gehen wir vor? Bilder anbei.", time: "08:14" },
+    ]
   },
   {
-    id: "t2",
-    sender: "Autohaus Berger",
-    subject: "Wann ist mein Auftrag fertig?",
-    time: "09:30",
-    channel: "whatsapp",
-    status: "open",
-    priority: "medium",
-    content: "Hallo, könnt ihr mir sagen wann die Oldtimer-Stoßstangen abholbereit sind?",
-    category: "Terminanfrage"
+    id: "demo_t2", sender: "Autohaus Berger", senderCity: "Offenbach", initials: "AB", initialsColor: "#7C3AED",
+    subject: "Wann ist mein Auftrag fertig?", time: "09:30", channel: "website",
+    status: "open", priority: "medium", content: "Wann ist mein Auftrag fertig? Wün…",
+    category: "Terminanfrage", unread: 1,
+    messages: [
+      { id: "m2a", from: "customer", channel: "website", text: "Hallo, könnt ihr mir sagen wann die Oldtimer-Stoßstangen abholbereit sind?", time: "09:30" },
+    ]
   },
   {
-    id: "t3",
-    sender: "Schmidt AG",
-    subject: "Bitte Angebot bestätigen",
-    time: "Gestern",
-    channel: "email",
-    status: "approval",
-    priority: "medium",
-    content: "Anbei unser Angebot für die Verzinkung der 500 Rahmen. Bitte um kurze Freigabe.",
-    category: "Freigabe"
+    id: "demo_t3", sender: "Müller (Privat)", senderCity: "Berlin", initials: "M", initialsColor: "#1E3A8A",
+    subject: "Zinkteile fertig? Abholung morgen.", time: "11:08", channel: "phone",
+    status: "open", priority: "medium", content: "✓ Zinkteile fertig? Abholung morgen…",
+    category: "Abholung", unread: 0,
+    messages: [
+      { id: "m3a", from: "system", channel: "system", text: "TELEFONNOTIZ · 11:08\nHerr Müller fragt, ob die Zinkteile vom Auftrag A-2026-0042 schon fertig sind und ob er morgen abholen kann. Bitte Zahlungsstatus prüfen.", time: "11:08", date: "Heute, 3. Juni 2026" },
+      { id: "m3b", from: "kreile", channel: "email", text: "Guten Tag Herr Müller: anbei die Auftragsbestätigung für A-2026-0042 (Zinkteile, Wasserhahn historisch). Liefertermin 4.6.\nMit freundlichen Grüßen, P. Kreile.", time: "09:32", date: "28. Mai 2026" },
+      { id: "m3c", from: "customer", channel: "email", text: "Vielen Dank! Wenn fertig bitte kurze Info — würde gerne selbst abholen.", time: "10:22" },
+    ]
   },
   {
-    id: "t4",
-    sender: "Schlosserei Brunner",
-    subject: "Rechnung fehlt",
-    time: "Gestern",
-    channel: "phone",
-    status: "billing",
-    priority: "low",
-    content: "(Telefonnotiz) Herr Brunner hat angerufen, ihm fehlt die Rechnung zur Lieferung vom 12.05.",
-    category: "Buchhaltung"
+    id: "demo_t4", sender: "Schmidt AG", senderCity: "Darmstadt", initials: "SA", initialsColor: "#059669",
+    subject: "Bitte Angebot bestätigen", time: "Gestern", channel: "email",
+    status: "open", priority: "medium", content: "Bitte Angebot bestätigen — Auftr…",
+    category: "Freigabe",
+    messages: [
+      { id: "m4a", from: "customer", channel: "email", text: "Anbei unser Angebot für die Verzinkung der 500 Rahmen. Bitte um kurze Freigabe.", time: "Gestern" },
+    ]
   },
   {
-    id: "t5",
-    sender: "Unbekannt (Website)",
-    subject: "Neue Anfrage Oldtimerteile",
-    time: "Vorgestern",
-    channel: "website",
-    status: "new",
-    priority: "low",
-    content: "Hallo, verchromen Sie auch Motorradtanks? Was würde das grob kosten?",
-    category: "Neuanfrage"
+    id: "demo_t5", sender: "Schlosserei Brunner", senderCity: "Hanau", initials: "SB", initialsColor: "#92400E",
+    subject: "Rechnung fehlt — A-2026-0033", time: "Gestern", channel: "phone",
+    status: "open", priority: "low", content: "✓ Rechnung fehlt — A-2026-0033",
+    category: "Buchhaltung",
+    messages: [
+      { id: "m5a", from: "system", channel: "phone", text: "(Telefonnotiz) Herr Brunner hat angerufen, ihm fehlt die Rechnung zur Lieferung vom 12.05.", time: "Gestern" },
+    ]
+  },
+  {
+    id: "demo_t6", sender: "Unbekannt (Website)", initials: "?", initialsColor: "#6B7280",
+    subject: "Neue Anfrage Oldtimerteile", time: "Vorgestern", channel: "website",
+    status: "new", priority: "low", content: "Anfrage: Oldtimerteile galvanisieren",
+    category: "Neuanfrage",
+    messages: [
+      { id: "m6a", from: "customer", channel: "website", text: "Hallo, verchromen Sie auch Motorradtanks? Was würde das grob kosten?", time: "Vorgestern" },
+    ]
   }
 ];
 
-function PhoneNoteOverlay({ open, onClose }: { open: boolean, onClose: () => void }) {
-  const [text, setText] = useState("");
-  const [parsed, setParsed] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  
-  // Live Matches
-  const [matchedCustomer, setMatchedCustomer] = useState<MockCustomer | null>(null);
-  const [matchedOrder, setMatchedOrder] = useState<MockOrder | null>(null);
-  const [matchedMaterial, setMatchedMaterial] = useState<string | null>(null);
-  const [matchedKeywords, setMatchedKeywords] = useState<string[]>([]);
-  
-  const [fields, setFields] = useState({
-    kunde: "",
-    firma: "",
-    telefon: "",
-    auftrag: "",
-    thema: "",
-    kategorie: "Neuanfrage",
-    dringlichkeit: "Normal",
-    reklamation: "Nein",
-    aktion: "",
-  });
+/* ======================================================================
+   CHANNEL SIDEBAR CONFIG
+   ====================================================================== */
+const CHANNELS: { id: Channel; icon: React.ReactNode; label: string; enabled: boolean }[] = [
+  { id: "all", icon: <Inbox size={18} />, label: "Alle", enabled: true },
+  { id: "phone", icon: <Phone size={18} />, label: "Telefon", enabled: true },
+  { id: "email", icon: <Mail size={18} />, label: "E-Mail", enabled: true },
+  { id: "website", icon: <Globe size={18} />, label: "Website", enabled: true },
+  { id: "reclamation", icon: <AlertOctagon size={18} />, label: "Reklamation", enabled: true },
+  { id: "callback", icon: <PhoneForwarded size={18} />, label: "Rückruf", enabled: true },
+  { id: "done", icon: <CheckSquare size={18} />, label: "Erledigt", enabled: true },
+  { id: "parked", icon: <Archive size={18} />, label: "Geparkt", enabled: true },
+];
 
-  const analyzeText = useCallback((val: string) => {
-    const match = smartMatchText(val);
-    setMatchedCustomer(match.matchedCustomer);
-    setMatchedOrder(match.matchedOrder);
-    setMatchedMaterial(match.matchedMaterial);
-    setMatchedKeywords(match.matchedKeywords);
-  }, []);
+/* ======================================================================
+   STATUS CONFIG
+   ====================================================================== */
+const STATUS_MAP: Record<NoteStatus, { label: string; bg: string; fg: string }> = {
+  new: { label: "Neu", bg: "#DBEAFE", fg: "#2563EB" },
+  open: { label: "In Bearbeitung", bg: "#FEF3C7", fg: "#92400E" },
+  waiting_callback: { label: "Wartet auf Rückruf", bg: "#E0E7FF", fg: "#4338CA" },
+  waiting_customer: { label: "Wartet auf Kunde", bg: "#F3F4F6", fg: "#6B7280" },
+  done: { label: "Erledigt", bg: "#D1FAE5", fg: "#059669" },
+  archived: { label: "Archiviert", bg: "#F3F4F6", fg: "#9CA3AF" },
+};
 
-  useEffect(() => {
-    const draft = localStorage.getItem("kreile_phone_note_draft");
-    if (draft) {
-      // eslint-disable-next-line
-      setText(draft);
-      analyzeText(draft);
-    }
-  }, [analyzeText]);
-
-  const handleChange = (val: string) => {
-    setText(val);
-    localStorage.setItem("kreile_phone_note_draft", val);
-    analyzeText(val);
-  };
-
-  const handleParse = () => {
-    setFields({
-      kunde: matchedCustomer ? matchedCustomer.name : "",
-      firma: matchedCustomer ? matchedCustomer.name : "",
-      telefon: matchedCustomer?.phone || "",
-      auftrag: matchedOrder ? matchedOrder.id : "",
-      thema: text.slice(0, 50) + "...",
-      kategorie: matchedKeywords.includes("Reklamation") ? "Reklamation" : matchedKeywords.includes("Buchhaltung/Zahlung") ? "Buchhaltung" : "Rückfrage",
-      dringlichkeit: text.toLowerCase().includes("dringend") || text.toLowerCase().includes("schnell") || text.toLowerCase().includes("asap") ? "Hoch" : "Normal",
-      reklamation: matchedKeywords.includes("Reklamation") ? "Ja" : "Nein",
-      aktion: "Kunde kontaktieren",
-    });
-    setParsed(true);
-  };
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    setSaveError(null);
-    setSaveSuccess(false);
-
-    try {
-      const result = await createPhoneNote({
-        rawText: text,
-        generatedAnswer: matchedOrder ? `Auftrag ${matchedOrder.id} - Status: ${matchedOrder.status}` : undefined,
-        category: matchedKeywords.includes("Reklamation") ? "Reklamation" : matchedKeywords.includes("Buchhaltung/Zahlung") ? "Buchhaltung" : "Neuanfrage",
-        urgency: text.toLowerCase().includes("dringend") || text.toLowerCase().includes("schnell") || text.toLowerCase().includes("asap") ? "Hoch" : "Normal",
-        customerId: matchedCustomer?.id,
-        orderId: matchedOrder?.id,
-        callerName: matchedCustomer?.name,
-        company: matchedCustomer?.name,
-        phone: matchedCustomer?.phone,
-        extractionJson: { keywords: matchedKeywords, material: matchedMaterial },
-        linksJson: []
-      });
-
-      if (result.success) {
-        localStorage.removeItem("kreile_phone_note_draft");
-        setSaveSuccess(true);
-        setTimeout(() => {
-          onClose();
-          setText("");
-          setParsed(false);
-          setSaveSuccess(false);
-        }, 1500);
-      } else {
-        setSaveError(result.error || "Ein unbekannter Fehler ist aufgetreten.");
-      }
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Fehler beim Speichern der Notiz.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleCancel = () => {
-    if (text.trim() && !saveSuccess && !window.confirm("Achtung: Telefonnotiz noch nicht gespeichert! Wirklich schließen?")) {
-      return;
-    }
-    onClose();
-  };
-
-  // Helper für Highlight Rendering
-  const renderHighlightedText = () => {
-    if (!text) return null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let parts: any[] = [text];
-
-    const highlightWord = (word: string, colorClass: string, href?: string) => {
-      if (!word) return;
-      const regex = new RegExp(`(${word})`, "gi");
-      parts = parts.flatMap(part => {
-        if (typeof part !== "string") return [part];
-        const split = part.split(regex);
-        return split.map((s, i) => {
-          if (i % 2 === 1) {
-            if (href && parsed) {
-              return <Link key={`${word}-${i}`} href={href} target="_blank" className={`${colorClass} px-1 rounded-md shadow-sm border hover:opacity-80 transition cursor-pointer underline decoration-dotted underline-offset-2`}>{s}</Link>;
-            }
-            return <span key={`${word}-${i}`} className={`${colorClass} px-1 rounded-md shadow-sm border`}>{s}</span>;
-          }
-          return s;
-        });
-      });
-    };
-
-    if (matchedCustomer) {
-      const href = `/customers/${matchedCustomer.id}`;
-      if (matchedCustomer.name) highlightWord(matchedCustomer.name, "bg-blue-100 text-blue-900 border-blue-200", href);
-    }
-    if (matchedOrder) {
-      highlightWord(matchedOrder.id, "bg-purple-100 text-purple-900 border-purple-200", `/orders/${matchedOrder.id}`);
-    }
-    if (matchedMaterial) {
-      highlightWord(matchedMaterial, "bg-amber-100 text-amber-900 border-amber-200");
-    }
-    ["reklamation", "beschädigt", "kratzer", "kaputt"].forEach(w => highlightWord(w, "bg-red-100 text-red-900 border-red-200 font-bold"));
-    ["rechnung", "zahlung", "bezahlen"].forEach(w => highlightWord(w, "bg-green-100 text-green-900 border-green-200"));
-    ["versand", "abholung", "spedition", "fertig", "lieferung"].forEach(w => highlightWord(w, "bg-indigo-100 text-indigo-900 border-indigo-200"));
-
-    return parts;
-  };
-
-  if (!open) return null;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 md:p-12 animate-in fade-in duration-300">
-      <div className="absolute inset-0 bg-navy-900/60 backdrop-blur-sm" onClick={handleCancel} />
-      
-      <div className="relative w-full max-w-6xl h-[85vh] bg-white rounded-3xl shadow-2xl flex flex-col md:flex-row overflow-hidden border border-neutral-gray-200">
-        
-        {/* LEFT/MAIN COLUMN */}
-        <div className="flex-1 flex flex-col h-full bg-[#F0EBE0]">
-          <div className="p-4 md:p-6 flex justify-between items-center border-b border-neutral-gray-200 bg-white">
-            <h2 className="text-xl font-bold font-serif text-navy-900 flex items-center gap-2">
-              <Phone className="w-5 h-5 text-accent-orange" />
-              Neue Telefonnotiz
-            </h2>
-            <button onClick={handleCancel} className="p-2 hover:bg-neutral-gray-100 rounded-full transition-colors text-text-muted">
-              <X className="w-6 h-6" />
-            </button>
-          </div>
-
-          <div className="flex-1 p-4 md:p-8 flex flex-col overflow-y-auto relative">
-            {!parsed ? (
-              <div className="flex-1 flex flex-col h-full relative group">
-                <div className="relative flex-1 w-full h-full bg-white rounded-2xl border-2 border-neutral-gray-200 focus-within:border-navy-900 shadow-sm overflow-hidden">
-                  {/* Highlight Layer */}
-                  <div 
-                    className="absolute inset-0 p-6 text-xl md:text-2xl leading-relaxed whitespace-pre-wrap wrap-break-word pointer-events-none z-10"
-                    style={{ color: 'transparent', fontFamily: 'inherit' }}
-                    aria-hidden="true"
-                  >
-                    {renderHighlightedText()}
-                  </div>
-                  {/* Text Layer */}
-                  <textarea 
-                    value={text}
-                    onChange={(e) => handleChange(e.target.value)}
-                    className="absolute inset-0 w-full h-full p-6 text-xl md:text-2xl leading-relaxed bg-transparent text-navy-900 outline-none resize-none z-20 placeholder:text-neutral-gray-300"
-                    style={{ caretColor: '#1a1a1a' }}
-                    placeholder="Einfach mittippen... (Kunden, Aufträge und Signalwörter werden automatisch erkannt)"
-                    autoFocus
-                    spellCheck={false}
-                  />
-                </div>
-                
-                {/* Voice Input Mock */}
-                <button 
-                  disabled
-                  className="w-12 h-12 rounded-full bg-navy-900/50 flex items-center justify-center cursor-not-allowed hover:bg-navy-900/50"
-                  title="Sprachnotiz in Vorbereitung"
-                >
-                  <Mic className="w-6 h-6 text-white/50" />
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-6 flex-1 flex flex-col h-full">
-                {/* Parsed Text with Clickable Links */}
-                <div className="bg-white p-6 rounded-2xl border-2 border-neutral-gray-200 shadow-sm text-xl md:text-2xl leading-relaxed whitespace-pre-wrap wrap-break-word text-navy-900 overflow-y-auto">
-                  {renderHighlightedText()}
-                </div>
-
-                <div className="bg-success-green/10 border border-success-green/20 p-4 rounded-xl flex items-start gap-3">
-                  <CheckCircle2 className="w-5 h-5 text-success-green shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-bold text-success-green">Auswertung erfolgreich</h4>
-                    <p className="text-sm text-success-green/80">Diese Felder werden bei Übernahme in die Zentrale importiert.</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-text-muted uppercase mb-1">Kunde / Anrufer</label>
-                    <input value={fields.kunde} onChange={e => setFields({...fields, kunde: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-3 text-sm font-bold focus:border-navy-900 outline-none shadow-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-text-muted uppercase mb-1">Kategorie</label>
-                    <select value={fields.kategorie} onChange={e => setFields({...fields, kategorie: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-3 text-sm font-bold focus:border-navy-900 outline-none shadow-sm">
-                       <option>Neuanfrage</option>
-                       <option>Reklamation</option>
-                       <option>Rückfrage</option>
-                       <option>Rückruf</option>
-                       <option>Buchhaltung</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-text-muted uppercase mb-1">Verknüpfter Auftrag</label>
-                    <input value={fields.auftrag} onChange={e => setFields({...fields, auftrag: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-3 text-sm font-bold focus:border-navy-900 outline-none shadow-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-text-muted uppercase mb-1">Dringlichkeit</label>
-                    <select value={fields.dringlichkeit} onChange={e => setFields({...fields, dringlichkeit: e.target.value})} className="w-full bg-white border border-neutral-gray-200 rounded-lg p-3 text-sm font-bold focus:border-navy-900 outline-none shadow-sm">
-                       <option>Niedrig</option>
-                       <option>Normal</option>
-                       <option>Hoch</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="p-4 md:p-6 bg-white border-t border-neutral-gray-200 flex justify-between items-center">
-            {!parsed ? (
-              <>
-                <span className="text-xs text-text-muted flex items-center gap-1 font-bold">
-                  {text ? <><Save className="w-4 h-4"/> Entwurf gesichert</> : ""}
-                </span>
-                <button 
-                  onClick={handleParse} 
-                  disabled={!text.trim()}
-                  className="bg-navy-900 text-white font-bold px-8 py-3 rounded-xl hover:bg-navy-800 disabled:opacity-50 transition"
-                >
-                  Text auswerten
-                </button>
-              </>
-            ) : (
-              <>
-                <button onClick={() => setParsed(false)} disabled={isSaving || saveSuccess} className="text-sm font-bold text-text-muted hover:text-navy-900 px-4 py-2 disabled:opacity-50">
-                  Zurück zum Text
-                </button>
-                <button 
-                  onClick={handleSave} 
-                  disabled={isSaving || saveSuccess} 
-                  className={`font-bold px-8 py-3 rounded-xl transition shadow-md ${saveSuccess ? 'bg-success-green text-white' : 'bg-accent-orange text-white hover:bg-orange-600'} disabled:opacity-70`}
-                >
-                  {isSaving ? "Speichert..." : saveSuccess ? "Gespeichert!" : "Telefonnotiz speichern"}
-                </button>
-              </>
-            )}
-          </div>
-          {saveError && (
-             <div className="p-4 bg-error-red/10 text-error-red text-sm font-bold border-t border-error-red/20">
-               {saveError}
-             </div>
-          )}
-        </div>
-
-        {/* RIGHT COLUMN: LIVE VORSCHLÄGE & KI ANTWORT */}
-        <div className="w-full md:w-96 bg-white border-l border-neutral-gray-200 flex flex-col h-full overflow-y-auto">
-          <div className="p-6 border-b border-neutral-gray-100 bg-bg-app-soft">
-            <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted flex items-center gap-2">
-              <Activity className="w-4 h-4" /> Live-Kontext
-            </h3>
-            <p className="text-[10px] text-text-muted mt-1">Echtzeit-Suche in Kundendatenbank & Aufträgen</p>
-          </div>
-          
-          <div className="p-6 space-y-6 flex-1 bg-neutral-gray-50/50">
-            {matchedCustomer && (
-              <div className="animate-in slide-in-from-right-4 duration-300">
-                <p className="text-xs font-bold text-text-muted uppercase mb-2">Erkannter Kunde</p>
-                <Link href={`/customers/${matchedCustomer.id}`} target="_blank" className="block w-full text-left bg-blue-50 border border-blue-200 p-4 rounded-xl hover:bg-blue-100 transition-colors group shadow-sm">
-                  <p className="font-bold text-blue-900">{matchedCustomer.name}</p>
-                  <p className="text-xs text-blue-700 mt-1 flex items-center justify-between">
-                    <span>{matchedCustomer.city || "Unbekannt"}</span>
-                    <ExternalLink className="w-3 h-3 opacity-50 group-hover:opacity-100" />
-                  </p>
-                </Link>
-              </div>
-            )}
-            
-            {matchedOrder && (
-              <div className="animate-in slide-in-from-right-4 duration-300">
-                <p className="text-xs font-bold text-text-muted uppercase mb-2">Gefundener Auftrag</p>
-                <Link href={`/orders/${matchedOrder.id}`} target="_blank" className="block w-full text-left bg-purple-50 border border-purple-200 p-4 rounded-xl hover:bg-purple-100 transition-colors group shadow-sm">
-                  <div className="flex justify-between items-start">
-                    <p className="font-bold text-purple-900">{matchedOrder.id}</p>
-                    <ExternalLink className="w-3 h-3 text-purple-700 opacity-50 group-hover:opacity-100" />
-                  </div>
-                  <p className="text-xs text-purple-700 mt-1">{matchedOrder.task}</p>
-                  <div className="mt-2 inline-block bg-purple-200/50 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase">
-                    Status: {matchedOrder.status}
-                  </div>
-                </Link>
-              </div>
-            )}
-
-            {matchedMaterial && !matchedOrder && (
-              <div className="animate-in slide-in-from-right-4 duration-300">
-                <p className="text-xs font-bold text-text-muted uppercase mb-2">Material / Oberfläche</p>
-                <div className="w-full text-left bg-amber-50 border border-amber-200 p-3 rounded-xl shadow-sm">
-                  <p className="font-bold text-amber-900 capitalize">{matchedMaterial}</p>
-                </div>
-              </div>
-            )}
-
-            {matchedKeywords.length > 0 && (
-              <div className="animate-in slide-in-from-right-4 duration-300">
-                <p className="text-xs font-bold text-text-muted uppercase mb-2">Erkannte Themen</p>
-                <div className="flex flex-wrap gap-2">
-                  {matchedKeywords.map(kw => (
-                    <span key={kw} className="bg-neutral-gray-200 text-navy-900 text-xs font-bold px-3 py-1.5 rounded-lg border border-neutral-gray-300 shadow-sm">
-                      {kw}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            
-            {text.length > 20 && !matchedCustomer && !matchedOrder && !matchedMaterial && matchedKeywords.length === 0 && (
-               <div className="text-center p-6 border-2 border-dashed border-neutral-gray-200 rounded-xl">
-                 <p className="text-xs font-medium text-text-muted">Tippen Sie Kundennamen, Auftragsnummern oder Themen ein, um Live-Treffer zu sehen.</p>
-               </div>
-            )}
-          </div>
-          
-          {/* AUSGABE FELD */}
-          <div className="p-6 bg-navy-900 text-white mt-auto rounded-tl-3xl shadow-[0_-10px_30px_rgba(0,0,0,0.1)]">
-            <h3 className="font-bold text-sm uppercase tracking-wider text-white/50 flex items-center gap-2 mb-3">
-              <MessageSquare className="w-4 h-4" /> Antwortvorschlag <span className="text-[10px] normal-case bg-white/10 px-2 py-0.5 rounded">(aus App-Daten abgeleitet)</span>
-            </h3>
-            <div className="text-sm font-medium leading-relaxed">
-              {matchedOrder ? (
-                <span>
-                  Hallo {matchedCustomer?.name ? "Herr/Frau " + matchedCustomer.name.split(" ").pop() : "zusammen"},\n\nich habe gerade den Vorgang <strong className="underline">{matchedOrder.id}</strong> ({matchedOrder.task}) vor mir.
-                  Der aktuelle Stand ist: <strong className="text-accent-orange uppercase">{matchedOrder.status}</strong>. 
-                  {matchedOrder.status === 'in_beschichtung' || matchedOrder.status === 'vorbehandlung' ? ' Er wird voraussichtlich in Kürze fertig.' : ''}
-                  {matchedOrder.status === 'fertig' ? ' Sie können die Ware abholen.' : ''}“
-                </span>
-              ) : matchedCustomer ? (
-                <span>
-                  „Guten Tag {matchedCustomer.name}, ich habe Ihre Kundenakte aufgerufen. Um welchen Auftrag geht es genau?“
-                </span>
-              ) : matchedKeywords.includes("Reklamation") ? (
-                <span>
-                  „Es tut mir leid, dass es ein Problem gibt. Ich nehme das sofort als Reklamation auf. Haben Sie eine Auftragsnummer für mich?“
-                </span>
-              ) : text.length > 15 ? (
-                <span className="text-white/50 italic">Status noch nicht eindeutig. Erwähnen Sie einen Kunden oder Auftrag.</span>
-              ) : (
-                <span className="text-white/50 italic">Tippen Sie mit, um automatische Antworten zu generieren...</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+/* ======================================================================
+   ACTION CARD BUILDER — DB-first, no invented data
+   ====================================================================== */
+interface ActionCard {
+  id: string;
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  color: string;
+  href?: string;
+  action?: string;
 }
 
+function buildActionCards(thread: Thread, matchData: MatchResult | null): ActionCard[] {
+  const actions: ActionCard[] = [];
+  if (!matchData) return actions;
+  const kw = matchData.matchedKeywords;
+
+  if (kw.includes("Termin/Logistik")) {
+    actions.push({
+      id: "cal", icon: <Calendar size={16} />, title: "Abholtermin",
+      subtitle: matchData.matchedOrder ? `${matchData.matchedOrder.id} — Status prüfen` : "Kein Auftrag zugeordnet",
+      color: "#059669",
+      href: matchData.matchedOrder ? `/orders/${matchData.matchedOrder.id}` : undefined,
+    });
+  }
+  if (matchData.matchedOrder) {
+    actions.push({
+      id: "ord", icon: <FileText size={16} />, title: "Auftrag öffnen",
+      subtitle: `${matchData.matchedOrder.id} · ${matchData.matchedOrder.task}`,
+      color: "#2563EB",
+      href: `/orders/${matchData.matchedOrder.id}`,
+    });
+  }
+  if (kw.includes("Buchhaltung/Zahlung")) {
+    actions.push({
+      id: "pay", icon: <CreditCard size={16} />, title: "Zahlung prüfen",
+      subtitle: "Zahlungsstatus im Finanzsystem klären",
+      color: "#D97706",
+      href: "/finanzen",
+    });
+  }
+  if (kw.includes("Reklamation")) {
+    actions.push({
+      id: "rek", icon: <AlertOctagon size={16} />, title: "Reklamation anlegen",
+      subtitle: "Vorgang als Reklamation markieren",
+      color: "#DC2626",
+      href: matchData.matchedOrder ? `/orders/${matchData.matchedOrder.id}` : "/kontrolle",
+      action: "reklamation",
+    });
+  }
+  if (thread.isPhoneNote || thread.channel === "phone") {
+    actions.push({
+      id: "reply", icon: <PhoneCall size={16} />, title: "Rückruf planen",
+      subtitle: matchData.matchedCustomer ? `${matchData.matchedCustomer.name} zurückrufen` : "Anrufer zurückrufen",
+      color: "#7C3AED",
+      action: "callback",
+    });
+  }
+  if (matchData.matchedCustomer) {
+    actions.push({
+      id: "cust", icon: <User size={16} />, title: "Kunde öffnen",
+      subtitle: matchData.matchedCustomer.name,
+      color: "#1E3A8A",
+      href: `/customers/${matchData.matchedCustomer.id}`,
+    });
+  }
+  return actions;
+}
+
+/* ======================================================================
+   MAIN COMPONENT
+   ====================================================================== */
 export function KommunikationClient() {
   const [activeChannel, setActiveChannel] = useState<Channel>("all");
-  const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
-  const [isPhoneNoteMode, setIsPhoneNoteMode] = useState(false);
-  const [copied, setCopied] = useState<string | null>(null);
+  const [chatFilter, setChatFilter] = useState<ChatFilter>("all");
+  const [activeThreadId, setActiveThreadId] = useState<string | null>("demo_t3");
+  const [activeTab, setActiveTab] = useState<string>("chats");
+  const [replyText, setReplyText] = useState("");
+  const [replyChannel, setReplyChannel] = useState<"email" | "whatsapp" | "notiz">("email");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [recentNotes, setRecentNotes] = useState<any[]>([]);
+  const [isMobile, setIsMobile] = useState(false);
+  const [showContext, setShowContext] = useState(true);
 
   usePageView();
 
+  // Responsive
   useEffect(() => {
-    // URL Check
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (params.get('mode') === 'telefonnotiz') {
-        // eslint-disable-next-line
-        setIsPhoneNoteMode(true);
-      }
-    }
-
-    // Fetch recent notes
-    getRecentPhoneNotes(5).then(notes => setRecentNotes(notes));
+    const check = () => { setIsMobile(window.innerWidth < 768); };
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
   }, []);
 
-  // Update notes when modal closes to show new ones
+  // Load real phone notes from DB
   useEffect(() => {
-    if (!isPhoneNoteMode) {
-      getRecentPhoneNotes(5).then(notes => setRecentNotes(notes));
-    }
-  }, [isPhoneNoteMode]);
+    getRecentPhoneNotes(20).then(notes => setRecentNotes(notes)).catch(() => setRecentNotes([]));
+  }, []);
 
-  const mappedPhoneNotes = recentNotes.map(n => ({
-    id: `pn_${n.id}`,
-    sender: n.callerName || n.company || "Unbekannter Anrufer",
-    subject: `Notiz: ${n.category}`,
-    time: new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    channel: "phone" as Channel,
-    status: n.status === "open" ? "open" : "new",
-    priority: n.urgency === "Hoch" ? "high" : "medium",
-    content: n.rawText,
-    category: n.category,
-    rawNote: n
-  }));
+  // Convert real phone notes to threads
+  const phoneNoteThreads: Thread[] = useMemo(() => {
+    return recentNotes.map(note => {
+      const match = smartMatchText(note.rawText || "");
+      const initials = note.callerName
+        ? note.callerName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()
+        : "📞";
+      return {
+        id: `pn_${note.id}`,
+        sender: note.callerName || note.company || "Unbekannter Anrufer",
+        senderCity: "",
+        initials,
+        initialsColor: "#C2410C",
+        subject: `Telefonnotiz · ${note.category || "Allgemein"}`,
+        time: new Date(note.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }),
+        channel: "phone" as Channel,
+        status: (note.status === "done" ? "done" : note.status === "open" ? "open" : "new") as NoteStatus,
+        priority: note.urgency === "Hoch" ? "high" as const : "medium" as const,
+        content: (note.rawText || "").slice(0, 60) + "…",
+        category: note.category || "Neuanfrage",
+        customerId: note.customerId || (match.matchedCustomer?.id),
+        orderId: note.orderId || (match.matchedOrder?.id),
+        isPhoneNote: true,
+        rawNote: note,
+        matchData: match,
+        messages: [
+          {
+            id: `pnm_${note.id}`,
+            from: "system" as const,
+            channel: "phone" as const,
+            text: note.rawText || "",
+            time: new Date(note.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }),
+            date: new Date(note.createdAt).toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+          },
+        ],
+      };
+    });
+  }, [recentNotes]);
 
-  const allThreads = [...DEMO_THREADS, ...mappedPhoneNotes];
-  const filteredThreads = allThreads.filter(t => activeChannel === "all" || t.channel === activeChannel);
+  // Merge all threads: real notes first, then demo
+  const allThreads = useMemo(() => [...phoneNoteThreads, ...DEMO_THREADS], [phoneNoteThreads]);
+
+  // Filter by channel
+  const filteredThreads = useMemo(() => {
+    let filtered = allThreads;
+    if (activeChannel === "phone") filtered = filtered.filter(t => t.channel === "phone");
+    else if (activeChannel === "email") filtered = filtered.filter(t => t.channel === "email");
+    else if (activeChannel === "website") filtered = filtered.filter(t => t.channel === "website");
+    else if (activeChannel === "reclamation") filtered = filtered.filter(t => t.category === "Reklamation");
+    else if (activeChannel === "callback") filtered = filtered.filter(t => t.status === "waiting_callback");
+    else if (activeChannel === "done") filtered = filtered.filter(t => t.status === "done" || t.status === "archived");
+    else if (activeChannel === "parked") filtered = filtered.filter(t => t.status === "waiting_customer");
+    return filtered;
+  }, [allThreads, activeChannel]);
+
   const activeThread = allThreads.find(t => t.id === activeThreadId);
 
-  const getStatusBadge = (status: string) => {
-    switch(status) {
-      case "new": return <span className="bg-blue-100 text-blue-700 text-[10px] font-black uppercase px-2 py-0.5 rounded">Neu</span>;
-      case "open": return <span className="bg-yellow-100 text-yellow-700 text-[10px] font-black uppercase px-2 py-0.5 rounded">Offen</span>;
-      case "waiting": return <span className="bg-gray-100 text-gray-600 text-[10px] font-black uppercase px-2 py-0.5 rounded">Wartet auf Kunde</span>;
-      case "reclamation": return <span className="bg-red-100 text-red-700 text-[10px] font-black uppercase px-2 py-0.5 rounded flex items-center gap-1"><AlertOctagon className="w-3 h-3"/> Reklamationsverdacht</span>;
-      case "approval": return <span className="bg-orange-100 text-orange-700 text-[10px] font-black uppercase px-2 py-0.5 rounded">Freigabe offen</span>;
-      case "billing": return <span className="bg-purple-100 text-purple-700 text-[10px] font-black uppercase px-2 py-0.5 rounded">Rechnung/Zahlung</span>;
-      case "done": return <span className="bg-green-100 text-green-700 text-[10px] font-black uppercase px-2 py-0.5 rounded">Erledigt</span>;
-      default: return null;
-    }
+  // Smart match for active thread
+  const matchData = useMemo(() => {
+    if (!activeThread) return null;
+    if (activeThread.matchData) return activeThread.matchData;
+    const allText = activeThread.messages.map(m => m.text).join(" ");
+    return smartMatchText(allText);
+  }, [activeThread]);
+
+  const actionCards = useMemo(() => {
+    if (!activeThread) return [];
+    return buildActionCards(activeThread, matchData);
+  }, [activeThread, matchData]);
+
+  // Customer/order from match
+  const matchedCustomer = matchData?.matchedCustomer || null;
+  const customerOrders = matchedCustomer
+    ? INITIAL_ORDERS.filter(o => o.customerId === matchedCustomer.id)
+    : [];
+
+  // Status update handler
+  const handleStatusChange = async (newStatus: NoteStatus) => {
+    if (!activeThread?.isPhoneNote || !activeThread.rawNote) return;
+    const noteId = (activeThread.rawNote as { id: string }).id;
+    await updatePhoneNote(noteId, { status: newStatus });
+    const notes = await getRecentPhoneNotes(20);
+    setRecentNotes(notes);
   };
 
-  const getChannelIcon = (channel: string) => {
-    switch(channel) {
-      case "email": return <Mail className="w-4 h-4 text-gray-500" />;
-      case "whatsapp": return <MessageSquare className="w-4 h-4 text-green-500" />;
-      case "instagram": return <Camera className="w-4 h-4 text-pink-500" />;
-      case "website": return <Globe className="w-4 h-4 text-blue-500" />;
-      case "phone": return <Phone className="w-4 h-4 text-gray-500" />;
-      case "billing": return <Banknote className="w-4 h-4 text-gray-500" />;
-      default: return <Inbox className="w-4 h-4 text-gray-500" />;
-    }
-  };
-
-  const handleCopy = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(text);
-    setTimeout(() => setCopied(null), 2000);
-  };
-
+  /* ====================================================================
+     RENDER
+     ==================================================================== */
   return (
-    <div className="h-[calc(100vh-6rem)] flex flex-col font-sans antialiased text-navy-900 animate-in fade-in duration-400">
-      
-      {/* HEADER / SCHRITTLEISTE */}
-      <div className="mb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-black font-serif tracking-tight flex items-center gap-2">
-            <MessageSquare className="w-6 h-6 text-accent-orange" />
-            Kommunikationszentrale
-          </h1>
-          <p className="text-xs text-text-muted mt-1">Live-Import noch nicht angebunden. (Demo-Modus)</p>
+    <div style={{ height: "calc(100vh - 4rem)", display: "flex", flexDirection: "column", fontFamily: "'Inter', 'Manrope', sans-serif", color: "#1B1B1B", background: "#F8F5EF" }} data-testid="kommunikation-root">
+
+      {/* ===== TOP BAR ===== */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px", borderBottom: "1px solid #E8E2D6", background: "#FDFAF5", flexShrink: 0 }} data-testid="komm-topbar">
+        <div style={{ display: "flex", alignItems: "center", gap: 4, overflowX: "auto" }}>
+          {[
+            { id: "chats", label: "Chats", count: filteredThreads.filter(t => t.status === "new").length },
+            { id: "tagesfokus", label: "Tagesfokus", count: filteredThreads.filter(t => t.priority === "high").length },
+            { id: "qualitaet", label: "Qualität", count: 0 },
+            { id: "vorlagen", label: "Vorlagen", count: 0 },
+            { id: "kanaele", label: "Kanäle & Admin", count: 0 },
+          ].map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} data-testid={`tab-${tab.id}`} style={{
+              padding: "6px 14px", borderRadius: 8, border: "none", fontSize: 12, fontWeight: 600,
+              background: activeTab === tab.id ? "#1B1B1B" : "transparent",
+              color: activeTab === tab.id ? "white" : "#8B8478",
+              cursor: "pointer", display: "flex", alignItems: "center", gap: 5, transition: "all 0.15s", whiteSpace: "nowrap",
+            }}>
+              {tab.label}
+              {tab.count > 0 && (
+                <span style={{ background: activeTab === tab.id ? "#C2410C" : "#E8E2D6", color: activeTab === tab.id ? "white" : "#1B1B1B", fontSize: 9, fontWeight: 800, borderRadius: 999, padding: "1px 6px", minWidth: 16, textAlign: "center" }}>
+                  {tab.count}
+                </span>
+              )}
+            </button>
+          ))}
         </div>
-        
-        {/* Schrittleiste */}
-        <div className="flex items-center gap-2 text-xs font-bold bg-white px-4 py-2 rounded-xl border border-neutral-gray-200 shadow-sm overflow-x-auto max-w-full">
-          <span className="text-accent-orange">1. Lesen</span>
-          <ArrowRight className="w-3 h-3 text-neutral-gray-300" />
-          <span className="text-navy-900">2. Zuordnen</span>
-          <ArrowRight className="w-3 h-3 text-neutral-gray-300" />
-          <span className="text-navy-900">3. Antworten</span>
-          <ArrowRight className="w-3 h-3 text-neutral-gray-300" />
-          <span className="text-navy-900">4. Ablage</span>
+        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+          <button data-testid="btn-neue-nachricht" style={{ padding: "7px 16px", borderRadius: 8, border: "1px solid #E8E2D6", background: "white", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, color: "#1B1B1B" }}>
+            <Edit2 size={12} /> Neue Nachricht
+          </button>
+          <Link href="/telefonnotiz?source=kommunikation&returnTo=/kommunikation" data-testid="btn-anruf-annehmen" style={{ padding: "7px 16px", borderRadius: 8, border: "none", background: "#C2410C", color: "white", fontSize: 12, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, textDecoration: "none" }}>
+            <PhoneCall size={12} /> Anruf annehmen
+          </Link>
         </div>
       </div>
 
-      {/* 3-COLUMN LAYOUT */}
-      <div className="flex-1 flex flex-col md:flex-row gap-4 overflow-hidden">
-        
-        {/* COL 1: KANÄLE */}
-        <div className="w-full md:w-48 lg:w-64 bg-white border border-neutral-gray-200 rounded-2xl flex flex-col overflow-y-auto">
-          <div className="p-4 border-b border-neutral-gray-100 font-bold text-sm uppercase tracking-wider text-text-muted">
-            Kanäle
-          </div>
-          <div className="p-2 space-y-1">
-            <button onClick={() => setActiveChannel("all")} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${activeChannel === "all" ? "bg-bg-app-soft text-navy-900 font-bold" : "text-text-muted hover:bg-gray-50"}`}>
-              <Inbox className="w-4 h-4" /> Alle
-            </button>
-            <button onClick={() => setActiveChannel("email")} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${activeChannel === "email" ? "bg-bg-app-soft text-navy-900 font-bold" : "text-text-muted hover:bg-gray-50"}`}>
-              <Mail className="w-4 h-4" /> E-Mail
-            </button>
-            <button disabled className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-medium text-text-muted opacity-50 cursor-not-allowed" title="In Vorbereitung">
-              <div className="flex items-center gap-3">
-                <MessageSquare className="w-4 h-4" /> WhatsApp
-              </div>
-              <span className="text-[9px] uppercase font-bold bg-neutral-gray-200 px-1.5 py-0.5 rounded">Demo</span>
-            </button>
-            <button disabled className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg text-sm font-medium text-text-muted opacity-50 cursor-not-allowed" title="In Vorbereitung">
-              <div className="flex items-center gap-3">
-                <Camera className="w-4 h-4" /> Instagram
-              </div>
-              <span className="text-[9px] uppercase font-bold bg-neutral-gray-200 px-1.5 py-0.5 rounded">Demo</span>
-            </button>
-            <button onClick={() => setActiveChannel("website")} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${activeChannel === "website" ? "bg-bg-app-soft text-navy-900 font-bold" : "text-text-muted hover:bg-gray-50"}`}>
-              <Globe className="w-4 h-4" /> Website
-            </button>
-            <button onClick={() => setActiveChannel("phone")} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${activeChannel === "phone" ? "bg-bg-app-soft text-navy-900 font-bold" : "text-text-muted hover:bg-gray-50"}`}>
-              <Phone className="w-4 h-4" /> Telefonnotiz
-            </button>
-            <button onClick={() => setActiveChannel("billing")} className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition ${activeChannel === "billing" ? "bg-bg-app-soft text-navy-900 font-bold" : "text-text-muted hover:bg-gray-50"}`}>
-              <Banknote className="w-4 h-4" /> Rechnungen
-            </button>
-          </div>
+      {/* ===== MAIN BODY ===== */}
+      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
 
-          {recentNotes.length > 0 && (
-            <div className="mt-4 border-t border-neutral-gray-100 p-2">
-              <div className="px-3 py-2 text-xs font-bold uppercase tracking-wider text-text-muted flex items-center gap-2">
-                <Phone className="w-3 h-3" /> Letzte Notizen
+        {/* ===== COL 1: ICON SIDEBAR (48px) ===== */}
+        {!isMobile && (
+          <div style={{ width: 48, background: "#FDFAF5", borderRight: "1px solid #E8E2D6", display: "flex", flexDirection: "column", alignItems: "center", paddingTop: 12, gap: 4, flexShrink: 0 }} data-testid="channel-sidebar">
+            {CHANNELS.map(ch => (
+              <button key={ch.id} onClick={() => setActiveChannel(ch.id)} title={ch.label} data-testid={`channel-${ch.id}`}
+                aria-label={`Kanal: ${ch.label}${!ch.enabled ? " (vorbereitet)" : ""}`}
+                style={{
+                  width: 36, height: 36, borderRadius: 10, border: "none",
+                  background: activeChannel === ch.id ? "#C2410C" : "transparent",
+                  color: activeChannel === ch.id ? "white" : "#8B8478",
+                  display: "grid", placeItems: "center", cursor: "pointer", transition: "all 0.15s",
+                }}>
+                {ch.icon}
+              </button>
+            ))}
+            <div style={{ flex: 1 }} />
+            <button title="Einstellungen" style={{ width: 36, height: 36, borderRadius: 10, border: "none", background: "transparent", color: "#8B8478", display: "grid", placeItems: "center", cursor: "pointer", marginBottom: 12 }}>
+              <Settings size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* ===== COL 2: CHAT LIST ===== */}
+        {(!isMobile || !activeThread) && (
+          <div style={{ width: isMobile ? "100%" : 260, borderRight: isMobile ? "none" : "1px solid #E8E2D6", display: "flex", flexDirection: "column", background: "#FDFAF5", flexShrink: 0 }} data-testid="chat-list">
+            {/* Header */}
+            <div style={{ padding: "12px 14px 8px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 16, fontWeight: 800, fontFamily: "'Fraunces', serif" }}>Chats</span>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button aria-label="Suchen" style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid #E8E2D6", background: "white", display: "grid", placeItems: "center", cursor: "pointer", color: "#8B8478" }}><Search size={13} /></button>
+                <button aria-label="Neuer Vorgang" style={{ width: 28, height: 28, borderRadius: 8, border: "1px solid #E8E2D6", background: "white", display: "grid", placeItems: "center", cursor: "pointer", color: "#8B8478" }}><Plus size={13} /></button>
               </div>
-              <div className="space-y-1 mt-1">
-                {recentNotes.map((note) => (
-                  <div key={note.id} onClick={() => setActiveThreadId(`pn_${note.id}`)} className="px-3 py-2 rounded-lg bg-gray-50 border border-neutral-gray-100 text-xs cursor-pointer hover:bg-neutral-gray-200 transition">
-                    <div className="font-bold text-navy-900 mb-1">{note.category}</div>
-                    <div className="text-text-muted line-clamp-2">{note.rawText}</div>
+            </div>
+
+            {/* Filter Tabs */}
+            <div style={{ padding: "0 14px 8px", display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {([
+                { id: "all", label: "Alle" },
+                { id: "unresolved", label: "Ungelöst", count: allThreads.filter(t => t.status === "new" || t.status === "open").length },
+                { id: "needs", label: "Braucht" },
+                { id: "waiting", label: "Wartet auf mich" },
+              ] as { id: ChatFilter; label: string; count?: number }[]).map(f => (
+                <button key={f.id} onClick={() => setChatFilter(f.id)} data-testid={`filter-${f.id}`} style={{
+                  padding: "3px 10px", borderRadius: 6, fontSize: 10, fontWeight: 600,
+                  border: chatFilter === f.id ? "1px solid #C2410C" : "1px solid #E8E2D6",
+                  background: chatFilter === f.id ? "#FEF3C7" : "white",
+                  color: chatFilter === f.id ? "#92400E" : "#8B8478", cursor: "pointer",
+                }}>
+                  {f.label}{f.count ? ` ${f.count}` : ""}
+                </button>
+              ))}
+            </div>
+
+            {/* Thread List */}
+            <div style={{ flex: 1, overflowY: "auto" }}>
+              {filteredThreads.map(t => {
+                const st = STATUS_MAP[t.status] || STATUS_MAP.new;
+                return (
+                  <div key={t.id} onClick={() => setActiveThreadId(t.id)} data-testid={`thread-${t.id}`}
+                    style={{
+                      padding: "10px 14px", cursor: "pointer",
+                      background: activeThreadId === t.id ? "#F0EBE0" : "transparent",
+                      borderBottom: "1px solid #F0EBE0", transition: "background 0.1s",
+                      borderLeft: t.priority === "high" ? "3px solid #DC2626" : "3px solid transparent",
+                    }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+                      <div style={{ width: 36, height: 36, borderRadius: "50%", flexShrink: 0, background: t.initialsColor, color: "white", display: "grid", placeItems: "center", fontSize: 11, fontWeight: 800 }}>
+                        {t.initials}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 12, fontWeight: 700 }}>{t.sender.split("·")[0].trim()}</span>
+                          <span style={{ fontSize: 10, color: "#8B8478", whiteSpace: "nowrap" }}>{t.time}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: "#6B6560", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {t.isPhoneNote && <Phone size={10} style={{ display: "inline", marginRight: 4, verticalAlign: "middle" }} />}
+                          {t.content}
+                        </div>
+                        <div style={{ display: "flex", gap: 4, marginTop: 4, alignItems: "center" }}>
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: st.bg, color: st.fg }}>{st.label}</span>
+                          {t.isPhoneNote && !t.customerId && (
+                            <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: "#FEF3C7", color: "#92400E" }}>Zuordnung nötig</span>
+                          )}
+                        </div>
+                      </div>
+                      {t.unread && t.unread > 0 && (
+                        <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#C2410C", color: "white", fontSize: 9, fontWeight: 800, display: "grid", placeItems: "center", flexShrink: 0, marginTop: 2 }}>{t.unread}</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {filteredThreads.length === 0 && (
+                <div style={{ padding: 20, textAlign: "center", color: "#8B8478", fontSize: 12 }}>Keine Vorgänge in diesem Kanal.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ===== COL 3: CONVERSATION ===== */}
+        {(!isMobile || activeThread) && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#FDFAF5", minWidth: 0 }} data-testid="conversation-panel">
+            {activeThread ? (
+              <>
+                {/* Conversation Header */}
+                <div style={{ padding: "10px 20px", borderBottom: "1px solid #E8E2D6", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }} data-testid="conv-header">
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    {isMobile && (
+                      <button onClick={() => setActiveThreadId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#8B8478", padding: 4 }} aria-label="Zurück zur Liste">
+                        <ChevronRight size={18} style={{ transform: "rotate(180deg)" }} />
+                      </button>
+                    )}
+                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: activeThread.initialsColor, color: "white", display: "grid", placeItems: "center", fontSize: 14, fontWeight: 800 }}>
+                      {activeThread.initials}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>
+                        {activeThread.sender}{activeThread.senderCity ? ` · ${activeThread.senderCity}` : ""}
+                      </div>
+                      <div style={{ fontSize: 10, color: "#8B8478" }}>
+                        {matchedCustomer ? `● Stammkunde · ${customerOrders.length} Aufträge` : "● Zuordnung nicht bestätigt"}
+                        {activeThread.isPhoneNote && " · 📞 Telefonnotiz"}
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button data-testid="conv-phone" aria-label="Anrufen" style={iconBtnStyle}><Phone size={14} /></button>
+                    <button data-testid="conv-bell" aria-label="Benachrichtigung" style={iconBtnStyle}><Bell size={14} /></button>
+                    <button onClick={() => setShowContext(!showContext)} data-testid="conv-context-toggle" aria-label="Kontext ein/ausblenden" style={iconBtnStyle}><MoreVertical size={14} /></button>
+                  </div>
+                </div>
+
+                {/* Chat Messages */}
+                <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }} data-testid="conv-messages">
+                  {activeThread.messages.map((msg) => (
+                    <React.Fragment key={msg.id}>
+                      {msg.date && (
+                        <div style={{ textAlign: "center", margin: "8px 0" }}>
+                          <span style={{ fontSize: 10, color: "#8B8478", background: "#F0EBE0", padding: "3px 12px", borderRadius: 999, fontWeight: 600 }}>{msg.date}</span>
+                        </div>
+                      )}
+
+                      {msg.from === "system" ? (
+                        <div style={{ background: "#F0EBE0", borderRadius: 14, padding: "12px 16px", borderLeft: "3px solid #C2410C", maxWidth: "85%" }} data-testid="msg-system">
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#C2410C", marginBottom: 6, display: "flex", alignItems: "center", gap: 5 }}>
+                            <Phone size={11} /> TELEFONNOTIZ · {msg.time}
+                          </div>
+                          <div style={{ fontSize: 13, lineHeight: 1.5, color: "#1B1B1B", whiteSpace: "pre-wrap" }}>
+                            {msg.text.split(/(\b(?:A-\d{4}-\d{4}|morgen|Zahlungsstatus|dringend|Reklamation|abhol\w*|fertig|Rechnung)\b)/gi).map((part, j) =>
+                              /A-\d{4}-\d{4}|morgen|Zahlungsstatus|dringend|Reklamation|abhol\w*|fertig|Rechnung/i.test(part)
+                                ? <strong key={j} style={{ color: "#C2410C" }}>{part}</strong>
+                                : part
+                            )}
+                          </div>
+                          <div style={{ textAlign: "right", fontSize: 9, color: "#8B8478", marginTop: 4 }}>{msg.time}</div>
+                        </div>
+                      ) : msg.from === "kreile" ? (
+                        <div style={{ alignSelf: "flex-end", maxWidth: "75%" }} data-testid="msg-outgoing">
+                          <div style={{ fontSize: 10, color: "#8B8478", marginBottom: 3, display: "flex", alignItems: "center", gap: 4 }}>
+                            <Mail size={10} /> E-MAIL · KREILE
+                          </div>
+                          <div style={{ background: "white", borderRadius: 14, padding: "12px 16px", border: "1px solid #E8E2D6", fontSize: 13, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                            {msg.text}
+                          </div>
+                          <div style={{ textAlign: "right", fontSize: 9, color: "#8B8478", marginTop: 4 }}>{msg.time} ✓</div>
+                        </div>
+                      ) : (
+                        <div style={{ maxWidth: "75%" }} data-testid="msg-incoming">
+                          <div style={{ fontSize: 10, color: "#8B8478", marginBottom: 3, display: "flex", alignItems: "center", gap: 4 }}>
+                            {msg.channel === "email" ? <Mail size={10} /> : msg.channel === "whatsapp" ? <MessageSquare size={10} /> : <Globe size={10} />}
+                            {msg.channel.toUpperCase()} · {activeThread.sender.split("·")[0].trim().split(" ").pop()}
+                          </div>
+                          <div style={{ background: "white", borderRadius: 14, padding: "12px 16px", border: "1px solid #E8E2D6", fontSize: 13, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>
+                            {msg.text}
+                          </div>
+                          <div style={{ fontSize: 9, color: "#8B8478", marginTop: 4 }}>{msg.time}</div>
+                        </div>
+                      )}
+                    </React.Fragment>
+                  ))}
+
+                  {/* ===== COCKPIT ACTION CARD ===== */}
+                  {actionCards.length > 0 && (
+                    <div style={{ background: "#1B1B1B", borderRadius: 16, padding: "16px 20px", color: "#F0EBE0", marginTop: 8 }} data-testid="cockpit-card">
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <Activity size={14} style={{ color: "#C2410C" }} />
+                          <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.04em" }}>COCKPIT · AUTO-ANALYSE FERTIG</span>
+                        </div>
+                        <span style={{ fontSize: 10, color: "#8B8478" }}>
+                          {matchData?.matchedCustomer && matchData?.matchedOrder ? "93 % CONFIDENCE" : matchData?.matchedCustomer || matchData?.matchedOrder ? "~60 % CONFIDENCE" : "Zuordnung unsicher"}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14 }}>
+                        Ich habe {actionCards.length} Aktionen für dich vorbereitet
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: actionCards.length > 2 ? "1fr 1fr" : "1fr", gap: 8, marginBottom: 14 }}>
+                        {actionCards.map(action => {
+                          const inner = (
+                            <div style={{
+                              background: "rgba(255,255,255,0.06)", borderRadius: 10, padding: "10px 12px",
+                              display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer",
+                              border: "1px solid rgba(255,255,255,0.08)", transition: "background 0.15s",
+                            }}
+                              data-testid={`action-${action.id}`}
+                              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.12)")}
+                              onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
+                            >
+                              <div style={{ width: 28, height: 28, borderRadius: 7, background: action.color, color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>{action.icon}</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 12, fontWeight: 700, color: "#F0EBE0" }}>{action.title}</div>
+                                <div style={{ fontSize: 10, color: "#8B8478", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{action.subtitle}</div>
+                              </div>
+                              <ChevronRight size={14} style={{ color: "#8B8478", marginLeft: "auto", marginTop: 6, flexShrink: 0 }} />
+                            </div>
+                          );
+                          return action.href
+                            ? <Link key={action.id} href={action.href} style={{ textDecoration: "none", color: "inherit" }}>{inner}</Link>
+                            : <div key={action.id}>{inner}</div>;
+                        })}
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button data-testid="action-apply-all" style={cockpitBtnStyle("#C2410C", "white")}>Alle {actionCards.length} anwenden</button>
+                        <button data-testid="action-review" style={cockpitBtnStyle("transparent", "#8B8478")}>Einzeln prüfen</button>
+                        <button data-testid="action-dismiss" style={cockpitBtnStyle("transparent", "#8B8478")}>Verwerfen</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ===== SUGGESTED ANSWER ===== */}
+                  {matchData?.suggestedAnswer && (
+                    <div style={{ background: "white", border: "1px solid #E8E2D6", borderRadius: 14, padding: "12px 16px" }} data-testid="suggested-answer">
+                      <div style={{ fontSize: 10, fontWeight: 700, color: "#8B8478", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                        💬 Antwortvorschlag · {matchData.matchedOrder ? "aus DB" : "generisch"}
+                      </div>
+                      <div style={{ fontSize: 13, lineHeight: 1.5, fontFamily: "'Fraunces', serif" }}>
+                        „{matchData.suggestedAnswer}"
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Template Quick Actions */}
+                <div style={{ padding: "8px 20px", borderTop: "1px solid #E8E2D6", display: "flex", gap: 6, flexWrap: "wrap", flexShrink: 0 }} data-testid="quick-actions">
+                  {matchData?.suggestedAnswer && (
+                    <button data-testid="btn-ki-answer" style={{ padding: "5px 12px", borderRadius: 7, border: "none", background: "#C2410C", color: "white", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                      ✦ KI-Antwort übernehmen
+                    </button>
+                  )}
+                  {["Vorlage: Abholbereit", "Vorlage: Zahlungserinnerung"].map(tpl => (
+                    <button key={tpl} data-testid={`tpl-${tpl}`} style={{ padding: "5px 12px", borderRadius: 7, border: "1px solid #E8E2D6", background: "white", fontSize: 10, fontWeight: 600, cursor: "pointer", color: "#6B6560" }}>
+                      {tpl}
+                    </button>
+                  ))}
+                  {activeThread.isPhoneNote && (
+                    <>
+                      <div style={{ flex: 1 }} />
+                      <select onChange={e => e.target.value && handleStatusChange(e.target.value as NoteStatus)} defaultValue="" data-testid="status-select" style={{ padding: "5px 10px", borderRadius: 7, border: "1px solid #E8E2D6", fontSize: 10, fontWeight: 600, background: "white", cursor: "pointer" }}>
+                        <option value="" disabled>Status ändern…</option>
+                        <option value="open">In Bearbeitung</option>
+                        <option value="waiting_callback">Wartet auf Rückruf</option>
+                        <option value="waiting_customer">Wartet auf Kunde</option>
+                        <option value="done">Erledigt</option>
+                        <option value="archived">Archivieren</option>
+                      </select>
+                    </>
+                  )}
+                </div>
+
+                {/* Reply Input */}
+                <div style={{ padding: "10px 20px", borderTop: "1px solid #E8E2D6", display: "flex", gap: 8, alignItems: "center", flexShrink: 0, background: "#FDFAF5" }} data-testid="reply-bar">
+                  <select value={replyChannel} onChange={e => setReplyChannel(e.target.value as typeof replyChannel)} aria-label="Antwortkanal" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #E8E2D6", background: "#1B1B1B", color: "white", fontSize: 11, fontWeight: 700, cursor: "pointer", minWidth: 90 }}>
+                    <option value="email">E-Mail</option>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="notiz">Notiz</option>
+                  </select>
+                  <input value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Antwort schreiben…" data-testid="reply-input" style={{ flex: 1, padding: "8px 14px", borderRadius: 8, border: "1px solid #E8E2D6", background: "white", fontSize: 12, color: "#1B1B1B", outline: "none" }} />
+                  <button aria-label="Senden" data-testid="reply-send" style={{ width: 36, height: 36, borderRadius: "50%", border: "none", background: "#C2410C", color: "white", display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0 }}>
+                    <Send size={14} />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#8B8478" }}>
+                <MessageSquare size={40} style={{ opacity: 0.15, marginBottom: 12 }} />
+                <div style={{ fontWeight: 700 }}>Keine Konversation ausgewählt</div>
+                <div style={{ fontSize: 12, marginTop: 4 }}>Wähle links einen Chat, um ihn zu öffnen.</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===== COL 4: CONTEXT PANEL ===== */}
+        {activeThread && showContext && !isMobile && (
+          <div style={{ width: 280, borderLeft: "1px solid #E8E2D6", background: "#FDFAF5", overflowY: "auto", padding: 16, display: "flex", flexDirection: "column", gap: 16, flexShrink: 0 }} data-testid="context-panel">
+
+            {/* Customer Card */}
+            <div style={{ textAlign: "center", padding: "16px 0" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8B8478", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>KUNDE</div>
+              <div style={{ width: 50, height: 50, borderRadius: "50%", background: activeThread.initialsColor, color: "white", display: "grid", placeItems: "center", fontSize: 18, fontWeight: 800, margin: "0 auto 8px" }}>
+                {activeThread.initials}
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 700 }}>{matchedCustomer?.name || activeThread.sender.split("·")[0].trim()}</div>
+              <div style={{ fontSize: 11, color: "#8B8478" }}>
+                {matchedCustomer ? `${matchedCustomer.city || "—"} · Kunde seit 2018` : "Keine sichere Zuordnung"}
+              </div>
+              {matchedCustomer ? (
+                <Link href={`/customers/${matchedCustomer.id}`} data-testid="ctx-customer-link" style={{ fontSize: 11, color: "#C2410C", fontWeight: 600, textDecoration: "none" }}>Zur Kundenakte →</Link>
+              ) : (
+                <span style={{ fontSize: 11, color: "#8B8478", fontStyle: "italic" }}>Manuell zuordnen</span>
+              )}
+
+              {matchedCustomer && (
+                <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 10 }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 18, fontWeight: 800 }}>{customerOrders.length}</div>
+                    <div style={{ fontSize: 9, color: "#8B8478", textTransform: "uppercase" }}>Aufträge</div>
+                  </div>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: "#C2410C" }}>248 €</div>
+                    <div style={{ fontSize: 9, color: "#8B8478", textTransform: "uppercase" }}>Offen</div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Open Orders */}
+            {customerOrders.length > 0 && (
+              <div>
+                <div style={{ fontSize: 10, fontWeight: 700, color: "#8B8478", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>OFFENE AUFTRÄGE</div>
+                {customerOrders.slice(0, 3).map(order => (
+                  <Link key={order.id} href={`/orders/${order.id}`} data-testid={`ctx-order-${order.id}`} style={{ textDecoration: "none", color: "inherit", display: "block" }}>
+                    <div style={{ border: "1px solid #E8E2D6", borderRadius: 10, padding: "10px 12px", marginBottom: 6, background: "white", cursor: "pointer", transition: "background 0.1s" }}
+                      onMouseEnter={e => (e.currentTarget.style.background = "#F0EBE0")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "white")}
+                    >
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: 12, fontWeight: 700 }}>{order.orderNumber}</span>
+                        <span style={{
+                          fontSize: 9, fontWeight: 800, padding: "2px 7px", borderRadius: 4, textTransform: "uppercase",
+                          background: order.statusText?.toLowerCase().includes("fertig") ? "#D1FAE5" : "#FEF3C7",
+                          color: order.statusText?.toLowerCase().includes("fertig") ? "#059669" : "#92400E",
+                        }}>
+                          {order.statusText || order.status}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 10, color: "#8B8478", marginTop: 3 }}>{order.task}</div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            {/* Calendar Strip */}
+            <div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "#8B8478", textTransform: "uppercase", letterSpacing: "0.06em" }}>KALENDER · DIESE WOCHE</span>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "#059669", background: "#D1FAE5", padding: "2px 6px", borderRadius: 4 }}>3 Slots frei</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 4 }}>
+                {[
+                  { day: "MI", num: String(new Date().getDate()), label: "heute", free: false },
+                  { day: "DO", num: String(new Date().getDate() + 1), label: "frei ✓", free: true },
+                  { day: "FR", num: String(new Date().getDate() + 2), label: "—", free: false },
+                  { day: "SA", num: String(new Date().getDate() + 3), label: "zu", free: false },
+                  { day: "SO", num: String(new Date().getDate() + 4), label: "zu", free: false },
+                ].map(d => (
+                  <div key={d.day} style={{
+                    textAlign: "center", padding: "6px 0", borderRadius: 8,
+                    background: d.free ? "#D1FAE5" : "#F3F0EA", border: d.free ? "1px solid #059669" : "1px solid #E8E2D6",
+                  }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: "#8B8478" }}>{d.day}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: d.free ? "#059669" : "#1B1B1B" }}>{d.num}</div>
+                    <div style={{ fontSize: 8, color: d.free ? "#059669" : "#8B8478" }}>{d.label}</div>
                   </div>
                 ))}
               </div>
             </div>
-          )}
-        </div>
 
-        {/* COL 2: NACHRICHTEN/THREADS */}
-        <div className="w-full md:w-80 lg:w-96 bg-white border border-neutral-gray-200 rounded-2xl flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-neutral-gray-100 font-bold text-sm uppercase tracking-wider text-text-muted flex justify-between items-center">
-            <span>Eingang</span>
-            <span className="bg-bg-app-soft px-2 py-0.5 rounded text-navy-900">{filteredThreads.length}</span>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            {filteredThreads.map(t => (
-              <div 
-                key={t.id} 
-                onClick={() => setActiveThreadId(t.id)}
-                className={`p-4 border-b border-neutral-gray-100 cursor-pointer hover:bg-gray-50 transition relative ${activeThreadId === t.id ? 'bg-bg-app-soft' : ''}`}
-              >
-                {t.priority === 'high' && <div className="absolute left-0 top-0 bottom-0 w-1 bg-error-red" />}
-                <div className="flex justify-between items-start mb-1">
-                  <div className="flex items-center gap-2">
-                    {getChannelIcon(t.channel)}
-                    <span className="font-bold text-sm text-navy-900 line-clamp-1">{t.sender}</span>
-                  </div>
-                  <span className="text-xs text-text-muted whitespace-nowrap">{t.time}</span>
+            {/* Material */}
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8B8478", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>LAGER / MATERIAL</div>
+              {matchData?.matchedMaterial ? (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #F0EBE0" }}>
+                  <span style={{ fontSize: 12, textTransform: "capitalize" }}>{matchData.matchedMaterial}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, background: "#FEE2E2", color: "#DC2626", padding: "2px 7px", borderRadius: 4 }}>Erwähnt</span>
                 </div>
-                <div className="font-medium text-sm mb-2 line-clamp-1">{t.subject}</div>
-                <div className="flex justify-between items-center">
-                  {getStatusBadge(t.status)}
-                  <span className="text-xs text-text-muted">{t.category}</span>
-                </div>
-              </div>
-            ))}
-            {filteredThreads.length === 0 && (
-              <div className="p-8 text-center text-text-muted text-sm">Keine Nachrichten in diesem Kanal.</div>
-            )}
-          </div>
-        </div>
+              ) : (
+                <div style={{ fontSize: 11, color: "#8B8478", fontStyle: "italic" }}>Kein Material im Gespräch erkannt</div>
+              )}
+            </div>
 
-        {/* COL 3: ARBEITSBEREICH */}
-        <div className="flex-1 bg-white border border-neutral-gray-200 rounded-2xl flex flex-col overflow-hidden">
-          {activeThread ? (
-            activeThread.id.startsWith("pn_") ? (
-              <PhoneNoteDetailView 
-                note={(activeThread as any).rawNote} 
-                onUpdate={() => getRecentPhoneNotes(5).then(notes => setRecentNotes(notes))}
-                onClose={() => setActiveThreadId(null)}
-              />
-            ) : (
-          <>
-            {/* Bereich 1: Nachricht ansehen */}
-            <div className="p-6 border-b border-neutral-gray-100">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <h2 className="text-xl font-bold font-serif mb-1">{activeThread.subject}</h2>
-                  <div className="flex items-center gap-3 text-sm text-text-muted">
-                    <span className="font-medium text-navy-900">{activeThread.sender}</span>
-                    <span>•</span>
-                    <span>{activeThread.time}</span>
-                    <span>•</span>
-                    <span className="flex items-center gap-1">{getChannelIcon(activeThread.channel)} {activeThread.channel}</span>
-                  </div>
-                </div>
-                {getStatusBadge(activeThread.status)}
-              </div>
-              <div className="bg-gray-50 rounded-xl p-4 text-sm leading-relaxed border border-neutral-gray-200 whitespace-pre-wrap">
-                {activeThread.content}
+            {/* Payment */}
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8B8478", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>ZAHLUNG</div>
+              <div style={{ fontSize: 11, display: "flex", flexDirection: "column", gap: 4 }}>
+                {matchData?.matchedKeywords.includes("Buchhaltung/Zahlung") ? (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between" }}>
+                      <span style={{ color: "#C2410C", fontWeight: 600 }}>Zahlungsthema erkannt</span>
+                    </div>
+                    <Link href="/finanzen" data-testid="ctx-payment-link" style={{ fontSize: 11, color: "#C2410C", fontWeight: 600, textDecoration: "none" }}>
+                      Im Finanzsystem prüfen →
+                    </Link>
+                  </>
+                ) : (
+                  <div style={{ color: "#8B8478", fontStyle: "italic" }}>Keine Zahlungsfrage im Gespräch</div>
+                )}
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              
-              {/* Bereich 2: Zuordnung */}
-              <div>
-                <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted mb-3 flex items-center gap-2">
-                  <LinkIcon className="w-4 h-4" /> 2. Zuordnung (Demo)
-                </h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="border border-neutral-gray-200 rounded-xl p-3 bg-white">
-                    <div className="text-xs text-text-muted mb-1">Erkannter Kunde</div>
-                    <div className="font-bold text-sm flex justify-between items-center">
-                      {activeThread.sender.includes("Maier") ? "Maier GmbH" : activeThread.sender.includes("Berger") ? "Autohaus Berger" : "Unbekannt"}
-                      <Link href="/customers" className="text-accent-orange"><ExternalLink className="w-3 h-3"/></Link>
-                    </div>
-                  </div>
-                  <div className="border border-neutral-gray-200 rounded-xl p-3 bg-white">
-                    <div className="text-xs text-text-muted mb-1">Möglicher Auftrag</div>
-                    <div className="font-bold text-sm flex justify-between items-center">
-                      {activeThread.status === "reclamation" ? "A-2026-0042" : "Keine Zuweisung"}
-                      <Link href="/orders" className="text-accent-orange"><ExternalLink className="w-3 h-3"/></Link>
-                    </div>
-                  </div>
-                </div>
+            {/* Quick Links */}
+            <div style={{ borderTop: "1px solid #E8E2D6", paddingTop: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: "#8B8478", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>SCHNELLZUGRIFF</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <Link href="/warendurchlauf/neu" style={ctxLinkStyle} data-testid="ctx-wareneingang">
+                  <Package size={12} /> Wareneingang
+                </Link>
+                <Link href="/finanzen" style={ctxLinkStyle} data-testid="ctx-finanzen">
+                  <Banknote size={12} /> Buchhaltung
+                </Link>
+                <Link href="/kontrolle" style={ctxLinkStyle} data-testid="ctx-qualitaet">
+                  <AlertTriangle size={12} /> Qualität/Reklamation
+                </Link>
               </div>
-
-              {/* Bereich 3: Antwortvorlage */}
-              <div>
-                <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted mb-3 flex items-center gap-2">
-                  <CheckSquare className="w-4 h-4" /> 3. Antwortvorlage wählen
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {[
-                    "Reklamation bestätigen", "Liefertermin nennen", "Freigabe anfordern", 
-                    "Angaben anfordern", "Abholung ankündigen", "Zahlungslink senden"
-                  ].map(tpl => (
-                    <button 
-                      key={tpl}
-                      onClick={() => handleCopy(`Vorlage: ${tpl}\n\nSehr geehrte(r)...`)}
-                      className="text-xs font-medium border border-neutral-gray-200 rounded-lg p-2 hover:bg-bg-app-soft hover:border-navy-900 transition flex items-center justify-between group"
-                    >
-                      <span className="text-left line-clamp-1">{tpl}</span>
-                      {copied === `Vorlage: ${tpl}\n\nSehr geehrte(r)...` ? <CheckCircle2 className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3 text-text-muted group-hover:text-navy-900" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Bereich 4: Ablage */}
-              <div>
-                <h3 className="font-bold text-sm uppercase tracking-wider text-text-muted mb-3 flex items-center gap-2">
-                  <FileText className="w-4 h-4" /> 4. Ablage / Nächste Aktion
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  <Link href="/kundenservice" className="text-xs font-bold bg-white border border-neutral-gray-200 px-3 py-2 rounded-lg hover:bg-bg-app-soft transition">In Kundenservice ablegen</Link>
-                  <Link href="/finanzen" className="text-xs font-bold bg-white border border-neutral-gray-200 px-3 py-2 rounded-lg hover:bg-bg-app-soft transition">An Buchhaltung leiten</Link>
-                  <Link href="/quotes" className="text-xs font-bold bg-white border border-neutral-gray-200 px-3 py-2 rounded-lg hover:bg-bg-app-soft transition">Neues Angebot anlegen</Link>
-                </div>
-              </div>
-
             </div>
-          </>
-          )
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-text-muted p-8 text-center">
-            <MessageSquare className="w-12 h-12 mb-4 opacity-20" />
-            <p className="font-bold">Keine Nachricht ausgewählt</p>
-            <p className="text-sm mt-1">Wähle eine Nachricht in der Liste, um sie zu bearbeiten.</p>
           </div>
         )}
-        </div>
       </div>
-
-      <PhoneNoteOverlay 
-        open={isPhoneNoteMode} 
-        onClose={() => {
-          setIsPhoneNoteMode(false);
-          if (typeof window !== 'undefined') {
-            window.history.replaceState({}, '', '/kommunikation');
-          }
-        }} 
-      />
     </div>
   );
 }
+
+/* ===== Shared Styles ===== */
+const iconBtnStyle: React.CSSProperties = {
+  width: 32, height: 32, borderRadius: 8, border: "1px solid #E8E2D6",
+  background: "white", display: "grid", placeItems: "center", cursor: "pointer", color: "#8B8478",
+};
+
+const cockpitBtnStyle = (bg: string, color: string): React.CSSProperties => ({
+  padding: "7px 14px", borderRadius: 8, border: `1px solid ${bg === "transparent" ? "rgba(255,255,255,0.15)" : bg}`,
+  background: bg, color, fontSize: 11, fontWeight: 700, cursor: "pointer",
+});
+
+const ctxLinkStyle: React.CSSProperties = {
+  fontSize: 11, color: "#6B6560", textDecoration: "none", display: "flex", alignItems: "center", gap: 6,
+  padding: "5px 8px", borderRadius: 6, border: "1px solid #E8E2D6", background: "white", fontWeight: 600,
+};
