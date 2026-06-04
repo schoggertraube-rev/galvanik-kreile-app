@@ -70,6 +70,7 @@ export function TelefonnotizDesktop() {
   const [showUndo, setShowUndo] = useState(false);
   const [showReminder, setShowReminder] = useState(false);
   const [reminderTime, setReminderTime] = useState("Heute 17:00");
+  const [showEmailMock, setShowEmailMock] = useState(false);
 
   // Parked Call Global State
   const { parkCall } = useParkedCall();
@@ -226,6 +227,40 @@ export function TelefonnotizDesktop() {
     setStep(3);
   }, [text]);
 
+  const handleLiveActionClick = useCallback((action: any) => {
+    if (action.type === "create_order") {
+      const draftId = `draft_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      
+      const draftPayload = {
+        draftId,
+        source: "phone_note",
+        rawText: text,
+        customerId: action.payload.customerId,
+        customerName: action.payload.customerName,
+        customerCandidateIds: action.payload.customerCandidateIds,
+        material: action.payload.material,
+        surfaceRequested: action.payload.surfaceRequested,
+        requestedDate: action.payload.requestedDate,
+        notes: `Aus Telefonnotiz: ${text}`
+      };
+      
+      sessionStorage.setItem(draftId, JSON.stringify(draftPayload));
+      
+      const query = new URLSearchParams({
+        mode: "new-order",
+        source: "phone-note",
+        draftId
+      });
+      router.push(`/warendurchlauf/wareneingang?${query.toString()}`);
+    } else if (action.type === "create_customer") {
+      router.push(`/customers?mode=new`);
+    } else if (action.type === "review_email") {
+      setShowEmailMock(true);
+    } else if (action.type === "prepare_quote") {
+      alert("Angebotsmodul öffnet sich (Mock)");
+    }
+  }, [router]);
+
   const handleSave = useCallback(async (saveMode: "auto" | "park") => {
     setIsSaving(true);
     try {
@@ -240,7 +275,7 @@ export function TelefonnotizDesktop() {
         status: saveMode === "park" ? "parked" : "done",
         extractionJson: {
           fields: result?.fields,
-          actions: result?.proposedActions,
+          actions: result?.liveActions,
           mode: saveMode,
         },
       };
@@ -322,6 +357,15 @@ export function TelefonnotizDesktop() {
         if (e.target === e.currentTarget) handleExit();
       }}
     >
+      <style>{`
+        @keyframes slideInFromRight {
+          from { opacity: 0; transform: translateX(30px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        .live-action-card {
+          animation: slideInFromRight 0.25s ease-out forwards;
+        }
+      `}</style>
       <div className="relative w-full h-full flex flex-col">
         {/* ===== RETURN ORB (floating, outside panel) ===== */}
         {showReturnOrb && (
@@ -510,128 +554,90 @@ export function TelefonnotizDesktop() {
                 )}
               </button>
 
-              {/* ===== LIVE TILES (below Auswerten, desktop only, during Step 1-2) ===== */}
-              {!isMobile && result && (
-                <div style={{ marginTop: 24, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
+              {/* ===== LIVE ACTIONS (below Auswerten, desktop only, during Step 1-2) ===== */}
+              {!isMobile && result && (result.needsCustomerSelection || result.needsOrderSelection || result.liveActions.length > 0) && (
+                <div style={{ marginTop: 24 }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--tn-ink-mute)", fontWeight: 700, marginBottom: 12 }}>
+                    Live-Erkennung & Aktionen
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
 
-                  {/* Customer disambiguation tile */}
-                  {result.needsCustomerSelection && result.customerCandidates.length > 1 && (
-                    <div style={{ gridColumn: "1 / -1", background: "var(--tn-orange-soft)", border: "1.5px solid var(--tn-orange)", borderRadius: 12, padding: "12px 14px" }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--tn-orange)", marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
-                        <AlertTriangle size={12} /> {result.customerCandidates.length} mögliche Kunden erkannt
-                      </div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {result.customerCandidates.map(cc => (
-                          <button key={cc.id} onClick={() => handleSelectCustomer(cc.id)} style={{
-                            background: selectedCustomerId === cc.id ? "var(--tn-green-bright)" : "var(--tn-paper)",
-                            color: selectedCustomerId === cc.id ? "white" : "var(--tn-ink)",
-                            border: `1px solid ${selectedCustomerId === cc.id ? "var(--tn-green-bright)" : "var(--tn-line)"}`,
-                            borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
-                            transition: "all 0.15s"
-                          }}>
-                            {cc.name} · {cc.city}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Matched customer tile */}
-                  {result.matchedCustomer && (
-                    <div style={{ background: "var(--tn-blue-soft)", borderRadius: 14, padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, #1E3A8A, #1E40AF)", color: "white", display: "grid", placeItems: "center", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>
-                        {result.matchedCustomer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tn-blue)" }}>{result.matchedCustomer.name}</div>
-                        <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 4 }}>{result.matchedCustomer.city || "Kunde erkannt"}</div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Matched order tile */}
-                  {result.matchedOrder && (
-                    <div style={{ background: "var(--tn-violet-soft)", borderRadius: 14, padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 10, background: "var(--tn-violet)", color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                        <FileText size={18} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tn-violet)" }}>{result.matchedOrder.orderNumber}</div>
-                        <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 4 }}>{result.matchedOrder.task}</div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Order disambiguation tile */}
-                  {result.needsOrderSelection && result.orderCandidates.length > 1 && (
-                    <div style={{ gridColumn: "1 / -1", background: "var(--tn-violet-soft)", border: "1.5px solid var(--tn-violet)", borderRadius: 12, padding: "12px 14px" }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--tn-violet)", marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
-                        <FileText size={12} /> {result.orderCandidates.length} offene Aufträge
-                      </div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {result.orderCandidates.map(oc => (
-                          <button key={oc.id} onClick={() => handleSelectOrder(oc.id)} style={{
-                            background: selectedOrderIds.includes(oc.id) ? "var(--tn-green-bright)" : "var(--tn-paper)",
-                            color: selectedOrderIds.includes(oc.id) ? "white" : "var(--tn-ink)",
-                            border: `1px solid ${selectedOrderIds.includes(oc.id) ? "var(--tn-green-bright)" : "var(--tn-line)"}`,
-                            borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
-                            transition: "all 0.15s"
-                          }}>
-                            {oc.orderNumber} · {oc.task}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Appointment tile */}
-                  {result.matchedTime && (
-                    <div style={{
-                      background: result.matchedTime.isFree ? "var(--tn-green-soft)" : "#FEF3C7",
-                      border: `1.5px solid ${result.matchedTime.isFree ? "var(--tn-green-bright)" : "var(--tn-yellow)"}`,
-                      borderRadius: 14, padding: "16px", display: "flex", flexDirection: "column", gap: 12
-                    }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 10, background: result.matchedTime.isFree ? "var(--tn-green)" : "var(--tn-yellow)", color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                        {result.matchedTime.isFree ? <Check size={18} /> : <AlertTriangle size={18} />}
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: result.matchedTime.isFree ? "var(--tn-green)" : "var(--tn-yellow)", marginBottom: 4 }}>
-                          {result.matchedTime.isFree ? "Termin frei" : "Terminkonflikt"}
+                    {/* Customer disambiguation tile */}
+                    {result.needsCustomerSelection && result.customerCandidates.length > 1 && (
+                      <div className="live-action-card" style={{ gridColumn: "1 / -1", background: "var(--tn-orange-soft)", border: "1.5px solid var(--tn-orange)", borderRadius: 12, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--tn-orange)", marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
+                          <AlertTriangle size={12} /> {result.customerCandidates.length} mögliche Kunden erkannt
                         </div>
-                        <div style={{ fontSize: 15, fontWeight: 600, color: "var(--tn-ink)" }}>{result.matchedTime.label}</div>
-                        <div style={{ fontSize: 11, color: result.matchedTime.isFree ? "var(--tn-green)" : "var(--tn-yellow)", marginTop: 4 }}>
-                          {result.matchedTime.isFree ? "Kann zugesagt werden" : "Alternative vorschlagen"}
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {result.customerCandidates.map(cc => (
+                            <button key={cc.id} onClick={() => handleSelectCustomer(cc.id)} style={{
+                              background: selectedCustomerId === cc.id ? "var(--tn-green-bright)" : "var(--tn-paper)",
+                              color: selectedCustomerId === cc.id ? "white" : "var(--tn-ink)",
+                              border: `1px solid ${selectedCustomerId === cc.id ? "var(--tn-green-bright)" : "var(--tn-line)"}`,
+                              borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                              transition: "all 0.15s"
+                            }}>
+                              {cc.name} · {cc.city}
+                            </button>
+                          ))}
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Material tile */}
-                  {result.matchedMaterial && (
-                    <div style={{ background: "var(--tn-yellow-soft)", borderRadius: 14, padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 10, background: "var(--tn-yellow)", color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                        <Package size={18} />
+                    {/* Order disambiguation tile */}
+                    {result.needsOrderSelection && result.orderCandidates.length > 1 && (
+                      <div className="live-action-card" style={{ gridColumn: "1 / -1", background: "var(--tn-violet-soft)", border: "1.5px solid var(--tn-violet)", borderRadius: 12, padding: "12px 14px" }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--tn-violet)", marginBottom: 8, display: "flex", alignItems: "center", gap: 5 }}>
+                          <FileText size={12} /> {result.orderCandidates.length} offene Aufträge
+                        </div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {result.orderCandidates.map(oc => (
+                            <button key={oc.id} onClick={() => handleSelectOrder(oc.id)} style={{
+                              background: selectedOrderIds.includes(oc.id) ? "var(--tn-green-bright)" : "var(--tn-paper)",
+                              color: selectedOrderIds.includes(oc.id) ? "white" : "var(--tn-ink)",
+                              border: `1px solid ${selectedOrderIds.includes(oc.id) ? "var(--tn-green-bright)" : "var(--tn-line)"}`,
+                              borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+                              transition: "all 0.15s"
+                            }}>
+                              {oc.orderNumber} · {oc.task}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tn-yellow)" }}>{result.matchedMaterial.charAt(0).toUpperCase() + result.matchedMaterial.slice(1)}</div>
-                        <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 4 }}>Material erkannt</div>
-                      </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* Payment tile */}
-                  {result.matchedPayment && (
-                    <div style={{ background: "var(--tn-cream-2)", borderRadius: 14, padding: "16px", display: "flex", flexDirection: "column", gap: 12 }}>
-                      <div style={{ width: 40, height: 40, borderRadius: 10, background: "var(--tn-ink-mute)", color: "white", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                        <CreditCard size={18} />
-                      </div>
-                      <div>
-                        <div style={{ fontSize: 14, fontWeight: 600 }}>{result.matchedPayment}</div>
-                        <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 4 }}>Zahlungsart</div>
-                      </div>
-                    </div>
-                  )}
+                    {/* DYNAMIC LIVE ACTIONS */}
+                    {result.liveActions.map(action => (
+                      <button 
+                        key={action.id} 
+                        className="live-action-card"
+                        onClick={() => handleLiveActionClick(action)}
+                        style={{
+                          background: "var(--tn-paper)", border: "1px solid var(--tn-line)", borderRadius: 14, padding: "16px",
+                          display: "flex", flexDirection: "column", gap: 12, cursor: "pointer", textAlign: "left",
+                          boxShadow: "0 2px 8px rgba(0,0,0,0.04)", transition: "transform 0.15s, box-shadow 0.15s"
+                        }}
+                        onMouseOver={(e) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 6px 16px rgba(0,0,0,0.08)"; }}
+                        onMouseOut={(e) => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "0 2px 8px rgba(0,0,0,0.04)"; }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <div style={{ width: 34, height: 34, borderRadius: 10, background: action.priority === "high" ? "var(--tn-orange-soft)" : "var(--tn-cream-3)", color: action.priority === "high" ? "var(--tn-orange)" : "var(--tn-ink)", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                            {action.type === "create_order" ? <Package size={16} /> :
+                             action.type === "create_customer" ? <User size={16} /> :
+                             action.type === "review_email" ? <Mail size={16} /> :
+                             action.type === "prepare_quote" ? <FileText size={16} /> :
+                             action.type.includes("cal") ? <Calendar size={16} /> :
+                             <Zap size={16} />}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tn-ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{action.title}</div>
+                            <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{action.subtitle}</div>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
 
+                  </div>
                 </div>
               )}
             </>
@@ -687,19 +693,19 @@ export function TelefonnotizDesktop() {
               </div>
 
               {/* Actions preview */}
-              {result.proposedActions.length > 0 && (
+              {result.liveActions.length > 0 && (
                 <div>
                   <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--tn-ink-mute)", fontWeight: 700, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
                     <span className="tn-pulse" /> Was passiert beim Verteilen
                   </div>
-                  {result.proposedActions.map(action => (
+                  {result.liveActions.map(action => (
                     <div key={action.id} className="tn-action-row">
                       <div style={{
                         width: 18, height: 18, borderRadius: "50%",
-                        background: action.type === "auto" ? "var(--tn-green-bright)" : "var(--tn-yellow)",
+                        background: action.source === "database" || action.priority === "high" ? "var(--tn-green-bright)" : "var(--tn-yellow)",
                         color: "white", display: "grid", placeItems: "center"
                       }}>
-                        {action.type === "auto" ? <Check size={9} /> : <AlertTriangle size={9} />}
+                        {action.source === "database" || action.priority === "high" ? <Check size={9} /> : <AlertTriangle size={9} />}
                       </div>
                       <div>
                         <div style={{ fontWeight: 600 }}>{action.title}</div>
@@ -707,10 +713,10 @@ export function TelefonnotizDesktop() {
                       </div>
                       <span style={{
                         fontSize: 9, padding: "2px 6px", borderRadius: 4, fontWeight: 700, letterSpacing: "0.04em",
-                        background: action.type === "auto" ? "var(--tn-green-soft)" : "var(--tn-yellow-soft)",
-                        color: action.type === "auto" ? "var(--tn-green)" : "var(--tn-yellow)"
+                        background: action.source === "database" || action.priority === "high" ? "var(--tn-green-soft)" : "var(--tn-yellow-soft)",
+                        color: action.source === "database" || action.priority === "high" ? "var(--tn-green)" : "var(--tn-yellow)"
                       }}>
-                        {action.type === "auto" ? "auto" : "prüfen"}
+                        {action.source === "database" || action.priority === "high" ? "auto" : "prüfen"}
                       </span>
                     </div>
                   ))}
@@ -741,9 +747,9 @@ export function TelefonnotizDesktop() {
               <p style={{ fontSize: 13, color: "var(--tn-ink-soft)", textAlign: "center", marginBottom: 20, maxWidth: 340, lineHeight: 1.5 }}>
                 Die Telefonnotiz wurde gespeichert und alle Aktionen wurden ausgeführt.
               </p>
-              {result && result.proposedActions.length > 0 && (
+              {result && result.liveActions.length > 0 && (
                 <div style={{ background: "var(--tn-paper)", border: "1px solid var(--tn-line)", borderRadius: 12, padding: "12px 16px", marginBottom: 18, maxWidth: 320, width: "100%" }}>
-                  {result.proposedActions.map(a => (
+                  {result.liveActions.map(a => (
                     <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 12 }}>
                       <Check size={14} style={{ color: "var(--tn-green-bright)", flexShrink: 0 }} />
                       <span>{a.title}</span>
@@ -1065,7 +1071,7 @@ export function TelefonnotizDesktop() {
               <div>
                 <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 2 }}>Automatisch verarbeiten</h4>
                 <div style={{ fontSize: 11, color: "rgba(250,246,238,0.6)", lineHeight: 1.4 }}>
-                  {result?.proposedActions.filter(a => a.type === "auto").length || 0} grüne Aktionen sofort anwenden
+                  {result?.liveActions.filter((a: any) => a.source === "database" || a.priority === "high").length || 0} grüne Aktionen sofort anwenden
                 </div>
               </div>
               <ChevronRight size={14} style={{ opacity: 0.5 }} />
@@ -1201,6 +1207,41 @@ export function TelefonnotizDesktop() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+
+      {/* ===== EMAIL MOCK OVERLAY ===== */}
+      {showEmailMock && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-navy-900/40 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowEmailMock(false); }}>
+          <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 600, boxShadow: "0 20px 40px rgba(0,0,0,0.2)", overflow: "hidden" }}>
+            <div style={{ background: "var(--tn-ink)", color: "white", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <h3 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 18, display: "flex", alignItems: "center", gap: 8 }}><Mail size={18}/> Letzte E-Mails & Anhänge</h3>
+              <button onClick={() => setShowEmailMock(false)} style={{ background: "none", border: "none", color: "white", cursor: "pointer" }}><X size={20}/></button>
+            </div>
+            <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ border: "1px solid var(--tn-line)", borderRadius: 8, padding: 16, background: "var(--tn-cream-2)" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>Kratzer am Kronleuchter</div>
+                    <div style={{ fontSize: 12, color: "var(--tn-ink-mute)" }}>Von: {result?.matchedCustomer?.name || "Kunde"} · Gestern, 14:32</div>
+                  </div>
+                  <div style={{ background: "var(--tn-blue-soft)", color: "var(--tn-blue)", padding: "4px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, alignSelf: "flex-start" }}>Posteingang</div>
+                </div>
+                <p style={{ fontSize: 13, lineHeight: 1.5, color: "var(--tn-ink)", margin: 0 }}>
+                  "Guten Tag, anbei wie telefonisch besprochen die Bilder der beschädigten Teile. Können Sie diese noch retten und neu versilbern? Bitte um kurze Rückmeldung bezüglich Preis und Dauer."
+                </p>
+                <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+                  <button onClick={() => alert("Bildvorschau öffnet sich")} style={{ display: "flex", alignItems: "center", gap: 8, background: "white", border: "1px solid var(--tn-line)", borderRadius: 6, padding: "8px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                    <ImageIcon size={14} color="var(--tn-orange)" /> kratzer_detail_1.jpg
+                  </button>
+                  <button onClick={() => alert("Bildvorschau öffnet sich")} style={{ display: "flex", alignItems: "center", gap: 8, background: "white", border: "1px solid var(--tn-line)", borderRadius: 6, padding: "8px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                    <ImageIcon size={14} color="var(--tn-orange)" /> kratzer_detail_2.jpg
+                  </button>
+                </div>
+              </div>
+              <button onClick={() => setShowEmailMock(false)} className="tn-btn-primary" style={{ alignSelf: "flex-end" }}>Zurück zur Notiz</button>
+            </div>
+          </div>
+        </div>
+      )}
         </div>
       </div>
     </div>

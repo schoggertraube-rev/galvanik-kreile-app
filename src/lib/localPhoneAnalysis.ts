@@ -6,17 +6,26 @@ export interface LocalAnalysisResult {
   matchedOrder: MockOrder | null;
   orderCandidates: { id: string; orderNumber: string; task: string; status: string; station: string; dueDate: string; confidence: number; matchReason: string; }[];
   matchedMaterial: string | null;
+  surfaceRequested: string | null;
   matchedTheme: string | null;
-  matchedTime: { label: string; dayOfWeek: number; isFree: boolean } | null;
+  matchedTime: { label: string; dayOfWeek: number; isFree: boolean; intent: "deadline" | "pickup" | "dropoff" | "callback" } | null;
   matchedPayment: string | null;
+  
+  intents: {
+    wantsNewOrder: boolean;
+    wantsNewCustomer: boolean;
+    wantsQuote: boolean;
+    hasEmailOrAttachment: boolean;
+  };
+  
   suggestedAnswer: string;
   overallConfidence: number;
   requiresAI: boolean;
   aiReason?: string;
-  highlights: { word: string; type: "kunde" | "auftrag" | "material" | "thema" | "zeit" }[];
+  highlights: { word: string; type: "kunde" | "auftrag" | "material" | "thema" | "zeit" | "aktion" }[];
 }
 
-function parseTimePhrase(text: string): { label: string; dayOfWeek: number; isFree: boolean } | null {
+function parseTimePhrase(text: string): { label: string; dayOfWeek: number; isFree: boolean; intent: "deadline" | "pickup" | "dropoff" | "callback" } | null {
   const lower = text.toLowerCase();
   const now = new Date();
   const weekdays = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
@@ -35,6 +44,11 @@ function parseTimePhrase(text: string): { label: string; dayOfWeek: number; isFr
   const timeMatch = lower.match(/(\d{1,2})(?::(\d{2}))?\s*(?:uhr)?/);
   const timeStr = timeMatch ? `${timeMatch[1]}:${timeMatch[2] || "00"}` : "10:00";
 
+  let intent: "deadline" | "pickup" | "dropoff" | "callback" = "pickup";
+  if (lower.includes("bis ")) intent = "deadline";
+  else if (lower.includes("bringen") || lower.includes("abgeben")) intent = "dropoff";
+  else if (lower.includes("rückruf") || lower.includes("anrufen")) intent = "callback";
+
   for (const [pattern, daysAhead] of timePatterns) {
     if (pattern.test(lower)) {
       const targetDate = new Date(now);
@@ -42,9 +56,16 @@ function parseTimePhrase(text: string): { label: string; dayOfWeek: number; isFr
       const dow = targetDate.getDay();
       const isFree = dow >= 1 && dow <= 5;
       const dayLabel = `${weekdays[dow]} ${targetDate.getDate()}.${targetDate.getMonth() + 1}. · ${timeStr}`;
-      return { label: dayLabel, dayOfWeek: dow, isFree };
+      return { label: dayLabel, dayOfWeek: dow, isFree, intent };
     }
   }
+  
+  // Extra check for "bis september", "bis morgen" without specific days
+  const monthMatch = lower.match(/\bbis\s+(januar|februar|märz|april|mai|juni|juli|august|september|oktober|november|dezember)\b/i);
+  if (monthMatch) {
+    return { label: monthMatch[0], dayOfWeek: 1, isFree: true, intent: "deadline" };
+  }
+  
   return null;
 }
 
@@ -155,11 +176,24 @@ export function performLocalAnalysis(text: string): LocalAnalysisResult {
       }
   }
 
-  // 4. Material
-  const materials = ["zink", "chrom", "nickel", "messing", "kupfer", "gold", "silber", "eloxal", "alu", "stahl"];
+  // 4. Material & Surface
+  const materials = ["zink", "messing", "kupfer", "gold", "silber", "alu", "stahl", "edelstahl", "bronze"];
   const finishes = ["vernickeln", "verchromen", "verzinken", "vergolden", "versilbern", "brünieren", "eloxieren"];
-  const material = materials.find(m => lower.includes(m)) || finishes.find(f => lower.includes(f)) || null;
+  const material = materials.find(m => lower.includes(m)) || null;
+  const surfaceRequested = finishes.find(f => lower.includes(f)) || null;
   if (material) highlights.push({ word: material, type: "material" });
+  if (surfaceRequested) highlights.push({ word: surfaceRequested, type: "material" });
+
+  // 4b. New Intents (Live Actions)
+  const wantsNewOrder = /neuer auftrag|auftrag anlegen|möchte etwas abgeben|kommt mit teilen|bringt|neue teile|neue ware|zum (versilbern|verchromen|verzinken) bringen/i.test(lower);
+  const wantsNewCustomer = /neuer kunde|noch nicht angelegt|erstmalig|zum ersten mal|keine kundennummer/i.test(lower);
+  const wantsQuote = /kostenvoranschlag|kv\b|angebot|preis|was kostet|ungefährer preis|vorab schätzen/i.test(lower);
+  const hasEmailOrAttachment = /e-mail|mail\b|habe geschickt|habe bilder geschickt|siehe anhang|anhang|pdf\b|foto|bilder|dokument|lieferschein/i.test(lower);
+
+  if (wantsNewOrder) highlights.push({ word: "Neuer Auftrag", type: "aktion" });
+  if (wantsNewCustomer) highlights.push({ word: "Neuer Kunde", type: "aktion" });
+  if (wantsQuote) highlights.push({ word: "Angebot", type: "aktion" });
+  if (hasEmailOrAttachment) highlights.push({ word: "E-Mail/Bild", type: "aktion" });
 
   // 5. Theme
   const matchedKeywords: string[] = [];
@@ -213,9 +247,16 @@ export function performLocalAnalysis(text: string): LocalAnalysisResult {
     matchedOrder,
     orderCandidates,
     matchedMaterial: material,
+    surfaceRequested,
     matchedTheme: theme,
     matchedTime,
     matchedPayment: payment,
+    intents: {
+      wantsNewOrder,
+      wantsNewCustomer,
+      wantsQuote,
+      hasEmailOrAttachment
+    },
     suggestedAnswer,
     overallConfidence: matchedCustomer ? (matchedOrder ? 90 : 70) : 40,
     requiresAI,

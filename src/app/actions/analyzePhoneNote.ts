@@ -10,7 +10,15 @@ export type PhoneNoteCategory =
   | "complaint"
   | "callback"
   | "new_order_intake"
+  | "new_customer_request"
   | "quote_request"
+  | "email_review"
+  | "attachment_review"
+  | "photo_review"
+  | "document_review"
+  | "appointment_request"
+  | "deadline_request"
+  | "material_or_surface_info"
   | "shipping_question"
   | "technical_question"
   | "general";
@@ -50,13 +58,20 @@ export async function analyzePhoneNoteWithAI(input: AIAnalysisInput) {
         description: "Die Hauptkategorie des Anrufs.",
         enum: [
           "pickup_request", "status_question", "payment_question", "complaint",
-          "callback", "new_order_intake", "quote_request", "shipping_question",
-          "technical_question", "general"
+          "callback", "new_order_intake", "new_customer_request", "quote_request",
+          "email_review", "attachment_review", "photo_review", "document_review",
+          "appointment_request", "deadline_request", "material_or_surface_info",
+          "shipping_question", "technical_question", "general"
         ]
       },
       material: {
         type: Type.STRING,
-        description: "Das erkannte Material oder Verfahren (z.B. Zink, Chrom, Vernickeln), falls aus dem Text ersichtlich.",
+        description: "Das erkannte Material (z.B. Zink, Kupfer, Messing, Stahl, Bronze), falls aus dem Text ersichtlich.",
+        nullable: true,
+      },
+      surfaceRequested: {
+        type: Type.STRING,
+        description: "Die gewünschte Oberfläche oder das Verfahren (z.B. Versilbern, Verchromen, Vernickeln).",
         nullable: true,
       },
       suggestedAnswer: {
@@ -89,9 +104,10 @@ Du darfst NIEMALS Fakten erfinden. Nutze AUSSCHLIESSLICH diese bekannten Fakten 
 REGELN FÜR DEN ANTWORTVORSCHLAG:
 1. Wenn es ein neuer Auftrag ist (new_order_intake): Formuliere, dass der Vorgang für den Wareneingang erfasst wird.
 2. Wenn es ein KV/Angebot ist (quote_request): Weise darauf hin, dass Foto/Teil/Material nötig sind für eine verbindliche Schätzung.
-3. Wenn es eine Abholung ist: Weise auf Prüfung von Auftrag, Termin und Zahlung hin.
-4. Wenn Reklamation: Formuliere, dass das aufgenommen und zur Klärung weitergegeben wird.
-5. Keine trockenen Standard-Phrasen wie "Ich nehme die Anfrage auf und kläre den Vorgang intern" bei jedem Fall. Sei kontextbezogen!
+3. Wenn Neukunde (new_customer_request): Erfinde keine Fakten zu einem existierenden Kunden. Weise darauf hin, dass der Kunde im System neu angelegt wird.
+4. Wenn E-Mail/Bilder (email_review, photo_review): Erwähne, dass die E-Mail/Bilder jetzt geöffnet und geprüft werden.
+5. Wenn Reklamation (complaint): Formuliere, dass das aufgenommen und zur Klärung weitergegeben wird.
+6. Keine trockenen Standard-Phrasen wie "Ich nehme die Anfrage auf" bei jedem Fall. Sei kontextbezogen!
 `;
 
     const response = await ai.models.generateContent({
@@ -105,7 +121,14 @@ REGELN FÜR DEN ANTWORTVORSCHLAG:
     });
 
     if (!response.text) return null;
-    return JSON.parse(response.text);
+    const parsed = JSON.parse(response.text);
+    return {
+      category: parsed.category,
+      material: parsed.material,
+      surfaceRequested: parsed.surfaceRequested,
+      suggestedAnswer: parsed.suggestedAnswer,
+      overallConfidence: parsed.overallConfidence
+    };
 
   } catch (error) {
     console.error("Gemini AI Analysis Error:", error);

@@ -12,13 +12,68 @@ export interface AnalysisField {
   type: "kunde" | "auftrag" | "thema" | "material" | "zeit" | "zahlung";
 }
 
-export interface ProposedAction {
+export interface LivePhoneAction {
   id: string;
+  type:
+    | "create_order"
+    | "create_customer"
+    | "prepare_quote"
+    | "review_email"
+    | "review_attachments"
+    | "review_photos"
+    | "open_customer"
+    | "open_order"
+    | "check_payment"
+    | "schedule_pickup"
+    | "schedule_dropoff"
+    | "clarify_customer"
+    | "clarify_order"
+    | "create_calendar_event"
+    | "update_order_pickup"
+    | "add_customer_note"
+    | "create_complaint";
+
   title: string;
   subtitle: string;
-  type: "auto" | "review";
-  actionType: string;
+  confidence: number;
+  priority: "low" | "medium" | "high" | "critical";
+  source: "database" | "local" | "ai" | "manual";
+  payload: Record<string, any>;
+  status: "suggested" | "selected" | "dismissed";
 }
+
+export type PhoneNoteToOrderDraft = {
+  source: "phone_note";
+  phoneNoteId?: string;
+  rawText: string;
+  customerId?: string;
+  customerName?: string;
+  customerCandidateIds?: string[];
+  title?: string;
+  itemName?: string;
+  material?: string;
+  surfaceRequested?: string;
+  requestedDate?: string;
+  notes?: string;
+  relatedEmailIds?: string[];
+  relatedAttachmentIds?: string[];
+  suggestedAction?: "create_order";
+};
+
+export type PhoneNoteToCustomerDraft = {
+  source: "phone_note";
+  rawText: string;
+  proposedName?: string;
+  phone?: string;
+  email?: string;
+  city?: string;
+  notes?: string;
+  intendedFirstOrder?: {
+    itemName?: string;
+    surfaceRequested?: string;
+    requestedDate?: string;
+  };
+};
 
 export interface CustomerCandidate {
   id: string;
@@ -53,8 +108,8 @@ export interface AnalysisResult {
   suggestedAnswer: string;
   overallConfidence: number;
   fields: AnalysisField[];
-  proposedActions: ProposedAction[];
-  highlights: { word: string; type: "kunde" | "auftrag" | "material" | "thema" | "zeit" }[];
+  liveActions: LivePhoneAction[];
+  highlights: { word: string; type: "kunde" | "auftrag" | "material" | "thema" | "zeit" | "aktion" }[];
   // Disambiguation
   customerCandidates: CustomerCandidate[];
   needsCustomerSelection: boolean;
@@ -110,49 +165,110 @@ export function usePhoneNoteAnalysis() {
       if (baseResult.matchedTime) fields.push({ label: "Wunschtermin", value: baseResult.matchedTime.label, confidence: baseResult.matchedTime.isFree ? 90 : 70, type: "zeit" });
       if (baseResult.matchedPayment) fields.push({ label: "Zahlung", value: baseResult.matchedPayment, confidence: 85, type: "zahlung" });
 
-      const proposedActions: ProposedAction[] = [];
+      const liveActions: LivePhoneAction[] = [];
       
-      // Intent-based actions (HYBRID AI additions)
-      if (aiCategory === "new_order_intake") {
-        proposedActions.push({
-          id: "intake", title: "Neuer Wareneingang",
-          subtitle: `Erfassung für ${baseResult.matchedCustomer?.name || "Kunde"} vorbereiten`,
-          type: "auto", actionType: "create_intake"
+      // Intent-based actions (HYBRID AI + LOCAL)
+      if (baseResult.intents.wantsNewOrder || aiCategory === "new_order_intake") {
+        const orderPayload: PhoneNoteToOrderDraft = {
+          source: "phone_note",
+          rawText: text,
+          customerId: baseResult.matchedCustomer?.id,
+          customerName: baseResult.matchedCustomer?.name,
+          customerCandidateIds: baseResult.customerCandidates.map(c => c.id),
+          material: baseResult.matchedMaterial || undefined,
+          surfaceRequested: baseResult.surfaceRequested || undefined,
+          requestedDate: baseResult.matchedTime?.label || undefined,
+          suggestedAction: "create_order"
+        };
+        
+        liveActions.push({
+          id: "create_order", title: "Auftrag anlegen",
+          subtitle: `Wareneingang ${baseResult.matchedCustomer?.name ? `für ${baseResult.matchedCustomer.name}` : "vorbereiten"}`,
+          type: "create_order",
+          confidence: 90, priority: "high", source: "local",
+          payload: orderPayload, status: "suggested"
         });
-      } else if (aiCategory === "quote_request") {
-        proposedActions.push({
-          id: "quote", title: "Angebot / KV vorbereiten",
-          subtitle: "Material klären, Foto anfordern",
-          type: "auto", actionType: "create_quote"
+      }
+      
+      // Neukunde - Strict Logic
+      if (baseResult.intents.wantsNewCustomer || aiCategory === "new_customer_request") {
+        // Only if no strong customer match
+        if (!baseResult.matchedCustomer && (!baseResult.customerCandidates || baseResult.customerCandidates.length === 0 || baseResult.customerCandidates[0].confidence < 80)) {
+          const custPayload: PhoneNoteToCustomerDraft = {
+            source: "phone_note",
+            rawText: text,
+            notes: `Aus Telefonnotiz erstellt.\n\nKundenanfrage: ${text}`,
+            intendedFirstOrder: {
+               surfaceRequested: baseResult.surfaceRequested || undefined,
+               requestedDate: baseResult.matchedTime?.label || undefined,
+            }
+          };
+          liveActions.push({
+            id: "create_customer", title: "Neuen Kunden vorbereiten",
+            subtitle: "Kein sicherer Treffer gefunden.",
+            type: "create_customer",
+            confidence: 85, priority: "medium", source: "local",
+            payload: custPayload, status: "suggested"
+          });
+        }
+      }
+
+      if (baseResult.intents.wantsQuote || aiCategory === "quote_request") {
+        liveActions.push({
+          id: "quote", title: "KV / Angebot vorbereiten",
+          subtitle: "Daten sammeln für Schätzung",
+          type: "prepare_quote",
+          confidence: 85, priority: "medium", source: "local",
+          payload: { text }, status: "suggested"
         });
-      } else if (aiCategory === "complaint") {
-        proposedActions.push({
+      }
+      
+      if (baseResult.intents.hasEmailOrAttachment || ["email_review", "attachment_review", "photo_review", "document_review"].includes(aiCategory || "")) {
+         liveActions.push({
+            id: "review_email", title: "E-Mail/Bilder prüfen",
+            subtitle: "Letzte Mails und Anhänge sichten",
+            type: "review_email",
+            confidence: 95, priority: "high", source: "local",
+            payload: { customerId: baseResult.matchedCustomer?.id }, status: "suggested"
+         });
+      }
+
+      if (aiCategory === "complaint") {
+        liveActions.push({
           id: "complaint", title: "Reklamationsfall anlegen",
           subtitle: `Auftrag ${baseResult.matchedOrder?.orderNumber || "prüfen"} & Qualitätsprüfung`,
-          type: "review", actionType: "create_complaint"
+          type: "create_complaint",
+          confidence: 85, priority: "high", source: "ai",
+          payload: { orderId: baseResult.matchedOrder?.id }, status: "suggested"
         });
       }
 
-      // Fact-based actions (LOCAL DATABASE additions)
+      // Fact-based actions
       if (baseResult.matchedTime) {
-        proposedActions.push({
-          id: "cal", title: "Kalendereintrag",
-          subtitle: `${baseResult.matchedTime.label} · Abholung ${baseResult.matchedCustomer?.name || "Kunde"}`,
-          type: "auto", actionType: "create_calendar_event"
+        liveActions.push({
+          id: "cal", title: "Kalendereintrag / Frist",
+          subtitle: `${baseResult.matchedTime.label} · ${baseResult.matchedTime.intent === 'deadline' ? 'Deadline' : 'Abholung'}`,
+          type: "create_calendar_event",
+          confidence: 90, priority: "medium", source: "database",
+          payload: { date: baseResult.matchedTime }, status: "suggested"
         });
       }
       if (baseResult.matchedOrder && aiCategory !== "complaint") {
-        proposedActions.push({
+        liveActions.push({
           id: "ord", title: `Auftrag ${baseResult.matchedOrder.orderNumber}`,
-          subtitle: `${baseResult.matchedTime ? "Abholtermin" : "Aktualisierung"}${baseResult.matchedPayment ? " + Zahlungsart " + baseResult.matchedPayment.toLowerCase() : ""}`,
-          type: "auto", actionType: "update_order_pickup"
+          subtitle: `Aktualisierung/Notiz zum Auftrag`,
+          type: "update_order_pickup",
+          confidence: 90, priority: "low", source: "database",
+          payload: { orderId: baseResult.matchedOrder.id }, status: "suggested"
         });
       }
       if (baseResult.matchedCustomer) {
-        proposedActions.push({
+        liveActions.push({
           id: "cust", title: "Kundenkarte: Notiz",
-          subtitle: `${baseResult.matchedCustomer.name} · Anruf ${new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`,
-          type: "auto", actionType: "add_customer_note"
+          subtitle: `${baseResult.matchedCustomer.name} · Anruf hinterlegen`,
+          type: "add_customer_note",
+          confidence: 95, priority: "low", source: "database",
+          payload: { customerId: baseResult.matchedCustomer.id }, status: "suggested"
         });
       }
 
@@ -168,7 +284,7 @@ export function usePhoneNoteAnalysis() {
         suggestedAnswer: baseResult.suggestedAnswer,
         overallConfidence: baseResult.overallConfidence,
         fields,
-        proposedActions,
+        liveActions,
         highlights: baseResult.highlights || [],
         customerCandidates: baseResult.customerCandidates,
         needsCustomerSelection,
@@ -203,10 +319,11 @@ export function usePhoneNoteAnalysis() {
           // Merge AI insights with local strict data. DB matches (customer/order overrides) always win over AI.
           const mergedResult = {
               ...localResult,
-              matchedTheme: aiData.category || localResult.matchedTheme,
-              matchedMaterial: aiData.material || localResult.matchedMaterial,
-              suggestedAnswer: aiData.suggestedAnswer || localResult.suggestedAnswer,
-              overallConfidence: aiData.overallConfidence || localResult.overallConfidence,
+              matchedTheme: (aiData as any).category || localResult.matchedTheme,
+              matchedMaterial: (aiData as any).material || localResult.matchedMaterial,
+              surfaceRequested: (aiData as any).surfaceRequested || localResult.surfaceRequested,
+              suggestedAnswer: (aiData as any).suggestedAnswer || localResult.suggestedAnswer,
+              overallConfidence: (aiData as any).overallConfidence || localResult.overallConfidence,
               aiReason: "Hybrid AI Analyse (Absicht & Formulierung)"
           };
           setResult(buildFieldsAndActions(mergedResult, aiData.category, true));
