@@ -124,7 +124,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               Die Integration echter Telefonnotizen aus der Kommunikationszentrale ist vorbereitet. 
               Sobald das System vollständig mit echten Auftragsdaten verknüpft ist, werden Anrufe zu diesem Auftrag hier protokolliert.
             </p>
-            <Link href="/kommunikation?mode=telefonnotiz">
+            <Link href="/telefonnotiz?source=warendurchlauf">
               <Button variant="outline" className="w-full text-xs bg-white border-blue-300 text-blue-700 hover:bg-blue-100">
                 Zur Kommunikationszentrale
               </Button>

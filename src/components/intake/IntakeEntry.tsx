@@ -61,7 +61,7 @@ export function IntakeEntry({
       </div>
 
       {/* ── TELEFONNOTIZ SHORTCUT ── */}
-      <Link href="/kommunikation?mode=telefonnotiz" className="flex items-center justify-between w-full bg-navy-900 rounded-3xl p-6 hover:bg-navy-800 transition-all shadow-md group cursor-pointer">
+      <Link href="/telefonnotiz?source=warendurchlauf" className="flex items-center justify-between w-full bg-navy-900 rounded-3xl p-6 hover:bg-navy-800 transition-all shadow-md group cursor-pointer">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center shrink-0">
             <Phone className="w-6 h-6 text-white" strokeWidth={1.5} />

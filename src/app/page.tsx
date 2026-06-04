@@ -135,7 +135,7 @@ export default function HomeDashboard() {
       <section>
         <h2 className="text-sm font-bold text-text-muted uppercase tracking-wider mb-4">Schnellstart</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          <Link href="/kommunikation?mode=telefonnotiz" className="bg-white border border-neutral-gray-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center hover:border-navy-900 hover:shadow-md transition-all active:scale-95 group cursor-pointer">
+          <Link href="/telefonnotiz?source=home" className="bg-white border border-neutral-gray-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center hover:border-navy-900 hover:shadow-md transition-all active:scale-95 group cursor-pointer">
             <div className="w-12 h-12 bg-bg-app-soft rounded-full flex items-center justify-center mb-3 group-hover:bg-navy-900 transition-colors">
               <Phone className="w-6 h-6 text-navy-900 group-hover:text-white transition-colors" />
             </div>

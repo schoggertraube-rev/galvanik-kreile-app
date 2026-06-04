@@ -25,10 +25,11 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
     }).catch(() => setIsDemoMode(true));
   }, []);
 
-  // Start/Login-Screen: kein Header, keine Nav
+  // Start/Login/Focus-Modus: kein Header, keine Nav
   const isStartScreen = pathname === "/start" || pathname === "/login";
+  const isFocusMode = pathname.startsWith("/telefonnotiz");
 
-  if (isStartScreen) {
+  if (isStartScreen || isFocusMode) {
     return (
       <RealtimeSyncProvider>
         <div className="min-h-screen bg-bg-app text-kreile-text antialiased">

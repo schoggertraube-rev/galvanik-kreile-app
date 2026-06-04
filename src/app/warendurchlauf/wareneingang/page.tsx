@@ -58,7 +58,7 @@ export default function WarendurchlaufLeitstand() {
 
               {/* Telefonnotiz (ersetzt Datei-Upload) */}
               <Link
-                href="/kommunikation?mode=telefonnotiz"
+                href="/telefonnotiz?source=warendurchlauf"
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
                 style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
               >

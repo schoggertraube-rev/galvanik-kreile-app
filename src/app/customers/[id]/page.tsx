@@ -414,7 +414,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                       Die Anbindung der echten Telefonnotizen aus der Kommunikationszentrale ist für diesen Demo-Kunden vorbereitet. 
                       Sobald echte Kundendaten verknüpft sind, erscheinen hier alle relevanten Anrufe und Notizen automatisch.
                     </p>
-                    <Link href="/kommunikation?mode=telefonnotiz">
+                    <Link href="/telefonnotiz?source=kunde">
                       <Button variant="outline" className="mt-2 text-xs bg-white border-blue-300 text-blue-700 hover:bg-blue-100">
                         Zur Kommunikationszentrale
                       </Button>
