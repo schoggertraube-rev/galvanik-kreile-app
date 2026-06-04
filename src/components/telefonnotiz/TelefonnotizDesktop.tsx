@@ -41,6 +41,7 @@ export function TelefonnotizDesktop() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const source = searchParams.get("source") || "home";
+  const returnTo = searchParams.get("returnTo");
 
   // State
   const [text, setText] = useState("");
@@ -184,15 +185,15 @@ export function TelefonnotizDesktop() {
     if (text.trim() && step < 4) {
       setShowExitDialog(true);
     } else {
-      router.push(source === "kommunikation" ? "/kommunikation" : "/");
+      router.push(returnTo || (source === "kommunikation" ? "/kommunikation" : "/"));
     }
-  }, [text, step, source, router]);
+  }, [text, step, source, returnTo, router]);
 
   const handleDiscard = useCallback(() => {
     clearDraft();
     setShowExitDialog(false);
-    router.push(source === "kommunikation" ? "/kommunikation" : "/");
-  }, [clearDraft, source, router]);
+    router.push(returnTo || (source === "kommunikation" ? "/kommunikation" : "/"));
+  }, [clearDraft, source, returnTo, router]);
 
   // Backdrop HTML for mirror highlighting
   const backdropHtml = useMemo(() => {
@@ -207,10 +208,18 @@ export function TelefonnotizDesktop() {
         if (e.target === e.currentTarget) handleExit();
       }}
     >
-      <div 
-        className="flex-1 w-full h-full flex flex-col overflow-hidden md:rounded-4xl md:shadow-2xl md:ring-1 md:ring-white/10"
-        style={{ fontFamily: "'Manrope', sans-serif", background: "var(--tn-cream)", color: "var(--tn-ink)", WebkitFontSmoothing: "antialiased" }}
-      >
+      <div className="relative w-full h-full flex flex-col">
+        <div 
+          className="flex-1 w-full h-full flex flex-col overflow-hidden md:rounded-4xl md:shadow-2xl md:ring-1 md:ring-white/10"
+          style={{ 
+            fontFamily: "'Manrope', sans-serif", 
+            background: "var(--tn-cream)", 
+            color: "var(--tn-ink)", 
+            WebkitFontSmoothing: "antialiased",
+            maskImage: (!isMobile && returnTo?.includes("wareneingang")) ? "radial-gradient(circle at 0px 0px, transparent 68px, black 69px)" : "none",
+            WebkitMaskImage: (!isMobile && returnTo?.includes("wareneingang")) ? "radial-gradient(circle at 0px 0px, transparent 68px, black 69px)" : "none",
+          }}
+        >
 
       {/* ===== HEADER ===== */}
       <header style={{ background: "var(--tn-cream)", borderBottom: "1px solid var(--tn-line)", padding: isMobile ? "12px 16px" : "14px 22px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexShrink: 0 }}>
@@ -812,7 +821,27 @@ export function TelefonnotizDesktop() {
           to { opacity: 1; transform: translateY(0); }
         }
       `}</style>
+      
+      {/* The floating return button in the cutout (only visible on desktop when coming from wareneingang) */}
+      {!isMobile && returnTo?.includes("wareneingang") && (
+        <button
+          onClick={() => router.push(returnTo)}
+          title="Zurück zum Wareneingang"
+          className="absolute z-50 flex items-center justify-center bg-white/80 backdrop-blur-md shadow-xl border border-white/60 hover:bg-white hover:scale-105 active:scale-95 transition-all"
+          style={{
+            top: 10,
+            left: 10,
+            width: 44,
+            height: 44,
+            borderRadius: "50%",
+            color: "var(--tn-ink)",
+          }}
+        >
+          <ArrowLeft size={20} />
+        </button>
+      )}
       </div>
     </div>
-  );
+  </div>
+);
 }
