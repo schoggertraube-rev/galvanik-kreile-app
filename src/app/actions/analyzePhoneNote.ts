@@ -8,10 +8,82 @@ export async function analyzePhoneNoteWithAI(text: string) {
     return null;
   }
 
-  // Use Gemini API Key from environment
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = 
+    process.env.GEMINI_API_KEY || 
+    process.env.GOOGLE_API_KEY || 
+    process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set in environment variables");
+    // FALLBACK: Lokale Regex-Analyse
+    const lower = text.toLowerCase();
+    
+    // Customer
+    const matchedCustomer = INITIAL_CUSTOMERS.find(c => c.name && lower.includes(c.name.toLowerCase()));
+    
+    // Order
+    const orderMatch = text.match(/A-\d{4}-\d{4}/i);
+    const orderNumber = orderMatch ? orderMatch[0].toUpperCase() : null;
+
+    // Material
+    const materials = ["zink", "chrom", "nickel", "messing", "kupfer", "gold", "silber", "eloxal", "alu", "stahl"];
+    const finishes = ["vernickeln", "verchromen", "verzinken", "vergolden", "versilbern", "brünieren", "eloxieren"];
+    const material = materials.find(m => lower.includes(m)) || finishes.find(f => lower.includes(f)) || null;
+
+    // Keywords / Theme
+    const matchedKeywords: string[] = [];
+    if (/reklamation|beschädigt|kratzer|kaputt|defekt|mangel/i.test(lower)) matchedKeywords.push("Reklamation");
+    if (/rechnung|zahlung|bezahlen|überweisung|bar\b|offen.*€|€.*offen/i.test(lower)) matchedKeywords.push("Buchhaltung/Zahlung");
+    if (/abhol|versand|spedition|lieferung|fertig|termin|morgen|übermorgen/i.test(lower)) matchedKeywords.push("Termin/Logistik");
+    if (/angebot|preis|kosten/i.test(lower)) matchedKeywords.push("Angebot");
+
+    let theme = null;
+    if (matchedKeywords.includes("Termin/Logistik")) theme = "Abholtermin";
+    else if (matchedKeywords.includes("Reklamation")) theme = "Reklamation";
+    else if (matchedKeywords.includes("Buchhaltung/Zahlung")) theme = "Zahlungsfrage";
+    else if (matchedKeywords.includes("Angebot")) theme = "Angebotsanfrage";
+    else if (lower.includes("status") || lower.includes("stand")) theme = "Statusanfrage";
+    else if (lower.includes("preis") || lower.includes("kosten")) theme = "Preisanfrage";
+
+    // Payment
+    let payment = null;
+    if (lower.includes("bar")) payment = "Bar bei Abholung";
+    else if (lower.includes("rechnung")) payment = "Auf Rechnung";
+    else if (lower.includes("überweisung")) payment = "Überweisung";
+    else if (lower.includes("ec") || lower.includes("karte")) payment = "EC-Karte";
+
+    // Time Phrase Simple (Fallback just looks for words)
+    let timePhrase = null;
+    const timeWords = ["morgen", "übermorgen", "heute", "montag", "dienstag", "mittwoch", "donnerstag", "freitag"];
+    const foundTime = timeWords.find(tw => lower.includes(tw));
+    if (foundTime) timePhrase = foundTime.charAt(0).toUpperCase() + foundTime.slice(1);
+
+    // Answer
+    let suggestedAnswer = "";
+    if (orderNumber && matchedCustomer) {
+      suggestedAnswer = `Guten Tag ${matchedCustomer.name}, Ihr Auftrag ${orderNumber} ist in Bearbeitung.`;
+    } else if (matchedCustomer) {
+      suggestedAnswer = `Guten Tag ${matchedCustomer.name}, ich habe Ihre Kundenakte aufgerufen. Wie kann ich Ihnen helfen?`;
+    } else {
+      suggestedAnswer = `Ich höre zu... (Lokales Fallback - Kein API Key gefunden)`;
+    }
+
+    const highlights: any[] = [];
+    if (matchedCustomer) highlights.push({ word: matchedCustomer.name, type: "kunde" });
+    if (orderNumber) highlights.push({ word: orderNumber, type: "auftrag" });
+    if (material) highlights.push({ word: material, type: "material" });
+    if (timePhrase) highlights.push({ word: foundTime, type: "zeit" });
+
+    return {
+      customerName: matchedCustomer?.name || null,
+      orderNumber,
+      material,
+      theme,
+      timePhrase,
+      payment,
+      suggestedAnswer,
+      overallConfidence: 75,
+      highlights
+    };
   }
 
   const ai = new GoogleGenAI({ apiKey });

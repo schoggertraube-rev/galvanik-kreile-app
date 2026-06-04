@@ -66,8 +66,8 @@ export function TelefonnotizDesktop() {
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = true;
-        recognitionRef.current.interimResults = true;
+        recognitionRef.current.continuous = false; // iOS Safari is buggy with continuous=true
+        recognitionRef.current.interimResults = false; // Prevents duplicate text loops
         recognitionRef.current.lang = "de-DE";
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
