@@ -1,3 +1,4 @@
+import { describe, it, expect } from "vitest";
 import { resolveFeatures } from "../resolveFeatures";
 import { FeatureKey, DataReadiness } from "../types";
 
