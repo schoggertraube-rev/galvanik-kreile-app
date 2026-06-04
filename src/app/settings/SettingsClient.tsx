@@ -25,15 +25,23 @@ export function SettingsClient({ isAdmin, isDeveloper }: { isAdmin: boolean, isD
           title="Admin Console & Einstellungen"
           subtitle="Verwalte Einstellungen und Systemparameter."
         />
-        {isDeveloper && (
+        {isAdmin && (
           <div className="flex items-center gap-3">
-            <Link href="/admin/analytics" className="inline-flex items-center gap-2 px-4 py-2 bg-kreile-yellow text-navy-900 font-semibold rounded-xl hover:bg-yellow-500 transition-colors shadow-sm">
-              <BarChart2 className="w-5 h-5" />
-              App-Nutzung / Analytics
-            </Link>
-            <Link href="/kvp" className="inline-flex items-center gap-2 px-4 py-2 bg-neutral-gray-100 text-navy-900 font-semibold rounded-xl hover:bg-neutral-gray-200 transition-colors shadow-sm">
-              <Lightbulb className="w-5 h-5" />
-              App verbessern (Dev-KVP)
+            {isDeveloper && (
+              <>
+                <Link href="/admin/analytics" className="inline-flex items-center gap-2 px-4 py-2 bg-kreile-yellow text-navy-900 font-semibold rounded-xl hover:bg-yellow-500 transition-colors shadow-sm">
+                  <BarChart2 className="w-5 h-5" />
+                  App-Nutzung / Analytics
+                </Link>
+                <Link href="/kvp" className="inline-flex items-center gap-2 px-4 py-2 bg-neutral-gray-100 text-navy-900 font-semibold rounded-xl hover:bg-neutral-gray-200 transition-colors shadow-sm">
+                  <Lightbulb className="w-5 h-5" />
+                  App verbessern (Dev-KVP)
+                </Link>
+              </>
+            )}
+            <Link href="/admin/testanalyse" className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-900 font-semibold rounded-xl hover:bg-blue-200 transition-colors shadow-sm border border-blue-200">
+              <Shield className="w-5 h-5" />
+              Testanalyse (Testpilot)
             </Link>
           </div>
         )}

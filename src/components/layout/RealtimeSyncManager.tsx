@@ -88,8 +88,10 @@ export function RealtimeSyncProvider({ children }: { children: ReactNode }) {
                 hint: errorWithMetadata.hint || "No hint provided",
                 error: err
               });
+            } else if (subscribeStatus === 'CLOSED') {
+              console.log("[RealtimeSync] Channel cleanly closed (typically due to backgrounding tab).");
             } else {
-              console.error(`[RealtimeSync] Channel status changed to ${subscribeStatus} without an explicit error object.`);
+              console.warn(`[RealtimeSync] Channel status changed to ${subscribeStatus} without an explicit error object.`);
             }
             
             // Auto-reconnect after 5 seconds

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useTestpilot, TestpilotSession } from '@/components/testpilot/TestpilotProvider';
 
 export default function TestanalyseDashboard() {
-  const { session, exportSessionJSON, exportSessionMarkdown } = useTestpilot();
+  const { session, clearSession, exportSessionJSON, exportSessionMarkdown } = useTestpilot();
   const [mounted, setMounted] = useState(false);
   const [localSession, setLocalSession] = useState<TestpilotSession | null>(null);
   const [isLocalEnabled, setIsLocalEnabled] = useState(false);
@@ -14,7 +14,7 @@ export default function TestanalyseDashboard() {
     const initTimer = setTimeout(() => {
       setMounted(true);
       setIsLocalEnabled(localStorage.getItem('testpilot_enabled') === 'true');
-      const stored = sessionStorage.getItem('testpilot_session');
+      const stored = localStorage.getItem('testpilot_session');
       if (stored) {
         try {
           setLocalSession(JSON.parse(stored));
@@ -35,6 +35,10 @@ export default function TestanalyseDashboard() {
       localStorage.setItem('testpilot_enabled', 'true');
     } else {
       localStorage.removeItem('testpilot_enabled');
+      if (confirm("Testmodus deaktiviert. Sollen die bisher gesammelten Testdaten ebenfalls gelöscht werden?")) {
+        clearSession();
+        setLocalSession(null);
+      }
     }
     // Forces a hard reload so the provider picks up the new status across the app
     window.location.reload();
@@ -104,6 +108,17 @@ export default function TestanalyseDashboard() {
                 className="bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 px-4 py-2 rounded-md text-sm font-medium"
               >
                 Als JSON exportieren
+              </button>
+              <button 
+                onClick={() => {
+                  if (confirm("Wirklich alle lokalen Testdaten löschen? Die Aufzeichnung wird zurückgesetzt.")) {
+                    clearSession();
+                    setLocalSession(null);
+                  }
+                }}
+                className="bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 dark:hover:bg-red-900/50 px-4 py-2 rounded-md text-sm font-medium ml-auto"
+              >
+                Testdaten löschen
               </button>
             </div>
           </div>

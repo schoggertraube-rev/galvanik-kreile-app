@@ -12,6 +12,7 @@ import { trackUiEvent } from "@/lib/tracking/tracking";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { getCompanySettings } from "@/app/actions/company.actions";
+import { useTestpilot } from "@/components/testpilot/TestpilotProvider";
 
 interface KreileHeaderProps {
   onMenuToggle: () => void;
@@ -22,20 +23,23 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const [isOffline, setIsOffline] = useState(false);
   const [orderCount, setOrderCount] = useState(0);
   const [logoUrl, setLogoUrl] = useState("/assets/logo/kreile-wordmark-skyline.svg");
-  const [isAdminOrDev, setIsAdminOrDev] = useState(() => {
-    if (typeof window === "undefined") return false;
-    const role = localStorage.getItem("kreile_user_role");
-    return role === "admin" || role === "developer";
-  });
+  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
   
   const { status: realtimeStatus } = useRealtimeStatus();
+  const { isRecording } = useTestpilot();
 
   // User Dropdown State
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [userInitials, setUserInitials] = useState<string>(() => {
-    if (typeof window === "undefined") return "?";
-    return localStorage.getItem("kreile_user_initials") ?? "?";
-  });
+  const [userInitials, setUserInitials] = useState<string>("?");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const role = localStorage.getItem("kreile_user_role");
+      setIsAdminOrDev(role === "admin" || role === "developer" || role === "inhaber");
+      setUserInitials(localStorage.getItem("kreile_user_initials") ?? "?");
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []);
   const userDropdownRef = useRef<HTMLDivElement>(null);
 
   // Click outside to close user dropdown
@@ -96,6 +100,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
       {/* LEFT: GK Monogram + Brand */}
       <Link href="/" className="hidden md:flex items-center gap-3 shrink-0 group">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={logoUrl}
           alt="Firmenlogo"
@@ -105,6 +110,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
       
       {/* Mobile Logo Only */}
       <Link href="/" className="md:hidden flex items-center shrink-0">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={logoUrl}
           alt="Firmenlogo"
@@ -177,6 +183,14 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
             </span>
           )}
         </button>
+
+        {/* Testpilot Recording Indicator */}
+        {isRecording && (
+          <Link href="/admin/testanalyse/live" className="hidden sm:flex items-center gap-2 rounded-full px-3 h-9 text-sm font-bold bg-red-100 border border-red-200 text-red-700 hover:bg-red-200 transition-colors shadow-sm animate-pulse" title="Zur Live-Testanalyse">
+            <span className="w-2 h-2 rounded-full bg-red-600" />
+            <span>Testaufzeichnung</span>
+          </Link>
+        )}
 
         {/* Live-Sync Indicator */}
         {realtimeStatus !== "disabled" && (

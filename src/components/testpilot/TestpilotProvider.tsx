@@ -116,7 +116,7 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
   const eventsRef = useRef<TestpilotEvent[]>([]);
   const lastClickRef = useRef<{ time: number, element: HTMLElement | null }>({ time: 0, element: null });
 
-  // Initialize from sessionStorage and env vars
+  // Initialize from localStorage and env vars
   useEffect(() => {
     const initTimer = setTimeout(() => {
       // 1. Role Check
@@ -132,15 +132,22 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
 
       setIsActive(true);
 
-      const stored = sessionStorage.getItem('testpilot_session');
+      const stored = localStorage.getItem('testpilot_session');
       if (stored) {
         try {
           const parsed = JSON.parse(stored);
-          setSession(parsed);
-          eventsRef.current = parsed.events || [];
-          setIsRecording(true);
+          const SESSION_TTL = 12 * 60 * 60 * 1000; // 12 hours
+          if (Date.now() - parsed.startTime > SESSION_TTL) {
+            console.log("[Testpilot] Session expired, clearing local storage.");
+            localStorage.removeItem('testpilot_session');
+          } else {
+            setSession(parsed);
+            eventsRef.current = parsed.events || [];
+            setIsRecording(true);
+          }
         } catch (e) {
           console.error("Failed to parse testpilot session", e);
+          localStorage.removeItem('testpilot_session');
         }
       }
     }, 0);
@@ -150,7 +157,7 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
 
   const saveToStorage = useCallback((newSession: TestpilotSession) => {
     setSession(newSession);
-    sessionStorage.setItem('testpilot_session', JSON.stringify(newSession));
+    localStorage.setItem('testpilot_session', JSON.stringify(newSession));
   }, []);
 
   const addEvent = useCallback((event: AddEventPayload) => {
@@ -166,7 +173,7 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
     setSession(prev => {
       if (!prev) return prev;
       const updated = { ...prev, events: eventsRef.current };
-      sessionStorage.setItem('testpilot_session', JSON.stringify(updated));
+      localStorage.setItem('testpilot_session', JSON.stringify(updated));
       return updated;
     });
   }, [isRecording]);
@@ -189,14 +196,14 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
 
   const stopSession = useCallback(() => {
     setIsRecording(false);
-    // Keep it in session storage so it can be exported, or clear? We keep it.
+    // Keep it in local storage so it can be exported, or clear? We keep it.
   }, []);
 
   const clearSession = useCallback(() => {
     setIsRecording(false);
     setSession(null);
     eventsRef.current = [];
-    sessionStorage.removeItem('testpilot_session');
+    localStorage.removeItem('testpilot_session');
   }, []);
 
   // Track Clicks & Dead Clicks
@@ -207,8 +214,15 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
       const target = e.target as HTMLElement;
       // Filter out sensitive data from text, mask it here if needed
       // Simple masking: only grab short text, avoid long paragraphs
-      let text = target.innerText || target.textContent || '';
-      if (text.length > 50) text = text.substring(0, 50) + '...';
+      let text = target.innerText?.slice(0, 100).trim() || '';
+      
+      // Obfuscate potentially sensitive data (numbers, emails)
+      text = text.replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g, '[EMAIL]');
+      text = text.replace(/\b\d+\b/g, '[NUM]');
+      // Further obfuscate passwords if any input fields are clicked (inputs usually don't have innerText, but just in case)
+      if (target.tagName.toLowerCase() === 'input' && (target as HTMLInputElement).type === 'password') {
+        text = '***';
+      }
 
       // Avoid logging our own testpilot UI
       if (target.closest('[data-testpilot-ignore="true"]')) return;
@@ -379,8 +393,20 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
 
   }, [session]);
 
+  const contextValue = {
+    session,
+    isActive,
+    isRecording,
+    startSession,
+    stopSession,
+    addMarker,
+    clearSession,
+    exportSessionJSON,
+    exportSessionMarkdown
+  };
+
   return (
-    <TestpilotContext.Provider value={{ session, isActive, isRecording, startSession, stopSession, addMarker, clearSession, exportSessionJSON, exportSessionMarkdown }}>
+    <TestpilotContext.Provider value={contextValue}>
       {children}
       <React.Suspense fallback={null}>
         <RouteTracker isActive={isActive} isRecording={isRecording} addEvent={addEvent} />
