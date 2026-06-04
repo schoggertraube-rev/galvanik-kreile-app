@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Phone, Edit2, Mic, MicOff, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, ArrowLeft } from "lucide-react";
 import Link from "next/link";
@@ -57,10 +57,12 @@ export function TelefonnotizDesktop() {
 
   // Speech Recognition State
   const [isRecording, setIsRecording] = useState(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRecognition) {
         recognitionRef.current = new SpeechRecognition();
@@ -68,6 +70,7 @@ export function TelefonnotizDesktop() {
         recognitionRef.current.interimResults = true;
         recognitionRef.current.lang = "de-DE";
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         recognitionRef.current.onresult = (event: any) => {
           let finalTranscript = "";
           for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -84,6 +87,7 @@ export function TelefonnotizDesktop() {
           setIsRecording(false);
         };
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         recognitionRef.current.onerror = (event: any) => {
           console.error("Speech recognition error", event.error);
           setIsRecording(false);
@@ -111,7 +115,7 @@ export function TelefonnotizDesktop() {
   }, [isRecording]);
 
   // Hooks
-  const { result, analyze } = usePhoneNoteAnalysis();
+  const { result, analyze, isAnalyzing } = usePhoneNoteAnalysis();
   const { clearDraft } = useAutosaveDraft(text, setText);
   const ctx = useLiveContext(
     result?.matchedCustomer || null,
@@ -198,13 +202,13 @@ export function TelefonnotizDesktop() {
   /* ===== RENDER ===== */
   return (
     <div 
-      className="fixed inset-0 z-[100] flex flex-col md:p-6 lg:p-10 xl:p-14 md:bg-navy-900/60 md:backdrop-blur-md transition-all"
+      className="fixed inset-0 z-100 flex flex-col md:p-6 lg:p-10 xl:p-14 md:bg-navy-900/60 md:backdrop-blur-md transition-all"
       onClick={(e) => {
         if (e.target === e.currentTarget) handleExit();
       }}
     >
       <div 
-        className="flex-1 w-full h-full flex flex-col overflow-hidden md:rounded-[2rem] md:shadow-2xl md:ring-1 md:ring-white/10"
+        className="flex-1 w-full h-full flex flex-col overflow-hidden md:rounded-4xl md:shadow-2xl md:ring-1 md:ring-white/10"
         style={{ fontFamily: "'Manrope', sans-serif", background: "var(--tn-cream)", color: "var(--tn-ink)", WebkitFontSmoothing: "antialiased" }}
       >
 
@@ -357,8 +361,17 @@ export function TelefonnotizDesktop() {
               )}
 
               {/* Analyze button */}
-              <button className="tn-btn-primary" onClick={handleAnalyze} disabled={!text.trim()} style={{ marginTop: 18 }}>
-                <span style={{ color: "var(--tn-green-bright)" }}>✦</span> Auswerten <span style={{ color: "var(--tn-green-bright)" }}>✦</span>
+              <button className="tn-btn-primary" onClick={handleAnalyze} disabled={!text.trim() || isAnalyzing} style={{ marginTop: 18 }}>
+                {isAnalyzing ? (
+                  <>
+                    <Activity size={16} className="animate-spin" style={{ color: "var(--tn-green-bright)", marginRight: 8 }} />
+                    Analysiere mit AI...
+                  </>
+                ) : (
+                  <>
+                    <span style={{ color: "var(--tn-green-bright)" }}>✦</span> Auswerten <span style={{ color: "var(--tn-green-bright)" }}>✦</span>
+                  </>
+                )}
               </button>
             </>
           )}
