@@ -2,6 +2,7 @@
 
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { CameraCapture } from "@/components/intake/CameraCapture";
 import { OCRReviewPanel } from "@/components/intake/OCRReviewPanel";
 import { CustomerMatchPanel } from "@/components/intake/CustomerMatchPanel";
@@ -25,6 +26,7 @@ import {
   Loader2,
   Scan,
   Upload,
+  AlertOctagon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { customersRepository, Customer } from "@/lib/repositories/customersRepository";
@@ -79,9 +81,16 @@ interface WizardProps {
 export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps = {}) {
   usePageView();
   
+  const searchParams = useSearchParams();
+  const initialDraftId = searchParams.get("draftId");
+  
   const [step, setStep] = useState<WizardStep>(
-    initialMode === "manual" ? "manual_customer" : "camera"
+    initialMode === "manual" || searchParams.get("mode") === "new-order" ? "manual_customer" : "camera"
   );
+  
+  const [draftLoaded, setDraftLoaded] = useState(false);
+  const [draftMissing, setDraftMissing] = useState(false);
+  const [draftNotes, setDraftNotes] = useState("");
 
   // Shared payload
   const [ocrScan, setOcrScan] = useState<OcrResult | null>(null);
@@ -111,6 +120,42 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
   ]);
   const [isScanningIndex, setIsScanningIndex] = useState<number | null>(null);
   const [itemErrors, setItemErrors] = useState<Record<number, Record<string, string[]>>>({});
+
+  useEffect(() => {
+    if (initialDraftId && !draftLoaded) {
+      const draftStr = sessionStorage.getItem(initialDraftId);
+      if (draftStr) {
+        try {
+          const draft = JSON.parse(draftStr);
+          // Prefill logic
+          if (draft.customerId || draft.customerName) {
+            setManualSearch(draft.customerName || "");
+            setCustomerSelection({ id: draft.customerId || null, newName: draft.customerName || "" });
+            setStep("manual_items"); // Skip to items if customer is somewhat known
+          }
+          
+          if (draft.itemName || draft.material || draft.surfaceRequested) {
+            setManualItems([{
+              name: draft.itemName || draft.material || "",
+              quantity: 1,
+              surfaceRequested: draft.surfaceRequested || "",
+              photo: ""
+            }]);
+          }
+          
+          if (draft.notes) {
+            setDraftNotes(draft.notes);
+          }
+          setDraftLoaded(true);
+        } catch (e) {
+          console.error("Failed to parse phone note draft", e);
+          setDraftMissing(true);
+        }
+      } else {
+        setDraftMissing(true);
+      }
+    }
+  }, [initialDraftId, draftLoaded]);
 
   const handleManualSearch = async () => {
     const term = manualSearch.trim();
@@ -323,6 +368,35 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
           items={items}
           onBack={() => setStep("items")}
         />
+      )}
+      
+      {/* Draft Notices */}
+      {draftLoaded && step.startsWith("manual_") && (
+        <div className="max-w-3xl mx-auto mb-6 bg-navy-50 border border-navy-200 rounded-xl p-4 flex flex-col gap-2">
+          <div className="flex items-center gap-2 font-bold text-navy-900">
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-navy-100 text-navy-600"><CheckCircle size={14}/></span>
+            Telefonnotiz übernommen
+          </div>
+          <div className="text-sm text-navy-700">
+            Diese Angaben wurden aus dem laufenden Gespräch vorbereitet. Bitte prüfen und ergänzen.
+          </div>
+          {draftNotes && (
+            <div className="mt-2 text-xs text-navy-600 bg-white p-3 rounded-lg border border-navy-100">
+              <strong>Notiz:</strong> {draftNotes}
+            </div>
+          )}
+        </div>
+      )}
+      {draftMissing && step.startsWith("manual_") && (
+        <div className="max-w-3xl mx-auto mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col gap-2">
+          <div className="flex items-center gap-2 font-bold text-red-900">
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-600"><AlertOctagon size={14}/></span>
+            Telefonnotiz-Draft nicht gefunden
+          </div>
+          <div className="text-sm text-red-700">
+            Bitte Daten manuell erfassen oder zur Telefonnotiz zurückkehren.
+          </div>
+        </div>
       )}
 
       {/* ── MANUAL FLOW – Step 1: Kundensuche ── */}

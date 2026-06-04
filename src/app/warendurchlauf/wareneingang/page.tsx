@@ -5,15 +5,23 @@ import {
   Camera, PenLine, Phone, MessageSquare, Clock,
   ChevronRight, Zap
 } from "lucide-react";
-import { useState } from "react";
+import { useState, Suspense, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { WarendurchlaufIntakeWizard } from "@/components/warendurchlauf/WarendurchlaufIntakeWizard";
 
 /* ═══════════════════════════════════════════
    Warendurchlauf Leitstand — v4 Layout
    ═══════════════════════════════════════════ */
 
-export default function WarendurchlaufLeitstand() {
+function WarendurchlaufLeitstandContent() {
+  const searchParams = useSearchParams();
   const [wizardMode, setWizardMode] = useState<"camera" | "manual" | null>(null);
+
+  useEffect(() => {
+    if (searchParams.get("mode") === "new-order") {
+      setWizardMode("manual");
+    }
+  }, [searchParams]);
 
   return (
     <div className="w-full h-full font-sans antialiased text-[#1a1a1a]">
@@ -206,6 +214,13 @@ export default function WarendurchlaufLeitstand() {
   );
 }
 
+export default function WarendurchlaufLeitstand() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center">Lade Leitstand...</div>}>
+      <WarendurchlaufLeitstandContent />
+    </Suspense>
+  );
+}
 
 /* ── Hilfskomponenten ── */
 

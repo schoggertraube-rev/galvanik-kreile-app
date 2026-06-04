@@ -13,6 +13,7 @@ import { INITIAL_CUSTOMERS, INITIAL_ORDERS } from "@/lib/mockData";
 import { getRecentPhoneNotes, updatePhoneNote } from "@/app/actions/phoneNotes.actions";
 import { smartMatchText, MatchResult } from "./smartMatcher";
 import { useParkedCall } from "@/contexts/ParkedCallContext";
+import { ContextAnalysisOverlay, ContextAnalysisOverlayProps } from "@/components/kommunikation/ContextAnalysisOverlay";
 
 /* ═══════════════════════════════════════════════════════════════
    TYPES
@@ -137,18 +138,23 @@ function buildActions(thread: Thread, m: MatchResult | null): ActionCard[] {
   if (!m) return [];
   const a: ActionCard[] = [];
   const kw = m.matchedKeywords;
+  
   if (kw.includes("Termin/Logistik"))
-    a.push({ id: "cal", icon: <Calendar size={18} />, title: "Abholtermin", subtitle: m.matchedOrder ? `${m.matchedOrder.id} prüfen` : "Termin vormerken", color: "#059669", href: m.matchedOrder ? `/orders/${m.matchedOrder.id}` : undefined });
+    a.push({ id: "cal", icon: <Calendar size={18} />, title: "Abholtermin", subtitle: m.matchedOrder ? `${m.matchedOrder.id} prüfen` : "Termin vormerken", color: "#059669" });
   if (m.matchedOrder)
-    a.push({ id: "ord", icon: <FileText size={18} />, title: "Auftragsänderung", subtitle: `${m.matchedOrder.id} · ${m.matchedOrder.statusText || m.matchedOrder.task}`, color: "#2563EB", href: `/orders/${m.matchedOrder.id}` });
+    a.push({ id: "ord", icon: <FileText size={18} />, title: "Auftrag prüfen", subtitle: `${m.matchedOrder.id} · ${m.matchedOrder.statusText || m.matchedOrder.task}`, color: "#2563EB" });
   if (kw.includes("Buchhaltung/Zahlung"))
-    a.push({ id: "pay", icon: <CreditCard size={18} />, title: "Zahlung prüfen", subtitle: "Zahlungsstatus nicht sicher", color: "#D97706", href: "/finanzen" });
+    a.push({ id: "pay", icon: <CreditCard size={18} />, title: "Zahlung prüfen", subtitle: "Zahlungsstatus nicht sicher", color: "#D97706" });
   if (thread.channel === "phone" || thread.isPhoneNote)
-    a.push({ id: "call", icon: <PhoneCall size={18} />, title: "Rückruf-Antwort", subtitle: m.matchedCustomer ? `${m.matchedCustomer.name} anrufen` : "Direkter Textvorschlag", color: "#7C3AED" });
+    a.push({ id: "call", icon: <PhoneCall size={18} />, title: "Antwort prüfen", subtitle: m.matchedCustomer ? `${m.matchedCustomer.name} anrufen` : "Direkter Textvorschlag", color: "#7C3AED" });
   if (m.matchedCustomer)
-    a.push({ id: "cust", icon: <User size={18} />, title: "Kunde öffnen", subtitle: m.matchedCustomer.name, color: "#1E3A8A", href: `/customers/${m.matchedCustomer.id}` });
+    a.push({ id: "cust", icon: <User size={18} />, title: "Kunde prüfen", subtitle: m.matchedCustomer.name, color: "#1E3A8A" });
   if (kw.includes("Reklamation"))
-    a.push({ id: "rek", icon: <AlertOctagon size={18} />, title: "Reklamation", subtitle: "Qualitätsfall anlegen", color: "#DC2626", href: "/kontrolle" });
+    a.push({ id: "rek", icon: <AlertOctagon size={18} />, title: "Reklamation", subtitle: "Qualitätsfall anlegen", color: "#DC2626" });
+  if (kw.includes("Angebot") || kw.includes("E-Mail/Bilder") || m.matchedKeywords.length > 0) {
+     a.push({ id: "email", icon: <Mail size={18} />, title: "E-Mail/Bilder prüfen", subtitle: "Hinweis im Chat", color: "#0891B2" });
+  }
+
   return a;
 }
 
@@ -168,6 +174,7 @@ export function KommunikationClient() {
   const [chatFilter, setChatFilter] = useState("all");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const { activeParkedCall, resumeCall } = useParkedCall();
+  const [overlayConfig, setOverlayConfig] = useState<ContextAnalysisOverlayProps | null>(null);
 
   usePageView();
 
@@ -228,16 +235,96 @@ export function KommunikationClient() {
     const n = await getRecentPhoneNotes(20); setRecentNotes(n);
   };
 
+  const handleActionClick = (actionId: string) => {
+    if (!activeThread || !matchData) return;
+    
+    if (actionId === "ord") {
+      setOverlayConfig({
+        open: true,
+        onClose: () => setOverlayConfig(null),
+        type: "order",
+        title: matchData.matchedOrder ? `Auftrag ${matchData.matchedOrder.id}` : "Unbekannter Auftrag",
+        summary: "Status und Lieferfähigkeit im Chat-Kontext.",
+        facts: [
+          { label: "Kunde", value: matchData.matchedCustomer?.name || "Unbekannt", source: matchData.matchedCustomer ? "database" : "unknown" },
+          { label: "Status", value: matchData.matchedOrder?.statusText || "Versandbereit", source: "database" }
+        ],
+        actions: [
+          { label: "Auftrag vollständig öffnen", kind: "secondary", href: matchData.matchedOrder ? `/orders/${matchData.matchedOrder.id}` : "/orders" },
+          { label: "Mit Chat verknüpfen", kind: "primary" }
+        ]
+      });
+    } else if (actionId === "pay") {
+      setOverlayConfig({
+        open: true,
+        onClose: () => setOverlayConfig(null),
+        type: "payment",
+        title: "Zahlungsstatus",
+        summary: "Zum Auftrag wurde im Chat eine Zahlungsfrage erkannt.",
+        facts: [
+          { label: "Datenbankstatus", value: "Nicht sicher gefunden", source: "unknown" },
+          { label: "Empfehlung", value: "Zahlung vor Abholung prüfen", source: "mock" }
+        ],
+        actions: [
+          { label: "Zahlungsbereich öffnen", kind: "secondary", href: "/finanzen" },
+          { label: "Als offene Aktion speichern", kind: "primary" }
+        ]
+      });
+    } else if (actionId === "email") {
+      setOverlayConfig({
+        open: true,
+        onClose: () => setOverlayConfig(null),
+        type: "email",
+        title: "E-Mail / Bilder zum Chat",
+        summary: "Analyse der Anhänge und Korrespondenz zum aktuellen Fall.",
+        facts: [
+          { label: "Thema", value: "Kronleuchter", source: "chat" },
+          { label: "Hinweis", value: "Bilder geschickt", source: "chat" },
+          { label: "Echte Anbindung", value: "Keine E-Mail API verbunden", source: "mock" }
+        ],
+        actions: [
+          { label: "Als Demo ansehen", kind: "primary" }
+        ]
+      });
+    } else if (actionId === "cust") {
+      setOverlayConfig({
+        open: true,
+        onClose: () => setOverlayConfig(null),
+        type: "customer",
+        title: "Kundenprofil",
+        summary: "Relevante Kundendaten für diese Kommunikation.",
+        facts: [
+          { label: "Gefundener Name", value: matchData.matchedCustomer?.name || "Unbekannt", source: matchData.matchedCustomer ? "database" : "unknown" },
+          { label: "Zuverlässigkeit", value: "Mögliche Treffer: Schmid, Schmidt", source: "unknown" }
+        ],
+        actions: [
+          { label: "Kundenkarte öffnen", kind: "secondary", href: matchData.matchedCustomer ? `/customers/${matchData.matchedCustomer.id}` : "/customers" }
+        ]
+      });
+    } else {
+      setOverlayConfig({
+        open: true,
+        onClose: () => setOverlayConfig(null),
+        type: "generic",
+        title: "Detailanalyse",
+        summary: "Kontext zum ausgewählten Stichwort.",
+        facts: [
+          { label: "Erkannt", value: actionId, source: "chat" }
+        ],
+        actions: [
+          { label: "Bestätigen", kind: "primary", onClickKey: "close" }
+        ]
+      });
+    }
+  };
+
   const handleApplyAI = () => {
     if (matchData?.suggestedAnswer) {
       setReplyText(matchData.suggestedAnswer);
     }
   };
 
-  // Scroll chat to bottom when thread changes
-  useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [activeThreadId]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [activeThreadId, activeThread?.messages.length]);
 
   /* ═══════════════════════════════════════════════════════════
      RENDER
@@ -476,26 +563,27 @@ export function KommunikationClient() {
                     Ich habe {actionCards.length} Aktionen vorbereitet:
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
-                    {actionCards.map(ac => {
-                      const tile = (
-                        <div key={ac.id} data-testid={`action-${ac.id}`} style={{
+                    {actionCards.map(a => (
+                      <button
+                        key={a.id}
+                        onClick={() => handleActionClick(a.id)}
+                        style={{
                           background: "rgba(255,255,255,.04)", borderRadius: 12, padding: "12px 16px",
                           display: "flex", alignItems: "center", gap: 12, cursor: "pointer",
                           border: "1px solid rgba(255,255,255,.06)", transition: "background .15s",
+                          textAlign: "left", width: "100%", color: "#fff"
                         }}
-                          onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.08)")}
-                          onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,.04)")}
-                        >
-                          <div style={{ width: 36, height: 36, borderRadius: 8, background: ac.color, color: "#fff", display: "grid", placeItems: "center", flexShrink: 0 }}>{ac.icon}</div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{ac.title}</div>
-                            <div style={{ fontSize: 12, color: "#A09889", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>{ac.subtitle}</div>
-                          </div>
-                          <ChevronRight size={16} style={{ color: "#A09889", flexShrink: 0 }} />
+                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.08)")}
+                        onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,.04)")}
+                      >
+                        <div style={{ width: 36, height: 36, borderRadius: 8, background: a.color, color: "#fff", display: "grid", placeItems: "center", flexShrink: 0 }}>{a.icon}</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 14, fontWeight: 700 }}>{a.title}</div>
+                          <div style={{ fontSize: 12, color: "#A09889", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>{a.subtitle}</div>
                         </div>
-                      );
-                      return ac.href ? <Link key={ac.id} href={ac.href} style={{ textDecoration: "none", color: "inherit" }}>{tile}</Link> : <React.Fragment key={ac.id}>{tile}</React.Fragment>;
-                    })}
+                        <ChevronRight size={16} style={{ color: "#A09889", flexShrink: 0 }} />
+                      </button>
+                    ))}
                   </div>
                   <div style={{ display: "flex", gap: 12 }}>
                     <button onClick={() => alert("Backend Aktion vorbereitet.")} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all .1s" }} onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.15)")} onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,.1)")}>Alle {actionCards.length} anwenden</button>
@@ -639,6 +727,10 @@ export function KommunikationClient() {
               </div>
             </div>
           </aside>
+        )}
+
+        {overlayConfig && (
+          <ContextAnalysisOverlay {...overlayConfig} />
         )}
       </div>
     </div>
