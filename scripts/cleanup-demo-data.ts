@@ -2,7 +2,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" }); // MUST be before importing db
 
 import { db } from "../src/db";
-import { customers, orders, items, events, baths, phoneNotes, complaints } from "../src/db/schema";
+import { customers, orders, items, events, phoneNotes, complaints } from "../src/db/schema";
 import { like, sql } from "drizzle-orm";
 
 async function runCleanup() {

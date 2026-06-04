@@ -83,7 +83,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     };
     updateState();
 
-    const events = ["storage", "kreile-network-change", "kreile-sync-queue-updated", "online", "offline"];
+    const events = ["kreile-network-change", "kreile-sync-queue-updated", "online", "offline"];
     events.forEach(e => window.addEventListener(e, updateState));
     return () => events.forEach(e => window.removeEventListener(e, updateState));
   }, []);

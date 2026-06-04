@@ -218,39 +218,13 @@ export function DiagnosticsProvider({ children }: { children: React.ReactNode })
     };
 
     // 4. Network errors (fetch interception)
-    const origFetch = window.fetch;
-    window.fetch = async (...args: Parameters<typeof fetch>) => {
-      const url = typeof args[0] === "string" ? args[0] : (args[0] as Request)?.url || "unknown";
-      try {
-        const resp = await origFetch(...args);
-        if (!resp.ok && resp.status >= 400) {
-          logEvent({
-            type: "network",
-            severity: resp.status >= 500 ? "error" : "warn",
-            source: "fetch",
-            message: `HTTP ${resp.status} ${resp.statusText}`,
-            details: `URL: ${url}\nMethod: ${(args[1] as RequestInit)?.method || "GET"}`,
-          });
-        }
-        return resp;
-      } catch (err) {
-        logEvent({
-          type: "network",
-          severity: "error",
-          source: "fetch",
-          message: `Network error: ${(err as Error).message}`,
-          details: `URL: ${url}`,
-        });
-        throw err;
-      }
-    };
+    // Removed to prevent React Suspense / Next.js internal fetch infinite loops
 
     window.addEventListener("error", handleError);
     window.addEventListener("unhandledrejection", handleRejection);
 
     return () => {
       console.error = origError;
-      window.fetch = origFetch;
       window.removeEventListener("error", handleError);
       window.removeEventListener("unhandledrejection", handleRejection);
     };
@@ -270,10 +244,14 @@ export function DiagnosticsProvider({ children }: { children: React.ReactNode })
       const stored = localStorage.getItem("kreile_diag_events");
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) setEvents(parsed);
+        if (Array.isArray(parsed)) {
+          setTimeout(() => setEvents(parsed), 0);
+        }
       }
       const wasActive = localStorage.getItem("kreile_diag_active");
-      if (wasActive === "true") setIsActive(true);
+      if (wasActive === "true") {
+        setTimeout(() => setIsActive(true), 0);
+      }
     } catch { /* ignore */ }
   }, []);
 

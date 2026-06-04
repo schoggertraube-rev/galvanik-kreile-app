@@ -115,14 +115,37 @@ export function generateDemoData() {
   ];
 
   // --- ORDERS ---
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const orders: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const items: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const events: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const complaints: any[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const phoneNotes: any[] = [];
 
+  type OrderConfig = {
+    orderNumber: string;
+    customerId: string;
+    title: string;
+    task?: string;
+    station?: string;
+    status?: string;
+    risk?: string;
+    intakeDate?: Date;
+    dueDate?: Date;
+    delayReason?: string;
+    statusText?: string;
+    attachmentUrl?: string;
+    itemName?: string;
+    itemQty?: number;
+    material?: string;
+  };
+
   // Helper to create an order quickly
-  const createOrder = (config: any) => {
+  const createOrder = (config: OrderConfig) => {
     const oId = demoId(`order_${config.orderNumber}`);
     const order = {
       id: oId,

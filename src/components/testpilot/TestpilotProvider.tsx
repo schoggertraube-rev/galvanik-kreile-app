@@ -294,42 +294,9 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
     };
   }, [isActive, isRecording, addEvent]);
 
-  // Monkey-patch fetch (basic)
+  // Monkey-patch fetch removed to prevent infinite Suspense loops
   useEffect(() => {
-    if (!isActive || !isRecording) return;
-    const originalFetch = window.fetch;
-    window.fetch = async (...args) => {
-      const start = Date.now();
-      const url = typeof args[0] === 'string' ? args[0] : (args[0] instanceof Request ? args[0].url : 'unknown');
-      const method = (args[1]?.method) || (args[0] instanceof Request ? args[0].method : 'GET');
-      
-      try {
-        const response = await originalFetch(...args);
-        const duration = Date.now() - start;
-        if (!response.ok || duration > 1000) {
-          addEvent({
-            type: 'network',
-            url,
-            method,
-            status: response.status,
-            duration
-          });
-        }
-        return response;
-      } catch (err) {
-        addEvent({
-          type: 'network',
-          url,
-          method,
-          status: 0,
-          duration: Date.now() - start
-        });
-        throw err;
-      }
-    };
-    return () => {
-      window.fetch = originalFetch;
-    };
+    // Intentionally left blank or can be removed completely
   }, [isActive, isRecording, addEvent]);
 
   const addMarker = useCallback((marker: Omit<MarkerEvent, 'id' | 'timestamp' | 'type' | 'lastClicks'>) => {
