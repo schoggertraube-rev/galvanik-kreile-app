@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Phone, Edit2, Mic, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, ArrowLeft } from "lucide-react";
+import { Phone, Edit2, Mic, MicOff, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { usePhoneNoteAnalysis, AnalysisResult } from "@/hooks/usePhoneNoteAnalysis";
 import { useLiveContext } from "@/hooks/useLiveContext";
@@ -54,6 +54,61 @@ export function TelefonnotizDesktop() {
   const [showUndo, setShowUndo] = useState(false);
   const [showReminder, setShowReminder] = useState(false);
   const [reminderTime, setReminderTime] = useState("Heute 17:00");
+
+  // Speech Recognition State
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (SpeechRecognition) {
+        recognitionRef.current = new SpeechRecognition();
+        recognitionRef.current.continuous = true;
+        recognitionRef.current.interimResults = true;
+        recognitionRef.current.lang = "de-DE";
+
+        recognitionRef.current.onresult = (event: any) => {
+          let finalTranscript = "";
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript;
+            }
+          }
+          if (finalTranscript) {
+            setText(prev => prev + (prev.endsWith(" ") || prev === "" ? "" : " ") + finalTranscript);
+          }
+        };
+
+        recognitionRef.current.onend = () => {
+          setIsRecording(false);
+        };
+
+        recognitionRef.current.onerror = (event: any) => {
+          console.error("Speech recognition error", event.error);
+          setIsRecording(false);
+        };
+      }
+    }
+  }, [setText]);
+
+  const toggleRecording = useCallback(() => {
+    if (!recognitionRef.current) {
+      alert("Spracherkennung wird von deinem Browser (iOS Safari / Chrome) evtl. nicht vollständig unterstützt oder es fehlen Rechte.");
+      return;
+    }
+    if (isRecording) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+    } else {
+      try {
+        recognitionRef.current.start();
+        setIsRecording(true);
+      } catch (err) {
+        console.error("Failed to start recording:", err);
+      }
+    }
+  }, [isRecording]);
 
   // Hooks
   const { result, analyze } = usePhoneNoteAnalysis();
@@ -264,22 +319,39 @@ export function TelefonnotizDesktop() {
               {mode === "voice" && (
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "8px 0" }}>
                   <div style={{ position: "relative", width: 120, height: 120, margin: "8px 0 26px" }}>
-                    <button style={{
-                      width: "100%", height: "100%", borderRadius: "50%", border: "none",
-                      background: "linear-gradient(145deg, var(--tn-orange), #9A330A)", color: "white",
-                      display: "grid", placeItems: "center", cursor: "pointer",
-                      boxShadow: "0 16px 32px -10px rgba(194,65,12,0.5), inset 0 -3px 6px rgba(0,0,0,0.2)"
-                    }}>
-                      <Mic size={38} />
+                    <button 
+                      onClick={toggleRecording}
+                      style={{
+                        width: "100%", height: "100%", borderRadius: "50%", border: "none",
+                        background: isRecording ? "var(--tn-red)" : "linear-gradient(145deg, var(--tn-orange), #9A330A)", color: "white",
+                        display: "grid", placeItems: "center", cursor: "pointer",
+                        boxShadow: isRecording ? "0 16px 32px -10px rgba(220,38,38,0.5)" : "0 16px 32px -10px rgba(194,65,12,0.5), inset 0 -3px 6px rgba(0,0,0,0.2)",
+                        animation: isRecording ? "pulse 2s infinite" : "none"
+                      }}
+                    >
+                      {isRecording ? <MicOff size={38} /> : <Mic size={38} />}
                     </button>
                     <div style={{ position: "absolute", bottom: -26, left: "50%", transform: "translateX(-50%)", fontSize: 11.5, fontWeight: 600, color: "var(--tn-ink-soft)", whiteSpace: "nowrap" }}>
-                      Tippen zum Aufnehmen
+                      {isRecording ? "Aufnahme läuft... (Tippen zum Stoppen)" : "Tippen zum Aufnehmen"}
                     </div>
                   </div>
+                  {isRecording && (
+                    <style>{`
+                      @keyframes pulse {
+                        0% { transform: scale(1); }
+                        50% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(220,38,38,0.2); }
+                        100% { transform: scale(1); }
+                      }
+                    `}</style>
+                  )}
                   <div style={{ width: "100%", background: "var(--tn-paper)", border: "1px solid var(--tn-line)", borderRadius: 14, padding: "14px 16px", minHeight: 80, fontFamily: "'Fraunces', serif", fontSize: 15, lineHeight: 1.5, marginTop: 18 }}>
-                    <span style={{ color: "var(--tn-ink-mute)", fontFamily: "'Manrope', sans-serif", fontSize: 13 }}>
-                      Sobald du sprichst, erscheint hier die Live-Transkription…
-                    </span>
+                    {text ? (
+                      <span style={{ color: "var(--tn-ink)" }}>{text}</span>
+                    ) : (
+                      <span style={{ color: "var(--tn-ink-mute)", fontFamily: "'Manrope', sans-serif", fontSize: 13 }}>
+                        Sobald du sprichst, erscheint hier die Live-Transkription…
+                      </span>
+                    )}
                   </div>
                 </div>
               )}

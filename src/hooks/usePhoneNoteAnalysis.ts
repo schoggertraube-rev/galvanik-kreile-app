@@ -231,8 +231,17 @@ export function usePhoneNoteAnalysis() {
         if (matchedTime?.isFree) suggestedAnswer += ` Der gewünschte Termin ${matchedTime.label} ist frei.`;
         if (matchedPayment) suggestedAnswer += ` Zahlungsart: ${matchedPayment}.`;
       } else if (matchedCustomer) {
-        suggestedAnswer = `Guten Tag ${matchedCustomer.name}, ich habe Ihre Kundenakte aufgerufen. Wie kann ich Ihnen helfen?`;
+        suggestedAnswer = `Guten Tag ${matchedCustomer.name}, ich habe Ihre Kundenakte aufgerufen. `;
+        if (matchedTheme) suggestedAnswer += `Gern kümmere ich mich um Ihr Anliegen zum Thema ${matchedTheme}.`;
+        else suggestedAnswer += `Wie kann ich Ihnen weiterhelfen?`;
+      } else if (matchedTheme || matchedMaterial || matchedTime) {
+        suggestedAnswer = `Ich habe Ihr Anliegen notiert`;
+        if (matchedTheme) suggestedAnswer += ` (Thema: ${matchedTheme})`;
+        if (matchedMaterial) suggestedAnswer += ` zu ${matchedMaterial}`;
+        suggestedAnswer += `. Um welchen Auftrag oder Kunden handelt es sich genau?`;
       } else if (text.length > 15) {
+        suggestedAnswer = `Ich höre zu... (noch nicht genug Kontext für einen konkreten Lösungsvorschlag erkannt)`;
+      } else {
         suggestedAnswer = `„Sobald genug erkannt ist, schlage ich hier eine Antwort vor, die du direkt vorlesen kannst."`;
       }
 
