@@ -1,8 +1,10 @@
 import { Mail, Phone, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Customer } from "@/lib/repositories/customersRepository";
+import { useAppShortcut } from "@/components/ui/AppShortcutContext";
 
 export function CustomerProfileHeader({ customer }: { customer: Customer }) {
+  const { openShortcut } = useAppShortcut();
   return (
     <div className="bg-white border-2 border-neutral-gray-100 rounded-3xl p-6 md:p-8 shadow-sm space-y-6">
       <div className="flex justify-between items-start">
@@ -35,7 +37,10 @@ export function CustomerProfileHeader({ customer }: { customer: Customer }) {
       </div>
 
       <div className="flex gap-4 pt-2">
-        <Button className="h-14 px-6 rounded-2xl bg-navy-900 text-white font-bold text-lg hover:bg-navy-900 shadow-xl active:scale-95 transition-all">
+        <Button 
+          onClick={() => openShortcut("new_order")}
+          className="h-14 px-6 rounded-2xl bg-navy-900 text-white font-bold text-lg hover:bg-navy-900 shadow-xl active:scale-95 transition-all"
+        >
           Neuer Auftrag
         </Button>
         <Button variant="outline" className="h-14 px-6 rounded-2xl border-2 border-neutral-gray-100 text-navy-900 font-bold text-lg hover:bg-bg-app-soft active:scale-95 transition-all">

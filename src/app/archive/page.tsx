@@ -5,10 +5,12 @@ import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { INITIAL_ORDERS, MockOrder } from "@/lib/mockData";
-import { Archive as ArchiveIcon } from "lucide-react";
+import { Archive as ArchiveIcon, ArrowLeft } from "lucide-react";
+import Link from "next/link";
 import { getStationConfig } from "@/constants/stations";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { AppBackButton } from "@/components/ui/AppBackButton";
 
 export default function ArchivePage() {
   usePageView();
@@ -37,6 +39,9 @@ export default function ArchivePage() {
 
   return (
     <div className="space-y-6 pb-12 font-sans antialiased text-navy-900 max-w-5xl mx-auto">
+      <div className="mb-6">
+        <AppBackButton fallbackHref="/" label="Zurück zum Dashboard" />
+      </div>
       <PageHeader
         title="Kontrolle & Archiv"
         subtitle="Abgeschlossene und versendete Aufträge (Nur-Lese-Ansicht)."

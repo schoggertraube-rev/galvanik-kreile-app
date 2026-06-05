@@ -3,9 +3,8 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { X, Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, ChevronDown, ChevronRight, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3, Lightbulb, Settings, FileText } from "lucide-react";
-import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
-import { bathsRepository } from "@/lib/repositories/bathsRepository";
+import { X, Home, PackageCheck, Archive, Users, MessageSquare, ChevronDown, ChevronRight, BarChart3, Settings } from "lucide-react";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 interface MobileNavProps {
   open: boolean;
@@ -14,24 +13,10 @@ interface MobileNavProps {
 
 export function MobileNav({ open, onClose }: MobileNavProps) {
   const pathname = usePathname();
-  const [openQuotes, setOpenQuotes] = useState(0);
-  const [hasCriticalBaths, setHasCriticalBaths] = useState(false);
-  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
+  const { hasPermission } = usePermissions();
   
   // Submenu states
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      setOpenQuotes(await inquiriesRepository.getOpenCount());
-      setHasCriticalBaths(await bathsRepository.hasCriticalBath());
-    };
-    if (open) {
-      fetchStats();
-      const role = localStorage.getItem("kreile_user_role")?.toLowerCase();
-      if (role === "admin" || role === "developer" || role === "inhaber") setIsAdminOrDev(true);
-    }
-  }, [open]);
 
   // Lock body scroll when open
   useEffect(() => {
@@ -68,7 +53,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
     submenu?: { label: string; href: string; }[];
   };
 
-  const NavItem = ({ label, href, icon: Icon, badge, status, submenu }: NavItemProps) => {
+  const renderNavItem = ({ label, href, icon: Icon, badge, status, submenu }: NavItemProps) => {
     const active = isActive(href);
     const hasSub = !!submenu;
     const isSubOpen = openSubmenu === href;
@@ -138,6 +123,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
         className={`fixed left-0 top-0 h-full w-72 bg-white z-50 transform transition-transform duration-300 shadow-2xl flex flex-col ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="flex items-center justify-between p-4 px-6 border-b border-neutral-gray-100 min-h-[72px]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/assets/logo/kreile-wordmark-skyline.svg" alt="Kreile" className="h-8 w-auto" />
           <button 
             onClick={onClose}
@@ -148,51 +134,40 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
         </div>
 
         <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 pb-24">
-          <NavItem label="Home" href="/" icon={Home} />
-          <NavItem label="Warendurchlauf" href="/warendurchlauf" icon={PackageCheck} />
+          {renderNavItem({ label: "Home", href: "/", icon: Home })}
+          {renderNavItem({ label: "Warendurchlauf", href: "/warendurchlauf", icon: PackageCheck })}
           
-          <NavItem 
-            label="Kunden und Aufträge" 
-            href="/orders" 
-            icon={Users} 
-            submenu={[
+          {renderNavItem({
+            label: "Kunden und Aufträge",
+            href: "/orders",
+            icon: Users,
+            submenu: [
               { label: "Aufträge", href: "/orders" }, 
               { label: "Kunden", href: "/customers" }, 
               { label: "Angebote und Freigaben", href: "/quotes" }
-            ]} 
-          />
+            ]
+          })}
           
-          <NavItem 
-            label="Betrieb" 
-            href="/betrieb" 
-            icon={Archive} 
-            submenu={[
-              { label: "Betriebs-Cockpit", href: "/betrieb" }, 
-              { label: "Kontrolle", href: "/kontrolle" }, 
-              { label: "Kommunikation", href: "/kommunikation" }, 
-              { label: "Kundenservice", href: "/kundenservice" }, 
-              { label: "Betriebs-KVP", href: "/betrieb-kvp" }, 
-              { label: "Bäder", href: "/baeder" }, 
-              { label: "Lager und Teile", href: "/items" },
-              ...(isAdminOrDev ? [{ label: "Buchhaltung", href: "/buchhaltung" }] : [])
-            ]} 
-          />
+          {renderNavItem({
+            label: "Betrieb",
+            href: "/betrieb",
+            icon: Archive
+          })}
           
-          <NavItem label="Analyse" href="/performance" icon={BarChart3} />
+          {renderNavItem({
+            label: "Kommunikation",
+            href: "/kommunikation",
+            icon: MessageSquare
+          })}
           
-          {isAdminOrDev && (
-            <NavItem 
-              label="Verwaltung" 
-              href="/admin/import" 
-              icon={Settings} 
-              submenu={[
-                { label: "Datenimport", href: "/admin/import" }, 
-                { label: "Geräte und Lizenzen", href: "/admin/devices" }, 
-                { label: "Einstellungen", href: "/settings" }, 
-                { label: "App-KVP", href: "/kvp" }, 
-                { label: "Developer Analytics", href: "/admin/analytics" }
-              ]} 
-            />
+          {renderNavItem({ label: "Analyse", href: "/performance", icon: BarChart3 })}
+          
+          {hasPermission("perm_sys_users") && (
+            renderNavItem({
+              label: "Verwaltung",
+              href: "/settings",
+              icon: Settings
+            })
           )}
         </nav>
       </div>

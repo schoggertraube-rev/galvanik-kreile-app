@@ -1,54 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Lightbulb, PlusCircle, Camera, CheckCircle2, ListFilter, PlayCircle, BarChart3, Info, Lock, Settings, ThumbsUp, Wrench, MessageSquare, AlertTriangle, User, Smile } from "lucide-react";
+import { Lightbulb, PlusCircle, Camera, CheckCircle2, ListFilter, PlayCircle, BarChart3, ThumbsUp, Wrench, MessageSquare, AlertTriangle, User, Smile } from "lucide-react";
 import { usePageView } from "@/hooks/usePageView";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
-import Link from "next/link";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { OfflineSyncBadge } from "@/components/offline/OfflineSyncBadge";
+import { kvpRepository, KvpItem } from "@/lib/repositories/kvpRepository";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
-interface BusinessKvpItem {
-  id: string;
-  title: string;
-  category: string;
-  benefit: string;
-  status: "neu" | "prüfen" | "angenommen" | "umgesetzt" | "abgelehnt";
-  problemDesc: string;
-  hasPhoto: boolean;
-  date: string;
-  isDemo?: boolean;
-}
-
-const CATEGORIES = ["Sicherheit", "Qualität", "Ablauf", "Werkzeug/Maschine", "Kunde", "Kommunikation", "Ordnung/Sauberkeit", "Sonstiges"];
 const BENEFITS = ["Zeit sparen", "Fehler vermeiden", "Kunde zufriedener", "Kosten senken", "Arbeit erleichtern"];
-
-const DEMO_ITEMS: BusinessKvpItem[] = [
-  {
-    id: "b-demo-1", title: "Abtropfblech an Bad 4 verlängern", category: "Qualität", benefit: "Kosten senken", status: "angenommen",
-    problemDesc: "Es tropft zu viel Chemie daneben beim Herausheben der Ware.", hasPhoto: true, date: "12.05.2026", isDemo: true
-  },
-  {
-    id: "b-demo-2", title: "Neuer Besen für Halle 2", category: "Ordnung/Sauberkeit", benefit: "Arbeit erleichtern", status: "umgesetzt",
-    problemDesc: "Der alte Besen ist komplett abgenutzt, fegen dauert ewig.", hasPhoto: false, date: "10.05.2026", isDemo: true
-  },
-  {
-    id: "b-demo-3", title: "Kunden-Abholung deutlicher ausschildern", category: "Kunde", benefit: "Kunde zufriedener", status: "neu",
-    problemDesc: "LKW-Fahrer wissen oft nicht, an welchem Tor sie klingeln sollen.", hasPhoto: true, date: "Gestern", isDemo: true
-  },
-  {
-    id: "b-demo-4", title: "Gefahrstoffetiketten lösen sich", category: "Sicherheit", benefit: "Fehler vermeiden", status: "prüfen",
-    problemDesc: "Durch die Dämpfe fallen die Aufkleber von den Reservebehältern ab.", hasPhoto: true, date: "Heute", isDemo: true
-  }
-];
+const CATEGORIES = ["Sicherheit", "Qualität", "Ablauf", "Werkzeug/Maschine", "Kunde", "Kommunikation", "Ordnung/Sauberkeit", "Sonstiges"];
 
 export function BetriebKvpClient() {
   usePageView();
 
-  const [items, setItems] = useState<BusinessKvpItem[]>(DEMO_ITEMS);
-  const [activeItem, setActiveItem] = useState<BusinessKvpItem | null>(null);
-  const [isChef, setIsChef] = useState(false);
+  const [items, setItems] = useState<KvpItem[]>([]);
+  const [activeItem, setActiveItem] = useState<KvpItem | null>(null);
+  const { role } = usePermissions();
+  const isChef = role === "admin" || role === "developer" || role === "chef";
 
   // Form State
   const [newTitle, setNewTitle] = useState("");
@@ -58,50 +28,46 @@ export function BetriebKvpClient() {
   const [hasPhotoMock, setHasPhotoMock] = useState(false);
 
   useEffect(() => {
-    // Basic mock check for role
-    const role = localStorage.getItem("kreile_user_role");
-    if (role === "admin" || role === "developer" || role === "chef") setIsChef(true);
-
-    const saved = localStorage.getItem("kreile_business_kvp_items");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setItems([...parsed, ...DEMO_ITEMS]);
-      } catch(e) {
-        setItems(DEMO_ITEMS);
-      }
-    }
+    kvpRepository.getAll().then(data => setItems(data)).catch(console.error);
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!newTitle.trim()) return;
 
-    const newItem: BusinessKvpItem = {
-      id: "local-b-" + Date.now(),
-      title: newTitle,
-      category: newCategory,
-      benefit: newBenefit,
-      status: "neu",
-      problemDesc: newProblem,
-      hasPhoto: hasPhotoMock,
-      date: "Gerade eben",
-      isDemo: false
-    };
+    try {
+      const newItem = await kvpRepository.addItem({
+        title: newTitle,
+        category: newCategory,
+        benefit: newBenefit,
+        status: "neu",
+        problemDesc: newProblem,
+        hasPhoto: hasPhotoMock,
+        date: "Gerade eben",
+        isDemo: false
+      });
 
-    const currentSaved = localStorage.getItem("kreile_business_kvp_items");
-    let currentArr = [];
-    if (currentSaved) {
-      try { currentArr = JSON.parse(currentSaved); } catch(e) {}
+      setItems([newItem, ...items]);
+      setNewTitle("");
+      setNewProblem("");
+      setHasPhotoMock(false);
+    } catch (e) {
+      console.error("Failed to add KVP item", e);
+      alert("Fehler beim Speichern der Idee.");
     }
-    currentArr.unshift(newItem);
-    localStorage.setItem("kreile_business_kvp_items", JSON.stringify(currentArr));
+  };
 
-    OfflineManager.enqueueAction("BUSINESS_KVP_CREATE", newItem).catch(console.error);
-
-    setItems([newItem, ...items]);
-    setNewTitle("");
-    setNewProblem("");
-    setHasPhotoMock(false);
+  const handleUpdateStatus = async (status: KvpItem["status"]) => {
+    if (!activeItem) return;
+    try {
+      const updated = await kvpRepository.updateItemStatus(activeItem.id, status);
+      if (updated) {
+        setItems(items.map(i => i.id === updated.id ? updated : i));
+        setActiveItem(updated);
+      }
+    } catch (e) {
+      console.error("Failed to update status", e);
+      alert("Fehler beim Aktualisieren des Status.");
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -149,10 +115,6 @@ export function BetriebKvpClient() {
           </h1>
           <p className="text-text-muted mt-2 font-medium">Betriebliche Verbesserungen, Mängel und Ideen aus der Werkstatt/Büro.</p>
         </div>
-        <div className="bg-bg-app-soft px-3 py-1.5 rounded-lg border border-neutral-gray-200 text-xs font-bold flex items-center gap-2 self-start">
-          <Info className="w-4 h-4 text-accent-orange" />
-          Lokal gespeichert / Backend später
-        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -184,7 +146,7 @@ export function BetriebKvpClient() {
                   onChange={e => setNewCategory(e.target.value)}
                   className="w-full rounded-lg border border-neutral-gray-300 px-2 py-1.5 text-sm focus:border-navy-900 outline-none bg-white"
                 >
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {CATEGORIES.map((c: string) => <option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
 
@@ -260,7 +222,7 @@ export function BetriebKvpClient() {
               </li>
               <li className="flex justify-between items-center text-sm">
                 <span className="font-medium text-navy-900">Offene Mängel:</span>
-                <span className="font-bold text-navy-900">2 an Station "Beschichtung"</span>
+                <span className="font-bold text-navy-900">2 an Station &quot;Beschichtung&quot;</span>
               </li>
             </ul>
 
@@ -366,14 +328,16 @@ export function BetriebKvpClient() {
               </div>
             )}
 
-            <div className="pt-4 border-t border-neutral-gray-200">
-              <h3 className="font-bold text-sm uppercase text-text-muted mb-2">Aktion (Chef / Meister)</h3>
-              <div className="flex gap-2">
-                <button className="flex-1 bg-success-green/10 text-success-green font-bold py-2 rounded-lg text-sm border border-success-green/20 hover:bg-success-green/20 transition">Umgesetzt</button>
-                <button className="flex-1 bg-warning-yellow/10 text-warning-yellow font-bold py-2 rounded-lg text-sm border border-warning-yellow/20 hover:bg-warning-yellow/20 transition">Prüfen</button>
-                <button className="flex-1 bg-neutral-gray-100 text-text-muted font-bold py-2 rounded-lg text-sm border border-neutral-gray-200 hover:bg-neutral-gray-200 transition">Ablehnen</button>
+            {isChef && (
+              <div className="pt-4 border-t border-neutral-gray-200">
+                <h3 className="font-bold text-sm uppercase text-text-muted mb-2">Aktion (Chef / Meister)</h3>
+                <div className="flex gap-2">
+                  <button onClick={() => handleUpdateStatus("umgesetzt")} className="flex-1 bg-success-green/10 text-success-green font-bold py-2 rounded-lg text-sm border border-success-green/20 hover:bg-success-green/20 transition">Umgesetzt</button>
+                  <button onClick={() => handleUpdateStatus("prüfen")} className="flex-1 bg-warning-yellow/10 text-warning-yellow font-bold py-2 rounded-lg text-sm border border-warning-yellow/20 hover:bg-warning-yellow/20 transition">Prüfen</button>
+                  <button onClick={() => handleUpdateStatus("abgelehnt")} className="flex-1 bg-neutral-gray-100 text-text-muted font-bold py-2 rounded-lg text-sm border border-neutral-gray-200 hover:bg-neutral-gray-200 transition">Ablehnen</button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </DetailOverlay>

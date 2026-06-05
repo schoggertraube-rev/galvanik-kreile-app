@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Users, Plus, Shield, Mail, CheckCircle2, XCircle, Loader2 } from "lucide-react";
-import { getUsers, createUser, toggleUserStatus, updateUserRole } from "@/app/actions/admin.actions";
+import { getUsers, createUser, toggleUserStatus, updateUserRole, updateUserPin } from "@/app/actions/admin.actions";
 
 type AppUser = {
   id: string;
@@ -16,6 +16,7 @@ type AppUser = {
   active: boolean;
   location: string | null;
   language: string | null;
+  pinHash: string | null;
 };
 
 export function UserManagement() {
@@ -27,7 +28,8 @@ export function UserManagement() {
   const [showCreate, setShowCreate] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [newName, setNewName] = useState("");
-  const [newRole, setNewRole] = useState("workshop");
+  const [newPin, setNewPin] = useState("1234");
+  const [newRole, setNewRole] = useState("werkstatt");
   const [isCreating, setIsCreating] = useState(false);
 
   const fetchUsers = async () => {
@@ -51,10 +53,11 @@ export function UserManagement() {
     setIsCreating(true);
     setError(null);
     try {
-      await createUser({ email: newEmail, fullName: newName, role: newRole });
+      await createUser({ email: newEmail, fullName: newName, role: newRole, pinHash: newPin });
       setShowCreate(false);
       setNewEmail("");
       setNewName("");
+      setNewPin("1234");
       await fetchUsers();
     } catch (err) {
       setError(String(err));
@@ -76,6 +79,17 @@ export function UserManagement() {
     try {
       await updateUserRole(id, newRole);
       await fetchUsers();
+    } catch (err) {
+      alert(String(err));
+    }
+  };
+
+  const handlePinChange = async (id: string, newPin: string) => {
+    if (newPin.length !== 4) return;
+    try {
+      await updateUserPin(id, newPin);
+      await fetchUsers();
+      alert("PIN erfolgreich geändert!");
     } catch (err) {
       alert(String(err));
     }
@@ -128,13 +142,17 @@ export function UserManagement() {
                   <option value="developer">Developer (Voller Zugriff)</option>
                   <option value="admin">Admin (Alle Daten)</option>
                   <option value="meister">Meister (Produktion)</option>
-                  <option value="office">Büro (Kunden und Rechnungen)</option>
-                  <option value="workshop">Werkstatt (Status & Fotos)</option>
+                  <option value="buero">Büro (Kunden und Rechnungen)</option>
+                  <option value="werkstatt">Werkstatt (Status & Fotos)</option>
                   <option value="readonly">Nur Lesen</option>
                 </select>
               </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-navy-700">Tablet-PIN (4 Ziffern)</label>
+                <Input value={newPin} onChange={e => setNewPin(e.target.value)} maxLength={4} placeholder="1234" />
+              </div>
             </div>
-            <Button onClick={handleCreateUser} disabled={isCreating || !newEmail || !newName} className="w-full md:w-auto">
+            <Button onClick={handleCreateUser} disabled={isCreating || !newEmail || !newName || newPin.length !== 4} className="w-full md:w-auto">
               {isCreating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
               Benutzer anlegen
             </Button>
@@ -171,10 +189,26 @@ export function UserManagement() {
                     <option value="developer">Developer</option>
                     <option value="admin">Admin</option>
                     <option value="meister">Meister</option>
-                    <option value="office">Büro</option>
-                    <option value="workshop">Werkstatt</option>
+                    <option value="buero">Büro</option>
+                    <option value="werkstatt">Werkstatt</option>
                     <option value="readonly">Nur Lesen</option>
                   </select>
+                </div>
+                
+                <div className="flex items-center gap-1 border border-neutral-gray-200 rounded-lg bg-white px-2 py-1">
+                  <span className="text-[10px] text-text-muted font-bold">PIN:</span>
+                  <Input 
+                    type="password"
+                    defaultValue={user.pinHash || "1234"} 
+                    maxLength={4}
+                    className="w-12 h-6 text-xs text-center p-0 bg-transparent border-none focus-visible:ring-0"
+                    onBlur={(e) => {
+                      if (e.target.value !== user.pinHash && e.target.value.length === 4) {
+                        handlePinChange(user.id, e.target.value);
+                      }
+                    }}
+                    disabled={!user.active}
+                  />
                 </div>
                 
                 <Button 

@@ -31,7 +31,7 @@ export async function getUsers() {
   return users
 }
 
-export async function createUser(data: { email: string, fullName: string, role: string, location?: string, language?: string }) {
+export async function createUser(data: { email: string, fullName: string, role: string, location?: string, language?: string, pinHash?: string }) {
   await requireAdminOrDeveloper();
   const supabase = getAdminSupabase()
   
@@ -59,6 +59,7 @@ export async function createUser(data: { email: string, fullName: string, role: 
       role: data.role,
       location: data.location || null,
       language: data.language || 'de',
+      pinHash: data.pinHash || '1234',
       active: true,
     })
     return { success: true, userId }
@@ -72,6 +73,12 @@ export async function createUser(data: { email: string, fullName: string, role: 
 export async function updateUserRole(userId: string, newRole: string) {
   await requireAdminOrDeveloper();
   await db.update(appUsers).set({ role: newRole }).where(eq(appUsers.id, userId))
+  return { success: true }
+}
+
+export async function updateUserPin(userId: string, newPin: string) {
+  await requireAdminOrDeveloper();
+  await db.update(appUsers).set({ pinHash: newPin }).where(eq(appUsers.id, userId))
   return { success: true }
 }
 
@@ -94,6 +101,12 @@ export async function toggleFeatureFlag(id: string, enabled: boolean) {
   return { success: true }
 }
 
+export async function updateFeatureFlagRoles(id: string, rolesAllowed: string[]) {
+  await requireAdminOrDeveloper();
+  await db.update(featureFlags).set({ rolesAllowed }).where(eq(featureFlags.id, id))
+  return { success: true }
+}
+
 export async function initializeDefaultFlags() {
   await requireAdminOrDeveloper();
   const defaults = [
@@ -102,7 +115,24 @@ export async function initializeDefaultFlags() {
     { id: 'module_scan', name: 'Scan/Kamera', description: 'Schnellannahme per OCR', enabled: true },
     { id: 'module_portal', name: 'Kundenportal', description: 'Externer Kunden-Login', enabled: false },
     { id: 'module_payment', name: 'Zahlungsmodul', description: 'Rechnungen & Zahlungen', enabled: false },
-  ]
+    // Permissions System
+    { id: 'perm_sys_toggles', name: 'Feature-Toggles steuern', description: 'System', enabled: true, rolesAllowed: ['developer'] },
+    { id: 'perm_sys_diag', name: 'Diagnose & Tests', description: 'System', enabled: true, rolesAllowed: ['developer', 'admin'] },
+    { id: 'perm_sys_users', name: 'Benutzer verwalten', description: 'System', enabled: true, rolesAllowed: ['developer', 'admin'] },
+    // Permissions Daten & Import
+    { id: 'perm_data_csv', name: 'CSV Massenimport', description: 'Daten & Import', enabled: true, rolesAllowed: ['developer', 'admin'] },
+    { id: 'perm_data_customers', name: 'Kunden anlegen/löschen', description: 'Daten & Import', enabled: true, rolesAllowed: ['developer', 'admin', 'buero'] },
+    { id: 'perm_data_orders', name: 'Aufträge anlegen', description: 'Daten & Import', enabled: true, rolesAllowed: ['developer', 'admin', 'buero', 'meister'] },
+    // Permissions Operativ
+    { id: 'perm_op_status', name: 'Auftragsstatus ändern', description: 'Operativ (Werkstatt)', enabled: true, rolesAllowed: ['developer', 'admin', 'meister', 'werkstatt'] },
+    { id: 'perm_op_risk', name: 'Priorität / Risiko ändern', description: 'Operativ (Werkstatt)', enabled: true, rolesAllowed: ['developer', 'admin', 'meister'] },
+    { id: 'perm_op_photos', name: 'Fotos hochladen', description: 'Operativ (Werkstatt)', enabled: true, rolesAllowed: ['developer', 'admin', 'meister', 'werkstatt'] },
+    { id: 'perm_op_qa', name: 'Qualitätskontrolle', description: 'Operativ (Werkstatt)', enabled: true, rolesAllowed: ['developer', 'admin', 'meister'] },
+    // Permissions Ansicht
+    { id: 'perm_view_leitstand', name: 'Leitstand sehen', description: 'Ansicht', enabled: true, rolesAllowed: ['developer', 'admin', 'meister', 'buero', 'werkstatt', 'readonly'] },
+    { id: 'perm_view_customers', name: 'Kundendaten sehen', description: 'Ansicht', enabled: true, rolesAllowed: ['developer', 'admin', 'meister', 'buero', 'werkstatt', 'readonly'] },
+    { id: 'perm_view_prices', name: 'Preise und Rechnungen sehen', description: 'Ansicht', enabled: true, rolesAllowed: ['developer', 'admin', 'buero'] },
+  ];
   
   for (const flag of defaults) {
     await db.insert(featureFlags).values(flag).onConflictDoNothing()

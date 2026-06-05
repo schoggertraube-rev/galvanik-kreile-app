@@ -36,13 +36,39 @@ export async function seedDatabase({ safeMode = false } = {}) {
 
     // 2. Create appUsers
     console.log("👤 Lege Benutzer an...");
-    await db.insert(appUsers).values({
-      id: "123e4567-e89b-12d3-a456-426614174000",
-      email: "demo@kreile.de",
-      fullName: "Max Meister",
-      role: "admin",
-      active: true,
-    });
+    await db.insert(appUsers).values([
+      {
+        id: "123e4567-e89b-12d3-a456-426614174000",
+        email: "schoggertraube@gmail.com",
+        fullName: "Master Admin",
+        role: "developer",
+        active: true,
+      },
+      {
+        id: "223e4567-e89b-12d3-a456-426614174001",
+        email: "admin@kreile.de",
+        fullName: "Max Kreile",
+        role: "admin",
+        pinHash: "1234",
+        active: true,
+      },
+      {
+        id: "323e4567-e89b-12d3-a456-426614174002",
+        email: "werkstatt@kreile.de",
+        fullName: "Christian Dieter",
+        role: "werkstatt",
+        pinHash: "1234",
+        active: true,
+      },
+      {
+        id: "423e4567-e89b-12d3-a456-426614174003",
+        email: "buero@kreile.de",
+        fullName: "Reiner Schmitt",
+        role: "buero",
+        pinHash: "1234",
+        active: true,
+      }
+    ]);
 
     // 3. Insert Customers
     console.log(`🏢 Lege ${INITIAL_CUSTOMERS.length} Kunden an...`);

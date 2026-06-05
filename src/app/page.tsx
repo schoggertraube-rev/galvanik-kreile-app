@@ -10,8 +10,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   UserPlus, FilePlus, Camera, AlertTriangle, HeadphonesIcon, Settings,
-  CheckCircle, Circle, Clock, AlertOctagon, Send, Activity, Info, Phone
+  CheckCircle, Circle, Clock, AlertOctagon, Send, Activity, Info, Phone, RefreshCw, Sparkles
 } from "lucide-react";
+import { useAppShortcut } from "@/components/ui/AppShortcutContext";
+import { useSync } from "@/lib/offline/SyncContext";
 
 // Task model definition
 interface ChecklistTask {
@@ -36,6 +38,11 @@ export default function HomeDashboard() {
   
   // Drilldown Overlay State
   const [activeOverlay, setActiveOverlay] = useState<{title: string, desc: string, targetLink?: string} | null>(null);
+  
+  // Unified App Shortcuts
+  const { openShortcut } = useAppShortcut();
+
+  const { isOnline, outboxItems, syncNow } = useSync();
 
   // Todo List State (Enriched Task Model)
   const [todos, setTodos] = useState<ChecklistTask[]>([
@@ -134,6 +141,30 @@ export default function HomeDashboard() {
         <p className="text-text-muted font-medium">Dein Tag im Überblick. Gehirn aus, Checkliste an.</p>
       </div>
 
+      {/* OUTBOX WARNING */}
+      {outboxItems.length > 0 && (
+        <div className="bg-gold-50 border-2 border-gold-400 p-4 md:p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm animate-in fade-in slide-in-from-top-4">
+          <div className="flex items-start gap-4">
+            <div className="p-3 bg-gold-200 rounded-full shrink-0">
+              <RefreshCw className={`w-6 h-6 text-gold-800 ${isOnline ? 'animate-spin' : ''}`} />
+            </div>
+            <div>
+              <h3 className="font-bold text-navy-900 text-lg">Ausstehende Synchronisation</h3>
+              <p className="text-sm font-medium text-navy-800">
+                Es {outboxItems.length === 1 ? "befindet sich 1 Änderung" : `befinden sich ${outboxItems.length} Änderungen`} lokal auf diesem Gerät, die noch nicht mit dem Server synchronisiert {outboxItems.length === 1 ? "wurde" : "wurden"}.
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={() => syncNow()}
+            disabled={!isOnline}
+            className="w-full md:w-auto px-6 py-3 bg-navy-900 hover:bg-navy-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl whitespace-nowrap transition-colors"
+          >
+            {isOnline ? "Jetzt synchronisieren" : "Warte auf Internet..."}
+          </button>
+        </div>
+      )}
+
       {/* 1. USP-SCHNELLSTART-KACHELN */}
       <section>
         <h2 className="text-sm font-bold text-text-muted uppercase tracking-wider mb-4">Schnellstart</h2>
@@ -146,7 +177,7 @@ export default function HomeDashboard() {
           </Link>
 
           <button 
-            onClick={() => setActiveOverlay({title: "Neuer Kunde", desc: "Schneller Kundenstart wird angebunden. Bis dahin Kundendaten über Kundenbereich prüfen oder ergänzen.", targetLink: "/customers"})}
+            onClick={() => openShortcut("new_customer")}
             className="bg-white border border-neutral-gray-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center hover:border-navy-900 hover:shadow-md transition-all active:scale-95 group cursor-pointer"
           >
             <div className="w-12 h-12 bg-bg-app-soft rounded-full flex items-center justify-center mb-3 group-hover:bg-navy-900 transition-colors">
@@ -156,7 +187,7 @@ export default function HomeDashboard() {
           </button>
 
           <button 
-            onClick={() => setActiveOverlay({title: "Neuer Auftrag", desc: "Auftragserfassung ist jetzt unter Warendurchlauf -> Neuer Auftrag angebunden.", targetLink: "/warendurchlauf/neu"})}
+            onClick={() => openShortcut("new_order")}
             className="bg-white border border-neutral-gray-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center hover:border-navy-900 hover:shadow-md transition-all active:scale-95 group cursor-pointer"
           >
             <div className="w-12 h-12 bg-bg-app-soft rounded-full flex items-center justify-center mb-3 group-hover:bg-navy-900 transition-colors">
@@ -165,12 +196,15 @@ export default function HomeDashboard() {
             <span className="font-bold text-sm text-navy-900">Neuer Auftrag</span>
           </button>
 
-          <Link href="/scan" className="bg-white border border-neutral-gray-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center hover:border-navy-900 hover:shadow-md transition-all active:scale-95 group cursor-pointer">
+          <button 
+            onClick={() => openShortcut("new_document")}
+            className="bg-white border border-neutral-gray-200 rounded-2xl p-4 flex flex-col items-center justify-center text-center hover:border-navy-900 hover:shadow-md transition-all active:scale-95 group cursor-pointer"
+          >
             <div className="w-12 h-12 bg-bg-app-soft rounded-full flex items-center justify-center mb-3 group-hover:bg-navy-900 transition-colors">
               <Camera className="w-6 h-6 text-navy-900 group-hover:text-white transition-colors" />
             </div>
             <span className="font-bold text-sm text-navy-900">Foto / Scan</span>
-          </Link>
+          </button>
 
           <Link href="/kontrolle" className="bg-white border border-error-red/30 rounded-2xl p-4 flex flex-col items-center justify-center text-center hover:border-error-red hover:shadow-md transition-all active:scale-95 group relative overflow-hidden cursor-pointer">
             <div className="absolute top-0 left-0 w-full h-1 bg-error-red" />
@@ -193,6 +227,13 @@ export default function HomeDashboard() {
               <Settings className="w-6 h-6 text-navy-900 group-hover:text-white transition-colors" />
             </div>
             <span className="font-bold text-sm text-navy-900">Warendurchlauf</span>
+          </Link>
+
+          <Link href="/marketing" className="bg-white border border-gold-300 rounded-2xl p-4 flex flex-col items-center justify-center text-center hover:border-gold-600 hover:shadow-md transition-all active:scale-95 group cursor-pointer relative">
+            <div className="w-12 h-12 bg-gold-50 rounded-full flex items-center justify-center mb-3 group-hover:bg-gold-700 transition-colors">
+              <Sparkles className="w-6 h-6 text-gold-700 group-hover:text-white transition-colors" />
+            </div>
+            <span className="font-bold text-sm text-navy-900">Marketing</span>
           </Link>
         </div>
       </section>

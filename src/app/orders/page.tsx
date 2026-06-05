@@ -34,6 +34,7 @@ import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import { usePageView } from "@/hooks/usePageView";
 import { OrderWideCard, type UrgencyType } from "@/components/orders/OrderWideCard";
+import { useAppShortcut } from "@/components/ui/AppShortcutContext";
 
 const safe = (value: unknown) => String(value ?? "").toLowerCase();
 
@@ -41,6 +42,7 @@ const safe = (value: unknown) => String(value ?? "").toLowerCase();
 function OrdersPageInner() {
   usePageView();
   const searchParams = useSearchParams();
+  const { openShortcut } = useAppShortcut();
   const stationFilter = searchParams.get("station");
   const [searchTerm, setSearchTerm] = useState("");
   
@@ -363,13 +365,13 @@ function OrdersPageInner() {
           <button className="top-tab" onClick={() => window.location.href='/customers'}>Kundenkartei</button>
         </div>
         <div className="topbar-title">{getStationHeadline()}</div>
-        <button className="btn-new" onClick={() => window.location.href='/orders/new'}>+ Neuer Auftrag</button>
+        <button className="btn-new" onClick={() => openShortcut("new_order")}>+ Neuer Auftrag</button>
       </div>
       
       {/* Mobile topbar fallback */}
       <div className="flex sm:hidden justify-between items-center mb-4">
         <div className="font-bold text-lg">{getStationHeadline()}</div>
-        <button className="btn-new py-1.5 px-3 text-xs" onClick={() => window.location.href='/orders/new'}>+ Neu</button>
+        <button className="btn-new py-1.5 px-3 text-xs" onClick={() => openShortcut("new_order")}>+ Neu</button>
       </div>
 
       <div className="status-strip">

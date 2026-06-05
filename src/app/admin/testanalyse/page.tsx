@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTestpilot, TestpilotSession } from '@/components/testpilot/TestpilotProvider';
+import { AppBackButton } from '@/components/ui/AppBackButton';
 
 export default function TestanalyseDashboard() {
   const { session, clearSession, exportSessionJSON, exportSessionMarkdown } = useTestpilot();
@@ -47,7 +48,10 @@ export default function TestanalyseDashboard() {
   if (!mounted) return null;
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8 text-slate-900 dark:text-slate-100">
+    <div className="max-w-7xl mx-auto p-4 md:p-8 font-sans antialiased text-navy-900 bg-bg-app min-h-screen">
+      <div className="mb-4">
+        <AppBackButton fallbackHref="/settings" label="Zurück zu Einstellungen" />
+      </div>
       <header className="flex justify-between items-end border-b pb-4 dark:border-slate-800">
         <div>
           <h1 className="text-3xl font-bold font-playfair">Testanalyse Dashboard</h1>
@@ -145,6 +149,13 @@ export default function TestanalyseDashboard() {
                         <span className="font-bold block mb-1">[{ev.category}]</span>
                         <p>{ev.description}</p>
                         {ev.expected && <p className="text-slate-500 mt-1">Erwartet: {ev.expected}</p>}
+                        {ev.screenshot && (
+                          <div className="mt-3">
+                            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Angehängter Screenshot</span>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={ev.screenshot} alt="Screenshot Marker" className="max-w-full h-auto rounded border border-slate-300 dark:border-slate-700 shadow-sm" style={{ maxHeight: '300px' }} />
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

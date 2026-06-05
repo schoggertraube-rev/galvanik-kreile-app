@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useTestpilot } from './TestpilotProvider';
-import { TestpilotOverlay } from './TestpilotOverlay';
+import { useTestpilot } from '@/components/testpilot/TestpilotProvider';
+import { TestpilotOverlay } from '@/components/testpilot/TestpilotOverlay';
 
 export function TestpilotFloatingButton() {
   const { isActive } = useTestpilot();

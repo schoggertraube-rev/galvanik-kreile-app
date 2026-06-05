@@ -22,6 +22,7 @@ export interface DiagEvent {
   route?: string;        // Current pathname
   viewport?: string;     // e.g. "1024x768"
   userAgent?: string;
+  screenshot?: string;   // Optional base64 screenshot
 }
 
 interface DiagContextValue {
@@ -31,7 +32,7 @@ interface DiagContextValue {
   deactivate: () => void;
   toggle: () => void;
   logEvent: (event: Omit<DiagEvent, "id" | "timestamp" | "route" | "viewport" | "userAgent">) => void;
-  markProblem: (description: string) => void;
+  markProblem: (description: string, screenshot?: string) => void;
   clearEvents: () => void;
   exportReport: () => string;
   eventCount: { errors: number; warnings: number; total: number };
@@ -86,13 +87,14 @@ export function DiagnosticsProvider({ children }: { children: React.ReactNode })
     setEvents(prev => [...prev.slice(-499), full]); // Cap at 500 events
   }, [getContext]);
 
-  const markProblem = useCallback((description: string) => {
+  const markProblem = useCallback((description: string, screenshot?: string) => {
     logEvent({
       type: "manual",
       severity: "error",
       source: "user",
       message: description,
       details: `Manuell markiert auf ${window.location.pathname}`,
+      screenshot,
     });
   }, [logEvent]);
 
@@ -148,6 +150,11 @@ export function DiagnosticsProvider({ children }: { children: React.ReactNode })
         lines.push(`${e.message}`);
         if (e.details) lines.push(`\`\`\`\n${e.details}\n\`\`\``);
         if (e.route) lines.push(`Route: ${e.route}`);
+        if (e.screenshot) {
+          lines.push(``);
+          lines.push(`📷 **Screenshot angehängt:**`);
+          lines.push(`![Screenshot](${e.screenshot})`);
+        }
         lines.push(``);
       });
     }
@@ -245,7 +252,13 @@ export function DiagnosticsProvider({ children }: { children: React.ReactNode })
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed)) {
-          setTimeout(() => setEvents(parsed), 0);
+          // Filter out events older than 12 hours to avoid showing "data from yesterday" forever
+          const now = Date.now();
+          const recent = parsed.filter(e => {
+             const t = new Date(e.timestamp).getTime();
+             return now - t < 12 * 60 * 60 * 1000;
+          });
+          setTimeout(() => setEvents(recent), 0);
         }
       }
       const wasActive = localStorage.getItem("kreile_diag_active");

@@ -21,11 +21,13 @@ import {
   Clock, 
   ChevronRight, 
   ArrowLeft,
-  AlertCircle,
   History,
   PhoneCall,
-  Mail
+  Mail,
+  AlertCircle
 } from "lucide-react";
+import { AppBackButton } from "@/components/ui/AppBackButton";
+import { useAppShortcut } from "@/components/ui/AppShortcutContext";
 
 export default function CustomerProfilePage({ params }: { params: Promise<{ id: string }> }) {
   usePageView();
@@ -36,6 +38,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
   const [orders, setOrders] = useState<Order[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { openShortcut } = useAppShortcut();
 
 
   useEffect(() => {
@@ -135,10 +138,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
     <div className="min-h-screen bg-transparent pb-16 font-sans">
       {/* Top bar with back navigation */}
       <div className="bg-white border-b border-neutral-gray-300 py-4 px-4 md:px-8 mb-6 flex items-center justify-between shadow-xs sticky top-0 z-10">
-        <Link href="/customers" className="flex items-center gap-2 text-text-muted hover:text-navy-900 font-bold transition-all group">
-          <ArrowLeft className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
-          <span>Zurück zur Kundenübersicht</span>
-        </Link>
+        <AppBackButton fallbackHref="/customers" label="Zurück zur Kundenübersicht" />
         <span className="font-mono text-sm text-text-muted font-bold">KUNDENID: {customer.customerNumber}</span>
       </div>
 
@@ -435,11 +435,11 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                 <h3 className="text-lg font-bold font-serif border-b border-white/10 pb-4">Schnellaktionen</h3>
                 
                 <div className="flex flex-col gap-3">
-                  <Link href={`/orders/new?customerId=${customer.id}`} className="w-full">
+                  <button onClick={() => openShortcut("new_order")} className="w-full">
                     <Button className="w-full h-12 bg-white hover:bg-neutral-gray-100 text-navy-900 font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow-md">
                       Neuer Auftrag anlegen
                     </Button>
-                  </Link>
+                  </button>
 
                   {customer.phone ? (
                     <a href={`tel:${customer.phone}`} className="w-full">

@@ -49,6 +49,7 @@ export interface MarkerEvent extends BaseEvent {
   expected?: string;
   route: string;
   lastClicks: ClickEvent[];
+  screenshot?: string;
 }
 
 export type TestpilotEvent = ClickEvent | RouteEvent | AppErrorEvent | NetworkEvent | MarkerEvent;
@@ -124,11 +125,12 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
 
       // 2. Env Var Check
       const envEnabled = process.env.NEXT_PUBLIC_ENABLE_TEST_ANALYTICS === 'true';
-      if (!envEnabled) return;
       
       // 3. Local Developer Switch
       const localEnabled = localStorage.getItem('testpilot_enabled') === 'true';
-      if (!localEnabled) return;
+      
+      // Activate if either env is true OR local switch is true
+      if (!envEnabled && !localEnabled) return;
 
       setIsActive(true);
 
@@ -191,6 +193,8 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
     };
     eventsRef.current = [];
     saveToStorage(newSession);
+    localStorage.setItem('testpilot_enabled', 'true');
+    setIsActive(true);
     setIsRecording(true);
   }, [saveToStorage]);
 
@@ -201,9 +205,11 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
 
   const clearSession = useCallback(() => {
     setIsRecording(false);
+    setIsActive(false);
     setSession(null);
     eventsRef.current = [];
     localStorage.removeItem('testpilot_session');
+    localStorage.removeItem('testpilot_enabled');
   }, []);
 
   // Track Clicks & Dead Clicks
@@ -346,6 +352,11 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
         lines.push(`${i+1}. [${time}] NETZWERK: ${e.method} ${e.url} (${e.status}) in ${e.duration}ms`);
       } else if (e.type === 'marker') {
         lines.push(`${i+1}. [${time}] MARKER: [${e.category}] ${e.description}`);
+        if (e.expected) lines.push(`   - Erwartet: ${e.expected}`);
+        if (e.screenshot) {
+          lines.push(`   - 📷 **Screenshot angehängt:**`);
+          lines.push(`   ![Screenshot](${e.screenshot})`);
+        }
       }
     });
 

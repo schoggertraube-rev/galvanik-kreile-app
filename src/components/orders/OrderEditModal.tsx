@@ -34,6 +34,7 @@ export function OrderEditModal({
     rawIntakeDate: formatDateForInput(order.rawIntakeDate),
     rawDueDate: formatDateForInput(order.rawDueDate),
   });
+  const [isDirty, setIsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -75,6 +76,17 @@ export function OrderEditModal({
 
   const updateField = (key: keyof Order, val: string | null) => {
     setFormData(prev => ({ ...prev, [key]: val }));
+    setIsDirty(true);
+  };
+
+  const handleCancel = () => {
+    if (isDirty) {
+      if (window.confirm("Bist du sicher? Deine ungespeicherten Änderungen gehen verloren.")) {
+        onClose();
+      }
+    } else {
+      onClose();
+    }
   };
 
   return (
@@ -91,7 +103,7 @@ export function OrderEditModal({
           </div>
           <button 
             type="button"
-            onClick={onClose} 
+            onClick={handleCancel} 
             className="p-2 hover:bg-neutral-gray-100 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
@@ -171,7 +183,7 @@ export function OrderEditModal({
           <Button 
             type="button" 
             variant="ghost" 
-            onClick={onClose} 
+            onClick={handleCancel} 
             className="rounded-xl"
           >
             Abbrechen

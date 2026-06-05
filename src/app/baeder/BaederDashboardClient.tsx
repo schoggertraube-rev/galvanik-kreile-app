@@ -1,7 +1,7 @@
 "use client";
 
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { 
   Beaker, AlertTriangle, CalendarDays, FlaskConical, 
@@ -375,7 +375,7 @@ export function BaederDashboardClient() {
           
           <div>
             <h4 className="font-bold mb-3 border-b border-neutral-gray-200 pb-2">Wie Sperrungen funktionieren (Info)</h4>
-            <p className="text-sm text-text-muted mb-2">Wenn ein Bad im Labor auf "Gesperrt" gesetzt wird:</p>
+            <p className="text-sm text-text-muted mb-2">Wenn ein Bad im Labor auf &quot;Gesperrt&quot; gesetzt wird:</p>
             <ul className="list-disc pl-5 space-y-1 text-sm text-text-muted">
               <li>Kann in der App kein Auftrag auf diese Station gebucht werden.</li>
               <li>Werden Mitarbeiter beim Scannen eines Laufszettels gewarnt.</li>

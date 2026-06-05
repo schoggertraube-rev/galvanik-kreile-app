@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { CheckCircle2, Factory, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { AppActionButton } from "@/components/ui/AppActionButton";
 import { intakeService } from "@/lib/services/intakeService";
 import { useRouter } from "next/navigation";
 import { LabelPrintView } from "@/components/orders/LabelPrintView";
@@ -106,33 +107,35 @@ export function IntakeCompletionSummary({
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-4">
-          <Button
+          <AppActionButton
             onClick={() => router.push("/warendurchlauf")}
             variant="outline"
-            className="flex-1 h-16 text-sm font-bold rounded-2xl border-2 border-neutral-gray-100 text-navy-900 hover:bg-neutral-gray-100 active:scale-95 transition-all"
+            className="flex-1 h-16 text-sm font-bold"
           >
             Zum Leitstand
-          </Button>
-          <Button
+          </AppActionButton>
+          <AppActionButton
             onClick={() => router.push(`/customers/${createdOrder.customerId}`)}
             variant="outline"
-            className="flex-1 h-16 text-sm font-bold rounded-2xl border-2 border-navy-700 text-navy-700 bg-gold-100 hover:bg-navy-100 active:scale-95 transition-all"
+            className="flex-1 h-16 text-sm font-bold bg-gold-100 border-navy-700 text-navy-700"
           >
             Zur Kundenkarte
-          </Button>
-          <Button
+          </AppActionButton>
+          <AppActionButton
             onClick={() => router.push(`/orders/${createdOrder.id}`)}
             variant="outline"
-            className="flex-1 h-16 text-sm font-bold rounded-2xl border-2 border-navy-700 text-navy-700 bg-gold-100 hover:bg-navy-100 active:scale-95 transition-all"
+            className="flex-1 h-16 text-sm font-bold bg-gold-100 border-navy-700 text-navy-700"
           >
             Auftrag öffnen
-          </Button>
-          <Button
+          </AppActionButton>
+          <AppActionButton
             onClick={() => window.print()}
-            className="flex-1 h-16 text-sm font-black rounded-2xl bg-navy-700 text-white hover:bg-navy-700 shadow-xl shadow-blue-600/30 active:scale-95 transition-all flex items-center justify-center gap-2 animate-pulse"
+            variant="primary"
+            icon={<Printer className="w-5 h-5" />}
+            className="flex-1 h-16 text-sm font-black animate-pulse"
           >
-            <Printer className="w-5 h-5" /> Etikett drucken
-          </Button>
+            Etikett drucken
+          </AppActionButton>
         </div>
 
         {/* Mount LabelPrintView Portal for printing */}
@@ -182,13 +185,14 @@ export function IntakeCompletionSummary({
         </div>
       </div>
 
-      <Button 
+      <AppActionButton 
         onClick={handleFinish}
         disabled={saving}
-        className="w-full h-16 text-xl font-black rounded-2xl bg-green-600 text-white hover:bg-green-700 shadow-xl shadow-green-600/30 active:scale-95 transition-all"
+        variant="primary"
+        className="w-full h-16 text-xl"
       >
         {saving ? "Auftrag wird erstellt..." : "Auftrag jetzt speichern"}
-      </Button>
+      </AppActionButton>
     </div>
   )
 }

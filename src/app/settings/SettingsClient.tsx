@@ -9,14 +9,22 @@ import { RoleMatrix } from "@/components/admin/RoleMatrix";
 import { FeatureToggles } from "@/components/admin/FeatureToggles";
 import { DataImportCenter } from "@/components/admin/DataImportCenter";
 import { CompanySettingsForm } from "@/components/admin/CompanySettingsForm";
-import { Server, Users, Shield, Power, Database, Settings, Building2, BarChart2, Lightbulb } from "lucide-react";
+import { BackupRestoreCenter } from "@/components/admin/BackupRestoreCenter";
+import { AdminDevicesClient } from "@/app/admin/devices/AdminDevicesClient";
+import { Server, Users, Shield, Power, Database, Settings, Building2, BarChart2, Lightbulb, Smartphone, MonitorSmartphone } from "lucide-react";
 import Link from "next/link";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
-type Tab = "status" | "company" | "users" | "roles" | "features" | "import" | "system";
+type Tab = "status" | "company" | "users" | "roles" | "features" | "import" | "system" | "devices" | "backup";
 
-export function SettingsClient({ isAdmin, isDeveloper }: { isAdmin: boolean, isDeveloper: boolean }) {
+export function SettingsClient() {
   usePageView();
+  const { hasPermission } = usePermissions();
   const [activeTab, setActiveTab] = useState<Tab>("status");
+
+  const canManageUsers = hasPermission("perm_sys_users");
+  const canSeeDiag = hasPermission("perm_sys_diag");
+  const canManageToggles = hasPermission("perm_sys_toggles");
 
   return (
     <div className="space-y-6 pb-12 font-sans antialiased text-navy-900 w-full px-4 sm:px-6 xl:px-8">
@@ -25,9 +33,9 @@ export function SettingsClient({ isAdmin, isDeveloper }: { isAdmin: boolean, isD
           title="Admin Console & Einstellungen"
           subtitle="Verwalte Einstellungen und Systemparameter."
         />
-        {isAdmin && (
+        {canManageUsers && (
           <div className="flex items-center gap-3">
-            {isDeveloper && (
+            {canSeeDiag && (
               <>
                 <Link href="/admin/analytics" className="inline-flex items-center gap-2 px-4 py-2 bg-kreile-yellow text-navy-900 font-semibold rounded-xl hover:bg-yellow-500 transition-colors shadow-sm">
                   <BarChart2 className="w-5 h-5" />
@@ -50,13 +58,15 @@ export function SettingsClient({ isAdmin, isDeveloper }: { isAdmin: boolean, isD
       <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide border-b border-neutral-gray-200">
         <TabButton active={activeTab === "status"} onClick={() => setActiveTab("status")} icon={<Server />} label="Status & Diagnose" />
         
-        {isAdmin && (
+        {canManageUsers && (
           <>
             <TabButton active={activeTab === "company"} onClick={() => setActiveTab("company")} icon={<Building2 />} label="Firmendaten" />
             <TabButton active={activeTab === "users"} onClick={() => setActiveTab("users")} icon={<Users />} label="Benutzer" />
             <TabButton active={activeTab === "roles"} onClick={() => setActiveTab("roles")} icon={<Shield />} label="Rollen & Rechte" />
-            {isDeveloper && <TabButton active={activeTab === "features"} onClick={() => setActiveTab("features")} icon={<Power />} label="Feature-Toggles" />}
+            <TabButton active={activeTab === "devices"} onClick={() => setActiveTab("devices")} icon={<MonitorSmartphone />} label="Geräte & Sessions" />
+            {canManageToggles && <TabButton active={activeTab === "features"} onClick={() => setActiveTab("features")} icon={<Power />} label="Feature-Toggles" />}
             <TabButton active={activeTab === "import"} onClick={() => setActiveTab("import")} icon={<Database />} label="Daten-Import" />
+            <TabButton active={activeTab === "backup"} onClick={() => setActiveTab("backup")} icon={<Database />} label="Sicherung & Wiederherstellung" />
             <TabButton active={activeTab === "system"} onClick={() => setActiveTab("system")} icon={<Settings />} label="System" />
           </>
         )}
@@ -65,18 +75,20 @@ export function SettingsClient({ isAdmin, isDeveloper }: { isAdmin: boolean, isD
       <div className="pt-2">
         {activeTab === "status" && <AdminDashboard />}
         
-        {isAdmin && (
+        {canManageUsers && (
           <>
             {activeTab === "company" && <CompanySettingsForm />}
             {activeTab === "users" && <UserManagement />}
             {activeTab === "roles" && <RoleMatrix />}
-            {isDeveloper && activeTab === "features" && <FeatureToggles />}
+            {activeTab === "devices" && <AdminDevicesClient />}
+            {canManageToggles && activeTab === "features" && <FeatureToggles />}
             {activeTab === "import" && <DataImportCenter />}
+            {activeTab === "backup" && <BackupRestoreCenter />}
             {activeTab === "system" && (
-              <div className="p-12 text-center border-2 border-dashed border-neutral-gray-200 rounded-2xl text-text-muted space-y-2">
+              <div className="p-12 text-center border-2 border-dashed border-neutral-gray-200 rounded-2xl text-text-muted space-y-4">
                 <Settings className="w-8 h-8 mx-auto opacity-50" />
                 <h3 className="font-bold text-navy-900">Systemeinstellungen</h3>
-                <p className="text-sm">Globale Parameter, Backup-Jobs und API-Keys folgen hier.</p>
+                <p className="text-sm max-w-md mx-auto">Globale Parameter, API-Keys und weitere Funktionen, die nicht im Standardmenü Platz finden.</p>
               </div>
             )}
           </>

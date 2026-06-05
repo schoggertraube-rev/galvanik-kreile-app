@@ -4,8 +4,8 @@ import {
   Inbox, MessageSquare, Mail, Phone, Globe,
   AlertOctagon, User, FileText, Banknote,
   Edit2, Activity, Search, Plus, PhoneCall, Bell, MoreVertical, Send,
-  Calendar, Package, CreditCard, Settings, ChevronRight, ChevronLeft,
-  Archive, PhoneForwarded, CheckSquare, X, Paperclip, Image as ImageIcon
+  Package, CreditCard, Settings, ChevronRight, ChevronLeft,
+  Archive, PhoneForwarded, CheckSquare, X, Paperclip, Image as ImageIcon, Sparkles
 } from "lucide-react";
 import Link from "next/link";
 import { usePageView } from "@/hooks/usePageView";
@@ -14,6 +14,10 @@ import { getRecentPhoneNotes, updatePhoneNote } from "@/app/actions/phoneNotes.a
 import { smartMatchText, MatchResult } from "./smartMatcher";
 import { useParkedCall } from "@/contexts/ParkedCallContext";
 import { ContextAnalysisOverlay, ContextAnalysisOverlayProps } from "@/components/kommunikation/ContextAnalysisOverlay";
+import { ReactivationGeneratorOverlay } from "@/components/kommunikation/ReactivationGeneratorOverlay";
+import { CustomerDetailView } from "@/components/customers/CustomerDetailView";
+import type { CustomerLike } from "@/lib/types/customerLike";
+import { Customer } from "@/lib/types/customer";
 
 /* ═══════════════════════════════════════════════════════════════
    TYPES
@@ -139,8 +143,6 @@ function buildActions(thread: Thread, m: MatchResult | null): ActionCard[] {
   const a: ActionCard[] = [];
   const kw = m.matchedKeywords;
   
-  if (kw.includes("Termin/Logistik"))
-    a.push({ id: "cal", icon: <Calendar size={18} />, title: "Abholtermin", subtitle: m.matchedOrder ? `${m.matchedOrder.id} prüfen` : "Termin vormerken", color: "#059669" });
   if (m.matchedOrder)
     a.push({ id: "ord", icon: <FileText size={18} />, title: "Auftrag prüfen", subtitle: `${m.matchedOrder.id} · ${m.matchedOrder.statusText || m.matchedOrder.task}`, color: "#2563EB" });
   if (kw.includes("Buchhaltung/Zahlung"))
@@ -170,11 +172,13 @@ export function KommunikationClient() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [recentNotes, setRecentNotes] = useState<any[]>([]);
   const [isMobile, setIsMobile] = useState(false);
-  const [showCockpit, setShowCockpit] = useState(true);
+  const [showCockpit, setShowCockpit] = useState(false);
+  const [showReactivationGen, setShowReactivationGen] = useState(false);
   const [chatFilter, setChatFilter] = useState("all");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const { activeParkedCall, resumeCall } = useParkedCall();
   const [overlayConfig, setOverlayConfig] = useState<ContextAnalysisOverlayProps | null>(null);
+  const [showCustomerOverlay, setShowCustomerOverlay] = useState<CustomerLike | null>(null);
 
   usePageView();
 
@@ -298,7 +302,16 @@ export function KommunikationClient() {
           { label: "Zuverlässigkeit", value: "Mögliche Treffer: Schmid, Schmidt", source: "unknown" }
         ],
         actions: [
-          { label: "Kundenkarte öffnen", kind: "secondary", href: matchData.matchedCustomer ? `/customers/${matchData.matchedCustomer.id}` : "/customers" }
+          { 
+            label: "Kundenkarte öffnen", 
+            kind: "secondary", 
+            onClick: () => {
+              if (matchData.matchedCustomer) {
+                setShowCustomerOverlay(matchData.matchedCustomer as CustomerLike);
+                setOverlayConfig(null);
+              }
+            } 
+          }
         ]
       });
     } else {
@@ -487,6 +500,9 @@ export function KommunikationClient() {
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
+                  <button onClick={() => setShowCockpit(!showCockpit)} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #C2410C", background: showCockpit ? "#C2410C" : "transparent", color: showCockpit ? "#fff" : "#C2410C", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                    <Activity size={16} /> KI Analyse
+                  </button>
                   <button style={hdrBtnLg}><Phone size={18} /></button>
                   <button style={hdrBtnLg}><Bell size={18} /></button>
                   <button style={hdrBtnLg}><MoreVertical size={18} /></button>
@@ -587,6 +603,7 @@ export function KommunikationClient() {
                   </div>
                   <div style={{ display: "flex", gap: 12 }}>
                     <div style={{ marginTop: 20 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src="/kreile_mockup_v2_bg.png" alt="" style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,.1)" }} />
                     </div>
                     <button onClick={() => alert("Backend Aktion vorbereitet.")} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all .1s" }} onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.15)")} onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,.1)")}>Alle {actionCards.length} anwenden</button>
@@ -654,7 +671,7 @@ export function KommunikationClient() {
               <div style={{ width: 56, height: 56, borderRadius: "50%", background: activeThread.initialsColor, color: "#fff", display: "grid", placeItems: "center", fontSize: 20, fontWeight: 800, margin: "0 auto 10px" }}>{activeThread.initials}</div>
               <div style={{ fontSize: 16, fontWeight: 800 }}>{matchedCustomer?.name || activeThread.sender.split("·")[0].trim()}</div>
               <div style={{ fontSize: 13, color: "#A09889", marginTop: 4 }}>{matchedCustomer ? `${activeThread.senderCity || "—"} · Kunde seit 2018` : "Keine sichere Zuordnung"}</div>
-              {matchedCustomer && <Link href={`/customers/${matchedCustomer.id}`} style={{ fontSize: 13, color: "#C2410C", fontWeight: 700, textDecoration: "none", display: "inline-block", marginTop: 8 }}>Zur Kundenakte →</Link>}
+              {matchedCustomer && <Link href={`/customers/${matchedCustomer.id}?returnTo=/kommunikation`} style={{ fontSize: 13, color: "#C2410C", fontWeight: 700, textDecoration: "none", display: "inline-block", marginTop: 8 }}>Zur Kundenakte →</Link>}
               {matchedCustomer && (
                 <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 16 }}>
                   <div style={{ textAlign: "center" }}><div style={{ fontSize: 20, fontWeight: 800 }}>{customerOrders.length}</div><div style={{ fontSize: 10, color: "#A09889", textTransform: "uppercase", fontWeight: 600 }}>Aufträge</div></div>
@@ -662,6 +679,30 @@ export function KommunikationClient() {
                 </div>
               )}
             </div>
+
+            {/* Reactivation Opportunity (Mock for Modul E) */}
+            {matchedCustomer && (
+              <div className="bg-gold-50 border-2 border-gold-200 p-4 rounded-2xl mb-2 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-2 opacity-10">
+                  <Sparkles size={40} />
+                </div>
+                <div className="relative z-10">
+                  <div className="text-[10px] font-black text-gold-800 uppercase tracking-widest mb-1 flex items-center gap-1">
+                    <Sparkles size={12} /> Umsatzchance erkannt
+                  </div>
+                  <h4 className="text-sm font-bold text-navy-900 mb-2">Oldtimer-Restauration fortsetzen</h4>
+                  <p className="text-xs text-navy-800 mb-3 leading-relaxed">
+                    Der letzte Auftrag (BMW R75 Motorradteile) liegt 14 Monate zurück. Historisch typischer Zeitpunkt für Folgeaufträge.
+                  </p>
+                  <button 
+                    onClick={() => setShowReactivationGen(true)}
+                    className="w-full py-2 bg-navy-900 hover:bg-navy-800 text-white text-xs font-bold rounded-xl transition-colors"
+                  >
+                    E-Mail vorschlagen
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Orders */}
             {customerOrders.length > 0 && (
@@ -734,6 +775,24 @@ export function KommunikationClient() {
 
         {overlayConfig && (
           <ContextAnalysisOverlay {...overlayConfig} />
+        )}
+
+        {showReactivationGen && matchedCustomer && (
+          <ReactivationGeneratorOverlay 
+            customer={matchedCustomer}
+            lastOrderTitle="BMW R75 Motorradteile verchromen"
+            lastOrderDate="vor 14 Monaten"
+            onClose={() => setShowReactivationGen(false)}
+          />
+        )}
+
+        {showCustomerOverlay && (
+          <div className="fixed inset-0 z-100 flex items-center justify-center p-4 lg:p-8 bg-navy-900/40 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowCustomerOverlay(null); }}>
+             <div className="bg-white rounded-[24px] w-full max-w-5xl max-h-[90vh] overflow-y-auto relative shadow-2xl animate-in fade-in slide-in-from-bottom-4">
+               <button onClick={() => setShowCustomerOverlay(null)} className="absolute top-4 right-4 z-110 w-10 h-10 bg-white/20 hover:bg-white/40 flex items-center justify-center rounded-full text-white backdrop-blur-md transition-colors"><X size={20} /></button>
+               <CustomerDetailView customer={showCustomerOverlay as unknown as Customer} onEdit={() => {}} />
+             </div>
+          </div>
         )}
       </div>
     </div>

@@ -34,6 +34,7 @@ export type ContextAnalysisOverlayProps = {
     kind: "primary" | "secondary" | "danger";
     href?: string;
     onClickKey?: string;
+    onClick?: () => void;
     disabled?: boolean;
     preparedOnly?: boolean;
   }>;
@@ -158,7 +159,8 @@ export function ContextAnalysisOverlay({
               <button
                 key={i}
                 onClick={() => {
-                  if (action.onClickKey === "close") onClose();
+                  if (action.onClick) action.onClick();
+                  else if (action.onClickKey === "close") onClose();
                   else alert(`Aktion ausgeführt: ${action.label}`);
                 }}
                 disabled={action.disabled}

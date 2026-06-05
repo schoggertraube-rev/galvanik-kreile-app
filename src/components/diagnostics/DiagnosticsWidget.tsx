@@ -1,7 +1,8 @@
 "use client";
 import React, { useState, useCallback, useRef, useEffect } from "react";
 import { useDiagnostics, DiagEvent } from "@/lib/diagnostics/DiagnosticsContext";
-import { Bug, X, Flag, Trash2, Download, ChevronDown, ChevronUp, AlertTriangle, AlertCircle, Info, Wifi } from "lucide-react";
+import { Bug, X, Flag, Trash2, Download, ChevronDown, ChevronUp, AlertTriangle, AlertCircle, Info, Camera } from "lucide-react";
+import { TestpilotCanvas } from "@/components/testpilot/TestpilotCanvas";
 
 /* ===== Severity Icon ===== */
 function SevIcon({ severity }: { severity: DiagEvent["severity"] }) {
@@ -35,6 +36,8 @@ export function DiagnosticsWidget() {
   const [expanded, setExpanded] = useState(false);
   const [showMarkDialog, setShowMarkDialog] = useState(false);
   const [markText, setMarkText] = useState("");
+  const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll log
@@ -57,17 +60,18 @@ export function DiagnosticsWidget() {
 
   const handleMark = useCallback(() => {
     if (markText.trim()) {
-      markProblem(markText.trim());
+      markProblem(markText.trim(), screenshot || undefined);
       setMarkText("");
+      setScreenshot(null);
       setShowMarkDialog(false);
     }
-  }, [markText, markProblem]);
+  }, [markText, screenshot, markProblem]);
 
   // Floating Activation Button (always visible when diagnostic is OFF)
   if (!isActive) {
     return (
       <button
-        onClick={toggle}
+        onClick={() => { toggle(); setExpanded(true); }}
         style={{
           position: "fixed", bottom: 16, right: 16, zIndex: 9999,
           width: 44, height: 44, borderRadius: "50%",
@@ -89,6 +93,13 @@ export function DiagnosticsWidget() {
   // Active Panel
   return (
     <>
+      {isDrawing && (
+        <TestpilotCanvas 
+          onSave={(b64) => { setScreenshot(b64); setIsDrawing(false); setShowMarkDialog(true); }} 
+          onCancel={() => { setIsDrawing(false); setShowMarkDialog(true); }} 
+        />
+      )}
+      
       {/* Floating Bar */}
       <div style={{
         position: "fixed", bottom: 16, right: 16, zIndex: 9999,
@@ -164,6 +175,13 @@ export function DiagnosticsWidget() {
                         {ev.message.slice(0, 200)}
                       </div>
                       {ev.route && <div style={{ fontSize: 9, color: "#475569", marginTop: 2 }}>{ev.route}</div>}
+                      {ev.screenshot && (
+                        <div style={{ marginTop: 6 }}>
+                          <span style={{ fontSize: 9, color: "#475569", display: "block", marginBottom: 2 }}>Screenshot:</span>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={ev.screenshot} alt="Screenshot" style={{ maxWidth: '100%', maxHeight: 150, borderRadius: 4, border: "1px solid #334155" }} />
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -206,7 +224,29 @@ export function DiagnosticsWidget() {
                 fontFamily: "inherit", resize: "vertical",
               }}
             />
-            <div style={{ display: "flex", gap: 8, marginTop: 12, justifyContent: "flex-end" }}>
+            
+            {screenshot ? (
+              <div style={{ position: "relative", marginTop: 12, borderRadius: 8, overflow: "hidden", border: "1px solid #334155" }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={screenshot} alt="Screenshot" style={{ width: "100%", maxHeight: 150, objectFit: "cover", display: "block" }} />
+                <button 
+                  onClick={() => setScreenshot(null)}
+                  style={{ position: "absolute", top: 4, right: 4, background: "rgba(220,38,38,0.9)", color: "white", border: "none", borderRadius: "50%", width: 20, height: 20, display: "grid", placeItems: "center", cursor: "pointer" }}
+                  title="Bild entfernen"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={() => { setShowMarkDialog(false); setIsDrawing(true); }}
+                style={{ width: "100%", marginTop: 12, padding: "8px", background: "transparent", color: "#94A3B8", border: "1px dashed #334155", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12 }}
+              >
+                <Camera size={14} /> Screenshot & Zeichnen
+              </button>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
               <button onClick={() => setShowMarkDialog(false)} style={{ ...btnStyle, padding: "6px 14px", fontSize: 12 }}>Abbrechen</button>
               <button onClick={handleMark} style={{ padding: "6px 14px", fontSize: 12, fontWeight: 600, background: "#F97316", color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}>
                 Markieren

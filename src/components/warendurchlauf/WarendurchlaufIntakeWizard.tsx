@@ -27,6 +27,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { customersRepository, Customer } from "@/lib/repositories/customersRepository";
 import { orderSchema } from "@/lib/validation/orderSchema";
+import { AppActionButton } from "@/components/ui/AppActionButton";
+import { AppBackButton } from "@/components/ui/AppBackButton";
 
 type WizardStep =
   | "camera"
@@ -62,6 +64,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
   // Shared payload
   const [ocrPreviewUrl, setOcrPreviewUrl] = useState<string | undefined>();
   const [parsedOcrData, setParsedOcrData] = useState<Record<string, string> | null>(null);
+  const [abortModalOpen, setAbortModalOpen] = useState(false);
   const [customerSelection, setCustomerSelection] = useState<{
     id: string | null;
     newName?: string;
@@ -286,7 +289,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
             setStep("ocr_match_result");
           }} 
           onCancel={() => {
-              if (onClose) onClose();
+              setAbortModalOpen(true);
             }}
         />
       )}
@@ -370,9 +373,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
       {step === "manual_customer" && (
         <div className="w-full max-w-3xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
           <button
-            onClick={() => {
-              if (onClose) onClose();
-            }}
+            onClick={() => setAbortModalOpen(true)}
             className="flex items-center gap-2 text-text-muted hover:text-navy-900 font-bold text-sm px-3 py-2 rounded-xl hover:bg-bg-app-soft transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -656,7 +657,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
             </button>
           </div>
 
-          <Button
+          <AppActionButton
             onClick={() => {
               setItemErrors({});
               // Try to validate parts using Zod schema's part definition
@@ -681,10 +682,12 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
               setItems(valid);
               setStep("manual_summary");
             }}
-            className="w-full h-16 text-lg font-extrabold rounded-2xl bg-navy-900 text-white hover:bg-navy-700 shadow-xl active:scale-95 transition-all disabled:opacity-40"
+            variant="primary"
+            icon={<ChevronRight className="w-5 h-5" />}
+            className="w-full h-16 text-lg"
           >
-            Teile bestätigen <ChevronRight className="ml-2 w-6 h-6" />
-          </Button>
+            Teile bestätigen
+          </AppActionButton>
         </div>
       )}
 
@@ -703,9 +706,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
         <div className="w-full h-full flex flex-col pt-10">
           <div className="mb-4 text-center">
             <button
-              onClick={() => {
-                if (onClose) onClose();
-              }}
+              onClick={() => setAbortModalOpen(true)}
               className="inline-flex items-center gap-2 text-text-muted hover:text-navy-900 font-bold text-sm px-3 py-2 rounded-xl hover:bg-bg-app-soft transition-all"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -720,6 +721,44 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
               if (onClose) onClose();
             }}
           />
+        </div>
+      )}
+
+      {/* Abort Confirmation Dialog */}
+      {abortModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-navy-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 md:p-8 max-w-sm w-full shadow-2xl space-y-6 text-center animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 bg-danger-red/10 text-danger-red rounded-full flex items-center justify-center mx-auto mb-2">
+              <AlertOctagon className="w-8 h-8" />
+            </div>
+            <div>
+              <h3 className="text-xl font-black font-serif text-navy-900 mb-2">Wirklich abbrechen?</h3>
+              <p className="text-sm font-medium text-text-muted">Alle bisherigen Eingaben gehen verloren. Dieser Vorgang kann nicht rückgängig gemacht werden.</p>
+            </div>
+            <div className="flex flex-col gap-3 pt-2">
+              <AppActionButton 
+                onClick={() => {
+                  setAbortModalOpen(false);
+                  if (onClose) {
+                    onClose();
+                  } else {
+                    window.location.href = "/warendurchlauf";
+                  }
+                }} 
+                variant="danger" 
+                className="w-full h-12"
+              >
+                Ja, abbrechen
+              </AppActionButton>
+              <Button 
+                onClick={() => setAbortModalOpen(false)} 
+                variant="outline" 
+                className="w-full h-12 rounded-xl font-bold border-2 border-neutral-gray-200 text-navy-900"
+              >
+                Zurück zum Formular
+              </Button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -1,3 +1,4 @@
+import React, { useState } from "react";
 import { Customer } from "@/lib/types/customer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -15,6 +16,8 @@ import {
   FileWarning, CheckCircle, ShieldAlert
 } from "lucide-react";
 import { CustomerMemoryCard } from "./CustomerMemoryCard";
+import { CustomerContextOverlay, CustomerContextType } from "@/components/context/CustomerContextOverlay";
+import { useAppShortcut } from "@/components/ui/AppShortcutContext";
 
 interface CustomerDetailViewProps {
   customer: Customer;
@@ -22,6 +25,9 @@ interface CustomerDetailViewProps {
 }
 
 export function CustomerDetailView({ customer, onEdit }: CustomerDetailViewProps) {
+  const [contextOverlayType, setContextOverlayType] = useState<CustomerContextType>(null);
+  const { openShortcut } = useAppShortcut();
+
   const handleSimulateMail = (email?: string, name?: string) => {
     if (email && email !== "Keine E-Mail hinterlegt" && email.includes("@")) {
       window.location.href = `mailto:${email}?subject=Status-Update%20zu%20Ihrem%20Galvanik-Auftrag%20-%20Kreile%20WerkstattCockpit&body=Hallo%20${encodeURIComponent(name || "")},%0A%0A`;
@@ -276,7 +282,7 @@ export function CustomerDetailView({ customer, onEdit }: CustomerDetailViewProps
               <TabsContent value="auftraege" className="mt-0 space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-bold font-serif text-navy-900">Auftragshistorie</h3>
-                  <Button variant="outline" size="sm" onClick={() => window.location.href = `/orders/new?customer=${customer.id}`}>
+                  <Button variant="outline" size="sm" onClick={() => openShortcut("new_order")}>
                     <Sparkles className="w-4 h-4 mr-2 text-accent-orange" /> Neuer Auftrag
                   </Button>
                 </div>
@@ -412,25 +418,29 @@ export function CustomerDetailView({ customer, onEdit }: CustomerDetailViewProps
               <TabsContent value="kommunikation" className="mt-0 space-y-4">
                 <h3 className="text-lg font-bold font-serif text-navy-900">Kommunikation & Freigaben</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <Card className="shadow-sm border-neutral-gray-200">
-                    <CardContent className="p-4 space-y-3">
-                      <h4 className="font-bold text-sm uppercase text-text-muted tracking-wider">Bevorzugter Weg</h4>
-                      <p className="text-lg font-serif text-navy-900">{customer.prefComm || "Unbekannt"}</p>
-                      {customer.expectationProfile?.communicationStyle && (
-                        <p className="text-xs text-navy-500 bg-neutral-gray-50 p-2 rounded">Stil: {customer.expectationProfile.communicationStyle}</p>
-                      )}
-                    </CardContent>
-                  </Card>
+                  <button onClick={() => setContextOverlayType("kommunikation")} className="text-left w-full cursor-pointer hover:shadow-md transition-shadow rounded-xl">
+                    <Card className="shadow-sm border-neutral-gray-200 h-full">
+                      <CardContent className="p-4 space-y-3">
+                        <h4 className="font-bold text-sm uppercase text-text-muted tracking-wider">Bevorzugter Weg</h4>
+                        <p className="text-lg font-serif text-navy-900">{customer.prefComm || "Unbekannt"}</p>
+                        {customer.expectationProfile?.communicationStyle && (
+                          <p className="text-xs text-navy-500 bg-neutral-gray-50 p-2 rounded">Stil: {customer.expectationProfile.communicationStyle}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </button>
                   
-                  <Card className="shadow-sm border-neutral-gray-200">
-                    <CardContent className="p-4 space-y-3">
-                      <h4 className="font-bold text-sm uppercase text-text-muted tracking-wider">Zahlungsverhalten</h4>
-                      <p className="text-lg font-serif text-navy-900">{customer.paymentProfile?.paymentBehavior || "Unbekannt"}</p>
-                      {customer.paymentProfile?.invoiceNotes && (
-                        <p className="text-xs text-navy-500 bg-neutral-gray-50 p-2 rounded">{customer.paymentProfile.invoiceNotes}</p>
-                      )}
-                    </CardContent>
-                  </Card>
+                  <button onClick={() => setContextOverlayType("zahlungen")} className="text-left w-full cursor-pointer hover:shadow-md transition-shadow rounded-xl">
+                    <Card className="shadow-sm border-neutral-gray-200 h-full">
+                      <CardContent className="p-4 space-y-3">
+                        <h4 className="font-bold text-sm uppercase text-text-muted tracking-wider">Zahlungsverhalten</h4>
+                        <p className="text-lg font-serif text-navy-900">{customer.paymentProfile?.paymentBehavior || "Unbekannt"}</p>
+                        {customer.paymentProfile?.invoiceNotes && (
+                          <p className="text-xs text-navy-500 bg-neutral-gray-50 p-2 rounded">{customer.paymentProfile.invoiceNotes}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </button>
                 </div>
               </TabsContent>
 
@@ -466,7 +476,7 @@ export function CustomerDetailView({ customer, onEdit }: CustomerDetailViewProps
           </Tabs>
 
           {/* Actions Bar fixed at bottom of card */}
-          <div className="flex flex-col sm:flex-row gap-3 p-6 border-t bg-neutral-gray-50/50">
+          <div className="flex flex-col sm:flex-row gap-3 p-6 border-t bg-neutral-gray-50/50 rounded-b-xl">
             <Button 
               variant="outline" 
               className="font-bold text-xs h-11 border-neutral-gray-200 hover:bg-white flex-1 gap-1.5"
@@ -476,14 +486,21 @@ export function CustomerDetailView({ customer, onEdit }: CustomerDetailViewProps
             </Button>
             <Button 
               className="bg-navy-900 text-white hover:bg-navy-700 font-bold text-xs h-11 flex-1 gap-1.5"
-              onClick={() => window.location.href = `/orders/new?customer=${customer.id}`}
+              onClick={() => openShortcut("new_order")}
             >
-              <Sparkles className="h-3.5 w-3.5 text-accent-orange" /> Neuen Auftrag erfassen
+              <Sparkles className="w-4 h-4" /> Neuer Auftrag
             </Button>
           </div>
-
         </CardContent>
       </Card>
+
+      {contextOverlayType && (
+        <CustomerContextOverlay
+          type={contextOverlayType}
+          customer={customer as any}
+          onClose={() => setContextOverlayType(null)}
+        />
+      )}
     </div>
   );
 }

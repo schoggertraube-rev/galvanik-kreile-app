@@ -415,6 +415,41 @@ export default function PerformanceCockpit() {
           </Link>
 
         </div>
+
+        {/* F) Marketing & Kundenreaktivierung */}
+        <div className="t-grid" style={{marginTop: 16}}>
+          <Link href="/marketing" style={{textDecoration:'none',color:'inherit'}}>
+          <div className="t-tile" style={{borderColor: 'rgba(251,191,36,0.3)'}}>
+            <div className="t-glow" style={{background: '#FBBF24'}}></div>
+            <div className="t-th">
+              <div className="t-tl">
+                <div className="t-ico" style={{background: 'var(--warnbg)'}}><Sparkles className="w-5 h-5" style={{color: 'var(--warn)'}} /></div>
+                <div><div className="t-name">Marketing & Kundenreaktivierung</div><div className="t-sub">Kandidaten · Segmente · Umsatzpotenzial</div></div>
+              </div>
+              <span className="t-pill t-pill-y">DEMO-DATEN</span>
+            </div>
+            <div className="metrics">
+              <div className="m">
+                <div className="ml">Reaktivierungskandidaten</div><div className="mv warn">6</div><div className="md" style={{color: 'var(--ink2)'}}>Kunden ohne Folgeauftrag &gt; 6 Mon.</div>
+              </div>
+              <div className="m">
+                <div className="ml">Segmentpotenzial</div><div className="mv sm">Oldtimer / Schmuck</div><div className="md" style={{color: 'var(--ink2)'}}>Stärkste Segmente</div>
+              </div>
+              <div className="m">
+                <div className="ml">Reaktivierungswirkung</div><div className="mv sm" style={{color: 'var(--ink3)'}}>– %</div><div className="md" style={{color: 'var(--ink3)'}}>Noch keine Kampagne gestartet</div>
+              </div>
+              <div className="m">
+                <div className="ml">Marge-Potenzial</div><div className="mv sm" style={{color: 'var(--ink3)'}}>– €</div><div className="md" style={{color: 'var(--ink3)'}}>Echte Kampagnendaten fehlen</div>
+              </div>
+            </div>
+            <div className="alertbox" style={{background: 'var(--warnbg)', fontSize: '10px', fontWeight: 500}}>
+              ⚠ Daten basieren auf Bestandskunden-Analyse (Demo). Echte Kampagnendaten werden erst nach E-Mail-Integration verfügbar.
+            </div>
+            <div className="t-arr">Zum Marketing-Cockpit →</div>
+          </div>
+          </Link>
+        </div>
+
       </div>
 
 

@@ -16,11 +16,11 @@ const TABS = [
 ];
 
 const MOCK_MORAL = [
-  { kunde: "Metallbau Werner", tage: 8, status: "pünktlich", color: "text-emerald-600 bg-emerald-50" },
-  { kunde: "Autohaus Schmidt", tage: 14, status: "pünktlich", color: "text-emerald-600 bg-emerald-50" },
-  { kunde: "Industriewerk Mainz", tage: 32, status: "verspätet", color: "text-amber-600 bg-amber-50" },
-  { kunde: "Galvano-Service Nord", tage: 45, status: "kritisch", color: "text-rose-600 bg-rose-50" },
-  { kunde: "Optik Braun GmbH", tage: 7, status: "pünktlich", color: "text-emerald-600 bg-emerald-50" },
+  { kundeId: "k-123", kunde: "Metallbau Werner", tage: 8, status: "pünktlich", color: "text-emerald-600 bg-emerald-50 border-emerald-200", letzteRechnung: "RE-2026-050", auftragId: "AU-1050" },
+  { kundeId: "k-124", kunde: "Autohaus Schmidt", tage: 14, status: "pünktlich", color: "text-emerald-600 bg-emerald-50 border-emerald-200", letzteRechnung: "RE-2026-048", auftragId: "AU-1048" },
+  { kundeId: "k-125", kunde: "Industriewerk Mainz", tage: 32, status: "verspätet", color: "text-amber-600 bg-amber-50 border-amber-200", letzteRechnung: "RE-2026-021", auftragId: "AU-1021" },
+  { kundeId: "k-126", kunde: "Galvano-Service Nord", tage: 45, status: "kritisch", color: "text-rose-600 bg-rose-50 border-rose-200", letzteRechnung: "RE-2026-003", auftragId: "AU-1003" },
+  { kundeId: "k-127", kunde: "Optik Braun GmbH", tage: 7, status: "pünktlich", color: "text-emerald-600 bg-emerald-50 border-emerald-200", letzteRechnung: "RE-2026-055", auftragId: "AU-1055" },
 ];
 
 const MOCK_STATISTIK = {
@@ -99,23 +99,38 @@ function ZahlungContent() {
 
             <div className="space-y-3">
               {MOCK_MORAL.map((m, i) => (
-                <div key={i} className="flex items-center gap-4 p-3 bg-neutral-50 rounded-xl">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-neutral-100 flex items-center justify-center shrink-0">
-                    <Users className="w-4 h-4 text-neutral-400" />
+                <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-white border border-neutral-gray-100 rounded-xl hover:shadow-md transition-all hover:border-neutral-gray-300 group">
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="w-12 h-12 rounded-xl bg-bg-app-soft border border-neutral-gray-200 flex items-center justify-center shrink-0 group-hover:bg-navy-50 transition-colors">
+                      <Users className="w-5 h-5 text-navy-900" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <Link href={`/kunden/${m.kundeId}`} className="text-base font-extrabold text-navy-900 truncate hover:text-blue-600 transition-colors inline-block">{m.kunde}</Link>
+                      <div className="text-xs font-semibold text-text-muted mt-0.5">
+                        <Link href={`/auftraege/${m.auftragId}`} className="hover:text-navy-900 hover:underline">{m.auftragId}</Link>
+                        <span className="mx-1.5">•</span>
+                        <span>{m.letzteRechnung}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-extrabold text-navy-900 truncate">{m.kunde}</div>
-                    <div className="text-xs text-text-muted">Ø {m.tage} Tage</div>
-                  </div>
-                  <span className={`text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full ${m.color}`}>
-                    {m.status}
-                  </span>
-                  {/* Bar */}
-                  <div className="hidden sm:block w-24 h-2 bg-neutral-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${m.tage <= 14 ? "bg-emerald-500" : m.tage <= 30 ? "bg-amber-500" : "bg-rose-500"}`}
-                      style={{ width: `${Math.min(100, (m.tage / 60) * 100)}%` }}
-                    />
+                  
+                  <div className="flex items-center justify-between sm:justify-end gap-6 sm:w-1/2">
+                    <div className="text-center">
+                      <div className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1">Dauer</div>
+                      <div className="text-sm font-extrabold text-navy-900">Ø {m.tage} Tage</div>
+                    </div>
+                    
+                    {/* Bar */}
+                    <div className="hidden sm:block w-32 h-2.5 bg-neutral-100 rounded-full overflow-hidden border border-neutral-200/50">
+                      <div
+                        className={`h-full rounded-full ${m.tage <= 14 ? "bg-emerald-500" : m.tage <= 30 ? "bg-amber-500" : "bg-rose-500"}`}
+                        style={{ width: `${Math.min(100, (m.tage / 60) * 100)}%` }}
+                      />
+                    </div>
+
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-full border ${m.color} min-w-[80px] text-center shrink-0`}>
+                      {m.status}
+                    </span>
                   </div>
                 </div>
               ))}

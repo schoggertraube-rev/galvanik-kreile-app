@@ -13,6 +13,8 @@ import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { getCompanySettings } from "@/app/actions/company.actions";
 import { useTestpilot } from "@/components/testpilot/TestpilotProvider";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
+import { useSync } from "@/lib/offline/SyncContext";
 
 interface KreileHeaderProps {
   onMenuToggle: () => void;
@@ -23,23 +25,25 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const [isOffline, setIsOffline] = useState(false);
   const [orderCount, setOrderCount] = useState(0);
   const [logoUrl, setLogoUrl] = useState("/assets/logo/kreile-wordmark-skyline.svg");
-  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
   
+  const { initials } = usePermissions();
   const { status: realtimeStatus } = useRealtimeStatus();
   const { isRecording } = useTestpilot();
+  const { isOnline, outboxItems, syncNow } = useSync();
 
   // User Dropdown State
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [userInitials, setUserInitials] = useState<string>("?");
+  const [storedInitials, setStoredInitials] = useState<string>("?");
 
   useEffect(() => {
+    // Defer the local storage read to avoid hydration mismatch and synchronous setState warnings
     const timer = setTimeout(() => {
-      const role = localStorage.getItem("kreile_user_role");
-      setIsAdminOrDev(role === "admin" || role === "developer" || role === "inhaber");
-      setUserInitials(localStorage.getItem("kreile_user_initials") ?? "?");
+      setStoredInitials(localStorage.getItem("kreile_user_initials") ?? "?");
     }, 0);
     return () => clearTimeout(timer);
   }, []);
+
+  const userInitials = initials && initials !== "?" ? initials : storedInitials;
   const userDropdownRef = useRef<HTMLDivElement>(null);
 
   // Click outside to close user dropdown
@@ -168,18 +172,25 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
         {/* Online/Offline Pill mit Zähler */}
         <button
-          onClick={() => OfflineManager.toggleSimulatedOffline()}
+          onClick={() => {
+            if (isOnline) {
+              syncNow();
+            } else {
+              OfflineManager.toggleSimulatedOffline();
+            }
+          }}
           className={`hidden sm:flex items-center gap-2 rounded-full px-3 h-9 text-sm font-bold border transition-colors shadow-sm ${
-            isOffline
+            !isOnline || outboxItems.length > 0
               ? "bg-bg-app-soft border-neutral-gray-100 text-text-muted"
               : "bg-white border-neutral-gray-100 text-navy-900"
           }`}
+          title={!isOnline ? "Offline Modus aktiv" : (outboxItems.length > 0 ? "Klicken zum Synchronisieren" : "Online und synchron")}
         >
-          <span className={`w-2 h-2 rounded-full ${isOffline ? "bg-accent-orange" : "bg-success-green"}`} />
-          <span>{isOffline ? "Offline" : "Online"}</span>
-          {orderCount > 0 && (
-            <span className="bg-gold-1000 text-white text-[10px] font-black rounded-full px-1.5 py-px min-w-[20px] text-center">
-              {orderCount > 99 ? "99+" : orderCount}
+          <span className={`w-2 h-2 rounded-full ${!isOnline ? "bg-accent-orange" : (outboxItems.length > 0 ? "bg-gold-500 animate-pulse" : "bg-success-green")}`} />
+          <span>{!isOnline ? "Offline" : (outboxItems.length > 0 ? "Syncing..." : "Online")}</span>
+          {outboxItems.length > 0 && (
+            <span className="bg-accent-orange text-white text-[10px] font-black rounded-full px-1.5 py-px min-w-[20px] text-center">
+              {outboxItems.length > 99 ? "99+" : outboxItems.length}
             </span>
           )}
         </button>
@@ -241,24 +252,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
               >
                 Einstellungen
               </Link>
-              {isAdminOrDev && (
-                <>
-                  <Link
-                    href="/admin/import"
-                    onClick={() => setUserDropdownOpen(false)}
-                    className="block w-full text-left px-3 py-2 text-sm font-bold text-accent-orange hover:bg-accent-orange/10 rounded-xl transition-colors cursor-pointer mb-1"
-                  >
-                    Datenimport
-                  </Link>
-                  <Link
-                    href="/admin/devices"
-                    onClick={() => setUserDropdownOpen(false)}
-                    className="block w-full text-left px-3 py-2 text-sm font-bold text-accent-orange hover:bg-accent-orange/10 rounded-xl transition-colors cursor-pointer mb-1"
-                  >
-                    Geräte und Sessions
-                  </Link>
-                </>
-              )}
+              {/* Settings and other tabs are handled within /settings */}
               <button
                 onClick={handleLogout}
                 className="w-full text-left px-3 py-2 text-sm font-bold text-danger-red hover:bg-danger-red/10 rounded-xl transition-colors cursor-pointer"

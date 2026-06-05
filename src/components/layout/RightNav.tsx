@@ -1,14 +1,12 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { RightNavItem } from "./RightNavItem";
-import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
-import { bathsRepository } from "@/lib/repositories/bathsRepository";
-import { Home, PackageCheck, Warehouse, Archive, Users, MessageSquare, Banknote, HeartHandshake, Beaker, Database, MonitorSmartphone, BarChart3, Lightbulb, Settings, FileText } from "lucide-react";
+import { Home, PackageCheck, Archive, Users, Settings, BarChart3 } from "lucide-react";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import Link from "next/link";
-import { useFeatureFlag } from "@/lib/license/useFeatureFlag";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 function SubMenuLink({ label, href, isAvailable }: { label: string, href: string, isAvailable: boolean }) {
   const pathname = usePathname();
@@ -39,32 +37,8 @@ function SubMenuLink({ label, href, isAvailable }: { label: string, href: string
 
 export function RightNav() {
   const pathname = usePathname();
-  const [openQuotes, setOpenQuotes] = useState(0);
-  const [hasCriticalBaths, setHasCriticalBaths] = useState(false);
-  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
-  
-  const performanceFeature = useFeatureFlag("performance_score");
+  const { hasPermission } = usePermissions();
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchStats = async () => {
-      setOpenQuotes(await inquiriesRepository.getOpenCount());
-      setHasCriticalBaths(await bathsRepository.hasCriticalBath());
-      
-      const role = localStorage.getItem("kreile_user_role")?.toLowerCase();
-      if (role === "admin" || role === "developer" || role === "inhaber") setIsAdminOrDev(true);
-    };
-    
-    fetchStats();
-    
-    window.addEventListener("kreile-inquiries-updated", fetchStats);
-    window.addEventListener("storage", fetchStats);
-    
-    return () => {
-      window.removeEventListener("kreile-inquiries-updated", fetchStats);
-      window.removeEventListener("storage", fetchStats);
-    };
-  }, []);
 
   const isActive = (path: string) =>
     path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
@@ -84,48 +58,29 @@ export function RightNav() {
         <RightNavItem label="Kunden und Aufträge" href="/orders" icon={<Users className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/orders") || isActive("/customers") || isActive("/quotes")} onClick={() => setExpandedGroup(expandedGroup === "kunden" ? null : "kunden")} />
         {(expandedGroup === "kunden" || isActive("/orders") || isActive("/customers") || isActive("/quotes")) && (
           <div className="flex flex-col w-full mt-2 space-y-1">
-            <SubMenuLink label="Aufträge" href="/orders" isAvailable={true} />
             <SubMenuLink label="Kunden" href="/customers" isAvailable={true} />
-            <SubMenuLink label="Angebote und Freigaben" href="/quotes" isAvailable={true} />
+            <SubMenuLink label="Aufträge" href="/orders" isAvailable={true} />
+            <SubMenuLink label="Anfragen" href="/quotes" isAvailable={true} />
           </div>
         )}
       </div>
 
       <div className="flex flex-col items-center w-full mt-2 border-t border-neutral-gray-100 pt-4">
-        <RightNavItem label="Betrieb" href="/betrieb" icon={<Archive className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/betrieb") || isActive("/kontrolle") || isActive("/kommunikation") || isActive("/kundenservice") || isActive("/betrieb-kvp") || isActive("/baeder") || isActive("/items") || isActive("/buchhaltung")} onClick={() => setExpandedGroup(expandedGroup === "betrieb" ? null : "betrieb")} />
-        {(expandedGroup === "betrieb" || isActive("/betrieb") || isActive("/kontrolle") || isActive("/kommunikation") || isActive("/kundenservice") || isActive("/betrieb-kvp") || isActive("/baeder") || isActive("/items") || isActive("/buchhaltung")) && (
-          <div className="flex flex-col w-full mt-2 space-y-1">
-            <SubMenuLink label="Betriebs-Cockpit" href="/betrieb" isAvailable={true} />
-            <SubMenuLink label="Kontrolle" href="/kontrolle" isAvailable={true} />
-            <SubMenuLink label="Kommunikation" href="/kommunikation" isAvailable={true} />
-            <SubMenuLink label="Kundenservice" href="/kundenservice" isAvailable={true} />
-            <SubMenuLink label="Betriebs-KVP" href="/betrieb-kvp" isAvailable={true} />
-            <SubMenuLink label="Bäder" href="/baeder" isAvailable={true} />
-            <SubMenuLink label="Lager und Teile" href="/items" isAvailable={true} />
-            <SubMenuLink label="Buchhaltung" href="/buchhaltung" isAvailable={isAdminOrDev} />
-          </div>
-        )}
+        <RightNavItem label="Betrieb" href="/betrieb" icon={<Archive className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/betrieb") || isActive("/items") || isActive("/baeder") || isActive("/buchhaltung")} onClick={() => trackUiEvent("nav_click", { target: "/betrieb" })} />
       </div>
 
       <div className="flex flex-col items-center w-full mt-2 border-t border-neutral-gray-100 pt-4">
         <RightNavItem label="Analyse" href="/performance" icon={<BarChart3 className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/performance")} onClick={() => trackUiEvent("nav_click", { target: "/performance" })} />
       </div>
 
-      {isAdminOrDev && (
-        <>
+      <div className="flex flex-col items-center w-full mt-2 border-t border-neutral-gray-100 pt-4">
+        <RightNavItem label="Kommunikation" href="/kommunikation" icon={<Users className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/kommunikation")} onClick={() => trackUiEvent("nav_click", { target: "/kommunikation" })} />
+      </div>
+
+      {hasPermission("perm_sys_users") && (
         <div className="flex flex-col items-center w-full mt-2 border-t border-neutral-gray-100 pt-4 mb-8">
-          <RightNavItem label="Verwaltung" href="/admin/import" icon={<Settings className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/admin/import") || isActive("/admin/devices") || isActive("/settings") || isActive("/kvp") || isActive("/admin/analytics")} onClick={() => setExpandedGroup(expandedGroup === "verwaltung" ? null : "verwaltung")} />
-          {(expandedGroup === "verwaltung" || isActive("/admin/import") || isActive("/admin/devices") || isActive("/settings") || isActive("/kvp") || isActive("/admin/analytics")) && (
-            <div className="flex flex-col w-full mt-2 space-y-1">
-              <SubMenuLink label="Datenimport" href="/admin/import" isAvailable={true} />
-              <SubMenuLink label="Geräte und Lizenzen" href="/admin/devices" isAvailable={true} />
-              <SubMenuLink label="Einstellungen" href="/settings" isAvailable={true} />
-              <SubMenuLink label="App-KVP" href="/kvp" isAvailable={true} />
-              <SubMenuLink label="Developer Analytics" href="/admin/analytics" isAvailable={true} />
-            </div>
-          )}
+          <RightNavItem label="Verwaltung" href="/settings" icon={<Settings className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/settings") || isActive("/admin/") || isActive("/kvp")} onClick={() => trackUiEvent("nav_click", { target: "/settings" })} />
         </div>
-        </>
       )}
       
     </aside>

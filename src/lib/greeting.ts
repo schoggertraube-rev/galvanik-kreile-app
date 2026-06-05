@@ -2,7 +2,14 @@ export function getGreeting(date = new Date(), role = "Meister") {
   const hour = date.getHours();
   
   // Map roles to displays
-  const roleDisplay = role === "Inhaber" || !role ? "Meister" : role;
+  let roleDisplay = role || "Meister";
+  if (role === "admin" || role === "developer" || role === "inhaber") roleDisplay = "Admin";
+  else if (role === "werkstatt") roleDisplay = "Werkstatt";
+  else if (role === "buero") roleDisplay = "Büro";
+  else if (role === "meister") roleDisplay = "Meister";
+  
+  // Capitalize first letter if it's something else
+  roleDisplay = roleDisplay.charAt(0).toUpperCase() + roleDisplay.slice(1);
 
   if (hour >= 4 && hour < 11) {
     return { text: `Guten Morgen, ${roleDisplay}!`, emoji: "👋" };

@@ -1,8 +1,9 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useTestpilot } from './TestpilotProvider';
+import { useTestpilot } from '@/components/testpilot/TestpilotProvider';
 import { usePathname } from 'next/navigation';
+import { TestpilotCanvas } from '@/components/testpilot/TestpilotCanvas';
 
 interface TestpilotOverlayProps {
   onClose: () => void;
@@ -30,12 +31,15 @@ export function TestpilotOverlay({ onClose }: TestpilotOverlayProps) {
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [description, setDescription] = useState("");
   const [expected, setExpected] = useState("");
+  const [screenshot, setScreenshot] = useState<string | null>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
 
   const handleSave = () => {
     addMarker({
       category,
       description,
       expected,
+      screenshot: screenshot || undefined,
       route: pathname || 'unknown',
     });
     onClose();
@@ -61,6 +65,13 @@ export function TestpilotOverlay({ onClose }: TestpilotOverlayProps) {
             ✕
           </button>
         </div>
+
+        {isDrawing && (
+          <TestpilotCanvas 
+            onSave={(b64) => { setScreenshot(b64); setIsDrawing(false); }} 
+            onCancel={() => setIsDrawing(false)} 
+          />
+        )}
 
         <div className="space-y-4">
           <div>
@@ -94,6 +105,31 @@ export function TestpilotOverlay({ onClose }: TestpilotOverlayProps) {
               onChange={e => setExpected(e.target.value)}
               placeholder="Erwartetes Verhalten..."
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Visuelle Markierung</label>
+            {screenshot ? (
+              <div className="relative border rounded-md overflow-hidden dark:border-slate-700 mt-1">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={screenshot} alt="Screenshot" className="w-full h-auto max-h-[160px] object-cover" />
+                <button 
+                  onClick={() => setScreenshot(null)}
+                  className="absolute top-2 right-2 bg-red-600/90 text-white p-1 rounded-full hover:bg-red-700 backdrop-blur-sm"
+                  title="Bild entfernen"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsDrawing(true)}
+                className="w-full mt-1 p-3 border border-dashed rounded-md border-slate-300 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center gap-2 transition-colors"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>
+                Screenshot machen & Zeichnen
+              </button>
+            )}
           </div>
         </div>
 

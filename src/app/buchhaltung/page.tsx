@@ -1,8 +1,10 @@
-import { isAdminOrDeveloper } from "@/lib/auth/permissions";
+import { hasPermission } from "@/lib/auth/permissions";
 import { BuchhaltungCockpitClient } from "./BuchhaltungCockpitClient";
 
+export const dynamic = "force-dynamic";
+
 export default async function BuchhaltungPage() {
-  const isDevOrAdmin = await isAdminOrDeveloper();
+  const isDevOrAdmin = await hasPermission("perm_view_prices");
 
   if (!isDevOrAdmin) {
     return (

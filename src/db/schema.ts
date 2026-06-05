@@ -9,7 +9,7 @@ export const appUsers = pgTable("app_users", {
   id: uuid("id").primaryKey().defaultRandom(), // matches Supabase auth.users.id
   email: text("email").notNull().unique(),
   fullName: text("full_name").notNull(),
-  role: varchar("role", { length: 50 }).notNull().default("workshop"), // developer, admin, meister, office, workshop, readonly
+  role: varchar("role", { length: 50 }).notNull().default("werkstatt"), // developer, admin, meister, buero, werkstatt, readonly
   location: text("location"),
   language: text("language").default("de"),
   pinHash: text("pin_hash"),

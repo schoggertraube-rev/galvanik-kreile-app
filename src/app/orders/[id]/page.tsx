@@ -3,6 +3,7 @@ import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, use } from "react";
 import { OrderActionGrid } from "@/components/orders/OrderActionGrid";
 import { OrderTimeline } from "@/components/orders/OrderTimeline";
+import { OrderProfitabilityCard } from "@/components/orders/OrderProfitabilityCard";
 import { StationCompletionModal } from "@/components/orders/StationCompletionModal";
 import { LabelPrintView } from "@/components/orders/LabelPrintView";
 import { timelineRepository, TimelineEntry } from "@/lib/repositories/timelineRepository";
@@ -11,6 +12,7 @@ import { Clock, Box, PhoneCall } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { getStationConfig } from "@/constants/stations";
+import { AppBackButton } from "@/components/ui/AppBackButton";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   usePageView();
@@ -39,6 +41,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="min-h-screen bg-transparent p-4 md:p-8">
+      {/* Top bar with back navigation */}
+      <div className="mb-6">
+        <AppBackButton fallbackHref="/warendurchlauf" label="Zurück zum Warendurchlauf" />
+      </div>
+
       {/* Header */}
       <div className="mb-8">
         <h1 className="text-4xl font-black font-serif text-navy-900">{order.orderNumber}</h1>
@@ -107,6 +114,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               ))}
             </div>
           </div>
+          
+          <OrderProfitabilityCard order={order} />
         </div>
 
         {/* Right Column (Timeline & Docs) */}
