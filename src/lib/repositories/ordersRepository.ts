@@ -39,22 +39,16 @@ export const ordersRepository = {
           if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
             throw new Error(`AUTH_ERROR: ${result.message}`);
           }
-          console.warn("Drizzle fallback:", result.message);
-          throw new Error("NETWORK_ERROR");
+          console.error("Drizzle ordersRepository fallback:", result.message, result.error);
+          return [];
         }
         return result.data as unknown as Order[];
       } catch (error) {
         if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
           throw error; // hard crash for auth errors
         }
-        console.error("Drizzle ordersRepository.getAll error:", error);
-        // We throw here so the offline fallback below handles it? 
-        // Wait, the offline fallback is in the "Mock Fallback" section which is ONLY reached if isSupabase is false, or if we fallback?
-        // Ah, the original code returned [] on error. I should return [] but NOT for auth errors.
-        if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
-          throw error;
-        }
-        // If not auth error, fallback to offline
+        console.error("Drizzle ordersRepository.getAll error. Message:", error instanceof Error ? error.message : "Unknown", "Details:", error);
+        return [];
       }
     }
 
