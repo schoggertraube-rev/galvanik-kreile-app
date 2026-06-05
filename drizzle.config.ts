@@ -9,7 +9,7 @@ if (!process.env.DATABASE_URL) {
 }
 
 export default defineConfig({
-  schema: "./src/db/schema.ts",
+  schema: ["./src/db/schema.ts", "./src/db/schema_buchhaltung.ts", "./src/db/schema_marketing.ts"],
   out: "./src/db/migrations",
   dialect: "postgresql",
   dbCredentials: {
@@ -17,5 +17,5 @@ export default defineConfig({
   },
   schemaFilter: ["public"],
   verbose: true,
-  strict: true,
+  strict: false,
 });
