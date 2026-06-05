@@ -18,6 +18,7 @@ import { ReactivationGeneratorOverlay } from "@/components/kommunikation/Reactiv
 import { CustomerDetailView } from "@/components/customers/CustomerDetailView";
 import type { CustomerLike } from "@/lib/types/customerLike";
 import { Customer } from "@/lib/types/customer";
+import { Kommandozentrale } from "@/components/kommunikation/kommandozentrale/Kommandozentrale";
 
 /* ═══════════════════════════════════════════════════════════════
    TYPES
@@ -122,18 +123,7 @@ const CHANNELS: { id: Channel; icon: React.ReactNode; label: string; isDemo?: bo
   { id: "parked", icon: <Archive size={22} />, label: "Geparkt" },
 ];
 
-const STATUS_MAP: Record<NoteStatus, { label: string; bg: string; fg: string }> = {
-  new: { label: "Neu", bg: "#DBEAFE", fg: "#2563EB" },
-  open: { label: "In Bearbeitung", bg: "#FEF3C7", fg: "#92400E" },
-  waiting_callback: { label: "Wartet Rückruf", bg: "#E0E7FF", fg: "#4338CA" },
-  waiting_customer: { label: "Wartet Kunde", bg: "#F3F4F6", fg: "#6B7280" },
-  done: { label: "Erledigt", bg: "#D1FAE5", fg: "#059669" },
-  archived: { label: "Archiviert", bg: "#F3F4F6", fg: "#9CA3AF" },
-};
 
-/* ═══════════════════════════════════════════════════════════════
-   ACTION CARD BUILDER
-   ═══════════════════════════════════════════════════════════════ */
 interface ActionCard {
   id: string; icon: React.ReactNode; title: string; subtitle: string; color: string; href?: string;
 }
@@ -165,12 +155,27 @@ function buildActions(thread: Thread, m: MatchResult | null): ActionCard[] {
    ═══════════════════════════════════════════════════════════════ */
 export function KommunikationClient() {
   const [activeChannel, setActiveChannel] = useState<Channel>("all");
-  const [activeThreadId, setActiveThreadId] = useState<string | null>("demo_t3");
-  const [activeTab, setActiveTab] = useState("chats");
+    const [activeTab, setActiveTab] = useState("chats");
   const [replyText, setReplyText] = useState("");
   const [replyChannel, setReplyChannel] = useState<"email" | "whatsapp" | "notiz">("email");
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [recentNotes, setRecentNotes] = useState<any[]>([]);
+  
+interface PhoneNoteData {
+  id: string;
+  callerName?: string | null;
+  company?: string | null;
+  createdAt: string | number | Date | null;
+  status: string | null;
+  urgency: string | null;
+  rawText?: string | null;
+  category?: string | null;
+  customerId?: string | null;
+  orderId?: string | null;
+  [key: string]: unknown;
+}
+
+  const [recentNotes, setRecentNotes] = useState<PhoneNoteData[]>([]);
+
+interface CustomerContact { id: string; name: string; city: string; initials: string; initialsColor: string; latestTime: string; lastChannel: Channel; openTopics: number; priority: "high" | "medium" | "low"; latestContent: string; threads: Thread[]; messages: ChatMessage[]; unread: number; isPhoneNote?: boolean; }
   const [isMobile, setIsMobile] = useState(false);
   const [showCockpit, setShowCockpit] = useState(false);
   const [showReactivationGen, setShowReactivationGen] = useState(false);
@@ -179,6 +184,10 @@ export function KommunikationClient() {
   const { activeParkedCall, resumeCall } = useParkedCall();
   const [overlayConfig, setOverlayConfig] = useState<ContextAnalysisOverlayProps | null>(null);
   const [showCustomerOverlay, setShowCustomerOverlay] = useState<CustomerLike | null>(null);
+  const [showKommandozentrale, setShowKommandozentrale] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [chatSearch, setChatSearch] = useState("");
+  const [activeContactId, setActiveContactId] = useState<string | null>("contact_Müller (Privat)");
 
   usePageView();
 
@@ -197,13 +206,13 @@ export function KommunikationClient() {
     return {
       id: `pn_${note.id}`, sender: note.callerName || note.company || "Unbekannter Anrufer",
       initials, initialsColor: "#C2410C", subject: `Telefonnotiz · ${note.category || "Allgemein"}`,
-      time: new Date(note.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }),
+      time: new Date(note.createdAt || new Date()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }),
       channel: "phone" as Channel, status: (note.status === "done" ? "done" : note.status === "open" ? "open" : "new") as NoteStatus,
       priority: note.urgency === "Hoch" ? "high" as const : "medium" as const,
       content: (note.rawText || "").slice(0, 55) + "…", category: note.category || "Neuanfrage",
       customerId: note.customerId || match.matchedCustomer?.id, orderId: note.orderId || match.matchedOrder?.id,
       isPhoneNote: true, rawNote: note, matchData: match,
-      messages: [{ id: `pnm_${note.id}`, from: "system" as const, channel: "phone" as const, text: note.rawText || "", time: new Date(note.createdAt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }), date: new Date(note.createdAt).toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) }],
+      messages: [{ id: `pnm_${note.id}`, from: "system" as const, channel: "phone" as const, text: note.rawText || "", time: new Date(note.createdAt || new Date()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }), date: new Date(note.createdAt || new Date()).toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) }],
     };
   }), [recentNotes]);
 
@@ -223,24 +232,100 @@ export function KommunikationClient() {
     return f;
   }, [allThreads, activeChannel, chatFilter]);
 
-  const activeThread = allThreads.find(t => t.id === activeThreadId);
+  
+  const customerContacts = useMemo(() => {
+    const map = new Map<string, CustomerContact>();
+    for (const t of filteredThreads) {
+      const name = t.sender.split("·")[0].trim();
+      if (!map.has(name)) {
+        map.set(name, {
+          id: `contact_${name}`,
+          name: name,
+          city: t.senderCity || "",
+          initials: t.initials,
+          initialsColor: t.initialsColor,
+          latestTime: t.time,
+          lastChannel: t.channel,
+          openTopics: 0,
+          priority: "low",
+          latestContent: t.content,
+          threads: [],
+          messages: [],
+          unread: 0
+        });
+      }
+      const c = map.get(name)!;
+      c.threads.push(t);
+      c.messages.push(...t.messages);
+      c.openTopics += (t.status === "new" || t.status === "open") ? 1 : 0;
+      if (t.priority === "high") c.priority = "high";
+      else if (t.priority === "medium" && c.priority === "low") c.priority = "medium";
+      if (t.unread && t.unread > 0) c.unread += t.unread;
+      c.latestContent = t.content; 
+    }
+    return Array.from(map.values()).sort((a,b) => {
+      if (a.priority === "high" && b.priority !== "high") return -1;
+      if (b.priority === "high" && a.priority !== "high") return 1;
+      if (a.openTopics > 0 && b.openTopics === 0) return -1;
+      if (b.openTopics > 0 && a.openTopics === 0) return 1;
+      return 0; 
+    });
+  }, [filteredThreads]);
+
+  const activeContact = customerContacts.find(c => c.id === activeContactId);
+
+  const filteredMessages = useMemo(() => {
+    const searchSynonyms: Record<string, string[]> = {
+      "aufträge": ["order", "auftrag", "auftragsnummer", "anfrage zu auftrag", "freigabe", "status", "a-", "rahmen"],
+      "anfragen": ["anfrage", "angebot", "kostenschätzung", "preisfrage", "erstkontakt", "kosten"],
+      "zahlung": ["rechnung", "bezahlt", "offen", "mahnung", "zahlung", "beleg", "€"],
+      "reklamation": ["nacharbeit", "mangel", "unzufrieden", "beschädigt", "fehler", "kratzer"],
+      "termin": ["morgen", "abholen", "termin", "fertig"],
+      "material": ["zink", "chrom", "material"],
+      "oberfläche": ["verzinken", "verchromen", "oberfläche"],
+      "bilder": ["foto", "bild", "anhang"],
+      "e-mail": ["mail", "e-mail"],
+      "telefon": ["anruf", "telefonnotiz", "telefon"],
+      "freigabe": ["freigabe", "bestätigen", "angebot"],
+    };
+    if (!activeContact) return [];
+    if (!chatSearch.trim()) return activeContact.messages;
+    
+    const q = chatSearch.toLowerCase();
+    const searchTerms = [q];
+    
+    for (const [key, syns] of Object.entries(searchSynonyms)) {
+      if (key.includes(q) || syns.some(s => s.includes(q))) {
+        searchTerms.push(key, ...syns);
+      }
+    }
+
+    return activeContact.messages.filter(m => {
+      const txt = m.text.toLowerCase();
+      const from = m.from.toLowerCase();
+      const channel = m.channel.toLowerCase();
+      return searchTerms.some(term => txt.includes(term) || from.includes(term) || channel.includes(term));
+    });
+  }, [activeContact, chatSearch]);
+
   const matchData = useMemo(() => {
-    if (!activeThread) return null;
-    if (activeThread.matchData) return activeThread.matchData;
-    return smartMatchText(activeThread.messages.map(m => m.text).join(" "));
-  }, [activeThread]);
-  const actionCards = useMemo(() => activeThread ? buildActions(activeThread, matchData) : [], [activeThread, matchData]);
+    if (!activeContact) return null;
+    return smartMatchText(activeContact.messages.map(m => m.text).join(" "));
+  }, [activeContact]);
+
+  
+  const actionCards = useMemo(() => activeContact ? buildActions(activeContact.threads[0], matchData) : [], [activeContact, matchData]);
   const matchedCustomer = matchData?.matchedCustomer || null;
   const customerOrders = matchedCustomer ? INITIAL_ORDERS.filter(o => o.customerId === matchedCustomer.id) : [];
 
   const handleStatusChange = async (s: NoteStatus) => {
-    if (!activeThread?.isPhoneNote || !activeThread.rawNote) return;
-    await updatePhoneNote((activeThread.rawNote as { id: string }).id, { status: s });
+    const thread = activeContact?.threads[0]; if (!thread?.isPhoneNote || !thread.rawNote) return;
+    await updatePhoneNote((thread.rawNote as { id: string }).id, { status: s });
     const n = await getRecentPhoneNotes(20); setRecentNotes(n);
   };
 
   const handleActionClick = (actionId: string) => {
-    if (!activeThread || !matchData) return;
+    if (!activeContact || !matchData) return;
     
     if (actionId === "ord") {
       setOverlayConfig({
@@ -337,7 +422,7 @@ export function KommunikationClient() {
     }
   };
 
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [activeThreadId, activeThread?.messages.length]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [activeContactId, activeContact?.messages.length, chatSearch]);
 
   /* ═══════════════════════════════════════════════════════════
      RENDER
@@ -370,7 +455,7 @@ export function KommunikationClient() {
           ))}
         </nav>
         <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
-          <button onClick={() => alert("Neue Nachricht (vorbereitet)")} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid #E5DFD3", background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, color: "#292119" }}>
+          <button onClick={() => setToastMessage("Neue Nachricht (vorbereitet)")} style={{ padding: "8px 18px", borderRadius: 8, border: "1px solid #E5DFD3", background: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, color: "#292119" }}>
             <Edit2 size={15} /> Neue Nachricht
           </button>
           <Link href="/telefonnotiz?source=kommunikation&returnTo=/kommunikation" style={{ padding: "8px 18px", borderRadius: 8, border: "none", background: "#C2410C", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
@@ -380,7 +465,14 @@ export function KommunikationClient() {
       </header>
 
       {/* ─── BODY: 4 FIXED COLUMNS ─── */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+      
+      {toastMessage && (
+        <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: "#292119", color: "#fff", padding: "12px 24px", borderRadius: 8, fontSize: 14, fontWeight: 600, zIndex: 1000, boxShadow: "0 10px 25px rgba(0,0,0,0.2)" }}>
+          {toastMessage}
+          <button onClick={() => setToastMessage(null)} style={{ marginLeft: 16, background: "none", border: "none", color: "#A09889", cursor: "pointer" }}><X size={14}/></button>
+        </div>
+      )}
+<div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
 
         {/* ── COL 1: ICON SIDEBAR ── */}
         {!isMobile && (
@@ -404,7 +496,7 @@ export function KommunikationClient() {
         )}
 
         {/* ── COL 2: CHAT LIST ── */}
-        {(!isMobile || !activeThread) && (
+        {(!isMobile || !activeContact) && (
           <aside style={{ width: isMobile ? "100%" : 320, borderRight: "1px solid #E5DFD3", display: "flex", flexDirection: "column", background: "#FDFBF7", flexShrink: 0 }} data-testid="chat-list">
             {/* List header */}
             <div style={{ padding: "16px 20px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -447,34 +539,29 @@ export function KommunikationClient() {
             </div>
             {/* Threads */}
             <div style={{ flex: 1, overflowY: "auto" }}>
-              {filteredThreads.map(t => {
-                const s = STATUS_MAP[t.status] || STATUS_MAP.new;
+              {customerContacts.map(c => {
                 return (
-                  <div key={t.id} onClick={() => { setActiveThreadId(t.id); setShowCockpit(true); }} data-testid={`thread-${t.id}`} style={{
+                  <div key={c.id} onClick={() => { setActiveContactId(c.id); setShowCockpit(true); }} data-testid={`contact-${c.id}`} style={{
                     padding: "16px 20px", cursor: "pointer",
-                    background: activeThreadId === t.id ? "#EDE8DD" : "transparent",
+                    background: activeContactId === c.id ? "#EDE8DD" : "transparent",
                     borderBottom: "1px solid #EDE8DD", transition: "background .1s",
-                    borderLeft: t.priority === "high" ? "4px solid #DC2626" : (activeThreadId === t.id ? "4px solid #292119" : "4px solid transparent"),
+                    borderLeft: c.priority === "high" ? "4px solid #DC2626" : (activeContactId === c.id ? "4px solid #059669" : "4px solid transparent"),
                   }}>
                     <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                      <div style={{ width: 44, height: 44, borderRadius: "50%", flexShrink: 0, background: t.initialsColor, color: "#fff", display: "grid", placeItems: "center", fontSize: 16, fontWeight: 800 }}>{t.initials}</div>
+                      <div style={{ width: 44, height: 44, borderRadius: "50%", flexShrink: 0, background: c.initialsColor, color: "#fff", display: "grid", placeItems: "center", fontSize: 16, fontWeight: 800 }}>{c.initials}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                          <span style={{ fontSize: 15, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{t.sender.split("·")[0].trim()}</span>
-                          <span style={{ fontSize: 12, color: "#A09889", whiteSpace: "nowrap", marginLeft: 8 }}>{t.time}</span>
+                          <span style={{ fontSize: 15, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.name}</span>
+                          <span style={{ fontSize: 12, color: "#A09889", whiteSpace: "nowrap", marginLeft: 8 }}>{c.latestTime}</span>
                         </div>
                         <div style={{ fontSize: 14, color: "#7A7265", marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.4 }}>
-                          {t.isPhoneNote && "📞 "}{t.content}
+                          {c.latestContent}
                         </div>
                         <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: s.bg, color: s.fg }}>{s.label}</span>
-                          <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, color: "#8B8478" }}>
-                            {t.channel === "email" ? <Mail size={10} /> : t.channel === "phone" ? <Phone size={10} /> : <Globe size={10} />}
-                            {t.channel.toUpperCase()}
-                          </span>
+                          {c.openTopics > 0 && <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "#FEF3C7", color: "#92400E" }}>{c.openTopics} offene Themen</span>}
                         </div>
                       </div>
-                      {t.unread && t.unread > 0 ? <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#C2410C", color: "#fff", fontSize: 11, fontWeight: 800, display: "grid", placeItems: "center", flexShrink: 0 }}>{t.unread}</div> : null}
+                      {c.unread && c.unread > 0 ? <div style={{ width: 22, height: 22, borderRadius: "50%", background: "#059669", color: "#fff", fontSize: 11, fontWeight: 800, display: "grid", placeItems: "center", flexShrink: 0 }}>{c.unread}</div> : null}
                     </div>
                   </div>
                 );
@@ -484,24 +571,41 @@ export function KommunikationClient() {
         )}
 
         {/* ── COL 3: CONVERSATION ── */}
-        {(!isMobile || activeThread) && (
+        {(!isMobile || activeContact) && (
           <section style={{ flex: 1, display: "flex", flexDirection: "column", background: "#F5F1EB", minWidth: 0, position: "relative" }} data-testid="conversation-panel">
-            {activeThread ? (<>
+            {activeContact ? (<>
               {/* Conv Header — FIXED */}
               <div style={{ padding: "16px 24px", borderBottom: "1px solid #E5DFD3", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, background: "#FDFBF7", zIndex: 5 }} data-testid="conv-header">
                 <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                  {isMobile && <button onClick={() => setActiveThreadId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#8B8478" }}><ChevronLeft size={24} /></button>}
-                  <div style={{ width: 44, height: 44, borderRadius: "50%", background: activeThread.initialsColor, color: "#fff", display: "grid", placeItems: "center", fontSize: 16, fontWeight: 800 }}>{activeThread.initials}</div>
+                  {isMobile && <button onClick={() => setActiveContactId(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#8B8478" }}><ChevronLeft size={24} /></button>}
+                  <div style={{ width: 44, height: 44, borderRadius: "50%", background: activeContact.initialsColor, color: "#fff", display: "grid", placeItems: "center", fontSize: 16, fontWeight: 800 }}>{activeContact.initials}</div>
                   <div>
-                    <div style={{ fontSize: 16, fontWeight: 700 }}>{activeThread.sender}{activeThread.senderCity ? ` · ${activeThread.senderCity}` : ""}</div>
+                    <div style={{ fontSize: 16, fontWeight: 700 }}>{activeContact.name}{activeContact.city ? ` · ${activeContact.city}` : ""}</div>
                     <div style={{ fontSize: 12, color: "#A09889", marginTop: 2 }}>
                       {matchedCustomer ? `● Stammkunde · ${customerOrders.length} Aufträge` : "● Zuordnung nicht bestätigt"}
                     </div>
                   </div>
                 </div>
+                
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1, paddingLeft: 20, maxWidth: 300 }}>
+                  <div style={{ display: "flex", alignItems: "center", background: "#fff", borderRadius: 8, border: "1px solid #E5DFD3", padding: "6px 12px", width: "100%" }}>
+                     <Search size={14} color="#A09889" style={{ marginRight: 6 }} />
+                     <input 
+                       type="text" 
+                       placeholder="Suchen (z.B. Aufträge)" 
+                       value={chatSearch}
+                       onChange={e => setChatSearch(e.target.value)}
+                       style={{ border: "none", outline: "none", width: "100%", fontSize: 13, background: "transparent" }}
+                     />
+                     {chatSearch && <button onClick={() => setChatSearch("")} style={{ border: "none", background: "none", cursor: "pointer", display: "grid", placeItems: "center" }}><X size={14} color="#A09889" /></button>}
+                  </div>
+                </div>
                 <div style={{ display: "flex", gap: 10 }}>
                   <button onClick={() => setShowCockpit(!showCockpit)} style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #C2410C", background: showCockpit ? "#C2410C" : "transparent", color: showCockpit ? "#fff" : "#C2410C", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                     <Activity size={16} /> KI Analyse
+                  </button>
+                  <button onClick={() => setShowKommandozentrale(true)} data-testid="btn-kommandozentrale" style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#059669", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                    <Activity size={16} /> Kommzentrale
                   </button>
                   <button style={hdrBtnLg}><Phone size={18} /></button>
                   <button style={hdrBtnLg}><Bell size={18} /></button>
@@ -511,7 +615,9 @@ export function KommunikationClient() {
 
               {/* Chat — SCROLLABLE */}
               <div style={{ flex: 1, overflowY: "auto", padding: "24px 32px", display: "flex", flexDirection: "column", gap: 16 }} data-testid="conv-messages">
-                {activeThread.messages.map(msg => (
+                {filteredMessages.length === 0 ? (
+      <div style={{ textAlign: "center", color: "#A09889", marginTop: 40, fontSize: 14 }}>Keine Nachrichten gefunden für &quot;{chatSearch}&quot;.</div>
+  ) : filteredMessages.map((msg: ChatMessage) => (
                   <React.Fragment key={msg.id}>
                     {msg.date && <div style={{ textAlign: "center", margin: "16px 0 8px" }}><span style={{ fontSize: 11, color: "#A09889", background: "#EDE8DD", padding: "4px 14px", borderRadius: 99, fontWeight: 600 }}>{msg.date}</span></div>}
 
@@ -538,7 +644,7 @@ export function KommunikationClient() {
                       <div style={{ maxWidth: "75%" }} data-testid="msg-incoming">
                         <div style={{ fontSize: 11, color: "#A09889", marginBottom: 4, display: "flex", alignItems: "center", gap: 5, fontWeight: 600 }}>
                           {msg.channel === "email" ? <Mail size={12} /> : msg.channel === "whatsapp" ? <MessageSquare size={12} /> : <Globe size={12} />}
-                          {msg.channel.toUpperCase()} · {activeThread.sender.split("·")[0].trim().split(" ").pop()}
+                          {msg.channel.toUpperCase()} · {activeContact.name.split("·")[0].trim().split(" ").pop()}
                         </div>
                         <div style={{ background: "#fff", borderRadius: 16, padding: "14px 20px", border: "1px solid #E5DFD3", fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap", color: "#292119" }}>{msg.text}</div>
                         <div style={{ fontSize: 10, color: "#A09889", marginTop: 4 }}>{msg.time}</div>
@@ -606,7 +712,7 @@ export function KommunikationClient() {
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src="/kreile_mockup_v2_bg.png" alt="" style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,.1)" }} />
                     </div>
-                    <button onClick={() => alert("Backend Aktion vorbereitet.")} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all .1s" }} onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.15)")} onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,.1)")}>Alle {actionCards.length} anwenden</button>
+                    <button onClick={() => setToastMessage("Backend Aktion vorbereitet.")} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all .1s" }} onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.15)")} onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,.1)")}>Alle {actionCards.length} anwenden</button>
                     <button style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.1)", background: "transparent", color: "#EDE8DD", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Einzeln prüfen</button>
                     <button onClick={() => setShowCockpit(false)} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.1)", background: "transparent", color: "#A09889", fontSize: 13, fontWeight: 600, cursor: "pointer", marginLeft: "auto" }}>Verwerfen</button>
                   </div>
@@ -620,7 +726,7 @@ export function KommunikationClient() {
                   {matchData?.suggestedAnswer && <button onClick={handleApplyAI} style={{ padding: "6px 14px", borderRadius: 8, border: "none", background: "#C2410C", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>✦ KI-Antwort übernehmen</button>}
                   {["Vorlage: Abholbereit", "Vorlage: Zahlungserinnerung"].map(t => <button key={t} onClick={() => setReplyText(t + " - ")} style={{ padding: "6px 14px", borderRadius: 8, border: "1px solid #E5DFD3", background: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", color: "#7A7265" }}>{t}</button>)}
                   <div style={{ flex: 1 }} />
-                  {activeThread.isPhoneNote && (
+                  {activeContact.threads.some(t => t.isPhoneNote) && (
                     <select onChange={e => e.target.value && handleStatusChange(e.target.value as NoteStatus)} defaultValue="" style={{ padding: "6px 12px", borderRadius: 8, border: "1px solid #E5DFD3", fontSize: 12, fontWeight: 600, background: "#fff", cursor: "pointer" }}>
                       <option value="" disabled>Status ändern…</option>
                       <option value="open">In Bearbeitung</option>
@@ -644,8 +750,8 @@ export function KommunikationClient() {
                        style={{ flex: 1, padding: "10px 12px", minHeight: 40, maxHeight: 160, border: "none", background: "transparent", fontSize: 14, color: "#292119", outline: "none", resize: "none", fontFamily: "inherit" }} 
                     />
                     <div style={{ display: "flex", gap: 6, padding: "0 8px", marginBottom: 6 }}>
-                      <button onClick={() => alert("Datei-Anhang vorbereitet. Upload-Modul wird hier geöffnet.")} title="Datei anhängen" style={iconBtn}><Paperclip size={20} /></button>
-                      <button onClick={() => alert("Foto-Anhang vorbereitet. Kamera wird hier geöffnet.")} title="Foto aufnehmen/anhängen" style={iconBtn}><ImageIcon size={20} /></button>
+                      <button onClick={() => setToastMessage("Datei-Anhang vorbereitet. Upload-Modul wird hier geöffnet.")} title="Datei anhängen" style={iconBtn}><Paperclip size={20} /></button>
+                      <button onClick={() => setToastMessage("Foto-Anhang vorbereitet. Kamera wird hier geöffnet.")} title="Foto aufnehmen/anhängen" style={iconBtn}><ImageIcon size={20} /></button>
                     </div>
                   </div>
                   <button style={{ width: 48, height: 48, borderRadius: "50%", border: "none", background: "#C2410C", color: "#fff", display: "grid", placeItems: "center", cursor: "pointer", flexShrink: 0 }}><Send size={20} /></button>
@@ -662,15 +768,15 @@ export function KommunikationClient() {
         )}
 
         {/* ── COL 4: CONTEXT PANEL — FIXED, scrollable ── */}
-        {activeThread && !isMobile && (
+        {activeContact && !isMobile && (
           <aside style={{ width: 320, borderLeft: "1px solid #E5DFD3", background: "#FDFBF7", overflowY: "auto", padding: 20, display: "flex", flexDirection: "column", gap: 20, flexShrink: 0 }} data-testid="context-panel">
 
             {/* Customer */}
             <div style={{ textAlign: "center", paddingBottom: 16, borderBottom: "1px solid #EDE8DD" }}>
               <div style={{ fontSize: 11, fontWeight: 800, color: "#A09889", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>Kunde</div>
-              <div style={{ width: 56, height: 56, borderRadius: "50%", background: activeThread.initialsColor, color: "#fff", display: "grid", placeItems: "center", fontSize: 20, fontWeight: 800, margin: "0 auto 10px" }}>{activeThread.initials}</div>
-              <div style={{ fontSize: 16, fontWeight: 800 }}>{matchedCustomer?.name || activeThread.sender.split("·")[0].trim()}</div>
-              <div style={{ fontSize: 13, color: "#A09889", marginTop: 4 }}>{matchedCustomer ? `${activeThread.senderCity || "—"} · Kunde seit 2018` : "Keine sichere Zuordnung"}</div>
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: activeContact.initialsColor, color: "#fff", display: "grid", placeItems: "center", fontSize: 20, fontWeight: 800, margin: "0 auto 10px" }}>{activeContact.initials}</div>
+              <div style={{ fontSize: 16, fontWeight: 800 }}>{matchedCustomer?.name || activeContact.name.split("·")[0].trim()}</div>
+              <div style={{ fontSize: 13, color: "#A09889", marginTop: 4 }}>{matchedCustomer ? `${activeContact.city || "—"} · Kunde seit 2018` : "Keine sichere Zuordnung"}</div>
               {matchedCustomer && <Link href={`/customers/${matchedCustomer.id}?returnTo=/kommunikation`} style={{ fontSize: 13, color: "#C2410C", fontWeight: 700, textDecoration: "none", display: "inline-block", marginTop: 8 }}>Zur Kundenakte →</Link>}
               {matchedCustomer && (
                 <div style={{ display: "flex", justifyContent: "center", gap: 24, marginTop: 16 }}>
@@ -793,6 +899,23 @@ export function KommunikationClient() {
                <CustomerDetailView customer={showCustomerOverlay as unknown as Customer} onEdit={() => {}} />
              </div>
           </div>
+        )}
+
+        {/* ═══ KLIENTEN-KOMMANDOZENTRALE v2 ═══ */}
+        {activeContact && (
+          <Kommandozentrale
+            open={showKommandozentrale}
+            onClose={() => setShowKommandozentrale(false)}
+            customerName={activeContact.name}
+            customerId={matchedCustomer?.id || null}
+            customerInitials={activeContact.initials}
+            customerCity={activeContact.city}
+            messages={activeContact.messages.map((m: ChatMessage) => ({
+              ...m,
+              attachment: undefined,
+            }))}
+            matchData={matchData}
+          />
         )}
       </div>
     </div>
