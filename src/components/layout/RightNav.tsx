@@ -44,8 +44,10 @@ export function RightNav() {
     path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
 
   return (
-    <aside className="w-[112px] bg-white border-l border-neutral-gray-100 flex flex-col py-4 gap-4 h-full overflow-y-auto overflow-x-hidden shadow-[-4px_0_24px_rgba(14,26,46,0.02)] scrollbar-hide">
+    <aside className="w-[100px] bg-transparent flex flex-col items-center py-4 gap-3 h-full overflow-y-auto overflow-x-visible scrollbar-hide">
       
+      {/* Glass background overlay spanning the height but subtle */}
+      <div className="absolute inset-y-0 left-0 w-[60px] bg-white/40 backdrop-blur-md border-r border-white/60 -z-10" />
       <div className="flex flex-col items-center w-full">
         <RightNavItem label="Home" href="/" icon={<Home className="w-6 h-6" strokeWidth={1.5} />} variant="primary" isActive={isActive("/")} onClick={() => trackUiEvent("nav_click", { target: "/" })} />
       </div>
@@ -54,8 +56,8 @@ export function RightNav() {
         <RightNavItem label="Warendurchlauf" href="/warendurchlauf" icon={<PackageCheck className="w-6 h-6" strokeWidth={1.5} />} variant="primary" isActive={isActive("/station") || isActive("/warendurchlauf")} onClick={() => trackUiEvent("nav_click", { target: "/warendurchlauf" })} />
       </div>
 
-      <div className="flex flex-col items-center w-full mt-2">
-        <RightNavItem label="Kunden und Aufträge" href="/orders" icon={<Users className="w-5 h-5" strokeWidth={1.5} />} variant="normal" isActive={isActive("/orders") || isActive("/customers") || isActive("/quotes")} onClick={() => setExpandedGroup(expandedGroup === "kunden" ? null : "kunden")} />
+      <div className="flex flex-col items-center w-full mt-2 relative">
+        <RightNavItem label="Kunden/Aufträge" href="/orders" icon={<Users className="w-6 h-6" strokeWidth={1.5} />} variant="normal" isActive={isActive("/orders") || isActive("/customers") || isActive("/quotes")} onClick={() => setExpandedGroup(expandedGroup === "kunden" ? null : "kunden")} />
         {(expandedGroup === "kunden" || isActive("/orders") || isActive("/customers") || isActive("/quotes")) && (
           <div className="flex flex-col w-full mt-2 space-y-1">
             <SubMenuLink label="Kunden" href="/customers" isAvailable={true} />

@@ -126,7 +126,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
       <div className="flex-1 max-w-2xl mx-auto hidden md:block relative">
         <button
           onClick={() => setSearchOpen(true)}
-          className="w-full relative flex items-center bg-white border border-neutral-gray-100 rounded-2xl h-14 px-5 gap-3 hover:border-neutral-gray-300 transition-colors group shadow-sm"
+          className="w-full relative flex items-center bg-white/50 backdrop-blur-md border border-white/60 rounded-2xl h-14 px-5 gap-3 hover:bg-white hover:border-neutral-gray-200 hover:shadow-md transition-all duration-300 group shadow-sm"
         >
           <Search className="w-5 h-5 text-navy-500 shrink-0" strokeWidth={1.5} />
           <span className="text-sm text-text-muted flex-1 text-left">
@@ -164,7 +164,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         </button>
 
         {/* Datum-Pill */}
-        <Link href="/kalender" className="hidden lg:flex items-center gap-2 bg-white border border-neutral-gray-100 rounded-full px-3 h-9 text-sm font-semibold text-navy-900 shadow-sm hover:border-neutral-gray-300 transition-colors">
+        <Link href="/kalender" className="hidden lg:flex items-center gap-2 bg-white/50 backdrop-blur-sm border border-white/60 rounded-full px-3 h-9 text-sm font-semibold text-navy-900 shadow-sm hover:bg-white hover:border-neutral-gray-200 transition-all duration-300">
           <Calendar className="w-4 h-4 text-text-muted" />
           <span>Heute · {dateString}</span>
           <span className="w-2 h-2 rounded-full bg-accent-orange animate-pulse" />
@@ -179,10 +179,10 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
               OfflineManager.toggleSimulatedOffline();
             }
           }}
-          className={`hidden sm:flex items-center gap-2 rounded-full px-3 h-9 text-sm font-bold border transition-colors shadow-sm ${
+          className={`hidden sm:flex items-center gap-2 rounded-full px-3 h-9 text-sm font-bold border transition-all duration-300 shadow-sm hover:bg-white hover:border-neutral-gray-200 ${
             !isOnline || outboxItems.length > 0
-              ? "bg-bg-app-soft border-neutral-gray-100 text-text-muted"
-              : "bg-white border-neutral-gray-100 text-navy-900"
+              ? "bg-bg-app-soft/50 backdrop-blur-sm border-white/60 text-text-muted"
+              : "bg-white/50 backdrop-blur-sm border-white/60 text-navy-900"
           }`}
           title={!isOnline ? "Offline Modus aktiv" : (outboxItems.length > 0 ? "Klicken zum Synchronisieren" : "Online und synchron")}
         >
@@ -205,7 +205,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
         {/* Live-Sync Indicator */}
         {realtimeStatus !== "disabled" && (
-          <div className="hidden lg:flex items-center gap-1.5 px-3 h-9 rounded-full bg-white border border-neutral-gray-100 shadow-sm text-xs font-bold text-navy-700">
+          <div className="hidden lg:flex items-center gap-1.5 px-3 h-9 rounded-full bg-white/50 backdrop-blur-sm border border-white/60 shadow-sm text-xs font-bold text-navy-700 transition-all duration-300 hover:bg-white">
             {realtimeStatus === "active" ? (
               <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live</>
             ) : realtimeStatus === "connecting" ? (
@@ -218,7 +218,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
         {/* Glocke mit rotem Badge */}
         <div className="relative hidden md:block">
-          <button className="w-9 h-9 rounded-full bg-white border border-neutral-gray-100 flex items-center justify-center text-navy-900 hover:border-neutral-gray-300 transition-colors shadow-sm">
+          <button className="w-9 h-9 rounded-full bg-white/50 backdrop-blur-sm border border-white/60 flex items-center justify-center text-navy-900 hover:bg-white hover:border-neutral-gray-200 transition-all duration-300 shadow-sm">
             <Bell className="w-4 h-4" />
           </button>
           <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-danger-red rounded-full text-[9px] text-white font-black flex items-center justify-center">
@@ -234,7 +234,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         <div className="relative" ref={userDropdownRef}>
           <button 
             onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-            className="w-12 h-12 rounded-full bg-navy-700 hover:bg-navy-900 transition-colors text-white flex items-center justify-center text-sm font-black shrink-0 shadow-sm cursor-pointer"
+            className="w-10 h-10 rounded-full bg-navy-700/90 backdrop-blur-sm border border-navy-500 hover:bg-navy-900 transition-all duration-300 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-sm cursor-pointer"
           >
             {userInitials}
           </button>

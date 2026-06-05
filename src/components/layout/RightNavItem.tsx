@@ -30,27 +30,25 @@ export function RightNavItem({
     <Link
       href={href}
       className={cn(
-        "relative flex flex-col items-center justify-center gap-1.5 transition-all duration-300 rounded-2xl cursor-pointer shadow-sm hover:scale-105",
-        // Primary is large and protrudes slightly if active
-        isPrimary ? "h-[96px] md:h-[112px]" : "h-[72px] md:h-[80px]",
-        isActive && isPrimary ? "w-[96px] translate-x-3 z-10" : "w-[72px]",
+        "group relative flex flex-col items-center justify-center gap-1.5 transition-all duration-300 rounded-2xl cursor-pointer shadow-sm hover:shadow-md hover:scale-[1.08] hover:w-[88px] hover:z-20",
+        // Base sizes
+        isPrimary ? "h-[88px] w-[80px]" : "h-[76px] w-[76px]",
         // Active visual state
         isActive 
-          ? "bg-bg-app border border-neutral-gray-200" 
-          : "bg-white border border-transparent hover:bg-neutral-gray-100",
+          ? "bg-kreile-green border border-kreile-green text-white shadow-md ring-4 ring-kreile-green/20" 
+          : "bg-white border border-neutral-gray-200 hover:bg-white hover:border-neutral-gray-300",
         "active:scale-95" // Touch feedback
       )}
       onClick={onClick}
     >
       {/* Active dot / Status Dot */}
-      {(status || isActive) && (
+      {(status) && (
         <div 
           className={cn(
-            "absolute top-2 right-2 w-2 h-2 rounded-full shadow-sm",
+            "absolute top-2 right-2 w-2.5 h-2.5 rounded-full shadow-sm border-2 border-white",
             status === "critical" ? "bg-danger-red animate-pulse" : 
             status === "warning" ? "bg-accent-orange" : 
-            status === "ok" ? "bg-success-green" :
-            isActive ? "bg-navy-900" : ""
+            "bg-success-green"
           )}
         />
       )}
@@ -63,15 +61,15 @@ export function RightNavItem({
       )}
 
       <div className={cn(
-        "flex items-center justify-center rounded-xl p-2",
-        isActive ? "text-navy-900" : "text-text-muted"
+        "flex items-center justify-center rounded-xl p-2 transition-colors",
+        isActive ? "text-white" : "text-navy-500 group-hover:text-navy-900"
       )}>
         {icon}
       </div>
 
       <span className={cn(
-        "text-[10px] font-bold text-center px-1 leading-tight wrap-break-word max-w-full",
-        isActive ? "text-navy-900" : "text-text-muted"
+        "text-[10px] font-bold text-center px-1 leading-tight wrap-break-word max-w-full transition-colors",
+        isActive ? "text-white" : "text-navy-700 group-hover:text-navy-900"
       )}>
         {label}
       </span>
