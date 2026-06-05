@@ -25,6 +25,7 @@ export default function NewQuotePage() {
   const [rustLevel, setRustLevel] = useState<"Leicht" | "Mittel" | "Stark" | "Sehr stark">("Leicht");
   const [dirtLevel, setDirtLevel] = useState<"Sauber" | "Leicht" | "Stark">("Leicht");
   const [description, setDescription] = useState("");
+  const [quelleTyp, setQuelleTyp] = useState("unbekannt");
   const [errors, setErrors] = useState<Record<string, string[]>>({});
 
   const steps: { id: WizardStep; label: string; icon: React.ReactNode }[] = [
@@ -37,14 +38,15 @@ export default function NewQuotePage() {
   const handleSave = async () => {
     setErrors({});
     const res = await createInquiry({
-      customerName: customerName,
-      customerId: customerId || "",
-      subject: subject,
-      description: description,
-      partCount,
+      customerName,
+      customerId: customerId || undefined,
+      subject,
+      description,
+      partCount: Number(partCount),
       material,
       rustLevel,
-      dirtLevel
+      dirtLevel,
+      quelleTyp,
     });
     
     if (res?.success) {
@@ -125,6 +127,21 @@ export default function NewQuotePage() {
                       placeholder="Z.B. K-00123" 
                       className="w-full p-4 bg-bg-app-soft border-2 border-neutral-gray-300 rounded-xl focus:border-navy-700 focus:ring-0 text-navy-900 font-bold"
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-text-muted uppercase tracking-wider">Marketing-Quelle</label>
+                    <select 
+                      value={quelleTyp}
+                      onChange={e => setQuelleTyp(e.target.value)}
+                      className="w-full p-4 bg-bg-app-soft border-2 border-neutral-gray-300 rounded-xl focus:border-navy-700 focus:ring-0 text-navy-900 font-bold appearance-none"
+                    >
+                      <option value="unbekannt">Unbekannt / Weiß nicht</option>
+                      <option value="Empfehlung">Empfehlung / Bestandskunde</option>
+                      <option value="Google Suche">Google Suche</option>
+                      <option value="Instagram">Instagram</option>
+                      <option value="Messe">Messe / Event</option>
+                      <option value="Zeitung/Werbung">Zeitung / Printwerbung</option>
+                    </select>
                   </div>
                 </div>
                 <div className="flex justify-end pt-4">

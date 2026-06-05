@@ -89,6 +89,7 @@ export async function createInquiry(data: Record<string, unknown>) {
       material: validData.material,
       status: validData.status || "offen",
       pricing,
+      quelleTyp: validData.quelleTyp || "unbekannt",
     };
     
     await db.insert(inquiries).values(dbRow);

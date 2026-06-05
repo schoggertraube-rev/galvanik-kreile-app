@@ -12,6 +12,7 @@ export const inquirySchema = z.object({
   status: z.enum(["offen", "angeboten", "archiviert", "angenommen", "abgelehnt"]).optional(),
   photo: z.string().optional().nullable(),
   pricing: z.record(z.string(), z.unknown()).optional().nullable(),
+  quelleTyp: z.string().optional().nullable(),
 });
 
 export type InquiryInput = z.infer<typeof inquirySchema>;
