@@ -1,4 +1,4 @@
-﻿'use server'
+'use server'
 
 import { createClient } from '@/lib/supabase/server'
 import type { Beleg, BelegDetail, BelegFilter, Ausgangsrechnung, RechnungFilter, AusgangsrechnungPosition , Kostenposten, KostenpostenFilter } from '@/lib/buchhaltung/types'
@@ -566,7 +566,7 @@ import { UstvaWerte, Ersparnis, KategorieSumme } from '@/lib/buchhaltung/types';
 
 export async function getCockpitMetricsAction(von: string, bis: string) {
   // Einnahmen & USt aus Rechnungen
-  const rechnungen = await db.select({ netto: ausgangsrechnung.netto, ustBetrag: ausgangsrechnung.ustBetrag })
+  const rechnungen = await db.select({ netto: ausgangsrechnung.netto, ustBetrag: ausgangsrechnung.ustBetrag, ustSatz: ausgangsrechnung.ustSatz })
     .from(ausgangsrechnung)
     .where(and(
       ne(ausgangsrechnung.status, 'storniert'),
@@ -584,18 +584,45 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
     ));
 
   // Fixkosten
-  const kosten = await db.select({ betrag: kostenposten.betrag, kategorie: kostenposten.kategorie, art: kostenposten.art })
+  const kosten = await db.select({ betrag: kostenposten.betrag, kategorie: kostenposten.kategorie, art: kostenposten.art, intervall: kostenposten.intervall, giltAb: kostenposten.giltAb, giltBis: kostenposten.giltBis })
     .from(kostenposten);
 
-  const einnahmenNetto = rechnungen.reduce((sum, r) => sum + (Number(r.netto) || 0), 0);
-  const einnahmenUst = rechnungen.reduce((sum, r) => sum + (Number(r.ustBetrag) || 0), 0);
+  let umsatz19 = 0, umsatz7 = 0, umsatz0 = 0;
+  for (const r of rechnungen) {
+    const netto = Number(r.netto) || 0;
+    const satz = Number(r.ustSatz) || 19;
+    if (satz === 19) umsatz19 += netto;
+    else if (satz === 7) umsatz7 += netto;
+    else umsatz0 += netto;
+  }
+  const ust19 = umsatz19 * 0.19;
+  const ust7 = umsatz7 * 0.07;
+  const einnahmenNetto = umsatz19 + umsatz7 + umsatz0;
   
   const ausgabenBelegeNetto = belege.reduce((sum, b) => sum + (Number(b.netto) || 0), 0);
   const ausgabenBelegeUst = belege.reduce((sum, b) => sum + (Number(b.ustBetrag) || 0), 0);
   
-  const ausgabenFix = kosten.reduce((sum, k) => sum + (Number(k.betrag) || 0), 0);
+  let ausgabenFix = 0;
+  for (const k of kosten) {
+    if (k.giltAb && k.giltAb > bis) continue;
+    if (k.giltBis && k.giltBis < von) continue;
 
-  const zahllast = einnahmenUst - ausgabenBelegeUst;
+    let betrag = Number(k.betrag) || 0;
+    if (k.intervall === 'vierteljhrlich' || k.intervall === 'vierteljaehrlich') betrag = betrag / 3;
+    else if (k.intervall === 'jhrlich' || k.intervall === 'jaehrlich') betrag = betrag / 12;
+    else if (k.intervall === 'einmalig') {
+       const giltAbMonth = k.giltAb ? k.giltAb.substring(0, 7) : null;
+       const queryMonth = von.substring(0, 7);
+       if (giltAbMonth !== queryMonth) betrag = 0;
+    }
+    
+    // We add the proportion to ausgabenFix, but the original code mapped them later to Kategorien...
+    // Since we overwrote betrag in 'k', we must assign it back so the Kategorien grouping works correctly.
+    k.betrag = betrag.toString();
+    ausgabenFix += betrag;
+  }
+
+  const zahllast = (ust19 + ust7) - ausgabenBelegeUst;
   const bwaErgebnis = einnahmenNetto - ausgabenBelegeNetto - ausgabenFix;
 
   // Kategorien gruppieren
@@ -630,11 +657,11 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
   const ustva: UstvaWerte = {
     zeitraumVon: von,
     zeitraumBis: bis,
-    umsatz19: einnahmenNetto,
-    ust19: einnahmenUst,
-    umsatz7: 0,
-    ust7: 0,
-    umsatz0: 0,
+    umsatz19: umsatz19,
+    ust19: ust19,
+    umsatz7: umsatz7,
+    ust7: ust7,
+    umsatz0: umsatz0,
     vorsteuer: ausgabenBelegeUst,
     zahllast: zahllast,
     status: 'berechnet'
