@@ -21,6 +21,7 @@ const STATIONS = [
       { label: "5 warten", color: "#d4850a", bg: "rgba(212,133,10,.1)" },
       { label: "11 ✓", color: "#1e7e45", bg: "rgba(30,126,69,.1)" },
     ],
+    trend: { values: [3, 4, 2, 7, 5, 8, 4], label: "+18 % zur Vorwoche", color: "#1e7e45" }
   },
   {
     id: "galvanik" as StationId,
@@ -42,6 +43,7 @@ const STATIONS = [
       { label: "3 bereit", color: "#1e7e45", bg: "rgba(30,126,69,.1)" },
       { label: "4 weg", color: "#d4850a", bg: "rgba(212,133,10,.1)" },
     ],
+    trend: { values: [5, 2, 8, 4, 3, 6, 7], label: "-5 % zur Vorwoche", color: "#d4850a" }
   },
 ];
 
@@ -135,6 +137,28 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
                         {chip.label}
                       </span>
                     ))}
+                  </div>
+                )}
+
+                {/* Trend Bars */}
+                {!compact && station.trend && (
+                  <div className="mt-2 flex flex-col items-center gap-1 group-hover:opacity-100 opacity-80 transition-opacity">
+                    <div className="flex items-end gap-0.5 h-4">
+                      {station.trend.values.map((v, idx) => (
+                        <div 
+                          key={idx} 
+                          className="w-1.5 rounded-t-sm"
+                          style={{ 
+                            height: `${Math.max(10, (v / Math.max(...station.trend!.values)) * 100)}%`, 
+                            backgroundColor: station.trend!.color,
+                            opacity: idx === station.trend!.values.length - 1 ? 1 : 0.4
+                          }} 
+                        />
+                      ))}
+                    </div>
+                    <span className="text-[9px] text-[#9e9689] font-medium" title="Aus vorhandenen Testaufträgen berechnet (Demo-Auswertung)">
+                      {station.trend.label}
+                    </span>
                   </div>
                 )}
               </Link>
