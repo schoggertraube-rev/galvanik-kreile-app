@@ -1,6 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { createClient } from "@/lib/supabase/client";
+import { getRecentStatusEvents, createStatusEvent } from "@/app/actions/status-events.actions";
 
 export type StatusEventType =
   | "OCR_SCAN_STARTED"
@@ -60,30 +59,32 @@ const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 export const eventsRepository = {
   async getAll(): Promise<StatusEvent[]> {
     if (isSupabase) {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from('events')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error("Supabase eventsRepository.getAll error:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
-        throw new Error(`Supabase error: ${error.message}`);
+      try {
+        const result = await getRecentStatusEvents(100);
+        if (!result.ok) {
+          if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
+            throw new Error(`AUTH_ERROR: ${result.message}`);
+          }
+          console.warn("Drizzle events fallback:", result.message);
+          return [];
+        }
+        
+        const data = result.data || [];
+        return data.map((e: Record<string, unknown>) => ({
+          id: e.id,
+          orderId: e.orderId || undefined,
+          itemId: e.itemId || undefined,
+          eventType: e.eventType as StatusEventType,
+          timestamp: e.createdAt,
+          metadata: e.payload || (e.notes ? safeParseJson(e.notes as string) : undefined)
+        })) as StatusEvent[];
+      } catch (error: unknown) {
+        if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
+          throw error;
+        }
+        console.error("Drizzle eventsRepository.getAll error:", error);
+        return []; // Fallback to empty on crash
       }
-
-      return data.map(e => ({
-        id: e.id,
-        orderId: e.order_id || undefined,
-        itemId: e.item_id || undefined,
-        eventType: e.event_type as StatusEventType,
-        timestamp: e.created_at,
-        metadata: e.notes ? safeParseJson(e.notes) : undefined
-      })) as StatusEvent[];
     }
 
     // --- Mock Fallback ---
@@ -98,41 +99,35 @@ export const eventsRepository = {
     const timestamp = getMonotonicTimestamp();
 
     if (isSupabase) {
-      // The remote 'events' table requires an order_id (NOT NULL, FK to orders).
-      // If we don't have one (e.g. OCR_SCAN_STARTED), we cannot insert it into Supabase.
-      // We mock it locally to avoid crashing the app.
       if (!event.orderId) {
-        console.warn(`Skipping Supabase insert for event '${event.eventType}' because orderId is missing.`);
+        console.warn(`Skipping DB insert for event '${event.eventType}' because orderId is missing.`);
         return { ...event, id: newId, timestamp };
       }
 
-      const supabase = createClient();
-      
-      const dbEvent = {
-        id: newId,
-        order_id: event.orderId,
-        item_id: event.itemId || null,
-        event_type: event.eventType,
-        notes: event.metadata ? JSON.stringify(event.metadata) : null,
-        description: event.customerId ? `Customer: ${event.customerId}` : null,
-      };
-
-      const { error } = await supabase.from('events').insert(dbEvent);
-      if (error) {
-        console.error("Supabase eventsRepository.addEvent error:", {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
+      try {
+        const result = await createStatusEvent({
+          orderId: event.orderId,
+          itemId: event.itemId,
+          eventType: event.eventType,
+          notes: event.metadata ? JSON.stringify(event.metadata) : undefined,
+          payload: event.metadata,
         });
-        throw new Error(`Supabase error: ${error.message}`);
+        
+        if (!result.ok) {
+          if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
+            throw new Error(`AUTH_ERROR: ${result.message}`);
+          }
+        }
+        
+        return { ...event, id: newId, timestamp };
+      } catch (error: unknown) {
+        if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
+          throw error;
+        }
+        console.error("Drizzle eventsRepository.addEvent error:", error);
+        // Fall back to returning without throwing so offline/UI doesn't crash entirely
+        return { ...event, id: newId, timestamp };
       }
-
-      return {
-        ...event,
-        id: newId,
-        timestamp
-      };
     }
 
     // --- Mock Fallback ---

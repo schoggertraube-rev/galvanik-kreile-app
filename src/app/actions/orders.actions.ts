@@ -4,15 +4,22 @@ import { db } from "@/db";
 import { orders, items, customers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
+import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 
-export async function getOrdersDb() {
-  if (!db) return [];
+// DTO Typen (zur Vereinfachung)
+export type OrderResponse = Record<string, unknown>;
+
+export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
+  const auth = await checkAppAuth();
+  if (!auth.ok) return auth;
+
+  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   try {
     const dbOrders = await db.select().from(orders).orderBy(orders.createdAt);
     const dbItems = await db.select().from(items).orderBy(items.createdAt);
     const dbCustomers = await db.select().from(customers);
     
-    return dbOrders.map(o => {
+    const data = dbOrders.map(o => {
       const orderItems = dbItems.filter(item => item.orderId === o.id);
       const customer = dbCustomers.find(c => c.id === o.customerId);
       const customerName = customer ? customer.name : "Unbekannter Kunde";
@@ -44,21 +51,26 @@ export async function getOrdersDb() {
         dueValue
       };
     });
+    
+    return { ok: true, data };
   } catch (error) {
     console.error("Failed to get orders from DB:", error);
-    return [];
+    return { ok: false, error: "DB_ERROR", message: "Fehler beim Laden der Aufträge", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
   }
 }
 
-export async function createOrderDb(data: Record<string, unknown>) {
-  if (!db) return { success: false, error: "Database not available" };
+export async function createOrderDb(data: Record<string, unknown>): Promise<ActionResult<Record<string, unknown>>> {
+  const auth = await checkAppAuth("write");
+  if (!auth.ok) return auth;
+
+  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   const { orderSchema } = await import("@/lib/validation/orderSchema");
   const parsed = orderSchema.safeParse(data);
   
   if (!parsed.success) {
     const formattedErrors = parsed.error.flatten().fieldErrors;
-    return { success: false, errors: formattedErrors };
+    return { ok: false, error: "UNKNOWN", message: "Validierungsfehler", details: formattedErrors };
   }
   
   const validData = parsed.data;
@@ -96,7 +108,7 @@ export async function createOrderDb(data: Record<string, unknown>) {
     }
     
     return {
-      success: true,
+      ok: true,
       data: {
         ...newOrder,
         station: newOrder.currentStationId,
@@ -106,7 +118,7 @@ export async function createOrderDb(data: Record<string, unknown>) {
     };
   } catch (error) {
     console.error("Failed to create order in DB:", error);
-    return { success: false, error: "Database error" };
+    return { ok: false, error: "DB_ERROR", message: "Fehler beim Erstellen des Auftrags", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
   }
 }
 
@@ -115,8 +127,11 @@ export async function updateOrderDb(id: string, changes: {
   currentStationId?: string;
   priorityComputed?: string;
   title?: string;
-}) {
-  if (!db) return null;
+}): Promise<ActionResult<Record<string, unknown>>> {
+  const auth = await checkAppAuth("write");
+  if (!auth.ok) return auth;
+
+  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   try {
     const updateData: Record<string, string> = {};
     if (changes.status !== undefined) updateData.status = changes.status;
@@ -130,9 +145,9 @@ export async function updateOrderDb(id: string, changes: {
       await db.update(items).set({ currentStationId: changes.currentStationId }).where(eq(items.orderId, id));
     }
     
-    return { id, ...changes };
+    return { ok: true, data: { id, ...changes } };
   } catch (error) {
     console.error("Failed to update order in DB:", error);
-    return null;
+    return { ok: false, error: "DB_ERROR", message: "Fehler beim Aktualisieren des Auftrags", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
   }
 }

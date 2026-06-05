@@ -2,7 +2,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { INITIAL_ORDERS } from "@/lib/mockData";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { IndexedDBHelper } from "@/lib/offline/IndexedDBHelper";
-import { createClient } from "@/lib/supabase/client";
+import { getOrdersDb, createOrderDb, updateOrderDb } from "@/app/actions/orders.actions";
 
 export type Order = {
   id: string;
@@ -33,91 +33,29 @@ const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 export const ordersRepository = {
   async getAll(): Promise<Order[]> {
     if (isSupabase) {
-      const supabase = createClient();
-      let dbOrders = null;
-      let ordersError = null;
-      
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        const { data, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
-        dbOrders = data;
-        ordersError = error;
-        
-        if (ordersError && ordersError.message?.includes("JWT issued at future")) {
-          console.warn(`Supabase clock drift detected (JWT future). Retrying attempt ${attempt}...`);
-          await new Promise(r => setTimeout(r, 1000));
-          continue;
+      try {
+        const result = await getOrdersDb();
+        if (!result.ok) {
+          if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
+            throw new Error(`AUTH_ERROR: ${result.message}`);
+          }
+          console.warn("Drizzle fallback:", result.message);
+          throw new Error("NETWORK_ERROR");
         }
-        break;
-      }
-
-      if (ordersError || !dbOrders) {
-        console.error("Supabase ordersRepository.getAll (orders) error:", ordersError?.message, ordersError?.details, ordersError?.hint);
-        return [];
-      }
-      
-      const { data: dbItems, error: itemsError } = await supabase.from('items').select('*');
-      if (itemsError) {
-        console.error("Supabase ordersRepository.getAll (items) error:", itemsError?.message, itemsError?.details, itemsError?.hint);
-        return [];
-      }
-      
-      const { data: dbCustomers, error: customersError } = await supabase.from('customers').select('id, name');
-      if (customersError) {
-        console.error("Supabase ordersRepository.getAll (customers) error:", customersError?.message, customersError?.details, customersError?.hint);
-        return [];
-      }
-
-      return dbOrders.map(o => {
-        const orderItems = dbItems.filter(item => item.order_id === o.id);
-        const customer = dbCustomers.find(c => c.id === o.customer_id);
-        const customerName = customer ? customer.name : "Unbekannter Kunde";
-        
-        let normalizedOrderNumber = o.order_number || "A-0000-0000";
-        const numMatch = normalizedOrderNumber.match(/^A-(\d{4})-?(\d+)$/i);
-        if (numMatch) {
-          normalizedOrderNumber = `A-${numMatch[1]}-${numMatch[2].padStart(4, '0')}`;
+        return result.data as unknown as Order[];
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
+          throw error; // hard crash for auth errors
         }
-        
-        const rawIntake = o.intake_date ? new Date(o.intake_date) : (o.created_at ? new Date(o.created_at) : new Date());
-        const rawDue = o.due_date ? new Date(o.due_date) : new Date(rawIntake.getTime() + 10 * 24 * 60 * 60 * 1000);
-        
-        const intakeDate = !isNaN(rawIntake.getTime()) 
-          ? rawIntake.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ", " + rawIntake.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) + " Uhr"
-          : "Unbekannt";
-        const dueDate = !isNaN(rawDue.getTime()) 
-          ? rawDue.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-          : "Unbekannt";
-        
-        return {
-          id: o.id,
-          orderNumber: normalizedOrderNumber,
-          customerId: o.customer_id || "",
-          customerName,
-          title: o.title,
-          task: o.task || o.title || "Unbenanntes Projekt",
-          station: o.current_station || "wareneingang",
-          currentStationId: o.current_station || "wareneingang",
-          status: o.status,
-          risk: o.risk || "green",
-          statusText: o.status_text,
-          delayReason: o.delay_reason,
-          recommendedAction: o.recommended_action,
-          parts: orderItems.map(item => ({
-            id: item.id,
-            name: item.name,
-            quantity: item.quantity,
-            surfaceRequested: item.surface_requested || "",
-            station: o.current_station || "wareneingang"
-          })),
-          intakeDate,
-          dueDate,
-          rawIntakeDate: !isNaN(rawIntake.getTime()) ? rawIntake.toISOString() : undefined,
-          rawDueDate: !isNaN(rawDue.getTime()) ? rawDue.toISOString() : undefined,
-          attachmentUrl: o.attachment_url,
-          dueLabel: "Fällig in",
-          dueValue: "10 Tagen"
-        };
-      });
+        console.error("Drizzle ordersRepository.getAll error:", error);
+        // We throw here so the offline fallback below handles it? 
+        // Wait, the offline fallback is in the "Mock Fallback" section which is ONLY reached if isSupabase is false, or if we fallback?
+        // Ah, the original code returned [] on error. I should return [] but NOT for auth errors.
+        if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
+          throw error;
+        }
+        // If not auth error, fallback to offline
+      }
     }
 
     // --- Mock Fallback ---
@@ -156,73 +94,22 @@ export const ordersRepository = {
     const dueDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
     
     if (isSupabase) {
-      const supabase = createClient();
-      const orderId = data.id || createId();
-      const orderNumber = `A-${202600 + Math.floor(Math.random() * 10000)}`;
-      
-      const newOrderDb: Record<string, unknown> = {
-        id: orderId,
-        order_number: orderNumber,
-        customer_id: data.customerId,
-        title: data.title,
-        status: "in_progress",
-        risk: "green",
-        intake_date: intakeDate,
-        due_date: dueDate
-      };
-      if (data.attachmentUrl) {
-        newOrderDb.attachment_url = data.attachmentUrl;
-      }
-      
-      const { error: orderError } = await supabase.from('orders').insert(newOrderDb);
-      if (orderError) {
-        console.error("Supabase ordersRepository.create (order) error:", orderError.message, orderError.details, orderError.hint);
-        throw orderError;
-      }
-      
-      const mappedParts = (data.parts || []).map((part: Record<string, unknown>) => ({
-        id: (part.id as string) || createId(),
-        order_id: orderId,
-        customer_id: data.customerId,
-        name: (part.name as string) || "Teil",
-        quantity: typeof part.quantity === "number" ? part.quantity : parseInt(String(part.quantity)) || 1,
-        surface_requested: (part.surfaceRequested as string) || ""
-      }));
-      
-      if (mappedParts.length > 0) {
-        const { error: itemsError } = await supabase.from('items').insert(mappedParts);
-        if (itemsError) {
-          console.error("Supabase ordersRepository.create (items) error:", itemsError?.message, itemsError?.details, itemsError?.hint);
-          throw itemsError;
+      try {
+        const result = await createOrderDb(data as Record<string, unknown>);
+        if (!result.ok) {
+          if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
+            throw new Error(`AUTH_ERROR: ${result.message}`);
+          }
+          throw new Error("Drizzle Server Action failed: " + result.message);
         }
+        return result.data as unknown as Order;
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
+          throw error;
+        }
+        console.error("Drizzle ordersRepository.create error:", error);
+        throw error;
       }
-      
-      let customerName = "Unbekannter Kunde";
-      const { data: customerData } = await supabase.from('customers').select('name').eq('id', data.customerId).single();
-      if (customerData) {
-        customerName = customerData.name;
-      }
-      
-      return {
-        ...data,
-        id: orderId,
-        orderNumber,
-        customerName,
-        status: "in_progress",
-        risk: "green",
-        intakeDate,
-        dueDate,
-        dueLabel: "Fällig in",
-        dueValue: "10 Tagen",
-        parts: mappedParts.map(p => ({
-            id: p.id,
-            name: p.name,
-            quantity: p.quantity,
-            surfaceRequested: p.surface_requested,
-            status: "in_progress",
-            station: data.currentStationId || "wareneingang"
-        }))
-      };
     }
 
     // --- Mock Fallback ---
@@ -294,40 +181,27 @@ export const ordersRepository = {
 
   async updateOrder(idOrNumber: string, changes: Partial<Order>): Promise<Order | null> {
     if (isSupabase) {
-      const supabase = createClient();
-      const isId = idOrNumber.length > 20; 
-      
-      const updateData: Record<string, unknown> = {};
-      if (changes.status) updateData.status = changes.status;
-      if (changes.title) updateData.title = changes.title;
-      if (changes.risk) updateData.risk = changes.risk;
-      if (changes.statusText) updateData.status_text = changes.statusText;
-      if (changes.delayReason) updateData.delay_reason = changes.delayReason;
-      if (changes.recommendedAction) updateData.recommended_action = changes.recommendedAction;
-      if (changes.station || changes.currentStationId) updateData.current_station = changes.station || changes.currentStationId;
-      if (changes.customerId) updateData.customer_id = changes.customerId;
-      if (changes.rawIntakeDate) updateData.intake_date = changes.rawIntakeDate;
-      if (changes.rawDueDate) updateData.due_date = changes.rawDueDate;
-      if (changes.task) updateData.task = changes.task;
-      
-      if (Object.keys(updateData).length > 0) {
-        const query = supabase.from('orders').update(updateData);
-        const { error } = isId 
-          ? await query.eq('id', idOrNumber)
-          : await query.eq('order_number', idOrNumber);
-          
-        if (error) {
-          const errMsg = error.message || JSON.stringify(error);
-          console.error("Supabase ordersRepository.updateOrder error:", errMsg, error.details, error.hint, error.code);
-          throw new Error(errMsg);
+      try {
+        const result = await updateOrderDb(idOrNumber, changes);
+        if (!result.ok) {
+          if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
+            throw new Error(`AUTH_ERROR: ${result.message}`);
+          }
+          throw new Error("Update failed: " + result.message);
         }
+        
+        // Return the updated object by re-fetching all and finding it,
+        // ensuring we have the exact UI format mapped correctly.
+        const all = await this.getAll();
+        const updatedOrder = all.find(o => o.id === idOrNumber || o.orderNumber === idOrNumber);
+        return updatedOrder || null;
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
+          throw error;
+        }
+        console.error("Drizzle ordersRepository.updateOrder error:", error);
+        throw error;
       }
-      
-      // Return the updated object by re-fetching all and finding it, 
-      // ensuring we have the exact UI format mapped correctly.
-      const all = await this.getAll();
-      const updatedOrder = all.find(o => o.id === idOrNumber || o.orderNumber === idOrNumber);
-      return updatedOrder || null;
     }
 
     // --- Mock Fallback ---
