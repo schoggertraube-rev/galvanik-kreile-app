@@ -35,6 +35,8 @@ export const customers = pgTable("customers", {
   riskNote: text("risk_note"),
   notes: text("notes"),
   imageUrls: text("image_urls").array().default([]),
+  marketingOptOut: boolean("marketing_opt_out").default(false),
+  lastReactivatedAt: timestamp("last_reactivated_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -95,6 +97,8 @@ export const events = pgTable("events", {
   eventType: varchar("event_type", { length: 100 }).notNull(),
   description: text("description"),
   notes: text("notes"),
+  payload: jsonb("payload").$type<Record<string, unknown>>(),
+  status: varchar("status", { length: 50 }).default("success"),
   userId: uuid("user_id").references(() => appUsers.id),
   workerId: varchar("worker_id", { length: 100 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -266,6 +270,41 @@ export const phoneNotes = pgTable("phone_notes", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+
+// 12. Phase 3 (Resilience & Marketing)
+export const offlineOutbox = pgTable("offline_outbox", {
+  id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  mutationType: varchar("mutation_type", { length: 100 }).notNull(),
+  payload: jsonb("payload").notNull().$type<Record<string, unknown>>(),
+  status: varchar("status", { length: 50 }).notNull().default("pending"),
+  retryCount: integer("retry_count").default(0),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  processedAt: timestamp("processed_at"),
+});
+
+export const orderCostPositions = pgTable("order_cost_positions", {
+  id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 50 }).notNull(), // labor, material, external
+  description: text("description").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const communicationDrafts = pgTable("communication_drafts", {
+  id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  customerId: text("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  type: varchar("type", { length: 50 }).notNull().default("reactivation"), // reactivation, quote, general
+  status: varchar("status", { length: 50 }).notNull().default("draft"), // draft, sent, archived
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
 // 11. Buchhaltung & Finanzen
 export * from "./schema_buchhaltung";
