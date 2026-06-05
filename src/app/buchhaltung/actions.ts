@@ -32,7 +32,7 @@ export async function listBelegeAction(filter?: BelegFilter): Promise<Beleg[]> {
 }
 
 /**
- * LÃ¤dt einen einzelnen Beleg anhand der ID.
+ * LÃƒÂ¤dt einen einzelnen Beleg anhand der ID.
  */
 export async function getBelegAction(id: string): Promise<BelegDetail> {
   const supabase = await createClient()
@@ -50,13 +50,13 @@ export async function getBelegAction(id: string): Promise<BelegDetail> {
     throw new Error('Beleg nicht gefunden.')
   }
   
-  // Wenn der Beleg eine Datei hat, erzeugen wir eine Signed URL fÃ¼r die Vorschau
+  // Wenn der Beleg eine Datei hat, erzeugen wir eine Signed URL fÃƒÂ¼r die Vorschau
   let originalDatei = data.original_datei;
   if (originalDatei && !originalDatei.startsWith('http')) {
     const { data: urlData, error: urlError } = await supabase
       .storage
       .from('buchhaltung-belege')
-      .createSignedUrl(originalDatei, 3600); // 1h gÃ¼ltig
+      .createSignedUrl(originalDatei, 3600); // 1h gÃƒÂ¼ltig
       
     if (urlData) {
       originalDatei = urlData.signedUrl;
@@ -125,8 +125,8 @@ export async function createBelegAction(formData: FormData): Promise<Beleg> {
     original_format: mimeType,
     erfasst_am: new Date().toISOString(),
     erstellt_von: userId,
-    // Mock-Daten fÃ¼r OCR: Da MockOcrProvider genutzt wird, erwarten wir im Frontend
-    // ein Fallback oder fÃ¼llen das hier minimal aus.
+    // Mock-Daten fÃƒÂ¼r OCR: Da MockOcrProvider genutzt wird, erwarten wir im Frontend
+    // ein Fallback oder fÃƒÂ¼llen das hier minimal aus.
     brutto: 0,
     netto: 0,
     vorsteuer_abzug: true,
@@ -153,7 +153,7 @@ export async function createBelegAction(formData: FormData): Promise<Beleg> {
 export async function freigebenBelegAction(id: string, korrektur?: Partial<Beleg>): Promise<Beleg> {
   const supabase = await createClient()
   
-  // Nur 'pruefen' oder 'erfasst' dÃ¼rfen bearbeitet/freigegeben werden
+  // Nur 'pruefen' oder 'erfasst' dÃƒÂ¼rfen bearbeitet/freigegeben werden
   const { data: current, error: fetchError } = await supabase.from('beleg').select('status').eq('id', id).single()
   if (fetchError || !current) throw new Error('Beleg nicht gefunden.')
   if (current.status === 'festgeschrieben' || current.status === 'storniert') {
@@ -302,7 +302,7 @@ export async function listOffenePostenAction(): Promise<Ausgangsrechnung[]> {
   return data.map(mapToClientRechnung);
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ Helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Helper Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 function mapToClientRechnung(dbData: any): Ausgangsrechnung {
   return {
@@ -364,7 +364,7 @@ export async function createRechnungAction(formData: FormData, positionen: Ausga
   const isDemo = formData.get('isDemo') === "true";
 
   if (!nummer || !kundeId || !datum || !faelligAm) {
-    throw new Error('Bitte fÃ¼llen Sie alle Pflichtfelder aus.');
+    throw new Error('Bitte fÃƒÂ¼llen Sie alle Pflichtfelder aus.');
   }
 
   if (positionen.length === 0) {
@@ -495,12 +495,12 @@ export async function createKostenpostenAction(formData: FormData): Promise<Kost
   const isDemo = formData.get('isDemo') === "true";
 
   if (!bezeichnung || !art || !betragStr || !intervall) {
-    throw new Error('Bitte fÃ¼llen Sie alle Pflichtfelder aus.');
+    throw new Error('Bitte fÃƒÂ¼llen Sie alle Pflichtfelder aus.');
   }
 
   const betrag = parseFloat(betragStr.replace(',', '.'));
   if (isNaN(betrag) || betrag <= 0) {
-    throw new Error('Bitte geben Sie einen gÃ¼ltigen Betrag grÃ¶ÃŸer 0 ein.');
+    throw new Error('Bitte geben Sie einen gÃƒÂ¼ltigen Betrag grÃƒÂ¶ÃƒÅ¸er 0 ein.');
   }
 
   const { data, error } = await supabase.from('kostenposten').insert({
@@ -668,16 +668,22 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
 }
 export async function generateDatevExportAction(von: string, bis: string): Promise<string> {
   const supabase = await createClient();
+  const { data: profileData } = await supabase.from('steuerprofil').select('berater_nr, mandanten_nr, sachkontenrahmen').limit(1).single();
+  const beraterNr = profileData?.berater_nr || '';
+  const mandantenNr = profileData?.mandanten_nr || '';
+  const skr = profileData?.sachkontenrahmen || 'SKR03';
   const { data: belege } = await supabase.from('beleg').select('*').eq('status', 'festgeschrieben').gte('belegdatum', von).lte('belegdatum', bis);
   
-  const headerLine = `"EXTF";700;21;"Buchungsstapel";4;...;`; // Pseudo DATEV Header
-  const columnHeaders = `"Umsatz";"S/H";"WKZ";"Konto";"Gegenkonto";"Belegdatum";"Belegfeld 1";"Buchungstext"`;
+  const headerLine = `"EXTF";700;21;"Buchungsstapel";4;` + new Date().toISOString().replace(/[-:T]/g, '').substring(0, 14) + ;\"\";\"\";\"\";\"\"; + \"${beraterNr}\";\"${mandantenNr}\"; + new Date(von).getFullYear() +  101;4; + von.replace(/-/g, '') + ; + bis.replace(/-/g, '') + ;\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";
+  const columnHeaders = `"Umsatz";"S/H";"Konto";"Gegenkonto";"BU-SchlÃ¼ssel";"Belegdatum";"Belegfeld 1";"Buchungstext";"USt-Satz";"Festschreibung"`;
   
   let csvRows = [];
   if (belege) {
     for (const b of belege) {
-      const datum = new Date(b.belegdatum || b.erfasst_am).toLocaleDateString('de-DE').replace(/\./g, '');
-      csvRows.push(`"${b.brutto || ''}";"S";"EUR";"${b.skr_konto || ''}";"1200";"${datum}";"${b.id.substring(0,8)}";"${b.lieferant_text || ''}"`);
+      const datum = new Date(b.belegdatum || b.erfasst_am);
+      const ttmm = String(datum.getDate()).padStart(2, '0') + String(datum.getMonth() + 1).padStart(2, '0');
+      const ustSatz = b.ust_satz || '19';
+      csvRows.push(`"${b.brutto || ''}";"S";"${b.skr_konto || ''}";"1200";"";"${ttmm}";"${b.id.substring(0,8)}";"${b.lieferant_text || ''}";"${ustSatz}";"1"`);
     }
   }
 
@@ -686,18 +692,25 @@ export async function generateDatevExportAction(von: string, bis: string): Promi
 
 export async function generateLexwareExportAction(von: string, bis: string): Promise<string> {
   const supabase = await createClient();
+  const { data: profileData } = await supabase.from('steuerprofil').select('berater_nr, mandanten_nr, sachkontenrahmen').limit(1).single();
+  const beraterNr = profileData?.berater_nr || '';
+  const mandantenNr = profileData?.mandanten_nr || '';
+  const skr = profileData?.sachkontenrahmen || 'SKR03';
   const { data: belege } = await supabase.from('beleg').select('*').eq('status', 'festgeschrieben').gte('belegdatum', von).lte('belegdatum', bis);
 
-  const columnHeaders = `Datum;Belegnummer;Buchungstext;Betrag;Konto;Gegenkonto`;
+  const columnHeaders = `Datum;Belegnummer;Buchungstext;Betrag;USt-Satz;USt-Betrag;Konto;Gegenkonto;S/H`;
   let csvRows = [];
   if (belege) {
     for (const b of belege) {
       const datum = new Date(b.belegdatum || b.erfasst_am).toLocaleDateString('de-DE');
-      csvRows.push(`${datum};${b.id.substring(0,8)};${b.lieferant_text || ''};${b.brutto || ''};${b.skr_konto || ''};1200`);
+      const ustSatz = b.ust_satz || '19';
+      csvRows.push(`${datum};${b.id.substring(0,8)};${b.lieferant_text || ''};${b.brutto || ''};${ustSatz};${b.ust_betrag || ''};${b.skr_konto || ''};1200;S`);
     }
   }
 
   return columnHeaders + '\n' + csvRows.join('\n');
 }
+
+
 
 
