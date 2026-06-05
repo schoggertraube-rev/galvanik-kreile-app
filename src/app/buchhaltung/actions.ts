@@ -701,8 +701,8 @@ export async function generateDatevExportAction(von: string, bis: string): Promi
   const skr = profileData?.sachkontenrahmen || 'SKR03';
   const { data: belege } = await supabase.from('beleg').select('*').eq('status', 'festgeschrieben').gte('belegdatum', von).lte('belegdatum', bis);
   
-  const headerLine = `"EXTF";700;21;"Buchungsstapel";4;` + new Date().toISOString().replace(/[-:T]/g, '').substring(0, 14) + ;\"\";\"\";\"\";\"\"; + \"${beraterNr}\";\"${mandantenNr}\"; + new Date(von).getFullYear() +  101;4; + von.replace(/-/g, '') + ; + bis.replace(/-/g, '') + ;\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";\"\";
-  const columnHeaders = `"Umsatz";"S/H";"Konto";"Gegenkonto";"BU-SchlÃ¼ssel";"Belegdatum";"Belegfeld 1";"Buchungstext";"USt-Satz";"Festschreibung"`;
+  const headerLine = `"EXTF";700;21;"Buchungsstapel";4;` + new Date().toISOString().replace(/[-:T]/g, '').substring(0, 14) + `;"";"";"";"";"${beraterNr}";"${mandantenNr}";` + new Date(von).getFullYear() + `0101;4;` + von.replace(/-/g, '') + `;` + bis.replace(/-/g, '') + `;"";"";"";"";""`;
+  const columnHeaders = `"Umsatz";"S/H";"Konto";"Gegenkonto";"BU-Schlüssel";"Belegdatum";"Belegfeld 1";"Buchungstext";"USt-Satz";"Festschreibung"`;
   
   let csvRows = [];
   if (belege) {
