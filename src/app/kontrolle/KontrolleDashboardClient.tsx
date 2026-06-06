@@ -287,7 +287,7 @@ export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
           </div>
           
           <div className="pt-4 border-t border-neutral-gray-200 flex justify-end gap-3">
-            <Link href="/kundenservice" className="bg-white border border-neutral-gray-200 text-navy-900 px-5 py-2.5 rounded-xl font-bold hover:bg-neutral-gray-50 transition-colors flex items-center gap-2">
+            <Link href="/kommunikation" className="bg-white border border-neutral-gray-200 text-navy-900 px-5 py-2.5 rounded-xl font-bold hover:bg-neutral-gray-50 transition-colors flex items-center gap-2">
               Zum Kundenservice
             </Link>
             <Link href="/quotes" className="bg-navy-900 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-navy-800 transition-colors flex items-center gap-2">

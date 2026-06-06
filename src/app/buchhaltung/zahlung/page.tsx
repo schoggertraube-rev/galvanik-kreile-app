@@ -88,9 +88,9 @@ function ZahlungContent() {
                         <Users className="w-5 h-5 text-navy-900" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <Link href={`/kunden/${m.kundeId}`} className="text-base font-extrabold text-navy-900 truncate hover:text-blue-600 transition-colors inline-block">{m.kunde}</Link>
+                        <Link href={`/customers/${m.kundeId}`} className="text-base font-extrabold text-navy-900 truncate hover:text-blue-600 transition-colors inline-block">{m.kunde}</Link>
                         <div className="text-xs font-semibold text-text-muted mt-0.5">
-                          <Link href={`/auftraege/${m.auftragId}`} className="hover:text-navy-900 hover:underline">{m.auftragId}</Link>
+                          <Link href={`/orders/${m.auftragId}`} className="hover:text-navy-900 hover:underline">{m.auftragId}</Link>
                           <span className="mx-1.5">•</span>
                           <span>{m.letzteRechnung}</span>
                         </div>
