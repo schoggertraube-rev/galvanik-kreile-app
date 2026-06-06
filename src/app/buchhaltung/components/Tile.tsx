@@ -73,7 +73,7 @@ export function Tile({ title, description, icon, iconColor, href, kpi, status, f
 
   if (href && analyseLink) {
     return (
-      <div className={cls} onClick={() => router.push(href)}>
+      <div className={cls} onClick={(e) => { if (onClick) onClick(); else router.push(href); }}>
         <div className="absolute -right-2 -bottom-2 pointer-events-none opacity-[0.06] transform scale-[7] -rotate-12 origin-bottom-right">
           {icon}
         </div>
@@ -107,7 +107,7 @@ export function Tile({ title, description, icon, iconColor, href, kpi, status, f
     );
   }
   if (href) {
-    return <Link href={href} className={cls}>{inner}</Link>;
+    return <Link href={href} className={cls} onClick={onClick}>{inner}</Link>;
   }
-  return <div className={cls}>{inner}</div>;
+  return <div className={cls} onClick={onClick}>{inner}</div>;
 }
