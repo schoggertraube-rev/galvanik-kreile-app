@@ -347,5 +347,42 @@ export const qs = pgTable("qs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// 15. Bäder (Galvanik)
+export const baeder = pgTable("baeder", {
+  id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  name: varchar("name", { length: 100 }).notNull(),
+  status: varchar("status", { length: 50 }).notNull().default("ok"), // "ok", "warnung", "kritisch"
+  temperatur: numeric("temperatur", { precision: 5, scale: 2 }),
+  phWert: numeric("ph_wert", { precision: 4, scale: 2 }),
+  letzteWartung: timestamp("letzte_wartung"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 16. Bad-Messwerte (Historie)
+export const badMesswerte = pgTable("bad_messwerte", {
+  id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  badId: text("bad_id").notNull().references(() => baeder.id, { onDelete: "cascade" }),
+  wertTyp: varchar("wert_typ", { length: 50 }).notNull(), // "temperatur", "ph", "chemie"
+  wert: numeric("wert", { precision: 10, scale: 2 }).notNull(),
+  gemessenVon: text("gemessen_von"),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+});
+
+// 17. Lager & Chemie
+export const lagerArtikel = pgTable("lager_artikel", {
+  id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  artikelnummer: varchar("artikelnummer", { length: 100 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  kategorie: varchar("kategorie", { length: 50 }).notNull(), // "chemie", "verpackung", "verschleiss"
+  bestand: numeric("bestand", { precision: 10, scale: 2 }).notNull().default("0"),
+  mindestbestand: numeric("mindestbestand", { precision: 10, scale: 2 }).notNull().default("0"),
+  einheit: varchar("einheit", { length: 20 }).notNull().default("Stk"),
+  letzterWareneingang: timestamp("letzter_wareneingang"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // 11. Buchhaltung & Finanzen
 export * from "./schema_buchhaltung";
