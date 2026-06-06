@@ -229,13 +229,49 @@ export default function MarketingPage(): React.ReactElement | null {
           ]
         };
 
+      
+      case "Kampagnen":
+        return {
+          icon: <svg viewBox="0 0 24 24" width={24} height={24} stroke="currentColor" strokeWidth={2} fill="none"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
+          title: "Kampagnen-Performance",
+          subtitle: "Detailanalyse der laufenden und geplanten Kampagnen.",
+          accentBg: "linear-gradient(180deg, var(--posbg), transparent)",
+          
+          tabs: [{ id: "gesamt", label: "Aktive Kampagnen" }],
+          activeTab: "gesamt",
+
+          hero: {
+            kicker: "KAMPAGNEN STATUS",
+            value: "2 Aktiv",
+            changePill: { text: "Guter Verlauf", variant: "teal" as const },
+            meta: "Messung der Interaktionen und Conversion-Rate aller gebündelten Aktionen.",
+          },
+
+          composition: {
+            title: "Performance nach Kampagne",
+            rows: [
+              { avatar: "M", avatarColor: "bg-navy-900", name: "Messe-Nachfass", amount: "+14 Leads", href: "/marketing/kampagne/1" },
+              { avatar: "O", avatarColor: "bg-posbg", name: "Oberflächen-Push", amount: "+8 Leads", href: "/marketing/kampagne/2" }
+            ]
+          },
+
+          insight: {
+            body: "Messe-Nachfass konvertiert aktuell 15% besser als erwartet. Budget-Erhöhung empfohlen."
+          },
+
+          linkedAreas: [
+            { label: "Kunden & CRM", href: "/customers" },
+            { label: "Umsatz-Performance", href: "/performance" }
+          ]
+        };
+
       case "Return on Invest":
         const rData = analysisDataMap["Return on Invest"];
         if (!rData) return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
 
         return {
           icon: <svg viewBox="0 0 24 24" width={24} height={24} stroke="currentColor" strokeWidth={2} fill="none"><path d="M23 6l-9.5 9.5-5-5L1 18"/></svg>,
-          title: "Return on Investment (ROI)",
+          title: "Return on Invest & Lead-Kosten",
           subtitle: "Wie viel Umsatz jeder investierte Marketing-Euro zurÃ¼ckbringt.",
           accentBg: "linear-gradient(180deg, var(--posbg), transparent)",
           
@@ -568,7 +604,7 @@ export default function MarketingPage(): React.ReactElement | null {
               <h3 className="font-serif">Laufende &amp; geplante Kampagnen</h3>
               <div className="pdesc">Mehrere Aktionen mit einem Ziel gebÃ¼ndelt â€” das Studio verteilt sie auf die besten Zeitfenster.</div>
               {kampagnen.map(k => (
-                <div key={k.id} className="mk-camp">
+                <div key={k.id} className="mk-camp cursor-pointer" onClick={() => setAnalysisOpen('Kampagnen')}>
                   <span className="mk-camp-dot" style={{ background: k.statusColor }} />
                   <div className="mk-camp-content">
                     <h4>{k.titel}</h4>
