@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { WarendurchlaufCockpitClient } from "./WarendurchlaufCockpitClient";
 
 export default function WarendurchlaufIndex() {
-  redirect("/warendurchlauf/wareneingang");
+  return <WarendurchlaufCockpitClient />;
 }

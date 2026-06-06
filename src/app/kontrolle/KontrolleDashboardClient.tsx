@@ -9,6 +9,7 @@ import {
   Truck, MailQuestion, ArrowRight, XCircle, Info
 } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
+import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 
 interface Props {
   isDevOrAdmin: boolean;
@@ -289,61 +290,31 @@ export function KontrolleDashboardClient({ isDevOrAdmin }: Props) {
       </DetailOverlay>
 
       {/* D: QS / Nacharbeit */}
-      <DetailOverlay open={activeOverlay === "quality_control"} onClose={closeOverlay} title="QS / Reklamationen" subtitle="Analyse zu fehlerhaften Teilen und Nacharbeiten.">
-        <div className="space-y-6 text-navy-900">
-          <div className="bg-warning-yellow/10 border border-warning-yellow/30 rounded-xl p-4 flex items-center justify-between">
-            <div className="flex gap-3">
-              <Info className="w-5 h-5 text-warning-yellow shrink-0 mt-0.5" />
-              <div>
-                <h4 className="font-bold text-navy-900">Demo / Noch nicht vollständig angebunden</h4>
-                <p className="text-sm text-text-muted">Die Reklamationsdatenbank (complaintsRepository) wird derzeit migriert.</p>
-              </div>
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="font-bold mb-3 border-b border-neutral-gray-200 pb-2">Reklamationsanalyse (Beispieldaten)</h4>
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="bg-bg-app-soft p-4 rounded-xl text-center border border-neutral-gray-100">
-                <span className="block text-3xl font-black text-navy-900">2</span>
-                <span className="text-xs text-text-muted font-bold uppercase tracking-wider">Aktuelle Fälle</span>
-              </div>
-              <div className="bg-bg-app-soft p-4 rounded-xl text-center border border-neutral-gray-100">
-                <span className="block text-3xl font-black text-error-red">4.2%</span>
-                <span className="text-xs text-text-muted font-bold uppercase tracking-wider">Fehlerquote (Woche)</span>
-              </div>
-            </div>
-            
-            <ul className="space-y-3">
-              <li className="bg-bg-app-soft p-3 rounded-lg flex justify-between items-center border border-neutral-gray-100">
-                <div><p className="font-bold">Oberflächenqualität mangelhaft</p><p className="text-xs text-text-muted">Häufigste Ursache diese Woche</p></div>
-                <span className="text-xs bg-neutral-gray-200 text-text-muted px-2 py-1 rounded font-bold">Station: Bad 3</span>
-              </li>
-              <li className="bg-bg-app-soft p-3 rounded-lg flex justify-between items-center border border-neutral-gray-100">
-                <div><p className="font-bold">Transportschaden</p><p className="text-xs text-text-muted">Wiederholungsmuster erkannt</p></div>
-                <span className="text-xs bg-neutral-gray-200 text-text-muted px-2 py-1 rounded font-bold">Verpackung</span>
-              </li>
-            </ul>
-          </div>
-          
-          <div>
-            <h4 className="font-bold mb-2">Verbesserungsmaßnahme</h4>
-            <p className="text-sm text-text-muted">Kontrolle der Badparameter an Station 3 (Temperatur/Stromdichte) anweisen.</p>
-          </div>
-          
-          <div className="pt-4 border-t border-neutral-gray-200 flex justify-end gap-3 flex-wrap">
-            <Link href="/baeder" className="bg-white border border-neutral-gray-200 text-navy-900 px-5 py-2.5 rounded-xl font-bold hover:bg-neutral-gray-50 transition-colors flex items-center gap-2">
-              Bäder prüfen
-            </Link>
-            <Link href="/kundenservice" className="bg-white border border-neutral-gray-200 text-navy-900 px-5 py-2.5 rounded-xl font-bold hover:bg-neutral-gray-50 transition-colors flex items-center gap-2">
-              Zum Kundenservice
-            </Link>
-            <Link href="/orders" className="bg-navy-900 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-navy-800 transition-colors flex items-center gap-2">
-              Aufträge prüfen <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay
+        open={activeOverlay === "quality_control"}
+        onClose={closeOverlay}
+        title="QS / Reklamationen"
+        subtitle="Analyse zu fehlerhaften Teilen und Nacharbeiten."
+        hero={{
+          kicker: "Aktuelle Reklamationen",
+          value: "2",
+          changePill: { text: "Fehlerquote 4.2%", variant: "red" }
+        }}
+        composition={{
+          title: "Häufigste Ursachen",
+          rows: [
+            { avatar: "3", avatarColor: "bg-error-red", name: "A-2026-0044 (Oberflächenqualität mangelhaft)", amount: "Station: Bad 3", href: "/orders/1" },
+            { avatar: "V", avatarColor: "bg-warning-yellow", name: "A-2026-0081 (Transportschaden)", amount: "Verpackung", href: "/orders/2" }
+          ]
+        }}
+        insight={{
+          body: "Kontrolle der Badparameter an Station 3 (Temperatur/Stromdichte) anweisen."
+        }}
+        linkedAreas={[
+          { label: "Bäder prüfen", href: "/baeder" },
+          { label: "Kundenservice prüfen", href: "/kundenservice" }
+        ]}
+      />
 
       {/* E: Kundenservice */}
       <DetailOverlay open={activeOverlay === "customer_service"} onClose={closeOverlay} title="Kundenservice prüfen" subtitle="Offene Anfragen und E-Mail-Postfach.">
