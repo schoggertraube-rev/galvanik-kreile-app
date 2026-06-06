@@ -4,10 +4,16 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { Activity, Clock, Target, AlertOctagon, ArrowRight, Zap, CheckCircle2, TrendingDown } from 'lucide-react';
 import { PerformanceDetailLayout } from '../PerformanceDetailLayout';
-import { DetailOverlay } from '@/components/ui/DetailOverlay';
+import { AnalysisOverlay } from '@/components/ui/AnalysisOverlay';
+import { useFeatureFlag } from '@/lib/analytics/useFeatureFlag';
+import { AnalyticsDrillDrawer } from '@/components/analytics/AnalyticsDrillDrawer';
+import type { PeriodType } from '@/lib/analytics/plainLanguage';
 
 export default function WerkstattPulsDetail() {
   const [overlay, setOverlay] = useState<string | null>(null);
+  const analyticsDrawerEnabled = useFeatureFlag('analyticsDrawer');
+  const [drillKpi, setDrillKpi] = useState<string | null>(null);
+  const [drillPeriod, setDrillPeriod] = useState<PeriodType>('monat');
 
   return (
     <PerformanceDetailLayout
@@ -20,7 +26,7 @@ export default function WerkstattPulsDetail() {
       <div className="pd-grid">
 
         {/* Termintreue */}
-        <div className="pd-tile" onClick={() => setOverlay('termintreue')} style={{ cursor: 'pointer' }}>
+        <div className="pd-tile" onClick={() => { if (analyticsDrawerEnabled) { setDrillKpi('on_time_rate'); } else { setOverlay('termintreue'); } }} style={{ cursor: 'pointer' }}>
           <div className="pd-tile-hd">
             <div className="pd-tile-ico" style={{ background: 'var(--negbg)' }}>
               <Clock className="w-5 h-5" style={{ color: 'var(--neg)' }} />
@@ -230,144 +236,30 @@ export default function WerkstattPulsDetail() {
           <div className="pd-tile-foot">Details ansehen <ArrowRight className="w-3 h-3" /></div>
         </div>
 
-        {/* Module Links */}
-        <div className="pd-module-links">
-          <Link href="/orders" className="pd-module-link">Auftragsbuch <ArrowRight className="w-3 h-3" /></Link>
-          <Link href="/warendurchlauf" className="pd-module-link">Warendurchlauf <ArrowRight className="w-3 h-3" /></Link>
-          <Link href="/kontrolle" className="pd-module-link">Qualitätskontrolle <ArrowRight className="w-3 h-3" /></Link>
-        </div>
       </div>
 
-      {/* OVERLAYS */}
-      <DetailOverlay open={overlay === 'termintreue'} onClose={() => setOverlay(null)} title="Termintreue — Trendanalyse">
-        <div style={{ color: 'var(--ink)' }}>
-          <p style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 16 }}>Die Termintreue ist seit 4 Wochen rückläufig. Hauptgrund: Engpass bei Schleifen und verzögerte Zulieferungen.</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {[{ w: 'KW19', v: 85, c: 'var(--pos)' }, { w: 'KW20', v: 82, c: 'var(--pos)' }, { w: 'KW21', v: 79, c: 'var(--warn)' }, { w: 'KW22', v: 76, c: 'var(--neg)' }].map(r => (
-              <div key={r.w} className="pd-bar-row">
-                <div className="pd-bar-label">{r.w}</div>
-                <div className="pd-bar-track"><div className="pd-bar-fill" style={{ width: `${r.v}%`, background: r.c }} /></div>
-                <div className="pd-bar-val" style={{ color: r.c }}>{r.v}%</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 16, padding: 12, background: 'var(--negbg)', borderRadius: 10, fontSize: 12 }}>
-            <strong>Prognose:</strong> Ohne Gegenmaßnahme sinkt die Termintreue bis Monatsende auf ca. 72%.
-          </div>
-          <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Link href="/orders" style={{ padding: '8px 14px', border: '1px solid var(--bd)', borderRadius: 10, background: 'var(--sf)', color: 'var(--ink2)', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Auftragsbuch</Link>
-            <Link href="/kontrolle" style={{ padding: '8px 14px', border: '1px solid var(--bd)', borderRadius: 10, background: 'var(--sf)', color: 'var(--ink2)', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Qualitätskontrolle</Link>
-          </div>
-        </div>
-      </DetailOverlay>
+      {/* OVERLAYS — standardized AnalysisOverlay pattern */}
+      <AnalysisOverlay open={overlay === 'termintreue'} onClose={() => setOverlay(null)} icon={<Clock className="w-5 h-5" style={{ color: 'var(--neg)' }} />} title="Termintreue" subtitle="Pünktlich gelieferte Aufträge — Werkstatt-Performance" accentBg="linear-gradient(180deg, var(--negbg), transparent)" hero={{ kicker: "Wie pünktlich lieferst du", value: "76 %", changePill: { text: "▼ −9 Pkt. vs. Vorjahr", variant: "red" }, meta: "KW22 · Tendenz fallend seit 4 Wochen", sparkValues: [85, 82, 79, 76] }} crossKpi={[ { label: "KW22 vs. Vorjahr", value: "−9 Pkt.", delta: "85% → 76%", deltaColor: "var(--neg)", accentColor: "var(--neg)" }, { label: "Überfällige Aufträge", value: "8", delta: "Station Schleifen", deltaColor: "var(--neg)", accentColor: "var(--neg)" }, { label: "Prognose", value: "72 %", delta: "Ohne Gegenmaßnahme", deltaColor: "var(--neg)", accentColor: "var(--warn)" } ]} insight={{ body: "<b>Beobachtung:</b> Termintreue seit 4 Wochen rückläufig (85% → 76%). Hauptgrund: Engpass bei Schleifen (14 Aufträge) und verzögerte Zulieferungen.<br><b>Prognose:</b> Ohne Gegenmaßnahme sinkt die Termintreue bis Monatsende auf ca. 72%.<br><b>Empfehlung:</b> 2. Schicht Schleifen aktivieren. Express-Aufträge temporär auf Politur umleiten.", actions: [{ label: "2. Schicht aktivieren" }, { label: "Engpass-Aufträge anzeigen" }] }} linkedAreas={[{ label: "Auftragsbuch", href: "/orders" }, { label: "Warendurchlauf", href: "/warendurchlauf" }, { label: "Qualitätskontrolle", href: "/kontrolle" }]} />
 
-      <DetailOverlay open={overlay === 'durchlaufzeit'} onClose={() => setOverlay(null)} title="Durchlaufzeit — Stationsanalyse">
-        <div style={{ color: 'var(--ink)' }}>
-          <p style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 16 }}>Mittlere Verweildauer je Station. Schleifen und Politur sind die größten Zeitfresser.</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {[
-              { s: 'Schleifen', t: 2.8, pct: 30, c: 'var(--neg)', hint: 'Engpass: 14 Aufträge im Stau' },
-              { s: 'Politur', t: 2.3, pct: 24, c: 'var(--warn)', hint: 'Wartung fällig in 3 Tagen' },
-              { s: 'Galvanik', t: 1.9, pct: 20, c: 'var(--pos)', hint: 'Stabil, Nickelbad beobachten' },
-              { s: 'Vorbereitung', t: 1.2, pct: 13, c: 'var(--info)', hint: 'Unterausgelastet — Express möglich' },
-              { s: 'QK und Versand', t: 1.2, pct: 13, c: 'var(--purple)', hint: 'Stabil' },
-            ].map(s => (
-              <div key={s.s} style={{ padding: 10, background: 'var(--sf2)', borderRadius: 10, border: '1px solid var(--bd)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                  <span style={{ fontWeight: 700, fontSize: 13 }}>{s.s}</span>
-                  <span style={{ fontWeight: 700, fontSize: 14, color: s.c }}>{s.t} Tage</span>
-                </div>
-                <div className="pd-bar-track"><div className="pd-bar-fill" style={{ width: `${s.pct * 3.3}%`, background: s.c }} /></div>
-                <div style={{ fontSize: 10, color: 'var(--ink2)', marginTop: 4 }}>{s.hint}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'durchlaufzeit'} onClose={() => setOverlay(null)} icon={<Target className="w-5 h-5" style={{ color: 'var(--warn)' }} />} title="Durchlaufzeit" subtitle="Mittlere Verweildauer je Station" accentBg="linear-gradient(180deg, var(--warnbg), transparent)" hero={{ kicker: "Wie lange braucht ein Auftrag", value: "Ø 9,4 Tage", changePill: { text: "Schleifen = 30% der Gesamtzeit", variant: "amber" }, meta: "5 Stationen · Schleifen und Politur sind die Zeitfresser" }} composition={{ title: "C · Durchlaufzeit pro Station", rows: [ { avatar: "S", avatarColor: "#D14F3D", name: "Schleifen", meta: "2,8 Tage · Engpass: 14 Aufträge im Stau", amount: "2,8 T" }, { avatar: "P", avatarColor: "#FBBF24", name: "Politur", meta: "2,3 Tage · Wartung fällig in 3 Tagen", amount: "2,3 T" }, { avatar: "G", avatarColor: "#34D399", name: "Galvanik", meta: "1,9 Tage · Stabil, Nickelbad beobachten", amount: "1,9 T" }, { avatar: "V", avatarColor: "#60A5FA", name: "Vorbereitung", meta: "1,2 Tage · Unterausgelastet — Express möglich", amount: "1,2 T" }, { avatar: "Q", avatarColor: "#A78BFA", name: "QK und Versand", meta: "1,2 Tage · Stabil", amount: "1,2 T" } ] }} insight={{ body: "<b>Beobachtung:</b> Schleifen und Politur machen 54% der Gesamtdurchlaufzeit aus. Vorbereitung ist unterausgelastet und könnte Express-Aufträge übernehmen." }} linkedAreas={[{ label: "Warendurchlauf", href: "/warendurchlauf" }]} />
 
-      <DetailOverlay open={overlay === 'engpass'} onClose={() => setOverlay(null)} title="Engpassstation — Schleifen">
-        <div style={{ color: 'var(--ink)' }}>
-          <div style={{ padding: 12, background: 'var(--negbg)', borderRadius: 10, marginBottom: 16, fontSize: 12, lineHeight: 1.6 }}>
-            <strong>Ursache:</strong> Erhöhter Anteil an Sonderbearbeitungen und 1 Maschine seit Mo. in Wartung.<br />
-            <strong>Folge:</strong> 14 Aufträge stauen sich, 8 davon mit akutem Terminrisiko.<br />
-            <strong>Empfehlung:</strong> 2. Schicht für Do/Fr aktivieren oder Express-Aufträge temporär auf Politur umleiten.
-          </div>
-          <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Link href="/warendurchlauf" style={{ padding: '8px 14px', border: '1px solid var(--bd)', borderRadius: 10, background: 'var(--sf)', color: 'var(--ink2)', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Warendurchlauf</Link>
-          </div>
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'engpass'} onClose={() => setOverlay(null)} icon={<AlertOctagon className="w-5 h-5" style={{ color: 'var(--neg)' }} />} title="Engpassstation" subtitle="Schleifen — 94% Auslastung, 14 Aufträge im Stau" accentBg="linear-gradient(180deg, var(--negbg), transparent)" hero={{ kicker: "Wo staut es sich", value: "Schleifen", changePill: { text: "94% Auslastung", variant: "red" }, meta: "14 Aufträge im Stau · 8 mit akutem Terminrisiko" }} crossKpi={[ { label: "Auslastung", value: "94 %", delta: "Höchste aller Stationen", deltaColor: "var(--neg)", accentColor: "var(--neg)" }, { label: "Stau-Aufträge", value: "14", delta: "8 mit Terminrisiko", deltaColor: "var(--neg)", accentColor: "var(--neg)" }, { label: "Maschine in Wartung", value: "1 von 3", delta: "Seit Montag", deltaColor: "var(--warn)", accentColor: "var(--warn)" } ]} insight={{ body: "<b>Ursache:</b> Erhöhter Anteil an Sonderbearbeitungen und 1 Maschine seit Mo. in Wartung.<br><b>Folge:</b> 14 Aufträge stauen sich, 8 davon mit akutem Terminrisiko.<br><b>Empfehlung:</b> 2. Schicht für Do/Fr aktivieren oder Express-Aufträge temporär auf Politur umleiten.", actions: [{ label: "2. Schicht aktivieren" }, { label: "Umleitung einrichten" }] }} linkedAreas={[{ label: "Warendurchlauf", href: "/warendurchlauf" }]} />
 
-      <DetailOverlay open={overlay === 'terminrisiko'} onClose={() => setOverlay(null)} title="Terminrisiko-Liste">
-        <div style={{ color: 'var(--ink)' }}>
-          <p style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 16 }}>Aufträge, deren Liefertermin gefährdet oder bereits überschritten ist.</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {[
-              { id: 'A-2026-0089', kunde: 'Museum Lenzburg', wert: '4.200 €', tage: -2, station: 'Schleifen' },
-              { id: 'A-2026-0091', kunde: 'Autohaus Berger', wert: '2.800 €', tage: -1, station: 'Politur' },
-              { id: 'A-2026-0094', kunde: 'Schlosserei Brunner', wert: '1.600 €', tage: 0, station: 'Galvanik' },
-              { id: 'A-2026-0095', kunde: 'Uhren Keller', wert: '3.400 €', tage: 0, station: 'Schleifen' },
-              { id: 'A-2026-0098', kunde: 'Metallbau Zürich', wert: '2.200 €', tage: 1, station: 'Vorbereitung' },
-              { id: 'A-2026-0101', kunde: 'Privatauftrag K.', wert: '1.100 €', tage: 1, station: 'Galvanik' },
-              { id: 'A-2026-0103', kunde: 'Schmuck Lutz', wert: '3.800 €', tage: 2, station: 'Schleifen' },
-              { id: 'A-2026-0107', kunde: 'Antiquitäten Bern', wert: '3.300 €', tage: 2, station: 'Politur' },
-            ].map(a => (
-              <div key={a.id} style={{ padding: 10, background: 'var(--sf2)', borderRadius: 8, border: `1px solid ${a.tage < 0 ? 'var(--neg)' : a.tage === 0 ? 'var(--warn)' : 'var(--bd)'}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, gap: 8, flexWrap: 'wrap' }}>
-                <div>
-                  <span style={{ fontWeight: 700 }}>{a.id}</span>
-                  <span style={{ color: 'var(--ink2)', marginLeft: 8 }}>{a.kunde}</span>
-                </div>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  <span style={{ color: 'var(--ink2)', fontSize: 10 }}>{a.station}</span>
-                  <span style={{ fontWeight: 600 }}>{a.wert}</span>
-                  <span style={{ color: a.tage < 0 ? 'var(--neg)' : a.tage === 0 ? 'var(--warn)' : 'var(--ink2)', fontWeight: 700, fontSize: 11 }}>{a.tage < 0 ? `${a.tage} T` : a.tage === 0 ? 'Heute' : `+${a.tage} T`}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'terminrisiko'} onClose={() => setOverlay(null)} icon={<Clock className="w-5 h-5" style={{ color: 'var(--neg)' }} />} title="Terminrisiko-Liste" subtitle="Gefährdete und überfällige Aufträge" accentBg="linear-gradient(180deg, var(--negbg), transparent)" hero={{ kicker: "Welche Aufträge sind gefährdet", value: "8 Aufträge", changePill: { text: "2 bereits überfällig", variant: "red" }, meta: "Station Schleifen und Politur betroffen" }} composition={{ title: "C · Betroffene Aufträge · 8 Stück", rows: [ { avatar: "ML", avatarColor: "#D14F3D", name: "A-0089 — Museum Lenzburg", meta: "4.200 € · Schleifen · −2 Tage überfällig", amount: "−2 T" }, { avatar: "AB", avatarColor: "#D14F3D", name: "A-0091 — Autohaus Berger", meta: "2.800 € · Politur · −1 Tag überfällig", amount: "−1 T" }, { avatar: "SB", avatarColor: "#FBBF24", name: "A-0094 — Schlosserei Brunner", meta: "1.600 € · Galvanik · Frist Heute", amount: "Heute" }, { avatar: "UK", avatarColor: "#FBBF24", name: "A-0095 — Uhren Keller", meta: "3.400 € · Schleifen · Frist Heute", amount: "Heute" }, { avatar: "MZ", avatarColor: "#60A5FA", name: "A-0098 — Metallbau Zürich", meta: "2.200 € · Vorbereitung · +1 Tag", amount: "+1 T" }, { avatar: "PK", avatarColor: "#60A5FA", name: "A-0101 — Privatauftrag K.", meta: "1.100 € · Galvanik · +1 Tag", amount: "+1 T" }, { avatar: "SL", avatarColor: "#60A5FA", name: "A-0103 — Schmuck Lutz", meta: "3.800 € · Schleifen · +2 Tage", amount: "+2 T" }, { avatar: "AN", avatarColor: "#60A5FA", name: "A-0107 — Antiquitäten Bern", meta: "3.300 € · Politur · +2 Tage", amount: "+2 T" } ] }} insight={{ body: "<b>Beobachtung:</b> 2 Aufträge bereits überfällig, 2 weitere auf Kante (Frist Heute). 6 Aufträge in den Stationen Schleifen und Politur betroffen.<br><b>Empfehlung:</b> Museum Lenzburg und Autohaus Berger priorisieren. Kunden über Verzögerung informieren.", actions: [{ label: "Kunden benachrichtigen" }, { label: "Priorisierung anpassen" }] }} linkedAreas={[{ label: "Auftragsbuch", href: "/orders" }, { label: "Warendurchlauf", href: "/warendurchlauf" }]} />
 
-      <DetailOverlay open={overlay === 'wochenziel'} onClose={() => setOverlay(null)} title="Wochenziel — Fortschritt">
-        <div style={{ color: 'var(--ink)' }}>
-          <div style={{ textAlign: 'center', marginBottom: 20 }}>
-            <div style={{ fontSize: 48, fontWeight: 800 }}>23 <span style={{ fontSize: 20, fontWeight: 400, color: 'var(--ink2)' }}>/ 25</span></div>
-            <div style={{ fontSize: 12, color: 'var(--ink2)', marginTop: 4 }}>Chargen abgeschlossen</div>
-          </div>
-          <div style={{ height: 12, background: 'var(--bd)', borderRadius: 6, overflow: 'hidden', marginBottom: 16 }}>
-            <div style={{ width: '92%', height: '100%', background: 'linear-gradient(90deg, var(--pos), var(--cyan))', borderRadius: 6 }} />
-          </div>
-          <div style={{ padding: 12, background: 'var(--posbg)', borderRadius: 10, fontSize: 12, lineHeight: 1.6 }}>
-            <strong>Prognose:</strong> Bei aktuellem Tempo werden 25 Chargen bis Freitag 14:00 Uhr erreicht. 2 Express-Chargen könnten das Ziel bereits bis Donnerstag sichern.
-          </div>
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'wochenziel'} onClose={() => setOverlay(null)} icon={<CheckCircle2 className="w-5 h-5" style={{ color: 'var(--pos)' }} />} title="Wochenziel" subtitle="Chargen-Fortschritt · Prognose" accentBg="linear-gradient(180deg, var(--posbg), transparent)" hero={{ kicker: "Wie weit ist das Wochenziel", value: "23 / 25", changePill: { text: "92% erreicht — auf Kurs", variant: "teal" }, meta: "Prognose: Freitag 14:00 Uhr · 2 Express-Chargen könnten beschleunigen", sparkValues: [5, 10, 14, 18, 23] }} insight={{ body: "<b>Beobachtung:</b> 23 von 25 Chargen abgeschlossen (92%). Bei aktuellem Tempo wird das Ziel bis Freitag 14:00 erreicht.<br><b>Chance:</b> 2 Express-Chargen könnten das Ziel bereits bis Donnerstag sichern.", actions: [{ label: "Express-Chargen freigeben" }] }} linkedAreas={[{ label: "Warendurchlauf", href: "/warendurchlauf" }]} />
 
-      <DetailOverlay open={overlay === 'massnahmen'} onClose={() => setOverlay(null)} title="Maßnahmenvorschläge">
-        <div style={{ color: 'var(--ink)' }}>
-          <p style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 16 }}>Operative Handlungsempfehlungen für die aktuelle Woche:</p>
-          {[
-            { prio: 'Hoch', signal: '94% Auslastung Schleifen', aktion: '2. Schicht für Do/Fr aktivieren', nutzen: 'Reduktion des Staus um ca. 50%, Termintreue +5 Pkt.', color: 'var(--neg)', link: '/warendurchlauf', linkLabel: 'Warendurchlauf' },
-            { prio: 'Mittel', signal: 'Politur-Wartung überfällig', aktion: 'Wartung auf Samstag vorziehen', nutzen: 'Vermeidung ungeplanter Stillstandzeit nächste Woche', color: 'var(--warn)', link: '/kontrolle', linkLabel: 'Qualitätskontrolle' },
-            { prio: 'Niedrig', signal: 'Vorbereitung unterausgelastet', aktion: '15% Express-Kontingent freigeben', nutzen: '+800 € Zusatzumsatz pro Tag durch Express-Zuschläge', color: 'var(--pos)', link: '/orders', linkLabel: 'Auftragsbuch' },
-          ].map((m, i) => (
-            <div key={i} style={{ padding: 14, background: 'var(--sf2)', borderRadius: 12, border: `1px solid var(--bd)`, marginBottom: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: m.color }} />
-                <span style={{ fontWeight: 700, fontSize: 14 }}>Priorität: {m.prio}</span>
-              </div>
-              <div style={{ fontSize: 12, lineHeight: 1.6 }}>
-                <p><strong>Signal:</strong> {m.signal}</p>
-                <p style={{ marginTop: 4 }}><strong>Maßnahme:</strong> {m.aktion}</p>
-                <p style={{ marginTop: 4, color: 'var(--pos)' }}><strong>Erwarteter Nutzen:</strong> {m.nutzen}</p>
-              </div>
-              <div style={{ marginTop: 10 }}>
-                <Link href={m.link} style={{ padding: '6px 12px', border: '1px solid var(--bd)', borderRadius: 8, background: 'var(--sf)', color: 'var(--ink2)', fontSize: 11, fontWeight: 600, textDecoration: 'none' }}>{m.linkLabel}</Link>
-              </div>
-            </div>
-          ))}
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'massnahmen'} onClose={() => setOverlay(null)} icon={<Zap className="w-5 h-5" style={{ color: 'var(--pos)' }} />} title="Maßnahmenvorschläge" subtitle="3 operative Handlungsempfehlungen für diese Woche" accentBg="linear-gradient(180deg, var(--posbg), transparent)" hero={{ kicker: "Was solltest du tun", value: "3 Maßnahmen", changePill: { text: "1 hochprioritär", variant: "amber" }, meta: "Basierend auf aktuellen Engpässen und Auslastung" }} composition={{ title: "C · Maßnahmen nach Priorität", rows: [ { avatar: "!", avatarColor: "#D14F3D", name: "Schleifen: 2. Schicht aktivieren", meta: "Priorität Hoch · Signal: 94% Auslastung · Erwartung: Stau −50%, Termintreue +5 Pkt.", amount: "" }, { avatar: "⚙", avatarColor: "#FBBF24", name: "Politur: Wartung vorziehen", meta: "Priorität Mittel · Signal: Wartung überfällig · Erwartung: Stillstand vermeiden", amount: "" }, { avatar: "⚡", avatarColor: "#34D399", name: "Express-Kontingent freigeben", meta: "Priorität Niedrig · Signal: Vorbereitung unterausgelastet · Erwartung: +800 €/Tag", amount: "" } ] }} insight={{ body: "<b>Gesamteinschätzung:</b> Die wichtigste Maßnahme ist die 2. Schicht bei Schleifen. Damit wird der Stau halbiert und die Termintreue stabilisiert sich. Politur-Wartung sollte auf Samstag vorgezogen werden, um ungeplanten Stillstand nächste Woche zu vermeiden.", actions: [{ label: "2. Schicht anweisen" }, { label: "Wartung planen" }, { label: "Express freigeben" }] }} linkedAreas={[{ label: "Warendurchlauf", href: "/warendurchlauf" }, { label: "Auftragsbuch", href: "/orders" }, { label: "Qualitätskontrolle", href: "/kontrolle" }]} />
+
+      {/* Analytics Drill Drawer (B1) */}
+      {drillKpi && (
+        <AnalyticsDrillDrawer
+          kpiId={drillKpi}
+          period={drillPeriod}
+          onPeriodChange={setDrillPeriod}
+          onClose={() => setDrillKpi(null)}
+        />
+      )}
     </PerformanceDetailLayout>
   );
 }

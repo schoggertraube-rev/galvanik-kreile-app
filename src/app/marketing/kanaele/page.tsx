@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getKanaele, updateKanalConfig } from "./actions";
-import { CheckCircle, XCircle, Settings, Mail, Instagram, Globe, LayoutTemplate } from "lucide-react";
+import { CheckCircle, XCircle, Settings, Mail, Camera, Globe, LayoutTemplate } from "lucide-react";
 
 export default function KanaelePage() {
   const [kanaele, setKanaele] = useState<any[]>([]);
@@ -29,7 +29,7 @@ export default function KanaelePage() {
   function renderIcon(typ: string) {
     switch(typ) {
       case 'email': return <Mail size={24} className="text-blue-500" />;
-      case 'instagram': return <Instagram size={24} className="text-pink-500" />;
+      case 'instagram': return <Camera size={24} className="text-pink-500" />;
       case 'google': return <Globe size={24} className="text-green-500" />;
       case 'web': return <LayoutTemplate size={24} className="text-slate-500" />;
       default: return <Settings size={24} />;

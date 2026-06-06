@@ -50,6 +50,7 @@ import { TestpilotFloatingButton } from "@/components/testpilot/TestpilotFloatin
 import { PermissionsProvider } from "@/lib/auth/PermissionsContext";
 import { AppShortcutProvider } from "@/components/ui/AppShortcutContext";
 import { SyncProvider } from "@/lib/offline/SyncContext";
+import { FeatureFlagProvider } from "@/lib/analytics/useFeatureFlag";
 
 import { isAdminOrDeveloper } from "@/lib/auth/permissions";
 
@@ -73,9 +74,11 @@ export default async function RootLayout({
               <DiagnosticsProvider>
                 <LicenseProvider>
                   <AppShortcutProvider>
+                    <FeatureFlagProvider>
                     <KreileAppShell>
                       {children}
                     </KreileAppShell>
+                    </FeatureFlagProvider>
                   </AppShortcutProvider>
                 </LicenseProvider>
                 <DiagnosticsWidget />

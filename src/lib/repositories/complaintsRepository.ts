@@ -47,24 +47,23 @@ export const complaintsRepository = {
       const supabase = createClient();
       const { data, error } = await supabase.from('complaints').select('*').order('created_at', { ascending: false });
       if (error) {
-        console.error("Supabase complaintsRepository.getAll error:", error.message, error.details, error.hint);
-        return [];
+        console.warn("Supabase complaintsRepository.getAll error:", error.message, error.details, error.hint);
+      } else {
+        return data.map(c => ({
+          id: c.id,
+          customerId: c.customer_id,
+          orderId: c.order_id,
+          itemId: c.item_id || undefined,
+          reason: c.reason as Complaint["reason"],
+          stationId: c.station_id || undefined,
+          description: c.description,
+          photoIds: c.photo_ids || [],
+          createdAt: c.created_at,
+          resolvedAt: c.resolved_at || undefined,
+          resolution: c.resolution || undefined,
+          status: c.status || undefined
+        }));
       }
-      
-      return data.map(c => ({
-        id: c.id,
-        customerId: c.customer_id,
-        orderId: c.order_id,
-        itemId: c.item_id || undefined,
-        reason: c.reason as Complaint["reason"],
-        stationId: c.station_id || undefined,
-        description: c.description,
-        photoIds: c.photo_ids || [],
-        createdAt: c.created_at,
-        resolvedAt: c.resolved_at || undefined,
-        resolution: c.resolution || undefined,
-        status: c.status || undefined
-      }));
     }
 
     // --- Mock Fallback ---
@@ -99,24 +98,23 @@ export const complaintsRepository = {
       const supabase = createClient();
       const { data, error } = await supabase.from('complaints').select('*').eq('customer_id', customerId).order('created_at', { ascending: false });
       if (error) {
-        console.error("Supabase complaintsRepository.getByCustomer error:", error.message, error.details, error.hint);
-        return [];
+        console.warn("Supabase complaintsRepository.getByCustomer error:", error.message, error.details, error.hint);
+      } else {
+        return data.map(c => ({
+          id: c.id,
+          customerId: c.customer_id,
+          orderId: c.order_id,
+          itemId: c.item_id || undefined,
+          reason: c.reason as Complaint["reason"],
+          stationId: c.station_id || undefined,
+          description: c.description,
+          photoIds: c.photo_ids || [],
+          createdAt: c.created_at,
+          resolvedAt: c.resolved_at || undefined,
+          resolution: c.resolution || undefined,
+          status: c.status || undefined
+        }));
       }
-      
-      return data.map(c => ({
-        id: c.id,
-        customerId: c.customer_id,
-        orderId: c.order_id,
-        itemId: c.item_id || undefined,
-        reason: c.reason as Complaint["reason"],
-        stationId: c.station_id || undefined,
-        description: c.description,
-        photoIds: c.photo_ids || [],
-        createdAt: c.created_at,
-        resolvedAt: c.resolved_at || undefined,
-        resolution: c.resolution || undefined,
-        status: c.status || undefined
-      }));
     }
 
     const all = await this.getAll();
@@ -144,11 +142,10 @@ export const complaintsRepository = {
       });
 
       if (error) {
-        console.error("Supabase complaintsRepository.addComplaint error:", error.message, error.details, error.hint);
-        throw error;
+        console.warn("Supabase complaintsRepository.addComplaint error:", error.message, error.details, error.hint);
+      } else {
+        return { ...complaint, id, createdAt };
       }
-      
-      return { ...complaint, id, createdAt };
     }
 
     // --- Mock Fallback ---
@@ -188,16 +185,19 @@ export const complaintsRepository = {
       if (changes.resolution !== undefined) updateData.resolution = changes.resolution;
       if (changes.resolvedAt !== undefined) updateData.resolved_at = changes.resolvedAt;
 
+      let errorOccurred = false;
       if (Object.keys(updateData).length > 0) {
         const { error } = await supabase.from('complaints').update(updateData).eq('id', id);
         if (error) {
-          console.error("Supabase complaintsRepository.updateComplaint error:", error.message, error.details, error.hint);
-          throw error;
+          console.warn("Supabase complaintsRepository.updateComplaint error:", error.message, error.details, error.hint);
+          errorOccurred = true;
         }
       }
       
-      const all = await this.getAll();
-      return all.find(c => c.id === id) || null;
+      if (!errorOccurred) {
+        const all = await this.getAll();
+        return all.find(c => c.id === id) || null;
+      }
     }
 
     // --- Mock Fallback ---

@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { AlertTriangle, ShieldCheck, ArrowRight, AlertCircle, Activity, MessageCircle, Shield } from 'lucide-react';
 import { PerformanceDetailLayout } from '../PerformanceDetailLayout';
-import { DetailOverlay } from '@/components/ui/DetailOverlay';
+import { AnalysisOverlay } from '@/components/ui/AnalysisOverlay';
 
 export default function QualitaetRisikoDetail() {
   const [overlay, setOverlay] = useState<string | null>(null);
@@ -183,94 +183,17 @@ export default function QualitaetRisikoDetail() {
           <div className="pd-tile-foot">Alle Maßnahmen <ArrowRight className="w-3 h-3" /></div>
         </div>
 
-        {/* Module Links */}
-        <div className="pd-module-links">
-          <Link href="/kundenservice" className="pd-module-link">Kundenservice <ArrowRight className="w-3 h-3" /></Link>
-          <Link href="/kommunikation" className="pd-module-link">Kommunikation <ArrowRight className="w-3 h-3" /></Link>
-          <Link href="/kontrolle" className="pd-module-link">Qualitätskontrolle <ArrowRight className="w-3 h-3" /></Link>
-          <Link href="/orders" className="pd-module-link">Auftragsbuch <ArrowRight className="w-3 h-3" /></Link>
-        </div>
+
       </div>
 
-      {/* OVERLAYS */}
-      <DetailOverlay open={overlay === 'reklamation'} onClose={() => setOverlay(null)} title="Reklamationsquote — Trendanalyse">
-        <div style={{ color: 'var(--ink)' }}>
-          <p style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 16 }}>Verlauf der Reklamationsquote über die letzten 4 Monate:</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {[{ m: 'Feb', v: 3.2, c: 'var(--pos)' }, { m: 'Mär', v: 4.1, c: 'var(--pos)' }, { m: 'Apr', v: 5.8, c: 'var(--warn)' }, { m: 'Mai', v: 7.1, c: 'var(--neg)' }].map(r => (
-              <div key={r.m} className="pd-bar-row">
-                <div className="pd-bar-label">{r.m}</div>
-                <div className="pd-bar-track"><div className="pd-bar-fill" style={{ width: `${r.v * 10}%`, background: r.c }} /></div>
-                <div className="pd-bar-val" style={{ color: r.c }}>{r.v}%</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 16, padding: 12, background: 'var(--negbg)', borderRadius: 10, fontSize: 12, lineHeight: 1.6 }}>
-            <strong>Tendenz:</strong> Steigend. Hauptursache ist die Verschlechterung des Nickelbads und fehlende Kalibrierung der Poliermaschine.
-          </div>
-        </div>
-      </DetailOverlay>
+      {/* OVERLAYS — standardized AnalysisOverlay pattern */}
+      <AnalysisOverlay open={overlay === 'reklamation'} onClose={() => setOverlay(null)} icon={<AlertCircle className="w-5 h-5" style={{ color: 'var(--warn)' }} />} title="Reklamationsquote" subtitle="Trendanalyse · Fehlerquote · Monatsvergleich" accentBg="linear-gradient(180deg, var(--warnbg), transparent)" hero={{ kicker: "Wie hoch ist die Reklamationsquote", value: "7,1 %", changePill: { text: "▲ +1 vs. Vorjahr — steigend", variant: "red" }, meta: "2 von 28 Aufträgen · Tendenz steigend seit 4 Monaten", sparkValues: [3.2, 4.1, 5.8, 7.1] }} crossKpi={[ { label: "Feb", value: "3,2 %", delta: "Niedrig", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Mär", value: "4,1 %", delta: "Leicht steigend", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Apr", value: "5,8 %", delta: "Warnung", deltaColor: "var(--warn)", accentColor: "var(--warn)" }, { label: "Mai", value: "7,1 %", delta: "Kritisch", deltaColor: "var(--neg)", accentColor: "var(--neg)" } ]} insight={{ body: "<b>Tendenz:</b> Steigend. Hauptursache ist die Verschlechterung des Nickelbads und fehlende Kalibrierung der Poliermaschine.<br><b>Empfehlung:</b> Sofortige Bad-Filter-Bestellung und Poliermaschinen-Kalibrierung vorziehen.", actions: [{ label: "Qualitätskontrolle öffnen" }, { label: "Maßnahmen prüfen" }] }} linkedAreas={[{ label: "Qualitätskontrolle", href: "/kontrolle" }, { label: "Bäder-Management", href: "/baeder" }]} />
 
-      <DetailOverlay open={overlay === 'ursachen'} onClose={() => setOverlay(null)} title="Ursachenverteilung — Detail">
-        <div style={{ color: 'var(--ink)' }}>
-          <p style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 16 }}>Detaillierte Aufschlüsselung nach Fehlerart:</p>
-          {[
-            { typ: 'Pickelbildung', anteil: 45, station: 'Galvanik-Zink (Bad 2)', ursache: 'Verunreinigte Badchemie', loesung: 'Neue Filter bestellt' },
-            { typ: 'Maßabweichung', anteil: 30, station: 'Politur manuell', ursache: 'Kalibrierfehler', loesung: 'Kalibrierung geplant' },
-            { typ: 'Kratzer', anteil: 25, station: 'Schleifen', ursache: 'Schleifscheibe verschlissen', loesung: 'Austausch am Wochenende' },
-          ].map(u => (
-            <div key={u.typ} style={{ padding: 12, background: 'var(--sf2)', borderRadius: 10, border: '1px solid var(--bd)', marginBottom: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                <span style={{ fontWeight: 700, fontSize: 14 }}>{u.typ}</span>
-                <span style={{ fontWeight: 700, color: 'var(--warn)' }}>{u.anteil}%</span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--ink2)', lineHeight: 1.5 }}>
-                <p><strong>Station:</strong> {u.station}</p>
-                <p><strong>Ursache:</strong> {u.ursache}</p>
-                <p style={{ color: 'var(--pos)' }}><strong>Lösung:</strong> {u.loesung}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'ursachen'} onClose={() => setOverlay(null)} icon={<ShieldCheck className="w-5 h-5" style={{ color: 'var(--neg)' }} />} title="Ursachenanalyse" subtitle="Verteilung der häufigsten Fehlerursachen" accentBg="linear-gradient(180deg, var(--negbg), transparent)" hero={{ kicker: "Was geht schief", value: "3 Fehlertypen", changePill: { text: "Pickelbildung führt (45%)", variant: "red" }, meta: "3 Stationen betroffen · Lösungen in Umsetzung" }} composition={{ title: "C · Fehlerursachen im Detail", rows: [ { avatar: "P", avatarColor: "#D14F3D", name: "Pickelbildung", meta: "45% · Galvanik-Zink (Bad 2) · Verunreinigte Badchemie · Lösung: Neue Filter bestellt", amount: "45 %" }, { avatar: "M", avatarColor: "#FBBF24", name: "Maßabweichung", meta: "30% · Politur manuell · Kalibrierfehler · Lösung: Kalibrierung geplant", amount: "30 %" }, { avatar: "K", avatarColor: "#60A5FA", name: "Kratzer", meta: "25% · Schleifen · Schleifscheibe verschlissen · Lösung: Austausch am Wochenende", amount: "25 %" } ] }} insight={{ body: "<b>Beobachtung:</b> Pickelbildung ist die häufigste Ursache (45%) und direkt auf das verschlechterte Nickelbad (PH 6,3) zurückzuführen.<br><b>Zusammenhang:</b> Korreliert mit den Ergebnissen aus der Badstatus-Analyse." }} linkedAreas={[{ label: "Qualitätskontrolle", href: "/kontrolle" }, { label: "Bäder-Management", href: "/baeder" }]} />
 
-      <DetailOverlay open={overlay === 'nacharbeit'} onClose={() => setOverlay(null)} title="Nacharbeitskosten">
-        <div style={{ color: 'var(--ink)' }}>
-          <div style={{ textAlign: 'center', marginBottom: 20 }}>
-            <div style={{ fontSize: 40, fontWeight: 800, color: 'var(--warn)' }}>420 €</div>
-            <div style={{ fontSize: 12, color: 'var(--ink2)' }}>Durchschnitt pro Woche</div>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.6, marginBottom: 12 }}>
-            Die Nacharbeitskosten setzen sich zusammen aus Materialverbrauch für Neuanfertigung, verlorener Arbeitszeit und Express-Zuschlägen bei verspäteter Lieferung.
-          </p>
-          <div style={{ padding: 12, background: 'var(--infobg)', borderRadius: 10, fontSize: 12 }}>
-            <strong>Hochrechnung Mai:</strong> ~1.680 € Nacharbeitskosten gesamt. Das entspricht 4% des Monats-Deckungsbeitrags.
-          </div>
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'nacharbeit'} onClose={() => setOverlay(null)} icon={<AlertTriangle className="w-5 h-5" style={{ color: 'var(--warn)' }} />} title="Nacharbeitskosten" subtitle="Material · Arbeitszeit · Express-Zuschlag" accentBg="linear-gradient(180deg, var(--warnbg), transparent)" hero={{ kicker: "Was kostet dich Nacharbeit", value: "420 €/Wo.", changePill: { text: "~1.680 €/Monat — 4% vom DB", variant: "amber" }, meta: "Material + Arbeitszeit + Express-Zuschlag", sparkValues: [180, 150, 340, 420] }} crossKpi={[ { label: "Hochrechnung Mai", value: "1.680 €", delta: "4% vom Deckungsbeitrag", deltaColor: "var(--warn)", accentColor: "var(--warn)" }, { label: "Material-Anteil", value: "~40 %", delta: "Neuanfertigung", deltaColor: "var(--info)", accentColor: "var(--info)" }, { label: "Express-Anteil", value: "~25 %", delta: "Verspätete Lieferung", deltaColor: "var(--neg)", accentColor: "var(--neg)" } ]} insight={{ body: "<b>Beobachtung:</b> 420 €/Woche = ~1.680 €/Monat. Das sind 4% des Deckungsbeitrags.<br><b>Empfehlung:</b> Senkung der Fehlerquote durch Präventionsmaßnahmen würde direkt die Marge verbessern." }} linkedAreas={[{ label: "BWA", href: "/buchhaltung/bwa" }, { label: "Qualitätskontrolle", href: "/kontrolle" }]} />
 
-      <DetailOverlay open={overlay === 'praevention'} onClose={() => setOverlay(null)} title="Präventionsmaßnahmen — Übersicht">
-        <div style={{ color: 'var(--ink)' }}>
-          <p style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 16 }}>Laufende und geplante Maßnahmen zur Senkung der Fehlerquote:</p>
-          {[
-            { status: 'Bestellt', aktion: 'Neue Bad-Filter für Galvanik-Zink', termin: '12.06.2026', nutzen: 'Senkung Pickelbildung um ~60%' },
-            { status: 'Geplant', aktion: 'Kalibrierung Poliermaschine', termin: 'KW24 (Sa)', nutzen: 'Reduktion Maßabweichungen' },
-            { status: 'Umgesetzt', aktion: 'Eingangskontrolle-Checkliste aktualisiert', termin: 'Erledigt', nutzen: 'Früheres Erkennen fehlerhafter Zulieferteile' },
-            { status: 'Geplant', aktion: 'Schulung Schleifpersonal', termin: 'KW25', nutzen: 'Weniger Kratzer durch bessere Technik' },
-          ].map((m, i) => (
-            <div key={i} style={{ padding: 12, background: 'var(--sf2)', borderRadius: 10, border: '1px solid var(--bd)', marginBottom: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ fontWeight: 700, fontSize: 13 }}>{m.aktion}</span>
-                <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 6, fontWeight: 700, background: m.status === 'Umgesetzt' ? 'var(--posbg)' : m.status === 'Bestellt' ? 'var(--infobg)' : 'var(--warnbg)', color: m.status === 'Umgesetzt' ? 'var(--pos)' : m.status === 'Bestellt' ? 'var(--info)' : 'var(--warn)' }}>{m.status}</span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--ink2)', lineHeight: 1.5 }}>
-                <p><strong>Termin:</strong> {m.termin}</p>
-                <p style={{ color: 'var(--pos)' }}><strong>Erwarteter Nutzen:</strong> {m.nutzen}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'praevention'} onClose={() => setOverlay(null)} icon={<Shield className="w-5 h-5" style={{ color: 'var(--pos)' }} />} title="Präventionsmaßnahmen" subtitle="Laufende und geplante Maßnahmen" accentBg="linear-gradient(180deg, var(--posbg), transparent)" hero={{ kicker: "Was tust du gegen Fehler", value: "4 Maßnahmen", changePill: { text: "1 umgesetzt, 1 bestellt, 2 geplant", variant: "teal" }, meta: "Zielsenkung: Reklamationsquote → ≤4%" }} composition={{ title: "C · Maßnahmen übersicht", rows: [ { avatar: "✔", avatarColor: "#34D399", name: "Eingangskontrolle-Checkliste", meta: "Status: Umgesetzt · Nutzen: Früheres Erkennen fehlerhafter Zulieferteile", amount: "Erledigt" }, { avatar: "📦", avatarColor: "#60A5FA", name: "Neue Bad-Filter (Galvanik-Zink)", meta: "Status: Bestellt · Eintreffen 12.06. · Nutzen: Senkung Pickelbildung um ~60%", amount: "12.06." }, { avatar: "⚙", avatarColor: "#FBBF24", name: "Kalibrierung Poliermaschine", meta: "Status: Geplant · KW24 Samstag · Nutzen: Reduktion Maßabweichungen", amount: "KW24" }, { avatar: "📋", avatarColor: "#FBBF24", name: "Schulung Schleifpersonal", meta: "Status: Geplant · KW25 · Nutzen: Weniger Kratzer durch bessere Technik", amount: "KW25" } ] }} insight={{ body: "<b>Beobachtung:</b> 4 Maßnahmen aktiv. Die wichtigsten (Bad-Filter + Kalibrierung) werden in den nächsten 2 Wochen umgesetzt.<br><b>Prognose:</b> Bei erfolgreicher Umsetzung aller Maßnahmen sinkt die Reklamationsquote voraussichtlich auf ≤4%." }} linkedAreas={[{ label: "Qualitätskontrolle", href: "/kontrolle" }, { label: "Bäder-Management", href: "/baeder" }]} />
     </PerformanceDetailLayout>
   );
 }

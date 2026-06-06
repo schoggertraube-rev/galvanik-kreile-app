@@ -23,6 +23,7 @@ export interface RechnungFilter {
   zeitraum?: Zeitraum;
   status?: AusgangsrechnungStatus;
   kundeId?: string;
+  ueberfaellig?: boolean;
 }
 
 // ── Enums / Unions ───────────────────────────────────────────────────────
@@ -114,6 +115,13 @@ export interface KraftstoffDetail {
   ort?: string;
 }
 
+export interface AusgangsrechnungPosition {
+  id?: string; // Optional for creation
+  beschreibung: string;
+  menge: number;
+  einzelpreisNetto: number;
+}
+
 export interface Ausgangsrechnung {
   id: string;
   nummer: string;
@@ -129,6 +137,9 @@ export interface Ausgangsrechnung {
   status: AusgangsrechnungStatus;
   mahnstufe: number;
   erechnungXml?: string;
+  leadId?: string;
+  bemerkung?: string;
+  positionen?: AusgangsrechnungPosition[]; // Client-seitig beigefügt
 }
 
 export interface Zahlung {
@@ -312,4 +323,24 @@ export interface Quittung {
   zeitpunkt: string;
   status: "akzeptiert" | "abgelehnt";
   fehler?: string;
+}
+
+
+export interface Kostenposten {
+  id: string;
+  bezeichnung: string;
+  art: "fix" | "variabel";
+  kategorie?: string;
+  betrag: number;
+  intervall: "einmalig" | "monatlich" | "jaehrlich";
+  belegId?: string;
+  kampagneId?: string;
+  giltAb?: string;
+  giltBis?: string;
+  isDemo?: boolean;
+}
+
+export interface KostenpostenFilter {
+  art?: "fix" | "variabel";
+  kategorie?: string;
 }

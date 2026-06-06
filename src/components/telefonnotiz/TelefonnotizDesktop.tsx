@@ -71,6 +71,9 @@ export function TelefonnotizDesktop() {
   const [showReminder, setShowReminder] = useState(false);
   const [reminderTime, setReminderTime] = useState("Heute 17:00");
   const [showEmailMock, setShowEmailMock] = useState(false);
+  
+  // Marketing Source State
+  const [quelleTyp, setQuelleTyp] = useState("weiß nicht");
 
   // Parked Call Global State
   const { parkCall } = useParkedCall();
@@ -277,6 +280,7 @@ export function TelefonnotizDesktop() {
           fields: result?.fields,
           actions: result?.liveActions,
           mode: saveMode,
+          quelleTyp,
         },
       };
 
@@ -1058,6 +1062,25 @@ export function TelefonnotizDesktop() {
             <h3 style={{ fontFamily: "'Fraunces', serif", fontSize: 21, margin: 0, marginBottom: 6 }}>Was soll passieren?</h3>
             <div style={{ fontSize: 13, color: "var(--tn-ink-soft)", marginBottom: 18, lineHeight: 1.5 }}>
               Egal welcher Weg — alles landet sauber. Nichts versandet.
+            </div>
+
+            {/* Marketing Dropdown */}
+            <div style={{ marginBottom: 18, padding: "12px 16px", background: "var(--tn-cream-2)", borderRadius: 12, border: "1px solid var(--tn-line)" }}>
+              <label style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--tn-ink-mute)", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 6 }}>
+                Wie haben Sie von uns gehört?
+              </label>
+              <select 
+                value={quelleTyp} 
+                onChange={(e) => setQuelleTyp(e.target.value)}
+                style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: "1px solid var(--tn-line)", background: "var(--tn-paper)", color: "var(--tn-ink)", fontSize: 13, fontFamily: "'Manrope', sans-serif" }}
+              >
+                <option value="weiß nicht">Weiß nicht / keine Angabe</option>
+                <option value="Empfehlung">Empfehlung / Bestandskunde</option>
+                <option value="Google Suche">Google Suche</option>
+                <option value="Instagram">Instagram</option>
+                <option value="Messe">Messe / Event</option>
+                <option value="Zeitung/Werbung">Zeitung / Printwerbung</option>
+              </select>
             </div>
 
             {/* Auto */}

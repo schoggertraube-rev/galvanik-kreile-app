@@ -1,14 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowRight, Layers, PlayCircle, CheckCircle2, AlertTriangle } from "lucide-react";
-import { INITIAL_ORDERS, MockOrder } from "@/lib/mockData";
+import { ArrowRight, Layers, PlayCircle, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
+import { ordersRepository, Order } from "@/lib/repositories/ordersRepository";
 import { OrderWideCard, UrgencyType } from "@/components/orders/OrderWideCard";
 
 type GalvanikBucket = "ready" | "in_progress" | "finished";
 
-function sortByUrgency(orders: MockOrder[]) {
+function sortByUrgency(orders: Order[]) {
   const priorityRank: Record<string, number> = {
     red: 0,
     orange: 1,
@@ -32,19 +32,35 @@ function mapRiskToUrgency(risk: string): UrgencyType {
 
 export default function GalvanikPage() {
   const [activeBucket, setActiveBucket] = useState<GalvanikBucket>("in_progress");
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const data = await ordersRepository.getAll();
+        setAllOrders(data);
+      } catch (err) {
+        console.error("Failed to load orders in Galvanik", err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    load();
+  }, []);
 
   // Get orders in Beschichtung/Galvanik (we also include some global ones for demo)
-  const galvanikOrders = INITIAL_ORDERS.filter(o => o.station === "beschichtung" || o.station === "galvanik" || o.statusText?.toLowerCase().includes("bad") || o.statusText?.toLowerCase().includes("qs"));
+  const galvanikOrders = allOrders.filter(o => o.station === "beschichtung" || o.station === "galvanik" || o.currentStationId === "beschichtung" || o.currentStationId === "galvanik" || o.statusText?.toLowerCase().includes("bad") || o.statusText?.toLowerCase().includes("qs"));
 
-  // Buckets assignment (mock logic)
-  const readyOrders = sortByUrgency(galvanikOrders.filter(o => o.status === "ready" || o.statusText?.toLowerCase().includes("bereit") || o.statusText?.toLowerCase().includes("warte")));
-  const inProgressOrders = sortByUrgency(galvanikOrders.filter(o => o.status === "in_progress" || o.statusText?.toLowerCase().includes("bad") || o.statusText?.toLowerCase().includes("läuft")));
+  // Buckets assignment
+  const readyOrders = sortByUrgency(galvanikOrders.filter(o => o.status === "ready" || o.statusText?.toLowerCase().includes("bereit") || o.statusText?.toLowerCase().includes("warte") || o.station === "beschichtung" || o.currentStationId === "beschichtung"));
+  const inProgressOrders = sortByUrgency(galvanikOrders.filter(o => o.status === "in_progress" || o.statusText?.toLowerCase().includes("bad") || o.statusText?.toLowerCase().includes("läuft") || o.station === "galvanik" || o.currentStationId === "galvanik"));
   const finishedOrders = sortByUrgency(galvanikOrders.filter(o => o.status === "done" || o.status === "quality_check" || o.statusText?.toLowerCase().includes("fertig") || o.statusText?.toLowerCase().includes("qs")));
 
   // Top Urgent overall
   const topUrgent = sortByUrgency(galvanikOrders).filter(o => o.risk === "red" || o.risk === "orange").slice(0, 3);
 
-  const renderOrderList = (orders: MockOrder[], bucket: GalvanikBucket) => {
+  const renderOrderList = (orders: Order[], bucket: GalvanikBucket) => {
     const isActive = activeBucket === bucket;
     return (
       <div className={`flex flex-col gap-3 transition-all duration-500 ${isActive ? 'opacity-100' : 'opacity-50 grayscale-[0.5] hover:opacity-70'}`}>
@@ -56,10 +72,10 @@ export default function GalvanikPage() {
               key={o.id}
               id={o.id}
               orderNumber={o.orderNumber}
-              customerName={o.customerName}
+              customerName={o.customerName || "Unbekannt"}
               article={o.task || "Unbekannt"}
-              surface={o.parts?.[0]?.finish || "Offen"}
-              surfaceKey={o.parts?.[0]?.finish?.toLowerCase().includes("chrom") ? "chrom" : o.parts?.[0]?.finish?.toLowerCase().includes("nickel") ? "nickel" : o.parts?.[0]?.finish?.toLowerCase().includes("gold") ? "gold" : "offen"}
+              surface={((o.parts?.[0] as any)?.finish) || "Offen"}
+              surfaceKey={((o.parts?.[0] as any)?.finish?.toLowerCase()?.includes("chrom")) ? "chrom" : ((o.parts?.[0] as any)?.finish?.toLowerCase()?.includes("nickel")) ? "nickel" : ((o.parts?.[0] as any)?.finish?.toLowerCase()?.includes("gold")) ? "gold" : "offen"}
               urgency={mapRiskToUrgency(o.risk)}
               dueValue={o.dueValue || "--"}
               dueLabel={o.dueLabel || "Tage"}
@@ -81,6 +97,14 @@ export default function GalvanikPage() {
           Galvanik Bearbeitung
           <span className="flex-1 h-px bg-[#d8d0c4]" />
         </div>
+
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 text-[#9e9689]">
+            <Loader2 className="w-8 h-8 animate-spin mb-4" />
+            <p>Lade Galvanik Aufträge...</p>
+          </div>
+        ) : (
+          <>
         
         {/* Top Urgent */}
         {topUrgent.length > 0 && (
@@ -94,10 +118,10 @@ export default function GalvanikPage() {
                   key={`urg-${o.id}`}
                   id={o.id}
                   orderNumber={o.orderNumber}
-                  customerName={o.customerName}
+                  customerName={o.customerName || "Unbekannt"}
                   article={o.task || "Unbekannt"}
-                  surface={o.parts?.[0]?.finish || "Offen"}
-                  surfaceKey={o.parts?.[0]?.finish?.toLowerCase().includes("chrom") ? "chrom" : "offen"}
+                  surface={((o.parts?.[0] as any)?.finish) || "Offen"}
+                  surfaceKey={((o.parts?.[0] as any)?.finish?.toLowerCase()?.includes("chrom")) ? "chrom" : "offen"}
                   urgency={mapRiskToUrgency(o.risk)}
                   dueValue={o.dueValue || "--"}
                   dueLabel={o.dueLabel || "Tage"}
@@ -185,13 +209,13 @@ export default function GalvanikPage() {
           </div>
         </div>
 
-        <div className="mt-12 text-center">
-          <span className="inline-block text-[10px] font-bold bg-[#fef3e2] text-[#c8922a] px-3 py-1 rounded-full border border-[#c8922a]/20">
-            Aus vorhandenen Testaufträgen berechnet (Demo-Auswertung)
-          </span>
-        </div>
+        {/* Demo Tag Removed */}
+
+          </>
+        )}
 
       </div>
     </div>
   );
 }
+

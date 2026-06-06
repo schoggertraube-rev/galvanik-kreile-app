@@ -1,7 +1,8 @@
 "use client";
 
 import { usePageView } from "@/hooks/usePageView";
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, Camera, Upload, CheckCircle2, Calendar as CalendarIcon, ReceiptText, WifiOff } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
@@ -80,11 +81,28 @@ function mapBelegToEntry(b: Beleg): BelegEntry {
 
 export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }) {
   usePageView();
-  const [activeFilter, setActiveFilter] = useState("alle");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const activeFilter = searchParams.get("kategorie") || "alle";
+
+  const setActiveFilter = (catId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (catId === "alle") {
+      params.delete("kategorie");
+    } else {
+      params.set("kategorie", catId);
+    }
+    router.push(`/buchhaltung/belege?${params.toString()}`);
+  };
+
   const [belege, setBelege] = useState<Beleg[]>(initialBelege);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [overlayMode, setOverlayMode] = useState<"foto" | "upload">("upload");
   const offlineManager = useOfflineManager();
+  
+  useEffect(() => {
+    setBelege(initialBelege);
+  }, [initialBelege]);
   
   const belegeEntries = useMemo(() => belege.map(mapBelegToEntry), [belege]);
 
@@ -136,9 +154,7 @@ export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }
     }
   }, [offlineManager]);
 
-  const filteredBelege = activeFilter === "alle"
-    ? belegeEntries
-    : belegeEntries.filter(b => b.categoryId === activeFilter);
+  const filteredBelege = belegeEntries; // Data is already filtered by server
 
   const recentBelege = belegeEntries.slice(0, 3);
 

@@ -39,6 +39,49 @@ export function DiagnosticsWidget() {
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
+  
+  // Dragging state for the dialog
+  const [dialogPos, setDialogPos] = useState({ x: 0, y: 0 });
+  const [isDraggingDialog, setIsDraggingDialog] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0, initialX: 0, initialY: 0 });
+
+  useEffect(() => {
+    setDialogPos({ x: window.innerWidth / 2 - 190, y: window.innerHeight / 2 - 150 });
+  }, []);
+
+  // Center dialog on mount if showMarkDialog becomes true
+  useEffect(() => {
+    if (showMarkDialog) {
+      setDialogPos({ x: window.innerWidth / 2 - 190, y: window.innerHeight / 2 - 150 });
+    }
+  }, [showMarkDialog]);
+
+  // Drag handlers
+  const onPointerDown = (e: React.PointerEvent) => {
+    setIsDraggingDialog(true);
+    dragStartRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      initialX: dialogPos.x,
+      initialY: dialogPos.y
+    };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!isDraggingDialog) return;
+    const dx = e.clientX - dragStartRef.current.x;
+    const dy = e.clientY - dragStartRef.current.y;
+    setDialogPos({
+      x: dragStartRef.current.initialX + dx,
+      y: dragStartRef.current.initialY + dy
+    });
+  };
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    setIsDraggingDialog(false);
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
+  };
 
   // Auto-scroll log
   useEffect(() => {
@@ -205,53 +248,72 @@ export function DiagnosticsWidget() {
       {/* Mark Problem Dialog */}
       {showMarkDialog && (
         <div style={{
-          position: "fixed", inset: 0, zIndex: 10000, background: "rgba(0,0,0,0.5)",
-          display: "grid", placeItems: "center",
-        }} onClick={() => setShowMarkDialog(false)}>
-          <div style={{
-            background: "#1E293B", borderRadius: 16, padding: 20, width: "min(380px, 90vw)",
-            boxShadow: "0 16px 48px rgba(0,0,0,0.5)",
-          }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ color: "#E2E8F0", fontSize: 15, fontWeight: 700, margin: "0 0 12px" }}>🚩 Problem markieren</h3>
-            <textarea
-              value={markText}
-              onChange={e => setMarkText(e.target.value)}
-              placeholder="Was ist gerade schiefgelaufen? z.B. 'Button reagiert nicht' oder 'Kamera zeigt schwarz'"
-              autoFocus
-              style={{
-                width: "100%", minHeight: 80, borderRadius: 10, border: "1px solid #334155",
-                background: "#0F172A", color: "#E2E8F0", padding: "10px 12px", fontSize: 13,
-                fontFamily: "inherit", resize: "vertical",
-              }}
-            />
-            
-            {screenshot ? (
-              <div style={{ position: "relative", marginTop: 12, borderRadius: 8, overflow: "hidden", border: "1px solid #334155" }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={screenshot} alt="Screenshot" style={{ width: "100%", maxHeight: 150, objectFit: "cover", display: "block" }} />
-                <button 
-                  onClick={() => setScreenshot(null)}
-                  style={{ position: "absolute", top: 4, right: 4, background: "rgba(220,38,38,0.9)", color: "white", border: "none", borderRadius: "50%", width: 20, height: 20, display: "grid", placeItems: "center", cursor: "pointer" }}
-                  title="Bild entfernen"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            ) : (
+          position: "fixed", 
+          zIndex: 10000, 
+          left: dialogPos.x, 
+          top: dialogPos.y,
+          background: "#1E293B", 
+          borderRadius: 16, 
+          padding: 20, 
+          width: "min(380px, 90vw)",
+          boxShadow: "0 16px 48px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1)",
+        }} onClick={e => e.stopPropagation()}>
+          <h3 
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            style={{ 
+              color: "#E2E8F0", 
+              fontSize: 15, 
+              fontWeight: 700, 
+              margin: "0 -20px 12px", 
+              padding: "0 20px 12px",
+              cursor: isDraggingDialog ? "grabbing" : "grab",
+              borderBottom: "1px solid #334155",
+              userSelect: "none",
+              touchAction: "none"
+            }}
+          >
+            🚩 Problem markieren
+          </h3>
+          <textarea
+            value={markText}
+            onChange={e => setMarkText(e.target.value)}
+            placeholder="Was ist gerade schiefgelaufen? z.B. 'Button reagiert nicht' oder 'Kamera zeigt schwarz'"
+            autoFocus
+            style={{
+              width: "100%", minHeight: 80, borderRadius: 10, border: "1px solid #334155",
+              background: "#0F172A", color: "#E2E8F0", padding: "10px 12px", fontSize: 13,
+              fontFamily: "inherit", resize: "vertical",
+            }}
+          />
+          
+          {screenshot ? (
+            <div style={{ position: "relative", marginTop: 12, borderRadius: 8, overflow: "hidden", border: "1px solid #334155" }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={screenshot} alt="Screenshot" style={{ width: "100%", maxHeight: 150, objectFit: "cover", display: "block" }} />
               <button 
-                onClick={() => { setShowMarkDialog(false); setIsDrawing(true); }}
-                style={{ width: "100%", marginTop: 12, padding: "8px", background: "transparent", color: "#94A3B8", border: "1px dashed #334155", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12 }}
+                onClick={() => setScreenshot(null)}
+                style={{ position: "absolute", top: 4, right: 4, background: "rgba(220,38,38,0.9)", color: "white", border: "none", borderRadius: "50%", width: 20, height: 20, display: "grid", placeItems: "center", cursor: "pointer" }}
+                title="Bild entfernen"
               >
-                <Camera size={14} /> Screenshot & Zeichnen
-              </button>
-            )}
-
-            <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
-              <button onClick={() => setShowMarkDialog(false)} style={{ ...btnStyle, padding: "6px 14px", fontSize: 12 }}>Abbrechen</button>
-              <button onClick={handleMark} style={{ padding: "6px 14px", fontSize: 12, fontWeight: 600, background: "#F97316", color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}>
-                Markieren
+                <X size={12} />
               </button>
             </div>
+          ) : (
+            <button 
+              onClick={() => { setShowMarkDialog(false); setIsDrawing(true); }}
+              style={{ width: "100%", marginTop: 12, padding: "8px", background: "transparent", color: "#94A3B8", border: "1px dashed #334155", borderRadius: 8, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 12 }}
+            >
+              <Camera size={14} /> Screenshot & Zeichnen
+            </button>
+          )}
+
+          <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "flex-end" }}>
+            <button onClick={() => setShowMarkDialog(false)} style={{ ...btnStyle, padding: "6px 14px", fontSize: 12 }}>Abbrechen</button>
+            <button onClick={handleMark} style={{ padding: "6px 14px", fontSize: 12, fontWeight: 600, background: "#F97316", color: "white", border: "none", borderRadius: 8, cursor: "pointer" }}>
+              Markieren
+            </button>
           </div>
         </div>
       )}

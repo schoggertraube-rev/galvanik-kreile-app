@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { Banknote, TrendingUp, ArrowRight, Target, BarChart3, Users, Zap, Calculator } from 'lucide-react';
 import { PerformanceDetailLayout } from '../PerformanceDetailLayout';
-import { DetailOverlay } from '@/components/ui/DetailOverlay';
+import { AnalysisOverlay } from '@/components/ui/AnalysisOverlay';
 
 export default function UmsatzMargeDetail() {
   const [overlay, setOverlay] = useState<string | null>(null);
@@ -201,93 +201,19 @@ export default function UmsatzMargeDetail() {
           <div className="pd-tile-foot">Details ansehen <ArrowRight className="w-3 h-3" /></div>
         </div>
 
-        {/* Module Links */}
-        <div className="pd-module-links">
-          <Link href="/finanzen" className="pd-module-link">Finanz-Dashboard <ArrowRight className="w-3 h-3" /></Link>
-          <Link href="/orders" className="pd-module-link">Auftragsbuch <ArrowRight className="w-3 h-3" /></Link>
-          <Link href="/customers" className="pd-module-link">Kundenkartei <ArrowRight className="w-3 h-3" /></Link>
-        </div>
+
       </div>
 
-      {/* OVERLAYS */}
-      <DetailOverlay open={overlay === 'umsatz'} onClose={() => setOverlay(null)} title="Umsatz netto — Monatsübersicht">
-        <div style={{ color: 'var(--ink)' }}>
-          <p style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 16 }}>Kumulierter Nettoumsatz im laufenden Monat, aufgeteilt nach Wochen.</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {[{ w: 'KW19', v: 8200 }, { w: 'KW20', v: 10400 }, { w: 'KW21', v: 12600 }, { w: 'KW22', v: 11180 }].map(r => (
-              <div key={r.w} className="pd-bar-row">
-                <div className="pd-bar-label">{r.w}</div>
-                <div className="pd-bar-track"><div className="pd-bar-fill" style={{ width: `${(r.v / 14000) * 100}%`, background: 'var(--pos)' }} /></div>
-                <div className="pd-bar-val">{r.v.toLocaleString('de-DE')} €</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 16, padding: 12, background: 'var(--posbg)', borderRadius: 10, fontSize: 12, lineHeight: 1.6 }}>
-            <strong>Stärkste Kunden diesen Monat:</strong> Museum Lenzburg (18k €), Schrauben Meier (12k €), Autohaus Berger (8.6k €).
-          </div>
-        </div>
-      </DetailOverlay>
+      {/* OVERLAYS — standardized AnalysisOverlay pattern */}
+      <AnalysisOverlay open={overlay === 'umsatz'} onClose={() => setOverlay(null)} icon={<Banknote className="w-5 h-5" style={{ color: 'var(--pos)' }} />} title="Umsatz netto" subtitle="Kumulierter Nettoumsatz im laufenden Monat" accentBg="linear-gradient(180deg, var(--posbg), transparent)" hero={{ kicker: "Was nimmst du ein", value: "42.380 €", changePill: { text: "+7,2% vs. Vorjahr", variant: "teal" }, meta: "Laufender Monat · 4 Wochen erfasst", sparkValues: [8200, 18600, 31200, 42380] }} composition={{ title: "C · Umsatz pro Woche", rows: [{ avatar: "19", avatarColor: "#34D399", name: "KW19", meta: "1. Woche des Monats", amount: "8.200 €" }, { avatar: "20", avatarColor: "#34D399", name: "KW20", meta: "2. Woche — stärkste Woche", amount: "10.400 €" }, { avatar: "21", avatarColor: "#34D399", name: "KW21", meta: "3. Woche", amount: "12.600 €" }, { avatar: "22", avatarColor: "#60A5FA", name: "KW22", meta: "Laufende Woche", amount: "11.180 €" }] }} crossKpi={[{ label: "Vorjahresumsatz", value: "39.540 €", delta: "+7,2% aktuell darüber", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Stärkster Kunde", value: "18.400 €", delta: "Museum Lenzburg", deltaColor: "var(--info)", accentColor: "var(--info)" }]} insight={{ body: "<b>Beobachtung:</b> Umsatz 7,2% über Vorjahr. Stärkste Woche war KW20 mit 10.400 €.<br><b>Hinweis:</b> Museum Lenzburg macht 43% des Monatsumsatzes aus — Klumpenrisiko beachten." }} linkedAreas={[{ label: "BWA", href: "/buchhaltung/bwa" }, { label: "Auftragsbuch", href: "/orders" }]} />
 
-      <DetailOverlay open={overlay === 'db'} onClose={() => setOverlay(null)} title="Deckungsbeitrag — Margenanalyse">
-        <div style={{ color: 'var(--ink)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginBottom: 20 }}>
-            <div><div style={{ fontSize: 28, fontWeight: 800, color: 'var(--pos)' }}>27,9%</div><div style={{ fontSize: 11, color: 'var(--ink2)' }}>Marge aktuell</div></div>
-            <div><div style={{ fontSize: 28, fontWeight: 800 }}>11.840 €</div><div style={{ fontSize: 11, color: 'var(--ink2)' }}>Deckungsbeitrag</div></div>
-          </div>
-          <div className="pd-stack" style={{ marginBottom: 16 }}>
-            <div className="pd-stack-seg" style={{ width: '40%', background: 'var(--info)' }}>Fix 40%</div>
-            <div className="pd-stack-seg" style={{ width: '32%', background: 'var(--warn)' }}>Var 32%</div>
-            <div className="pd-stack-seg" style={{ width: '28%', background: 'var(--pos)' }}>Marge 28%</div>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.6 }}>Die Marge liegt leicht über dem Branchendurchschnitt von 25%. Steigende Goldpreise könnten die Marge ab nächster Woche unter Druck setzen.</p>
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'db'} onClose={() => setOverlay(null)} icon={<BarChart3 className="w-5 h-5" style={{ color: 'var(--info)' }} />} title="Deckungsbeitrag" subtitle="Marge nach variablen Kosten" accentBg="linear-gradient(180deg, var(--infobg), transparent)" hero={{ kicker: "Was bleibt nach den variablen Kosten", value: "11.840 €", changePill: { text: "27,9% Marge", variant: "teal" }, meta: "Branchendurchschnitt: 25% — leicht darüber" }} crossKpi={[{ label: "Fixkosten", value: "40 %", delta: "Personal, Miete, AfA", deltaColor: "var(--info)", accentColor: "var(--info)" }, { label: "Variable Kosten", value: "32 %", delta: "Energie, Material, Chemie", deltaColor: "var(--warn)", accentColor: "var(--warn)" }, { label: "Marge", value: "28 %", delta: "Über Branchenschnitt", deltaColor: "var(--pos)", accentColor: "var(--pos)" }]} insight={{ body: "<b>Beobachtung:</b> Marge 27,9% liegt leicht über dem Branchendurchschnitt von 25%.<br><b>Warnung:</b> Steigende Goldpreise könnten die Marge ab nächster Woche unter Druck setzen." }} linkedAreas={[{ label: "BWA", href: "/buchhaltung/bwa" }, { label: "Ausgaben", href: "/buchhaltung/ausgaben" }]} />
 
-      <DetailOverlay open={overlay === 'gewinn'} onClose={() => setOverlay(null)} title="Gewinn grob — Erlöse vs. Kosten">
-        <div style={{ color: 'var(--ink)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginBottom: 20 }}>
-            <div><div style={{ fontSize: 28, fontWeight: 800, color: 'var(--pos)' }}>42.380 €</div><div style={{ fontSize: 11, color: 'var(--ink2)' }}>Erlöse</div></div>
-            <div><div style={{ fontSize: 28, fontWeight: 800, color: 'var(--neg)' }}>30.540 €</div><div style={{ fontSize: 11, color: 'var(--ink2)' }}>Kosten gesamt</div></div>
-            <div><div style={{ fontSize: 28, fontWeight: 800, color: 'var(--pos)' }}>8.200 €</div><div style={{ fontSize: 11, color: 'var(--ink2)' }}>Rohgewinn</div></div>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.6 }}>Hinweis: Der Rohgewinn berücksichtigt keine Sonderkosten (z.B. einmalige Reparaturen) oder ausstehende Rechnungen.</p>
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'gewinn'} onClose={() => setOverlay(null)} icon={<TrendingUp className="w-5 h-5" style={{ color: 'var(--pos)' }} />} title="Gewinn grob" subtitle="Erlöse minus alle erfassten Kosten" accentBg="linear-gradient(180deg, var(--posbg), transparent)" hero={{ kicker: "Was bleibt am Ende übrig", value: "8.200 €", changePill: { text: "Rohgewinn laufender Monat", variant: "teal" }, meta: "Erlöse 42.380 € − Kosten 30.540 € = 8.200 € netto", sparkValues: [5400, 6200, 7100, 8200] }} crossKpi={[{ label: "Erlöse", value: "42.380 €", delta: "Nettoumsatz", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Kosten gesamt", value: "30.540 €", delta: "Fix + Variabel", deltaColor: "var(--neg)", accentColor: "var(--neg)" }, { label: "Rohgewinn", value: "8.200 €", delta: "19,4% Rendite", deltaColor: "var(--pos)", accentColor: "var(--pos)" }]} insight={{ body: "<b>Hinweis:</b> Der Rohgewinn berücksichtigt keine Sonderkosten (z.B. einmalige Reparaturen) oder ausstehende Rechnungen." }} linkedAreas={[{ label: "BWA", href: "/buchhaltung/bwa" }]} />
 
-      <DetailOverlay open={overlay === 'forecast'} onClose={() => setOverlay(null)} title="Forecast — Hochrechnung Monatsende">
-        <div style={{ color: 'var(--ink)' }}>
-          <div style={{ textAlign: 'center', marginBottom: 20 }}>
-            <div style={{ fontSize: 40, fontWeight: 800, color: 'var(--purple)' }}>~145.000 €</div>
-            <div style={{ fontSize: 12, color: 'var(--ink2)' }}>Prognostizierter Monatsumsatz</div>
-          </div>
-          <div style={{ padding: 12, background: 'var(--purpbg)', borderRadius: 10, fontSize: 12, lineHeight: 1.6, marginBottom: 16 }}>
-            <strong>Methodik:</strong> Linearer Trend basierend auf den bisherigen 22 Werktagen. Bei 5 verbleibenden Werktagen und aktuellem Auftragsbestand.
-          </div>
-          <div style={{ padding: 12, background: 'var(--posbg)', borderRadius: 10, fontSize: 12, lineHeight: 1.6 }}>
-            <strong>Szenario Optimistisch:</strong> Falls 3 offene Großaufträge bestätigt werden: ~158.000 €
-          </div>
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'forecast'} onClose={() => setOverlay(null)} icon={<Target className="w-5 h-5" style={{ color: 'var(--purple, #6D28D9)' }} />} title="Forecast Monatsende" subtitle="Hochrechnung basierend auf Auftragseingang" accentBg="linear-gradient(180deg, var(--purpbg, rgba(167,139,250,.1)), transparent)" hero={{ kicker: "Wie viel wird der Monat bringen", value: "~145.000 €", changePill: { text: "Linearer Trend auf 22 Werktagen", variant: "teal" }, meta: "5 verbleibende Werktage · Optimistisch: ~158.000 €" }} crossKpi={[{ label: "Basisprognose", value: "145.000 €", delta: "Linearer Trend", deltaColor: "var(--info)", accentColor: "var(--info)" }, { label: "Optimistisch", value: "158.000 €", delta: "Falls 3 Großaufträge bestätigt", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Verbleibend", value: "5 Tage", delta: "Werktage bis Monatsende", deltaColor: "var(--info)", accentColor: "var(--info)" }]} insight={{ body: "<b>Methodik:</b> Linearer Trend auf 22 Werktagen. Bei 5 verbleibenden Werktagen und aktuellem Auftragsbestand.<br><b>Szenario Optimistisch:</b> Falls 3 offene Großaufträge bestätigt werden: ~158.000 €." }} linkedAreas={[{ label: "Auftragsbuch", href: "/orders" }]} />
 
-      <DetailOverlay open={overlay === 'kalkulation'} onClose={() => setOverlay(null)} title="Kalkulationshinweise">
-        <div style={{ color: 'var(--ink)' }}>
-          <p style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 16 }}>Aktuelle Veränderungen der Kostenstruktur und ihre Auswirkungen:</p>
-          {[
-            { thema: 'Energiekosten', delta: '−2%', impact: 'Einsparung ca. 96 € / Monat durch neue Tarifverhandlung', color: 'var(--pos)' },
-            { thema: 'Materialkosten', delta: '+1%', impact: 'Kupfer und Nickel leicht teurer, Gold auf Warnschwelle', color: 'var(--neg)' },
-            { thema: 'Personalkosten', delta: '±0%', impact: 'Keine Änderung. Nächste Gehaltsrunde in Q4', color: 'var(--ink2)' },
-            { thema: 'Goldpreis-Warnung', delta: '+14%', impact: 'EK-Preis 60 €/g, Tagespreis 68,40 €/g — Marge aktuell positiv, aber Nachkauf riskant', color: 'var(--warn)' },
-          ].map((h, i) => (
-            <div key={i} style={{ padding: 12, background: 'var(--sf2)', borderRadius: 10, border: '1px solid var(--bd)', marginBottom: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ fontWeight: 700, fontSize: 13 }}>{h.thema}</span>
-                <span style={{ fontWeight: 700, color: h.color }}>{h.delta}</span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--ink2)', lineHeight: 1.5 }}>{h.impact}</div>
-            </div>
-          ))}
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'kalkulation'} onClose={() => setOverlay(null)} icon={<Calculator className="w-5 h-5" style={{ color: 'var(--warn)' }} />} title="Kalkulationshinweise" subtitle="Veränderungen der Kostenstruktur" accentBg="linear-gradient(180deg, var(--warnbg), transparent)" hero={{ kicker: "Was verändert sich bei deinen Kosten", value: "3 Faktoren", changePill: { text: "Gold auf Warnschwelle", variant: "amber" }, meta: "Energie −2% · Material +1% · Personal ±0%" }} composition={{ title: "C · Kostenveränderungen im Detail", rows: [{ avatar: "⚡", avatarColor: "#34D399", name: "Energiekosten", meta: "−2% · Einsparung ca. 96 €/Monat durch neue Tarifverhandlung", amount: "−96 €" }, { avatar: "M", avatarColor: "#D14F3D", name: "Materialkosten", meta: "+1% · Kupfer und Nickel leicht teurer, Gold auf Warnschwelle", amount: "+36 €" }, { avatar: "P", avatarColor: "#94A3B8", name: "Personalkosten", meta: "±0% · Keine Änderung. Nächste Gehaltsrunde Q4", amount: "0 €" }, { avatar: "Au", avatarColor: "#FBBF24", name: "Goldpreis-Warnung", meta: "+14% · EK: 60 €/g → Tagespreis: 68,40 €/g — Nachkauf riskant", amount: "+14%" }] }} insight={{ body: "<b>Beobachtung:</b> Energiekosten gesunken (−2%), aber Materialkosten (+1%) fressen das teilweise auf. Gold-EK auf Warnschwelle.<br><b>Empfehlung:</b> Gold-Nachkauf aufschieben. Energieeinsparung nutzen, um Material-Anstieg zu kompensieren." }} linkedAreas={[{ label: "BWA", href: "/buchhaltung/bwa" }, { label: "Ausgaben", href: "/buchhaltung/ausgaben" }]} />
     </PerformanceDetailLayout>
   );
 }

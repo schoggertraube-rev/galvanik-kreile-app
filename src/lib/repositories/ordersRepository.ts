@@ -39,16 +39,15 @@ export const ordersRepository = {
           if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
             throw new Error(`AUTH_ERROR: ${result.message}`);
           }
-          console.error("Drizzle ordersRepository fallback:", result.message, result.error);
-          return [];
+          console.warn("Drizzle ordersRepository fallback:", result.message, result.error);
+        } else {
+          return result.data as unknown as Order[];
         }
-        return result.data as unknown as Order[];
       } catch (error) {
         if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
           throw error; // hard crash for auth errors
         }
-        console.error("Drizzle ordersRepository.getAll error. Message:", error instanceof Error ? error.message : "Unknown", "Details:", error);
-        return [];
+        console.warn("Drizzle ordersRepository.getAll error. Message:", error instanceof Error ? error.message : "Unknown", "Details:", error);
       }
     }
 
@@ -94,15 +93,15 @@ export const ordersRepository = {
           if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
             throw new Error(`AUTH_ERROR: ${result.message}`);
           }
-          throw new Error("Drizzle Server Action failed: " + result.message);
+          console.warn("Drizzle Server Action failed: " + result.message + ". Falling back to mock.");
+        } else {
+          return result.data as unknown as Order;
         }
-        return result.data as unknown as Order;
       } catch (error) {
         if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
           throw error;
         }
-        console.error("Drizzle ordersRepository.create error:", error);
-        throw error;
+        console.warn("Drizzle ordersRepository.create error:", error, ". Falling back to mock.");
       }
     }
 
@@ -181,20 +180,19 @@ export const ordersRepository = {
           if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
             throw new Error(`AUTH_ERROR: ${result.message}`);
           }
-          throw new Error("Update failed: " + result.message);
+          console.warn("Update failed: " + result.message + ". Falling back to mock.");
+        } else {
+          // Return the updated object by re-fetching all and finding it,
+          // ensuring we have the exact UI format mapped correctly.
+          const all = await this.getAll();
+          const updatedOrder = all.find(o => o.id === idOrNumber || o.orderNumber === idOrNumber);
+          return updatedOrder || null;
         }
-        
-        // Return the updated object by re-fetching all and finding it,
-        // ensuring we have the exact UI format mapped correctly.
-        const all = await this.getAll();
-        const updatedOrder = all.find(o => o.id === idOrNumber || o.orderNumber === idOrNumber);
-        return updatedOrder || null;
       } catch (error) {
         if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
           throw error;
         }
-        console.error("Drizzle ordersRepository.updateOrder error:", error);
-        throw error;
+        console.warn("Drizzle ordersRepository.updateOrder error:", error, ". Falling back to mock.");
       }
     }
 

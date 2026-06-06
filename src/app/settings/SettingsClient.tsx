@@ -14,8 +14,9 @@ import { AdminDevicesClient } from "@/app/admin/devices/AdminDevicesClient";
 import { Server, Users, Shield, Power, Database, Settings, Building2, BarChart2, Lightbulb, Smartphone, MonitorSmartphone } from "lucide-react";
 import Link from "next/link";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
+import { TextTemplates } from "@/components/admin/TextTemplates";
 
-type Tab = "status" | "company" | "users" | "roles" | "features" | "import" | "system" | "devices" | "backup";
+type Tab = "status" | "company" | "users" | "roles" | "features" | "import" | "system" | "devices" | "backup" | "textvorlagen";
 
 export function SettingsClient() {
   usePageView();
@@ -64,6 +65,7 @@ export function SettingsClient() {
             <TabButton active={activeTab === "users"} onClick={() => setActiveTab("users")} icon={<Users />} label="Benutzer" />
             <TabButton active={activeTab === "roles"} onClick={() => setActiveTab("roles")} icon={<Shield />} label="Rollen & Rechte" />
             <TabButton active={activeTab === "devices"} onClick={() => setActiveTab("devices")} icon={<MonitorSmartphone />} label="Geräte & Sessions" />
+            <TabButton active={activeTab === "textvorlagen"} onClick={() => setActiveTab("textvorlagen")} icon={<Settings />} label="Textvorlagen & E-Mails" />
             {canManageToggles && <TabButton active={activeTab === "features"} onClick={() => setActiveTab("features")} icon={<Power />} label="Feature-Toggles" />}
             <TabButton active={activeTab === "import"} onClick={() => setActiveTab("import")} icon={<Database />} label="Daten-Import" />
             <TabButton active={activeTab === "backup"} onClick={() => setActiveTab("backup")} icon={<Database />} label="Sicherung & Wiederherstellung" />
@@ -81,6 +83,7 @@ export function SettingsClient() {
             {activeTab === "users" && <UserManagement />}
             {activeTab === "roles" && <RoleMatrix />}
             {activeTab === "devices" && <AdminDevicesClient />}
+            {activeTab === "textvorlagen" && <TextTemplates />}
             {canManageToggles && activeTab === "features" && <FeatureToggles />}
             {activeTab === "import" && <DataImportCenter />}
             {activeTab === "backup" && <BackupRestoreCenter />}

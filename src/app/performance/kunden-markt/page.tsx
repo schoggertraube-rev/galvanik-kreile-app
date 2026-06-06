@@ -1,10 +1,9 @@
 "use client";
 
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { Users, ArrowRight, HeartHandshake, Map, Banknote, Truck, Globe, UserCheck } from 'lucide-react';
 import { PerformanceDetailLayout } from '../PerformanceDetailLayout';
-import { DetailOverlay } from '@/components/ui/DetailOverlay';
+import { AnalysisOverlay } from '@/components/ui/AnalysisOverlay';
 
 export default function KundenMarktDetail() {
   const [overlay, setOverlay] = useState<string | null>(null);
@@ -19,33 +18,31 @@ export default function KundenMarktDetail() {
     >
       <div className="pd-grid">
 
-        {/* Top-Kunden → /customers */}
-        <Link href="/customers" className="pd-link">
-          <div className="pd-tile">
-            <div className="pd-tile-hd">
-              <div className="pd-tile-ico" style={{ background: 'var(--infobg)' }}>
-                <UserCheck className="w-5 h-5" style={{ color: 'var(--info)' }} />
-              </div>
-              <div className="pd-tile-name">Top-Kunden</div>
+        {/* Top-Kunden — In-Place Overlay */}
+        <div className="pd-tile" onClick={() => setOverlay('topkunden')} style={{ cursor: 'pointer' }}>
+          <div className="pd-tile-hd">
+            <div className="pd-tile-ico" style={{ background: 'var(--infobg)' }}>
+              <UserCheck className="w-5 h-5" style={{ color: 'var(--info)' }} />
             </div>
-            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {[
-                { name: 'Museum Lenzburg', val: '5.840 €', pct: 100 },
-                { name: 'Schrauben Meier', val: '4.200 €', pct: 72 },
-                { name: 'Autohaus Berger', val: '3.800 €', pct: 65 },
-                { name: 'Schlosserei Brunner', val: '2.600 €', pct: 45 },
-                { name: 'Uhren Keller', val: '1.900 €', pct: 33 },
-              ].map(k => (
-                <div key={k.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-                  <span style={{ width: 110, fontWeight: 500, flexShrink: 0 }}>{k.name}</span>
-                  <div className="pd-bar-track"><div className="pd-bar-fill" style={{ width: `${k.pct}%`, background: 'var(--info)' }} /></div>
-                  <span style={{ fontWeight: 600, width: 54, textAlign: 'right', flexShrink: 0 }}>{k.val}</span>
-                </div>
-              ))}
-            </div>
-            <div className="pd-tile-foot">Zur Kundenkartei <ArrowRight className="w-3 h-3" /></div>
+            <div className="pd-tile-name">Top-Kunden</div>
           </div>
-        </Link>
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {[
+              { name: 'Museum Lenzburg', val: '5.840 €', pct: 100 },
+              { name: 'Schrauben Meier', val: '4.200 €', pct: 72 },
+              { name: 'Autohaus Berger', val: '3.800 €', pct: 65 },
+              { name: 'Schlosserei Brunner', val: '2.600 €', pct: 45 },
+              { name: 'Uhren Keller', val: '1.900 €', pct: 33 },
+            ].map(k => (
+              <div key={k.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                <span style={{ width: 110, fontWeight: 500, flexShrink: 0 }}>{k.name}</span>
+                <div className="pd-bar-track"><div className="pd-bar-fill" style={{ width: `${k.pct}%`, background: 'var(--info)' }} /></div>
+                <span style={{ fontWeight: 600, width: 54, textAlign: 'right', flexShrink: 0 }}>{k.val}</span>
+              </div>
+            ))}
+          </div>
+          <div className="pd-tile-foot">Kundenanalyse <ArrowRight className="w-3 h-3" /></div>
+        </div>
 
         {/* CLV */}
         <div className="pd-tile" onClick={() => setOverlay('clv')} style={{ cursor: 'pointer' }}>
@@ -167,120 +164,41 @@ export default function KundenMarktDetail() {
           <div className="pd-tile-foot">Verteilung <ArrowRight className="w-3 h-3" /></div>
         </div>
 
-        {/* Kundenrisiko → /kommunikation */}
-        <Link href="/kommunikation" className="pd-link">
-          <div className="pd-tile">
-            <div className="pd-tile-hd">
-              <div className="pd-tile-ico" style={{ background: 'var(--negbg)' }}>
-                <HeartHandshake className="w-5 h-5" style={{ color: 'var(--neg)' }} />
-              </div>
-              <div className="pd-tile-name">Kundenrisiko</div>
+        {/* Kundenrisiko — In-Place Overlay */}
+        <div className="pd-tile" onClick={() => setOverlay('risiko')} style={{ cursor: 'pointer' }}>
+          <div className="pd-tile-hd">
+            <div className="pd-tile-ico" style={{ background: 'var(--negbg)' }}>
+              <HeartHandshake className="w-5 h-5" style={{ color: 'var(--neg)' }} />
             </div>
-            <div className="pd-tile-val" style={{ color: 'var(--neg)' }}>1</div>
-            <div className="pd-tile-desc">Großkunde droht abzuwandern (Lieferverzug bei Charge 409)</div>
-            <div style={{ marginTop: 10, padding: 10, background: 'var(--negbg)', borderRadius: 8, fontSize: 11, lineHeight: 1.5 }}>
-              <strong>Autohaus Berger</strong> — 2 Reklamationen in Folge, Antwortzeit über 48h
-            </div>
-            <div className="pd-tile-foot">Zur Kommunikation <ArrowRight className="w-3 h-3" /></div>
+            <div className="pd-tile-name">Kundenrisiko</div>
           </div>
-        </Link>
-
-        {/* Module Links */}
-        <div className="pd-module-links">
-          <Link href="/customers" className="pd-module-link">Kundenkartei <ArrowRight className="w-3 h-3" /></Link>
-          <Link href="/kommunikation" className="pd-module-link">Kommunikation <ArrowRight className="w-3 h-3" /></Link>
-          <Link href="/finanzen" className="pd-module-link">Finanzen <ArrowRight className="w-3 h-3" /></Link>
+          <div className="pd-tile-val" style={{ color: 'var(--neg)' }}>1</div>
+          <div className="pd-tile-desc">Großkunde droht abzuwandern (Lieferverzug bei Charge 409)</div>
+          <div style={{ marginTop: 10, padding: 10, background: 'var(--negbg)', borderRadius: 8, fontSize: 11, lineHeight: 1.5 }}>
+            <strong>Autohaus Berger</strong> — 2 Reklamationen in Folge, Antwortzeit über 48h
+          </div>
+          <div className="pd-tile-foot">Risiko-Analyse <ArrowRight className="w-3 h-3" /></div>
         </div>
+
       </div>
 
-      {/* OVERLAYS */}
-      <DetailOverlay open={overlay === 'clv'} onClose={() => setOverlay(null)} title="Customer Lifetime Value">
-        <div style={{ color: 'var(--ink)' }}>
-          <p style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 16 }}>CLV-Ranking der Top-5-Kunden basierend auf historischem Auftragsvolumen:</p>
-          {[
-            { name: 'Museum Lenzburg', clv: '18.400 €', seit: '2019', auftraege: 42 },
-            { name: 'Schrauben Meier', clv: '14.200 €', seit: '2020', auftraege: 35 },
-            { name: 'Autohaus Berger', clv: '11.800 €', seit: '2021', auftraege: 28 },
-            { name: 'Schlosserei Brunner', clv: '9.600 €', seit: '2022', auftraege: 19 },
-            { name: 'Uhren Keller', clv: '7.200 €', seit: '2023', auftraege: 12 },
-          ].map((k, i) => (
-            <div key={k.name} style={{ padding: 10, background: 'var(--sf2)', borderRadius: 8, border: '1px solid var(--bd)', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
-              <div><span style={{ fontWeight: 700, color: 'var(--info)', marginRight: 6 }}>{i + 1}.</span><span style={{ fontWeight: 600 }}>{k.name}</span></div>
-              <div style={{ display: 'flex', gap: 14, alignItems: 'center', color: 'var(--ink2)', fontSize: 11 }}>
-                <span>seit {k.seit}</span><span>{k.auftraege} Aufträge</span><span style={{ fontWeight: 700, color: 'var(--pos)' }}>{k.clv}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </DetailOverlay>
+      {/* OVERLAYS — standardized AnalysisOverlay pattern */}
+      <AnalysisOverlay open={overlay === 'topkunden'} onClose={() => setOverlay(null)} icon={<UserCheck className="w-5 h-5" style={{ color: 'var(--info)' }} />} title="Top-Kunden" subtitle="Umsatzranking · CLV · Auftragshistorie · Trend" accentBg="linear-gradient(180deg, var(--infobg), transparent)" hero={{ kicker: "Wer bringt den meisten Umsatz", value: "18.340 €", changePill: { text: "Top 5 decken 72% des Monatsumsatzes", variant: "teal" }, meta: "Juni 2026 · 5 Kunden · 47 aktive Kundenstammdaten", sparkValues: [14200, 15800, 16100, 17200, 17800, 18340] }} composition={{ title: "C · Top-5 Kunden nach Monatsumsatz", rows: [{ avatar: "ML", avatarColor: "#60A5FA", name: "Museum Lenzburg", meta: "CLV: 18.400 € · seit 2019 · 42 Aufträge · ↑ stabil", amount: "5.840 €" }, { avatar: "SM", avatarColor: "#34D399", name: "Schrauben Meier", meta: "CLV: 14.200 € · seit 2020 · 35 Aufträge · ↑ wachsend", amount: "4.200 €" }, { avatar: "AB", avatarColor: "#D14F3D", name: "Autohaus Berger", meta: "CLV: 11.800 € · seit 2021 · 28 Aufträge · ↓ gefährdet", amount: "3.800 €" }, { avatar: "SB", avatarColor: "#60A5FA", name: "Schlosserei Brunner", meta: "CLV: 9.600 € · seit 2022 · 19 Aufträge · ↑ stabil", amount: "2.600 €" }, { avatar: "UK", avatarColor: "#FBBF24", name: "Uhren Keller", meta: "CLV: 7.200 € · seit 2023 · 12 Aufträge · → neu", amount: "1.900 €" }] }} crossKpi={[{ label: "Stammkunden-Anteil", value: "82 %", delta: "38 von 47 Kunden", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Ø Auftragswert", value: "420 €", delta: "↑ +8% vs. Vorjahr", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Abwanderungsrisiko", value: "1", delta: "Autohaus Berger", deltaColor: "var(--neg)", accentColor: "var(--neg)" }]} insight={{ body: "<b>Beobachtung:</b> Museum Lenzburg stärkster Einzelkunde. Autohaus Berger zeigt Abwärtstrend.<br><b>Empfehlung:</b> Autohaus Berger proaktiv kontaktieren.", actions: [{ label: "Kundenkartei öffnen" }, { label: "Autohaus Berger anrufen" }] }} linkedAreas={[{ label: "Kundenkartei", href: "/customers" }, { label: "Auftragsbuch", href: "/orders" }]} />
 
-      <DetailOverlay open={overlay === 'zahlungsmoral'} onClose={() => setOverlay(null)} title="Zahlungsmoral — Trend">
-        <div style={{ color: 'var(--ink)' }}>
-          <div style={{ textAlign: 'center', marginBottom: 20 }}>
-            <div style={{ fontSize: 40, fontWeight: 800, color: 'var(--pos)' }}>Ø 18 Tage</div>
-            <div style={{ fontSize: 12, color: 'var(--ink2)' }}>Durchschnittliches Zahlungsziel (Vorjahr: 22 T)</div>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.6 }}>82% der Rechnungen werden pünktlich bezahlt. Der Trend ist positiv: Das Zahlungsziel hat sich in den letzten 4 Quartalen kontinuierlich verkürzt. Keine Forderungsausfälle im aktuellen Quartal.</p>
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'clv'} onClose={() => setOverlay(null)} icon={<HeartHandshake className="w-5 h-5" style={{ color: 'var(--pos)' }} />} title="Customer Lifetime Value" subtitle="Gesamtwert jedes Kunden über die Geschäftsbeziehung" accentBg="linear-gradient(180deg, var(--posbg), transparent)" hero={{ kicker: "Wie wertvoll sind deine Kunden langfristig", value: "18.400 €", changePill: { text: "Höchster CLV: Museum Lenzburg", variant: "teal" }, meta: "82% Stammkunden · 18% Neukunden" }} composition={{ title: "C · CLV-Ranking", rows: [{ avatar: "1", avatarColor: "#60A5FA", name: "Museum Lenzburg", meta: "Seit 2019 · 42 Aufträge", amount: "18.400 €" }, { avatar: "2", avatarColor: "#60A5FA", name: "Schrauben Meier", meta: "Seit 2020 · 35 Aufträge", amount: "14.200 €" }, { avatar: "3", avatarColor: "#FBBF24", name: "Autohaus Berger", meta: "Seit 2021 · 28 Aufträge · Risiko", amount: "11.800 €" }, { avatar: "4", avatarColor: "#60A5FA", name: "Schlosserei Brunner", meta: "Seit 2022 · 19 Aufträge", amount: "9.600 €" }, { avatar: "5", avatarColor: "#34D399", name: "Uhren Keller", meta: "Seit 2023 · 12 Aufträge · Neukunde", amount: "7.200 €" }] }} crossKpi={[{ label: "Ø CLV", value: "12.240 €", delta: "Durchschnitt Top 5", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Wiederholungsrate", value: "92 %", delta: "Handwerk am treuesten", deltaColor: "var(--pos)", accentColor: "var(--pos)" }]} insight={{ body: "<b>Beobachtung:</b> 82% Stammkunden mit hohem CLV. Wiederholungsrate 92% bei Handwerkskunden." }} linkedAreas={[{ label: "Kundenkartei", href: "/customers" }]} />
 
-      <DetailOverlay open={overlay === 'zahlungsarten'} onClose={() => setOverlay(null)} title="Zahlungsarten — Verteilung">
-        <div style={{ color: 'var(--ink)' }}>
-          {[
-            { art: 'Überweisung', anteil: 55, hinweis: 'Hauptzahlungsweg für B2B-Kunden' },
-            { art: 'Barzahlung', anteil: 25, hinweis: 'Überwiegend bei Abholung von Kleinaufträgen' },
-            { art: 'EC / Karte', anteil: 12, hinweis: 'Zunehmend bei Privatkunden' },
-            { art: 'Sonstige', anteil: 8, hinweis: 'Darunter Vorkasse und Nachnahme' },
-          ].map(z => (
-            <div key={z.art} style={{ padding: 12, background: 'var(--sf2)', borderRadius: 10, border: '1px solid var(--bd)', marginBottom: 10 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <span style={{ fontWeight: 700, fontSize: 13 }}>{z.art}</span>
-                <span style={{ fontWeight: 700, color: 'var(--info)' }}>{z.anteil}%</span>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--ink2)' }}>{z.hinweis}</div>
-            </div>
-          ))}
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'risiko'} onClose={() => setOverlay(null)} icon={<HeartHandshake className="w-5 h-5" style={{ color: 'var(--neg)' }} />} title="Kundenrisiko" subtitle="Abwanderungsanalyse — gefährdete Geschäftsbeziehungen" accentBg="linear-gradient(180deg, var(--negbg), transparent)" hero={{ kicker: "Wie viele Kunden sind gefährdet", value: "1 Kunde", changePill: { text: "Autohaus Berger — Risiko hoch", variant: "red" }, meta: "CLV 11.800 € · 28 Aufträge seit 2021 · letzter Auftrag vor 6 Wochen" }} composition={{ title: "C · Risikoindikatoren", rows: [{ avatar: "!", avatarColor: "#D14F3D", name: "2 Reklamationen in Folge", meta: "Oberflächenqualität — Charge 407 und 409", amount: "" }, { avatar: "⏱", avatarColor: "#FBBF24", name: "Antwortzeit 52h", meta: "Über 48h-Schwelle", amount: "" }, { avatar: "📅", avatarColor: "#FBBF24", name: "Lieferverzug −3 Tage", meta: "Charge 409", amount: "" }, { avatar: "📉", avatarColor: "#D14F3D", name: "Auftragsfrequenz fallend", meta: "Von 4/Monat auf 1/Monat", amount: "" }] }} crossKpi={[{ label: "Gefährdeter Umsatz", value: "3.800 €/M", delta: "Monatl. Umsatz", deltaColor: "var(--neg)", accentColor: "var(--neg)" }, { label: "Bedrohter CLV", value: "11.800 €", delta: "Gesamtwert", deltaColor: "var(--neg)", accentColor: "var(--neg)" }, { label: "Tage ohne Auftrag", value: "42 T", delta: "Normalwert: 7–14 T", deltaColor: "var(--warn)", accentColor: "var(--warn)" }]} insight={{ body: "<b>Beobachtung:</b> Autohaus Berger zeigt alle Abwanderungssignale.<br><b>Empfehlung:</b> Persönlich kontaktieren. Kulanzbadcharge anbieten.", actions: [{ label: "Anrufen" }, { label: "Kulanzbadcharge" }] }} linkedAreas={[{ label: "Kundenkartei", href: "/customers" }, { label: "Qualitätskontrolle", href: "/kontrolle" }]} />
 
-      <DetailOverlay open={overlay === 'logistik'} onClose={() => setOverlay(null)} title="Abholung und Versand">
-        <div style={{ color: 'var(--ink)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginBottom: 20 }}>
-            <div><div style={{ fontSize: 32, fontWeight: 800, color: 'var(--pos)' }}>82%</div><div style={{ fontSize: 11, color: 'var(--ink2)' }}>Abholung vor Ort</div></div>
-            <div><div style={{ fontSize: 32, fontWeight: 800, color: 'var(--info)' }}>18%</div><div style={{ fontSize: 11, color: 'var(--ink2)' }}>Versand</div></div>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.6 }}>Die hohe Abholquote reduziert Versandkosten und Transportrisiken erheblich. Versandkunden befinden sich überwiegend in DE und AT.</p>
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'zahlungsmoral'} onClose={() => setOverlay(null)} icon={<Banknote className="w-5 h-5" style={{ color: 'var(--pos)' }} />} title="Zahlungsmoral" subtitle="Zahlungsziele · Pünktlichkeit · Quartalsvergleich" accentBg="linear-gradient(180deg, var(--posbg), transparent)" hero={{ kicker: "Wie pünktlich zahlen deine Kunden", value: "Ø 18 Tage", changePill: { text: "−4 Tage vs. Vorjahr", variant: "teal" }, meta: "82% pünktlich · Vorjahr Ø 22 T", sparkValues: [22, 21, 20, 19, 18, 18] }} crossKpi={[{ label: "Pünktlich", value: "82 %", delta: "↑ +5% vs. Vorjahr", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Forderungsausfälle", value: "0 €", delta: "Kein Ausfall Q2", deltaColor: "var(--pos)", accentColor: "var(--pos)" }]} insight={{ body: "<b>Beobachtung:</b> Zahlungsmoral seit 4 Quartalen besser (Ø 22 → 18 T). Kein Forderungsausfall." }} linkedAreas={[{ label: "Rechnungen", href: "/buchhaltung/rechnungen" }, { label: "Offene Posten", href: "/buchhaltung/zahlung" }]} />
 
-      <DetailOverlay open={overlay === 'regionen'} onClose={() => setOverlay(null)} title="Geo-Verteilung">
-        <div style={{ color: 'var(--ink)' }}>
-          <p style={{ fontSize: 13, color: 'var(--ink2)', marginBottom: 16 }}>Verteilung nach Herkunftsland der Kunden:</p>
-          {[
-            { land: 'Schweiz', anteil: 60, kunden: 28 },
-            { land: 'Deutschland', anteil: 25, kunden: 12 },
-            { land: 'Österreich', anteil: 10, kunden: 5 },
-            { land: 'Rest-EU', anteil: 5, kunden: 2 },
-          ].map(r => (
-            <div key={r.land} className="pd-bar-row" style={{ marginBottom: 8 }}>
-              <div className="pd-bar-label">{r.land}</div>
-              <div className="pd-bar-track"><div className="pd-bar-fill" style={{ width: `${r.anteil}%`, background: 'var(--info)' }} /></div>
-              <div className="pd-bar-val">{r.anteil}%</div>
-            </div>
-          ))}
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'zahlungsarten'} onClose={() => setOverlay(null)} icon={<Banknote className="w-5 h-5" style={{ color: 'var(--purple, #6D28D9)' }} />} title="Zahlungsarten" subtitle="Überweisung · Bar · EC/Karte · Sonstige" accentBg="linear-gradient(180deg, var(--purpbg, rgba(167,139,250,.1)), transparent)" hero={{ kicker: "Wie zahlen deine Kunden", value: "4 Zahlungsarten", changePill: { text: "Überweisung dominiert (55%)", variant: "teal" }, meta: "B2B Überweisung · B2C Karte" }} composition={{ title: "C · Verteilung nach Zahlungsart", rows: [{ avatar: "Ü", avatarColor: "#60A5FA", name: "Überweisung", meta: "B2B-Hauptweg", amount: "55 %" }, { avatar: "B", avatarColor: "#34D399", name: "Barzahlung", meta: "Bei Abholung", amount: "25 %" }, { avatar: "E", avatarColor: "#A78BFA", name: "EC / Karte", meta: "Zunehmend Privatkunden", amount: "12 %" }, { avatar: "S", avatarColor: "#94A3B8", name: "Sonstige", meta: "Vorkasse / Nachnahme", amount: "8 %" }] }} insight={{ body: "<b>Beobachtung:</b> Überweisung 55% Standard bei B2B. EC/Karte +3% bei Privatkunden." }} linkedAreas={[{ label: "Rechnungen", href: "/buchhaltung/rechnungen" }]} />
 
-      <DetailOverlay open={overlay === 'kundentypen'} onClose={() => setOverlay(null)} title="Kundentypen — B2B/B2C-Split">
-        <div style={{ color: 'var(--ink)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', marginBottom: 20 }}>
-            <div><div style={{ fontSize: 32, fontWeight: 800, color: 'var(--info)' }}>60%</div><div style={{ fontSize: 11, color: 'var(--ink2)' }}>B2B Industrie</div></div>
-            <div><div style={{ fontSize: 32, fontWeight: 800, color: 'var(--pos)' }}>30%</div><div style={{ fontSize: 11, color: 'var(--ink2)' }}>B2B Handwerk</div></div>
-            <div><div style={{ fontSize: 32, fontWeight: 800, color: 'var(--purple)' }}>10%</div><div style={{ fontSize: 11, color: 'var(--ink2)' }}>B2C Privat</div></div>
-          </div>
-          <p style={{ fontSize: 12, color: 'var(--ink2)', lineHeight: 1.6 }}>Industriekunden liefern das höchste Volumen pro Auftrag. Handwerkskunden sind loyaler (Wiederholungsrate 92%). Privatkunden haben den höchsten Express-Anteil.</p>
-        </div>
-      </DetailOverlay>
+      <AnalysisOverlay open={overlay === 'logistik'} onClose={() => setOverlay(null)} icon={<Truck className="w-5 h-5" style={{ color: 'var(--pos)' }} />} title="Abholung und Versand" subtitle="Logistik-Split · Versandkosten" accentBg="linear-gradient(180deg, var(--posbg), transparent)" hero={{ kicker: "Wie kommt die Ware zum Kunden", value: "82 % Abholung", changePill: { text: "Versandanteil 18% — stabil", variant: "teal" }, meta: "Geringe Versandkosten" }} crossKpi={[{ label: "Abholung", value: "82 %", delta: "CH-Kunden", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Versand", value: "18 %", delta: "DE + AT", deltaColor: "var(--info)", accentColor: "var(--info)" }, { label: "Versandkosten/M", value: "≈ 340 €", delta: "Niedriger Anteil", deltaColor: "var(--pos)", accentColor: "var(--pos)" }]} insight={{ body: "<b>Beobachtung:</b> 82% Abholung reduziert Kosten erheblich. Versandkunden bestellen 40% mehr." }} linkedAreas={[{ label: "Auftragsbuch", href: "/orders" }]} />
+
+      <AnalysisOverlay open={overlay === 'regionen'} onClose={() => setOverlay(null)} icon={<Globe className="w-5 h-5" style={{ color: 'var(--info)' }} />} title="Geo-Verteilung" subtitle="Kundenverteilung nach Herkunftsland" accentBg="linear-gradient(180deg, var(--infobg), transparent)" hero={{ kicker: "Woher kommen deine Kunden", value: "DACH 95 %", changePill: { text: "3 Länder aktiv", variant: "teal" }, meta: "CH 60% · DE 25% · AT 10% · Rest-EU 5%" }} composition={{ title: "C · Verteilung nach Region", rows: [{ avatar: "CH", avatarColor: "#D14F3D", name: "Schweiz", meta: "28 Kunden · 60% · Kernmarkt", amount: "60 %" }, { avatar: "DE", avatarColor: "#FBBF24", name: "Deutschland", meta: "12 Kunden · 25% · Versand", amount: "25 %" }, { avatar: "AT", avatarColor: "#60A5FA", name: "Österreich", meta: "5 Kunden · 10% · Wachstum", amount: "10 %" }, { avatar: "EU", avatarColor: "#94A3B8", name: "Rest-EU", meta: "2 Kunden · 5%", amount: "5 %" }] }} insight={{ body: "<b>Beobachtung:</b> DACH-Fokus 95%. Österreich wächst." }} linkedAreas={[{ label: "Kundenkartei", href: "/customers" }]} />
+
+      <AnalysisOverlay open={overlay === 'kundentypen'} onClose={() => setOverlay(null)} icon={<Users className="w-5 h-5" style={{ color: 'var(--warn)' }} />} title="Kundentypen" subtitle="B2B Industrie · B2B Handwerk · B2C Privat" accentBg="linear-gradient(180deg, var(--warnbg), transparent)" hero={{ kicker: "Welche Kundentypen hast du", value: "90 % B2B", changePill: { text: "Industrie dominiert 60%", variant: "teal" }, meta: "Industrie 60% · Handwerk 30% · B2C 10%" }} composition={{ title: "C · Verteilung nach Kundentyp", rows: [{ avatar: "I", avatarColor: "#60A5FA", name: "B2B Industrie", meta: "Höchstes Volumen · Ø 680 €", amount: "60 %" }, { avatar: "H", avatarColor: "#34D399", name: "B2B Handwerk", meta: "Loyalste · Wiederholungsrate 92%", amount: "30 %" }, { avatar: "P", avatarColor: "#A78BFA", name: "B2C Privat", meta: "Höchster Express-Anteil", amount: "10 %" }] }} crossKpi={[{ label: "Ø Volumen Industrie", value: "680 €", delta: "Höchster Einzelauftragswert", deltaColor: "var(--info)", accentColor: "var(--info)" }, { label: "Wiederholungsrate HW", value: "92 %", delta: "Handwerk am treuesten", deltaColor: "var(--pos)", accentColor: "var(--pos)" }]} insight={{ body: "<b>Beobachtung:</b> B2B 90% — solide. Handwerk am treuesten. Industrie höchstes Volumen." }} linkedAreas={[{ label: "Kundenkartei", href: "/customers" }]} />
     </PerformanceDetailLayout>
   );
 }
+

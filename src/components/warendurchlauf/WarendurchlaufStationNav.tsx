@@ -62,9 +62,12 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
   const [volume, setVolume] = React.useState<VolumeState>("normal");
 
   React.useEffect(() => {
-    setTimeOfDay(getCurrentTimeOfDay());
-    setWeather(getCurrentWeather());
-    setVolume(getWareneingangVolumeState());
+    const timer = setTimeout(() => {
+      setTimeOfDay(getCurrentTimeOfDay());
+      setWeather(getCurrentWeather());
+      setVolume(getWareneingangVolumeState());
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
   const getIsActive = (station: typeof STATIONS[0]) => {

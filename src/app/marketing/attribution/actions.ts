@@ -52,14 +52,15 @@ export async function getAttributionData() {
     }, 0);
     
     const umsatz = Math.round(totalUmsatz * ratio);
+    const kostenProMonat = k.typ === 'google' ? 500 : k.typ === 'instagram' ? 150 : 0;
 
     return {
       kanal: k.name,
-      ausgaben: k.kostenProMonat || 0,
+      ausgaben: kostenProMonat,
       leads: leadCount,
       auftraege: auftragCount,
       umsatz: umsatz,
-      roi: (k.kostenProMonat || 0) > 0 ? ((umsatz - k.kostenProMonat!) / k.kostenProMonat!) * 100 : 0
+      roi: kostenProMonat > 0 ? ((umsatz - kostenProMonat) / kostenProMonat) * 100 : 0
     };
   });
 

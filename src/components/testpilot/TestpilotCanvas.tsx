@@ -90,8 +90,10 @@ export function TestpilotCanvas({ onSave, onCancel }: TestpilotCanvasProps) {
     }
     
     const rect = canvas.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
     
     ctxRef.current.beginPath();
     ctxRef.current.moveTo(x, y);
@@ -111,8 +113,10 @@ export function TestpilotCanvas({ onSave, onCancel }: TestpilotCanvasProps) {
     }
     
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+    const scaleX = canvasRef.current.width / rect.width;
+    const scaleY = canvasRef.current.height / rect.height;
+    const x = (clientX - rect.left) * scaleX;
+    const y = (clientY - rect.top) * scaleY;
     
     ctxRef.current.lineTo(x, y);
     ctxRef.current.stroke();

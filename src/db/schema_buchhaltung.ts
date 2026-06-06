@@ -88,20 +88,44 @@ export const ausgangsrechnung = pgTable("ausgangsrechnung", {
   status: text("status").notNull().default("offen"),
   mahnstufe: integer("mahnstufe").default(0),
   erechnungXml: text("erechnung_xml"),
+  leadId: uuid("lead_id"),
+  bemerkung: text("bemerkung"),
+  isDemo: boolean("is_demo").default(false),
   erstelltAm: timestamp("erstellt_am").defaultNow().notNull(),
+});
+
+export const ausgangsrechnungPosition = pgTable("ausgangsrechnung_position", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  ausgangsrechnungId: uuid("ausgangsrechnung_id").notNull().references(() => ausgangsrechnung.id),
+  beschreibung: text("beschreibung").notNull(),
+  menge: numeric("menge", { precision: 12, scale: 2 }).notNull().default("1"),
+  einzelpreisNetto: numeric("einzelpreis_netto", { precision: 12, scale: 2 }).notNull(),
 });
 
 export const zahlung = pgTable("zahlung", {
   id: uuid("id").primaryKey().defaultRandom(),
-  typ: text("typ").notNull(),
-  betrag: numeric("betrag", { precision: 12, scale: 2 }).notNull(),
-  datum: date("datum").notNull(),
-  referenz: text("referenz"),
-  belegId: uuid("beleg_id").references(() => beleg.id),
   ausgangsrechnungId: uuid("ausgangsrechnung_id").references(() => ausgangsrechnung.id),
-  zahlungsart: text("zahlungsart"),
-  bankReferenz: text("bank_referenz"),
-  erstelltAm: timestamp("erstellt_am").defaultNow().notNull(),
+  belegId: uuid("beleg_id").references(() => beleg.id),
+  betrag: numeric("betrag", { precision: 12, scale: 2 }).notNull(),
+  richtung: text("richtung").notNull(),
+  datum: date("datum").notNull(),
+  art: text("art"),
+  bankUmsatzRef: text("bank_umsatz_ref"),
+  isDemo: boolean("is_demo").default(false),
+});
+
+export const kostenposten = pgTable("kostenposten", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bezeichnung: text("bezeichnung").notNull(),
+  art: text("art").notNull(),
+  kategorie: text("kategorie"),
+  betrag: numeric("betrag", { precision: 12, scale: 2 }).notNull(),
+  intervall: text("intervall").notNull(),
+  belegId: uuid("beleg_id").references(() => beleg.id),
+  kampagneId: uuid("kampagne_id"),
+  giltAb: date("gilt_ab"),
+  giltBis: date("gilt_bis"),
+  isDemo: boolean("is_demo").default(false),
 });
 
 export const steuerprofil = pgTable("steuerprofil", {

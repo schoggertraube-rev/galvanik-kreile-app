@@ -34,8 +34,8 @@ export default async function SegmentePage({ searchParams }: { searchParams: { q
           <div key={s.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 relative">
             <div className="flex items-start gap-4">
               <div 
-                className="w-12 h-12 rounded-full flex items-center justify-center text-2xl flex-shrink-0"
-                style={{ backgroundColor: `${s.farbe}20`, color: s.farbe }}
+                className="w-12 h-12 rounded-full flex items-center justify-center text-2xl shrink-0"
+                style={{ backgroundColor: `${s.farbe}20`, color: s.farbe || undefined }}
               >
                 {s.icon || '📌'}
               </div>

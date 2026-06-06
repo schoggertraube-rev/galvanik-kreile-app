@@ -80,12 +80,15 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
 
           {/* Scroll-Container für Seiteninhalt */}
           <main
-            className={`flex-1 overflow-x-hidden ${(pathname.startsWith('/warendurchlauf') || pathname.startsWith('/kommunikation')) ? "overflow-hidden" : "overflow-y-auto p-4 md:p-6 lg:p-8"}`}
+            className={`flex-1 overflow-x-hidden ${
+              (pathname.startsWith('/warendurchlauf') || pathname.startsWith('/kommunikation')) ? "overflow-hidden" : 
+              "overflow-y-auto p-4 md:p-6 lg:p-8"
+            }`}
           >
             {/* Max-Width Container — auf großen Screens zentriert */}
-            <div className={`${(pathname.startsWith('/warendurchlauf') || pathname.startsWith('/kommunikation')) ? "w-full h-full" : "max-w-[1400px] mx-auto w-full"} pb-24 md:pb-0`}>
-              {children}
-            </div>
+            <div className="w-full h-full pb-24 md:pb-0">
+            {children}
+          </div>
           </main>
         </div>
 

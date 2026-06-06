@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { 
   Moon, Sun, Sparkles, Activity, 
-  TrendingUp, AlertTriangle, FlaskConical, Users, ArrowRight,
+  TrendingUp, AlertTriangle, FlaskConical, Users,
   Banknote
 } from 'lucide-react';
 
@@ -21,7 +21,9 @@ export default function PerformanceCockpit() {
   // Sync theme
   useEffect(() => {
     const saved = localStorage.getItem('perfTheme');
-    if (saved === 'dark' || saved === 'light') setTheme(saved);
+    if (saved === 'dark' || saved === 'light') {
+      setTimeout(() => setTheme(saved), 0);
+    }
   }, []);
   
   const toggleTheme = (t: 'dark' | 'light') => {

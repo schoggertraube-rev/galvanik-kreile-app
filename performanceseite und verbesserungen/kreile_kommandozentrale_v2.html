@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kreile · Klienten-Kommandozentrale</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream:#FAF6EE;--cream-2:#F2EBDD;--cream-3:#EDE4D0;--paper:#FFFFFF;
+    --ink:#1B1B1B;--ink-soft:#4B4742;--ink-mute:#8A8278;--ink-faint:#B0A894;
+    --line:#E8DFCC;--line-strong:#D5C9AC;
+    --orange:#C2410C;--orange-soft:#FED7AA;
+    --yellow:#B45309;--yellow-soft:#FEF3C7;
+    --green:#166534;--green-soft:#BBF7D0;--green-bright:#16A34A;
+    --red:#991B1B;--red-soft:#FECACA;
+    --blue:#1E3A8A;--blue-mid:#2563EB;--blue-soft:#DBEAFE;--blue-tint:#EFF5FF;
+    --violet:#5B21B6;--violet-soft:#DDD6FE;
+    --shadow-sm:0 1px 2px rgba(27,27,27,0.05),0 0 0 1px rgba(27,27,27,0.04);
+    --shadow-md:0 4px 16px rgba(27,27,27,0.07),0 0 0 1px rgba(27,27,27,0.05);
+    --shadow-lg:0 30px 70px -20px rgba(27,27,27,0.3);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:var(--cream-2);color:var(--ink);font-family:'Manrope',sans-serif;font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;height:100vh;overflow:hidden;}
+  h1,h2,h3,h4{font-family:'Fraunces',serif;font-weight:500;letter-spacing:-0.01em;}
+
+  /* ===== KOMMANDOZENTRALE (Vollbild) ===== */
+  .kz{height:100vh;display:flex;flex-direction:column;background:var(--cream-2);}
+
+  /* Header */
+  .kz-head{background:var(--cream);border-bottom:1px solid var(--line);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+  .kz-left{display:flex;align-items:center;gap:14px;}
+  .kz-back{display:flex;align-items:center;gap:4px;color:var(--orange);font-size:14px;font-weight:500;cursor:pointer;background:none;border:none;font-family:inherit;padding:6px 2px;}
+  .kz-back:hover{opacity:.7;}
+  .kz-sep{width:1px;height:28px;background:var(--line);margin:0 4px;}
+  .kz-ava{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#1E3A8A,#1E40AF);color:white;display:grid;place-items:center;font-weight:600;font-size:16px;}
+  .kz-info h1{font-size:20px;font-weight:600;line-height:1.1;}
+  .kz-tags{display:flex;gap:5px;margin-top:4px;}
+  .htag{font-size:10px;padding:2px 8px;border-radius:5px;font-weight:600;background:var(--cream-3);color:var(--ink-soft);}
+  .htag.gold{background:#FEF3C7;color:#92400E;}
+  .htag.good{background:var(--green-soft);color:var(--green);}
+  .kz-right{display:flex;align-items:center;gap:10px;}
+  .mode-pill{display:flex;background:var(--cream-2);border-radius:9px;padding:3px;}
+  .mode-opt{padding:7px 13px;border-radius:7px;font-size:12px;font-weight:600;border:none;background:transparent;cursor:pointer;color:var(--ink-mute);font-family:inherit;}
+  .mode-opt.active{background:var(--paper);color:var(--ink);box-shadow:var(--shadow-sm);}
+  .kz-close{width:36px;height:36px;border-radius:50%;background:var(--paper);border:1px solid var(--line);display:grid;place-items:center;cursor:pointer;color:var(--ink-soft);}
+  .kz-close:hover{background:var(--ink);color:var(--cream);border-color:var(--ink);}
+
+  /* Body: 3 columns */
+  .kz-body{flex:1;display:grid;grid-template-columns:380px 1fr 360px;overflow:hidden;}
+
+  /* Bento */
+  .bento{overflow-y:auto;padding:16px;display:grid;grid-template-columns:1fr 1fr;grid-auto-rows:min-content;gap:10px;align-content:start;}
+  .bento::-webkit-scrollbar{width:5px;}
+  .bento::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
+  .bento-label{grid-column:1/-1;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute);padding:2px 2px 0;}
+
+  /* Tile */
+  .tile{background:var(--paper);border:1px solid var(--line);border-radius:14px;padding:13px 14px;cursor:pointer;position:relative;transition:transform .18s cubic-bezier(.34,1.3,.6,1),box-shadow .18s,border-color .18s;}
+  .tile:hover{transform:translateY(-2px) scale(1.01);box-shadow:var(--shadow-md);border-color:var(--line-strong);}
+  .tile:active{transform:scale(.98);}
+  .tile.span2{grid-column:span 2;}
+  .tile.relevant{border-color:var(--blue-soft);background:var(--blue-tint);box-shadow:0 0 0 1px var(--blue-soft);}
+  .tile.relevant::before{content:'';position:absolute;left:0;top:12px;bottom:12px;width:3px;background:var(--blue-mid);border-radius:2px;}
+  .tile.dim{opacity:.45;}
+
+  .th{display:flex;align-items:center;gap:8px;margin-bottom:9px;}
+  .th-icon{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;flex-shrink:0;background:var(--cream-2);color:var(--ink-soft);}
+  .tile.relevant .th-icon{background:var(--blue-soft);color:var(--blue);}
+  .th-title{font-family:'Manrope',sans-serif;font-size:12px;font-weight:600;flex:1;}
+  .th-chev{color:var(--ink-faint);}
+  .tile-big{font-family:'Fraunces',serif;font-size:28px;font-weight:500;line-height:1;}
+  .tile-big.warn{color:var(--orange);}
+  .tile-big.good{color:var(--green);}
+  .tile-unit{font-size:11px;color:var(--ink-mute);margin-top:3px;}
+  .tile-rows{display:flex;flex-direction:column;gap:5px;}
+  .tr{display:flex;justify-content:space-between;align-items:center;font-size:12px;}
+  .tr .l{color:var(--ink-mute);}
+  .tr .v{font-weight:600;}
+  .pill{font-size:9px;padding:2px 6px;border-radius:4px;font-weight:700;letter-spacing:.03em;}
+  .pill-done{background:var(--green-soft);color:var(--green);}
+  .pill-prog{background:var(--yellow-soft);color:var(--yellow);}
+  .pill-open{background:var(--orange-soft);color:var(--orange);}
+  .mini-bars{display:flex;align-items:flex-end;gap:3px;height:32px;margin-top:6px;}
+  .mini-bars i{flex:1;background:var(--blue-soft);border-radius:2px 2px 0 0;min-height:4px;}
+  .mini-bars i.hi{background:var(--blue-mid);}
+  .stale-dot{position:absolute;bottom:8px;right:10px;width:7px;height:7px;border-radius:50%;background:var(--orange);box-shadow:0 0 0 2px var(--paper);}
+
+  /* Chat center */
+  .kz-chat{background:var(--cream);display:flex;flex-direction:column;border-left:1px solid var(--line);border-right:1px solid var(--line);background-image:radial-gradient(circle at 1px 1px,rgba(27,27,27,.035) 1px,transparent 0);background-size:22px 22px;}
+  .cc-stream{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:7px;}
+  .cc-stream::-webkit-scrollbar{width:5px;}
+  .cc-stream::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
+  .date-div{text-align:center;margin:5px 0;}
+  .date-div span{background:var(--cream-3);color:var(--ink-mute);font-size:10.5px;padding:3px 11px;border-radius:999px;font-weight:500;}
+
+  .cb{max-width:80%;padding:10px 13px;border-radius:13px;font-size:13.5px;line-height:1.55;box-shadow:0 1px 1px rgba(27,27,27,.04);}
+  .cb.in{background:var(--paper);align-self:flex-start;border-bottom-left-radius:4px;}
+  .cb.out{background:var(--cream-3);align-self:flex-end;border-bottom-right-radius:4px;}
+  .cb .chan{font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-mute);display:flex;align-items:center;gap:5px;margin-bottom:4px;}
+  .cb .bt{font-size:10px;color:var(--ink-mute);float:right;margin:6px 0 0 8px;}
+  .hl{padding:1px 4px;border-radius:4px;font-weight:600;cursor:pointer;transition:background .15s;}
+  .hl-kunde{background:var(--blue-soft);color:var(--blue);}
+  .hl-auftrag{background:var(--violet-soft);color:var(--violet);}
+  .hl-zahlung{background:var(--orange-soft);color:var(--orange);}
+  .hl-zeit{background:var(--green-soft);color:var(--green);}
+  .hl:hover{filter:brightness(.95);}
+  .cb.att{display:flex;align-items:center;gap:10px;cursor:pointer;}
+  .att-thumb{width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#FECACA,#F87171);display:grid;place-items:center;color:white;flex-shrink:0;}
+  .att-meta .an{font-weight:600;font-size:12.5px;}
+  .att-meta .as{font-size:10.5px;color:var(--ink-mute);}
+
+  /* Composer */
+  .cc-comp{background:var(--paper);border-top:1px solid var(--line);padding:11px 16px;display:flex;gap:10px;align-items:center;}
+  .cc-input{flex:1;background:var(--cream);border:1px solid var(--line);border-radius:22px;padding:10px 16px;font-family:inherit;font-size:13px;outline:none;}
+  .cc-input:focus{border-color:var(--line-strong);}
+  .cc-icon{width:36px;height:36px;border-radius:50%;background:var(--cream-2);color:var(--ink-soft);border:none;display:grid;place-items:center;cursor:pointer;}
+  .cc-send{width:40px;height:40px;border-radius:50%;background:var(--ink);color:var(--cream);border:none;display:grid;place-items:center;cursor:pointer;transition:transform .15s;}
+  .cc-send:hover{transform:scale(1.06);}
+
+  /* Suggest tile (dark) */
+  .sug{grid-column:span 2;background:var(--ink);color:var(--cream);border-radius:14px;padding:14px 15px;}
+  .sug .sl{font-size:9px;letter-spacing:.1em;text-transform:uppercase;opacity:.5;font-weight:700;margin-bottom:6px;}
+  .sug p{font-family:'Fraunces',serif;font-size:13px;line-height:1.5;margin-bottom:10px;}
+  .sug-actions{display:flex;gap:6px;}
+  .sug-btn{flex:1;background:rgba(255,255,255,.1);border:none;color:var(--cream);padding:8px;border-radius:8px;font-family:inherit;font-size:11.5px;font-weight:600;cursor:pointer;}
+  .sug-btn:hover{background:rgba(255,255,255,.18);}
+  .sug-btn.primary{background:var(--cream);color:var(--ink);}
+
+  /* Action list inside suggest */
+  .act{display:flex;flex-direction:column;gap:5px;margin-bottom:10px;}
+  .act-i{display:grid;grid-template-columns:16px 1fr auto;gap:7px;align-items:center;font-size:11px;}
+  .act-t{width:14px;height:14px;border-radius:50%;background:var(--green-bright);color:white;display:grid;place-items:center;}
+  .act-t.warn{background:var(--yellow);}
+  .at{font-size:8px;padding:1px 5px;border-radius:3px;font-weight:700;}
+  .at-auto{background:var(--green-soft);color:var(--green);}
+  .at-warn{background:var(--yellow-soft);color:var(--yellow);}
+
+  /* QA grid */
+  .qa-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:4px;}
+  .qa-btn{background:var(--cream-2);border:none;border-radius:8px;padding:8px;font-family:inherit;font-size:11px;font-weight:600;color:var(--ink);cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .15s;}
+  .qa-btn:hover{background:var(--cream-3);}
+  .qa-ic{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;flex-shrink:0;}
+
+  /* Detail overlay */
+  .det-bd{position:fixed;inset:0;background:rgba(27,27,27,.45);backdrop-filter:blur(8px);z-index:50;display:none;align-items:center;justify-content:center;padding:36px;}
+  .det-bd.show{display:flex;}
+  .det{background:var(--cream);border-radius:20px;box-shadow:var(--shadow-lg);width:100%;max-width:700px;max-height:calc(100vh - 72px);overflow:hidden;display:flex;flex-direction:column;transform:scale(.93);opacity:0;transition:transform .35s cubic-bezier(.34,1.3,.5,1),opacity .25s;}
+  .det-bd.show .det{transform:scale(1);opacity:1;}
+  .det-head{padding:20px 24px 14px;display:flex;align-items:flex-start;justify-content:space-between;border-bottom:1px solid var(--line);}
+  .det-head-left{display:flex;align-items:center;gap:12px;}
+  .det-icon{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;}
+  .det-head h2{font-size:19px;}
+  .det-head .ds{font-size:12px;color:var(--ink-mute);margin-top:2px;}
+  .det-body{padding:22px 24px;overflow-y:auto;}
+  .det-foot{padding:14px 24px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;}
+  .dbtn{padding:10px 16px;border-radius:10px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:var(--paper);color:var(--ink);}
+  .dbtn:hover{border-color:var(--line-strong);}
+  .dbtn.primary{background:var(--ink);color:var(--cream);border-color:var(--ink);}
+
+  .chart-card{background:var(--paper);border:1px solid var(--line);border-radius:13px;padding:16px 18px;margin-bottom:12px;}
+  .chart-title{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-mute);margin-bottom:12px;}
+  .scorecards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px;}
+  .scorecard{background:var(--paper);border:1px solid var(--line);border-radius:11px;padding:13px 14px;}
+  .scorecard .sc-num{font-family:'Fraunces',serif;font-size:24px;font-weight:500;line-height:1;}
+  .scorecard .sc-num.good{color:var(--green);}
+  .scorecard .sc-num.warn{color:var(--orange);}
+  .scorecard .sc-lbl{font-size:10px;color:var(--ink-mute);margin-top:4px;letter-spacing:.03em;text-transform:uppercase;font-weight:600;}
+  .data-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .data-table th{text-align:left;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-mute);padding:7px 10px;border-bottom:1px solid var(--line);font-weight:700;}
+  .data-table td{padding:8px 10px;border-bottom:1px solid var(--cream-2);}
+  .data-table tr:last-child td{border-bottom:none;}
+  .legend{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap;}
+  .legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-soft);}
+  .legend-dot{width:10px;height:10px;border-radius:3px;}
+
+  /* Save toast */
+  .toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--ink);color:var(--cream);border-radius:13px;padding:13px 18px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow-lg);z-index:100;opacity:0;transition:all .35s cubic-bezier(.34,1.2,.5,1);max-width:440px;}
+  .toast.show{transform:translateX(-50%) translateY(0);opacity:1;}
+  .toast .tt{font-size:13px;}
+  .toast .tt b{font-weight:700;}
+  .toast button{background:rgba(255,255,255,.12);border:none;color:var(--cream);padding:6px 13px;border-radius:7px;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;}
+
+  ::-webkit-scrollbar{width:5px;height:5px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:3px;}
+</style>
+</head>
+<body>
+
+<div class="kz">
+
+  <!-- ===== HEADER ===== -->
+  <header class="kz-head">
+    <div class="kz-left">
+      <button class="kz-back" onclick="closeKz()">
+        <svg width="10" height="16" viewBox="0 0 8 14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="6.5 1.5 1.5 7 6.5 12.5"/></svg>
+        Zurück
+      </button>
+      <div class="kz-sep"></div>
+      <div class="kz-ava">M</div>
+      <div class="kz-info">
+        <h1>Müller (Privat)</h1>
+        <div class="kz-tags">
+          <span class="htag gold">A-Kunde</span>
+          <span class="htag">Berlin · seit 2018</span>
+          <span class="htag good">14 Aufträge · pünktlich</span>
+        </div>
+      </div>
+    </div>
+    <div class="kz-right">
+      <div class="mode-pill">
+        <button class="mode-opt active" onclick="setMode(this,'smart')">Smart</button>
+        <button class="mode-opt" onclick="setMode(this,'all')">Alles</button>
+      </div>
+      <button class="kz-close" onclick="closeKz()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== BODY ===== -->
+  <div class="kz-body">
+
+    <!-- LEFT: Klient -->
+    <div class="bento" id="bl">
+      <div class="bento-label">Klient</div>
+
+      <div class="tile span2 relevant" onclick="openDet('zahlung')">
+        <div class="th"><div class="th-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></div><div class="th-title">Zahlung</div><svg class="th-chev" width="7" height="11" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1.5 1.5 6.5 6.5 1.5 11.5"/></svg></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-end;">
+          <div><div class="tile-big warn">248 €</div><div class="tile-unit">offen · 4 Tage</div></div>
+          <div style="text-align:right;"><div style="font-size:12px;font-weight:600;color:var(--green);">pünktlich</div><div style="font-size:10px;color:var(--ink-mute);">⌀ 4,7 T. · bar</div></div>
+        </div>
+      </div>
+
+      <div class="tile span2 relevant" onclick="openDet('auftraege')">
+        <div class="th"><div class="th-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div><div class="th-title">Offene Aufträge</div><svg class="th-chev" width="7" height="11" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1.5 1.5 6.5 6.5 1.5 11.5"/></svg></div>
+        <div class="tile-rows">
+          <div class="tr"><span class="l" style="color:var(--violet);font-weight:600;">A-2026-0042 · Zink</span><span class="pill pill-done">Fertig</span></div>
+          <div class="tr"><span class="l">A-2026-0058 · Vernicklung</span><span class="pill pill-prog">Bad 2</span></div>
+        </div>
+      </div>
+
+      <div class="tile" onclick="openDet('historie')">
+        <div class="th"><div class="th-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div><div class="th-title">Verlauf</div></div>
+        <div class="tile-big">14</div>
+        <div class="tile-unit">Aufträge gesamt</div>
+        <div class="mini-bars"><i style="height:40%"></i><i style="height:55%"></i><i style="height:45%"></i><i style="height:70%"></i><i class="hi" style="height:85%"></i><i class="hi" style="height:100%"></i></div>
+      </div>
+
+      <div class="tile" onclick="openDet('reklas')">
+        <div class="th"><div class="th-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3z"/><line x1="12" y1="9" x2="12" y2="13"/></svg></div><div class="th-title">Reklas</div></div>
+        <div class="tile-big good">0</div>
+        <div class="tile-unit">saubere Weste</div>
+      </div>
+
+      <div class="tile span2" onclick="openDet('komm')">
+        <div class="th"><div class="th-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div><div class="th-title">Kommunikation</div><svg class="th-chev" width="7" height="11" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1.5 1.5 6.5 6.5 1.5 11.5"/></svg></div>
+        <div class="tile-rows">
+          <div class="tr"><span class="l">📧 E-Mail</span><span class="v">18</span></div>
+          <div class="tr"><span class="l">📞 Telefon</span><span class="v">9</span></div>
+          <div class="tr"><span class="l">💬 WhatsApp</span><span class="v">3</span></div>
+        </div>
+      </div>
+
+      <div class="tile span2" onclick="openDet('stamm')">
+        <div class="th"><div class="th-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="th-title">Stammdaten</div><svg class="th-chev" width="7" height="11" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1.5 1.5 6.5 6.5 1.5 11.5"/></svg></div>
+        <div class="tile-rows">
+          <div class="tr"><span class="l">Telefon</span><span class="v">030 / 55 12 88</span></div>
+          <div class="tr"><span class="l">Adresse</span><span class="v">Berlin-Mitte</span></div>
+        </div>
+      </div>
+
+      <div class="tile span2" onclick="openDet('notizen')">
+        <div class="th"><div class="th-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div><div class="th-title">Notizen &amp; Tags</div></div>
+        <div style="font-size:12px;color:var(--ink-mute);">„Sehr zufriedener Kunde, empfiehlt weiter. Sammelt historische Armaturen."</div>
+      </div>
+    </div>
+
+    <!-- CENTER: Chat -->
+    <div class="kz-chat">
+      <div class="cc-stream">
+        <div class="date-div"><span>28. Mai 2026</span></div>
+        <div class="cb in"><div class="chan">📧 E-Mail · Müller</div>Guten Tag, sind meine <span class="hl hl-auftrag" onclick="openDet('auftraege')">Zinkteile (A-2026-0042)</span> fertig? Ich würde gerne <span class="hl hl-zeit">abholen</span>.<span class="bt">10:32</span></div>
+        <div class="cb out">Hallo Herr Müller, ich melde mich, sobald alles bereit ist.<span class="bt">11:14</span></div>
+        <div class="cb in att" onclick="openDet('anhaenge')">
+          <div class="att-thumb"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>
+          <div class="att-meta"><div class="an">Wasserhahn_historisch.jpg</div><div class="as">📎 1,2 MB · 28.5.</div></div>
+        </div>
+        <div class="date-div"><span>Heute · 3. Juni</span></div>
+        <div class="cb in">
+          <div class="chan"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3"/></svg> Telefonnotiz · 11:08</div>
+          <span class="hl hl-kunde" onclick="openDet('stamm')">Herr Müller</span> fragt, ob die Zinkteile <span class="hl hl-auftrag" onclick="openDet('auftraege')">A-2026-0042</span> fertig sind. Möchte <span class="hl hl-zeit">morgen abholen</span>, zahlt <span class="hl hl-zahlung" onclick="openDet('zahlung')">bar</span>.<span class="bt">11:08</span>
+        </div>
+      </div>
+      <div class="cc-comp">
+        <button class="cc-icon" title="Anhang"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>
+        <input class="cc-input" value="Ihre Zinkteile sind ab morgen 10:00 abholbereit. Offene Rechnung 248 € bitte mitbringen."/>
+        <button class="cc-send"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+      </div>
+    </div>
+
+    <!-- RIGHT: Vorgang -->
+    <div class="bento" id="br">
+      <div class="bento-label">Dieser Vorgang</div>
+
+      <div class="sug" id="sg-act">
+        <div class="sl">Vorbereitet — ein Klick</div>
+        <div class="act">
+          <div class="act-i"><div class="act-t"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div><span style="color:rgba(250,246,238,.9);">Kalender: Abholung Do 10:00</span><span class="at at-auto">auto</span></div>
+          <div class="act-i"><div class="act-t"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div><span style="color:rgba(250,246,238,.9);">Auftrag: Abholung + bar</span><span class="at at-auto">auto</span></div>
+          <div class="act-i"><div class="act-t"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div><span style="color:rgba(250,246,238,.9);">Kundenkarte: Notiz</span><span class="at at-auto">auto</span></div>
+          <div class="act-i"><div class="act-t warn"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="12" y1="9" x2="12" y2="13"/></svg></div><span style="color:rgba(250,246,238,.9);">Rechnung 248 € erwähnen</span><span class="at at-warn">prüfen</span></div>
+        </div>
+        <div class="sug-actions"><button class="sug-btn primary" onclick="markDone()">Alle anwenden</button><button class="sug-btn">Einzeln</button></div>
+      </div>
+
+      <div class="tile span2 relevant" onclick="openDet('kalender')">
+        <div class="th"><div class="th-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg></div><div class="th-title">Wunschtermin: morgen</div><svg class="th-chev" width="7" height="11" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1.5 1.5 6.5 6.5 1.5 11.5"/></svg></div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="background:var(--green-bright);color:white;border-radius:9px;padding:7px 12px;text-align:center;"><div style="font-size:9px;font-weight:700;opacity:.85;">DO</div><div style="font-family:'Fraunces',serif;font-size:19px;">4</div></div>
+          <div><div style="font-size:13px;font-weight:600;color:var(--green);">10:00 frei ✓</div><div style="font-size:11px;color:var(--ink-mute);">keine Kollision · Öffnungszeiten OK</div></div>
+        </div>
+      </div>
+
+      <div class="sug" style="background:var(--cream-3);color:var(--ink);">
+        <div class="sl" style="opacity:.5;">Antwort-Vorschlag</div>
+        <p style="color:var(--ink-soft);">„Guten Tag Herr Müller, Ihre Zinkteile (A-2026-0042) sind ab morgen 10:00 abholbereit. Eine offene Rechnung über 248 € bitte bei Abholung mitbringen."</p>
+        <div class="sug-actions"><button class="sug-btn primary" style="background:var(--ink);color:var(--cream);">Übernehmen</button></div>
+      </div>
+
+      <div class="tile span2" onclick="openDet('anhaenge')">
+        <div class="th"><div class="th-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></div><div class="th-title">Anhänge</div><svg class="th-chev" width="7" height="11" viewBox="0 0 8 13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1.5 1.5 6.5 6.5 1.5 11.5"/></svg></div>
+        <div class="tile-rows">
+          <div class="tr"><span class="l">🖼 Wasserhahn_historisch.jpg</span><span class="v" style="font-size:10px;color:var(--ink-mute);">28.5.</span></div>
+          <div class="tr"><span class="l">📄 Lieferschein_0042.pdf</span><span class="v" style="font-size:10px;color:var(--ink-mute);">26.5.</span></div>
+        </div>
+      </div>
+
+      <div class="tile span2" style="cursor:default;">
+        <div class="th"><div class="th-icon"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div><div class="th-title">Schnellzugriff</div></div>
+        <div class="qa-grid">
+          <button class="qa-btn" onclick="openDet('ware')"><span class="qa-ic" style="background:var(--blue-soft);color:var(--blue);"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>Wo ist Ware?</button>
+          <button class="qa-btn" onclick="openDet('zahlung')"><span class="qa-ic" style="background:var(--orange-soft);color:var(--orange);"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="2" y="5" width="20" height="14" rx="2"/></svg></span>Zahlung</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Detail -->
+<div class="det-bd" id="det-bd" onclick="if(event.target===this)closeDet()"><div class="det" id="det"></div></div>
+
+<!-- Toast -->
+<div class="toast" id="toast"><span class="tt"><b>Zwischengespeichert.</b> Offene Aktion im Tagesfokus.</span><button onclick="hideToast()">OK</button></div>
+
+<script>
+  let done=false;
+  function closeKz(){if(!done){showToast();}else{alert('→ Zurück zur Kommunikationszentrale');}}
+  function setMode(btn,mode){document.querySelectorAll('.mode-opt').forEach(b=>b.classList.remove('active'));btn.classList.add('active');document.querySelectorAll('.bento .tile').forEach(t=>{if(mode==='all')t.classList.remove('dim');else if(!t.classList.contains('relevant'))t.classList.add('dim');});}
+  function markDone(){done=true;document.getElementById('sg-act').innerHTML='<div style="display:flex;align-items:center;gap:10px;justify-content:center;padding:6px;"><div style="width:30px;height:30px;border-radius:50%;background:var(--green-bright);color:white;display:grid;place-items:center;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div><div><div style="font-weight:700;">Erledigt</div><div style="font-size:11px;color:rgba(250,246,238,.6);">4 Aktionen verteilt</div></div></div>';}
+  function showToast(){document.getElementById('toast').classList.add('show');setTimeout(hideToast,4000);}
+  function hideToast(){document.getElementById('toast').classList.remove('show');}
+
+  const D={
+    zahlung:{icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>',bg:'background:var(--orange-soft);color:var(--orange);',t:'Zahlung',s:'Müller · alle Belege',
+      b:`<div class="scorecards"><div class="scorecard"><div class="sc-num warn">248 €</div><div class="sc-lbl">offen</div></div><div class="scorecard"><div class="sc-num good">4,7</div><div class="sc-lbl">⌀ Tage bis Zahlung</div></div><div class="scorecard"><div class="sc-num good">100 %</div><div class="sc-lbl">Quote 12 Mon.</div></div></div>
+      <div class="chart-card"><div class="chart-title">Zahlungen 6 Monate</div>${bc([{m:'Jan',a:420,b:0},{m:'Feb',a:380,b:0},{m:'Mär',a:510,b:0},{m:'Apr',a:290,b:0},{m:'Mai',a:340,b:0},{m:'Jun',a:0,b:248}])}<div class="legend"><div class="legend-item"><span class="legend-dot" style="background:var(--green-bright);"></span>bezahlt</div><div class="legend-item"><span class="legend-dot" style="background:var(--orange);"></span>offen</div></div></div>
+      <div class="chart-card"><div class="chart-title">Offene Belege</div><table class="data-table"><thead><tr><th>Rechnung</th><th>Datum</th><th>Betrag</th><th>Status</th></tr></thead><tbody><tr><td>2026-0231</td><td>30.5.</td><td>248 €</td><td><span class="pill pill-open">offen · 4 T.</span></td></tr></tbody></table></div>`,a:['Zahlungserinnerung','Als bezahlt markieren']},
+    auftraege:{icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',bg:'background:var(--violet-soft);color:var(--violet);',t:'Aufträge',s:'2 offen · 14 gesamt',
+      b:`<div class="chart-card"><div class="chart-title">Aktuell offen</div><table class="data-table"><thead><tr><th>Nr.</th><th>Beschr.</th><th>Material</th><th>Status</th><th>Termin</th></tr></thead><tbody><tr><td><b>A-2026-0042</b></td><td>Wasserhahn</td><td>Zink</td><td><span class="pill pill-done">Fertig</span></td><td>4.6.</td></tr><tr><td>A-2026-0058</td><td>Türbeschlag</td><td>Nickel</td><td><span class="pill pill-prog">Bad 2</span></td><td>12.6.</td></tr></tbody></table></div>
+      <div class="chart-card"><div class="chart-title">Volumen pro Jahr</div>${lc([{y:'21',v:3},{y:'22',v:5},{y:'23',v:4},{y:'24',v:7},{y:'25',v:9},{y:'26',v:6}])}</div>`,a:['Auftrag öffnen']},
+    historie:{icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>',bg:'background:var(--blue-soft);color:var(--blue);',t:'Auftragsverlauf',s:'14 Aufträge seit 2018',
+      b:`<div class="scorecards"><div class="scorecard"><div class="sc-num">14</div><div class="sc-lbl">Aufträge</div></div><div class="scorecard"><div class="sc-num">~3.840 €</div><div class="sc-lbl">Umsatz</div></div><div class="scorecard"><div class="sc-num good">+38 %</div><div class="sc-lbl">vs. Vorjahr</div></div></div>
+      <div class="chart-card"><div class="chart-title">Trend</div>${lc([{y:'21',v:3},{y:'22',v:5},{y:'23',v:4},{y:'24',v:7},{y:'25',v:9},{y:'26',v:6}])}</div>
+      <div class="chart-card"><div class="chart-title">Materialverteilung</div>${dc([{l:'Zink',v:50,c:'#B45309'},{l:'Nickel',v:30,c:'#2563EB'},{l:'Chrom',v:20,c:'#16A34A'}])}</div>`,a:[]},
+    komm:{icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',bg:'background:var(--green-soft);color:var(--green);',t:'Kommunikation',s:'30 Kontakte',
+      b:`<div class="chart-card"><div class="chart-title">Kanalverteilung</div>${dc([{l:'E-Mail',v:18,c:'#2563EB'},{l:'Telefon',v:9,c:'#C2410C'},{l:'WhatsApp',v:3,c:'#16A34A'}])}</div>
+      <div class="chart-card"><div class="chart-title">Kontakte 6 Monate</div>${bc([{m:'Jan',a:3,b:0},{m:'Feb',a:2,b:0},{m:'Mär',a:4,b:0},{m:'Apr',a:5,b:0},{m:'Mai',a:6,b:0},{m:'Jun',a:4,b:0}],6,1)}</div>`,a:[]},
+    stamm:{icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',bg:'background:var(--cream-3);color:var(--ink-soft);',t:'Stammdaten',s:'Müller (Privat)',
+      b:`<div class="chart-card"><table class="data-table"><tbody><tr><td style="color:var(--ink-mute);width:35%;">Name</td><td><b>Müller (Privat)</b></td></tr><tr><td style="color:var(--ink-mute);">Telefon</td><td>030 / 55 12 88</td></tr><tr><td style="color:var(--ink-mute);">E-Mail</td><td>h.mueller@example.de</td></tr><tr><td style="color:var(--ink-mute);">Adresse</td><td>Beispielstr. 4, Berlin</td></tr><tr><td style="color:var(--ink-mute);">Seit</td><td>2018</td></tr><tr><td style="color:var(--ink-mute);">Kanal</td><td>Telefon bevorzugt</td></tr><tr><td style="color:var(--ink-mute);">Zahlart</td><td>Bar bei Abholung</td></tr></tbody></table></div>`,a:['Bearbeiten']},
+    reklas:{icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',bg:'background:var(--green-soft);color:var(--green);',t:'Reklamationen',s:'Müller',
+      b:`<div class="chart-card" style="text-align:center;padding:30px 18px;"><div style="width:56px;height:56px;border-radius:50%;background:var(--green-soft);color:var(--green);display:grid;place-items:center;margin:0 auto 14px;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></div><div style="font-family:'Fraunces',serif;font-size:20px;">Keine Reklamationen</div><div style="font-size:12px;color:var(--ink-mute);margin-top:5px;">0 in 14 Aufträgen · A-Kunde</div></div>`,a:[]},
+    kalender:{icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg>',bg:'background:var(--orange-soft);color:var(--orange);',t:'Wunschtermin prüfen',s:'Abholung morgen',
+      b:`<div class="chart-card"><div class="chart-title">Donnerstag, 4. Juni</div><div style="display:flex;flex-direction:column;gap:5px;"><div style="display:flex;gap:8px;align-items:center;"><div style="width:44px;font-size:10px;color:var(--ink-mute);">08:00</div><div style="flex:1;height:28px;background:var(--cream-2);border-radius:5px;"></div></div><div style="display:flex;gap:8px;align-items:center;"><div style="width:44px;font-size:10px;color:var(--ink-mute);">10:00</div><div style="flex:1;height:28px;background:var(--green-soft);border-radius:5px;display:flex;align-items:center;padding:0 10px;font-size:10px;font-weight:600;color:var(--green);">Abholung Müller ✓</div></div><div style="display:flex;gap:8px;align-items:center;"><div style="width:44px;font-size:10px;color:var(--ink-mute);">13:00</div><div style="flex:1;height:28px;background:var(--red-soft);border-radius:5px;display:flex;align-items:center;padding:0 10px;font-size:10px;font-weight:600;color:var(--red);">Belegt: Lieferung Schmidt</div></div><div style="display:flex;gap:8px;align-items:center;"><div style="width:44px;font-size:10px;color:var(--ink-mute);">15:00</div><div style="flex:1;height:28px;background:var(--cream-2);border-radius:5px;"></div></div></div></div>
+      <div class="chart-card" style="background:var(--green-soft);border-color:var(--green-soft);"><div style="display:flex;gap:8px;align-items:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg><div style="font-size:12px;color:var(--green);font-weight:600;">10:00 frei · keine Kollision · Öffnungszeiten OK · niemand abwesend</div></div></div>`,a:['Termin eintragen']},
+    anhaenge:{icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>',bg:'background:var(--cream-3);color:var(--ink-soft);',t:'Anhänge',s:'alle Dateien Müller',
+      b:`<div class="chart-card"><table class="data-table"><thead><tr><th>Datei</th><th>Auftrag</th><th>Datum</th></tr></thead><tbody><tr><td>🖼 Wasserhahn_historisch.jpg</td><td>A-2026-0042</td><td>28.5.</td></tr><tr><td>📄 Lieferschein_0042.pdf</td><td>A-2026-0042</td><td>26.5.</td></tr><tr><td>📄 Angebot_0042.pdf</td><td>A-2026-0042</td><td>20.5.</td></tr></tbody></table></div>`,a:['Alle herunterladen']},
+    ware:{icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>',bg:'background:var(--blue-soft);color:var(--blue);',t:'Wo ist die Ware?',s:'A-2026-0042',
+      b:`<div class="chart-card"><div class="chart-title">Aktueller Standort</div><div style="display:flex;align-items:center;gap:6px;margin:4px 0;"><div style="flex:1;text-align:center;"><div style="width:30px;height:30px;border-radius:50%;background:var(--green-soft);color:var(--green);display:grid;place-items:center;margin:0 auto;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div><div style="font-size:9px;margin-top:3px;">Bad 3</div></div><div style="flex:1;height:2px;background:var(--green-bright);"></div><div style="flex:1;text-align:center;"><div style="width:30px;height:30px;border-radius:50%;background:var(--blue-soft);color:var(--blue);display:grid;place-items:center;margin:0 auto;border:2px solid var(--blue-mid);"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4"/></svg></div><div style="font-size:9px;margin-top:3px;font-weight:600;">Verpackung</div></div><div style="flex:1;height:2px;background:var(--cream-3);"></div><div style="flex:1;text-align:center;opacity:.5;"><div style="width:30px;height:30px;border-radius:50%;background:var(--cream-2);display:grid;place-items:center;margin:0 auto;"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></div><div style="font-size:9px;margin-top:3px;">Übergabe</div></div></div></div>
+      <div class="chart-card"><table class="data-table"><tbody><tr><td style="color:var(--ink-mute);">Bad 3 fertig</td><td>heute 11:02</td></tr><tr><td style="color:var(--ink-mute);">Bereit</td><td>ab 14:00</td></tr><tr><td style="color:var(--ink-mute);">Etikett</td><td>noch nicht gedruckt</td></tr></tbody></table></div>`,a:['Etikett drucken']},
+    notizen:{icon:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>',bg:'background:var(--cream-3);color:var(--ink-soft);',t:'Notizen & Tags',s:'Müller',
+      b:`<div class="chart-card"><div style="font-size:13px;color:var(--ink-soft);line-height:1.6;">„Sehr zufriedener Kunde, empfiehlt weiter. Sammelt historische Armaturen. Bevorzugt telefonischen Kontakt. Möchte immer persönlich abholen."</div></div>
+      <div class="chart-card"><div class="chart-title">Tags</div><div style="display:flex;gap:5px;flex-wrap:wrap;"><span class="htag gold">A-Kunde</span><span class="htag">Privat</span><span class="htag">Sammler</span><span class="htag">Stammkunde</span></div></div>`,a:['Notiz bearbeiten']}
+  };
+
+  function openDet(k){const d=D[k];if(!d)return;const acts=d.a.map((a,i)=>`<button class="dbtn ${i===0?'primary':''}">${a}</button>`).join('');document.getElementById('det').innerHTML=`<div class="det-head"><div class="det-head-left"><div class="det-icon" style="${d.bg}">${d.icon}</div><div><h2>${d.t}</h2><div class="ds">${d.s}</div></div></div><button class="kz-close" onclick="closeDet()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div><div class="det-body">${d.b}</div><div class="det-foot"><button class="dbtn" onclick="closeDet()">Schließen</button>${acts}</div>`;document.getElementById('det-bd').classList.add('show');}
+  function closeDet(){document.getElementById('det-bd').classList.remove('show');}
+
+  function bc(data,mx,blue){const m=mx||Math.max(...data.map(d=>d.a+d.b));const w=320/data.length;return`<svg viewBox="0 0 320 110" style="width:100%;height:110px;">${data.map((d,i)=>{const x=i*w+w*.15;const bw=w*.7;const ph=(d.a/m)*82,oh=(d.b/m)*82;const py=94-ph,oy=94-ph-oh;return`${ph>0?`<rect x="${x}" y="${py}" width="${bw}" height="${ph}" rx="3" fill="${blue?'#2563EB':'#16A34A'}"/>`:''}${oh>0?`<rect x="${x}" y="${oy}" width="${bw}" height="${oh}" rx="3" fill="#C2410C"/>`:''}<text x="${x+bw/2}" y="108" font-size="9" fill="#8A8278" text-anchor="middle" font-family="Manrope">${d.m}</text>`;}).join('')}</svg>`;}
+  function lc(data){const max=Math.max(...data.map(d=>d.v));const step=300/(data.length-1);const pts=data.map((d,i)=>`${i*step+10},${92-(d.v/max)*76}`).join(' ');const area=`10,92 ${pts} ${(data.length-1)*step+10},92`;return`<svg viewBox="0 0 320 110" style="width:100%;height:110px;"><polygon points="${area}" fill="#DBEAFE" opacity=".6"/><polyline points="${pts}" fill="none" stroke="#2563EB" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${data.map((d,i)=>`<circle cx="${i*step+10}" cy="${92-(d.v/max)*76}" r="3" fill="#2563EB"/><text x="${i*step+10}" y="106" font-size="9" fill="#8A8278" text-anchor="middle" font-family="Manrope">${d.y}</text>`).join('')}</svg>`;}
+  function dc(data){const total=data.reduce((s,d)=>s+d.v,0);let acc=0;const r=44,c=2*Math.PI*r;const segs=data.map(d=>{const frac=d.v/total;const dash=frac*c;const off=-acc*c;acc+=frac;return`<circle cx="56" cy="56" r="${r}" fill="none" stroke="${d.c}" stroke-width="15" stroke-dasharray="${dash} ${c-dash}" stroke-dashoffset="${off}" transform="rotate(-90 56 56)"/>`;}).join('');const legend=data.map(d=>`<div class="legend-item"><span class="legend-dot" style="background:${d.c};"></span>${d.l} (${d.v})</div>`).join('');return`<div style="display:flex;align-items:center;gap:18px;"><svg viewBox="0 0 112 112" style="width:112px;height:112px;flex-shrink:0;">${segs}<text x="56" y="54" font-size="18" font-family="Fraunces" text-anchor="middle" fill="#1B1B1B">${total}</text><text x="56" y="68" font-size="9" fill="#8A8278" text-anchor="middle" font-family="Manrope">gesamt</text></svg><div class="legend" style="flex-direction:column;gap:7px;margin:0;">${legend}</div></div>`;}
+
+  document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(document.getElementById('det-bd').classList.contains('show'))closeDet();else closeKz();}});
+</script>
+</body>
+</html>

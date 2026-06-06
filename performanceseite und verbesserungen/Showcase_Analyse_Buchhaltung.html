@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Analyse & Buchhaltung — Visualisierungs-Showcase</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg:#EFE9DE; --bg2:#F5F1E9; --surface:#FFFFFF; --surface2:#F4F1EA; --surface3:#FAF8F3;
+    --text:#1B1A16; --text2:#615F58; --text3:#928F86;
+    --line:rgba(20,18,12,0.08); --line2:rgba(20,18,12,0.16);
+    --teal-bg:#E1F5EE; --teal:#0F6E56; --teal-st:#1D9E75;
+    --amber-bg:#FBEFD7; --amber:#7A4A0B; --amber-st:#E09B23;
+    --red-bg:#FBE9E9; --red:#8F2222; --red-st:#D8504F;
+    --blue-bg:#E7F1FB; --blue:#0C447C; --blue-st:#2F86D8;
+    --violet-bg:#EEEDFD; --violet:#3C3489; --violet-st:#6258C4;
+    --gray-bg:#EEEBE3;
+    --r:10px; --r-lg:16px; --r-sm:7px;
+    --sh:0 1px 2px rgba(20,18,12,.05), 0 4px 16px rgba(20,18,12,.05);
+    --sh-lg:0 2px 6px rgba(20,18,12,.06), 0 12px 32px rgba(20,18,12,.08);
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); font-family:var(--font); color:var(--text); -webkit-font-smoothing:antialiased; line-height:1.5;}
+  .wrap{max-width:760px; margin:0 auto; padding:28px 18px 80px;}
+  h1{font-size:20px; font-weight:650; margin:0 0 4px;}
+  .sub{font-size:13.5px; color:var(--text2); margin:0 0 20px;}
+  .tabs{display:flex; gap:6px; background:var(--surface2); padding:5px; border-radius:var(--r); margin-bottom:22px; flex-wrap:wrap;}
+  .tabs button{flex:1; min-width:130px; border:none; background:transparent; padding:9px 10px; border-radius:var(--r-sm); font:inherit; font-size:13px; color:var(--text2); cursor:pointer; transition:.12s;}
+  .tabs button.on{background:var(--surface); color:var(--text); font-weight:600; box-shadow:var(--sh);}
+  .view{display:none;}
+  .view.on{display:block;}
+  .card{background:var(--surface); border-radius:var(--r-lg); box-shadow:var(--sh); overflow:hidden;}
+  button{font-family:inherit; cursor:pointer;}
+  .btn{background:var(--surface); border:0.5px solid var(--line2); border-radius:var(--r-sm); color:var(--text); padding:7px 12px; font-size:13px; display:inline-flex; align-items:center; gap:7px; transition:.12s;}
+  .btn:hover{background:var(--surface2);}
+  .btn.primary{background:var(--text); color:#fff; border-color:var(--text);}
+  .btn.primary:hover{opacity:.9;}
+  .btn.amber{background:var(--amber-st); color:#3a2405; border-color:var(--amber-st);}
+  select{font:inherit; font-size:12.5px; border:0.5px solid var(--line2); border-radius:var(--r-sm); background:var(--surface); padding:6px 9px; color:var(--text);}
+  .ico{display:inline-block; width:1em; height:1em; vertical-align:-0.13em; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round;}
+  .kicker{font-size:10.5px; font-weight:600; letter-spacing:.7px; text-transform:uppercase; color:var(--text3);}
+  .sec{padding:18px 22px; border-top:0.5px solid var(--line);}
+  /* category header strip */
+  .chead{display:flex; align-items:center; gap:14px; padding:18px 22px; background:linear-gradient(180deg,var(--amber-bg),transparent);}
+  .cicon{width:46px; height:46px; border-radius:13px; background:var(--surface); box-shadow:var(--sh); display:flex; align-items:center; justify-content:center; color:var(--amber); font-size:22px; flex-shrink:0;}
+  .ctitle{font-size:17px; font-weight:650;}
+  .csub{font-size:12.5px; color:var(--text2);}
+  .seg{display:inline-flex; gap:3px; padding:3px; background:var(--surface2); border-radius:var(--r-sm); margin:14px 0 0;}
+  .seg button{border:none; background:transparent; padding:5px 13px; border-radius:5px; font:inherit; font-size:12.5px; color:var(--text2); cursor:pointer;}
+  .seg button.on{background:var(--surface); color:var(--text); font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.07);}
+  /* hero */
+  .hero{display:flex; gap:18px; align-items:flex-start; justify-content:space-between; flex-wrap:wrap; margin-top:14px;}
+  .heronum{font-size:34px; font-weight:680; line-height:1; letter-spacing:-.5px;}
+  .pill{display:inline-flex; align-items:center; gap:4px; padding:3px 9px; border-radius:20px; font-size:11.5px; font-weight:600;}
+  .p-red{background:var(--red-bg); color:var(--red);}
+  .p-amber{background:var(--amber-bg); color:var(--amber);}
+  .p-teal{background:var(--teal-bg); color:var(--teal);}
+  .p-gray{background:var(--gray-bg); color:var(--text2);}
+  .spark{width:150px; height:54px; flex-shrink:0;}
+  .label-line{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--text2); margin-top:9px;}
+  .meaning{display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:4px 9px; border-radius:20px; background:var(--amber-bg); color:var(--amber); font-weight:600;}
+  /* info button + popover */
+  .info{display:inline-flex; align-items:center; justify-content:center; width:17px; height:17px; border-radius:50%; border:1px solid var(--line2); color:var(--text3); font-size:10.5px; font-weight:700; cursor:pointer; flex-shrink:0; font-style:italic; background:var(--surface);}
+  .info:hover{color:var(--text); border-color:var(--text2);}
+  .pop{position:fixed; z-index:50; max-width:280px; background:var(--text); color:#fff; font-size:12.5px; line-height:1.55; padding:12px 14px; border-radius:var(--r); box-shadow:var(--sh-lg); display:none;}
+  .pop b{font-weight:650;}
+  .pop .formula{font-family:ui-monospace,Menlo,monospace; font-size:11.5px; background:rgba(255,255,255,.12); padding:2px 6px; border-radius:5px; display:inline-block; margin:4px 0;}
+  /* chart frame */
+  .chartframe{background:var(--surface3); border-radius:var(--r); padding:14px 14px 10px; margin-top:6px;}
+  .axislabel-y{font-size:10.5px; color:var(--text3); margin-bottom:2px;}
+  .axislabel-x{font-size:10.5px; color:var(--text3); text-align:center; margin-top:2px;}
+  .legend{display:flex; gap:14px; font-size:11.5px; color:var(--text2); margin-bottom:8px; flex-wrap:wrap;}
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .swatch{width:11px; height:11px; border-radius:3px;}
+  .readas{font-size:12.5px; color:var(--text2); background:var(--blue-bg); color:var(--blue); border-radius:var(--r-sm); padding:9px 12px; margin-top:10px; display:flex; gap:8px; align-items:flex-start;}
+  /* beleg rows */
+  .brow{display:flex; align-items:center; gap:12px; padding:11px 13px; background:var(--surface3); border-radius:var(--r); cursor:pointer; transition:.1s;}
+  .brow:hover{background:var(--surface2);}
+  .bav{width:34px; height:34px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; flex-shrink:0;}
+  .bname{font-weight:600; font-size:13.5px;}
+  .bmeta{font-size:11.5px; color:var(--text3);}
+  .bamt{margin-left:auto; font-weight:650; font-size:14px; white-space:nowrap;}
+  /* cross kpi */
+  .ckrow{overflow:hidden;}
+  .cktrack{display:flex; gap:12px; transition:transform .25s ease;}
+  .ckcard{flex:0 0 184px; background:var(--surface); border-radius:var(--r); padding:13px 14px; box-shadow:var(--sh); border-top:3px solid var(--blue-st);}
+  .ckcard.warn{border-top-color:var(--amber-st);}
+  .ckcard.miss{border-top-color:var(--line2); background:repeating-linear-gradient(45deg,var(--surface3),var(--surface3) 10px,#f0ece4 10px,#f0ece4 20px);}
+  .cklabel{font-size:11.5px; color:var(--text2); display:flex; align-items:center; gap:5px; margin-bottom:5px;}
+  .ckval{font-size:23px; font-weight:680; letter-spacing:-.3px;}
+  .ckdelta{font-size:11.5px; font-weight:600; margin-top:2px;}
+  /* missing data block */
+  .missblock{border:1.5px dashed var(--line2); border-radius:var(--r); padding:16px; text-align:center; background:var(--surface3);}
+  .missicon{width:42px; height:42px; border-radius:50%; background:var(--gray-bg); display:flex; align-items:center; justify-content:center; margin:0 auto 10px; color:var(--text2); font-size:20px;}
+  .misstitle{font-weight:650; font-size:14.5px; margin-bottom:4px;}
+  .misstext{font-size:13px; color:var(--text2); margin-bottom:14px; max-width:420px; margin-left:auto; margin-right:auto;}
+  /* insight */
+  .insight{background:linear-gradient(180deg,var(--violet-bg),var(--surface3)); border-radius:var(--r); padding:16px 18px;}
+  .ins-h{display:flex; align-items:center; gap:8px; font-size:11px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; color:var(--violet); margin-bottom:10px;}
+  .ins-h .badge{background:var(--violet); color:#fff; padding:2px 7px; border-radius:20px; font-size:9.5px; letter-spacing:.3px;}
+  .ins-body{font-size:13.5px; line-height:1.65;}
+  .ins-body b{font-weight:650;}
+  .ins-cta{display:flex; gap:8px; flex-wrap:wrap; margin-top:13px;}
+  /* chips */
+  .chips{display:flex; flex-wrap:wrap; gap:8px;}
+  .chip{display:inline-flex; align-items:center; gap:6px; padding:7px 12px; background:var(--surface3); border-radius:20px; font-size:12px; color:var(--text); text-decoration:none; transition:.1s; border:0.5px solid var(--line);}
+  .chip:hover{background:var(--surface2);}
+  .chip.future{opacity:.55; border-style:dashed;}
+  /* central mapping */
+  .maprow{display:grid; grid-template-columns:1fr auto; gap:12px; align-items:center; padding:13px 15px; border-radius:var(--r); background:var(--surface3); margin-bottom:8px;}
+  .maprow .ml{display:flex; align-items:center; gap:11px;}
+  .mdot{width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:15px; flex-shrink:0;}
+  .mstat{font-size:11px; font-weight:600; padding:3px 9px; border-radius:20px;}
+  .field{display:flex; flex-direction:column; gap:5px; margin-bottom:13px;}
+  .field label{font-size:12.5px; font-weight:600; color:var(--text2);}
+  .field input{font:inherit; font-size:13.5px; padding:9px 11px; border:0.5px solid var(--line2); border-radius:var(--r-sm); background:var(--surface);}
+  .field .hint{font-size:11.5px; color:var(--text3);}
+  .way{border:0.5px solid var(--line); border-radius:var(--r); padding:13px 15px; margin-bottom:10px;}
+  .way.reco{border:1.5px solid var(--teal-st); background:var(--teal-bg);}
+  .way-h{display:flex; align-items:center; gap:9px; font-weight:650; font-size:13.5px; margin-bottom:3px;}
+  .way-t{font-size:12.5px; color:var(--text2); margin-bottom:10px;}
+  .toggle{width:42px; height:24px; border-radius:20px; background:var(--teal-st); position:relative; cursor:pointer;}
+  .toggle::after{content:""; position:absolute; width:18px; height:18px; border-radius:50%; background:#fff; top:3px; right:3px; box-shadow:0 1px 2px rgba(0,0,0,.2);}
+  @media(max-width:560px){
+    .heronum{font-size:28px;}
+    .spark{width:120px;}
+    .bmeta{display:none;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Analyse & Buchhaltung — Visualisierungs-Showcase</h1>
+  <p class="sub">Vier Ansichten desselben Musters. Gilt 1:1 für jede Detail-Kachel in Performance und Buchhaltung.</p>
+
+  <div class="tabs" id="tabs">
+    <button data-v="full" class="on">Drawer · vollständig</button>
+    <button data-v="missing">Daten fehlen</button>
+    <button data-v="capture">So erfasst du das</button>
+    <button data-v="central">Zentrale Erfassung</button>
+  </div>
+
+  <!-- ============ VIEW 1: FULL DRAWER ============ -->
+  <div class="view on" data-view="full">
+    <div class="card">
+      <div class="chead">
+        <div class="cicon"><svg class="ico" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
+        <div style="flex:1;">
+          <div class="ctitle">Energie</div>
+          <div class="csub">Strom · Gas · Heizung — Kostenkategorie der Buchhaltung</div>
+          <div class="seg" id="seg">
+            <button data-p="tag">Tag</button>
+            <button data-p="woche">Woche</button>
+            <button data-p="monat" class="on">Monat</button>
+            <button data-p="quartal">Quartal</button>
+          </div>
+        </div>
+        <button class="btn" style="padding:6px 9px;" aria-label="schließen"><svg class="ico" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      </div>
+
+      <!-- HERO -->
+      <div class="sec" style="border-top:none;">
+        <div class="kicker">Was kostet dich Energie</div>
+        <div class="hero">
+          <div>
+            <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-top:6px;">
+              <span class="heronum" id="hval">9.800&nbsp;€</span>
+              <span class="pill p-red" id="hchange"><svg class="ico" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7h-5M21 7v5"/></svg>+12,5&nbsp;% mehr als Vormonat</span>
+            </div>
+            <div class="label-line">
+              <span class="meaning" id="hmeaning"><svg class="ico" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 4 2.6 18a1.5 1.5 0 0 0 1.3 2.2h16.2a1.5 1.5 0 0 0 1.3-2.2L13.7 4a1.5 1.5 0 0 0-2.6 0z"/></svg>auffällig hoch</span>
+              <span class="info" data-tip="hero">i</span>
+              <span id="hmeta" style="color:var(--text3);">Juni 2026 · 3 Belege · 98 % vom Budget</span>
+            </div>
+          </div>
+          <svg class="spark" id="spark" viewBox="0 0 150 54" preserveAspectRatio="none"></svg>
+        </div>
+      </div>
+
+      <!-- VERLAUF -->
+      <div class="sec">
+        <div class="kicker">B · So entwickelt es sich</div>
+        <div class="chartframe">
+          <div class="axislabel-y">Euro pro Monat ↑</div>
+          <div class="legend">
+            <span><span class="swatch" style="background:#E09B23;"></span>dieses Jahr</span>
+            <span><span class="swatch" style="background:#928F86; height:3px; border-radius:2px;"></span>Vorjahr (gestrichelt)</span>
+            <span style="margin-left:auto;" id="tavg">Ø: 8.420&nbsp;€</span>
+          </div>
+          <div style="position:relative; height:160px;">
+            <canvas id="trend" role="img" aria-label="Energiekosten je Monat mit Vorjahresvergleich"></canvas>
+          </div>
+          <div class="axislabel-x" id="xlabel">→ Monate (letzte 12)</div>
+        </div>
+        <div class="readas">
+          <svg class="ico" viewBox="0 0 24 24" style="flex-shrink:0; margin-top:1px;"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+          <span id="readas">So liest du das: Die orange Linie sind deine Energiekosten pro Monat. Die gestrichelte Linie war letztes Jahr. Liegt Orange darüber, zahlst du mehr als damals — aktuell der Fall.</span>
+        </div>
+      </div>
+
+      <!-- BELEGE -->
+      <div class="sec">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+          <div class="kicker">C · Woraus besteht der Betrag <span id="ccount" style="color:var(--text3); text-transform:none; letter-spacing:0; font-weight:400;">· 3 Belege</span></div>
+          <select id="sort">
+            <option value="amt">Größter Betrag zuerst</option>
+            <option value="date">Neueste zuerst</option>
+            <option value="name">Lieferant A–Z</option>
+          </select>
+        </div>
+        <div id="comp" style="display:flex; flex-direction:column; gap:7px; margin-top:11px;"></div>
+        <button class="btn" id="callbtn" style="margin-top:11px; font-size:12.5px;">Alle Belege im Beleg-Cockpit öffnen
+          <svg class="ico" viewBox="0 0 24 24"><path d="M11 7H7a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-4M14 4h6v6M20 4 10 14"/></svg></button>
+      </div>
+
+      <!-- CROSS KPI -->
+      <div class="sec">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="kicker" style="color:var(--blue);">D · Was die Zahl im Verhältnis bedeutet <span class="info" data-tip="cross" style="vertical-align:1px;">i</span></div>
+          <div style="display:flex; gap:6px;">
+            <button class="btn" id="ckp" style="padding:5px 8px;" aria-label="zurück"><svg class="ico" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button>
+            <button class="btn" id="ckn" style="padding:5px 8px;" aria-label="weiter"><svg class="ico" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
+          </div>
+        </div>
+        <div class="ckrow" style="margin-top:11px;">
+          <div class="cktrack" id="cktrack"></div>
+        </div>
+        <div class="readas">
+          <svg class="ico" viewBox="0 0 24 24" style="flex-shrink:0; margin-top:1px;"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+          <span>So liest du das: Diese Karten setzen die Energiekosten ins Verhältnis — z.&nbsp;B. „von jedem Euro Umsatz gehen 23 Cent in Energie". Steigt der Wert, frisst Energie mehr von deiner Marge.</span>
+        </div>
+      </div>
+
+      <!-- INSIGHT -->
+      <div class="sec" id="insight-sec">
+        <div class="insight">
+          <div class="ins-h"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3v3M5 12H2M22 12h-3M6 6 4 4M20 20l-2-2"/><circle cx="12" cy="13" r="4"/></svg> E · Was Claude dazu sagt <span class="badge">Pro</span></div>
+          <div class="ins-body" id="ibody"></div>
+          <div class="ins-cta" id="icta"></div>
+        </div>
+      </div>
+
+      <!-- LINKS -->
+      <div class="sec">
+        <div class="kicker">F · Verknüpfte Bereiche</div>
+        <div class="chips" style="margin-top:11px;">
+          <a class="chip" href="#"><svg class="ico" viewBox="0 0 24 24"><path d="M3 3v18h18M7 14l4-4 3 3 5-6"/></svg>BWA · Position Energie</a>
+          <a class="chip" href="#"><svg class="ico" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-4 9a2 2 0 0 0 2 3h8a2 2 0 0 0 2-3l-4-9V3"/></svg>Galvanikbäder · 4 aktiv</a>
+          <a class="chip" href="#"><svg class="ico" viewBox="0 0 24 24"><path d="M5 7h14v13H5zM9 3h6"/></svg>Aufträge Juni · 50</a>
+          <a class="chip" href="#"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7h11v8H3zM14 10h4l3 3v2h-7"/></svg>Lieferant Mainova</a>
+          <a class="chip future" href="#"><svg class="ico" viewBox="0 0 24 24"><path d="M3 11l19-9-9 19-2-8z"/></svg>Marketing (folgt)</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ VIEW 2: MISSING DATA ============ -->
+  <div class="view" data-view="missing">
+    <div class="card">
+      <div class="chead">
+        <div class="cicon"><svg class="ico" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
+        <div style="flex:1;">
+          <div class="ctitle">Energie</div>
+          <div class="csub">Strom · Gas · Heizung</div>
+        </div>
+      </div>
+
+      <div class="sec" style="border-top:none;">
+        <div class="kicker" style="color:var(--blue);">D · Was die Zahl im Verhältnis bedeutet</div>
+        <p style="font-size:13px; color:var(--text2); margin:8px 0 12px;">Drei Verhältniszahlen lassen sich berechnen. Eine vierte fehlt, weil eine Angabe noch nicht erfasst ist — wir raten den Wert <b>nicht</b>, sondern zeigen, was fehlt.</p>
+        <div class="ckrow">
+          <div class="cktrack" style="transform:none;">
+            <div class="ckcard">
+              <div class="cklabel">Energie je Umsatz-Euro</div>
+              <div class="ckval">23&nbsp;ct</div>
+              <div class="ckdelta" style="color:var(--red);">▲ +4 ct vs. Vormonat</div>
+            </div>
+            <div class="ckcard warn">
+              <div class="cklabel">Energie je Auftrag</div>
+              <div class="ckval">196&nbsp;€</div>
+              <div class="ckdelta" style="color:var(--amber);">▲ +21 € vs. Vormonat</div>
+            </div>
+            <div class="ckcard miss" style="flex:0 0 220px;">
+              <div class="cklabel" style="color:var(--text2);"><svg class="ico" viewBox="0 0 24 24" style="font-size:13px;"><path d="M12 9v4M12 17h.01M10.3 4 2.6 18a1.5 1.5 0 0 0 1.3 2.2h16.2a1.5 1.5 0 0 0 1.3-2.2L13.7 4a1.5 1.5 0 0 0-2.6 0z"/></svg>Energie je kWh</div>
+              <div class="ckval" style="color:var(--text3);">— ct</div>
+              <div class="ckdelta" style="color:var(--text2); font-weight:400; margin-top:6px;">Für diese Berechnung fehlt der <b>Stromverbrauch in kWh</b>.</div>
+              <button class="btn amber" id="toCapture" style="margin-top:10px; font-size:12px; width:100%; justify-content:center;">So erfasst du das →</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="kicker">E · Was Claude dazu sagt</div>
+        <div class="missblock" style="margin-top:11px;">
+          <div class="missicon"><svg class="ico" viewBox="0 0 24 24"><path d="M12 3v3M5 12H2M22 12h-3M6 6 4 4M20 20l-2-2"/><circle cx="12" cy="13" r="4"/></svg></div>
+          <div class="misstitle">Tiefere Analyse braucht noch eine Angabe</div>
+          <div class="misstext">Sobald der Verbrauch in kWh hinterlegt ist, erkennt Claude automatisch, ob ein höherer Verbrauch oder ein höherer Preis die Kosten treibt — und schlägt konkrete Schritte vor.</div>
+          <button class="btn primary" id="toCapture2">Jetzt in 30 Sekunden erfassen</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ VIEW 3: CAPTURE HINT ============ -->
+  <div class="view" data-view="capture">
+    <div class="card" style="max-width:480px; margin:0 auto;">
+      <div style="padding:18px 22px; border-bottom:0.5px solid var(--line); display:flex; align-items:center; gap:12px;">
+        <div style="width:38px; height:38px; border-radius:10px; background:var(--amber-bg); color:var(--amber); display:flex; align-items:center; justify-content:center; font-size:18px;"><svg class="ico" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
+        <div style="flex:1;">
+          <div style="font-weight:650; font-size:15.5px;">So erfasst du den Stromverbrauch</div>
+          <div style="font-size:12.5px; color:var(--text2);">Einmal eingeben — danach rechnet die App automatisch weiter.</div>
+        </div>
+      </div>
+
+      <div class="sec" style="border-top:none;">
+        <p style="font-size:13.5px; color:var(--text); margin:0 0 16px;">Du findest den Wert auf deiner Stromrechnung von Mainova unter <b>„Verbrauch"</b> in <b>kWh</b> — meist auf Seite 1 oder 2.</p>
+
+        <div class="way reco">
+          <div class="way-h"><svg class="ico" viewBox="0 0 24 24" style="color:var(--teal);"><path d="M5 12l5 5L20 7"/></svg>Empfohlen: Schnell hier eintragen</div>
+          <div class="way-t">Reicht, um sofort loszulegen. Du kannst es später in der zentralen Erfassung dauerhaft automatisieren.</div>
+          <div class="field">
+            <label>Verbrauch laut Rechnung (kWh)</label>
+            <input type="number" placeholder="z. B. 14.800" />
+            <span class="hint">Zeitraum: Juni 2026 · Rechnung RE 24-118</span>
+          </div>
+          <button class="btn primary" style="width:100%; justify-content:center;">Speichern & weiterrechnen</button>
+        </div>
+
+        <div class="way">
+          <div class="way-h"><svg class="ico" viewBox="0 0 24 24"><path d="M5 7h14v13H5zM9 3h6M9 11h6M9 15h4"/></svg>Aus Beleg übernehmen</div>
+          <div class="way-t">Beleg ist schon da? Foto öffnen, kWh-Feld antippen — wird automatisch übernommen.</div>
+          <button class="btn" style="width:100%; justify-content:center;">Beleg RE 24-118 öffnen</button>
+        </div>
+
+        <div class="way">
+          <div class="way-h"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.5-2.3 1a7 7 0 0 0-1.7-1l-.3-2.5h-4l-.3 2.5a7 7 0 0 0-1.7 1l-2.3-1-2 3.5 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.5 2.3-1a7 7 0 0 0 1.7 1l.3 2.5h4l.3-2.5a7 7 0 0 0 1.7-1l2.3 1 2-3.5-2-1.5a7 7 0 0 0 .1-1z"/></svg>Dauerhaft automatisch (zentrale Erfassung)</div>
+          <div class="way-t">Einmal Zähler/Quelle hinterlegen — danach ohne dein Zutun bei jeder Rechnung.</div>
+          <button class="btn" id="toCentral" style="width:100%; justify-content:center;">Zur zentralen Erfassung</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ VIEW 4: CENTRAL CAPTURE ============ -->
+  <div class="view" data-view="central">
+    <div class="card">
+      <div style="padding:18px 22px; border-bottom:0.5px solid var(--line);">
+        <div style="font-weight:650; font-size:16px;">Zentrale Erfassung & Zuordnung</div>
+        <div style="font-size:12.5px; color:var(--text2); margin-top:2px;">Einmal einrichten — danach ordnet die App neue Belege und Werte automatisch der richtigen Kategorie und Analyse zu.</div>
+      </div>
+
+      <div class="sec" style="border-top:none;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:13px;">
+          <div class="kicker">Kategorien & Datenstatus</div>
+          <div style="display:flex; align-items:center; gap:9px; font-size:12.5px; color:var(--text2);">automatische Zuweisung <span class="toggle" aria-label="aktiv"></span></div>
+        </div>
+
+        <div class="maprow">
+          <div class="ml"><div class="mdot" style="background:var(--amber-bg); color:var(--amber);"><svg class="ico" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></div>
+            <div><div style="font-weight:600; font-size:13.5px;">Energie</div><div style="font-size:11.5px; color:var(--text3);">Mainova, Shell → automatisch zugeordnet</div></div></div>
+          <span class="mstat" style="background:var(--amber-bg); color:var(--amber);">kWh fehlt</span>
+        </div>
+        <div class="maprow">
+          <div class="ml"><div class="mdot" style="background:var(--red-bg); color:var(--red);"><svg class="ico" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-4 9a2 2 0 0 0 2 3h8a2 2 0 0 0 2-3l-4-9V3"/></svg></div>
+            <div><div style="font-weight:600; font-size:13.5px;">Material & Chemie</div><div style="font-size:11.5px; color:var(--text3);">12 Lieferanten → automatisch</div></div></div>
+          <span class="mstat" style="background:var(--teal-bg); color:var(--teal);">vollständig</span>
+        </div>
+        <div class="maprow">
+          <div class="ml"><div class="mdot" style="background:var(--blue-bg); color:var(--blue);"><svg class="ico" viewBox="0 0 24 24"><path d="M3 7h11v8H3zM14 10h4l3 3v2h-7"/></svg></div>
+            <div><div style="font-weight:600; font-size:13.5px;">Kfz & Wartung</div><div style="font-size:11.5px; color:var(--text3);">Werkstatt, Tankstellen → automatisch</div></div></div>
+          <span class="mstat" style="background:var(--teal-bg); color:var(--teal);">vollständig</span>
+        </div>
+
+        <div style="margin-top:18px;" class="kicker">Bezugsgrößen für Verhältniszahlen</div>
+        <p style="font-size:12.5px; color:var(--text2); margin:6px 0 12px;">Woher die App die Vergleichswerte zieht. Grün = läuft automatisch, Gelb = einmal hinterlegen.</p>
+
+        <div class="maprow"><div class="ml"><div class="mdot" style="background:var(--teal-bg); color:var(--teal);"><svg class="ico" viewBox="0 0 24 24"><path d="M3 3v18h18M7 14l4-4 3 3 5-6"/></svg></div><div><div style="font-weight:600; font-size:13.5px;">Umsatz</div><div style="font-size:11.5px; color:var(--text3);">aus Aufträgen & Rechnungen</div></div></div><span class="mstat" style="background:var(--teal-bg); color:var(--teal);">automatisch</span></div>
+        <div class="maprow"><div class="ml"><div class="mdot" style="background:var(--teal-bg); color:var(--teal);"><svg class="ico" viewBox="0 0 24 24"><path d="M5 7h14v13H5zM9 3h6"/></svg></div><div><div style="font-weight:600; font-size:13.5px;">Anzahl Aufträge</div><div style="font-size:11.5px; color:var(--text3);">aus dem Auftragsmodul</div></div></div><span class="mstat" style="background:var(--teal-bg); color:var(--teal);">automatisch</span></div>
+        <div class="maprow"><div class="ml"><div class="mdot" style="background:var(--teal-bg); color:var(--teal);"><svg class="ico" viewBox="0 0 24 24"><path d="M9 3h6M10 3v6l-4 9a2 2 0 0 0 2 3h8a2 2 0 0 0 2-3l-4-9V3"/></svg></div><div><div style="font-weight:600; font-size:13.5px;">Bad-Aktivstunden</div><div style="font-size:11.5px; color:var(--text3);">aus den Badregelkarten</div></div></div><span class="mstat" style="background:var(--teal-bg); color:var(--teal);">automatisch</span></div>
+        <div class="maprow"><div class="ml"><div class="mdot" style="background:var(--amber-bg); color:var(--amber);"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div><div><div style="font-weight:600; font-size:13.5px;">Energie in kWh</div><div style="font-size:11.5px; color:var(--text3);">Zählerstand oder aus Rechnung</div></div></div><span class="mstat" style="background:var(--amber-bg); color:var(--amber);">einrichten</span></div>
+
+        <div style="margin-top:16px; display:flex; gap:9px; flex-wrap:wrap;">
+          <button class="btn primary">kWh-Quelle jetzt hinterlegen</button>
+          <button class="btn">Zuordnungsregeln bearbeiten</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="pop" id="pop"></div>
+
+<script>
+(function(){
+  const eur = n => Math.round(n).toLocaleString('de-DE') + '\u00A0€';
+
+  const PERIODS = {
+    tag:{ value:380, change:'+8 % mehr als gestern', ck:'p-amber', meaning:'noch im Rahmen', mk:'p-teal', mi:'M12 5l7 7-7 7M5 12h14',
+      meta:'05.06.2026 · aus Tagesabgrenzung', tlabel:'→ Tage (letzte 14)', avg:'Ø: 327\u00A0€',
+      labels:['23.5','24.5','25.5','26.5','27.5','28.5','29.5','30.5','31.5','1.6','2.6','3.6','4.6','5.6'],
+      cur:[290,310,300,330,340,360,350,370,360,355,365,380,390,380], prev:[300,300,310,320,320,330,330,340,335,340,345,350,355,350],
+      readas:'So liest du das: Jeder Punkt ist ein Tag. Orange ist dieses Jahr, gestrichelt war letztes Jahr. An einzelnen Tagen schwankt es normal — wichtig ist der Trend über die Woche.',
+      belege:[], insight:{ body:'<b>Beobachtung:</b> Tageswert leicht über dem Schnitt, aber innerhalb des Tagesbudgets.<br><b>Hinweis:</b> Eine Ursache lässt sich erst ab Wochensicht sicher erkennen.', cta:[] } },
+    woche:{ value:2180, change:'+11 % mehr als Vorwoche', ck:'p-amber', meaning:'beobachten', mk:'p-amber', mi:'M12 9v4M12 17h.01M10.3 4 2.6 18a1.5 1.5 0 0 0 1.3 2.2h16.2a1.5 1.5 0 0 0 1.3-2.2L13.7 4a1.5 1.5 0 0 0-2.6 0z',
+      meta:'KW22 · 02.–08.06. · 1 Beleg', tlabel:'→ Wochen (letzte 12)', avg:'Ø: 1.940\u00A0€',
+      labels:['KW11','KW12','KW13','KW14','KW15','KW16','KW17','KW18','KW19','KW20','KW21','KW22'],
+      cur:[1800,1850,1900,1950,2000,1950,2050,2100,2000,2150,2080,2180], prev:[1850,1820,1880,1900,1920,1900,1950,1980,1960,2000,2010,2020],
+      readas:'So liest du das: Jeder Punkt ist eine Kalenderwoche. Steigt Orange Woche für Woche und liegt über der gestrichelten Vorjahreslinie, wird Energie teurer als früher.',
+      belege:[{date:'05.06.', name:'Mainova · Strom (Teilabgrenzung)', doc:'RE 24-118 ant.', amt:1340, sup:'M'}],
+      insight:{ body:'<b>Beobachtung:</b> Verbrauch über Vorwoche und nah an der Budgetgrenze.<br><b>Vermutung:</b> längere Bad-Laufzeiten ab Wochenmitte.<br><b>Vorschlag:</b> Bad-Aktivstunden dieser Woche prüfen.', cta:[{i:'M12 7v5l3 2', l:'Bad-Aktivstunden KW22'}] } },
+    monat:{ value:9800, change:'+12,5 % mehr als Vormonat', ck:'p-red', meaning:'auffällig hoch', mk:'p-amber', mi:'M12 9v4M12 17h.01M10.3 4 2.6 18a1.5 1.5 0 0 0 1.3 2.2h16.2a1.5 1.5 0 0 0 1.3-2.2L13.7 4a1.5 1.5 0 0 0-2.6 0z',
+      meta:'Juni 2026 · 3 Belege · 98 % vom Budget', tlabel:'→ Monate (letzte 12)', avg:'Ø: 8.420\u00A0€',
+      labels:['Jul','Aug','Sep','Okt','Nov','Dez','Jan','Feb','Mär','Apr','Mai','Jun'],
+      cur:[7100,7400,7800,8100,8600,9200,8900,8400,8200,8500,8700,9800], prev:[7300,7200,7500,7900,8200,8600,8400,8000,7900,8100,8200,8300],
+      readas:'So liest du das: Die orange Linie sind deine Energiekosten pro Monat. Die gestrichelte Linie war letztes Jahr. Liegt Orange darüber, zahlst du mehr als damals — aktuell der Fall.',
+      belege:[{date:'12.06.', name:'Mainova · Strom Werkstatt', doc:'RE 24-118', amt:5840, sup:'M'},{date:'08.06.', name:'Mainova · Gas Galvanikbäder', doc:'RE 24-117', amt:2980, sup:'M'},{date:'03.06.', name:'Shell · Heizöl Reserve', doc:'BEL 24-093', amt:980, sup:'S'}],
+      insight:{ body:'<b>Beobachtung:</b> Gas +18 %, Strom +9 %, Umsatz nur +4 %.<br><b>Vermutung:</b> Galvanikbad 2 läuft seit 04.06. nachts durch (sollte 22–06 Uhr aus sein). Vielleicht ein Thermostatfehler.<br><b>Vorschlag:</b> Badregelkarte Bad 2 und das Nachtabschaltungs-Protokoll prüfen.', cta:[{i:'M5 3v9a4 4 0 0 0 4 4h2M15 3v6a4 4 0 0 0 4 4h2', l:'Badregelkarte Bad 2'},{i:'M12 7v5l3 2', l:'Nachtabschaltung prüfen'},{i:'M5 12l5 5L20 7', l:'Als erledigt markieren'}] } },
+    quartal:{ value:27400, change:'+9 % mehr als Q1', ck:'p-amber', meaning:'beobachten', mk:'p-amber', mi:'M12 9v4M12 17h.01M10.3 4 2.6 18a1.5 1.5 0 0 0 1.3 2.2h16.2a1.5 1.5 0 0 0 1.3-2.2L13.7 4a1.5 1.5 0 0 0-2.6 0z',
+      meta:'Q2 2026 · Apr–Jun · 7 Belege', tlabel:'→ Quartale (letzte 8)', avg:'Ø: 24.900\u00A0€',
+      labels:['Q3/24','Q4/24','Q1/25','Q2/25','Q3/25','Q4/25','Q1/26','Q2/26'],
+      cur:[22800,23500,24100,24600,25000,26200,25100,27400], prev:[23000,23200,23800,24000,24200,24900,24300,25600],
+      readas:'So liest du das: Jeder Punkt ist ein Quartal (3 Monate). Über den langen Zeitraum erkennst du den echten Trend — kurze Ausreißer fallen weniger ins Gewicht.',
+      belege:[{date:'12.06.', name:'Mainova · Strom Werkstatt', doc:'RE 24-118', amt:5840, sup:'M'},{date:'14.05.', name:'Mainova · Strom Werkstatt', doc:'RE 24-101', amt:5210, sup:'M'},{date:'11.04.', name:'Mainova · Strom Werkstatt', doc:'RE 24-084', amt:4990, sup:'M'},{date:'08.06.', name:'Mainova · Gas Bäder', doc:'RE 24-117', amt:2980, sup:'M'},{date:'09.05.', name:'Mainova · Gas Bäder', doc:'RE 24-100', amt:2640, sup:'M'},{date:'08.04.', name:'Mainova · Gas Bäder', doc:'RE 24-083', amt:2580, sup:'M'},{date:'03.06.', name:'Shell · Heizöl Reserve', doc:'BEL 24-093', amt:980, sup:'S'}],
+      insight:{ body:'<b>Beobachtung:</b> Energiekosten im Quartal über Vorjahr, die Steigung beschleunigt sich im Juni.<br><b>Vermutung:</b> Der Effekt sitzt bei Gas/Bäder, nicht in der Strom-Grundlast.<br><b>Vorschlag:</b> Bad-Effizienz gegen das Auftragsvolumen prüfen.', cta:[{i:'M5 3v9a4 4 0 0 0 4 4h2M15 3v6a4 4 0 0 0 4 4h2', l:'Bad-Effizienz Q2'},{i:'M5 12l5 5L20 7', l:'Als erledigt markieren'}] } }
+  };
+
+  const CROSS = [
+    { label:'Energie je Umsatz-Euro', val:'23 ct', delta:'▲ +4 ct', dk:'red', cls:'' },
+    { label:'Energie je Auftrag', val:'196 €', delta:'▲ +21 €', dk:'amber', cls:'warn' },
+    { label:'Anteil am Deckungsbeitrag', val:'83 %', delta:'▲ kritisch', dk:'red', cls:'' },
+    { label:'CO₂ (geschätzt)', val:'1,8 t', delta:'▲ +0,2 t', dk:'amber', cls:'warn' }
+  ];
+
+  const TIPS = {
+    hero:'<b>Energiekosten gesamt</b><br>Summe aller erfassten Energiebelege im Zeitraum (Strom, Gas, Heizöl).<br><span class="formula">Σ Belege Kategorie „Energie"</span><br><b>Farbe:</b> rot/„auffällig" = mehr als +10 % gegenüber Vorperiode.',
+    cross:'<b>Verhältniszahlen</b><br>Setzen die Energiekosten ins Verhältnis zu anderen Werten, damit eine Zahl Bedeutung bekommt.<br><span class="formula">Energie ÷ Umsatz</span><br>Beispiel: 23 ct heißt — von jedem Euro Umsatz gehen 23 Cent in Energie.'
+  };
+
+  let current='monat', sortKey='amt', chart, ci=0;
+  const $ = id => document.getElementById(id);
+
+  function sparkline(data){
+    const w=150,h=54,p=4, mn=Math.min(...data), mx=Math.max(...data), rng=(mx-mn)||1;
+    const pts=data.map((v,i)=>[p+i*(w-2*p)/(data.length-1), h-p-(v-mn)/rng*(h-2*p)]);
+    const d=pts.map((pt,i)=>(i?'L':'M')+pt[0].toFixed(1)+' '+pt[1].toFixed(1)).join(' ');
+    const area=d+` L${(w-p).toFixed(1)} ${h-p} L${p} ${h-p} Z`;
+    return `<path d="${area}" fill="rgba(224,155,35,.14)"/><path d="${d}" fill="none" stroke="#E09B23" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${pts[pts.length-1][0].toFixed(1)}" cy="${pts[pts.length-1][1].toFixed(1)}" r="3" fill="#E09B23"/>`;
+  }
+
+  function renderHero(){
+    const d=PERIODS[current];
+    $('hval').innerHTML=eur(d.value);
+    $('hchange').className='pill '+d.ck;
+    $('hchange').innerHTML='<svg class="ico" viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8M21 7h-5M21 7v5"/></svg>'+d.change;
+    $('hmeaning').className='meaning';
+    $('hmeaning').style.cssText = d.mk==='p-teal' ? 'background:var(--teal-bg); color:var(--teal);' : (d.mk==='p-red'?'background:var(--red-bg); color:var(--red);':'background:var(--amber-bg); color:var(--amber);');
+    $('hmeaning').innerHTML='<svg class="ico" viewBox="0 0 24 24"><path d="'+d.mi+'"/></svg>'+d.meaning;
+    $('hmeta').textContent=d.meta;
+    $('spark').innerHTML=sparkline(d.cur);
+    $('tavg').textContent=d.avg; $('xlabel').textContent=d.tlabel; $('readas').textContent=d.readas;
+  }
+  function supColor(s){ return s==='M' ? 'background:var(--blue-bg); color:var(--blue);' : 'background:var(--amber-bg); color:var(--amber);'; }
+  function sortB(a){ const x=a.slice(); if(sortKey==='amt')x.sort((p,q)=>q.amt-p.amt); else if(sortKey==='name')x.sort((p,q)=>p.name.localeCompare(q.name,'de')); else x.sort((p,q)=>q.date.localeCompare(p.date,'de')); return x; }
+  function renderComp(){
+    const d=PERIODS[current], w=$('comp');
+    $('ccount').textContent='· '+d.belege.length+' Belege';
+    $('callbtn').style.display=d.belege.length?'inline-flex':'none';
+    if(!d.belege.length){ w.innerHTML='<div class="missblock"><div class="misstext" style="margin:0;">Keine eigenen Belege in diesem Zeitraum — der Wert ist anteilig aus den Monatsbelegen berechnet.</div></div>'; return; }
+    w.innerHTML=sortB(d.belege).map(b=>`<div class="brow"><div class="bav" style="${supColor(b.sup)}">${b.sup}</div><div><div class="bname">${b.name}</div><div class="bmeta">${b.date} · ${b.doc}</div></div><div class="bamt">${eur(b.amt)}</div><svg class="ico" viewBox="0 0 24 24" style="color:var(--text3);"><path d="m9 6 6 6-6 6"/></svg></div>`).join('');
+  }
+  function renderInsight(){
+    const ins=PERIODS[current].insight;
+    $('ibody').innerHTML=ins.body;
+    $('icta').innerHTML=ins.cta.map(c=>`<button class="btn" style="font-size:12.5px;"><svg class="ico" viewBox="0 0 24 24"><path d="${c.i}"/></svg> ${c.l}</button>`).join('');
+  }
+  function renderChart(){ const d=PERIODS[current]; chart.data.labels=d.labels; chart.data.datasets[0].data=d.cur; chart.data.datasets[1].data=d.prev; chart.update(); }
+  function setSeg(){ document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on', b.dataset.p===current)); }
+  function renderAll(){ setSeg(); renderHero(); renderComp(); renderInsight(); renderChart(); }
+
+  document.querySelectorAll('#seg button').forEach(b=>b.addEventListener('click',()=>{current=b.dataset.p; ci=0; renderAll();}));
+  $('sort').addEventListener('change',e=>{sortKey=e.target.value; renderComp();});
+
+  const track=$('cktrack');
+  track.innerHTML=CROSS.map(c=>`<div class="ckcard ${c.cls}"><div class="cklabel">${c.label}</div><div class="ckval">${c.val}</div><div class="ckdelta" style="color:${c.dk==='red'?'var(--red)':'var(--amber)'};">${c.delta}</div></div>`).join('');
+  const step=196, maxi=Math.max(0,CROSS.length-3);
+  const moveCk=()=>track.style.transform='translateX(-'+(ci*step)+'px)';
+  $('ckp').addEventListener('click',()=>{ci=Math.max(0,ci-1); moveCk();});
+  $('ckn').addEventListener('click',()=>{ci=Math.min(maxi,ci+1); moveCk();});
+
+  chart=new Chart($('trend'),{ type:'line',
+    data:{ labels:PERIODS.monat.labels, datasets:[
+      {label:'aktuell', data:PERIODS.monat.cur, borderColor:'#E09B23', backgroundColor:'rgba(224,155,35,.10)', borderWidth:2.5, tension:.35, fill:true, pointRadius:3, pointBackgroundColor:'#E09B23', pointBorderColor:'#fff', pointBorderWidth:1.5},
+      {label:'Vorjahr', data:PERIODS.monat.prev, borderColor:'#B4B2A9', borderDash:[5,4], borderWidth:2, tension:.35, pointRadius:0}
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}, tooltip:{callbacks:{label:c=>eur(c.parsed.y)}}},
+      scales:{ y:{ grid:{color:'rgba(20,18,12,.05)'}, ticks:{callback:v=>(v/1000).toLocaleString('de-DE')+'k', font:{size:10}, color:'#928F86'} },
+               x:{ grid:{display:false}, ticks:{autoSkip:true, maxRotation:0, font:{size:10}, color:'#928F86'} } } }
+  });
+
+  renderAll();
+
+  // tabs
+  document.querySelectorAll('#tabs button').forEach(b=>b.addEventListener('click',()=>{
+    const v=b.dataset.v;
+    document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on', x===b));
+    document.querySelectorAll('.view').forEach(x=>x.classList.toggle('on', x.dataset.view===v));
+    window.scrollTo({top:0, behavior:'smooth'});
+  }));
+  function goto(v){ document.querySelector('#tabs button[data-v="'+v+'"]').click(); }
+  ['toCapture','toCapture2'].forEach(id=>{ const e=$(id); if(e) e.addEventListener('click',()=>goto('capture')); });
+  const tc=$('toCentral'); if(tc) tc.addEventListener('click',()=>goto('central'));
+
+  // info popovers
+  const pop=$('pop'); let openTip=null;
+  document.querySelectorAll('.info').forEach(el=>{
+    el.addEventListener('click',e=>{
+      e.stopPropagation();
+      const k=el.dataset.tip;
+      if(openTip===k){ pop.style.display='none'; openTip=null; return; }
+      pop.innerHTML=TIPS[k]; pop.style.display='block'; openTip=k;
+      const r=el.getBoundingClientRect();
+      let x=r.left, y=r.bottom+8;
+      if(x+290>window.innerWidth) x=window.innerWidth-300;
+      pop.style.left=x+'px'; pop.style.top=y+'px';
+    });
+  });
+  document.addEventListener('click',()=>{ pop.style.display='none'; openTip=null; });
+})();
+</script>
+</body>
+</html>

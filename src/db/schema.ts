@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
 // Helper for CUID primary keys
@@ -62,6 +62,7 @@ export const orders = pgTable("orders", {
   status: varchar("status", { length: 50 }).notNull().default("in_progress"),
   risk: varchar("risk", { length: 50 }).default("green"),
   priorityComputed: varchar("priority_computed", { length: 50 }).default("green"),
+  inquiryId: text("inquiry_id"), // FK to inquiries for attribution
   parts: jsonb("parts").$type<Record<string, unknown>[]>(), // Legacy / MVP fallback
   statusText: text("status_text"),
   delayReason: text("delay_reason"),
@@ -160,6 +161,10 @@ export const inquiries = pgTable("inquiries", {
   material: text("material").notNull().default(''),
   status: text("status").notNull().default('offen'),
   photo: text("photo"),
+  quelleTyp: text("quelle_typ").notNull().default('unbekannt'),
+  quelleTouchpointId: uuid("quelle_touchpoint_id"), // Will reference marketing_touchpoints
+  quelleManuell: text("quelle_manuell"),
+  quelleKonfidenz: numeric("quelle_konfidenz", { precision: 5, scale: 2 }), // 0..1
   pricing: jsonb("pricing").$type<{
     grundarbeit: number;
     reinigung: number;
@@ -304,6 +309,30 @@ export const communicationDrafts = pgTable("communication_drafts", {
   status: varchar("status", { length: 50 }).notNull().default("draft"), // draft, sent, archived
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// 13. Marketing Tracking & Attribution
+export const marketingTouchpoints = pgTable("marketing_touchpoints", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  aktionId: text("aktion_id"),
+  kanal: text("kanal").notNull(),
+  titel: text("titel"),
+  ausgefuehrtAm: timestamp("ausgefuehrt_am").defaultNow().notNull(),
+  budget: numeric("budget", { precision: 12, scale: 2 }).default("0"),
+  aufwandMinuten: integer("aufwand_minuten").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const kostenPosten = pgTable("kosten_posten", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  modul: text("modul").notNull().default("marketing"),
+  kanal: text("kanal"),
+  kampagneId: text("kampagne_id"),
+  beschreibung: text("beschreibung"),
+  betrag: numeric("betrag", { precision: 12, scale: 2 }).notNull(),
+  gebuchtAm: timestamp("gebucht_am").defaultNow().notNull(),
 });
 
 // 11. Buchhaltung & Finanzen

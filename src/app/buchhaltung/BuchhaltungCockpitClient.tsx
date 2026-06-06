@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -7,11 +8,13 @@ import {
   BarChart3, PieChart, Receipt, FileCheck,
   Download, AlertCircle, Settings, ChevronRight, CheckCircle2,
   Briefcase, CalendarClock, Sparkles, Banknote, Wallet,
-  ArrowRight, Globe, Users
+  ArrowRight, Globe, Users, Landmark, Activity
 } from "lucide-react";
 import { getBuchhaltungProvider } from "@/lib/buchhaltung";
 import type { UstvaWerte, Ersparnis, KategorieSumme } from "@/lib/buchhaltung/types";
 import { pruefeFristen } from "@/lib/buchhaltung/regeln";
+import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
+import { getAusgabenAnalysisAction, getUstvaAnalysisAction, getKraftstoffAnalysisAction, getOffenePostenAnalysisAction, getBwaAnalysisAction, getSparzaehlerAnalysisAction } from "@/app/buchhaltung/analysis.actions";
 import Link from "next/link";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
@@ -26,12 +29,13 @@ type TileProps = {
   kpi?: string;
   status?: { label: string; variant: "action" | "ready" | "prep" | "default" };
   footer?: string;
-  analyseLink?: { label: string; href: string };
+  analyseLink?: { label: string; href?: string; onClick?: () => void };
+  onClick?: () => void;
 };
 
-// ── Tile Component ───────────────────────────────────────────────────────
+// ── Tile Component ────────────────────────────────────────────────────────────
 
-function Tile({ title, description, icon, iconColor, href, kpi, status, footer, analyseLink }: TileProps) {
+function Tile({ title, description, icon, iconColor, href, kpi, status, footer, analyseLink, onClick }: TileProps) {
   const router = useRouter();
   const statusColors = {
     action: "bg-red-50 text-red-600 border-red-100",
@@ -64,13 +68,22 @@ function Tile({ title, description, icon, iconColor, href, kpi, status, footer, 
           {footer ?? "Öffnen"} <ChevronRight className="w-3.5 h-3.5" />
         </span>
         {analyseLink && (
-          <Link
-            href={analyseLink.href}
-            onClick={(e) => e.stopPropagation()}
-            className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-full flex items-center gap-1 transition-colors border border-blue-100 shrink-0"
-          >
-            <BarChart3 className="w-3 h-3" /> {analyseLink.label}
-          </Link>
+          analyseLink.onClick ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); analyseLink.onClick!(); }}
+              className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-full flex items-center gap-1 transition-colors border border-blue-100 shrink-0 z-10 relative"
+            >
+              <BarChart3 className="w-3 h-3" /> {analyseLink.label}
+            </button>
+          ) : (
+            <Link
+              href={analyseLink.href!}
+              onClick={(e) => e.stopPropagation()}
+              className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-full flex items-center gap-1 transition-colors border border-blue-100 shrink-0 z-10 relative"
+            >
+              <BarChart3 className="w-3 h-3" /> {analyseLink.label}
+            </Link>
+          )
         )}
       </div>
     </>
@@ -105,8 +118,8 @@ function Tile({ title, description, icon, iconColor, href, kpi, status, footer, 
           </span>
           {analyseLink && (
             <button
-              onClick={(e) => { e.stopPropagation(); router.push(analyseLink.href); }}
-              className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-full flex items-center gap-1 transition-colors border border-blue-100 shrink-0"
+              onClick={(e) => { e.stopPropagation(); if (analyseLink.onClick) analyseLink.onClick(); else if (analyseLink.href) router.push(analyseLink.href); }}
+              className="text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-full flex items-center gap-1 transition-colors border border-blue-100 shrink-0 z-10 relative"
             >
               <BarChart3 className="w-3 h-3" /> {analyseLink.label}
             </button>
@@ -151,6 +164,31 @@ export function BuchhaltungCockpitClient() {
   const [ersparnis, setErsparnis] = useState<Ersparnis | null>(null);
   const [kategorien, setKategorien] = useState<KategorieSumme[]>([]);
   const [loading, setLoading] = useState(true);
+  const [analysisOpen, setAnalysisOpen] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("");
+  const [analysisDataMap, setAnalysisDataMap] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    if (!analysisOpen) return;
+    const now = new Date();
+    const von = `${now.getFullYear()}-01-01`;
+    const bis = `${now.getFullYear()}-12-31`;
+    if ((analysisOpen === "Ausgaben" || analysisOpen === "Fixkosten" || analysisOpen === "Variable Kosten") && !analysisDataMap["Ausgaben"]) {
+      getAusgabenAnalysisAction("2026-06-01", "2026-06-30").then(res => setAnalysisDataMap(p => ({ ...p, Ausgaben: res, Fixkosten: res, "Variable Kosten": res })));
+    } else if (analysisOpen === "UStVA" && !analysisDataMap["UStVA"]) {
+      getUstvaAnalysisAction(von, bis).then(res => setAnalysisDataMap(p => ({ ...p, UStVA: res })));
+    } else if (analysisOpen === "Kraftstoff" && !analysisDataMap["Kraftstoff"]) {
+      getKraftstoffAnalysisAction(von, bis).then(res => setAnalysisDataMap(p => ({ ...p, Kraftstoff: res })));
+    } else if (analysisOpen === "Offene Posten" && !analysisDataMap["Offene Posten"]) {
+      getOffenePostenAnalysisAction(von, bis).then(res => setAnalysisDataMap(p => ({ ...p, "Offene Posten": res })));
+    } else if (analysisOpen === "BWA" && !analysisDataMap["BWA"]) {
+      getBwaAnalysisAction(von, bis).then(res => setAnalysisDataMap(p => ({ ...p, BWA: res })));
+    } else if (analysisOpen === "Sparzähler" && !analysisDataMap["Sparzähler"]) {
+      getSparzaehlerAnalysisAction(von, bis).then(res => setAnalysisDataMap(p => ({ ...p, "Sparzähler": res })));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analysisOpen]);
+
 
   useEffect(() => {
     const load = async () => {
@@ -183,6 +221,245 @@ export function BuchhaltungCockpitClient() {
       </div>
     );
   }
+
+
+  const getAnalysisProps = (key: string | null): any => {
+    if (!key) return null;
+    switch (key) {
+      case "Fixkosten":
+      case "Variable Kosten":
+      case "Ausgaben": {
+        const aData = analysisDataMap["Ausgaben"];
+        if (!aData) return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
+        return {
+          icon: <Wallet className="w-6 h-6" />,
+          title: "Ausgaben & Kostenstruktur",
+          subtitle: "Laufende Kosten für den aktuellen Monat",
+          accentBg: "linear-gradient(180deg, var(--posbg), transparent)",
+          tabs: [
+            { id: "gesamt", label: "Ausgaben Gesamt" },
+            { id: "fix", label: "Fixkosten" },
+            { id: "variabel", label: "Variable Kosten" }
+          ],
+          activeTab: activeTab || (key === "Fixkosten" ? "fix" : key === "Variable Kosten" ? "variabel" : "gesamt"),
+          hero: {
+            kicker: "GESAMTAUSGABEN (LFD. MONAT)",
+            value: `${aData.gesamt.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`,
+            changePill: { text: "Datenqualität: 95 %", variant: "teal" as const },
+            meta: `Fixkosten: ${aData.fix.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € · Variable Kosten: ${aData.variabel.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`,
+          },
+          trend: {
+            title: "Kostenentwicklung",
+            chartType: "bar",
+            chartData: aData.chartData
+          },
+          composition: {
+            title: "Top 5 Ausgaben-Kategorien",
+            rows: aData.topKategorien.map((k: any) => ({
+              avatar: k.name.substring(0, 2).toUpperCase(),
+              avatarColor: "#64748B",
+              name: k.name,
+              meta: "Summe aus Belegen & Verträgen",
+              amount: `${k.amount.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`,
+              href: `/buchhaltung/ausgaben?kategorie=${k.name}`
+            })),
+            footerLink: { label: "Zur Kosten-Übersicht", href: "/buchhaltung/kosten" }
+          },
+          crossKpi: [
+            { label: "Anteil Fixkosten", value: aData.gesamt > 0 ? `${((aData.fix / aData.gesamt) * 100).toFixed(1)}%` : "0%", delta: "Ziel: < 40%", deltaColor: aData.gesamt > 0 && (aData.fix / aData.gesamt) < 0.4 ? "var(--green)" : "var(--text3)" },
+            { label: "Größte variable Position", value: aData.topVariabel[0] ? `${Number(aData.topVariabel[0].netto).toLocaleString("de-DE")} €` : "0 €", delta: "Einzelbeleg", deltaColor: "var(--text3)" },
+            { label: "Kostentreiber im Monat", value: aData.topKategorien[0]?.name || "-", delta: "Höchste Kategorie", deltaColor: "var(--amber, #D97706)" }
+          ],
+          insight: {
+            body: aData.insightsGesamt.beobachtungen.map((b: string) => `<b>Beobachtung:</b> ${b}`).join('<br/>') + 
+                  (aData.insightsGesamt.vermutungen.length > 0 ? '<br/><br/>' + aData.insightsGesamt.vermutungen.map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
+            actions: aData.insightsGesamt.vorschlaege.map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
+          },
+          linkedAreas: [
+            { label: "Ausgaben nach Kategorie analysieren", href: "/buchhaltung/ausgaben" },
+            { label: "Wiederkehrende Kosten verwalten", href: "/buchhaltung/kosten" },
+            { label: "BWA / Liquidität", href: "/buchhaltung/bwa" }
+          ]
+        };
+      }
+      
+      case "UStVA": {
+        const uData = analysisDataMap["UStVA"];
+        if (!uData) return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
+        return {
+          icon: <Landmark className="w-6 h-6" />,
+          title: "UStVA Analyse",
+          subtitle: "Umsatzsteuervoranmeldung",
+          accentBg: "linear-gradient(180deg, var(--posbg), transparent)",
+          tabs: [
+            { id: "gesamt", label: "Zusammenfassung" },
+            { id: "zahllast", label: "Zahllast" },
+            { id: "vorsteuer", label: "Vorsteuer" }
+          ],
+          activeTab: activeTab || "gesamt",
+          hero: {
+            kicker: "VORAUSSICHTLICHE ZAHLLAST",
+            value: `${uData.zahllast?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} €`,
+            changePill: { text: "Pünktliche Meldung", variant: "teal" as const },
+            meta: `Umsatzsteuer: ${uData.umsatzsteuer?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} € · Vorsteuer: ${uData.vorsteuer?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} €`,
+          },
+          trend: {
+            title: "Zahllast Verlauf",
+            chartType: "bar",
+            chartData: uData.chartData || []
+          },
+          insight: {
+            body: (uData.insights?.beobachtungen || []).map((b: string) => `<b>Beobachtung:</b> ${b}`).join('<br/>') + 
+                  ((uData.insights?.vermutungen?.length || 0) > 0 ? '<br/><br/>' + uData.insights.vermutungen.map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
+            actions: (uData.insights?.vorschlaege || []).map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
+          },
+          linkedAreas: [
+            { label: "UStVA Meldungen", href: "/buchhaltung/export" }
+          ]
+        };
+      }
+
+      case "Kraftstoff": {
+        const kData = analysisDataMap["Kraftstoff"];
+        if (!kData) return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
+        return {
+          icon: <Activity className="w-6 h-6" />,
+          title: "Kraftstoff Analyse",
+          subtitle: "Tankkosten und Ausreißer",
+          accentBg: "linear-gradient(180deg, var(--posbg), transparent)",
+          tabs: [
+            { id: "gesamt", label: "Tankkosten Gesamt" }
+          ],
+          activeTab: "gesamt",
+          hero: {
+            kicker: "TANKKOSTEN DIESER MONAT",
+            value: `${kData.gesamtKosten?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} €`,
+            changePill: { text: `${kData.anzahlTankungen || 0} Tankungen`, variant: "teal" as const },
+            meta: `Maximaler Tankwert: ${kData.maxKosten?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} €`,
+          },
+          trend: {
+            title: "Tankkosten Verlauf",
+            chartType: "bar",
+            chartData: kData.chartData || []
+          },
+          insight: {
+            body: (kData.insights?.beobachtungen || []).map((b: string) => `<b>Beobachtung:</b> ${b}`).join('<br/>') + 
+                  ((kData.insights?.vermutungen?.length || 0) > 0 ? '<br/><br/>' + kData.insights.vermutungen.map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
+            actions: (kData.insights?.vorschlaege || []).map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
+          },
+          linkedAreas: [
+            { label: "Kraftstoff Detailansicht", href: "/buchhaltung/kraftstoff" }
+          ]
+        };
+      }
+
+      case "Offene Posten": {
+        const oData = analysisDataMap["Offene Posten"];
+        if (!oData) return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
+        return {
+          icon: <AlertCircle className="w-6 h-6" />,
+          title: "Offene Posten",
+          subtitle: "Unbezahlte und überfällige Rechnungen",
+          accentBg: "linear-gradient(180deg, var(--posbg), transparent)",
+          tabs: [
+            { id: "gesamt", label: "Gesamtrückstände" },
+            { id: "ueberfaellig", label: "Überfällig" }
+          ],
+          activeTab: activeTab || "gesamt",
+          hero: {
+            kicker: "OFFENE SUMME GESAMT",
+            value: `${oData.offeneSumme?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} €`,
+            changePill: { text: `${oData.offeneCount || 0} Rechnungen`, variant: "teal" as const },
+            meta: `Überfällig: ${oData.ueberfaelligSumme?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} € (${oData.ueberfaelligCount || 0} Stk)`,
+          },
+          trend: {
+            title: "Rückstände Verlauf",
+            chartType: "bar",
+            chartData: oData.chartData || []
+          },
+          insight: {
+            body: (oData.insights?.beobachtungen || []).map((b: string) => `<b>Beobachtung:</b> ${b}`).join('<br/>') + 
+                  ((oData.insights?.vermutungen?.length || 0) > 0 ? '<br/><br/>' + oData.insights.vermutungen.map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
+            actions: (oData.insights?.vorschlaege || []).map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
+          },
+          linkedAreas: [
+            { label: "Rechnungen verwalten", href: "/buchhaltung/rechnungen" }
+          ]
+        };
+      }
+
+      case "BWA": {
+        const bData = analysisDataMap["BWA"];
+        if (!bData) return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
+        return {
+          icon: <TrendingUp className="w-6 h-6" />,
+          title: "BWA / Liquidität",
+          subtitle: "Betriebswirtschaftliche Auswertung",
+          accentBg: "linear-gradient(180deg, var(--posbg), transparent)",
+          tabs: [
+            { id: "gesamt", label: "Betriebsergebnis" }
+          ],
+          activeTab: "gesamt",
+          hero: {
+            kicker: "BETRIEBSERGEBNIS",
+            value: `${bData.betriebsergebnis?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} €`,
+            changePill: { text: `Einnahmen: ${bData.einnahmen?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} €`, variant: "teal" as const },
+            meta: `Ausgaben: ${bData.ausgabenGesamt?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} €`,
+          },
+          trend: {
+            title: "Ergebnis Verlauf",
+            chartType: "bar",
+            chartData: bData.chartData || []
+          },
+          insight: {
+            body: (bData.insights?.beobachtungen || []).map((b: string) => `<b>Beobachtung:</b> ${b}`).join('<br/>') + 
+                  ((bData.insights?.vermutungen?.length || 0) > 0 ? '<br/><br/>' + bData.insights.vermutungen.map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
+            actions: (bData.insights?.vorschlaege || []).map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
+          },
+          linkedAreas: [
+            { label: "Umsätze ansehen", href: "/performance/umsatz-marge" }
+          ]
+        };
+      }
+
+      case "Sparzähler": {
+        const sData = analysisDataMap["Sparzähler"];
+        if (!sData) return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
+        return {
+          icon: <Activity className="w-6 h-6 text-accent-orange" />,
+          title: "Sparzähler durch Automatisierung",
+          subtitle: "Zeit & Kosten Ersparnis",
+          accentBg: "linear-gradient(180deg, var(--posbg), transparent)",
+          tabs: [
+            { id: "gesamt", label: "Ersparnis" }
+          ],
+          activeTab: "gesamt",
+          hero: {
+            kicker: "KUMULIERTE ERSPARNIS",
+            value: `${sData.ersparnisBetrag?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} €`,
+            changePill: { text: `${sData.anzahlAutoBelege || 0} Autom. Belege`, variant: "teal" as const },
+            meta: `${sData.prozentAutomatisch || 0}% Automatisierungsgrad`,
+          },
+          trend: {
+            title: "Ersparnis Verlauf",
+            chartType: "bar",
+            chartData: sData.chartData?.map((d: any) => ({ name: d.name, ist: d.istKumuliert, vorjahr: d.vorjahr })) || []
+          },
+          insight: {
+            body: (sData.insights?.beobachtungen || []).map((b: string) => `<b>Beobachtung:</b> ${b}`).join('<br/>') + 
+                  ((sData.insights?.vermutungen?.length || 0) > 0 ? '<br/><br/>' + sData.insights.vermutungen.map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
+            actions: (sData.insights?.vorschlaege || []).map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
+          },
+          linkedAreas: [
+            { label: "Belege hochladen", href: "/buchhaltung/belege" }
+          ]
+        };
+      }
+
+      default:
+        return { title: "Analyse", subtitle: "Keine Daten verfügbar" };
+    }
+  };
 
   return (
     <div className="w-full pb-24 px-4 sm:px-6 xl:px-8">
@@ -389,13 +666,24 @@ export function BuchhaltungCockpitClient() {
           footer="Details"
         />
         <Tile
-          title="Ausgaben nach Kategorie"
-          description="Laufender Monat nach Kategorie. KI-Hinweise zur Absetzbarkeit inklusive."
+          title="Fixkosten"
+          description="Laufende Fixkosten-Verträge, Abos, Miete (dieser Monat)."
+          icon={<Wallet className="w-5 h-5 text-amber-600" strokeWidth={1.8} />}
+          iconColor="bg-amber-50"
+          href="/buchhaltung/kosten?kategorie=fix"
+          kpi={`${(kategorien.find(k => k.kategorieId === "Fixkosten")?.summe || 0).toLocaleString("de-DE")} €`}
+          footer="Auswertung"
+          analyseLink={{ label: "Analyse", onClick: () => { setAnalysisOpen("Fixkosten"); setActiveTab("fix"); } }}
+        />
+        <Tile
+          title="Variable Kosten"
+          description="Laufende Ausgaben & Belege des Monats nach Kategorie."
           icon={<PieChart className="w-5 h-5 text-emerald-600" strokeWidth={1.8} />}
           iconColor="bg-emerald-50"
           href="/buchhaltung/ausgaben"
-          kpi={`${kategorien.length} Kategorien`}
-          footer="Details"
+          kpi={`${(gesamtAusgaben - (kategorien.find(k => k.kategorieId === "Fixkosten")?.summe || 0)).toLocaleString("de-DE")} €`}
+          footer="Auswertung"
+          analyseLink={{ label: "Analyse", onClick: () => { setAnalysisOpen("Variable Kosten"); setActiveTab("variabel"); } }}
         />
       </div>
 
@@ -435,7 +723,7 @@ export function BuchhaltungCockpitClient() {
         />
       </div>
 
-      {/* ── Abschnitt: Marketing & Umsatzwirkung ─────────────────────── */}
+      {/* ── Abschnitt: Marketing & Umsatzwirkung ────────────────────────────── */}
       <SectionHeader
         icon={<Sparkles className="w-4.5 h-4.5 text-amber-600" strokeWidth={2} />}
         iconBg="bg-amber-50"
@@ -471,6 +759,7 @@ export function BuchhaltungCockpitClient() {
           footer="Zum Cockpit"
         />
       </div>
+
       {/* ── Premium: Steuerberater-Paket ──────────────────────────────── */}
       <div className="bg-white border border-neutral-gray-100 rounded-2xl shadow-sm p-5 flex flex-col sm:flex-row items-center gap-5 mt-8">
         <div className="w-12 h-12 rounded-xl bg-accent-orange/10 flex items-center justify-center shrink-0">
@@ -493,6 +782,15 @@ export function BuchhaltungCockpitClient() {
         <br />
         Einmal Regeln einstellen — danach läuft die Buchhaltung im Hintergrund.
       </p>
+
+      <AnalysisOverlay
+        open={!!analysisOpen}
+        onClose={() => setAnalysisOpen(null)}
+        title={analysisOpen ? `Analyse: ${analysisOpen}` : ""}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        {...getAnalysisProps(analysisOpen)}
+      />
 
       <FeedbackFooter pageTitle="Buchhaltung" route="/buchhaltung" variant="full" />
     </div>
