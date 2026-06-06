@@ -276,14 +276,14 @@ function ExportContent({ previewData }: { previewData: { header: string, rows: s
             </Link>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-5">
-            <KpiBox label="Umsatzerlöse" value="85.400 €" color="text-navy-900" />
-            <KpiBox label="Materialaufwand" value="12.200 €" color="text-rose-600" />
-            <KpiBox label="Fixkosten" value="45.000 €" color="text-amber-600" />
-            <KpiBox label="Ergebnis" value="+23.700 €" color="text-emerald-600" />
+            <KpiBox label="Umsatzerlöse" value="0,00 €" color="text-navy-900" />
+            <KpiBox label="Materialaufwand" value="0,00 €" color="text-rose-600" />
+            <KpiBox label="Fixkosten" value="0,00 €" color="text-amber-600" />
+            <KpiBox label="Ergebnis" value="0,00 €" color="text-emerald-600" />
           </div>
-          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <p className="text-xs text-emerald-700"><strong>Positives Betriebsergebnis.</strong> Deckungsbeitrag bei 80,4 %. Materialquote 14,3 % liegt im Branchennormbereich.</p>
+          <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4 flex items-center gap-3">
+            <Info className="w-5 h-5 text-neutral-500 shrink-0" />
+            <p className="text-xs text-neutral-600">Noch keine Daten vorhanden für eine detaillierte BWA-Auswertung dieses Monats.</p>
           </div>
         </div>
       )}

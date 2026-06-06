@@ -31,7 +31,14 @@ export function KostenClient({ initialKosten, initialArt, initialKategorie }: { 
     router.push("?" + params.toString());
   };
 
-  const summe = initialKosten.reduce((s, c) => s + c.betrag, 0);
+  const monatsbetrag = (c: Kostenposten) => {
+    if (c.intervall === 'jaehrlich') return c.betrag / 12;
+    if ((c.intervall as string) === 'vierteljaehrlich' || (c.intervall as string) === 'vierteljhrlich') return c.betrag / 3;
+    if ((c.intervall as string) === 'jhrlich') return c.betrag / 12;
+    return c.betrag;
+  };
+
+  const summe = initialKosten.reduce((s, c) => s + monatsbetrag(c), 0);
 
   return (
     <div className="w-full pb-24 px-4 sm:px-6 xl:px-8">
@@ -102,7 +109,12 @@ export function KostenClient({ initialKosten, initialArt, initialKategorie }: { 
                 <span className="text-xs text-text-muted">{c.intervall}</span>
               </div>
             </div>
-            <span className="text-lg font-extrabold text-navy-900">{c.betrag.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</span>
+            <div className="text-right">
+              <span className="text-lg font-extrabold text-navy-900">{monatsbetrag(c).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</span>
+              {c.intervall !== 'monatlich' && c.intervall !== 'einmalig' && (
+                <div className="text-[10px] text-text-muted mt-0.5">davon {c.betrag.toLocaleString("de-DE", { minimumFractionDigits: 2 })} € {c.intervall}</div>
+              )}
+            </div>
             <ChevronRight className="w-4 h-4 text-neutral-300" />
           </Link>
         ))}

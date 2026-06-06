@@ -12,8 +12,10 @@ import {
   getBelegAction,
   createBelegAction,
   freigebenBelegAction,
-  stornoBelegAction
+  stornoBelegAction,
+  exportBelegeAction
 } from '@/app/buchhaltung/actions'
+import { getSparzaehlerAnalysisAction } from '@/app/buchhaltung/analysis.actions'
 
 export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
   private fallbackProvider: BuchhaltungDataProvider;
@@ -121,7 +123,13 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
   }
 
   async berechneUstva(zeitraum: Zeitraum): Promise<UstvaWerte> {
-    return this.fallbackProvider.berechneUstva(zeitraum);
+    try {
+      const { getCockpitMetricsAction } = await import('@/app/buchhaltung/actions');
+      const metrics = await getCockpitMetricsAction(zeitraum.von, zeitraum.bis);
+      return metrics.ustva;
+    } catch (err) {
+      return this.fallbackProvider.berechneUstva(zeitraum);
+    }
   }
 
   async getSteuerprofil(): Promise<Steuerprofil> {
@@ -129,11 +137,35 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
   }
 
   async exportDatev(zeitraum: Zeitraum): Promise<ExportDatei> {
-    return this.fallbackProvider.exportDatev(zeitraum);
+    try {
+      const res = await exportBelegeAction('DATEV');
+      return {
+        typ: 'datev',
+        dateiname: `EXTF_Buchungsstapel_${zeitraum.von.substring(0, 7)}.csv`,
+        inhalt: new Blob([res.csv], { type: 'text/csv' }),
+        mimeType: 'text/csv',
+        anzahlBuchungen: res.rows.length,
+        zeitraum
+      };
+    } catch (err) {
+      return this.fallbackProvider.exportDatev(zeitraum);
+    }
   }
 
   async exportLexware(zeitraum: Zeitraum): Promise<ExportDatei> {
-    return this.fallbackProvider.exportLexware(zeitraum);
+    try {
+      const res = await exportBelegeAction('Lexware');
+      return {
+        typ: 'lexware',
+        dateiname: `Lexware_Export_${zeitraum.von.substring(0, 7)}.csv`,
+        inhalt: new Blob([res.csv], { type: 'text/csv' }),
+        mimeType: 'text/csv',
+        anzahlBuchungen: res.rows.length,
+        zeitraum
+      };
+    } catch (err) {
+      return this.fallbackProvider.exportLexware(zeitraum);
+    }
   }
 
   async exportSteuerberaterPaket(zeitraum: Zeitraum): Promise<ExportDatei> {
@@ -141,6 +173,19 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
   }
 
   async getErsparnis(jahr: number): Promise<Ersparnis> {
-    return this.fallbackProvider.getErsparnis(jahr);
+    try {
+      const data = await getSparzaehlerAnalysisAction(`${jahr}-01-01`, `${jahr}-12-31`);
+      return {
+        jahr,
+        betrag: data.ersparnisBetrag,
+        anzahlAutoBelege: data.anzahlAutoBelege,
+        minutenProBeleg: 4,
+        beraterStundensatz: 120,
+        prozentAutomatisch: data.prozentAutomatisch
+      };
+    } catch (err) {
+      console.warn('Supabase getErsparnis failed, falling back to Mock:', err);
+      return this.fallbackProvider.getErsparnis(jahr);
+    }
   }
 }

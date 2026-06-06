@@ -3,7 +3,7 @@
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { ChevronRight, ArrowLeft, Save, ShieldCheck, XCircle, FileText, CheckCircle2, AlertTriangle, Clock, Anchor, Euro, Package } from "lucide-react";
+import { ChevronRight, ArrowLeft, Save, ShieldCheck, XCircle, FileText, CheckCircle2, AlertTriangle, Clock, Anchor, Euro, Package, Navigation } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 import { useOfflineManager } from "@/hooks/useOfflineManager";
@@ -191,30 +191,66 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
         </div>
       </div>
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Main Grid: Split View */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-        {/* Left: Preview + Form */}
-        <div className="lg:col-span-2 space-y-6">
-
-          {/* Preview */}
-          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">
+        {/* Left: Preview (Image) */}
+        <div className="flex flex-col gap-6">
+          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6 flex-1 flex flex-col">
             <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">Original-Beleg</h3>
-            <div className="bg-neutral-50 rounded-2xl p-8 flex flex-col items-center justify-center min-h-[120px] border border-neutral-100">
+            <div className="bg-neutral-50 rounded-2xl p-4 flex flex-col items-center justify-center flex-1 border border-neutral-100 overflow-hidden relative min-h-[400px]">
               {beleg.originalDatei && beleg.originalDatei.startsWith('http') ? (
-                <div className="relative w-full h-96 overflow-hidden">
+                <div className="relative w-full h-full min-h-[400px] overflow-auto cursor-crosshair">
                   <Image src={beleg.originalDatei} alt="Original Beleg" fill className="object-contain" />
                 </div>
               ) : (
                 <>
                   <FileText className="w-16 h-16 text-neutral-200 mb-3" />
                   <p className="text-xs text-neutral-400 font-bold">{beleg.originalFormat?.includes('pdf') ? 'PDF' : 'FOTO'} — {beleg.belegart}</p>
-                  <p className="text-[10px] text-neutral-400 mt-1">Original wird später GoBD-sicher im Storage abgelegt.</p>
+                  <p className="text-[10px] text-neutral-400 mt-1">Bild kann nicht aus Storage geladen werden oder fehlt.</p>
                 </>
               )}
             </div>
           </div>
+          
+          {/* Vernetzte Bereiche */}
+          <div className="bg-gradient-to-br from-[#1e1b18] to-navy-900 rounded-3xl shadow-sm p-4 sm:p-6 text-white border-2 border-[#1e1b18]">
+            <h3 className="text-xs font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <Anchor className="w-4 h-4" /> Wo wurde dieser Beleg verwendet?
+            </h3>
+            
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Link href="/buchhaltung/bwa" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
+                <Euro className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
+                <span className="block text-xs font-bold">BWA</span>
+                <span className="block text-[9px] text-white/60">Kostenanalyse</span>
+              </Link>
+              
+              <Link href="/buchhaltung/kosten/1" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
+                <FileText className="w-6 h-6 text-amber-400 mx-auto mb-1" />
+                <span className="block text-xs font-bold">Kosten</span>
+                <span className="block text-[9px] text-white/60">Detailbuchung</span>
+              </Link>
 
+              <Link href="/buchhaltung/export" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
+                <ShieldCheck className="w-6 h-6 text-blue-400 mx-auto mb-1" />
+                <span className="block text-xs font-bold">DATEV</span>
+                <span className="block text-[9px] text-white/60">Export</span>
+              </Link>
+
+              {form?.kategorie === "KFZ" || form?.kategorie?.toLowerCase().includes("kraftstoff") ? (
+                <Link href="/buchhaltung/kraftstoff" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
+                  <Navigation className="w-6 h-6 text-blue-400 mx-auto mb-1" />
+                  <span className="block text-xs font-bold">Kraftstoff</span>
+                  <span className="block text-[9px] text-white/60">Flotte</span>
+                </Link>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        {/* Right: Form & Actions */}
+        <div className="flex flex-col gap-6">
           {/* OCR Form */}
           <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">
             <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">Erkannte / Bearbeitbare Felder</h3>
@@ -236,46 +272,8 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
 
             <p className="text-[10px] text-neutral-400 mt-4">Im späteren GoBD-Modus wird jede Korrektur über Audit-Log/Storno nachvollzogen.</p>
           </div>
-        </div>
 
         {/* Right: KI + Audit + Actions */}
-        <div className="space-y-6">
-
-          {/* Vernetzte Bereiche */}
-          <div className="bg-gradient-to-br from-[#1e1b18] to-navy-900 rounded-3xl shadow-sm p-4 sm:p-6 text-white border-2 border-[#1e1b18]">
-            <h3 className="text-xs font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Anchor className="w-4 h-4" /> Vernetzte Bereiche
-            </h3>
-            
-            <div className="grid grid-cols-2 gap-3">
-              <Link href="/buchhaltung/bwa" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
-                <Euro className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
-                <span className="block text-xs font-bold">BWA-Position</span>
-                <span className="block text-[9px] text-white/60">Kostenanalyse</span>
-              </Link>
-              
-              <Link href="/buchhaltung/kosten/1" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
-                <FileText className="w-6 h-6 text-amber-400 mx-auto mb-1" />
-                <span className="block text-xs font-bold">Kostenposten</span>
-                <span className="block text-[9px] text-white/60">Detailbuchung</span>
-              </Link>
-
-              {(form?.kategorie === "Chemie" || form?.kategorie?.toLowerCase().includes("chemie")) && (
-                <>
-                  <Link href="/items" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
-                    <Package className="w-6 h-6 text-blue-400 mx-auto mb-1" />
-                    <span className="block text-xs font-bold">Lagerbestand</span>
-                    <span className="block text-[9px] text-white/60">Eingekaufte Artikel</span>
-                  </Link>
-                  <Link href="/baeder" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
-                    <div className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-300 mx-auto mb-1 flex items-center justify-center text-xs font-bold">B</div>
-                    <span className="block text-xs font-bold">Bäder</span>
-                    <span className="block text-[9px] text-white/60">Zielverbrauch</span>
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
 
           {/* KI Hinweise */}
           <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">

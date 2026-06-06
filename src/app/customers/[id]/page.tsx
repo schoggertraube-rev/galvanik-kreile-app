@@ -52,23 +52,29 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
       }
       
       try {
-        const custs = await customersRepository.getAll();
-        const c = custs.find(x => x.id === id || x.customerNumber === id) || custs[0];
-        setCustomer(c);
+        const { getCustomerDetailsAction } = await import("./actions");
+        const res = await getCustomerDetailsAction(id as string);
         
-        if (c) {
-          const ags = await priceAgreementsRepository.getByCustomer(c.id);
-          setAgreements(ags);
-          
-          const t = await timelineRepository.getForCustomer(c.id);
-          setTimeline(t);
-
-          const allOrders = await ordersRepository.getAll();
-          const customerOrders = allOrders.filter(o => o.customerId === c.id);
-          setOrders(customerOrders);
-
-          const customerComplaints = await complaintsRepository.getByCustomer(c.id);
-          setComplaints(customerComplaints);
+        if (res.ok && res.data) {
+          setCustomer(res.data.customer as unknown as Customer);
+          setAgreements(res.data.agreements as unknown as PriceAgreement[]);
+          setOrders(res.data.orders.map((o: any) => ({
+             ...o,
+             statusText: o.status === "completed" ? "ERLEDIGT" : "IN ARBEIT",
+             title: o.title || "Auftrag " + o.orderNumber
+          })));
+          setComplaints(res.data.complaints.map((c: any) => ({
+             id: c.id,
+             orderId: c.orderId,
+             reason: c.ergebnis,
+             description: c.bemerkung || "Qualitätsprüfung",
+             createdAt: c.createdAt,
+             resolvedAt: c.ergebnis === 'bestanden' ? c.datum : null,
+             resolution: c.ergebnis === 'bestanden' ? 'OK' : 'Nacharbeit nötig'
+          })));
+          setTimeline([]);
+        } else {
+           setCustomer(null);
         }
       } catch (err) {
         console.error("Error loading customer profile:", err);

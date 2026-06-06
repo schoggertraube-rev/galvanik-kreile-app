@@ -25,6 +25,7 @@ import { FixkostenKachel } from "./components/FixkostenKachel";
 import { VariableKostenKachel } from "./components/VariableKostenKachel";
 import { ExportKachel } from "./components/ExportKachel";
 import { FristenKachel } from "./components/FristenKachel";
+import { RoiKachel } from "./components/RoiKachel";
 
 export function BuchhaltungCockpitClient() {
   const [kategorien, setKategorien] = useState<KategorieSumme[]>([]);
@@ -113,6 +114,7 @@ export function BuchhaltungCockpitClient() {
 
       <SectionHeader icon={<TrendingUp className="w-4.5 h-4.5 text-teal-600" strokeWidth={2} />} iconBg="bg-teal-50" title="Auswertung & Steuerprofil" />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <RoiKachel />
         <BwaKachel />
         <SteuerprofilKachel />
         <FixkostenKachel summe={fixkostenSumme} />

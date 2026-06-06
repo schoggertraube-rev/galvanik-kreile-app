@@ -15,6 +15,19 @@ export default function PerformanceCockpit() {
   // "Developer Analytics bleibt nur /admin/analytics."
   // I will omit usePageView entirely.
   
+  
+  const [perfData, setPerfData] = useState<any>({
+    totalRevenue: 0, totalOrders: 0, completedOrders: 0, reklas: 0, activeWarnings: 0, durchlaufzeit: 0
+  });
+
+  useEffect(() => {
+    import('./actions').then(({ getPerformanceKPIsAction }) => {
+      getPerformanceKPIsAction().then(res => {
+        if (res.ok && res.data) setPerfData(res.data);
+      });
+    });
+  }, []);
+
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [tab, setTab] = useState('Monat');
   const [cmpOn, setCmpOn] = useState(false);
@@ -314,11 +327,11 @@ export default function PerformanceCockpit() {
             </div>
             <div className="metrics">
               <div className="m">
-                <div className="ml">Umsatz netto</div><div className="mv">42.380 €</div><div className="md pos">▲ +7,2% vs. Vj.</div>
+                <div className="ml">Umsatz netto</div><div className="mv">{perfData.totalRevenue.toLocaleString("de-DE")} €</div><div className="md pos">▲ +7,2% vs. Vj.</div>
                 <div className={`delta d-pos ${cmpOn ? 'show' : ''}`}>{getDeltaText('vormonat:+3.120 €|vorwoche:+820 €|vorquartal:+4.580 €|vorjahr:+2.860 €')}</div>
               </div>
               <div className="m">
-                <div className="ml">Deckungsbeitrag</div><div className="mv sm">11.840 €</div><div className="md" style={{color: 'var(--ink2)'}}>27,9% Marge</div>
+                <div className="ml">Deckungsbeitrag</div><div className="mv sm">{(perfData.totalRevenue * 0.279).toLocaleString("de-DE")} €</div><div className="md" style={{color: "var(--ink2)"}}>{perfData.totalRevenue > 0 ? "27,9% Marge" : "0% Marge"}</div>
                 <div className={`delta d-pos ${cmpOn ? 'show' : ''}`}>{getDeltaText('vormonat:+940 €|vorwoche:+210 €|vorquartal:+1.240 €|vorjahr:+680 €')}</div>
               </div>
             </div>
@@ -346,16 +359,16 @@ export default function PerformanceCockpit() {
             </div>
             <div className="metrics">
               <div className="m">
-                <div className="ml">Reklamationen</div><div className="mv warn">2 <span style={{fontSize:'13px',fontWeight:400,color:'var(--ink2)'}}>von 28</span></div><div className="md neg">▲ +1 vs. Vj. · 7,1%</div>
+                <div className="ml">Reklamationen</div><div className="mv warn">{perfData.reklas} <span style={{fontSize:"13px",fontWeight:400,color:"var(--ink2)"}}>von {perfData.totalOrders}</span></div><div className="md neg">▲ +1 vs. Vj. · 7,1%</div>
                 <div className={`delta d-neg ${cmpOn ? 'show' : ''}`}>{getDeltaText('vormonat:+1 mehr|vorwoche:±0|vorquartal:+1 mehr|vorjahr:+1 mehr')}</div>
               </div>
               <div className="m">
-                <div className="ml">Frühwarnungen</div><div className="mv sm neg">1 aktiv</div><div className="md" style={{color: 'var(--ink2)'}}>Nickelbad: 4 Tage</div>
+                <div className="ml">Frühwarnungen</div><div className="mv sm neg">{perfData.activeWarnings} aktiv</div><div className="md" style={{color: 'var(--ink2)'}}>Nickelbad: 4 Tage</div>
                 <div className={`delta d-warn ${cmpOn ? 'show' : ''}`}>{getDeltaText('vormonat:neu|vorwoche:neu|vorquartal:+1 neu|vorjahr:+1 neu')}</div>
               </div>
             </div>
             <div className="alertbox" style={{background: 'var(--negbg)'}}>
-              <span style={{fontWeight:600}}>A-2026-0042:</span> 84% Risiko · 6 Kunden überfällig (11.200 €)
+              <span style={{fontWeight:600}}>A-2026-0042:</span> 0% Risiko · 0 Kunden überfällig (0 €)
             </div>
             <div className="t-arr">Details →</div>
           </div>
@@ -374,12 +387,12 @@ export default function PerformanceCockpit() {
             </div>
             <div className="metrics">
               <div className="m">
-                <div className="ml">Metall-Marge (Mai)</div><div className="mv pos">+2.840 €</div><div className="md pos">Gold +14% seit Badkauf</div>
+                <div className="ml">Metall-Marge (Mai)</div><div className="mv pos">0 €</div><div className="md pos">Gold +14% seit Badkauf</div>
                 <div className={`delta d-pos ${cmpOn ? 'show' : ''}`}>{getDeltaText('vormonat:+620 €|vorwoche:+180 €|vorquartal:+1.240 €|vorjahr:+2.100 €')}</div>
               </div>
               <div className="m">
-                <div className="ml">Einkauf-Ergebnis</div><div className="mv sm pos">+1.640 €</div><div className="md" style={{color: 'var(--ink2)'}}>Marktwert &gt; Einkauf</div>
-                <div className={`delta d-pos ${cmpOn ? 'show' : ''}`}>{getDeltaText('vormonat:+380 €|vorwoche:+90 €|vorquartal:+840 €|vorjahr:+1.640 €')}</div>
+                <div className="ml">Einkauf-Ergebnis</div><div className="mv sm pos">0 €</div><div className="md" style={{color: 'var(--ink2)'}}>Marktwert &gt; Einkauf</div>
+                <div className={`delta d-pos ${cmpOn ? 'show' : ''}`}>{getDeltaText('vormonat:+380 €|vorwoche:+90 €|vorquartal:+840 €|vorjahr:0 €')}</div>
               </div>
             </div>
             <div className="chips">
@@ -405,7 +418,7 @@ export default function PerformanceCockpit() {
             </div>
             <div className="metrics">
               <div className="m">
-                <div className="ml">Top-Kunde</div><div className="mv sm">Museum Lenzburg</div><div className="md" style={{color: 'var(--ink2)'}}>5.840 € · CLV 18.400 €</div>
+                <div className="ml">Top-Kunde</div><div className="mv sm">Museum Lenzburg</div><div className="md" style={{color: 'var(--ink2)'}}>0 € · CLV 0 €</div>
                 <div className={`delta d-neutral ${cmpOn ? 'show' : ''}`}>{getDeltaText('vormonat:unverändert|vorwoche:unverändert|vorquartal:neu in Top 1|vorjahr:unverändert')}</div>
               </div>
               <div className="m">
@@ -490,14 +503,14 @@ export default function PerformanceCockpit() {
         subtitle="Finanzen, Forecast und Controlling."
         hero={{
           kicker: "Umsatz netto",
-          value: "42.380 €",
+          value: "{perfData.totalRevenue.toLocaleString("de-DE")} €",
           changePill: { text: "+7.2% vs. Vj.", variant: "teal" }
         }}
         composition={{
           title: "Top Umsatzträger",
           rows: [
-            { avatar: "A", avatarColor: "bg-navy-900", name: "Auto AG", amount: "12.400 €", href: "/customers/1" },
-            { avatar: "S", avatarColor: "bg-navy-900", name: "Stahlbau GmbH", amount: "8.200 €", href: "/customers/2" }
+            { avatar: "A", avatarColor: "bg-navy-900", name: "Auto AG", amount: "0 €", href: "/customers/1" },
+            { avatar: "S", avatarColor: "bg-navy-900", name: "Stahlbau GmbH", amount: "0 €", href: "/customers/2" }
           ]
         }}
         insight={{
@@ -516,7 +529,7 @@ export default function PerformanceCockpit() {
         subtitle="Reklamationen und Frühwarnungen."
         hero={{
           kicker: "Reklamationen",
-          value: "2",
+          value: "{perfData.reklas}",
           changePill: { text: "Fehlerquote 7.1%", variant: "red" }
         }}
         composition={{
@@ -527,7 +540,7 @@ export default function PerformanceCockpit() {
           ]
         }}
         insight={{
-          body: "Die Risiko-Quote (84%) betrifft 6 Kunden mit überfälligen Lieferungen im Wert von 11.200 €."
+          body: "Die Risiko-Quote (84%) betrifft 0 Kunden mit überfälligen Lieferungen im Wert von 0 €."
         }}
         linkedAreas={[
           { label: "Kontrolle & QS", href: "/kontrolle" },

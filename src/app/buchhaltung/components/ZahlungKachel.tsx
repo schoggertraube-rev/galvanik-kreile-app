@@ -16,7 +16,7 @@ export function ZahlungKachel() {
         iconColor="bg-teal-50"
         onClick={() => setOpen(true)}
         status={{ label: "Live", variant: "ready" }}
-        kpi="182.400 €"
+        kpi="0,00 €"
         footer="Verfügbare Liquidität"
         analyseLink={{ label: "Analyse", href: "#", onClick: () => setOpen(true) }}
       />
@@ -28,20 +28,20 @@ export function ZahlungKachel() {
         subtitle="Live-Übersicht der Liquidität und Transaktionen."
         hero={{
           kicker: "Gesamtliquidität",
-          value: "182.400 €",
-          changePill: { text: "+14.200 € vs. Vormonat", variant: "teal" },
-          meta: "Summe aus Bankguthaben (148.000 €) und kurzfristigen Forderungen abzüglich Verbindlichkeiten."
+          value: "0,00 €",
+          changePill: { text: "Noch keine Daten", variant: "neutral" },
+          meta: "Summe aus Bankguthaben und kurzfristigen Forderungen abzüglich Verbindlichkeiten."
         }}
         composition={{
           title: "Konten & Kassen",
           rows: [
-            { avatar: "S", avatarColor: "bg-teal-600", name: "Sparkasse (Geschäftskonto)", amount: "124.500 €", href: "/buchhaltung/zahlung" },
-            { avatar: "V", avatarColor: "bg-navy-900", name: "Volksbank (Rücklagen)", amount: "23.500 €", href: "/buchhaltung/zahlung" },
-            { avatar: "K", avatarColor: "bg-gray-500", name: "Kasse (Bar)", amount: "1.450 €", href: "/buchhaltung/zahlung" }
+            { avatar: "S", avatarColor: "bg-teal-600", name: "Sparkasse (Geschäftskonto)", amount: "0,00 €", href: "/buchhaltung/zahlung" },
+            { avatar: "V", avatarColor: "bg-navy-900", name: "Volksbank (Rücklagen)", amount: "0,00 €", href: "/buchhaltung/zahlung" },
+            { avatar: "K", avatarColor: "bg-gray-500", name: "Kasse (Bar)", amount: "0,00 €", href: "/buchhaltung/zahlung" }
           ]
         }}
         insight={{
-          body: "Die Zahlungsmoral der Kunden hat sich um 4 Tage verbessert. 92% der Rechnungen werden innerhalb der Frist bezahlt."
+          body: "Bisher liegen keine ausreichenden Daten vor, um die Zahlungsmoral der Kunden zu bewerten."
         }}
         linkedAreas={[
           { label: "Offene Posten (OPOS)", href: "/buchhaltung/rechnungen" },

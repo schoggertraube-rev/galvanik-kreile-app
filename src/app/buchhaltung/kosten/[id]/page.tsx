@@ -37,8 +37,8 @@ export default async function KostenDetailPage({ params }: { params: Promise<{ i
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="lg:col-span-2 bg-white rounded-3xl p-6 shadow-sm border border-neutral-100">
           <h3 className="text-sm font-bold text-[#1e1b18] mb-4">Details</h3>
           <div className="flex justify-between items-center text-sm mb-3">
             <span className="font-semibold text-neutral-500">Kategorie:</span>
@@ -60,6 +60,36 @@ export default async function KostenDetailPage({ params }: { params: Promise<{ i
           <div className="flex justify-between items-center text-lg">
             <span className="font-bold text-[#1e1b18]">Betrag:</span>
             <span className="font-extrabold text-[#1e1b18]">{kosten.betrag.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</span>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-6">
+          <div className="bg-gradient-to-br from-[#1e1b18] to-navy-900 rounded-3xl shadow-sm p-6 text-white border border-[#1e1b18]">
+            <h3 className="text-sm font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <TrendingUp className="w-4 h-4" /> Vernetzte Bereiche
+            </h3>
+            
+            <div className="flex flex-col gap-3">
+              <Link href="/buchhaltung/bwa" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all flex items-center gap-3 group">
+                <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+                  <PieChart className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="block text-sm font-bold">BWA-Auswertung</span>
+                  <span className="block text-[10px] text-white/60">Laufende Kosten prüfen</span>
+                </div>
+              </Link>
+
+              <Link href="/buchhaltung/belege" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all flex items-center gap-3 group">
+                <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                  <TrendingUp className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="block text-sm font-bold">Zugehörige Belege</span>
+                  <span className="block text-[10px] text-white/60">Einzelbuchungen ansehen</span>
+                </div>
+              </Link>
+            </div>
           </div>
         </div>
       </div>

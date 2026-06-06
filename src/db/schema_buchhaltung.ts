@@ -141,6 +141,9 @@ export const steuerprofil = pgTable("steuerprofil", {
   wjBeginn: date("wj_beginn"),
   aktiv: boolean("aktiv").default(true),
   erstelltAm: timestamp("erstellt_am").defaultNow().notNull(),
+  appLizenzMonat: numeric("app_lizenz_monat", { precision: 10, scale: 2 }).default("149.00"),
+  appEinrichtungEinmalig: numeric("app_einrichtung_einmalig", { precision: 10, scale: 2 }).default("0.00"),
+  appStartdatum: date("app_startdatum").defaultNow(),
 });
 
 export const ustvaPeriode = pgTable("ustva_periode", {

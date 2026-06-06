@@ -138,7 +138,7 @@ export function KraftstoffClient({ initialTankungen, gesamtLiter, gesamtKosten }
           {filtered.map((t, idx) => {
             return (
               <div key={t.id}>
-                <div className="flex items-center gap-4 p-3 hover:bg-neutral-50 rounded-2xl transition-colors cursor-pointer group">
+                <Link href={`/buchhaltung/belege/${t.id}`} className="flex items-center gap-4 p-3 hover:bg-neutral-50 rounded-2xl transition-colors cursor-pointer group">
                   
                   {/* Icon */}
                   <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 border border-neutral-100 ${t.absetzbar ? 'bg-blue-50' : 'bg-neutral-50'}`}>
@@ -171,7 +171,7 @@ export function KraftstoffClient({ initialTankungen, gesamtLiter, gesamtKosten }
                     <div className="text-base font-extrabold text-[#1e1b18]">{t.amount.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</div>
                   </div>
 
-                </div>
+                </Link>
                 {idx < filtered.length - 1 && <div className="w-full h-px bg-neutral-100 my-1 ml-14" />}
               </div>
             );

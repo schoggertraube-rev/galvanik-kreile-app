@@ -588,15 +588,15 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
     .from(kostenposten);
 
   let umsatz19 = 0, umsatz7 = 0, umsatz0 = 0;
+  let ust19 = 0, ust7 = 0;
   for (const r of rechnungen) {
     const netto = Number(r.netto) || 0;
     const satz = Number(r.ustSatz) || 19;
-    if (satz === 19) umsatz19 += netto;
-    else if (satz === 7) umsatz7 += netto;
+    const ustB = Number(r.ustBetrag) || (netto * (satz / 100));
+    if (satz === 19) { umsatz19 += netto; ust19 += ustB; }
+    else if (satz === 7) { umsatz7 += netto; ust7 += ustB; }
     else umsatz0 += netto;
   }
-  const ust19 = umsatz19 * 0.19;
-  const ust7 = umsatz7 * 0.07;
   const einnahmenNetto = umsatz19 + umsatz7 + umsatz0;
   
   const ausgabenBelegeNetto = belege.reduce((sum, b) => sum + (Number(b.netto) || 0), 0);

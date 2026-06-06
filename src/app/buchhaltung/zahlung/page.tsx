@@ -15,35 +15,12 @@ const TABS = [
   { id: "statistik", label: "Statistik", icon: Globe },
 ];
 
-const MOCK_MORAL = [
-  { kundeId: "k-123", kunde: "Metallbau Werner", tage: 8, status: "pünktlich", color: "text-emerald-600 bg-emerald-50 border-emerald-200", letzteRechnung: "RE-2026-050", auftragId: "AU-1050" },
-  { kundeId: "k-124", kunde: "Autohaus Schmidt", tage: 14, status: "pünktlich", color: "text-emerald-600 bg-emerald-50 border-emerald-200", letzteRechnung: "RE-2026-048", auftragId: "AU-1048" },
-  { kundeId: "k-125", kunde: "Industriewerk Mainz", tage: 32, status: "verspätet", color: "text-amber-600 bg-amber-50 border-amber-200", letzteRechnung: "RE-2026-021", auftragId: "AU-1021" },
-  { kundeId: "k-126", kunde: "Galvano-Service Nord", tage: 45, status: "kritisch", color: "text-rose-600 bg-rose-50 border-rose-200", letzteRechnung: "RE-2026-003", auftragId: "AU-1003" },
-  { kundeId: "k-127", kunde: "Optik Braun GmbH", tage: 7, status: "pünktlich", color: "text-emerald-600 bg-emerald-50 border-emerald-200", letzteRechnung: "RE-2026-055", auftragId: "AU-1055" },
-];
+const MOCK_MORAL: any[] = [];
 
 const MOCK_STATISTIK = {
-  zahlungsarten: [
-    { art: "Überweisung", anteil: 68, betrag: 42800, icon: "🏦" },
-    { art: "Lastschrift", anteil: 18, betrag: 11340, icon: "📄" },
-    { art: "Kartenzahlung", anteil: 9, betrag: 5670, icon: "💳" },
-    { art: "PayPal", anteil: 3, betrag: 1890, icon: "📱" },
-    { art: "Bar", anteil: 2, betrag: 1260, icon: "💶" },
-  ],
-  herkunft: [
-    { land: "Deutschland", anteil: 82, kunden: 47 },
-    { land: "Österreich", anteil: 8, kunden: 5 },
-    { land: "Schweiz", anteil: 5, kunden: 3 },
-    { land: "Niederlande", anteil: 3, kunden: 2 },
-    { land: "Sonstige", anteil: 2, kunden: 1 },
-  ],
-  dienstleister: [
-    { name: "Hausbank (Sparkasse)", anteil: 72, volumen: "45.360 €" },
-    { name: "PayPal", anteil: 15, volumen: "9.450 €" },
-    { name: "SumUp", anteil: 8, volumen: "5.040 €" },
-    { name: "Stripe", anteil: 5, volumen: "3.150 €" },
-  ],
+  zahlungsarten: [],
+  herkunft: [],
+  dienstleister: [],
 };
 
 function ZahlungContent() {
@@ -98,21 +75,27 @@ function ZahlungContent() {
             <p className="text-sm text-text-muted mb-5">Durchschnittliche Zahlungsdauer der letzten 6 Monate nach Kunde.</p>
 
             <div className="space-y-3">
-              {MOCK_MORAL.map((m, i) => (
-                <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-white border border-neutral-gray-100 rounded-xl hover:shadow-md transition-all hover:border-neutral-gray-300 group">
-                  <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="w-12 h-12 rounded-xl bg-bg-app-soft border border-neutral-gray-200 flex items-center justify-center shrink-0 group-hover:bg-navy-50 transition-colors">
-                      <Users className="w-5 h-5 text-navy-900" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <Link href={`/kunden/${m.kundeId}`} className="text-base font-extrabold text-navy-900 truncate hover:text-blue-600 transition-colors inline-block">{m.kunde}</Link>
-                      <div className="text-xs font-semibold text-text-muted mt-0.5">
-                        <Link href={`/auftraege/${m.auftragId}`} className="hover:text-navy-900 hover:underline">{m.auftragId}</Link>
-                        <span className="mx-1.5">•</span>
-                        <span>{m.letzteRechnung}</span>
+              {MOCK_MORAL.length === 0 ? (
+                <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4 flex items-center gap-3">
+                  <Info className="w-5 h-5 text-neutral-500 shrink-0" />
+                  <p className="text-xs text-neutral-600">Noch keine Daten zur Zahlungsmoral vorhanden.</p>
+                </div>
+              ) : (
+                MOCK_MORAL.map((m, i) => (
+                  <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-white border border-neutral-gray-100 rounded-xl hover:shadow-md transition-all hover:border-neutral-gray-300 group">
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="w-12 h-12 rounded-xl bg-bg-app-soft border border-neutral-gray-200 flex items-center justify-center shrink-0 group-hover:bg-navy-50 transition-colors">
+                        <Users className="w-5 h-5 text-navy-900" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <Link href={`/kunden/${m.kundeId}`} className="text-base font-extrabold text-navy-900 truncate hover:text-blue-600 transition-colors inline-block">{m.kunde}</Link>
+                        <div className="text-xs font-semibold text-text-muted mt-0.5">
+                          <Link href={`/auftraege/${m.auftragId}`} className="hover:text-navy-900 hover:underline">{m.auftragId}</Link>
+                          <span className="mx-1.5">•</span>
+                          <span>{m.letzteRechnung}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
                   
                   <div className="flex items-center justify-between sm:justify-end gap-6 sm:w-1/2">
                     <div className="text-center">
@@ -157,20 +140,27 @@ function ZahlungContent() {
             <h2 className="text-lg font-extrabold text-navy-900 mb-1">Zahlungsarten-Verteilung</h2>
             <p className="text-sm text-text-muted mb-5">Wie deine Kunden bezahlen — letzte 12 Monate.</p>
             <div className="space-y-3">
-              {MOCK_STATISTIK.zahlungsarten.map((z, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <span className="text-lg w-8 text-center">{z.icon}</span>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-bold text-navy-900">{z.art}</span>
-                      <span className="text-xs font-bold text-navy-900">{z.betrag.toLocaleString("de-DE")} € <span className="text-text-muted font-normal">({z.anteil} %)</span></span>
-                    </div>
-                    <div className="w-full h-2 bg-neutral-100 rounded-full overflow-hidden">
-                      <div className="h-full rounded-full bg-teal-500 transition-all" style={{ width: `${z.anteil}%` }} />
+              {MOCK_STATISTIK.zahlungsarten.length === 0 ? (
+                <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4 flex items-center gap-3">
+                  <Info className="w-5 h-5 text-neutral-500 shrink-0" />
+                  <p className="text-xs text-neutral-600">Noch keine Daten zu Zahlungsarten vorhanden.</p>
+                </div>
+              ) : (
+                MOCK_STATISTIK.zahlungsarten.map((z, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className="text-lg w-8 text-center">{z.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-bold text-navy-900">{z.art}</span>
+                        <span className="text-xs font-bold text-navy-900">{z.betrag.toLocaleString("de-DE")} € <span className="text-text-muted font-normal">({z.anteil} %)</span></span>
+                      </div>
+                      <div className="w-full h-2 bg-neutral-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full bg-teal-500 transition-all" style={{ width: `${z.anteil}%` }} />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 
@@ -179,20 +169,27 @@ function ZahlungContent() {
             <h2 className="text-lg font-extrabold text-navy-900 mb-1">Dienstleister-Verteilung</h2>
             <p className="text-sm text-text-muted mb-5">Über welche Anbieter die Zahlungen abgewickelt werden.</p>
             <div className="space-y-3">
-              {MOCK_STATISTIK.dienstleister.map((d, i) => (
-                <div key={i} className="flex items-center gap-4 p-3 bg-neutral-50 rounded-xl">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-neutral-100 flex items-center justify-center shrink-0">
-                    <CreditCard className="w-4 h-4 text-teal-500" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-extrabold text-navy-900">{d.name}</div>
-                    <div className="text-xs text-text-muted">{d.anteil} % · {d.volumen}</div>
-                  </div>
-                  <div className="w-16 h-2 bg-neutral-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-blue-500" style={{ width: `${d.anteil}%` }} />
-                  </div>
+              {MOCK_STATISTIK.dienstleister.length === 0 ? (
+                <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4 flex items-center gap-3">
+                  <Info className="w-5 h-5 text-neutral-500 shrink-0" />
+                  <p className="text-xs text-neutral-600">Noch keine Daten zu Dienstleistern vorhanden.</p>
                 </div>
-              ))}
+              ) : (
+                MOCK_STATISTIK.dienstleister.map((d, i) => (
+                  <div key={i} className="flex items-center gap-4 p-3 bg-neutral-50 rounded-xl">
+                    <div className="w-10 h-10 rounded-xl bg-white border border-neutral-100 flex items-center justify-center shrink-0">
+                      <CreditCard className="w-4 h-4 text-teal-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-extrabold text-navy-900">{d.name}</div>
+                      <div className="text-xs text-text-muted">{d.anteil} % · {d.volumen}</div>
+                    </div>
+                    <div className="w-16 h-2 bg-neutral-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-blue-500" style={{ width: `${d.anteil}%` }} />
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -201,20 +198,27 @@ function ZahlungContent() {
             <h2 className="text-lg font-extrabold text-navy-900 mb-1">Herkunftsländer der Kunden</h2>
             <p className="text-sm text-text-muted mb-5">Woher kommen die zahlenden Kunden.</p>
             <div className="space-y-3">
-              {MOCK_STATISTIK.herkunft.map((h, i) => (
-                <div key={i} className="flex items-center gap-4 p-3 bg-neutral-50 rounded-xl">
-                  <div className="w-10 h-10 rounded-xl bg-white border border-neutral-100 flex items-center justify-center shrink-0">
-                    <Globe className="w-4 h-4 text-purple-500" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-extrabold text-navy-900">{h.land}</div>
-                    <div className="text-xs text-text-muted">{h.kunden} Kunden · {h.anteil} %</div>
-                  </div>
-                  <div className="w-16 h-2 bg-neutral-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-purple-500" style={{ width: `${h.anteil}%` }} />
-                  </div>
+              {MOCK_STATISTIK.herkunft.length === 0 ? (
+                <div className="bg-neutral-50 border border-neutral-200 rounded-xl p-4 flex items-center gap-3">
+                  <Info className="w-5 h-5 text-neutral-500 shrink-0" />
+                  <p className="text-xs text-neutral-600">Noch keine Daten zur Herkunft vorhanden.</p>
                 </div>
-              ))}
+              ) : (
+                MOCK_STATISTIK.herkunft.map((h, i) => (
+                  <div key={i} className="flex items-center gap-4 p-3 bg-neutral-50 rounded-xl">
+                    <div className="w-10 h-10 rounded-xl bg-white border border-neutral-100 flex items-center justify-center shrink-0">
+                      <Globe className="w-4 h-4 text-purple-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-extrabold text-navy-900">{h.land}</div>
+                      <div className="text-xs text-text-muted">{h.kunden} Kunden · {h.anteil} %</div>
+                    </div>
+                    <div className="w-16 h-2 bg-neutral-100 rounded-full overflow-hidden">
+                      <div className="h-full rounded-full bg-purple-500" style={{ width: `${h.anteil}%` }} />
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 

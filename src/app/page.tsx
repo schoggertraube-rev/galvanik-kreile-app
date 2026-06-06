@@ -59,14 +59,10 @@ function useAnimatedCount(target: number, running: boolean) {
 }
 
 // Quick card data with gradients matching HTML reference
-const QUICK_CARDS = [
-  { id: 'telefon', label: 'Telefonnotiz', sub: 'schnell festhalten', grad: 'linear-gradient(135deg,#0E8C8C,#13B0A6)', shadow: 'rgba(14,140,140,.35)', icon: 'phone', href: '/telefonnotiz?source=home', shortcut: undefined as string | undefined },
-  { id: 'kunde', label: 'Neuer Kunde', sub: 'in 30 Sekunden', grad: 'linear-gradient(135deg,#2E9E6B,#46C285)', shadow: 'rgba(46,158,107,.35)', icon: 'userplus', href: undefined as string | undefined, shortcut: 'new_customer' },
-  { id: 'auftrag', label: 'Neuer Auftrag', sub: 'Teil annehmen', grad: 'linear-gradient(135deg,#3A6EA5,#4F8BC9)', shadow: 'rgba(58,110,165,.35)', icon: 'fileplus', href: undefined as string | undefined, shortcut: 'new_order' },
-  { id: 'foto', label: 'Foto / Scan', sub: 'Beleg & Teil', grad: 'linear-gradient(135deg,#C98A12,#E6A82E)', shadow: 'rgba(201,138,18,.35)', icon: 'camera', href: undefined as string | undefined, shortcut: 'new_document' },
-  { id: 'kritisch', label: 'Kritische Aufträge', sub: '3 brauchen dich', grad: 'linear-gradient(135deg,#D8453C,#EE6A5A)', shadow: 'rgba(216,69,60,.35)', icon: 'alert', href: '/kontrolle', badge: '3' },
-  { id: 'marketing', label: 'Marketing', sub: '1 Aktion empfohlen', grad: 'linear-gradient(115deg,#7A3FB0,#C2185B 55%,#F2643C)', shadow: 'rgba(194,24,91,.4)', icon: 'sparkles', href: '/marketing', badge: '1' },
-];
+
+// QUICK_CARDS will be dynamic inside the component now
+const QUICK_CARDS_TEMPLATE = [];
+
 
 const IconComponents: Record<string, React.ComponentType<{ className?: string }>> = {
   phone: Phone, userplus: UserPlus, fileplus: FilePlus, camera: Camera, alert: AlertTriangle, sparkles: Sparkles,
@@ -88,18 +84,7 @@ export default function HomeDashboard() {
   const { isOnline, outboxItems, syncNow } = useSync();
 
   // Todo List State (Enriched Task Model)
-  const [todos, setTodos] = useState<ChecklistTask[]>([
-    { id: 1, title: "Überfällige Auslieferungen klären", reason: "3 Aufträge sind seit gestern fertig, aber nicht abgeholt", area: "Warenausgang", urgency: "Hoch", action: "Kunde anrufen", targetHref: "/warendurchlauf", completionType: "live", source: "live", done: false },
-    { id: 2, title: "Salzsäure nachbestellen", reason: "Bestand unter 20 %", area: "Chemie / Lager", urgency: "Hoch", action: "Lieferant kontaktieren", targetHref: "/items", completionType: "live", source: "live", done: false },
-    { id: 3, title: "Kundenfreigabe Maier GmbH", reason: "Wartet seit 2 Tagen auf Preisbestätigung", area: "Büro", urgency: "Mittel", action: "Nachfassen", targetHref: "/quotes", completionType: "live", source: "live", done: false },
-    { id: 4, title: "Material fehlt für Auftrag #8102", reason: "Rohteile nicht auffindbar", area: "Wareneingang", urgency: "Mittel", action: "Palette suchen", targetHref: "/items", completionType: "live", source: "live", done: false },
-    { id: 5, title: "QS: Teile nacharbeiten", reason: "2 Teile aus Endkontrolle zurück", area: "Kontrolle", urgency: "Mittel", action: "Entlacken starten", targetHref: "/kundenservice", completionType: "live", source: "live", done: false },
-    { id: 6, title: "Versand vorbereiten", reason: "14 Pakete müssen heute raus", area: "Warenausgang", urgency: "Normal", action: "Lieferscheine drucken", targetHref: "/warendurchlauf", completionType: "live", source: "live", done: false },
-    { id: 7, title: "Offene Anfragen sichten", reason: "5 neue E-Mails im Postfach", area: "Büro", urgency: "Normal", action: "Angebote schreiben", targetHref: "/kundenservice", completionType: "live", source: "live", done: false },
-    { id: 8, title: "Bad-Protokolle eintragen", reason: "Routineprüfung fällig", area: "Labor", urgency: "Normal", action: "Messen", targetHref: "/baeder", completionType: "demo", source: "demo", done: false },
-    { id: 9, title: "Leergut sortieren", reason: "Kisten stapeln sich", area: "Hof", urgency: "Niedrig", action: "Aufräumen", completionType: "demo", source: "demo", done: false },
-    { id: 10, title: "Tagesrundgang Warendurchlauf", reason: "Einmal prüfen, ob alle Stationen sauber weiterlaufen", area: "Warendurchlauf", urgency: "Normal", action: "Stationen prüfen", targetHref: "/warendurchlauf", completionType: "live", source: "live", done: false }
-  ]);
+  const [todos, setTodos] = useState<ChecklistTask[]>([]);
 
   const [feedback, setFeedback] = useState("");
   const [feedbackSent, setFeedbackSent] = useState(false);
@@ -108,7 +93,30 @@ export default function HomeDashboard() {
 
   useEffect(() => {
     const load = async () => {
+      
       const dbOrders = await ordersRepository.getAll();
+      const qsRes = await fetch('/api/get-qs').catch(()=>({ok:false})); // just mock logic for checklist
+      
+      const newTodos: ChecklistTask[] = [];
+      const kritisch = dbOrders.filter(o => o.risk === 'red' || o.risk === 'orange');
+      if (kritisch.length > 0) {
+         newTodos.push({
+            id: 1, title: `Kritische Aufträge prüfen (${kritisch.length})`, reason: "Aufträge mit hohem Risiko entdeckt",
+            area: "Warendurchlauf", urgency: "Hoch", action: "Aufträge ansehen", targetHref: "/kontrolle",
+            completionType: "live", source: "live", done: false
+         });
+      }
+      const auslieferungen = dbOrders.filter(o => o.station === 'warenausgang');
+      if (auslieferungen.length > 0) {
+         newTodos.push({
+            id: 2, title: `Auslieferungen klären (${auslieferungen.length})`, reason: "Aufträge sind im Warenausgang",
+            area: "Warenausgang", urgency: "Normal", action: "Versand prüfen", targetHref: "/warendurchlauf",
+            completionType: "live", source: "live", done: false
+         });
+      }
+      
+      setTodos(newTodos);
+
       if (dbOrders) setOrders(dbOrders as unknown as MockOrder[]);
       const qCount = await inquiriesRepository.getOpenCount();
       setOpenQuotes(qCount);
@@ -244,7 +252,20 @@ export default function HomeDashboard() {
         >
           <h2 className="text-[11px] font-extrabold text-text-muted uppercase tracking-widest mb-3">Schnellstart</h2>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {QUICK_CARDS.map(card => {
+            
+            {(() => {
+              const kritisch = orders.filter(o => o.risk === 'red' || o.risk === 'orange').length;
+              const QUICK_CARDS = [
+                { id: 'telefon', label: 'Telefonnotiz', sub: 'schnell festhalten', grad: 'linear-gradient(135deg,#0E8C8C,#13B0A6)', shadow: 'rgba(14,140,140,.35)', icon: 'phone', href: '/telefonnotiz?source=home', shortcut: undefined as string | undefined },
+                { id: 'kunde', label: 'Neuer Kunde', sub: 'in 30 Sekunden', grad: 'linear-gradient(135deg,#2E9E6B,#46C285)', shadow: 'rgba(46,158,107,.35)', icon: 'userplus', href: undefined as string | undefined, shortcut: 'new_customer' },
+                { id: 'auftrag', label: 'Neuer Auftrag', sub: 'Teil annehmen', grad: 'linear-gradient(135deg,#3A6EA5,#4F8BC9)', shadow: 'rgba(58,110,165,.35)', icon: 'fileplus', href: undefined as string | undefined, shortcut: 'new_order' },
+                { id: 'foto', label: 'Foto / Scan', sub: 'Beleg & Teil', grad: 'linear-gradient(135deg,#C98A12,#E6A82E)', shadow: 'rgba(201,138,18,.35)', icon: 'camera', href: undefined as string | undefined, shortcut: 'new_document' },
+                { id: 'kritisch', label: 'Kritische Aufträge', sub: kritisch > 0 ? `${kritisch} brauchen dich` : 'Alles im Lot', grad: 'linear-gradient(135deg,#D8453C,#EE6A5A)', shadow: 'rgba(216,69,60,.35)', icon: 'alert', href: '/kontrolle', badge: kritisch > 0 ? kritisch.toString() : undefined },
+                { id: 'marketing', label: 'Marketing', sub: 'Keine Aktion', grad: 'linear-gradient(115deg,#7A3FB0,#C2185B 55%,#F2643C)', shadow: 'rgba(194,24,91,.4)', icon: 'sparkles', href: '/marketing', badge: undefined },
+              ];
+              return QUICK_CARDS;
+            })().map(card => {
+
               const Icon = IconComponents[card.icon];
               return (
                 <button
