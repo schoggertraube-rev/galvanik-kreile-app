@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { AnalysisOverlay } from '@/components/ui/AnalysisOverlay';
 import { 
   Moon, Sun, Sparkles, Activity, 
   TrendingUp, AlertTriangle, FlaskConical, Users,
@@ -18,6 +19,7 @@ export default function PerformanceCockpit() {
   const [tab, setTab] = useState('Monat');
   const [cmpOn, setCmpOn] = useState(false);
   const [cmpPer, setCmpPer] = useState('vormonat');
+  const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
   // Sync theme
   useEffect(() => {
     const saved = localStorage.getItem('perfTheme');
@@ -237,7 +239,7 @@ export default function PerformanceCockpit() {
         {/* 3. Hauptkacheln */}
         <div className="t-grid">
           {/* A) Werkstatt-Puls */}
-          <Link href="/performance/werkstatt-puls" style={{textDecoration:'none',color:'inherit'}}>
+          <div onClick={(e) => { e.preventDefault(); setActiveOverlay('werkstatt-puls'); }} style={{textDecoration:'none',color:'inherit', cursor:'pointer'}}>
           <div className="t-tile t-hero">
             <div className="t-glow" style={{background: '#22D3EE'}}></div>
             <div className="t-th">
@@ -295,12 +297,12 @@ export default function PerformanceCockpit() {
             </div>
             <div className="t-arr">Details →</div>
           </div>
-          </Link>
+          </div>
         </div>
 
         <div className="t-grid t-g2">
           {/* B) Umsatz und Marge */}
-          <Link href="/performance/umsatz-marge" style={{textDecoration:'none',color:'inherit'}}>
+          <div onClick={(e) => { e.preventDefault(); setActiveOverlay('umsatz-marge'); }} style={{textDecoration:'none',color:'inherit', cursor:'pointer'}}>
           <div className="t-tile">
             <div className="t-glow" style={{background: '#34D399'}}></div>
             <div className="t-th">
@@ -329,10 +331,10 @@ export default function PerformanceCockpit() {
             </div>
             <div className="t-arr">Details →</div>
           </div>
-          </Link>
+          </div>
 
           {/* C) Qualität und Risiko */}
-          <Link href="/performance/qualitaet-risiko" style={{textDecoration:'none',color:'inherit'}}>
+          <div onClick={(e) => { e.preventDefault(); setActiveOverlay('qualitaet-risiko'); }} style={{textDecoration:'none',color:'inherit', cursor:'pointer'}}>
           <div className="t-tile">
             <div className="t-glow" style={{background: '#FBBF24'}}></div>
             <div className="t-th">
@@ -357,7 +359,7 @@ export default function PerformanceCockpit() {
             </div>
             <div className="t-arr">Details →</div>
           </div>
-          </Link>
+          </div>
 
           {/* D) Bäder und Material */}
           <Link href="/performance/baeder-material" style={{textDecoration:'none',color:'inherit'}}>
@@ -454,8 +456,84 @@ export default function PerformanceCockpit() {
 
       </div>
 
+      {/* 7-Ebenen Overlays */}
+      <AnalysisOverlay
+        open={activeOverlay === 'werkstatt-puls'}
+        onClose={() => setActiveOverlay(null)}
+        title="Werkstatt-Puls Detail"
+        subtitle="Durchsatz, Stationen und Wochenziel im Detail."
+        hero={{
+          kicker: "Wochenziel",
+          value: "23 / 25",
+          changePill: { text: "92% erreicht", variant: "teal" }
+        }}
+        composition={{
+          title: "Stations-Status",
+          rows: [
+            { avatar: "G", avatarColor: "bg-error-red", name: "Galvanik", amount: "62% Durchsatz", href: "/baeder" },
+            { avatar: "P", avatarColor: "bg-warning-yellow", name: "Politur", amount: "78% Durchsatz", href: "/station/politur" }
+          ]
+        }}
+        insight={{
+          body: "Die Galvanik-Station ist der aktuelle Flaschenhals. Kapazitäten prüfen."
+        }}
+        linkedAreas={[
+          { label: "Bäder-Status", href: "/baeder" },
+          { label: "Warendurchlauf", href: "/warendurchlauf" }
+        ]}
+      />
 
+      <AnalysisOverlay
+        open={activeOverlay === 'umsatz-marge'}
+        onClose={() => setActiveOverlay(null)}
+        title="Umsatz und Marge Detail"
+        subtitle="Finanzen, Forecast und Controlling."
+        hero={{
+          kicker: "Umsatz netto",
+          value: "42.380 €",
+          changePill: { text: "+7.2% vs. Vj.", variant: "teal" }
+        }}
+        composition={{
+          title: "Top Umsatzträger",
+          rows: [
+            { avatar: "A", avatarColor: "bg-navy-900", name: "Auto AG", amount: "12.400 €", href: "/customers/1" },
+            { avatar: "S", avatarColor: "bg-navy-900", name: "Stahlbau GmbH", amount: "8.200 €", href: "/customers/2" }
+          ]
+        }}
+        insight={{
+          body: "Marge liegt stabil bei 27,9%. Deckungsbeitrag steigt durch verbesserte Materialnutzung."
+        }}
+        linkedAreas={[
+          { label: "Kunden", href: "/customers" },
+          { label: "Rechnungen", href: "/buchhaltung/rechnungen" }
+        ]}
+      />
 
+      <AnalysisOverlay
+        open={activeOverlay === 'qualitaet-risiko'}
+        onClose={() => setActiveOverlay(null)}
+        title="Qualität und Risiko Detail"
+        subtitle="Reklamationen und Frühwarnungen."
+        hero={{
+          kicker: "Reklamationen",
+          value: "2",
+          changePill: { text: "Fehlerquote 7.1%", variant: "red" }
+        }}
+        composition={{
+          title: "Aktuelle Fälle",
+          rows: [
+            { avatar: "B", avatarColor: "bg-error-red", name: "Bad 3 (Oberfläche)", amount: "A-2026-0044", href: "/orders/1" },
+            { avatar: "V", avatarColor: "bg-warning-yellow", name: "Verpackung (Transportschaden)", amount: "A-2026-0081", href: "/orders/2" }
+          ]
+        }}
+        insight={{
+          body: "Die Risiko-Quote (84%) betrifft 6 Kunden mit überfälligen Lieferungen im Wert von 11.200 €."
+        }}
+        linkedAreas={[
+          { label: "Kontrolle & QS", href: "/kontrolle" },
+          { label: "Reklamationen", href: "/orders" }
+        ]}
+      />
     </div>
   );
 }
