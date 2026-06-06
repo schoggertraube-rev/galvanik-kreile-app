@@ -1,5 +1,8 @@
 import { WarendurchlaufCockpitClient } from "./WarendurchlaufCockpitClient";
+import { getWarendurchlaufKPIs } from "./actions";
 
-export default function WarendurchlaufIndex() {
-  return <WarendurchlaufCockpitClient />;
+export default async function WarendurchlaufIndex() {
+  const result = await getWarendurchlaufKPIs();
+  const data = result.ok ? result.data : null;
+  return <WarendurchlaufCockpitClient data={data} />;
 }

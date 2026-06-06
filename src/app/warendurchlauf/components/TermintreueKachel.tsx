@@ -6,8 +6,30 @@ import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { Calendar } from "lucide-react";
 import Link from "next/link";
 
-export function TermintreueKachel() {
+export function TermintreueKachel({ data }: { data: any }) {
   const [overlayOpen, setOverlayOpen] = useState(false);
+
+  const termintreue = data?.termintreue ?? 0;
+  const orders = data?.orders || [];
+  
+  // Find critical orders
+  const criticalOrders = orders.filter((o: any) => o.status !== "completed" && o.status !== "abgeschlossen");
+  const sortedCritical = criticalOrders.sort((a: any, b: any) => {
+    const aDate = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+    const bDate = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+    return aDate - bDate;
+  }).slice(0, 5); // top 5 critical
+
+  const compositionRows = sortedCritical.length > 0 ? sortedCritical.map((o: any) => {
+    const isOverdue = o.dueDate ? new Date(o.dueDate).getTime() < Date.now() : false;
+    return {
+      avatar: o.orderNumber?.charAt(0) || "A",
+      avatarColor: isOverdue ? "bg-error-red" : "bg-amber-500",
+      name: `${o.orderNumber} ${o.task ? `(${o.task})` : ""}`,
+      amount: isOverdue ? "Überfällig" : "Kritisch",
+      href: `/orders/${o.id}`
+    };
+  }) : [{ avatar: "✓", avatarColor: "bg-teal-500", name: "Keine kritischen Aufträge", amount: "", href: "#" }];
 
   return (
     <>
@@ -15,9 +37,9 @@ export function TermintreueKachel() {
         icon={<Calendar className="w-6 h-6" />}
         iconColor="text-navy-900"
         title="Termintreue"
-        kpi="94.2%"
-        description="Zuletzt 7 Tage"
-        footer="Trend: +2.1%"
+        kpi={`${termintreue} %`}
+        description="Alle aktiven & beendeten Aufträge"
+        footer={`Von ${orders.length} Gesamtaufträgen`}
         onClick={() => setOverlayOpen(true)}
         analyseLink={{ label: "Details ansehen", onClick: () => setOverlayOpen(true) }}
       />
@@ -29,18 +51,15 @@ export function TermintreueKachel() {
         subtitle="Analysieren Sie terminkritische Aufträge und Verzögerungen."
         hero={{
           kicker: "Gesamt Termintreue",
-          value: "94.2 %",
-          changePill: { text: "+2.1% als Vormonat", variant: "teal" }
+          value: `${termintreue} %`,
+          changePill: { text: "Basierend auf Livedaten", variant: "neutral" }
         }}
         composition={{
           title: "Kritische Aufträge",
-          rows: [
-            { avatar: "M", avatarColor: "bg-error-red", name: "A-2026-0089 (Muster GmbH)", amount: "Morgen", href: "/orders/1" },
-            { avatar: "R", avatarColor: "bg-error-red", name: "A-2026-0091 (Riedel AG)", amount: "Überfällig", href: "/orders/2" }
-          ]
+          rows: compositionRows
         }}
         insight={{
-          body: "2 Aufträge benötigen sofortige Aufmerksamkeit an der Verzinkungsstation."
+          body: sortedCritical.length > 0 ? `${sortedCritical.length} Aufträge benötigen baldige Aufmerksamkeit.` : "Aktuell läuft alles nach Plan."
         }}
         linkedAreas={[
           { label: "Zur Kontrolle", href: "/kontrolle" },

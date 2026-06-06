@@ -13,11 +13,21 @@ import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 
 interface Props {
   isDevOrAdmin: boolean;
+  qsData?: any[];
 }
 
-export function KontrolleDashboardClient({ isDevOrAdmin }: Props) {
+export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
   const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
   const [isAdminOrDevLocal, setIsAdminOrDevLocal] = useState(isDevOrAdmin);
+
+  const qsCount = qsData.length;
+  const qsRows = qsCount > 0 ? qsData.map((q: any) => ({
+    avatar: q.ergebnis === "ausschuss" ? "A" : "N",
+    avatarColor: q.ergebnis === "ausschuss" ? "bg-error-red" : "bg-warning-yellow",
+    name: `${q.orderNumber} (${q.bemerkung || q.ergebnis})`,
+    amount: q.pruefer || "Unbekannt",
+    href: `/orders/${q.orderId}`
+  })) : [{ avatar: "✓", avatarColor: "bg-success-green", name: "Keine Qualitätsmängel", amount: "-", href: "#" }];
 
   useEffect(() => {
     const role = localStorage.getItem("kreile_user_role");
@@ -120,10 +130,10 @@ export function KontrolleDashboardClient({ isDevOrAdmin }: Props) {
                 <div className="w-12 h-12 bg-neutral-gray-100 rounded-xl flex items-center justify-center text-text-muted">
                   <PackageX className="w-6 h-6" />
                 </div>
-                <span className="text-3xl font-bold text-navy-900">1</span>
+                <span className="text-3xl font-bold text-navy-900">0</span>
               </div>
               <h3 className="font-bold text-navy-900 text-lg mb-1">Material fehlt</h3>
-              <p className="text-sm text-text-muted font-medium">Goldbad Nachschub</p>
+              <p className="text-sm text-text-muted font-medium">Bestellungen prüfen</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
               Details ansehen <ArrowRight className="w-4 h-4" />
@@ -136,7 +146,7 @@ export function KontrolleDashboardClient({ isDevOrAdmin }: Props) {
                 <div className="w-12 h-12 bg-error-red/10 rounded-xl flex items-center justify-center text-error-red">
                   <Wrench className="w-6 h-6" />
                 </div>
-                <span className="text-3xl font-bold text-navy-900">2</span>
+                <span className="text-3xl font-bold text-navy-900">{qsCount}</span>
               </div>
               <h3 className="font-bold text-navy-900 text-lg mb-1">QS / Nacharbeit</h3>
               <p className="text-sm text-error-red font-medium">Reklamationsanalyse</p>
@@ -152,7 +162,7 @@ export function KontrolleDashboardClient({ isDevOrAdmin }: Props) {
                 <div className="w-12 h-12 bg-success-green/10 rounded-xl flex items-center justify-center text-success-green">
                   <Truck className="w-6 h-6" />
                 </div>
-                <span className="text-3xl font-bold text-navy-900">4</span>
+                <span className="text-3xl font-bold text-navy-900">0</span>
               </div>
               <h3 className="font-bold text-navy-900 text-lg mb-1">Warenausgang offen</h3>
               <p className="text-sm text-success-green font-medium">Verpackt, nicht abgeholt</p>
@@ -184,110 +194,42 @@ export function KontrolleDashboardClient({ isDevOrAdmin }: Props) {
       
       {/* A: Kritische Aufträge */}
       <DetailOverlay open={activeOverlay === "critical_orders"} onClose={closeOverlay} title="Kritische Aufträge" subtitle="Aufträge, deren Liefertermin unmittelbar gefährdet ist.">
-        <div className="space-y-6 text-navy-900">
-          <div className="bg-error-red/10 border border-error-red/20 rounded-xl p-4 flex gap-3">
-            <AlertTriangle className="w-5 h-5 text-error-red shrink-0 mt-0.5" />
-            <div>
-              <h4 className="font-bold text-error-red">Sofortiger Handlungsbedarf</h4>
-              <p className="text-sm text-error-red/80">3 Aufträge überschreiten den garantierten Liefertermin heute, wenn sie nicht priorisiert werden.</p>
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="font-bold mb-3 border-b border-neutral-gray-200 pb-2">Betroffene Vorgänge (Demo)</h4>
-            <ul className="space-y-3">
-              <li className="bg-bg-app-soft p-3 rounded-lg flex justify-between items-center border border-neutral-gray-100">
-                <div><p className="font-bold">A-2026-0815 <span className="text-text-muted font-normal text-sm">— Metallbau Müller</span></p><p className="text-xs text-text-muted">Station: Verzinken (Seit 2 Tagen im Rückstand)</p></div>
-                <span className="text-xs bg-error-red text-white px-2 py-1 rounded font-bold">Heute fällig</span>
-              </li>
-              <li className="bg-bg-app-soft p-3 rounded-lg flex justify-between items-center border border-neutral-gray-100">
-                <div><p className="font-bold">A-2026-0820 <span className="text-text-muted font-normal text-sm">— AutoTech GmbH</span></p><p className="text-xs text-text-muted">Station: Qualitätskontrolle</p></div>
-                <span className="text-xs bg-accent-orange text-white px-2 py-1 rounded font-bold">Morgen fällig</span>
-              </li>
-            </ul>
-          </div>
-          
-          <div>
-            <h4 className="font-bold mb-2">Ursache</h4>
-            <p className="text-sm text-text-muted">Krankheitsausfall an der Verzinkungsanlage hat den Durchsatz gestern um 40% reduziert.</p>
-          </div>
-          
-          <div className="pt-4 border-t border-neutral-gray-200 flex justify-end">
-            <Link href="/orders" className="bg-navy-900 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-navy-800 transition-colors flex items-center gap-2">
-              Aufträge ansehen <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
+    <div className="space-y-6 text-navy-900">
+      <div className="bg-neutral-gray-100 border border-neutral-gray-200 rounded-xl p-4 flex gap-3">
+        <Info className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
+        <div>
+          <h4 className="font-bold text-navy-900">Keine Daten</h4>
+          <p className="text-sm text-text-muted">Aktuell sind 0 Aufträge kritisch.</p>
         </div>
-      </DetailOverlay>
+      </div>
+    </div>
+  </DetailOverlay>
 
       {/* B: Kundenfreigabe */}
-      <DetailOverlay open={activeOverlay === "customer_approval"} onClose={closeOverlay} title="Warten auf Kundenfreigabe" subtitle="Rückfragen, bei denen der Kunde am Zug ist.">
-        <div className="space-y-6 text-navy-900">
-          <div className="bg-accent-orange/10 border border-accent-orange/20 rounded-xl p-4 flex gap-3">
-            <Clock className="w-5 h-5 text-accent-orange shrink-0 mt-0.5" />
-            <div>
-              <h4 className="font-bold text-accent-orange">Kontakt erforderlich</h4>
-              <p className="text-sm text-accent-orange/80">5 Vorgänge pausieren. Eine telefonische Erinnerung bei den ältesten Vorgängen wird empfohlen.</p>
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="font-bold mb-3 border-b border-neutral-gray-200 pb-2">Offene Freigaben (Demo)</h4>
-            <ul className="space-y-3">
-              <li className="bg-bg-app-soft p-3 rounded-lg flex justify-between items-center border border-neutral-gray-100">
-                <div><p className="font-bold">AN-0422 <span className="text-text-muted font-normal text-sm">— Schrauben Meier</span></p><p className="text-xs text-text-muted">Unklarheit bezüglich Schichtdicke.</p></div>
-                <span className="text-xs bg-error-red/20 text-error-red px-2 py-1 rounded font-bold">Seit 4 Tagen</span>
-              </li>
-              <li className="bg-bg-app-soft p-3 rounded-lg flex justify-between items-center border border-neutral-gray-100">
-                <div><p className="font-bold">A-2026-0799 <span className="text-text-muted font-normal text-sm">— BikeParts UG</span></p><p className="text-xs text-text-muted">Rückfrage zu angeliefertem Zustand (rostig).</p></div>
-                <span className="text-xs bg-neutral-gray-200 text-text-muted px-2 py-1 rounded font-bold">Seit 1 Tag</span>
-              </li>
-            </ul>
-          </div>
-          
-          <div className="pt-4 border-t border-neutral-gray-200 flex justify-end gap-3">
-            <Link href="/quotes" className="bg-navy-900 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-navy-800 transition-colors flex items-center gap-2">
-              Zu den Angeboten <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
+      <DetailOverlay open={activeOverlay === "customer_approval"} onClose={closeOverlay} title="Kundenfreigabe" subtitle="Rückfragen an den Kunden, die die Produktion blockieren.">
+    <div className="space-y-6 text-navy-900">
+      <div className="bg-neutral-gray-100 border border-neutral-gray-200 rounded-xl p-4 flex gap-3">
+        <Info className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
+        <div>
+          <h4 className="font-bold text-navy-900">Keine Daten</h4>
+          <p className="text-sm text-text-muted">Aktuell liegen 0 Aufträge zur Kundenfreigabe vor.</p>
         </div>
-      </DetailOverlay>
+      </div>
+    </div>
+  </DetailOverlay>
 
       {/* C: Material fehlt */}
       <DetailOverlay open={activeOverlay === "missing_material"} onClose={closeOverlay} title="Material fehlt" subtitle="Waren oder Verbrauchsmaterial, das die Produktion blockiert.">
-        <div className="space-y-6 text-navy-900">
-          <div className="bg-neutral-gray-100 border border-neutral-gray-200 rounded-xl p-4 flex gap-3">
-            <PackageX className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
-            <div>
-              <h4 className="font-bold text-navy-900">Produktionsblockade</h4>
-              <p className="text-sm text-text-muted">1 wichtiges Material nähert sich dem kritischen Füllstand und gefährdet die Goldbad-Station.</p>
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="font-bold mb-3 border-b border-neutral-gray-200 pb-2">Fehlendes Material (Demo)</h4>
-            <div className="bg-bg-app-soft p-4 rounded-lg border border-neutral-gray-100">
-              <p className="font-bold">Gold-Elektrolyt (AURUM-7)</p>
-              <p className="text-sm text-text-muted mt-1">Aktueller Bestand: 2L (Kritisch). Letzte Bestellung vor 4 Wochen.</p>
-              <p className="text-sm text-error-red font-medium mt-2">Risiko: Stillstand in 2 Tagen bei aktueller Auftragslage.</p>
-            </div>
-          </div>
-          
-          <div>
-            <h4 className="font-bold mb-2">Empfohlene Aktion</h4>
-            <p className="text-sm text-text-muted">Umgehende Nachbestellung beim Lieferanten (Express-Versand).</p>
-          </div>
-          
-          <div className="pt-4 border-t border-neutral-gray-200 flex justify-end gap-3">
-            <Link href="/baeder" className="bg-white border border-neutral-gray-200 text-navy-900 px-5 py-2.5 rounded-xl font-bold hover:bg-neutral-gray-50 transition-colors flex items-center gap-2">
-              Bäder prüfen
-            </Link>
-            <Link href="/items" className="bg-navy-900 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-navy-800 transition-colors flex items-center gap-2">
-              Inventar öffnen <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
+    <div className="space-y-6 text-navy-900">
+      <div className="bg-neutral-gray-100 border border-neutral-gray-200 rounded-xl p-4 flex gap-3">
+        <Info className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
+        <div>
+          <h4 className="font-bold text-navy-900">Keine Daten</h4>
+          <p className="text-sm text-text-muted">Aktuell fehlen 0 Materialien für die Produktion.</p>
         </div>
-      </DetailOverlay>
+      </div>
+    </div>
+  </DetailOverlay>
 
       {/* D: QS / Nacharbeit */}
       <AnalysisOverlay
@@ -297,22 +239,19 @@ export function KontrolleDashboardClient({ isDevOrAdmin }: Props) {
         subtitle="Analyse zu fehlerhaften Teilen und Nacharbeiten."
         hero={{
           kicker: "Aktuelle Reklamationen",
-          value: "2",
-          changePill: { text: "Fehlerquote 4.2%", variant: "red" }
+          value: String(qsCount),
+          changePill: { text: "Basierend auf Livedaten", variant: qsCount > 0 ? "red" : "neutral" }
         }}
         composition={{
           title: "Häufigste Ursachen",
-          rows: [
-            { avatar: "3", avatarColor: "bg-error-red", name: "A-2026-0044 (Oberflächenqualität mangelhaft)", amount: "Station: Bad 3", href: "/orders/1" },
-            { avatar: "V", avatarColor: "bg-warning-yellow", name: "A-2026-0081 (Transportschaden)", amount: "Verpackung", href: "/orders/2" }
-          ]
+          rows: qsRows
         }}
         insight={{
-          body: "Kontrolle der Badparameter an Station 3 (Temperatur/Stromdichte) anweisen."
+          body: qsCount > 0 ? `${qsCount} Vorgänge benötigen eine Prüfung oder Nacharbeit.` : "Aktuell keine offenen Reklamationen."
         }}
         linkedAreas={[
-          { label: "Bäder prüfen", href: "/baeder" },
-          { label: "Kundenservice prüfen", href: "/kundenservice" }
+          { label: "Warendurchlauf prüfen", href: "/warendurchlauf" },
+          { label: "Bäder-Parameter checken", href: "/baeder" }
         ]}
       />
 

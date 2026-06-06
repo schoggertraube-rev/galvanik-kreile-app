@@ -6,8 +6,30 @@ import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { Clock } from "lucide-react";
 import Link from "next/link";
 
-export function DurchlaufzeitKachel() {
+export function DurchlaufzeitKachel({ data }: { data: any }) {
   const [overlayOpen, setOverlayOpen] = useState(false);
+
+  const dlz = data?.durchlaufzeitTage ?? 0;
+  const orders = data?.orders || [];
+  
+  // Find longest running active orders
+  const activeOrders = orders.filter((o: any) => o.status !== "completed" && o.status !== "abgeschlossen");
+  const sortedLongest = activeOrders.sort((a: any, b: any) => {
+    const aDate = a.intakeDate ? new Date(a.intakeDate).getTime() : Date.now();
+    const bDate = b.intakeDate ? new Date(b.intakeDate).getTime() : Date.now();
+    return aDate - bDate; // Oldest first
+  }).slice(0, 5);
+
+  const compositionRows = sortedLongest.length > 0 ? sortedLongest.map((o: any) => {
+    const daysActive = o.intakeDate ? ((Date.now() - new Date(o.intakeDate).getTime()) / (1000 * 60 * 60 * 24)).toFixed(1) : 0;
+    return {
+      avatar: o.orderNumber?.charAt(0) || "A",
+      avatarColor: Number(daysActive) > 14 ? "bg-error-red" : "bg-accent-orange",
+      name: `${o.orderNumber} (${o.currentStationId || "Unbekannt"})`,
+      amount: `${daysActive} Tage`,
+      href: `/orders/${o.id}`
+    };
+  }) : [{ avatar: "✓", avatarColor: "bg-teal-500", name: "Keine Aufträge in Bearbeitung", amount: "", href: "#" }];
 
   return (
     <>
@@ -15,9 +37,9 @@ export function DurchlaufzeitKachel() {
         icon={<Clock className="w-6 h-6" />}
         iconColor="text-navy-900"
         title="Durchlaufzeit"
-        kpi="4.2 Tage"
+        kpi={`${dlz} Tage`}
         description="Ø pro Auftrag"
-        footer="Trend: -0.3 Tage"
+        footer="Gleitender Durchschnitt"
         onClick={() => setOverlayOpen(true)}
         analyseLink={{ label: "Details ansehen", onClick: () => setOverlayOpen(true) }}
       />
@@ -26,21 +48,18 @@ export function DurchlaufzeitKachel() {
         open={overlayOpen}
         onClose={() => setOverlayOpen(false)}
         title="Durchlaufzeit Detail"
-        subtitle="Analysieren Sie die Dauer der einzelnen Stationen."
+        subtitle="Analysieren Sie die Dauer der einzelnen Aufträge."
         hero={{
           kicker: "Durchschnittliche DLZ",
-          value: "4.2 Tage",
-          changePill: { text: "-0.3 Tage vs. letzter Monat", variant: "teal" }
+          value: `${dlz} Tage`,
+          changePill: { text: "Basierend auf Livedaten", variant: "neutral" }
         }}
         composition={{
-          title: "Top Verzögerungen",
-          rows: [
-            { avatar: "G", avatarColor: "bg-accent-orange", name: "A-2026-0010 (Galvanik-Bad 2)", amount: "8.5 Std", href: "/orders/1" },
-            { avatar: "W", avatarColor: "bg-error-red", name: "A-2026-0044 (Warenausgang)", amount: "12.2 Std", href: "/orders/2" }
-          ]
+          title: "Am längsten in Bearbeitung",
+          rows: compositionRows
         }}
         insight={{
-          body: "Der Warenausgang verzeichnet aktuell die längsten Liegezeiten. Empfehlung: Kapazität prüfen."
+          body: sortedLongest.length > 0 ? "Überprüfen Sie diese Aufträge auf Liegezeiten." : "Keine auffälligen Liegezeiten."
         }}
         linkedAreas={[
           { label: "Bäder-Status", href: "/baeder" },

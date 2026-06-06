@@ -335,5 +335,17 @@ export const kostenPosten = pgTable("kosten_posten", {
   gebuchtAm: timestamp("gebucht_am").defaultNow().notNull(),
 });
 
+// 14. Qualitätskontrolle (QS)
+export const qs = pgTable("qs", {
+  id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  ergebnis: varchar("ergebnis", { length: 50 }).notNull(), // "bestanden", "nacharbeit", "ausschuss"
+  pruefer: text("pruefer"),
+  datum: timestamp("datum").defaultNow().notNull(),
+  bemerkung: text("bemerkung"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // 11. Buchhaltung & Finanzen
 export * from "./schema_buchhaltung";

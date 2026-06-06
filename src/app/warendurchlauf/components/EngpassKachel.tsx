@@ -6,17 +6,40 @@ import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
-export function EngpassKachel() {
+export function EngpassKachel({ data }: { data: any }) {
   const [overlayOpen, setOverlayOpen] = useState(false);
+
+  const engpassStation = data?.engpassStation || "Kein Engpass";
+  const engpassCount = data?.engpassCount || 0;
+  const orders = data?.orders || [];
+
+  // Group by station
+  const stations: Record<string, number> = {};
+  orders.filter((o: any) => o.status !== "completed" && o.status !== "abgeschlossen").forEach((o: any) => {
+    const s = o.currentStationId || "wareneingang";
+    stations[s] = (stations[s] || 0) + 1;
+  });
+
+  const sortedStations = Object.entries(stations).sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  const compositionRows = sortedStations.length > 0 ? sortedStations.map(([station, count]) => {
+    return {
+      avatar: station.charAt(0).toUpperCase(),
+      avatarColor: count > 5 ? "bg-error-red" : "bg-accent-orange",
+      name: station,
+      amount: `${count} Aufträge`,
+      href: `/warendurchlauf/${station}`
+    };
+  }) : [{ avatar: "✓", avatarColor: "bg-teal-500", name: "Keine Engpässe", amount: "", href: "#" }];
 
   return (
     <>
       <Tile
         icon={<AlertTriangle className="w-6 h-6" />}
-        iconColor="text-error-red"
+        iconColor={engpassCount > 0 ? "text-error-red" : "text-teal-600"}
         title="Engpass-Radar"
-        kpi="Galvanik"
-        description="Höchste Last"
+        kpi={engpassStation}
+        description={engpassCount > 0 ? "Höchste Last" : "Alles im Plan"}
         onClick={() => setOverlayOpen(true)}
         analyseLink={{ label: "Details ansehen", onClick: () => setOverlayOpen(true) }}
       />
@@ -28,18 +51,15 @@ export function EngpassKachel() {
         subtitle="Analysieren Sie gestaute Stationen."
         hero={{
           kicker: "Kritischster Engpass",
-          value: "Galvanik",
-          changePill: { text: "92% Auslastung", variant: "red" }
+          value: engpassStation,
+          changePill: { text: `${engpassCount} Aufträge in der Station`, variant: engpassCount > 0 ? "red" : "neutral" }
         }}
         composition={{
           title: "Stau nach Stationen",
-          rows: [
-            { avatar: "3", avatarColor: "bg-error-red", name: "Galvanik-Bad 3", amount: "92%", href: "/warendurchlauf/galvanik" },
-            { avatar: "W", avatarColor: "bg-accent-orange", name: "Warenausgang", amount: "14 Aufträge", href: "/warendurchlauf/warenausgang" }
-          ]
+          rows: compositionRows
         }}
         insight={{
-          body: "Galvanik-Bad 3 ist überlastet. Aufträge stauen sich."
+          body: engpassCount > 0 ? `${engpassStation} hat mit ${engpassCount} Aufträgen die höchste Last.` : "Keine Station verzeichnet auffälligen Stau."
         }}
         linkedAreas={[
           { label: "Bäder-Verwaltung", href: "/baeder" }

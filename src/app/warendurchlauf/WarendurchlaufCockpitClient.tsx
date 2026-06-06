@@ -10,7 +10,7 @@ import { OffeneAuftraegeKachel } from "./components/OffeneAuftraegeKachel";
 import Link from "next/link";
 import { ArrowRight, Box, Settings } from "lucide-react";
 
-export function WarendurchlaufCockpitClient() {
+export function WarendurchlaufCockpitClient({ data }: { data: any }) {
   usePageView();
 
   return (
@@ -63,10 +63,10 @@ export function WarendurchlaufCockpitClient() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 auto-rows-min mb-12">
-        <TermintreueKachel />
-        <DurchlaufzeitKachel />
-        <EngpassKachel />
-        <OffeneAuftraegeKachel />
+        <TermintreueKachel data={data} />
+        <DurchlaufzeitKachel data={data} />
+        <EngpassKachel data={data} />
+        <OffeneAuftraegeKachel data={data} />
       </div>
 
       <FeedbackFooter pageTitle="Warendurchlauf Cockpit" route="/warendurchlauf" variant="full" />
