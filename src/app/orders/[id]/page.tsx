@@ -8,11 +8,13 @@ import { StationCompletionModal } from "@/components/orders/StationCompletionMod
 import { LabelPrintView } from "@/components/orders/LabelPrintView";
 import { timelineRepository, TimelineEntry } from "@/lib/repositories/timelineRepository";
 import { ordersRepository, Order } from "@/lib/repositories/ordersRepository";
-import { Clock, Box, PhoneCall } from "lucide-react";
+import { Clock, Box, PhoneCall, CheckCircle2, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { getStationConfig } from "@/constants/stations";
 import { AppBackButton } from "@/components/ui/AppBackButton";
+import { customersRepository, Customer } from "@/lib/repositories/customersRepository";
+import { Badge } from "@/components/ui/badge";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   usePageView();
@@ -21,6 +23,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [printOpen, setPrintOpen] = useState(false);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [order, setOrder] = useState<Order | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -31,6 +34,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       const o = orders.find(x => x.id === id || x.orderNumber === id) || orders[0];
       setOrder(o);
       
+      const custs = await customersRepository.getAll();
+      setCustomer(custs.find(c => c.id === o.customerId) || null);
+
       const t = await timelineRepository.getForOrder(o.id);
       setTimeline(t);
     }
@@ -48,12 +54,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-4xl font-black font-serif text-navy-900">{order.orderNumber}</h1>
-        <h2 className="text-2xl font-bold text-text-muted mt-1">{order.title}</h2>
-        <div className="flex gap-4 mt-4">
-          <span className="px-3 py-1.5 bg-navy-700 text-navy-700 font-bold rounded-lg text-sm flex items-center">
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-4xl font-black font-serif text-navy-900">{order.orderNumber}</h1>
+            <h2 className="text-2xl font-bold text-text-muted mt-1">{order.title}</h2>
+          </div>
+          {customer && (
+            <Link href={`/customers/${customer.id}`} className="bg-white border-2 border-neutral-gray-200 rounded-2xl p-4 hover:border-navy-400 hover:shadow-md transition-all flex flex-col items-end text-right group">
+              <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider mb-1">Kunde</span>
+              <span className="text-lg font-black text-navy-900 group-hover:underline">{customer.name}</span>
+              <span className="text-xs text-text-muted font-semibold">{customer.customerNumber}</span>
+            </Link>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-4 mt-4">
+          <Link href={`/warendurchlauf/${getStationConfig(order.currentStationId || order.station || "wareneingang").name.toLowerCase().includes("galvanik") ? "galvanik" : "wareneingang"}?station=${order.currentStationId}`} className="px-3 py-1.5 bg-navy-700 text-white hover:bg-navy-800 transition-colors font-bold rounded-lg text-sm flex items-center shadow-sm">
             <Box className="w-4 h-4 mr-2" /> Station: {getStationConfig(order.currentStationId || order.station || "wareneingang").name}
-          </span>
+          </Link>
           {(() => {
             if (!order.dueDate) {
               return (
@@ -120,6 +137,50 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
         {/* Right Column (Timeline & Docs) */}
         <div className="lg:col-span-5 space-y-8">
+          
+          {/* Vernetzte Bereiche */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white border-2 border-neutral-gray-200 rounded-3xl p-5 hover:border-navy-400 transition-colors shadow-sm">
+              <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-2">Kontrolle</span>
+              {Math.random() > 0.5 ? (
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> QS Bestanden</span>
+                  <Link href={`/kontrolle?order=${order.orderNumber}`} className="text-xs text-navy-600 font-bold hover:underline">Prüfprotokoll öffnen</Link>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm font-black text-amber-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Nacharbeit</span>
+                  <Link href={`/kontrolle?order=${order.orderNumber}`} className="text-xs text-navy-600 font-bold hover:underline">Details ansehen</Link>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white border-2 border-neutral-gray-200 rounded-3xl p-5 hover:border-navy-400 transition-colors shadow-sm">
+              <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-2">Rechnung</span>
+              {order.status === "completed" || order.status === "done" ? (
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm font-black text-navy-900">RE-{new Date().getFullYear()}-{order.orderNumber.substring(0,4)}</span>
+                  <Link href={`/buchhaltung/rechnungen/1`} className="text-xs text-navy-600 font-bold hover:underline">Rechnung anzeigen</Link>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm font-bold text-text-muted italic">Noch nicht abgerechnet</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="col-span-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-100 rounded-3xl p-5 shadow-sm">
+              <div className="flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider block mb-1">Marketing-Quelle</span>
+                  <span className="text-sm font-black text-navy-900">Empfehlung / Bestandskunde</span>
+                </div>
+                <Link href="/marketing/attribution" className="text-xs font-bold text-blue-600 bg-white px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50">
+                  Kampagne ansehen
+                </Link>
+              </div>
+            </div>
+          </div>
           <div className="bg-white border-2 border-neutral-gray-300 rounded-3xl p-6 md:p-8 shadow-sm">
             <OrderTimeline entries={timeline} />
           </div>

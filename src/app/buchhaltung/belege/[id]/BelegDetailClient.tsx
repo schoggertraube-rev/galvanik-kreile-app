@@ -3,7 +3,7 @@
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useMemo } from "react";
 import Link from "next/link";
-import { ChevronRight, ArrowLeft, Save, ShieldCheck, XCircle, FileText, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
+import { ChevronRight, ArrowLeft, Save, ShieldCheck, XCircle, FileText, CheckCircle2, AlertTriangle, Clock, Anchor, Euro, Package } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 import { useOfflineManager } from "@/hooks/useOfflineManager";
@@ -166,7 +166,7 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
         <ChevronRight className="w-3 h-3" />
         <Link href="/buchhaltung/belege" className="hover:text-navy-900 transition-colors">Belege</Link>
         <ChevronRight className="w-3 h-3" />
-        <span className="text-navy-900 truncate max-w-[200px]">{beleg.lieferantText || beleg.lieferant?.name || "Unbekannter Lieferant"}</span>
+        <Link href={`/lieferanten/${beleg.lieferantId || "unbekannt"}`} className="text-navy-900 truncate max-w-[200px] hover:underline">{beleg.lieferantText || beleg.lieferant?.name || "Unbekannter Lieferant"}</Link>
       </div>
 
       {/* Back + Title */}
@@ -176,7 +176,9 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
             <ArrowLeft className="w-4 h-4 text-[#1e1b18]" />
           </Link>
           <div>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-[#1e1b18] tracking-tight">{beleg.lieferantText || beleg.lieferant?.name || "Unbekannter Lieferant"}</h1>
+            <Link href={`/lieferanten/${beleg.lieferantId || "unbekannt"}`} className="text-xl sm:text-2xl font-extrabold text-[#1e1b18] tracking-tight hover:underline hover:text-navy-600 transition-colors">
+              {beleg.lieferantText || beleg.lieferant?.name || "Unbekannter Lieferant"}
+            </Link>
             <div className="flex items-center gap-3 mt-1">
               <span className={`px-2.5 py-1 rounded text-[10px] font-extrabold tracking-wide uppercase ${statusColorClass}`}>{statusLabel}</span>
               <span className="text-xs text-neutral-500">{beleg.belegart} · {beleg.id.substring(0,8)}</span>
@@ -238,6 +240,42 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
 
         {/* Right: KI + Audit + Actions */}
         <div className="space-y-6">
+
+          {/* Vernetzte Bereiche */}
+          <div className="bg-gradient-to-br from-[#1e1b18] to-navy-900 rounded-3xl shadow-sm p-4 sm:p-6 text-white border-2 border-[#1e1b18]">
+            <h3 className="text-xs font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <Anchor className="w-4 h-4" /> Vernetzte Bereiche
+            </h3>
+            
+            <div className="grid grid-cols-2 gap-3">
+              <Link href="/buchhaltung/bwa" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
+                <Euro className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
+                <span className="block text-xs font-bold">BWA-Position</span>
+                <span className="block text-[9px] text-white/60">Kostenanalyse</span>
+              </Link>
+              
+              <Link href="/buchhaltung/kosten/1" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
+                <FileText className="w-6 h-6 text-amber-400 mx-auto mb-1" />
+                <span className="block text-xs font-bold">Kostenposten</span>
+                <span className="block text-[9px] text-white/60">Detailbuchung</span>
+              </Link>
+
+              {(form?.kategorie === "Chemie" || form?.kategorie?.toLowerCase().includes("chemie")) && (
+                <>
+                  <Link href="/items" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
+                    <Package className="w-6 h-6 text-blue-400 mx-auto mb-1" />
+                    <span className="block text-xs font-bold">Lagerbestand</span>
+                    <span className="block text-[9px] text-white/60">Eingekaufte Artikel</span>
+                  </Link>
+                  <Link href="/baeder" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
+                    <div className="w-6 h-6 rounded-full bg-blue-500/20 text-blue-300 mx-auto mb-1 flex items-center justify-center text-xs font-bold">B</div>
+                    <span className="block text-xs font-bold">Bäder</span>
+                    <span className="block text-[9px] text-white/60">Zielverbrauch</span>
+                  </Link>
+                </>
+              )}
+            </div>
+          </div>
 
           {/* KI Hinweise */}
           <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">

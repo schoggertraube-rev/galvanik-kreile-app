@@ -1,0 +1,58 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+"use client";
+import { useState, useEffect } from "react";
+import { TrendingUp } from "lucide-react";
+import { Tile } from "./Tile";
+import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
+import { getBwaAnalysisAction } from "@/app/buchhaltung/analysis.actions";
+
+export function BwaKachel() {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<any>(null);
+
+  useEffect(() => {
+    if (!open || data) return;
+    const now = new Date();
+    getBwaAnalysisAction(`${now.getFullYear()}-01-01`, `${now.getFullYear()}-12-31`).then(setData);
+  }, [open, data]);
+
+  const props = !data ? { subtitle: "Daten werden live berechnet..." } : {
+    icon: <TrendingUp className="w-6 h-6" />,
+    subtitle: "Betriebswirtschaftliche Auswertung",
+    accentBg: "linear-gradient(180deg, var(--posbg), transparent)",
+    tabs: [{ id: "gesamt", label: "Betriebsergebnis" }],
+    
+    hero: {
+      kicker: "BETRIEBSERGEBNIS",
+      value: `${data.betriebsergebnis?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} €`,
+      changePill: { text: `Einnahmen: ${data.einnahmen?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} €`, variant: "teal" as const },
+      meta: `Ausgaben: ${data.ausgabenGesamt?.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || 0} €`,
+    },
+    trend: { title: "Ergebnis Verlauf", chartType: "bar" as const, chartData: data.chartData || [] },
+    insight: {
+      body: (data.insights?.beobachtungen || []).map((b: string) => `<b>Beobachtung:</b> ${b}`).join('<br/>') + 
+            ((data.insights?.vermutungen?.length || 0) > 0 ? '<br/><br/>' + data.insights.vermutungen.map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
+      actions: (data.insights?.vorschlaege || []).map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
+    },
+    linkedAreas: [{ label: "Umsätze ansehen", href: "/performance/umsatz-marge" }]
+  };
+
+  return (
+    <>
+      <Tile
+        title="BWA / Monatsübersicht"
+        description="Betriebswirtschaftliche Auswertung. Einnahmen, Ausgaben, Ergebnis."
+        icon={<TrendingUp className="w-5 h-5 text-teal-600" strokeWidth={1.8} />}
+        iconColor="bg-teal-50"
+        href="/buchhaltung/bwa"
+        kpi="+19.200 €"
+        footer="Details"
+      />
+       
+          <AnalysisOverlay open={open} onClose={() => setOpen(false)} title="Analyse: BWA" activeTab={"gesamt"} onTabChange={() => {}} {...props} />
+    </>
+  );
+}
+
+
+

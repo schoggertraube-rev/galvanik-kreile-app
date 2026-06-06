@@ -24,7 +24,10 @@ import {
   History,
   PhoneCall,
   Mail,
-  AlertCircle
+  AlertCircle,
+  FileText,
+  TrendingUp,
+  Tag
 } from "lucide-react";
 import { AppBackButton } from "@/components/ui/AppBackButton";
 import { useAppShortcut } from "@/components/ui/AppShortcutContext";
@@ -396,6 +399,56 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
               </CardContent>
             </Card>
 
+            {/* Rechnungen & Offene Posten */}
+            <Card className="border-2 border-neutral-gray-300 rounded-3xl overflow-hidden shadow-xs bg-white">
+              <CardContent className="p-6 md:p-8 space-y-6">
+                <div className="flex justify-between items-center border-b pb-4">
+                  <div className="space-y-1">
+                    <h3 className="text-xl font-bold font-serif text-navy-900 flex items-center gap-2">
+                      <FileText className="w-5 h-5 text-text-muted" /> Rechnungen & Offene Posten
+                    </h3>
+                    <p className="text-xs font-semibold text-text-muted">Letzte Rechnungsaktivitäten dieses Kunden</p>
+                  </div>
+                  <Link href={`/buchhaltung/rechnungen?customer=${customer.customerNumber}`}>
+                    <Button variant="outline" className="text-xs font-bold">Alle Rechnungen</Button>
+                  </Link>
+                </div>
+                
+                <div className="space-y-3">
+                  <Link href="/buchhaltung/rechnungen/1" className="block group">
+                    <div className="p-4 bg-bg-app-soft border border-neutral-gray-200 rounded-2xl flex items-center justify-between group-hover:border-navy-500 transition-colors">
+                      <div>
+                        <span className="text-[10px] text-text-muted font-bold block mb-0.5">RE-{new Date().getFullYear()}-0042 · Vor 3 Tagen</span>
+                        <span className="text-sm font-black text-navy-900 flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-accent-orange" />
+                          Offen
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-sm font-black text-navy-900 block">4.200,00 €</span>
+                        <span className="text-[10px] text-text-muted font-bold">Zahlungsziel in 4 Tagen</span>
+                      </div>
+                    </div>
+                  </Link>
+
+                  <Link href="/buchhaltung/rechnungen/2" className="block group">
+                    <div className="p-4 bg-white border border-neutral-gray-100 rounded-2xl flex items-center justify-between group-hover:border-navy-500 transition-colors">
+                      <div>
+                        <span className="text-[10px] text-text-muted font-bold block mb-0.5">RE-{new Date().getFullYear()}-0018 · Letzter Monat</span>
+                        <span className="text-sm font-black text-emerald-700 flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                          Bezahlt
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-sm font-black text-text-muted block">1.840,00 €</span>
+                      </div>
+                    </div>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Kommunikationshistorie */}
             <Card className="border-2 border-neutral-gray-300 rounded-3xl overflow-hidden shadow-xs bg-white">
               <CardContent className="p-6 md:p-8 space-y-6">
@@ -428,6 +481,42 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
 
           {/* Right Column (Timeline & Quick Actions) */}
           <div className="lg:col-span-4 space-y-8">
+            
+            {/* Marketing & Insights */}
+            <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-3xl overflow-hidden shadow-sm">
+              <CardContent className="p-6 space-y-5">
+                <h3 className="text-lg font-bold font-serif text-blue-900 flex items-center gap-2 border-b border-blue-200 pb-3">
+                  <TrendingUp className="w-5 h-5 text-blue-600" />
+                  Marketing Profil
+                </h3>
+                
+                <div className="space-y-3">
+                  <div>
+                    <span className="block text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Quelle (Attribution)</span>
+                    <span className="text-sm font-black text-navy-900 flex items-center gap-2">
+                      <Tag className="w-4 h-4 text-blue-500" />
+                      Google Ads (B2B Kampagne)
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Segment</span>
+                    <Link href={`/marketing/segmente/1`} className="text-sm font-black text-navy-900 hover:text-blue-600 underline decoration-blue-300">
+                      Top-Kunden (A-Segment)
+                    </Link>
+                  </div>
+                  <div>
+                    <span className="block text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Feedback-Score</span>
+                    <span className="text-sm font-black text-emerald-700">8.9 / 10 (Sehr zufrieden)</span>
+                  </div>
+                </div>
+                
+                <Link href={`/marketing?customer=${customer.customerNumber}`}>
+                  <Button variant="outline" className="w-full mt-2 text-xs font-bold border-blue-300 text-blue-700 bg-white hover:bg-blue-100">
+                    Marketing-Historie
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
             
             {/* Quick Actions Panel */}
             <Card className="border-2 border-neutral-gray-300 rounded-3xl overflow-hidden shadow-xs bg-navy-900 text-white sticky top-24">

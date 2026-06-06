@@ -1,6 +1,6 @@
 import { getRechnungAction } from "@/app/buchhaltung/actions";
 import Link from "next/link";
-import { ChevronRight, FileText, CheckCircle2, AlertTriangle, Euro } from "lucide-react";
+import { ChevronRight, FileText, CheckCircle2, AlertTriangle, Euro, Anchor, Briefcase, User } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 export default async function RechnungDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -39,9 +39,20 @@ export default async function RechnungDetailPage({ params }: { params: Promise<{
               {rechnung.status}
             </span>
           </div>
-          <p className="text-sm font-semibold text-neutral-500 mt-2">
-            Kunde: {rechnung.kundeName || rechnung.kundeId}
-          </p>
+          <div className="flex items-center gap-2 text-sm font-semibold text-neutral-500 mt-2">
+            <User className="w-4 h-4" />
+            <span>Kunde:</span>
+            <Link href={`/customers/${rechnung.kundeId}`} className="text-navy-900 font-bold hover:underline hover:text-navy-600 transition-colors">
+              {rechnung.kundeName || rechnung.kundeId}
+            </Link>
+          </div>
+          <div className="flex items-center gap-2 text-sm font-semibold text-neutral-500 mt-1">
+            <Briefcase className="w-4 h-4" />
+            <span>Auftrag:</span>
+            <Link href={`/orders/${"A-" + rechnung.nummer.replace("RE-", "")}`} className="text-navy-900 font-bold hover:underline hover:text-navy-600 transition-colors">
+              {"A-" + rechnung.nummer.replace("RE-", "")}
+            </Link>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {/* Action buttons could go here */}
@@ -111,6 +122,46 @@ export default async function RechnungDetailPage({ params }: { params: Promise<{
             <div className="flex justify-between items-center text-lg">
               <span className="font-bold text-[#1e1b18]">Brutto:</span>
               <span className="font-extrabold text-[#1e1b18]">{(rechnung.brutto || 0).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</span>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-[#1e1b18] to-navy-900 rounded-3xl shadow-sm p-6 text-white border border-[#1e1b18]">
+            <h3 className="text-sm font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <Anchor className="w-4 h-4" /> Vernetzte Bereiche
+            </h3>
+            
+            <div className="flex flex-col gap-3">
+              {["offen", "teilbezahlt", "ueberfaellig", "gemahnt", "mahnung"].includes(rechnung.status) && (
+                <Link href="/buchhaltung/zahlung" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all flex items-center gap-3 group">
+                  <div className="w-8 h-8 rounded-full bg-accent-orange-soft/20 flex items-center justify-center text-accent-orange-light shrink-0">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="block text-sm font-bold">Offene Posten (OPOS)</span>
+                    <span className="block text-[10px] text-white/60">Zahlungsabgleich prüfen</span>
+                  </div>
+                </Link>
+              )}
+              
+              <Link href="/buchhaltung/steuerprofil" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all flex items-center gap-3 group">
+                <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="block text-sm font-bold">UStVA & Steuern</span>
+                  <span className="block text-[10px] text-white/60">USt-Betrag {rechnung.ustBetrag?.toLocaleString("de-DE")} € gebucht</span>
+                </div>
+              </Link>
+              
+              <Link href="/buchhaltung/bwa" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all flex items-center gap-3 group">
+                <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+                  <Euro className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="block text-sm font-bold">BWA-Einnahmen</span>
+                  <span className="block text-[10px] text-white/60">Monatsauswertung</span>
+                </div>
+              </Link>
             </div>
           </div>
         </div>
