@@ -118,9 +118,7 @@ export function PerformanceDetailLayout({
         .pd-grid > *:nth-child(8) { animation-delay: 0.35s; }
       `}} />
       <div className="pd-inner">
-        <Link href="/performance" className="pd-back">
-          <ArrowLeft className="w-4 h-4" /> Zurück zur Performance
-        </Link>
+
 
         <div className="pd-hero">
           <div className="pd-ico" style={{ background: accentColor }}>

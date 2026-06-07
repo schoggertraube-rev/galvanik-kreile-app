@@ -16,7 +16,7 @@ export default function LieferantenPage() {
       </div>
       
       <div className="max-w-4xl mx-auto space-y-6">
-        <AppBackButton fallbackHref="/" label="Zurück zum Dashboard" />
+        
         
         <div className="bg-white rounded-3xl p-8 border shadow-xs text-center space-y-4">
           <Building2 className="w-16 h-16 text-neutral-gray-400 mx-auto" />

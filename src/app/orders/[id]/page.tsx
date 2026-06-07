@@ -54,10 +54,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <BackButton label="Orders" href="/orders" />
       </div>
       
-      {/* Top bar with back navigation */}
-      <div className="mb-6">
-        <AppBackButton fallbackHref="/warendurchlauf" label="Zurück zum Warendurchlauf" />
-      </div>
+      
 
       {/* Header */}
       <div className="mb-8">

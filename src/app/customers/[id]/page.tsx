@@ -156,7 +156,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
     <div className="min-h-screen bg-transparent pb-16 font-sans">
       {/* Top bar with back navigation */}
       <div className="bg-white border-b border-neutral-gray-300 py-4 px-4 md:px-8 mb-6 flex items-center justify-between shadow-xs sticky top-0 z-10">
-        <AppBackButton fallbackHref="/customers" label="Zurück zur Kundenübersicht" />
+        
         <span className="font-mono text-sm text-text-muted font-bold">KUNDENID: {customer.customerNumber}</span>
       </div>
 

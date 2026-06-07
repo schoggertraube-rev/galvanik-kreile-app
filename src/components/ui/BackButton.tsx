@@ -18,21 +18,28 @@ export function BackButton({ label, href }: BackButtonProps) {
         display: "inline-flex",
         alignItems: "center",
         gap: "8px",
-        minHeight: "44px", // Touch target minimum
+        height: "44px",
         padding: "0 16px",
         borderRadius: "12px",
-        background: "var(--card, #ffffff)",
-        border: "1px solid var(--line, #e2e8f0)",
-        color: "var(--ink-soft, #475569)",
+        background: "#FBE9F1",
+        border: "1px solid rgba(194, 24, 91, 0.2)",
+        color: "#C2185B",
         fontSize: "13px",
         fontWeight: 600,
         cursor: "pointer",
         transition: "0.15s ease",
       }}
-      className="hover:bg-slate-50 hover:border-slate-300"
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "#C2185B";
+        e.currentTarget.style.color = "#ffffff";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "#FBE9F1";
+        e.currentTarget.style.color = "#C2185B";
+      }}
     >
       <ArrowLeft size={16} />
-      ← Zurück zur {label}
+      Zurück zur {label}
     </button>
   );
 }

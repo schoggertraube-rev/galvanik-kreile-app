@@ -19,7 +19,7 @@ export default function LieferantenDetailPage({ params }: { params: Promise<{ id
       </div>
       
       <div className="max-w-5xl mx-auto space-y-6">
-        <AppBackButton fallbackHref="/lieferanten" label="Zurück zur Lieferantenliste" />
+        
         
         <div className="bg-white rounded-3xl p-8 border shadow-xs">
           <div className="flex items-center gap-4 border-b pb-6 mb-6">
