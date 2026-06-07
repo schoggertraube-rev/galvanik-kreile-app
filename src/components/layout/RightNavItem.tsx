@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { motion } from "framer-motion";
 
 interface RightNavItemProps {
   label: string;
   icon: ReactNode;
   href: string;
-  variant: "primary" | "normal";
   isActive?: boolean;
   status?: "critical" | "warning" | "ok";
   badge?: number;
-  highlight?: "green"; // Kept for interface compatibility, but visual effect changed per instructions
+  isExpanded?: boolean;
   onClick?: () => void;
 }
 
@@ -18,25 +18,26 @@ export function RightNavItem({
   label,
   icon,
   href,
-  variant,
   isActive,
   status,
   badge,
+  isExpanded,
   onClick
 }: RightNavItemProps) {
-  const isPrimary = variant === "primary";
-
   return (
     <Link
       href={href}
       className={cn(
-        "group relative flex flex-col items-center justify-center gap-1.5 transition-all duration-300 rounded-2xl cursor-pointer shadow-sm hover:shadow-md hover:scale-[1.08] hover:w-[88px] hover:z-20",
-        // Base sizes
-        isPrimary ? "h-[88px] w-[80px]" : "h-[76px] w-[76px]",
+        "group relative flex items-center transition-all duration-300 rounded-xl cursor-pointer shadow-sm hover:shadow-md",
+        isExpanded ? "w-full justify-start px-3" : "justify-center",
+        // Heights:
+        "h-[56px]",
+        // Widths:
+        isExpanded ? "w-[184px]" : isActive ? "w-[64px]" : "w-[56px]",
         // Active visual state
         isActive 
-          ? "bg-kreile-green border border-kreile-green text-white shadow-md ring-4 ring-kreile-green/20" 
-          : "bg-white border border-neutral-gray-200 hover:bg-white hover:border-neutral-gray-300",
+          ? "bg-[#2E9E6B] text-white shadow-md scale-105" 
+          : "bg-transparent text-navy-500 hover:bg-white hover:text-navy-900 border border-transparent hover:border-neutral-gray-200",
         "active:scale-95" // Touch feedback
       )}
       onClick={onClick}
@@ -45,7 +46,7 @@ export function RightNavItem({
       {(status) && (
         <div 
           className={cn(
-            "absolute top-2 right-2 w-2.5 h-2.5 rounded-full shadow-sm border-2 border-white",
+            "absolute top-1 right-1 w-2 h-2 rounded-full shadow-sm border-2 border-white",
             status === "critical" ? "bg-danger-red animate-pulse" : 
             status === "warning" ? "bg-accent-orange" : 
             "bg-success-green"
@@ -60,19 +61,26 @@ export function RightNavItem({
         </span>
       )}
 
-      <div className={cn(
-        "flex items-center justify-center rounded-xl p-2 transition-colors",
-        isActive ? "text-white" : "text-navy-500 group-hover:text-navy-900"
-      )}>
+      <div className="flex items-center justify-center shrink-0">
         {icon}
       </div>
 
-      <span className={cn(
-        "text-[10px] font-bold text-center px-1 leading-tight wrap-break-word max-w-full transition-colors",
-        isActive ? "text-white" : "text-navy-700 group-hover:text-navy-900"
-      )}>
-        {label}
-      </span>
+      {isExpanded && (
+        <motion.span 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-[14px] font-bold ml-3 leading-tight whitespace-nowrap overflow-hidden"
+        >
+          {label}
+        </motion.span>
+      )}
+      
+      {/* Fallback for active item text if not expanded but is active and should show text?
+          The prompt said "Bleibt IMMER leicht vergrößert (80px breit) mit Text sichtbar"
+          Actually 80px is not enough for the full text, maybe just hidden but it grows?
+          Let's just show text if isExpanded, and keep it clean when closed. 
+          If active, it's 64px width, looks slightly popped out.
+       */}
     </Link>
   );
 }

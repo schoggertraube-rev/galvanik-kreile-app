@@ -63,16 +63,16 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
         {/* Header — fixe Höhe 72px */}
         <KreileHeader onMenuToggle={() => setMobileNavOpen(true)} />
 
-        {/* Tablet Landscape Top Nav (nur sichtbar zwischen md und xl) */}
-        <TabletTopFlowNav className="hidden md:flex xl:hidden shrink-0" />
+        {/* Tablet Landscape Top Nav is removed per F-MENU-ANIM (Hamburger on tablet) */}
+        {/* <TabletTopFlowNav className="hidden md:flex xl:hidden shrink-0" /> */}
 
         {/* Body: Hauptinhalt */}
         <div className="flex flex-1 min-h-0">   {/* min-h-0 verhindert Flex-Overflow */}
 
-          {/* Linke Navigation (Desktop Sidebar, sichtbar ab xl) */}
-          <div className="hidden md:flex shrink-0">
-            {/* Mobile (<768px): MobileNav via Hamburger */}
-            {/* Tablet/Desktop (≥768px): RightNav permanent sichtbar */}
+          {/* Linke Navigation (Desktop Sidebar, sichtbar ab lg) */}
+          <div className="hidden lg:flex shrink-0 z-50">
+            {/* Mobile/Tablet (<1024px): MobileNav via Hamburger */}
+            {/* Desktop (≥1024px): RightNav permanent sichtbar */}
             <RightNav />
           </div>
           
