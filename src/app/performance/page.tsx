@@ -18,7 +18,7 @@ export default function PerformanceCockpit() {
   // I will omit usePageView entirely.
   
   
-  const [perfData, setPerfData] = useState<any>({
+  const [perfData, setPerfData] = useState<any>({ // eslint-disable-line @typescript-eslint/no-explicit-any
     totalRevenue: 0, totalOrders: 0, completedOrders: 0, reklas: 0, activeWarnings: 0, durchlaufzeit: 0
   });
 
@@ -317,8 +317,8 @@ export default function PerformanceCockpit() {
             </div>
             <div className="t-arr">Details →</div>
           </div>
-          </div>
-        </Link>
+          </Link>
+        </div>
 
         <div className="t-grid t-g2">
           {/* B) Umsatz und Marge */}
@@ -476,6 +476,6 @@ export default function PerformanceCockpit() {
 
       </div>
 
-          </main>
+          </div>
   );
 }
