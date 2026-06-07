@@ -34,6 +34,7 @@ export const metadata: Metadata = {
   title: "KREILE WerkstattCockpit",
   description: "Mobiles PWA-Betriebssystem für die Galvanik Kreile Werkstatt",
   applicationName: "Kreile Cockpit",
+  manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
     title: "Kreile Cockpit",
@@ -51,6 +52,7 @@ import { PermissionsProvider } from "@/lib/auth/PermissionsContext";
 import { AppShortcutProvider } from "@/components/ui/AppShortcutContext";
 import { SyncProvider } from "@/lib/offline/SyncContext";
 import { FeatureFlagProvider } from "@/lib/analytics/useFeatureFlag";
+import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 
 import { isAdminOrDeveloper } from "@/lib/auth/permissions";
 
@@ -67,6 +69,7 @@ export default async function RootLayout({
       className={`${playfair.variable} ${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body>
+        <ServiceWorkerRegister />
         <Suspense fallback={null}>
         <TestpilotProvider isAdmin={isAdmin}>
           <SyncProvider>
