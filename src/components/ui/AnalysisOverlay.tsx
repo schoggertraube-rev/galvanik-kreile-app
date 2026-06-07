@@ -72,6 +72,14 @@ export interface InsightSection {
   actions?: { label: string }[];
 }
 
+export interface EmptyState {
+  title: string;
+  description: string;
+  actionLabel: string;
+  actionHref?: string;
+  onAction?: () => void;
+}
+
 export interface AnalysisOverlayProps {
   open: boolean;
   onClose: () => void;
@@ -83,6 +91,9 @@ export interface AnalysisOverlayProps {
   tabs?: { id: string; label: string; count?: number; alert?: boolean }[];
   activeTab?: string;
   onTabChange?: (tabId: string) => void;
+
+  isEmpty?: boolean;
+  emptyState?: EmptyState;
 
   hero?: HeroSection;
   trend?: TrendSection;
