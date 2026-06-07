@@ -425,6 +425,10 @@ export default function MarketingStudioClient({
       </div>
 
       <AnalysisOverlay
+        isEmpty={false}
+        emptyState={{ title: "Noch keine Daten", description: "Es wurden noch keine Daten für diesen Bereich erfasst.", actionLabel: "Jetzt Daten erfassen", actionHref: "/" }}
+        trend={{ chartType: "line", chartData: [{ name: "KW19", ist: 85, vorjahr: 70 }, { name: "KW20", ist: 82, vorjahr: 72 }, { name: "KW21", ist: 79, vorjahr: 75 }, { name: "KW22", ist: 76, vorjahr: 78 }] }}
+        tabs={[{ id: "1", label: "Aktueller Monat" }, { id: "2", label: "Vorjahr" }]}
         open={!!analysisOpen}
         onClose={() => setAnalysisOpen(null)}
         title={analysisOpen ? `Analyse: ${analysisOpen}` : ""}
