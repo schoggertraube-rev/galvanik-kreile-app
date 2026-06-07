@@ -2,30 +2,18 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Search, Package, ChevronRight, X, Sparkles, LayoutGrid, Droplets, Activity, Clock } from 'lucide-react'
+import { Search, Package, ChevronRight, X, Sparkles, LayoutGrid, Droplets, Activity, FileText, Receipt, Truck, User } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import { INITIAL_CUSTOMERS, MockCustomer } from '@/lib/mockData'
-import { ordersRepository, Order } from '@/lib/repositories/ordersRepository'
-import { customersRepository } from '@/lib/repositories/customersRepository'
 import { findActions, buildFallbackSuggestion } from '@/lib/search/fuzzy'
 import { SEARCH_ACTIONS } from '@/lib/search/actionRegistry'
 import { getRecentSearches, addRecentSearch } from '@/lib/search/recent'
 import type { SearchSuggestion } from '@/types/search'
-
-type MockOrderExt = Order & {
-  description?: string;
-  customerName?: string;
-  surfaceRequested?: string;
-  stationName?: string;
-  customer?: { name?: string };
-  items?: { name?: string; description?: string }[];
-}
+import { globalSearchAction } from '@/app/global-search-actions'
 
 export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChange: (v: boolean) => void }) {
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
-  const [orders, setOrders] = useState<Order[]>([])
-  const [customers, setCustomers] = useState<MockCustomer[]>([])
+  const [globalResults, setGlobalResults] = useState<any[]>([])
   const [prevOpen, setPrevOpen] = useState(open)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -56,63 +44,28 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
     return () => document.removeEventListener('keydown', down)
   }, [open, onOpenChange])
 
-  // Load from repositories on mount & when open triggers
   useEffect(() => {
-    if (open && typeof window !== "undefined") {
-      const loadData = async () => {
-        try {
-          const loadedOrders = await ordersRepository.getAll();
-          setOrders(loadedOrders);
-        } catch (e) {
-          console.error("GlobalSearch: Error loading orders", e);
-        }
-
-        try {
-          const loadedCustomers = await customersRepository.getAll();
-          setCustomers(loadedCustomers as unknown as MockCustomer[]);
-        } catch (e) {
-          console.error("GlobalSearch: Error loading customers", e);
-        }
-      };
-      loadData();
+    if (searchTerm.length > 2) {
+      const timer = setTimeout(() => {
+        globalSearchAction(searchTerm).then(res => setGlobalResults(res))
+      }, 300)
+      return () => clearTimeout(timer)
+    } else {
+      setGlobalResults([])
     }
-  }, [open])
+  }, [searchTerm])
 
   if (!open) return null
 
   const cleanTerm = searchTerm.trim().toLowerCase()
 
-  const safe = (value: unknown) => String(value ?? "").toLowerCase();
+  const filteredOrders = globalResults.filter(r => r.type === 'order')
+  const filteredCustomers = globalResults.filter(r => r.type === 'customer')
+  const filteredBelege = globalResults.filter(r => r.type === 'beleg')
+  const filteredRechnungen = globalResults.filter(r => r.type === 'rechnung')
+  const filteredLieferanten = globalResults.filter(r => r.type === 'lieferant')
 
-  const filteredOrders = cleanTerm
-    ? orders.filter(
-        (o: Order) => {
-          const orderObj = o as MockOrderExt;
-          const custName = orderObj.customerName || customers.find((c: MockCustomer) => c.id === o.customerId)?.name;
-          return safe(o.orderNumber).includes(cleanTerm) ||
-          safe(o.task).includes(cleanTerm) ||
-          safe(o.title).includes(cleanTerm) ||
-          safe(orderObj.description).includes(cleanTerm) ||
-          safe(custName).includes(cleanTerm) ||
-          safe(orderObj.customer?.name).includes(cleanTerm) ||
-          safe(orderObj.surfaceRequested).includes(cleanTerm) ||
-          safe(orderObj.stationName).includes(cleanTerm) ||
-          (Array.isArray(o.parts) && o.parts.some((p: { name?: string, description?: string }) => safe(p.name).includes(cleanTerm) || safe(p.description).includes(cleanTerm))) ||
-          (Array.isArray(orderObj.items) && orderObj.items.some((p: { name?: string, description?: string }) => safe(p.name).includes(cleanTerm) || safe(p.description).includes(cleanTerm)));
-        }
-      ).slice(0, 20)
-    : []
-
-  const filteredCustomers = cleanTerm
-    ? customers.filter(
-        (c) =>
-          safe(c.name).includes(cleanTerm) ||
-          safe(c.email).includes(cleanTerm) ||
-          safe(c.phone).includes(cleanTerm)
-      ).slice(0, 5)
-    : []
-
-  const hasResults = filteredOrders.length > 0 || filteredCustomers.length > 0
+  const hasResults = globalResults.length > 0
 
   // Intent-based action suggestions (shown above entity results)
   const actionSuggestions: SearchSuggestion[] = cleanTerm
@@ -121,12 +74,10 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
 
   const hasAnyResults = hasResults || actionSuggestions.length > 0
 
-  // Fallback — shown when nothing matches (NEVER "Keine Ergebnisse")
+  // Fallback
   const fallbackSuggestions: SearchSuggestion[] = cleanTerm && !hasAnyResults
     ? buildFallbackSuggestion(cleanTerm)
     : []
-
-  const [recentSearches] = [getRecentSearches()]
 
   const handleClose = () => {
     if (searchTerm.trim().length > 1) addRecentSearch(searchTerm.trim())
@@ -135,25 +86,25 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      // If only action hits, navigate to first action
-      if (actionSuggestions.length > 0 && filteredOrders.length === 0 && filteredCustomers.length === 0) {
+      if (actionSuggestions.length > 0 && globalResults.length === 0) {
         router.push(actionSuggestions[0].routeOnSelect)
         handleClose()
         return
       }
-      const exactMatch = filteredOrders.find(o => safe(o.orderNumber) === cleanTerm);
-      if (exactMatch) {
-        router.push(`/orders/${exactMatch.id}`);
-        handleClose();
-      } else if (filteredOrders.length > 0) {
-        router.push(`/orders/${filteredOrders[0].id}`);
-        handleClose();
+      if (globalResults.length > 0) {
+        const first = globalResults[0]
+        if (first.type === 'order') router.push(`/orders/${first.id}`)
+        else if (first.type === 'customer') router.push(`/customers/${first.id}`)
+        else if (first.type === 'beleg') router.push(`/buchhaltung/belege/${first.id}`)
+        else if (first.type === 'rechnung') router.push(`/buchhaltung/rechnungen/${first.id}`)
+        else if (first.type === 'lieferant') router.push(`/lieferanten/${first.id}`)
+        handleClose()
       }
     }
   }
 
-  // Color mapping for customer initials avatar
   const getAvatarColor = (name: string) => {
+    if (!name) return "bg-neutral-gray-100 text-navy-900 border-neutral-gray-100"
     const sum = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
     const colors = [
       "bg-navy-700 text-navy-700 border-navy-700",
@@ -165,26 +116,9 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
     return colors[sum % colors.length]
   }
 
-  // Get initials
   const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .slice(0, 2)
-      .join('')
-      .toUpperCase()
-  }
-
-  // Station Display formatting
-  const getStationLabel = (key: string) => {
-    const mapping: Record<string, string> = {
-      wareneingang: "Wareneingang",
-      entmetallisierung: "Entmetallisierung",
-      schleiferei: "Schleiferei",
-      beschichtung: "Beschichtung",
-      warenausgang: "Warenausgang"
-    }
-    return mapping[key] || key
+    if (!name) return "??"
+    return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
   }
 
   return (
@@ -196,7 +130,6 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
         className="bg-white w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden border border-neutral-gray-100 flex flex-col max-h-[70vh] animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
-        {/* Search Input Area */}
         <div className="flex items-center border-b border-neutral-gray-100 px-4 py-4 gap-3 bg-bg-app-soft/50">
           <Search className="w-5 h-5 text-text-muted shrink-0" />
           <input 
@@ -206,7 +139,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
             onChange={e => setSearchTerm(e.target.value)}
             onKeyDown={handleKeyDown}
             className="flex-1 bg-transparent outline-none placeholder:text-text-muted text-base font-medium" 
-            placeholder="Nach Auftragsnummer, Kundenname, Telefon oder Aufgabe suchen..." 
+            placeholder="Nach Aufträgen, Kunden, Belegen, Rechnungen..." 
           />
           {searchTerm && (
             <button 
@@ -221,10 +154,8 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
           </kbd>
         </div>
 
-        {/* Scrollable Results & Recommendations Container */}
         <div className="overflow-y-auto flex-1 p-3 space-y-4">
           
-          {/* Empty Search Term State: Display Quick Actions / Suggestions */}
           {!searchTerm && (
             <div className="space-y-4 py-2">
               <div className="px-2">
@@ -291,11 +222,9 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
             </div>
           )}
 
-          {/* Search Term Inputted - Show Grouped Results */}
           {searchTerm && (
             <div className="space-y-4">
 
-              {/* Group 0: Intent Actions — shown BEFORE entities */}
               {actionSuggestions.length > 0 && (
                 <div className="space-y-1.5">
                   <div className="px-2">
@@ -319,11 +248,68 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                 </div>
               )}
               
-              {/* Group 1: Customers */}
+              {filteredBelege.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="px-2">
+                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">📄 Belege ({filteredBelege.length} Treffer)</span>
+                  </div>
+                  <div className="space-y-1">
+                    {filteredBelege.map(b => (
+                      <Link 
+                        key={b.id} 
+                        href={`/buchhaltung/belege/${b.id}`}
+                        onClick={handleClose}
+                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-amber-50 to-amber-100 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0">
+                            <FileText className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-sm text-navy-900 block leading-tight">{b.title || "Unbekannter Lieferant"}</span>
+                            <span className="text-xs text-navy-500 font-medium block mt-0.5 max-w-[340px] truncate">{b.subtitle}</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {filteredOrders.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="px-2">
+                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">📦 Aufträge ({filteredOrders.length} Treffer)</span>
+                  </div>
+                  <div className="space-y-1">
+                    {filteredOrders.map(o => (
+                      <Link 
+                        key={o.id} 
+                        href={`/orders/${o.id}`}
+                        onClick={handleClose}
+                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-blue-50 to-blue-100 border border-navy-700/50 flex items-center justify-center text-navy-900 shrink-0">
+                            <Package className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-sm text-navy-900 block mt-1 leading-tight max-w-[340px] truncate">{o.title}</span>
+                            <span className="text-[10px] text-navy-500 font-semibold mt-0.5 block">{o.subtitle}</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {filteredCustomers.length > 0 && (
                 <div className="space-y-1.5">
                   <div className="px-2">
-                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">Kundenkartei ({filteredCustomers.length})</span>
+                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">👤 Kunden ({filteredCustomers.length} Treffer)</span>
                   </div>
                   <div className="space-y-1">
                     {filteredCustomers.map(c => (
@@ -334,12 +320,12 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                         className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-bold text-xs shrink-0 shadow-inner ${getAvatarColor(c.name)}`}>
-                            {getInitials(c.name)}
+                          <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-bold text-xs shrink-0 shadow-inner ${getAvatarColor(c.title)}`}>
+                            {getInitials(c.title)}
                           </div>
                           <div>
-                            <span className="font-extrabold text-sm text-navy-900 group-hover:text-navy-900 transition-colors block leading-tight">{c.name}</span>
-                            <span className="text-xs text-navy-500 font-medium block mt-0.5">{c.city} • {c.email || c.phone || "Keine Kontaktdaten"}</span>
+                            <span className="font-extrabold text-sm text-navy-900 block leading-tight">{c.title}</span>
+                            <span className="text-xs text-navy-500 font-medium block mt-0.5">{c.subtitle}</span>
                           </div>
                         </div>
                         <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
@@ -349,52 +335,64 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                 </div>
               )}
 
-              {/* Group 2: Orders */}
-              {filteredOrders.length > 0 && (
+              {filteredRechnungen.length > 0 && (
                 <div className="space-y-1.5">
                   <div className="px-2">
-                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">Auftragsbuch ({filteredOrders.length})</span>
+                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">🧾 Rechnungen ({filteredRechnungen.length} Treffer)</span>
                   </div>
                   <div className="space-y-1">
-                    {filteredOrders.map(o => {
-                      let riskBadgeColor = "bg-success-green text-success-green border-success-green";
-                      if (o.risk === "red" || o.risk === "orange") riskBadgeColor = "bg-danger-red text-danger-red border-danger-red";
-                      else if (o.risk === "yellow") riskBadgeColor = "bg-amber-100 text-gold-600 border-gold-600";
-                      else if (o.risk === "blocked") riskBadgeColor = "bg-navy-700 text-navy-700 border-navy-700";
-
-                      return (
-                        <Link 
-                          key={o.id} 
-                          href={`/orders/${o.id}`}
-                          onClick={handleClose}
-                          className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-linear-to-br from-blue-50 to-blue-100 border border-navy-700/50 flex items-center justify-center text-navy-900 shrink-0">
-                              <Package className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="font-extrabold text-xs text-navy-700 font-mono">{o.orderNumber}</span>
-                                <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded-full border ${riskBadgeColor}`}>
-                                  {getStationLabel(o.station)}
-                                </span>
-                              </div>
-                              <span className="font-bold text-xs text-navy-900 group-hover:text-navy-900 transition-colors block mt-1 leading-tight max-w-[340px] truncate">
-                                {o.task}
-                              </span>
-                              <span className="text-[10px] text-navy-500 font-semibold mt-0.5 block">{o.customerName}</span>
-                            </div>
+                    {filteredRechnungen.map(r => (
+                      <Link 
+                        key={r.id} 
+                        href={`/buchhaltung/rechnungen/${r.id}`}
+                        onClick={handleClose}
+                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-green-50 to-green-100 border border-green-200 flex items-center justify-center text-green-700 shrink-0">
+                            <Receipt className="w-4 h-4" />
                           </div>
-                          <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
-                        </Link>
-                      )
-                    })}
+                          <div>
+                            <span className="font-extrabold text-sm text-navy-900 block leading-tight">{r.title}</span>
+                            <span className="text-xs text-navy-500 font-medium block mt-0.5">{r.subtitle}</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
+                      </Link>
+                    ))}
                   </div>
                 </div>
               )}
 
-              {/* Fallback — NEVER "Keine Ergebnisse", always a suggestion */}
+              {filteredLieferanten.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="px-2">
+                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">🚚 Lieferanten ({filteredLieferanten.length} Treffer)</span>
+                  </div>
+                  <div className="space-y-1">
+                    {filteredLieferanten.map(l => (
+                      <Link 
+                        key={l.id} 
+                        href={`/lieferanten/${l.id}`}
+                        onClick={handleClose}
+                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-purple-50 to-purple-100 border border-purple-200 flex items-center justify-center text-purple-700 shrink-0">
+                            <Truck className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-sm text-navy-900 block leading-tight">{l.title}</span>
+                            <span className="text-xs text-navy-500 font-medium block mt-0.5">{l.subtitle}</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {!hasAnyResults && fallbackSuggestions.length > 0 && (
                 <div className="space-y-1.5">
                   <div className="px-2">

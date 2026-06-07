@@ -109,21 +109,16 @@ export function AppShortcutOverlay({ type, onClose }: AppShortcutOverlayProps) {
         <>
           <AppActionTile
             icon={<Camera className="w-6 h-6" />}
-            title="Foto aufnehmen"
+            title="Foto / Scan aufnehmen"
             description="Dokument direkt mit der Kamera abfotografieren."
-            onClick={() => handleAction("/scan")}
+            contextChip="Schnell"
+            onClick={() => handleAction("/buchhaltung/belege/neu")}
           />
           <AppActionTile
             icon={<Upload className="w-6 h-6" />}
             title="Datei hochladen"
             description="Vorhandenes PDF oder Bild aus dem Dateisystem wählen."
-            onClick={() => alert("Upload wird später angebunden.")}
-          />
-          <AppActionTile
-            icon={<FileText className="w-6 h-6" />}
-            title="Scan / OCR"
-            description="Erweiterten Scanner mit Texterkennung starten."
-            onClick={() => handleAction("/scan?mode=ocr")}
+            onClick={() => handleAction("/buchhaltung/belege/neu")}
           />
         </>
       );

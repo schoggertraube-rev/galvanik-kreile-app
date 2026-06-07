@@ -29,7 +29,7 @@ export function ZahlungKachel() {
         hero={{
           kicker: "Gesamtliquidität",
           value: "0,00 €",
-          changePill: { text: "Noch keine Daten", variant: "neutral" },
+          changePill: { text: "Noch keine Daten", variant: "gray" },
           meta: "Summe aus Bankguthaben und kurzfristigen Forderungen abzüglich Verbindlichkeiten."
         }}
         composition={{

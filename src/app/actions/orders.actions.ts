@@ -144,6 +144,33 @@ export async function updateOrderDb(id: string, changes: {
     if (changes.currentStationId !== undefined) {
       await db.update(items).set({ currentStationId: changes.currentStationId }).where(eq(items.orderId, id));
     }
+
+    if (changes.status === "abgeschlossen" || changes.status === "completed") {
+      try {
+        const orderRec = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+        if (orderRec.length > 0) {
+          const o = orderRec[0];
+          if (o.customerId) {
+            const plannedDate = new Date();
+            plannedDate.setDate(plannedDate.getDate() + 7); // Schedule for 7 days later
+            const { feedbackMail } = await import("@/db/schema_marketing");
+            // Check if one already exists
+            const existing = await db.select().from(feedbackMail).where(eq(feedbackMail.auftragId, id)).limit(1);
+            if (existing.length === 0) {
+              await db.insert(feedbackMail).values({
+                auftragId: id,
+                kundeId: o.customerId,
+                geplantFuer: plannedDate,
+                status: "geplant",
+                tokenFeedback: crypto.randomUUID()
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to schedule feedback mail:", err);
+      }
+    }
     
     return { ok: true, data: { id, ...changes } };
   } catch (error) {

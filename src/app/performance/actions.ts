@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { orders, buchhaltung_rechnungen, qs, baeder } from "@/db/schema";
+import { orders, ausgangsrechnung, qs, baeder } from "@/db/schema";
 import { checkAppAuth } from "@/lib/server/authHelper";
 
 export async function getPerformanceKPIsAction() {
@@ -12,16 +12,16 @@ export async function getPerformanceKPIsAction() {
 
   try {
     const allOrders = await db.select().from(orders);
-    const invoices = await db.select().from(buchhaltung_rechnungen);
+    const invoices = await db.select().from(ausgangsrechnung);
     const qsCases = await db.select().from(qs);
 
     const totalRevenue = invoices.reduce((sum, inv) => {
       // Very simple amount parsing assuming standard format or float string
-      let amtStr = inv.amount;
+      let amtStr = inv.netto;
       if (typeof amtStr === 'string') {
         amtStr = amtStr.replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
       }
-      return sum + (parseFloat(amtStr as string) || 0);
+      return sum + (parseFloat(amtStr as unknown as string) || 0);
     }, 0);
 
     const totalOrders = allOrders.length;

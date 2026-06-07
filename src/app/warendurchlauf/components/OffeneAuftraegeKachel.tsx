@@ -51,7 +51,7 @@ export function OffeneAuftraegeKachel({ data }: { data: any }) {
         hero={{
           kicker: "Gesamt Offen",
           value: String(offeneCount),
-          changePill: { text: "Basierend auf Livedaten", variant: "neutral" }
+          changePill: { text: "Basierend auf Livedaten", variant: "gray" }
         }}
         composition={{
           title: "Neu eingegangen",

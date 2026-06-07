@@ -344,6 +344,7 @@ function mapToClientBeleg(dbData: any): Beleg {
     originalFormat: dbData.original_format,
     ocrConfidence: dbData.ocr_confidence,
     status: dbData.status as any,
+    rechnungsnummerExtern: dbData.rechnungsnummer_extern,
     storniertVon: dbData.storniert_von,
     bankZahlungId: dbData.bank_zahlung_id,
     erstelltVon: dbData.erstellt_von
@@ -561,18 +562,23 @@ export async function getKostenpostenAction(id: string): Promise<Kostenposten> {
 // === COCKPIT & AUSWERTUNGEN ===
 import { db } from '@/db';
 import { ausgangsrechnung, beleg, kostenposten, kategorie } from '@/db/schema_buchhaltung';
-import { and, gte, lte, ne } from 'drizzle-orm';
+import { and, gte, lte, ne, sql } from 'drizzle-orm';
 import { UstvaWerte, Ersparnis, KategorieSumme } from '@/lib/buchhaltung/types';
 
 export async function getCockpitMetricsAction(von: string, bis: string) {
-  // Einnahmen & USt aus Rechnungen
-  const rechnungen = await db.select({ netto: ausgangsrechnung.netto, ustBetrag: ausgangsrechnung.ustBetrag, ustSatz: ausgangsrechnung.ustSatz })
+  // Einnahmen & USt aus Rechnungen grouped by ustSatz
+  const rechnungenGrouped = await db.select({
+    ustSatz: ausgangsrechnung.ustSatz,
+    nettoSum: sql<number>`sum(CAST(${ausgangsrechnung.netto} AS numeric))`,
+    ustSum: sql<number>`sum(CAST(${ausgangsrechnung.ustBetrag} AS numeric))`
+  })
     .from(ausgangsrechnung)
     .where(and(
       ne(ausgangsrechnung.status, 'storniert'),
       gte(ausgangsrechnung.datum, von),
       lte(ausgangsrechnung.datum, bis)
-    ));
+    ))
+    .groupBy(ausgangsrechnung.ustSatz);
 
   // Ausgaben & Vorsteuer aus Belegen
   const belege = await db.select({ netto: beleg.netto, ustBetrag: beleg.ustBetrag, kategorieId: beleg.kategorieId, ocrConfidence: beleg.ocrConfidence })
@@ -589,10 +595,12 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
 
   let umsatz19 = 0, umsatz7 = 0, umsatz0 = 0;
   let ust19 = 0, ust7 = 0;
-  for (const r of rechnungen) {
-    const netto = Number(r.netto) || 0;
+  
+  for (const r of rechnungenGrouped) {
+    const netto = Number(r.nettoSum) || 0;
+    const ustB = Number(r.ustSum) || 0;
     const satz = Number(r.ustSatz) || 19;
-    const ustB = Number(r.ustBetrag) || (netto * (satz / 100));
+    
     if (satz === 19) { umsatz19 += netto; ust19 += ustB; }
     else if (satz === 7) { umsatz7 += netto; ust7 += ustB; }
     else umsatz0 += netto;

@@ -43,10 +43,17 @@ export const beleg = pgTable("beleg", {
   absetzbarProzent: numeric("absetzbar_prozent", { precision: 5, scale: 2 }).default("100"),
   absetzbarGrund: text("absetzbar_grund"),
   belegart: text("belegart"),
+
   originalDatei: text("original_datei").notNull(),
   originalFormat: text("original_format"),
   ocrConfidence: numeric("ocr_confidence", { precision: 5, scale: 2 }),
+  ocrRohtext: text("ocr_rohtext"),
+  ocrPositionen: jsonb("ocr_positionen"),
+  ocrProvider: text("ocr_provider"),
+  zahlungsart: text("zahlungsart"),
+  rechnungsnummerExtern: text("rechnungsnummer_extern"),
   status: text("status").notNull().default("pruefen"),
+
   storniertVon: uuid("storniert_von"), // self reference handled below if needed, here just uuid
   bankZahlungId: uuid("bank_zahlung_id"), // FK to zahlung added later in db if circular
   erstelltVon: uuid("erstellt_von").notNull(),

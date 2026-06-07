@@ -52,7 +52,7 @@ export function TermintreueKachel({ data }: { data: any }) {
         hero={{
           kicker: "Gesamt Termintreue",
           value: `${termintreue} %`,
-          changePill: { text: "Basierend auf Livedaten", variant: "neutral" }
+          changePill: { text: "Basierend auf Livedaten", variant: "gray" }
         }}
         composition={{
           title: "Kritische Aufträge",

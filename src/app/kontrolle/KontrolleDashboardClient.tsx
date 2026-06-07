@@ -240,7 +240,7 @@ export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
         hero={{
           kicker: "Aktuelle Reklamationen",
           value: String(qsCount),
-          changePill: { text: "Basierend auf Livedaten", variant: qsCount > 0 ? "red" : "neutral" }
+          changePill: { text: "Basierend auf Livedaten", variant: qsCount > 0 ? "red" : "gray" }
         }}
         composition={{
           title: "Häufigste Ursachen",

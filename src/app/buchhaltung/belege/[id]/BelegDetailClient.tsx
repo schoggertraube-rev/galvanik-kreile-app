@@ -25,7 +25,7 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
   const [form, setForm] = useState(() => beleg ? {
     lieferant: beleg.lieferantText || beleg.lieferant?.name || "Unbekannt",
     datum: beleg.belegdatum ? new Date(beleg.belegdatum).toISOString().split('T')[0] : new Date(beleg.erfasstAm).toISOString().split('T')[0],
-    belegnummer: "",
+    belegnummer: beleg.rechnungsnummerExtern || "",
     brutto: (beleg.brutto || 0).toString(),
     netto: (beleg.netto || 0).toString(),
     ustSatz: (beleg.ustSatz || 0).toString(),

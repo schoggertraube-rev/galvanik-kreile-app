@@ -52,7 +52,7 @@ export function EngpassKachel({ data }: { data: any }) {
         hero={{
           kicker: "Kritischster Engpass",
           value: engpassStation,
-          changePill: { text: `${engpassCount} Aufträge in der Station`, variant: engpassCount > 0 ? "red" : "neutral" }
+          changePill: { text: `${engpassCount} Aufträge in der Station`, variant: engpassCount > 0 ? "red" : "gray" }
         }}
         composition={{
           title: "Stau nach Stationen",

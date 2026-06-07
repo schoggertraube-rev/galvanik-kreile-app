@@ -81,6 +81,7 @@ export interface Beleg {
   originalFormat?: string;
   ocrConfidence?: number;
   status: BelegStatus;
+  rechnungsnummerExtern?: string;
   storniertVon?: string;
   bankZahlungId?: string;
   erstelltVon: string;

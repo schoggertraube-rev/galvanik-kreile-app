@@ -70,7 +70,9 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
              description: c.bemerkung || "Qualitätsprüfung",
              createdAt: c.createdAt,
              resolvedAt: c.ergebnis === 'bestanden' ? c.datum : null,
-             resolution: c.ergebnis === 'bestanden' ? 'OK' : 'Nacharbeit nötig'
+             resolution: c.ergebnis === 'bestanden' ? 'OK' : 'Nacharbeit nötig',
+             customerId: id,
+             photoIds: []
           })));
           setTimeline([]);
         } else {

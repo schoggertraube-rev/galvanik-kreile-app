@@ -192,7 +192,7 @@ export default function HomeDashboard() {
   const dayStr = `${dayNames[now.getDay()]}, ${now.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}.`;
   const greeting = now.getHours() < 12 ? 'Guten Morgen' : now.getHours() < 17 ? 'Guten Tag' : 'Guten Abend';
 
-  const handleQuickClick = (card: typeof QUICK_CARDS[0]) => {
+  const handleQuickClick = (card: any) => {
     if (card.shortcut) {
       openShortcut(card.shortcut as ShortcutType);
     } else if (card.href) {

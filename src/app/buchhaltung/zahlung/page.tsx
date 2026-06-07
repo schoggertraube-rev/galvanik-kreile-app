@@ -18,9 +18,9 @@ const TABS = [
 const MOCK_MORAL: any[] = [];
 
 const MOCK_STATISTIK = {
-  zahlungsarten: [],
-  herkunft: [],
-  dienstleister: [],
+  zahlungsarten: [] as any[],
+  herkunft: [] as any[],
+  dienstleister: [] as any[],
 };
 
 function ZahlungContent() {
@@ -115,8 +115,9 @@ function ZahlungContent() {
                       {m.status}
                     </span>
                   </div>
-                </div>
-              ))}
+                  </div>
+                ))
+              )}
             </div>
           </div>
 

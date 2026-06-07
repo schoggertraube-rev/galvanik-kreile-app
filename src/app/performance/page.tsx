@@ -503,7 +503,7 @@ export default function PerformanceCockpit() {
         subtitle="Finanzen, Forecast und Controlling."
         hero={{
           kicker: "Umsatz netto",
-          value: "{perfData.totalRevenue.toLocaleString("de-DE")} €",
+          value: `${perfData.totalRevenue.toLocaleString("de-DE")} €`,
           changePill: { text: "+7.2% vs. Vj.", variant: "teal" }
         }}
         composition={{

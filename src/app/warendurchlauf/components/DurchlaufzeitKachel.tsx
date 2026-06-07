@@ -52,7 +52,7 @@ export function DurchlaufzeitKachel({ data }: { data: any }) {
         hero={{
           kicker: "Durchschnittliche DLZ",
           value: `${dlz} Tage`,
-          changePill: { text: "Basierend auf Livedaten", variant: "neutral" }
+          changePill: { text: "Basierend auf Livedaten", variant: "gray" }
         }}
         composition={{
           title: "Am längsten in Bearbeitung",

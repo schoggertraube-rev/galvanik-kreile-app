@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { customers, priceAgreements, orders, qs, buchhaltung_rechnungen } from "@/db/schema";
+import { customers, priceAgreements, orders, qs, ausgangsrechnung } from "@/db/schema";
 import { checkAppAuth } from "@/lib/server/authHelper";
 import { eq, or } from "drizzle-orm";
 
@@ -29,7 +29,7 @@ export async function getCustomerDetailsAction(customerIdOrNumber: string) {
     const ordersRes = await db.select().from(orders).where(eq(orders.customerId, customer.id)).orderBy(orders.createdAt);
     
     // get qs and invoices based on orders or customer
-    const rechnungenRes = await db.select().from(buchhaltung_rechnungen).where(eq(buchhaltung_rechnungen.kundenId, customer.customerNumber || customer.id));
+    const rechnungenRes = await db.select().from(ausgangsrechnung).where(eq(ausgangsrechnung.kundeId, customer.customerNumber || customer.id));
 
     // get qs logic (qs has orderId)
     // We fetch all qs and filter manually because Drizzle joins can be tricky to type dynamically here without a defined relation
