@@ -346,7 +346,7 @@ export default function MarketingStudioClient({
           <div>
             <h1 className="font-serif">Marketing Studio</h1>
             <div className="mk-subtitle">
-              Dein Betrieb, ins beste Licht gerückt â€” <b>geführt, in Minuten, ohne Vorkenntnisse.</b>
+              Dein Betrieb, ins beste Licht gerückt — <b>geführt, in Minuten, ohne Vorkenntnisse.</b>
             </div>
           </div>
         </div>
@@ -413,7 +413,7 @@ export default function MarketingStudioClient({
       </AnimatePresence>
 
       <div className="mk-footnote">
-        Jede Aktion trägt <b>Aufwand, Kosten und erwarteten Umsatz</b> â€” das Studio lernt aus jedem Post, was bei dir wirkt.<br />
+        Jede Aktion trägt <b>Aufwand, Kosten und erwarteten Umsatz</b> — das Studio lernt aus jedem Post, was bei dir wirkt.<br />
         Kosten fließen automatisch in die Buchhaltung, Umsatz in Performance. Komplett per Feature-Toggle abschaltbar.
       </div>
 

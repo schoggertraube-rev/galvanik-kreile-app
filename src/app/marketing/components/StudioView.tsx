@@ -140,13 +140,13 @@ export function StudioView({
         <div className="mk-step-arrow"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></svg></div>
         <div className="mk-step">
           <div className="mk-step-num">3</div>
-          <div className="mk-step-text"><b>Ein Tipp â€” fertig</b>Rest macht das Studio</div>
+          <div className="mk-step-text"><b>Ein Tipp — fertig</b>Rest macht das Studio</div>
         </div>
       </motion.div>
 
       {/* Story Ideen */}
       <motion.div custom={2} variants={floatIn}>
-        <div className="mk-sec-label">Ideen für heute â€” antippen &amp; übernehmen</div>
+        <div className="mk-sec-label">Ideen für heute — antippen &amp; übernehmen</div>
         <div className="mk-stories">
           {storyIdeen.map(story => (
             <StoryRing key={story.id} story={story} onClick={() => onStoryClick(story)} />
@@ -156,7 +156,7 @@ export function StudioView({
 
       {/* Wirkung Mini */}
       <motion.div custom={3} variants={floatIn}>
-        <div className="mk-sec-label">Was es bringt â€” diesen Monat</div>
+        <div className="mk-sec-label">Was es bringt — diesen Monat</div>
         <div className="mk-impact">
           {wirkungMini.map(w => (
             <div key={w.label} className="mk-imp cursor-pointer hover:shadow-md transition-shadow">

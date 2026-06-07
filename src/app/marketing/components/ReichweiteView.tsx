@@ -11,7 +11,7 @@ export function ReichweiteView({ funnel, funnelKey }: { funnel: FunnelDaten | nu
     <motion.div key="reichweite" initial="hidden" animate="visible" exit="exit">
       <motion.div custom={0} variants={floatIn} className="mk-panel">
         <h3 className="font-serif">Was dein Marketing wirklich bringt</h3>
-        <div className="pdesc">End-to-End verfolgt: vom Post bis zum bezahlten Auftrag â€” {new Date().toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}.</div>
+        <div className="pdesc">End-to-End verfolgt: vom Post bis zum bezahlten Auftrag — {new Date().toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}.</div>
         <div className="mk-fbars">
           {funnel.stufen.map((s, i) => (
             <div key={i} className="mk-fbar">
