@@ -71,12 +71,20 @@ function processDirectory(dir, moduleName) {
       </div>
       `;
       
-      // Inject imports
+      // Inject imports safely below "use client" if it exists
       if (!content.includes('import { Breadcrumb }')) {
-        content = `import { Breadcrumb } from "@/components/ui/Breadcrumb";\nimport { BackButton } from "@/components/ui/BackButton";\n` + content;
+        const lines = content.split('\n');
+        let insertIndex = 0;
+        if (lines[0].includes('"use client"') || lines[0].includes("'use client'")) {
+           insertIndex = 1;
+        }
+        lines.splice(insertIndex, 0, `import { Breadcrumb } from "@/components/ui/Breadcrumb";\nimport { BackButton } from "@/components/ui/BackButton";`);
+        content = lines.join('\n');
       }
       
-      // Try to inject after the first <div className="..."> that is after `return (`
+      // Avoid injecting into files that have <KreileAppShell> and return early inside functions.
+      // We will look for <div className="min-h-screen or <div className="pb-12 or just <div className="... right after return
+      
       const returnIndex = content.indexOf('return (');
       if (returnIndex === -1) continue;
       

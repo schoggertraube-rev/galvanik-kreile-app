@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, use } from "react";
 import { OrderActionGrid } from "@/components/orders/OrderActionGrid";
@@ -47,6 +49,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="min-h-screen bg-transparent p-4 md:p-8">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Orders',href:'/orders'}, {label:'[id]'}]} />
+        <BackButton label="Orders" href="/orders" />
+      </div>
+      
       {/* Top bar with back navigation */}
       <div className="mb-6">
         <AppBackButton fallbackHref="/warendurchlauf" label="Zurück zum Warendurchlauf" />

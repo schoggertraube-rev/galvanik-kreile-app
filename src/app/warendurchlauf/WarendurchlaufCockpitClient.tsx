@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import { usePageView } from "@/hooks/usePageView";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
@@ -15,6 +17,11 @@ export function WarendurchlaufCockpitClient({ data }: { data: any }) {
 
   return (
     <div className="w-full pb-24 px-4 sm:px-6 xl:px-8 font-sans">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Warendurchlauf',href:'/warendurchlauf'}]} />
+        <BackButton label="Home" href="/" />
+      </div>
+      
       <SectionHeader 
         title="Warendurchlauf" 
         icon={<Box className="w-5 h-5 text-navy-900" />} 

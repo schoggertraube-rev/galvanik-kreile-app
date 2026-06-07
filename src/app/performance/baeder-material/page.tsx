@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import React, { useState } from 'react';
 import { FlaskConical, ArrowRight, BarChart3, AlertTriangle, Package, Droplets } from 'lucide-react';
@@ -17,6 +19,11 @@ export default function BaederMaterialDetail() {
       pill={{ label: '1 BEOBACHTEN', variant: 'yellow' }}
     >
       <div className="pd-grid">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Performance',href:'/performance'}, {label:'Baeder-material'}]} />
+        <BackButton label="Performance" href="/performance" />
+      </div>
+      
 
         {/* Badstatus — In-Place Overlay */}
         <div className="pd-tile" onClick={() => setOverlay('badstatus')} style={{ cursor: 'pointer' }}>

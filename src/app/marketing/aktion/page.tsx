@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import { useEffect, useState } from "react";
 import { getAktionen, changeAktionStatus } from "./actions";
@@ -31,6 +33,11 @@ export default function AktionenPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Marketing',href:'/marketing'}, {label:'Aktion'}]} />
+        <BackButton label="Marketing" href="/marketing" />
+      </div>
+      
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold mb-1">Aktionen</h1>

@@ -10,7 +10,7 @@ export function KundenView({ segmente }: { segmente: Segment[] }) {
     <motion.div key="kunden" initial="hidden" animate="visible" exit="exit">
       <motion.div custom={0} variants={floatIn} className="mk-panel">
         <h3 className="font-serif">Kunden wecken</h3>
-        <div className="pdesc">Segmente aus deiner Kartei â€” das Studio schlÃ¤gt vor, wen du wann ansprichst.</div>
+        <div className="pdesc">Segmente aus deiner Kartei â€” das Studio schlägt vor, wen du wann ansprichst.</div>
         <div className="mk-segs">
           {segmente.map(s => (
             <div key={s.id} className="mk-seg">

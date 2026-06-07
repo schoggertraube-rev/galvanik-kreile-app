@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
@@ -90,6 +92,11 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
   if (isLoading) {
     return (
       <div className="p-8 font-bold text-text-muted flex flex-col items-center justify-center min-h-screen space-y-4 bg-bg-app-soft">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Customers',href:'/customers'}, {label:'[id]'}]} />
+        <BackButton label="Customers" href="/customers" />
+      </div>
+      
         <div className="w-12 h-12 rounded-full border-4 border-neutral-gray-300 border-t-navy-900 animate-spin"></div>
         <p className="text-lg">Lade Kundenkartei...</p>
       </div>

@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   Inbox, MessageSquare, Mail, Phone, Globe,
@@ -429,6 +431,11 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
      ═══════════════════════════════════════════════════════════ */
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", fontFamily: "'Inter','Manrope',system-ui,sans-serif", color: "#1B1B1B", background: "#F5F1EB", overflow: "hidden" }} data-testid="kommunikation-root">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Kommunikation',href:'/kommunikation'}]} />
+        <BackButton label="Home" href="/" />
+      </div>
+      
 
       {/* ─── TOP BAR ─── */}
       <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 24px", background: "#FDFBF7", borderBottom: "1px solid #E5DFD3", flexShrink: 0, gap: 12 }} data-testid="komm-topbar">

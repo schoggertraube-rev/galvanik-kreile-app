@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
@@ -316,6 +318,11 @@ function OrdersPageInner() {
 
   return (
     <div className="pb-12 max-w-[1400px] mx-auto px-4 md:px-6 mt-6 font-sans">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Orders',href:'/orders'}]} />
+        <BackButton label="Home" href="/" />
+      </div>
+      
       <style dangerouslySetInnerHTML={{__html: `
         .topbar { display: flex; align-items: center; height: 44px; margin-bottom: 16px; }
         .top-tabs { display: flex; background: #faf8f4; border: 1.5px solid #d8d0c4; border-radius: 24px; padding: 3px; }

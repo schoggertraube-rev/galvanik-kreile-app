@@ -50,7 +50,7 @@ function IdeenCard({ vorschlag }: { vorschlag: AktionVorschlag }) {
       <div className="mk-idea-foot">
         <span className="mk-idea-score">Wirkung <b>{vorschlag.score}</b></span>
         <button className="mk-idea-btn">
-          {vorschlag.kanal === 'email' ? 'Mails prÃ¼fen' : vorschlag.kanal === 'google' ? 'Anfragen' : 'Ãœbernehmen'}
+          {vorschlag.kanal === 'email' ? 'Mails prüfen' : vorschlag.kanal === 'google' ? 'Anfragen' : 'Übernehmen'}
         </button>
       </div>
     </motion.div>

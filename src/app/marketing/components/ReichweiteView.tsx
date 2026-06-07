@@ -34,11 +34,11 @@ export function ReichweiteView({ funnel, funnelKey }: { funnel: FunnelDaten | nu
         <div className="mk-roi-big mk-animated">
           <div>
             <div className="mk-roi-label">Umsatz aus Marketing</div>
-            <div className="mk-roi-value">{funnel.umsatz.toLocaleString('de-DE')} â‚¬</div>
+            <div className="mk-roi-value">{funnel.umsatz.toLocaleString('de-DE')} €</div>
           </div>
           <div style={{ textAlign: 'right' }}>
             <div className="mk-roi-label">ROI</div>
-            <div className="mk-roi-value">{funnel.roi.toFixed(1).replace('.', ',')}Ã—</div>
+            <div className="mk-roi-value">{funnel.roi.toFixed(1).replace('.', ',')}×</div>
           </div>
         </div>
       </motion.div>

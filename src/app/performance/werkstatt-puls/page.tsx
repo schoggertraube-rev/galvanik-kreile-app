@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import React, { useState } from 'react';
 import Link from 'next/link';
@@ -24,6 +26,11 @@ export default function WerkstattPulsDetail() {
       pill={{ label: 'HANDLUNGSBEDARF', variant: 'yellow' }}
     >
       <div className="pd-grid">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Performance',href:'/performance'}, {label:'Werkstatt-puls'}]} />
+        <BackButton label="Performance" href="/performance" />
+      </div>
+      
 
         {/* Termintreue */}
         <div className="pd-tile" onClick={() => { if (analyticsDrawerEnabled) { setDrillKpi('on_time_rate'); } else { setOverlay('termintreue'); } }} style={{ cursor: 'pointer' }}>

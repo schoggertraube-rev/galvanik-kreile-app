@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import React, { useState } from 'react';
 import Link from 'next/link';
@@ -18,6 +20,11 @@ export default function UmsatzMargeDetail() {
       pill={{ label: 'STABIL', variant: 'green' }}
     >
       <div className="pd-grid">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Performance',href:'/performance'}, {label:'Umsatz-marge'}]} />
+        <BackButton label="Performance" href="/performance" />
+      </div>
+      
 
         {/* Umsatz netto */}
         <div className="pd-tile" onClick={() => setOverlay('umsatz')} style={{ cursor: 'pointer' }}>

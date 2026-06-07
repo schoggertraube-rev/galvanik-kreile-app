@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import Link from "next/link";
@@ -37,6 +39,11 @@ export default function SteuerprofilPage() {
 
   return (
     <div className="w-full pb-24 px-4 sm:px-6 xl:px-8">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Buchhaltung',href:'/buchhaltung'}, {label:'Steuerprofil'}]} />
+        <BackButton label="Buchhaltung" href="/buchhaltung" />
+      </div>
+      
       <div className="flex items-center gap-2 text-xs font-semibold text-text-muted mt-4 mb-3">
         <Link href="/" className="hover:text-navy-900 transition-colors">Home</Link>
         <ChevronRight className="w-3 h-3" />

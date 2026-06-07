@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
@@ -64,6 +66,11 @@ export default function GalvanikPage() {
     const isActive = activeBucket === bucket;
     return (
       <div className={`flex flex-col gap-3 transition-all duration-500 ${isActive ? 'opacity-100' : 'opacity-50 grayscale-[0.5] hover:opacity-70'}`}>
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Warendurchlauf',href:'/warendurchlauf'}, {label:'Galvanik'}]} />
+        <BackButton label="Warendurchlauf" href="/warendurchlauf" />
+      </div>
+      
         {orders.length === 0 ? (
           <div className="text-xs text-[#9e9689] italic p-4 border border-dashed border-[#d8d0c4] rounded-[14px] text-center">Keine Aufträge in dieser Kategorie</div>
         ) : (

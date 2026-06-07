@@ -1,3 +1,5 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 import { getKostenpostenAction } from "@/app/buchhaltung/actions";
 import Link from "next/link";
 import { ChevronRight, PieChart, TrendingUp } from "lucide-react";
@@ -9,6 +11,11 @@ export default async function KostenDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div className="w-full pb-24 px-4 sm:px-6 xl:px-8 min-h-screen">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Buchhaltung',href:'/buchhaltung'}, {label:'Kosten',href:'/buchhaltung/kosten'}, {label:'Detail'}]} />
+        <BackButton label="Kosten" href="/buchhaltung/kosten" />
+      </div>
+      
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs font-semibold text-text-muted mt-4 mb-3">
         <Link href="/betrieb" className="hover:text-navy-900 transition-colors">Betrieb</Link>

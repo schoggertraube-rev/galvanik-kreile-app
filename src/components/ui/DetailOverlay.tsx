@@ -103,7 +103,7 @@ export function DetailOverlay({ open, onClose, title, subtitle, badgeContent, ch
           </div>
           <button
             onClick={onClose}
-            className="shrink-0 w-9 h-9 rounded-full bg-white border border-neutral-gray-200 flex items-center justify-center text-text-muted hover:text-navy-900 hover:border-navy-900 transition-colors"
+            className="shrink-0 w-11 h-11 rounded-full bg-white border border-neutral-gray-200 flex items-center justify-center text-text-muted hover:text-navy-900 hover:border-navy-900 transition-colors"
             aria-label="Schließen"
           >
             <X className="w-5 h-5" />

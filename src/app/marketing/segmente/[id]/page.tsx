@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import { getSegmentById, updateSegment, deleteSegment } from "../actions";
 import { useRouter } from "next/navigation";
@@ -49,6 +51,11 @@ export default function SegmentDetailPage({ params }: { params: { id: string } }
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Marketing',href:'/marketing'}, {label:'Segmente',href:'/marketing/segmente'}, {label:'Detail'}]} />
+        <BackButton label="Segmente" href="/marketing/segmente" />
+      </div>
+      
       <div className="flex items-center gap-4 mb-8">
         <Link href="/marketing/segmente" className="text-slate-500 hover:text-slate-800">
           <ArrowLeft size={24} />

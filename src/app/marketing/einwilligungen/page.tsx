@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import { useEffect, useState } from "react";
 import { getEinwilligungen } from "./actions";
@@ -23,6 +25,11 @@ export default function EinwilligungenPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Marketing',href:'/marketing'}, {label:'Einwilligungen'}]} />
+        <BackButton label="Marketing" href="/marketing" />
+      </div>
+      
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-2xl font-bold mb-2">Einwilligungen (Opt-Ins)</h1>

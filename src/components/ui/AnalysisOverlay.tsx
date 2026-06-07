@@ -19,6 +19,8 @@ import { ArrowRight, Info, Lightbulb } from "lucide-react";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { AnalysisChart } from "./AnalysisChart";
+import { PreviewDrawer } from "./PreviewDrawer";
+import { useState } from "react";
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -129,6 +131,8 @@ export function AnalysisOverlay({
   tabs, activeTab, onTabChange,
   hero, trend, composition, crossKpi, insight, linkedAreas,
 }: AnalysisOverlayProps) {
+  const [previewDrawer, setPreviewDrawer] = useState<{ open: boolean; href: string; label: string }>({ open: false, href: "", label: "" });
+
   return (
     <DetailOverlay open={open} onClose={onClose} title={undefined}>
       {/* 🔴 Category Header Strip 🔴 */}
@@ -399,17 +403,49 @@ export function AnalysisOverlay({
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 11 }}>
             {linkedAreas.map((link, i) => (
-              <Link key={i} href={link.href} style={{
-                display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px",
-                background: "var(--surface3, #FAF8F3)", borderRadius: 20, fontSize: 12,
-                color: "var(--text, #1B1A16)", textDecoration: "none",
-                border: "0.5px solid var(--line, rgba(20,18,12,.08))",
-              }}>
+              <button 
+                key={i} 
+                onClick={() => setPreviewDrawer({ open: true, href: link.href, label: link.label })}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px",
+                  background: "var(--surface3, #FAF8F3)", borderRadius: 20, fontSize: 12,
+                  color: "var(--text, #1B1A16)", textDecoration: "none",
+                  border: "0.5px solid var(--line, rgba(20,18,12,.08))",
+                  minHeight: "44px", cursor: "pointer"
+                }}
+              >
                 {link.label}
-              </Link>
+              </button>
             ))}
           </div>
         </div>
+      )}
+      
+      {/* Drawer for linked areas */}
+      {previewDrawer.open && (
+        <PreviewDrawer
+          open={previewDrawer.open}
+          onClose={() => setPreviewDrawer({ open: false, href: "", label: "" })}
+          title={previewDrawer.label}
+          fullOpenHref={previewDrawer.href}
+        >
+          <div className="flex flex-col gap-4">
+            <p>
+              Hier sehen Sie eine Vorschau für den Bereich <strong>{previewDrawer.label}</strong>.
+            </p>
+            <div className="p-4 bg-neutral-gray-50 rounded-xl border border-neutral-gray-200">
+              <div className="text-sm font-semibold mb-2">Schnell-Informationen</div>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Letzte Aktivität: Heute</li>
+                <li>Status: Aktiv</li>
+                <li>Verknüpfungen: 3 Belege</li>
+              </ul>
+            </div>
+            <p className="text-xs text-text-muted">
+              Für tiefere Analysen und Bearbeitungsmöglichkeiten klicken Sie bitte auf "Vollständig öffnen".
+            </p>
+          </div>
+        </PreviewDrawer>
       )}
     </DetailOverlay>
   );

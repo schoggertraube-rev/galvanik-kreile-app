@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import React, { useState } from 'react';
 import Link from 'next/link';
@@ -124,6 +126,11 @@ export default function KiEmpfehlungenDetail() {
       pill={{ label: `${recommendations.length} EMPFEHLUNGEN`, variant: 'green' }}
     >
       <div style={{ padding: '12px 16px', background: 'var(--sf2)', borderRadius: 12, border: '1px solid var(--bd)', marginBottom: 20, fontSize: 12, color: 'var(--ink2)', lineHeight: 1.6 }}>
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Performance',href:'/performance'}, {label:'Ki-empfehlungen'}]} />
+        <BackButton label="Performance" href="/performance" />
+      </div>
+      
         <strong style={{ color: 'var(--ink)' }}>Hinweis:</strong> Die nachfolgenden Empfehlungen werden aus den dargestellten Demo-Kennzahlen abgeleitet. In der Produktivversion würde hier eine echte Analyse auf Basis von Echtzeit-Betriebsdaten erfolgen. Derzeit sind alle Vorschläge konzeptionell vorbereitet.
       </div>
 

@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import { useEffect, useState } from "react";
 import { getKanaele, updateKanalConfig } from "./actions";
@@ -40,6 +42,11 @@ export default function KanaelePage() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Marketing',href:'/marketing'}, {label:'Kanaele'}]} />
+        <BackButton label="Marketing" href="/marketing" />
+      </div>
+      
       <div className="mb-8">
         <h1 className="text-2xl font-bold mb-2">Marketing-Kanäle</h1>
         <p className="text-slate-500">Verbinde KREILE mit deinen Plattformen, um Aktionen zu steuern.</p>

@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import React, { useState } from 'react';
@@ -24,6 +26,11 @@ export function BaederDashboardClient({ baederData = [] }: Props) {
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 lg:p-8 font-sans antialiased text-navy-900 min-h-screen bg-[#F0EBE0]">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Baeder',href:'/baeder'}]} />
+        <BackButton label="Home" href="/" />
+      </div>
+      
       <header className="mb-8">
         <h1 className="text-3xl font-bold text-navy-900 mb-2 font-serif">Bäder und Chemie</h1>
         <p className="text-text-muted text-sm md:text-base">Zentrale für Galvanik-Bäder, Messwerte und Betriebsstoffe.</p>

@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
@@ -113,6 +115,11 @@ export default function CustomersPage() {
 
   return (
     <div className="space-y-6 pb-12 font-sans max-w-7xl">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Customers',href:'/customers'}]} />
+        <BackButton label="Home" href="/" />
+      </div>
+      
       <PageHeader
         title="Kundenkartei"
         action={{

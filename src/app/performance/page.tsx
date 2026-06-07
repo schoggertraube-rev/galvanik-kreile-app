@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
@@ -58,6 +60,11 @@ export default function PerformanceCockpit() {
 
   return (
     <div className={`perf-wrapper ${theme === 'light' ? 'light' : ''}`}>
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Performance',href:'/performance'}]} />
+        <BackButton label="Home" href="/" />
+      </div>
+      
       <style dangerouslySetInnerHTML={{__html: `
         .perf-wrapper {
           --bg: #0E1626; --sf: #1A2436; --sf2: #222E42; --sf3: #2A3650;

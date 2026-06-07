@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import React, { useState } from 'react';
 import Link from 'next/link';
@@ -18,6 +20,11 @@ export default function QualitaetRisikoDetail() {
       pill={{ label: '2 AKTIV', variant: 'yellow' }}
     >
       <div className="pd-grid">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Performance',href:'/performance'}, {label:'Qualitaet-risiko'}]} />
+        <BackButton label="Performance" href="/performance" />
+      </div>
+      
 
         {/* Reklamationsquote */}
         <div className="pd-tile" onClick={() => setOverlay('reklamation')} style={{ cursor: 'pointer' }}>

@@ -130,7 +130,7 @@ export function StudioView({
       <motion.div custom={1} variants={floatIn} className="mk-steps">
         <div className="mk-step">
           <div className="mk-step-num">1</div>
-          <div className="mk-step-text"><b>Foto wÃ¤hlen</b>aus deinen AuftrÃ¤gen</div>
+          <div className="mk-step-text"><b>Foto wählen</b>aus deinen Aufträgen</div>
         </div>
         <div className="mk-step-arrow"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></svg></div>
         <div className="mk-step">
@@ -146,7 +146,7 @@ export function StudioView({
 
       {/* Story Ideen */}
       <motion.div custom={2} variants={floatIn}>
-        <div className="mk-sec-label">Ideen fÃ¼r heute â€” antippen &amp; Ã¼bernehmen</div>
+        <div className="mk-sec-label">Ideen für heute â€” antippen &amp; übernehmen</div>
         <div className="mk-stories">
           {storyIdeen.map(story => (
             <StoryRing key={story.id} story={story} onClick={() => onStoryClick(story)} />
@@ -176,13 +176,13 @@ export function StudioView({
 
       {/* Entry Tiles */}
       <motion.div custom={4} variants={floatIn}>
-        <div className="mk-sec-label">Tiefer einsteigen &amp; VerknÃ¼pfungen</div>
+        <div className="mk-sec-label">Tiefer einsteigen &amp; Verknüpfungen</div>
         <div className="mk-entries">
           <div className="mk-entry" onClick={() => onEntryClick("Ideen")}>
             <div className="mk-entry-icon">
               <svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-4 10.5c.8.8 1 1.3 1 2.5h6c0-1.2.2-1.7 1-2.5A6 6 0 0012 3z" /></svg>
             </div>
-            <div><h3>Ideenpool</h3><p>Alle VorschlÃ¤ge, sortierbar</p></div>
+            <div><h3>Ideenpool</h3><p>Alle Vorschläge, sortierbar</p></div>
           </div>
           <div className="mk-entry" onClick={() => onEntryClick("Reichweite")}>
             <div className="mk-entry-icon">

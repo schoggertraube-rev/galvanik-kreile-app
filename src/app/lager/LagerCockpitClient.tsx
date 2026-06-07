@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import React, { useState } from 'react';
 import { Package, AlertTriangle, Box, Truck, FlaskConical, ArrowRight, Info } from 'lucide-react';
@@ -27,6 +29,11 @@ export function LagerCockpitClient({ lagerData = [] }: Props) {
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6 lg:p-8 font-sans antialiased text-navy-900 min-h-screen bg-[#F0EBE0]">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Lager',href:'/lager'}]} />
+        <BackButton label="Home" href="/" />
+      </div>
+      
       <header className="mb-8">
         <h1 className="text-3xl font-bold text-navy-900 mb-2 font-serif">Lager & Chemie</h1>
         <p className="text-text-muted text-sm md:text-base">Bestände, Nachbestellungen und Wareneingänge.</p>

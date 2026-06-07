@@ -1,3 +1,5 @@
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 import { getSegments } from "./actions";
 import Link from "next/link";
 import { PlusCircle, Search, Edit2 } from "lucide-react";
@@ -8,6 +10,11 @@ export default async function SegmentePage({ searchParams }: { searchParams: { q
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Marketing',href:'/marketing'}, {label:'Segmente'}]} />
+        <BackButton label="Marketing" href="/marketing" />
+      </div>
+      
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Kundensegmente</h1>
         <Link href="/marketing/segmente/neu" className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">

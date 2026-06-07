@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import React, { useState } from 'react';
 import { Users, ArrowRight, HeartHandshake, Map, Banknote, Truck, Globe, UserCheck } from 'lucide-react';
@@ -17,6 +19,11 @@ export default function KundenMarktDetail() {
       pill={{ label: 'STABIL', variant: 'green' }}
     >
       <div className="pd-grid">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Performance',href:'/performance'}, {label:'Kunden-markt'}]} />
+        <BackButton label="Performance" href="/performance" />
+      </div>
+      
 
         {/* Top-Kunden — In-Place Overlay */}
         <div className="pd-tile" onClick={() => setOverlay('topkunden')} style={{ cursor: 'pointer' }}>

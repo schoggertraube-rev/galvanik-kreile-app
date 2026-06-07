@@ -143,7 +143,8 @@ export function AppShortcutOverlay({ type, onClose }: AppShortcutOverlayProps) {
             <h2 className="text-2xl md:text-3xl font-black font-serif text-navy-900">{title}</h2>
             <button 
               onClick={onClose}
-              className="bg-neutral-gray-200 hover:bg-error-red hover:text-white text-navy-900 p-2 rounded-full transition-colors"
+              className="flex items-center justify-center bg-neutral-gray-200 hover:bg-error-red hover:text-white text-navy-900 rounded-full transition-colors"
+              style={{ width: "44px", height: "44px" }}
             >
               <X className="w-6 h-6" />
             </button>

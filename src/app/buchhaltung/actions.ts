@@ -32,7 +32,7 @@ export async function listBelegeAction(filter?: BelegFilter): Promise<Beleg[]> {
 }
 
 /**
- * LÃƒÂ¤dt einen einzelnen Beleg anhand der ID.
+ * Lädt einen einzelnen Beleg anhand der ID.
  */
 export async function getBelegAction(id: string): Promise<BelegDetail> {
   const supabase = await createClient()
@@ -50,13 +50,13 @@ export async function getBelegAction(id: string): Promise<BelegDetail> {
     throw new Error('Beleg nicht gefunden.')
   }
   
-  // Wenn der Beleg eine Datei hat, erzeugen wir eine Signed URL fÃƒÂ¼r die Vorschau
+  // Wenn der Beleg eine Datei hat, erzeugen wir eine Signed URL für die Vorschau
   let originalDatei = data.original_datei;
   if (originalDatei && !originalDatei.startsWith('http')) {
     const { data: urlData, error: urlError } = await supabase
       .storage
       .from('buchhaltung-belege')
-      .createSignedUrl(originalDatei, 3600); // 1h gÃƒÂ¼ltig
+      .createSignedUrl(originalDatei, 3600); // 1h gültig
       
     if (urlData) {
       originalDatei = urlData.signedUrl;
@@ -125,8 +125,8 @@ export async function createBelegAction(formData: FormData): Promise<Beleg> {
     original_format: mimeType,
     erfasst_am: new Date().toISOString(),
     erstellt_von: userId,
-    // Mock-Daten fÃƒÂ¼r OCR: Da MockOcrProvider genutzt wird, erwarten wir im Frontend
-    // ein Fallback oder fÃƒÂ¼llen das hier minimal aus.
+    // Mock-Daten für OCR: Da MockOcrProvider genutzt wird, erwarten wir im Frontend
+    // ein Fallback oder füllen das hier minimal aus.
     brutto: 0,
     netto: 0,
     vorsteuer_abzug: true,
@@ -153,7 +153,7 @@ export async function createBelegAction(formData: FormData): Promise<Beleg> {
 export async function freigebenBelegAction(id: string, korrektur?: Partial<Beleg>): Promise<Beleg> {
   const supabase = await createClient()
   
-  // Nur 'pruefen' oder 'erfasst' dÃƒÂ¼rfen bearbeitet/freigegeben werden
+  // Nur 'pruefen' oder 'erfasst' dürfen bearbeitet/freigegeben werden
   const { data: current, error: fetchError } = await supabase.from('beleg').select('status').eq('id', id).single()
   if (fetchError || !current) throw new Error('Beleg nicht gefunden.')
   if (current.status === 'festgeschrieben' || current.status === 'storniert') {
@@ -302,7 +302,7 @@ export async function listOffenePostenAction(): Promise<Ausgangsrechnung[]> {
   return data.map(mapToClientRechnung);
 }
 
-// Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Helper Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+// Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€ Helper Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€Ã¢â€€
 
 function mapToClientRechnung(dbData: any): Ausgangsrechnung {
   return {
@@ -365,7 +365,7 @@ export async function createRechnungAction(formData: FormData, positionen: Ausga
   const isDemo = formData.get('isDemo') === "true";
 
   if (!nummer || !kundeId || !datum || !faelligAm) {
-    throw new Error('Bitte fÃƒÂ¼llen Sie alle Pflichtfelder aus.');
+    throw new Error('Bitte füllen Sie alle Pflichtfelder aus.');
   }
 
   if (positionen.length === 0) {
@@ -496,12 +496,12 @@ export async function createKostenpostenAction(formData: FormData): Promise<Kost
   const isDemo = formData.get('isDemo') === "true";
 
   if (!bezeichnung || !art || !betragStr || !intervall) {
-    throw new Error('Bitte fÃƒÂ¼llen Sie alle Pflichtfelder aus.');
+    throw new Error('Bitte füllen Sie alle Pflichtfelder aus.');
   }
 
   const betrag = parseFloat(betragStr.replace(',', '.'));
   if (isNaN(betrag) || betrag <= 0) {
-    throw new Error('Bitte geben Sie einen gÃƒÂ¼ltigen Betrag grÃƒÂ¶ÃƒÅ¸er 0 ein.');
+    throw new Error('Bitte geben Sie einen gültigen Betrag größer 0 ein.');
   }
 
   const { data, error } = await supabase.from('kostenposten').insert({

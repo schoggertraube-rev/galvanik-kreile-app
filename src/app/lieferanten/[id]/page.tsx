@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import React from 'react';
 import { use } from 'react';
@@ -11,6 +13,11 @@ export default function LieferantenDetailPage({ params }: { params: Promise<{ id
 
   return (
     <div className="min-h-screen bg-bg-app-soft p-8">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Lieferanten',href:'/lieferanten'}, {label:'[id]'}]} />
+        <BackButton label="Lieferanten" href="/lieferanten" />
+      </div>
+      
       <div className="max-w-5xl mx-auto space-y-6">
         <AppBackButton fallbackHref="/lieferanten" label="Zurück zur Lieferantenliste" />
         

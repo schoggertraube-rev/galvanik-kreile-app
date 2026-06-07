@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import Link from "next/link";
 import { CheckCircle2, Package, Truck, MessageSquare, CreditCard } from "lucide-react";
@@ -6,6 +8,11 @@ import { CheckCircle2, Package, Truck, MessageSquare, CreditCard } from "lucide-
 export default function WarenausgangPage() {
   return (
     <div className="w-full h-full font-sans antialiased text-[#1a1a1a]">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Warendurchlauf',href:'/warendurchlauf'}, {label:'Warenausgang'}]} />
+        <BackButton label="Warendurchlauf" href="/warendurchlauf" />
+      </div>
+      
       <div className="w-full mx-auto px-5 md:px-8 lg:px-12 xl:px-16 py-6">
         
         {/* Titel */}

@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import Link from "next/link";
 import {
@@ -21,6 +23,11 @@ function WarendurchlaufLeitstandContent() {
 
   return (
     <div className="w-full h-full font-sans antialiased text-[#1a1a1a]">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Warendurchlauf',href:'/warendurchlauf'}, {label:'Wareneingang'}]} />
+        <BackButton label="Warendurchlauf" href="/warendurchlauf" />
+      </div>
+      
       {wizardMode && (
         <div className="fixed inset-0 z-50 flex flex-col bg-black/60 backdrop-blur-sm overflow-y-auto">
           <WarendurchlaufIntakeWizard

@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
@@ -52,6 +54,11 @@ export function BuchhaltungCockpitClient() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Buchhaltung',href:'/buchhaltung'}]} />
+        <BackButton label="Home" href="/" />
+      </div>
+      
         <div className="w-8 h-8 border-3 border-accent-orange/20 border-t-accent-orange rounded-full animate-spin" />
       </div>
     );

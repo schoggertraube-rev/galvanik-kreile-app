@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 
 import React from 'react';
 import Link from 'next/link';
@@ -8,6 +10,11 @@ import { Building2, Search, ArrowRight } from 'lucide-react';
 export default function LieferantenPage() {
   return (
     <div className="min-h-screen bg-bg-app-soft p-8">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Lieferanten',href:'/lieferanten'}]} />
+        <BackButton label="Home" href="/" />
+      </div>
+      
       <div className="max-w-4xl mx-auto space-y-6">
         <AppBackButton fallbackHref="/" label="Zurück zum Dashboard" />
         

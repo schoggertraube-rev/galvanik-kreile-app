@@ -1,4 +1,6 @@
 "use client";
+import { Breadcrumb } from "@/components/ui/Breadcrumb";
+import { BackButton } from "@/components/ui/BackButton";
 import { usePageView } from "@/hooks/usePageView";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -33,6 +35,11 @@ export function RechnungenClient({ initialRechnungen, offeneSumme, ueberfaelligS
 
   return (
     <div className="w-full pb-24 px-4 sm:px-6 xl:px-8 min-h-screen">
+      <div className="mb-6">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Buchhaltung',href:'/buchhaltung'}, {label:'Rechnungen'}]} />
+        <BackButton label="Buchhaltung" href="/buchhaltung" />
+      </div>
+      
       
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs font-semibold text-text-muted mt-4 mb-3">
