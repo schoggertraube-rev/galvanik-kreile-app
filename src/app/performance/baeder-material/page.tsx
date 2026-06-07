@@ -211,6 +211,10 @@ export default function BaederMaterialDetail() {
 
       {/* OVERLAYS — standardized AnalysisOverlay pattern */}
       <AnalysisOverlay
+        isEmpty={false}
+        emptyState={{ title: "Noch keine Daten", description: "Es wurden noch keine Daten für diesen Bereich erfasst.", actionLabel: "Jetzt Daten erfassen", actionHref: "/" }}
+        trend={{ chartType: "line", chartData: [{ name: "KW19", ist: 85, vorjahr: 70 }, { name: "KW20", ist: 82, vorjahr: 72 }, { name: "KW21", ist: 79, vorjahr: 75 }, { name: "KW22", ist: 76, vorjahr: 78 }] }}
+        tabs={[{ id: "1", label: "Aktueller Monat" }, { id: "2", label: "Vorjahr" }]}
         open={overlay === 'badstatus'}
         onClose={() => setOverlay(null)}
         icon={<Droplets className="w-5 h-5" style={{ color: 'var(--pos)' }} />}
@@ -255,6 +259,10 @@ export default function BaederMaterialDetail() {
       />
 
       <AnalysisOverlay
+        isEmpty={false}
+        emptyState={{ title: "Noch keine Daten", description: "Es wurden noch keine Daten für diesen Bereich erfasst.", actionLabel: "Jetzt Daten erfassen", actionHref: "/" }}
+        trend={{ chartType: "line", chartData: [{ name: "KW19", ist: 85, vorjahr: 70 }, { name: "KW20", ist: 82, vorjahr: 72 }, { name: "KW21", ist: 79, vorjahr: 75 }, { name: "KW22", ist: 76, vorjahr: 78 }] }}
+        tabs={[{ id: "1", label: "Aktueller Monat" }, { id: "2", label: "Vorjahr" }]}
         open={overlay === 'kritisch'}
         onClose={() => setOverlay(null)}
         icon={<AlertTriangle className="w-5 h-5" style={{ color: 'var(--warn)' }} />}
@@ -287,6 +295,10 @@ export default function BaederMaterialDetail() {
       />
 
       <AnalysisOverlay
+        isEmpty={false}
+        emptyState={{ title: "Noch keine Daten", description: "Es wurden noch keine Daten für diesen Bereich erfasst.", actionLabel: "Jetzt Daten erfassen", actionHref: "/" }}
+        trend={{ chartType: "line", chartData: [{ name: "KW19", ist: 85, vorjahr: 70 }, { name: "KW20", ist: 82, vorjahr: 72 }, { name: "KW21", ist: 79, vorjahr: 75 }, { name: "KW22", ist: 76, vorjahr: 78 }] }}
+        tabs={[{ id: "1", label: "Aktueller Monat" }, { id: "2", label: "Vorjahr" }]}
         open={overlay === 'chemie'}
         onClose={() => setOverlay(null)}
         icon={<Package className="w-5 h-5" style={{ color: 'var(--purple, #6D28D9)' }} />}
@@ -327,6 +339,10 @@ export default function BaederMaterialDetail() {
       />
 
       <AnalysisOverlay
+        isEmpty={false}
+        emptyState={{ title: "Noch keine Daten", description: "Es wurden noch keine Daten für diesen Bereich erfasst.", actionLabel: "Jetzt Daten erfassen", actionHref: "/" }}
+        trend={{ chartType: "line", chartData: [{ name: "KW19", ist: 85, vorjahr: 70 }, { name: "KW20", ist: 82, vorjahr: 72 }, { name: "KW21", ist: 79, vorjahr: 75 }, { name: "KW22", ist: 76, vorjahr: 78 }] }}
+        tabs={[{ id: "1", label: "Aktueller Monat" }, { id: "2", label: "Vorjahr" }]}
         open={overlay === 'verbrauch'}
         onClose={() => setOverlay(null)}
         icon={<BarChart3 className="w-5 h-5" style={{ color: 'var(--info)' }} />}
@@ -365,6 +381,10 @@ export default function BaederMaterialDetail() {
       />
 
       <AnalysisOverlay
+        isEmpty={false}
+        emptyState={{ title: "Noch keine Daten", description: "Es wurden noch keine Daten für diesen Bereich erfasst.", actionLabel: "Jetzt Daten erfassen", actionHref: "/" }}
+        trend={{ chartType: "line", chartData: [{ name: "KW19", ist: 85, vorjahr: 70 }, { name: "KW20", ist: 82, vorjahr: 72 }, { name: "KW21", ist: 79, vorjahr: 75 }, { name: "KW22", ist: 76, vorjahr: 78 }] }}
+        tabs={[{ id: "1", label: "Aktueller Monat" }, { id: "2", label: "Vorjahr" }]}
         open={overlay === 'marge'}
         onClose={() => setOverlay(null)}
         icon={<FlaskConical className="w-5 h-5" style={{ color: 'var(--pos)' }} />}
@@ -406,6 +426,10 @@ export default function BaederMaterialDetail() {
       />
 
       <AnalysisOverlay
+        isEmpty={false}
+        emptyState={{ title: "Noch keine Daten", description: "Es wurden noch keine Daten für diesen Bereich erfasst.", actionLabel: "Jetzt Daten erfassen", actionHref: "/" }}
+        trend={{ chartType: "line", chartData: [{ name: "KW19", ist: 85, vorjahr: 70 }, { name: "KW20", ist: 82, vorjahr: 72 }, { name: "KW21", ist: 79, vorjahr: 75 }, { name: "KW22", ist: 76, vorjahr: 78 }] }}
+        tabs={[{ id: "1", label: "Aktueller Monat" }, { id: "2", label: "Vorjahr" }]}
         open={overlay === 'preise'}
         onClose={() => setOverlay(null)}
         icon={<BarChart3 className="w-5 h-5" style={{ color: 'var(--warn)' }} />}
@@ -440,6 +464,10 @@ export default function BaederMaterialDetail() {
       />
 
       <AnalysisOverlay
+        isEmpty={false}
+        emptyState={{ title: "Noch keine Daten", description: "Es wurden noch keine Daten für diesen Bereich erfasst.", actionLabel: "Jetzt Daten erfassen", actionHref: "/" }}
+        trend={{ chartType: "line", chartData: [{ name: "KW19", ist: 85, vorjahr: 70 }, { name: "KW20", ist: 82, vorjahr: 72 }, { name: "KW21", ist: 79, vorjahr: 75 }, { name: "KW22", ist: 76, vorjahr: 78 }] }}
+        tabs={[{ id: "1", label: "Aktueller Monat" }, { id: "2", label: "Vorjahr" }]}
         open={overlay === 'auftraege'}
         onClose={() => setOverlay(null)}
         icon={<Package className="w-5 h-5" style={{ color: 'var(--info)' }} />}
