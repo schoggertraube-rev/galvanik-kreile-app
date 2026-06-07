@@ -23,10 +23,20 @@ export function IdeenView({
           ))}
         </div>
       </motion.div>
-      <motion.div custom={1} variants={floatIn} className="mk-ideas">
-        {vorschlaege.map(v => (
-          <IdeenCard key={v.id} vorschlag={v} />
-        ))}
+      <motion.div custom={1} variants={floatIn} className={vorschlaege.length > 0 ? "mk-ideas" : ""}>
+        {vorschlaege.length > 0 ? (
+          vorschlaege.map(v => (
+            <IdeenCard key={v.id} vorschlag={v} />
+          ))
+        ) : (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-16 h-16 rounded-full bg-neutral-gray-100 flex items-center justify-center mb-4">
+              <svg viewBox="0 0 24 24" className="w-8 h-8 text-neutral-gray-400" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18h6M10 21h4M12 3a6 6 0 00-4 10.5c.8.8 1 1.3 1 2.5h6c0-1.2.2-1.7 1-2.5A6 6 0 0012 3z"/></svg>
+            </div>
+            <h3 className="font-serif text-lg font-bold mb-2">Derzeit keine neuen Ideen.</h3>
+            <p className="text-sm text-text-muted max-w-sm">Das Marketing-Studio sammelt im Hintergrund neue Daten. Schauen Sie später wieder vorbei.</p>
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );

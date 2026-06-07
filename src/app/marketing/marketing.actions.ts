@@ -76,25 +76,8 @@ export async function getBesteAktionAction(): Promise<AktionVorschlag | null> {
 }
 
 export async function listVorschlaegeAction(sort: SortMode = "output"): Promise<AktionVorschlag[]> {
-  await ensureMarketingData();
-  const res = await db.select().from(aktion).where(eq(aktion.status, "vorschlag")).orderBy(desc(aktion.score));
-  return res.map(a => {
-    const chanId = a.typ === "post" ? "instagram" : a.typ === "mail" ? "email" : "google";
-    return {
-      id: a.id,
-      titel: a.titel,
-      kanal: chanId as any,
-      kanalLabel: chanId === "instagram" ? "Instagram" : chanId === "email" ? "E-Mail" : "Google",
-      score: Number(a.score),
-      caption: (a.inhalt as any)?.caption || "",
-      hashtags: (a.inhalt as any)?.hashtags || "",
-      begruendung: "",
-      erwarteterOutput: `~${a.erwarteterOutput} Anfragen`,
-      aufwand: `${a.aufwandMin} Min`,
-      kosten: `${a.kostenBudget} €`,
-      varianten: []
-    };
-  });
+  // Empty state for Ideen as requested
+  return [];
 }
 
 export async function getKampagnenAction(): Promise<MKampagne[]> {
