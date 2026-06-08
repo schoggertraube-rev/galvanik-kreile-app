@@ -6,9 +6,15 @@ import React, { useState } from 'react';
 import { Users, ArrowRight, HeartHandshake, Map, Banknote, Truck, Globe, UserCheck } from 'lucide-react';
 import { PerformanceDetailLayout } from '../PerformanceDetailLayout';
 import { AnalysisOverlay } from '@/components/ui/AnalysisOverlay';
+import { getTopKunden } from '@/app/actions/customers.actions';
 
 export default function KundenMarktDetail() {
   const [overlay, setOverlay] = useState<string | null>(null);
+  const [topKunden, setTopKunden] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    getTopKunden(5).then(setTopKunden);
+  }, []);
 
   return (
     <PerformanceDetailLayout
@@ -34,19 +40,17 @@ export default function KundenMarktDetail() {
             <div className="pd-tile-name">Top-Kunden</div>
           </div>
           <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {[
-              { name: 'Museum Lenzburg', val: '5.840 €', pct: 100 },
-              { name: 'Schrauben Meier', val: '4.200 €', pct: 72 },
-              { name: 'Autohaus Berger', val: '3.800 €', pct: 65 },
-              { name: 'Schlosserei Brunner', val: '2.600 €', pct: 45 },
-              { name: 'Uhren Keller', val: '1.900 €', pct: 33 },
-            ].map(k => (
-              <div key={k.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-                <span style={{ width: 110, fontWeight: 500, flexShrink: 0 }}>{k.name}</span>
-                <div className="pd-bar-track"><div className="pd-bar-fill" style={{ width: `${k.pct}%`, background: 'var(--info)' }} /></div>
-                <span style={{ fontWeight: 600, width: 54, textAlign: 'right', flexShrink: 0 }}>{k.val}</span>
-              </div>
-            ))}
+            {topKunden.length === 0 ? <div style={{fontSize:11, color:'var(--ink3)'}}>Noch keine Kunden</div> : topKunden.map((k, i) => {
+              const maxVal = topKunden[0]?.wert || 1;
+              const pct = Math.max(5, Math.round((k.wert / maxVal) * 100));
+              return (
+                <div key={k.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                  <span style={{ width: 110, fontWeight: 500, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.name}</span>
+                  <div className="pd-bar-track"><div className="pd-bar-fill" style={{ width: `${pct}%`, background: 'var(--info)' }} /></div>
+                  <span style={{ fontWeight: 600, width: 54, textAlign: 'right', flexShrink: 0 }}>{k.wert.toLocaleString('de-DE')} €</span>
+                </div>
+              );
+            })}
           </div>
           <div className="pd-tile-foot">Kundenanalyse <ArrowRight className="w-3 h-3" /></div>
         </div>
@@ -191,10 +195,10 @@ export default function KundenMarktDetail() {
 
       {/* OVERLAYS — standardized AnalysisOverlay pattern */}
       <AnalysisOverlay
-        isEmpty={false}
+        isEmpty={topKunden.length === 0}
         emptyState={{ title: "Noch keine Daten", description: "Es wurden noch keine Daten für diesen Bereich erfasst.", actionLabel: "Jetzt Daten erfassen", actionHref: "/" }}
-        trend={{ chartType: "line", chartData: [{ name: "KW19", ist: 85, vorjahr: 70 }, { name: "KW20", ist: 82, vorjahr: 72 }, { name: "KW21", ist: 79, vorjahr: 75 }, { name: "KW22", ist: 76, vorjahr: 78 }] }}
-        tabs={[{ id: "1", label: "Aktueller Monat" }, { id: "2", label: "Vorjahr" }]} open={overlay === 'topkunden'} onClose={() => setOverlay(null)} icon={<UserCheck className="w-5 h-5" style={{ color: 'var(--info)' }} />} title="Top-Kunden" subtitle="Umsatzranking · CLV · Auftragshistorie · Trend" accentBg="linear-gradient(180deg, var(--infobg), transparent)" hero={{ kicker: "Wer bringt den meisten Umsatz", value: "18.340 €", changePill: { text: "Top 5 decken 72% des Monatsumsatzes", variant: "teal" }, meta: "Juni 2026 · 5 Kunden · 47 aktive Kundenstammdaten", sparkValues: [14200, 15800, 16100, 17200, 17800, 18340] }} composition={{ title: "C · Top-5 Kunden nach Monatsumsatz", rows: [{ avatar: "ML", avatarColor: "#60A5FA", name: "Museum Lenzburg", meta: "CLV: 18.400 € · seit 2019 · 42 Aufträge · ↑ stabil", amount: "5.840 €" }, { avatar: "SM", avatarColor: "#34D399", name: "Schrauben Meier", meta: "CLV: 14.200 € · seit 2020 · 35 Aufträge · ↑ wachsend", amount: "4.200 €" }, { avatar: "AB", avatarColor: "#D14F3D", name: "Autohaus Berger", meta: "CLV: 11.800 € · seit 2021 · 28 Aufträge · ↓ gefährdet", amount: "3.800 €" }, { avatar: "SB", avatarColor: "#60A5FA", name: "Schlosserei Brunner", meta: "CLV: 9.600 € · seit 2022 · 19 Aufträge · ↑ stabil", amount: "2.600 €" }, { avatar: "UK", avatarColor: "#FBBF24", name: "Uhren Keller", meta: "CLV: 7.200 € · seit 2023 · 12 Aufträge · → neu", amount: "1.900 €" }] }} crossKpi={[{ label: "Stammkunden-Anteil", value: "82 %", delta: "38 von 47 Kunden", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Ø Auftragswert", value: "420 €", delta: "↑ +8% vs. Vorjahr", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Abwanderungsrisiko", value: "1", delta: "Autohaus Berger", deltaColor: "var(--neg)", accentColor: "var(--neg)" }]} insight={{ body: "<b>Beobachtung:</b> Museum Lenzburg stärkster Einzelkunde. Autohaus Berger zeigt Abwärtstrend.<br><b>Empfehlung:</b> Autohaus Berger proaktiv kontaktieren.", actions: [{ label: "Kundenkartei öffnen" }, { label: "Autohaus Berger anrufen" }] }} linkedAreas={[{ label: "Kundenkartei", href: "/customers" }, { label: "Auftragsbuch", href: "/orders" }]} />
+        trend={{ chartType: "line", chartData: [{ name: "KW19", ist: 0, vorjahr: 0 }, { name: "KW20", ist: 0, vorjahr: 0 }, { name: "KW21", ist: 0, vorjahr: 0 }, { name: "KW22", ist: 0, vorjahr: 0 }] }}
+        tabs={[{ id: "1", label: "Aktueller Monat" }, { id: "2", label: "Vorjahr" }]} open={overlay === 'topkunden'} onClose={() => setOverlay(null)} icon={<UserCheck className="w-5 h-5" style={{ color: 'var(--info)' }} />} title="Top-Kunden" subtitle="Umsatzranking · CLV · Auftragshistorie · Trend" accentBg="linear-gradient(180deg, var(--infobg), transparent)" hero={{ kicker: "Wer bringt den meisten Umsatz", value: topKunden.length > 0 ? `${topKunden[0]?.wert?.toLocaleString('de-DE')} €` : "0 €", changePill: { text: "Top 5 decken 72% des Monatsumsatzes", variant: "teal" }, meta: "Aktueller Monat · 5 Kunden", sparkValues: [0, 0, 0, 0, 0, 0] }} composition={{ title: "C · Top-5 Kunden nach Monatsumsatz", rows: topKunden.map(k => ({ avatar: k.name.substring(0, 2).toUpperCase(), avatarColor: "#60A5FA", name: k.name, meta: `Umsatz: ${k.wert.toLocaleString('de-DE')} €`, amount: `${k.wert.toLocaleString('de-DE')} €` })) }} crossKpi={[{ label: "Stammkunden-Anteil", value: "82 %", delta: "38 von 47 Kunden", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Ø Auftragswert", value: "420 €", delta: "↑ +8% vs. Vorjahr", deltaColor: "var(--pos)", accentColor: "var(--pos)" }, { label: "Abwanderungsrisiko", value: "1", delta: "Autohaus Berger", deltaColor: "var(--neg)", accentColor: "var(--neg)" }]} insight={{ body: "<b>Beobachtung:</b> Daten aus der Datenbank geladen.", actions: [{ label: "Kundenkartei öffnen" }] }} linkedAreas={[{ label: "Kundenkartei", href: "/customers" }, { label: "Auftragsbuch", href: "/orders" }]} />
 
       <AnalysisOverlay
         isEmpty={false}

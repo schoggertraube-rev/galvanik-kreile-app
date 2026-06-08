@@ -50,6 +50,7 @@ export interface CompositionRow {
   meta?: string;
   amount?: string;
   href?: string;
+  previewText?: string;       // Dynamischer Text für PreviewDrawer
   onClick?: () => void;
 }
 
@@ -100,7 +101,7 @@ export interface AnalysisOverlayProps {
   composition?: CompositionSection;
   crossKpi?: CrossKpiCard[];
   insight?: InsightSection;
-  linkedAreas?: { label: string; href: string }[];
+  linkedAreas?: { label: string; href: string; previewText?: string }[];
 }
 
 // ── Pill color maps ──────────────────────────────────────────────────
@@ -142,7 +143,7 @@ export function AnalysisOverlay({
   tabs, activeTab, onTabChange,
   hero, trend, composition, crossKpi, insight, linkedAreas,
 }: AnalysisOverlayProps) {
-  const [previewDrawer, setPreviewDrawer] = useState<{ open: boolean; href: string; label: string }>({ open: false, href: "", label: "" });
+  const [previewDrawer, setPreviewDrawer] = useState<{ open: boolean; href: string; label: string; previewText?: string }>({ open: false, href: "", label: "" });
 
   return (
     <DetailOverlay open={open} onClose={onClose} title={undefined}>
@@ -308,13 +309,26 @@ export function AnalysisOverlay({
 
               if (row.href) {
                 return (
-                  <Link key={i} href={row.href} style={wrapperStyle} onClick={row.onClick}>
+                  <Link key={i} href={row.href} style={wrapperStyle} onClick={(e) => {
+                    if (row.previewText) {
+                      e.preventDefault();
+                      setPreviewDrawer({ open: true, href: row.href || "", label: row.name, previewText: row.previewText });
+                    } else if (row.onClick) {
+                      row.onClick();
+                    }
+                  }}>
                     {inner}
                   </Link>
                 );
               }
               return (
-                <div key={i} style={wrapperStyle} onClick={row.onClick}>
+                <div key={i} style={wrapperStyle} onClick={(e) => {
+                  if (row.previewText) {
+                    setPreviewDrawer({ open: true, href: row.href || "", label: row.name, previewText: row.previewText });
+                  } else if (row.onClick) {
+                    row.onClick();
+                  }
+                }}>
                   {inner}
                 </div>
               );
@@ -416,7 +430,7 @@ export function AnalysisOverlay({
             {linkedAreas.map((link, i) => (
               <button 
                 key={i} 
-                onClick={() => setPreviewDrawer({ open: true, href: link.href, label: link.label })}
+                onClick={() => setPreviewDrawer({ open: true, href: link.href, label: link.label, previewText: link.previewText })}
                 style={{
                   display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px",
                   background: "var(--surface3, #FAF8F3)", borderRadius: 20, fontSize: 12,
@@ -432,7 +446,7 @@ export function AnalysisOverlay({
         </div>
       )}
       
-      {/* Drawer for linked areas */}
+      {/* Drawer for linked areas and rows */}
       {previewDrawer.open && (
         <PreviewDrawer
           open={previewDrawer.open}
@@ -441,18 +455,29 @@ export function AnalysisOverlay({
           fullOpenHref={previewDrawer.href}
         >
           <div className="flex flex-col gap-4">
-            <p>
-              Hier sehen Sie eine Vorschau für den Bereich <strong>{previewDrawer.label}</strong>.
-            </p>
-            <div className="p-4 bg-neutral-gray-50 rounded-xl border border-neutral-gray-200">
-              <div className="text-sm font-semibold mb-2">Schnell-Informationen</div>
-              <ul className="list-disc list-inside space-y-1">
-                <li>Letzte Aktivität: Heute</li>
-                <li>Status: Aktiv</li>
-                <li>Verknüpfungen: 3 Belege</li>
-              </ul>
+            <div className="inline-flex items-center self-start bg-neutral-gray-100 text-navy-900 px-2 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider mb-2">
+              {title}
             </div>
-            <p className="text-xs text-text-muted">
+            {previewDrawer.previewText ? (
+              <div className="text-sm leading-relaxed text-text-muted mb-4 whitespace-pre-wrap">
+                {previewDrawer.previewText}
+              </div>
+            ) : (
+              <>
+                <p className="text-sm">
+                  Hier sehen Sie eine Vorschau für den Bereich <strong>{previewDrawer.label}</strong>.
+                </p>
+                <div className="p-4 bg-neutral-gray-50 rounded-xl border border-neutral-gray-200">
+                  <div className="text-sm font-semibold mb-2">Schnell-Informationen</div>
+                  <ul className="list-disc list-inside space-y-1 text-sm">
+                    <li>Letzte Aktivität: Heute</li>
+                    <li>Status: Aktiv</li>
+                    <li>Verknüpfungen: 3 Elemente</li>
+                  </ul>
+                </div>
+              </>
+            )}
+            <p className="text-xs text-text-muted mt-2 border-t pt-4">
               Für tiefere Analysen und Bearbeitungsmöglichkeiten klicken Sie bitte auf "Vollständig öffnen".
             </p>
           </div>

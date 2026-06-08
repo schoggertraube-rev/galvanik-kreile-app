@@ -294,7 +294,7 @@ function GaugeChart({ data }: { data: Record<string, unknown> }) {
 function LineChart({ data }: { data: Record<string, unknown> }) {
   const labels = (data.labels as string[]) || ["Jul","Aug","Sep","Okt","Nov","Dez","Jan","Feb","Mär","Apr","Mai","Jun"];
   const values = (data.values as number[]) || [];
-  const previousValues = (data.previousValues as number[]) || values.map(v => v * (0.8 + Math.random() * 0.4)); // Fallback mock
+  const previousValues = (data.previousValues as number[]) || values.map(() => 0);
 
   // Calculate average for "Vorjahr" if needed, or overall average
   const avg = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;

@@ -25,7 +25,7 @@ export function PerformanceDetailLayout({
 
   useEffect(() => {
     const saved = localStorage.getItem('perfTheme');
-    if (saved === 'dark' || saved === 'light') setTheme(saved);
+    if (saved === 'dark' || saved === 'light') setTimeout(() => setTheme(saved), 0);
   }, []);
 
   const pillClass =
