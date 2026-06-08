@@ -17,6 +17,9 @@ export interface BelegFilter {
   status?: BelegStatus;
   belegart?: Belegart;
   suchbegriff?: string;
+  missingKonto?: boolean;
+  missingKostenstelle?: boolean;
+  nichtAufAuftrag?: boolean;
 }
 
 export interface RechnungFilter {
@@ -85,6 +88,11 @@ export interface Beleg {
   storniertVon?: string;
   bankZahlungId?: string;
   erstelltVon: string;
+  kontoId?: string;
+  kostenstelleId?: string;
+  periodeId?: string;
+  istAufAuftragZugeordnet?: boolean;
+  zugeordneterOrderId?: string;
 }
 
 export interface BelegDetail extends Beleg {

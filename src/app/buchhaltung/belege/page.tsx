@@ -11,6 +11,9 @@ export default async function BelegePage({ searchParams }: { searchParams: Promi
     kategorieId: sp.kategorie as string | undefined,
     status: sp.status as any,
     belegart: sp.belegart as any,
+    missingKonto: sp.view === "missingKonto" ? true : undefined,
+    missingKostenstelle: sp.view === "missingKostenstelle" ? true : undefined,
+    nichtAufAuftrag: sp.view === "nichtAufAuftrag" ? true : undefined,
   };
   
   const belege = await provider.listBelege(filter);

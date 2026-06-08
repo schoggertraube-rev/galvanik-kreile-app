@@ -20,6 +20,15 @@ export async function listBelegeAction(filter?: BelegFilter): Promise<Beleg[]> {
   if (filter?.belegart) {
     query = query.eq('belegart', filter.belegart)
   }
+  if (filter?.missingKonto) {
+    query = query.is('konto_id', null)
+  }
+  if (filter?.missingKostenstelle) {
+    query = query.is('kostenstelle_id', null)
+  }
+  if (filter?.nichtAufAuftrag) {
+    query = query.eq('ist_auf_auftrag_zugeordnet', false)
+  }
   
   const { data, error } = await query
   
@@ -347,7 +356,12 @@ function mapToClientBeleg(dbData: any): Beleg {
     rechnungsnummerExtern: dbData.rechnungsnummer_extern,
     storniertVon: dbData.storniert_von,
     bankZahlungId: dbData.bank_zahlung_id,
-    erstelltVon: dbData.erstellt_von
+    erstelltVon: dbData.erstellt_von,
+    kontoId: dbData.konto_id,
+    kostenstelleId: dbData.kostenstelle_id,
+    periodeId: dbData.periode_id,
+    istAufAuftragZugeordnet: dbData.ist_auf_auftrag_zugeordnet,
+    zugeordneterOrderId: dbData.zugeordneter_order_id
   }
 }
 

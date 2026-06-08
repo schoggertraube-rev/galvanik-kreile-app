@@ -86,6 +86,7 @@ export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeFilter = searchParams.get("kategorie") || "alle";
+  const viewFilter = searchParams.get("view") || "alle";
 
   const setActiveFilter = (catId: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -93,6 +94,16 @@ export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }
       params.delete("kategorie");
     } else {
       params.set("kategorie", catId);
+    }
+    router.push(`/buchhaltung/belege?${params.toString()}`);
+  };
+
+  const setViewFilter = (view: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (view === "alle") {
+      params.delete("view");
+    } else {
+      params.set("view", view);
     }
     router.push(`/buchhaltung/belege?${params.toString()}`);
   };
@@ -361,6 +372,43 @@ export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }
         </div>
         <button className="flex items-center gap-2 bg-white border border-neutral-200 rounded-full px-4 py-2 text-[11px] font-bold text-neutral-500 hover:text-[#1e1b18] shadow-sm whitespace-nowrap min-h-[36px]">
           <CalendarIcon className="w-3.5 h-3.5" /> 2026 · Jan–Mai
+        </button>
+      </div>
+
+      {/* View Filter für Abschluss */}
+      <div className="flex flex-wrap items-center gap-3 mb-6 bg-white border border-neutral-100 p-2 rounded-2xl shadow-sm">
+        <span className="text-xs font-bold text-neutral-400 pl-2 uppercase tracking-wide">Prüfen:</span>
+        <button
+          onClick={() => setViewFilter("alle")}
+          className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors ${
+            viewFilter === "alle" ? "bg-neutral-100 text-[#1e1b18]" : "text-neutral-500 hover:text-[#1e1b18]"
+          }`}
+        >
+          Alle
+        </button>
+        <button
+          onClick={() => setViewFilter("missingKonto")}
+          className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors flex items-center gap-1 ${
+            viewFilter === "missingKonto" ? "bg-rose-100 text-rose-700" : "text-neutral-500 hover:text-rose-600"
+          }`}
+        >
+          <div className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Konto fehlt
+        </button>
+        <button
+          onClick={() => setViewFilter("missingKostenstelle")}
+          className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors flex items-center gap-1 ${
+            viewFilter === "missingKostenstelle" ? "bg-amber-100 text-amber-700" : "text-neutral-500 hover:text-amber-600"
+          }`}
+        >
+          <div className="w-1.5 h-1.5 rounded-full bg-amber-500" /> Kostenstelle fehlt
+        </button>
+        <button
+          onClick={() => setViewFilter("nichtAufAuftrag")}
+          className={`px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors flex items-center gap-1 ${
+            viewFilter === "nichtAufAuftrag" ? "bg-blue-100 text-blue-700" : "text-neutral-500 hover:text-blue-600"
+          }`}
+        >
+          <div className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Kein Auftrag
         </button>
       </div>
 

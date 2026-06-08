@@ -223,6 +223,7 @@ export const kostenstelle = pgTable("kostenstelle", {
   geplantePersonalkostenMonatlich: numeric("geplante_personalkosten_monatlich", { precision: 12, scale: 2 }),
   geplanteSachkostenMonatlich: numeric("geplante_sachkosten_monatlich", { precision: 12, scale: 2 }),
   verfuegbareStundenMonatlich: numeric("verfuegbare_stunden_monatlich", { precision: 8, scale: 2 }),
+  energieAnteilProzent: numeric("energie_anteil_prozent", { precision: 5, scale: 2 }),
   notiz: text("notiz"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
