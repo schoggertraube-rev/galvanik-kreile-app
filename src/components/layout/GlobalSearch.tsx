@@ -9,11 +9,12 @@ import { SEARCH_ACTIONS } from '@/lib/search/actionRegistry'
 import { getRecentSearches, addRecentSearch } from '@/lib/search/recent'
 import type { SearchSuggestion } from '@/types/search'
 import { globalSearchAction } from '@/app/global-search-actions'
+import { GlobalSearchAIResult } from './GlobalSearchAIResult'
 
 export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChange: (v: boolean) => void }) {
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
-  const [globalResults, setGlobalResults] = useState<any[]>([])
+  const [globalResults, setGlobalResults] = useState<Record<string, any>[]>([]);
   const [prevOpen, setPrevOpen] = useState(open)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -51,19 +52,23 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
       }, 300)
       return () => clearTimeout(timer)
     } else {
-      setGlobalResults([])
+      setTimeout(() => setGlobalResults([]), 0)
     }
   }, [searchTerm])
 
   if (!open) return null
 
   const cleanTerm = searchTerm.trim().toLowerCase()
+  const isAiMode = /^(wie|was|wo|warum|welche|zeige|vergleiche|analysiere)/i.test(cleanTerm) || cleanTerm.endsWith("?");
 
   const filteredOrders = globalResults.filter(r => r.type === 'order')
   const filteredCustomers = globalResults.filter(r => r.type === 'customer')
   const filteredBelege = globalResults.filter(r => r.type === 'beleg')
   const filteredRechnungen = globalResults.filter(r => r.type === 'rechnung')
   const filteredLieferanten = globalResults.filter(r => r.type === 'lieferant')
+  const filteredBaeder = globalResults.filter(r => r.type === 'bad')
+  const filteredLager = globalResults.filter(r => r.type === 'lager')
+  const filteredKosten = globalResults.filter(r => r.type === 'kostenposten')
 
   const hasResults = globalResults.length > 0
 
@@ -98,6 +103,9 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
         else if (first.type === 'beleg') router.push(`/buchhaltung/belege/${first.id}`)
         else if (first.type === 'rechnung') router.push(`/buchhaltung/rechnungen/${first.id}`)
         else if (first.type === 'lieferant') router.push(`/lieferanten/${first.id}`)
+        else if (first.type === 'bad') router.push(`/baths/${first.id}`)
+        else if (first.type === 'lager') router.push(`/inventory/${first.id}`)
+        else if (first.type === 'kostenposten') router.push(`/buchhaltung/kosten/${first.id}`)
         handleClose()
       }
     }
@@ -156,8 +164,12 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
 
         <div className="overflow-y-auto flex-1 p-3 space-y-4">
           
-          {!searchTerm && (
-            <div className="space-y-4 py-2">
+          {isAiMode && searchTerm.length > 2 ? (
+            <GlobalSearchAIResult query={searchTerm} onClose={handleClose} />
+          ) : (
+            <>
+              {!searchTerm && (
+                <div className="space-y-4 py-2">
               <div className="px-2">
                 <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider flex items-center gap-1">
                   <Sparkles className="w-3.5 h-3.5 text-navy-900" />
@@ -393,6 +405,93 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                 </div>
               )}
 
+              {filteredBaeder.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="px-2">
+                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">🧪 Bäder ({filteredBaeder.length} Treffer)</span>
+                  </div>
+                  <div className="space-y-1">
+                    {filteredBaeder.map(b => (
+                      <Link 
+                        key={b.id} 
+                        href={`/baths/${b.id}`}
+                        onClick={handleClose}
+                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-cyan-50 to-cyan-100 border border-cyan-200 flex items-center justify-center text-cyan-700 shrink-0">
+                            <Droplets className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-sm text-navy-900 block leading-tight">{b.title}</span>
+                            <span className="text-xs text-navy-500 font-medium block mt-0.5">{b.subtitle}</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {filteredLager.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="px-2">
+                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">📦 Lager ({filteredLager.length} Treffer)</span>
+                  </div>
+                  <div className="space-y-1">
+                    {filteredLager.map(l => (
+                      <Link 
+                        key={l.id} 
+                        href={`/inventory/${l.id}`}
+                        onClick={handleClose}
+                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-yellow-50 to-yellow-100 border border-yellow-200 flex items-center justify-center text-yellow-700 shrink-0">
+                            <Package className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-sm text-navy-900 block leading-tight">{l.title}</span>
+                            <span className="text-xs text-navy-500 font-medium block mt-0.5">{l.subtitle}</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {filteredKosten.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="px-2">
+                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">💶 Kostenposten ({filteredKosten.length} Treffer)</span>
+                  </div>
+                  <div className="space-y-1">
+                    {filteredKosten.map(k => (
+                      <Link 
+                        key={k.id} 
+                        href={`/buchhaltung/kosten/${k.id}`}
+                        onClick={handleClose}
+                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-red-50 to-red-100 border border-red-200 flex items-center justify-center text-red-700 shrink-0">
+                            <Receipt className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-sm text-navy-900 block leading-tight">{k.title}</span>
+                            <span className="text-xs text-navy-500 font-medium block mt-0.5">{k.subtitle}</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {!hasAnyResults && fallbackSuggestions.length > 0 && (
                 <div className="space-y-1.5">
                   <div className="px-2">
@@ -415,6 +514,8 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
               )}
 
             </div>
+          )}
+          </>
           )}
 
         </div>
