@@ -37,9 +37,14 @@ export function CockpitClient() {
         <div className="lg:col-span-1"><DbRankingKachel /></div>
       </div>
 
-      {/* Reihe 4: Frühwarnungen | What-If-Studio */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
-        <FruehwarnungenKachel />
+      {/* Reihe 4: Frühwarnungen */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1"><FruehwarnungenKachel /></div>
+        {/* Platz für zukünftige Kacheln */}
+      </div>
+
+      {/* Reihe 5: What-If-Studio (Volle Breite) */}
+      <div className="w-full pb-12">
         <WhatIfStudio />
       </div>
 

@@ -1,104 +1,141 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ChevronDown, ChevronUp, Beaker, Loader2, AlertCircle } from "lucide-react";
+import { Beaker, Loader2, AlertCircle, Euro, UserPlus, TrendingUp, Handshake } from "lucide-react";
 import { getWhatIfKontext } from "../actions";
 import { berechneInvestition, berechneMitarbeiter, berechnePreis, berechneNeukunde, KontextDaten } from "@/lib/whatif/engine";
 import { KachelInfo } from "@/components/ui/KachelInfo";
+import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
 
 export function WhatIfStudio() {
-  const [open, setOpen] = useState(false);
   const [kontext, setKontext] = useState<KontextDaten | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'investition' | 'mitarbeiter' | 'preis' | 'neukunde'>('investition');
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'investition' | 'mitarbeiter' | 'preis' | 'neukunde' | null>(null);
 
   useEffect(() => {
-    if (open && !kontext && !loading) {
-      setLoading(true);
-      getWhatIfKontext().then(res => {
-        setKontext(res);
-        setLoading(false);
-      });
-    }
-  }, [open, kontext, loading]);
-
-  if (!open) {
-    return (
-      <div 
-        id="whatif-studio-btn"
-        className="bg-navy-900 rounded-2xl shadow-sm p-4 flex items-center justify-between cursor-pointer hover:bg-navy-800 transition-colors"
-        onClick={() => setOpen(true)}
-      >
-        <div className="flex items-center gap-3 text-white">
-          <Beaker className="w-5 h-5 text-accent-orange" />
-          <h3 className="font-bold text-lg">What-If Studio</h3>
-          <span className="text-navy-300 text-sm hidden md:inline-block">Szenarien durchspielen & Entscheidungen absichern</span>
-        </div>
-        <ChevronDown className="w-5 h-5 text-white" />
-      </div>
-    );
-  }
+    getWhatIfKontext().then(res => {
+      setKontext(res);
+      setLoading(false);
+    });
+  }, []);
 
   return (
-    <div className="bg-white rounded-2xl border border-neutral-gray-200 shadow-sm flex flex-col">
-      <div 
-        className="bg-navy-900 rounded-t-2xl p-4 flex items-center justify-between cursor-pointer"
-        onClick={() => setOpen(false)}
-      >
-        <div className="flex items-center gap-3 text-white">
-          <Beaker className="w-5 h-5 text-accent-orange" />
-          <h3 className="font-bold text-lg">What-If Studio</h3>
+    <>
+      <div className="bg-white rounded-2xl border border-neutral-gray-200 shadow-sm flex flex-col relative w-full lg:col-span-2">
+        <div className="absolute top-4 right-4 z-10">
+          <KachelInfo 
+            wasZeigtDieKachel="Simulieren Sie Geschäftsentscheidungen mit Ihren echten Zahlen"
+            wasBedeutetDas="Testen Sie Investitionen, Personalentscheidungen, Preisänderungen und Neukunden — bevor Sie sie umsetzen."
+            datenquelle="Berechnung auf Basis Ihrer realen Kostenstellen, Auslastungen und Deckungsbeiträge"
+          />
         </div>
-        <ChevronUp className="w-5 h-5 text-white" />
+        
+        <div className="p-6 pb-4 flex items-center gap-3 border-b border-neutral-gray-100 pr-14">
+          <Beaker className="w-5 h-5 text-accent-orange" />
+          <h3 className="font-bold text-navy-900 text-lg">Was wäre wenn...</h3>
+        </div>
+
+        {loading || !kontext ? (
+          <div className="p-12 flex flex-col items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-navy-500 mb-4" />
+            <p className="text-text-muted">Lade operative Kontextdaten...</p>
+          </div>
+        ) : (
+          <div className="p-6 flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            <ActionCard 
+              icon={<Euro className="w-6 h-6 text-emerald-600" />}
+              title="Investition prüfen"
+              subtitle="Lohnt sich eine neue Maschine?"
+              onClick={() => setActiveTab('investition')}
+              colorClass="bg-emerald-50 hover:bg-emerald-100 border-emerald-200"
+            />
+            
+            <ActionCard 
+              icon={<UserPlus className="w-6 h-6 text-navy-600" />}
+              title="Neuer Mitarbeiter"
+              subtitle="Ab wann trägt sich die Kraft?"
+              onClick={() => setActiveTab('mitarbeiter')}
+              colorClass="bg-navy-50 hover:bg-navy-100 border-navy-200"
+            />
+            
+            <ActionCard 
+              icon={<TrendingUp className="w-6 h-6 text-accent-orange" />}
+              title="Preise anpassen"
+              subtitle="Wieviel mehr bleibt übrig?"
+              onClick={() => setActiveTab('preis')}
+              colorClass="bg-orange-50 hover:bg-orange-100 border-orange-200"
+            />
+            
+            <ActionCard 
+              icon={<Handshake className="w-6 h-6 text-purple-600" />}
+              title="Neuer Kunde"
+              subtitle="Passt der Auftrag?"
+              onClick={() => setActiveTab('neukunde')}
+              colorClass="bg-purple-50 hover:bg-purple-100 border-purple-200"
+            />
+
+          </div>
+        )}
       </div>
 
-      {loading || !kontext ? (
-        <div className="p-12 flex flex-col items-center justify-center">
-          <Loader2 className="w-8 h-8 animate-spin text-navy-500 mb-4" />
-          <p className="text-text-muted">Lade operative Kontextdaten...</p>
-        </div>
-      ) : (
-        <div className="p-0 flex flex-col h-full">
-          {/* Tabs */}
-          <div className="flex border-b border-neutral-gray-100 overflow-x-auto">
-            <TabButton active={activeTab === 'investition'} onClick={() => setActiveTab('investition')} label="Investition" />
-            <TabButton active={activeTab === 'mitarbeiter'} onClick={() => setActiveTab('mitarbeiter')} label="Mitarbeiter" />
-            <TabButton active={activeTab === 'preis'} onClick={() => setActiveTab('preis')} label="Preiserhöhung" />
-            <TabButton active={activeTab === 'neukunde'} onClick={() => setActiveTab('neukunde')} label="Neukunde" />
-          </div>
+      <ResponsiveDetailDrawer
+        isOpen={activeTab === 'investition'}
+        onClose={() => setActiveTab(null)}
+        title="Szenario: Investition prüfen"
+      >
+        {kontext && <TabInvestition kontext={kontext} />}
+      </ResponsiveDetailDrawer>
 
-          <div className="p-6 flex-1 bg-neutral-gray-50/30">
-            {activeTab === 'investition' && <TabInvestition kontext={kontext} />}
-            {activeTab === 'mitarbeiter' && <TabMitarbeiter kontext={kontext} />}
-            {activeTab === 'preis' && <TabPreis kontext={kontext} />}
-            {activeTab === 'neukunde' && <TabNeukunde kontext={kontext} />}
-          </div>
-        </div>
-      )}
-    </div>
+      <ResponsiveDetailDrawer
+        isOpen={activeTab === 'mitarbeiter'}
+        onClose={() => setActiveTab(null)}
+        title="Szenario: Neuer Mitarbeiter"
+      >
+        {kontext && <TabMitarbeiter kontext={kontext} />}
+      </ResponsiveDetailDrawer>
+
+      <ResponsiveDetailDrawer
+        isOpen={activeTab === 'preis'}
+        onClose={() => setActiveTab(null)}
+        title="Szenario: Preise anpassen"
+      >
+        {kontext && <TabPreis kontext={kontext} />}
+      </ResponsiveDetailDrawer>
+
+      <ResponsiveDetailDrawer
+        isOpen={activeTab === 'neukunde'}
+        onClose={() => setActiveTab(null)}
+        title="Szenario: Neuer Kunde"
+      >
+        {kontext && <TabNeukunde kontext={kontext} />}
+      </ResponsiveDetailDrawer>
+    </>
   );
 }
 
-function TabButton({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) {
+function ActionCard({ icon, title, subtitle, onClick, colorClass }: { icon: React.ReactNode, title: string, subtitle: string, onClick: () => void, colorClass: string }) {
   return (
-    <button
+    <div 
+      className={`rounded-2xl border p-5 flex flex-col items-start cursor-pointer transition-colors shadow-sm group ${colorClass}`}
       onClick={onClick}
-      className={`px-6 py-4 font-semibold text-sm whitespace-nowrap transition-colors border-b-2 ${
-        active ? 'border-accent-orange text-navy-900 bg-orange-50/50' : 'border-transparent text-text-muted hover:bg-neutral-gray-50 hover:text-navy-700'
-      }`}
     >
-      {label}
-    </button>
+      <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center mb-4 shadow-sm group-hover:scale-105 transition-transform">
+        {icon}
+      </div>
+      <h4 className="font-bold text-navy-900 text-base mb-1">{title}</h4>
+      <p className="text-sm text-neutral-gray-700">{subtitle}</p>
+    </div>
   );
 }
 
 // --- TAB INVESTITION ---
 function TabInvestition({ kontext }: { kontext: KontextDaten }) {
   const [kostenstelle, setKostenstelle] = useState<string>('');
-  const [invest, setInvest] = useState(50000);
-  const [dauer, setDauer] = useState(7);
+  const [invest, setInvest] = useState(45000);
+  const [dauer, setDauer] = useState(10);
   const [zins, setZins] = useState(0);
-  const [ersparnis, setErsparnis] = useState(0);
+  const [ersparnis, setErsparnis] = useState(2);
   const [mehrumsatz, setMehrumsatz] = useState(0);
   const [result, setResult] = useState<any>(null);
 
@@ -119,13 +156,6 @@ function TabInvestition({ kontext }: { kontext: KontextDaten }) {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
-      <div className="absolute top-0 right-0 z-10 -mt-2 -mr-2">
-        <KachelInfo 
-          wasZeigtDieKachel="Prüfen Sie ob sich eine Anschaffung rechnet."
-          wasBedeutetDas="Die Berechnung nutzt Ihre echten Kosten- und Auslastungsdaten."
-          datenquelle="Berechnet aus Monats-DB und Station-Auslastung"
-        />
-      </div>
       <div className="flex flex-col gap-4">
         <h4 className="font-bold text-navy-900">Annahmen & Parameter</h4>
         
@@ -140,7 +170,7 @@ function TabInvestition({ kontext }: { kontext: KontextDaten }) {
           </select>
           {kostenstelle && kontext.db_marge_je_ks[kostenstelle] === null && (
             <p className="text-xs text-danger-red mt-1 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> Datengrundlage für Station fehlt. Erst nach 3 abgeschlossenen Aufträgen aussagekräftig.
+              <AlertCircle className="w-3 h-3" /> Datengrundlage für Station fehlt.
             </p>
           )}
         </div>
@@ -181,7 +211,7 @@ function TabInvestition({ kontext }: { kontext: KontextDaten }) {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-neutral-gray-200 p-6 flex flex-col">
+      <div className="bg-neutral-gray-50 rounded-xl border border-neutral-gray-200 p-6 flex flex-col">
         <h4 className="font-bold text-navy-900 mb-4">Ergebnis</h4>
         {!result ? (
           <div className="flex-1 flex items-center justify-center text-text-muted text-sm text-center">
@@ -191,14 +221,12 @@ function TabInvestition({ kontext }: { kontext: KontextDaten }) {
           <div className="flex flex-col gap-6">
             <EmpfehlungsBox result={result} />
             
-            <div className="grid grid-cols-2 gap-4 border-t border-neutral-gray-100 pt-4">
+            <div className="grid grid-cols-2 gap-4 border-t border-neutral-gray-200 pt-4">
               <ErgebnisWert label="Netto-Wirkung / Monat" value={`€ ${Math.round(result.netto_monatswirkung)}`} highlight={result.netto_monatswirkung > 0} />
-              <ErgebnisWert label="Break-Even" value={result.break_even_monate ? `${Math.round(result.break_even_monate)} Monate` : 'Nie'} />
+              <ErgebnisWert label="Break-Even" value={result.break_even_monate && result.break_even_monate > 0 ? `${Math.round(result.break_even_monate)} Monate` : 'Nie'} />
               <ErgebnisWert label="Abschreibung / Monat" value={`€ ${Math.round(result.abschreibung_monatlich)}`} />
               <ErgebnisWert label="Zins / Monat" value={`€ ${Math.round(result.zins_monatlich)}`} />
             </div>
-
-            <button className="text-sm text-accent-orange font-semibold hover:underline mt-auto self-start">Datenherkunft anzeigen</button>
           </div>
         )}
       </div>
@@ -209,10 +237,10 @@ function TabInvestition({ kontext }: { kontext: KontextDaten }) {
 // --- TAB MITARBEITER ---
 function TabMitarbeiter({ kontext }: { kontext: KontextDaten }) {
   const [kostenstelle, setKostenstelle] = useState<string>('');
-  const [gehalt, setGehalt] = useState(3500);
+  const [gehalt, setGehalt] = useState(3200);
   const [stunden, setStunden] = useState(40);
   const [produktiv, setProduktiv] = useState(75);
-  const [verrechnung, setVerrechnung] = useState(65);
+  const [verrechnung, setVerrechnung] = useState(68);
   const [result, setResult] = useState<any>(null);
 
   const calculate = () => {
@@ -234,13 +262,6 @@ function TabMitarbeiter({ kontext }: { kontext: KontextDaten }) {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
-      <div className="absolute top-0 right-0 z-10 -mt-2 -mr-2">
-        <KachelInfo 
-          wasZeigtDieKachel="Prüfen Sie ob sich eine Anschaffung rechnet."
-          wasBedeutetDas="Die Berechnung nutzt Ihre echten Kosten- und Auslastungsdaten."
-          datenquelle="Berechnet aus Monats-DB und Station-Auslastung"
-        />
-      </div>
       <div className="flex flex-col gap-4">
         <h4 className="font-bold text-navy-900">Annahmen & Parameter</h4>
         
@@ -255,7 +276,7 @@ function TabMitarbeiter({ kontext }: { kontext: KontextDaten }) {
           </select>
           {kostenstelle && kontext.db_marge_je_ks[kostenstelle] === null && (
             <p className="text-xs text-danger-red mt-1 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> Datengrundlage fehlt.
+              <AlertCircle className="w-3 h-3" /> Datengrundlage für Station fehlt.
             </p>
           )}
         </div>
@@ -292,7 +313,7 @@ function TabMitarbeiter({ kontext }: { kontext: KontextDaten }) {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-neutral-gray-200 p-6 flex flex-col">
+      <div className="bg-neutral-gray-50 rounded-xl border border-neutral-gray-200 p-6 flex flex-col">
         <h4 className="font-bold text-navy-900 mb-4">Ergebnis</h4>
         {!result ? (
           <div className="flex-1 flex items-center justify-center text-text-muted text-sm text-center">
@@ -302,14 +323,12 @@ function TabMitarbeiter({ kontext }: { kontext: KontextDaten }) {
           <div className="flex flex-col gap-6">
             <EmpfehlungsBox result={result} />
             
-            <div className="grid grid-cols-2 gap-4 border-t border-neutral-gray-100 pt-4">
-              <ErgebnisWert label="Break-Even Auslastung" value={`${Math.round(result.break_even_auslastung * 100)} %`} highlight={result.empfehlung === 'ja'} />
+            <div className="grid grid-cols-2 gap-4 border-t border-neutral-gray-200 pt-4">
+              <ErgebnisWert label="Break-Even Auslastung" value={result.break_even_auslastung !== null ? `${Math.round(result.break_even_auslastung * 100)} %` : 'N/A'} highlight={result.empfehlung === 'ja'} />
               <ErgebnisWert label="Vollkosten / Monat" value={`€ ${Math.round(result.vollkosten_monatlich)}`} />
               <ErgebnisWert label="Echter Kostensatz" value={`€ ${Math.round(result.kostensatz_real)} / h`} />
               <ErgebnisWert label="Max. DB-Potenzial" value={`€ ${Math.round(result.db_zusatz_vollauslastung)}`} />
             </div>
-
-            <button className="text-sm text-accent-orange font-semibold hover:underline mt-auto self-start">Datenherkunft anzeigen</button>
           </div>
         )}
       </div>
@@ -320,7 +339,7 @@ function TabMitarbeiter({ kontext }: { kontext: KontextDaten }) {
 // --- TAB PREIS ---
 function TabPreis({ kontext }: { kontext: KontextDaten }) {
   const [gruppe, setGruppe] = useState<'alle' | 'stamm' | 'neu' | 'privat' | 'gewerbe'>('alle');
-  const [erhoehung, setErhoehung] = useState(5);
+  const [erhoehung, setErhoehung] = useState(10);
   const [abwanderung, setAbwanderung] = useState(5);
   const [result, setResult] = useState<any>(null);
 
@@ -337,13 +356,6 @@ function TabPreis({ kontext }: { kontext: KontextDaten }) {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
-      <div className="absolute top-0 right-0 z-10 -mt-2 -mr-2">
-        <KachelInfo 
-          wasZeigtDieKachel="Prüfen Sie ob sich eine Anschaffung rechnet."
-          wasBedeutetDas="Die Berechnung nutzt Ihre echten Kosten- und Auslastungsdaten."
-          datenquelle="Berechnet aus Monats-DB und Station-Auslastung"
-        />
-      </div>
       <div className="flex flex-col gap-4">
         <h4 className="font-bold text-navy-900">Annahmen & Parameter</h4>
         
@@ -361,7 +373,7 @@ function TabPreis({ kontext }: { kontext: KontextDaten }) {
           </select>
           {umsatzIst0 && (
             <p className="text-xs text-danger-red mt-1 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> Keine Umsatzdaten für diese Gruppe
+              <AlertCircle className="w-3 h-3" /> Keine Umsatzdaten vorhanden
             </p>
           )}
         </div>
@@ -387,7 +399,7 @@ function TabPreis({ kontext }: { kontext: KontextDaten }) {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-neutral-gray-200 p-6 flex flex-col">
+      <div className="bg-neutral-gray-50 rounded-xl border border-neutral-gray-200 p-6 flex flex-col">
         <h4 className="font-bold text-navy-900 mb-4">Ergebnis</h4>
         {!result ? (
           <div className="flex-1 flex items-center justify-center text-text-muted text-sm text-center">
@@ -397,18 +409,18 @@ function TabPreis({ kontext }: { kontext: KontextDaten }) {
           <div className="flex flex-col gap-6">
             <EmpfehlungsBox result={result} />
             
-            <div className="grid grid-cols-2 gap-4 border-t border-neutral-gray-100 pt-4">
+            <div className="grid grid-cols-2 gap-4 border-t border-neutral-gray-200 pt-4">
               <ErgebnisWert label="Umsatz-Effekt (Netto)" value={`€ ${Math.round(result.netto_effekt).toLocaleString()}`} highlight={result.netto_effekt > 0} />
-              <ErgebnisWert label="Basis-Umsatz" value={`€ ${Math.round(result.basis_umsatz_12m).toLocaleString()}`} />
+              <ErgebnisWert label="Basis-Umsatz (12M)" value={`€ ${Math.round(result.basis_umsatz_12m).toLocaleString()}`} />
               <ErgebnisWert label="Umsatzverlust (Risiko)" value={`€ ${Math.round(result.risiko_umsatzverlust).toLocaleString()}`} />
             </div>
 
-            {result.top_5_gefaehrdet.length > 0 && (
+            {result.top_5_gefaehrdet && result.top_5_gefaehrdet.length > 0 && (
               <div className="mt-2 text-xs text-text-muted">
                 <p className="font-semibold mb-1">Gefährdete Top-Kunden (Umsatz):</p>
                 <ul className="list-disc pl-4">
                   {result.top_5_gefaehrdet.map((k: any) => (
-                    <li key={k.name}>{k.name}</li>
+                    <li key={k.name}>{k.name} - € {k.umsatz?.toLocaleString()}</li>
                   ))}
                 </ul>
               </div>
@@ -424,8 +436,8 @@ function TabPreis({ kontext }: { kontext: KontextDaten }) {
 function TabNeukunde({ kontext }: { kontext: KontextDaten }) {
   const [kostenstelle, setKostenstelle] = useState<string>('');
   const [auftragswert, setAuftragswert] = useState(2500);
-  const [stunden, setStunden] = useState(15);
-  const [haeufigkeit, setHaeufigkeit] = useState(12);
+  const [stunden, setStunden] = useState(8);
+  const [haeufigkeit, setHaeufigkeit] = useState(6);
   const [zahlungsziel, setZahlungsziel] = useState(30);
   const [result, setResult] = useState<any>(null);
 
@@ -495,7 +507,7 @@ function TabNeukunde({ kontext }: { kontext: KontextDaten }) {
         </button>
       </div>
 
-      <div className="bg-white rounded-xl border border-neutral-gray-200 p-6 flex flex-col">
+      <div className="bg-neutral-gray-50 rounded-xl border border-neutral-gray-200 p-6 flex flex-col">
         <h4 className="font-bold text-navy-900 mb-4">Ergebnis</h4>
         {!result ? (
           <div className="flex-1 flex items-center justify-center text-text-muted text-sm text-center">
@@ -505,14 +517,12 @@ function TabNeukunde({ kontext }: { kontext: KontextDaten }) {
           <div className="flex flex-col gap-6">
             <EmpfehlungsBox result={result} />
             
-            <div className="grid grid-cols-2 gap-4 border-t border-neutral-gray-100 pt-4">
+            <div className="grid grid-cols-2 gap-4 border-t border-neutral-gray-200 pt-4">
               <ErgebnisWert label="Zusatz-DB / Jahr" value={`€ ${Math.round(result.db_jahr).toLocaleString()}`} highlight={result.db_jahr > 0} />
               <ErgebnisWert label="Neue Auslastung" value={`${Math.round(result.auslastung_nach_annahme * 100)} %`} highlight={result.auslastung_nach_annahme < 0.95} />
               <ErgebnisWert label="Zusatzstunden" value={`${Math.round(result.zusatz_auslastung_stunden)} h / Jahr`} />
               <ErgebnisWert label="Working Capital" value={`€ ${Math.round(result.working_capital_bedarf).toLocaleString()}`} />
             </div>
-
-            <button className="text-sm text-accent-orange font-semibold hover:underline mt-auto self-start">Datenherkunft anzeigen</button>
           </div>
         )}
       </div>
