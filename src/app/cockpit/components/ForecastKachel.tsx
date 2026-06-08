@@ -103,7 +103,7 @@ export function ForecastKachel() {
                 <XAxis dataKey="monat" tick={{ fontSize: 11 }} tickMargin={10} />
                 <YAxis tickFormatter={(val) => `€${(val / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
                 <Tooltip 
-                  formatter={(value: any, name: string) => {
+                  formatter={(value: any, name: any) => {
                     if (name === "Umsatz (Ist)") return [`€ ${Number(value).toLocaleString('de-DE')}`, name];
                     if (name === "Pipeline (Gewichtet)") return [`€ ${Number(value).toLocaleString('de-DE')}`, name];
                     return [value, name];
