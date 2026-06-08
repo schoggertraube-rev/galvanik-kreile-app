@@ -1,0 +1,61 @@
+import { pgTable, text, timestamp, boolean, integer, uuid, numeric, date } from "drizzle-orm/pg-core";
+import { orders, appUsers, inventoryItems } from "./schema";
+
+export const vorlageZeit = pgTable("vorlage_zeit", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  schluessel: text("schluessel").notNull(),
+  teilekategorie: text("teilekategorie"),
+  oberflaeche: text("oberflaeche"),
+  stationKuerzel: text("station_kuerzel").notNull(),
+  medianMinuten: numeric("median_minuten", { precision: 8, scale: 2 }).notNull(),
+  p25Minuten: numeric("p25_minuten", { precision: 8, scale: 2 }),
+  p75Minuten: numeric("p75_minuten", { precision: 8, scale: 2 }),
+  nReferenzauftraege: integer("n_referenzauftraege").notNull(),
+  letzteAktualisierung: timestamp("letzte_aktualisierung", { withTimezone: true }).defaultNow(),
+});
+
+export const vorlageVerbrauch = pgTable("vorlage_verbrauch", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  schluessel: text("schluessel").notNull(),
+  teilekategorie: text("teilekategorie"),
+  oberflaeche: text("oberflaeche"),
+  stationKuerzel: text("station_kuerzel").notNull(),
+  inventoryItemId: text("inventory_item_id").notNull().references(() => inventoryItems.id),
+  einheitNormiert: text("einheit_normiert").notNull(),
+  medianMenge: numeric("median_menge", { precision: 10, scale: 4 }).notNull(),
+  p25Menge: numeric("p25_menge", { precision: 10, scale: 4 }),
+  p75Menge: numeric("p75_menge", { precision: 10, scale: 4 }),
+  nReferenzauftraege: integer("n_referenzauftraege").notNull(),
+  haeufigkeitProzent: numeric("haeufigkeit_prozent", { precision: 5, scale: 2 }),
+  letzteAktualisierung: timestamp("letzte_aktualisierung", { withTimezone: true }).defaultNow(),
+});
+
+export const arbeitszeitBuchung = pgTable("arbeitszeit_buchung", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  auftragId: text("auftrag_id").notNull().references(() => orders.id),
+  employeeId: uuid("employee_id").notNull().references(() => appUsers.id),
+  kostenstelleKuerzel: text("kostenstelle_kuerzel").notNull(),
+  stationKuerzel: text("station_kuerzel").notNull(),
+  startZeit: timestamp("start_zeit", { withTimezone: true }).notNull(),
+  endZeit: timestamp("end_zeit", { withTimezone: true }),
+  dauerMinuten: integer("dauer_minuten").notNull(),
+  kostensatzEurProStunde: numeric("kostensatz_eur_pro_stunde", { precision: 8, scale: 2 }).notNull(),
+  erfasstModus: text("erfasst_modus").notNull(),
+  warAusVorlage: boolean("war_aus_vorlage").default(false),
+  vorlageId: uuid("vorlage_id").references(() => vorlageZeit.id),
+  bemerkung: text("bemerkung"),
+  erstelltAm: timestamp("erstellt_am", { withTimezone: true }).defaultNow(),
+  aktualisiertAm: timestamp("aktualisiert_am", { withTimezone: true }).defaultNow(),
+});
+
+export const kostensatzDefault = pgTable("kostensatz_default", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  stationKuerzel: text("station_kuerzel").notNull(),
+  eurProStunde: numeric("eur_pro_stunde", { precision: 8, scale: 2 }).notNull(),
+  giltAb: date("gilt_ab").notNull(),
+  bemerkung: text("bemerkung"),
+});

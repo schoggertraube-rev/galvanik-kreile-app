@@ -85,6 +85,7 @@ export const ausgangsrechnung = pgTable("ausgangsrechnung", {
   id: uuid("id").primaryKey().defaultRandom(),
   nummer: text("nummer").notNull(),
   kundeId: text("kunde_id"),
+  orderId: text("order_id"),
   datum: date("datum").notNull(),
   faelligAm: date("faellig_am"),
   brutto: numeric("brutto", { precision: 12, scale: 2 }).notNull(),

@@ -136,11 +136,35 @@ export const baths = pgTable("baths", {
 
 export const inventoryItems = pgTable("inventory_items", {
   id: cuidPrimaryKey("id"),
+  tenantId: text("tenant_id"),
   name: text("name").notNull(),
   category: varchar("category", { length: 100 }),
   currentStock: integer("current_stock").default(0),
   minStock: integer("min_stock").default(0),
   unit: varchar("unit", { length: 20 }),
+  einkaufspreisEur: numeric("einkaufspreis_eur", { precision: 10, scale: 4 }),
+  einheitNormiert: text("einheit_normiert"),
+  kostenstelleDefaultKuerzel: text("kostenstelle_default_kuerzel"),
+  letzterPreisAktualisiertAm: timestamp("letzter_preis_aktualisiert_am", { withTimezone: true }),
+  letzterPreisQuelleBelegId: uuid("letzter_preis_quelle_beleg_id"),
+});
+
+export const stockMovements = pgTable("stock_movements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  inventoryItemId: text("inventory_item_id").notNull(),
+  movementType: text("movement_type").notNull(),
+  quantity: numeric("quantity").notNull(),
+  reason: text("reason"),
+  orderId: text("order_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  kostenstelleKuerzel: text("kostenstelle_kuerzel"),
+  stationKuerzel: text("station_kuerzel"),
+  erfasstVon: uuid("erfasst_von").references(() => appUsers.id),
+  warAusVorlage: boolean("war_aus_vorlage").default(false),
+  vorlageId: uuid("vorlage_id"),
+  snapshotEinkaufspreisEur: numeric("snapshot_einkaufspreis_eur", { precision: 10, scale: 4 }),
+  notiz: text("notiz"),
 });
 
 // Legacy aliases for backward compatibility with old actions
@@ -386,3 +410,6 @@ export const lagerArtikel = pgTable("lager_artikel", {
 
 // 11. Buchhaltung & Finanzen
 export * from "./schema_buchhaltung";
+
+// 18. Erfassung (Zeit & Verbrauch)
+export * from "./schema_erfassung";
