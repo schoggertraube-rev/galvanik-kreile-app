@@ -269,11 +269,20 @@ export async function getForecastDaten() {
     .select('*')
     .order('erwarteter_monat', { ascending: true });
 
+  const currentYear = new Date().getFullYear();
+  const { data: plan } = await supabase.from('forecast_version')
+    .select('werte')
+    .eq('tenant_id', 'galvanik-kreile')
+    .eq('jahr', currentYear)
+    .eq('version_typ', 'plan')
+    .eq('ist_aktiv', true)
+    .single();
+
   if (error) {
     console.error("Error getForecastDaten:", error);
-    return { monate: [], pipeline: [] };
+    return { monate: [], pipeline: [], plan: null };
   }
-  return { monate: results || [], pipeline: pipeline || [] };
+  return { monate: results || [], pipeline: pipeline || [], plan: plan?.werte || null };
 }
 
 export async function getKundenDetails(customerId: string) {
@@ -381,6 +390,56 @@ export async function refreshWarnungen() {
   if (error) {
     console.error("Error refreshWarnungen:", error.message, error.details, error.hint);
     return false;
+  }
+  return true;
+}
+
+export async function getAktiverJahresplan(jahr: number) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('forecast_version')
+    .select('*')
+    .eq('tenant_id', 'galvanik-kreile')
+    .eq('jahr', jahr)
+    .eq('version_typ', 'plan')
+    .eq('ist_aktiv', true)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error getAktiverJahresplan:", error);
+    return null;
+  }
+  return data;
+}
+
+export async function speichereJahresplan(jahr: number, monate: Record<string, number>) {
+  const supabase = await createClient();
+  
+  await supabase
+    .from('forecast_version')
+    .update({ ist_aktiv: false })
+    .eq('tenant_id', 'galvanik-kreile')
+    .eq('jahr', jahr)
+    .eq('version_typ', 'plan')
+    .eq('ist_aktiv', true);
+    
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+
+  const { error } = await supabase
+    .from('forecast_version')
+    .insert({
+      tenant_id: 'galvanik-kreile',
+      jahr,
+      version_typ: 'plan',
+      ist_aktiv: true,
+      erstellt_von: userId,
+      werte: { monate }
+    });
+
+  if (error) {
+    console.error("Error speichereJahresplan:", error);
+    throw new Error(error.message);
   }
   return true;
 }

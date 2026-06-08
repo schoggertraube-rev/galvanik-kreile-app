@@ -8,7 +8,7 @@ import Link from "next/link";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 
 export function ForecastKachel() {
-  const [data, setData] = useState<{ monate: any[], pipeline: any[] } | null>(null);
+  const [data, setData] = useState<{ monate: any[], pipeline: any[], plan?: Record<string, number> | null } | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -32,12 +32,14 @@ export function ForecastKachel() {
   // Pipeline months start from current month and go forward
   const chartData = [...(data?.monate || [])].map(m => {
     const monatDate = new Date(m.monat);
+    const monatIdx = monatDate.getMonth() + 1;
     return {
       monat: monatDate.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' }),
       umsatz: m.umsatz,
       istWert: true,
       pipelineGewichtet: 0,
-      pipelineUngewichtet: 0
+      pipelineUngewichtet: 0,
+      plan: data?.plan ? (data.plan[String(monatIdx)] || 0) : 0
     };
   });
 
@@ -49,13 +51,15 @@ export function ForecastKachel() {
     if (existing) {
       existing.pipelineGewichtet += p.pipeline_wert_gewichtet;
       existing.pipelineUngewichtet += p.pipeline_wert_ungewichtet;
+      existing.plan = data?.plan ? (data.plan[String(pDate.getMonth() + 1)] || 0) : 0;
     } else {
       chartData.push({
         monat: mStr,
         umsatz: 0,
         istWert: false,
         pipelineGewichtet: p.pipeline_wert_gewichtet,
-        pipelineUngewichtet: p.pipeline_wert_ungewichtet
+        pipelineUngewichtet: p.pipeline_wert_ungewichtet,
+        plan: data?.plan ? (data.plan[String(pDate.getMonth() + 1)] || 0) : 0
       });
     }
   });
@@ -112,8 +116,14 @@ export function ForecastKachel() {
                 <Legend wrapperStyle={{ fontSize: '12px' }} />
                 <Bar dataKey="umsatz" name="Umsatz (Ist)" fill="#1E3A8A" radius={[4, 4, 0, 0]} maxBarSize={40} />
                 <Bar dataKey="pipelineGewichtet" name="Pipeline (Gewichtet)" fill="#F59E0B" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                <Line type="monotone" dataKey="plan" name="Jahresplan" stroke="#3B82F6" strokeWidth={2} strokeDasharray="5 5" dot={false} />
               </ComposedChart>
             </ResponsiveContainer>
+            {!data?.plan && (
+              <div className="text-center mt-2 text-xs text-text-muted">
+                Kein Jahresplan hinterlegt — <Link href="/cockpit/jahresplan" className="text-navy-600 font-bold hover:underline">Jahresplan anlegen</Link>
+              </div>
+            )}
           </div>
         )}
       </div>
