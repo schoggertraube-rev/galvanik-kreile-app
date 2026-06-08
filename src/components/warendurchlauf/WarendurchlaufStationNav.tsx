@@ -87,31 +87,31 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
             <React.Fragment key={station.id}>
               <Link
                 href={station.path}
-                className={`group flex flex-col items-center gap-3 cursor-pointer transition-all shrink-0 px-2 py-2 rounded-2xl ${
-                  isActive ? "opacity-100" : "opacity-80 hover:opacity-100"
+                className={`group flex flex-col items-center gap-3 cursor-pointer transition-all shrink-0 px-2 py-2 rounded-2xl relative ${
+                  isActive ? "opacity-100 z-20" : "opacity-80 hover:opacity-100 z-10"
                 } hover:-translate-y-1`}
               >
                 {/* Circle with image */}
                 <div
-                  className={`rounded-full overflow-hidden flex items-center justify-center transition-transform duration-300 bg-white ${
+                  className={`rounded-full overflow-hidden flex items-center justify-center transition-all duration-300 bg-white shadow-sm ${
                     compact 
-                      ? "w-16 h-16" 
-                      : "w-24 h-24 md:w-[120px] md:h-[120px] lg:w-[140px] lg:h-[140px]"
-                  }`}
+                      ? "w-[76px] h-[76px]" 
+                      : "w-[115px] h-[115px] md:w-[144px] md:h-[144px] lg:w-[168px] lg:h-[168px]"
+                  } ${isActive ? "relative -mt-6 md:-mt-10 lg:-mt-12 ring-4 ring-bg-app ring-opacity-50" : ""}`}
                   style={{
                     border: isActive
                       ? "4px solid #1a6b38"
                       : "4px solid transparent",
-                    transform: isActive ? "scale(1.15)" : "scale(0.95)",
+                    transform: isActive ? "scale(1.05)" : "scale(0.95)",
                     transformOrigin: "center bottom",
                   }}
                 >
                   <Image
                     src={getStationIcon(station.id, timeOfDay, weather, volume)}
                     alt={station.alt}
-                    width={130}
-                    height={130}
-                    className="object-cover"
+                    width={180}
+                    height={180}
+                    className="object-cover w-full h-full"
                   />
                 </div>
 

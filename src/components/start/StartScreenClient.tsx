@@ -7,6 +7,7 @@ import { Delete, Clock, Wrench, Calculator, Sun, CloudRain, Cloud, ShieldAlert }
 import { getGreeting } from "@/lib/greeting";
 import { EmailLoginDialog } from "@/components/start/EmailLoginDialog";
 import { useSearchParams } from "next/navigation";
+import { getTodayTopPriority, getFeierabendEvents, notifyAdminPinReset } from "@/app/actions/start.actions";
 
 export type StartUser = {
   id: string;
@@ -21,6 +22,7 @@ function WeatherCard() {
   const [weatherText, setWeatherText] = useState("");
   const [temperature, setTemperature] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [eventText, setEventText] = useState<string | null>(null);
   const timeStr = new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 
   useEffect(() => {
@@ -43,6 +45,19 @@ function WeatherCard() {
           condition = "Es schneit über Mainhattan! Perfekt eingepackt geht es ans Werk. ❄️";
         } else if (temp < 12) {
           condition = "Etwas frisch heute – die Galvanikbäder wärmen uns auf! ☕";
+        }
+        
+        // Fetch event if after 15:00
+        const hour = new Date().getHours();
+        if (hour >= 15) {
+          try {
+            const evRes = await getFeierabendEvents();
+            if (evRes?.success && evRes.event) {
+              setEventText(`Event-Tipp: ${evRes.event} 🎉`);
+            }
+          } catch (e) {
+            console.error(e);
+          }
         }
         
         // Simulating the 600ms skeleton requirement
@@ -82,6 +97,11 @@ function WeatherCard() {
         </div>
         <div className="text-sm leading-relaxed text-navy-900 font-medium">
           Heute: <strong>{temperature !== null ? `${temperature}°C` : "20°C"}</strong> und noch {weatherText}
+          {eventText && (
+            <div className="mt-2 text-xs text-accent-orange font-bold flex items-center gap-1">
+              {eventText}
+            </div>
+          )}
         </div>
       </div>
       <div className="flex justify-end items-center gap-1.5 mt-3">
@@ -212,7 +232,18 @@ function PinDialog({ user, onClose }: { user: StartUser; onClose: () => void }) 
             />
           ))}
         </div>
-        {error && <p className="text-center text-danger-red text-xs font-semibold -mt-4 mb-3">Falscher PIN (Versuche 1234)</p>}
+        {error && (
+          <p className="text-center text-danger-red text-xs font-semibold -mt-4 mb-3">
+            Falscher PIN. <button onClick={async () => {
+              const res = await notifyAdminPinReset(user.id, user.fullName);
+              if (res.success) {
+                alert("Der Administrator wurde benachrichtigt und wird sich bei Ihnen melden.");
+              } else {
+                alert("Fehler beim Benachrichtigen des Administrators. Bitte sprechen Sie ihn direkt an.");
+              }
+            }} className="underline hover:text-danger-red/80">Administrator kontaktieren</button>
+          </p>
+        )}
 
         {/* Numpad */}
         <div className="grid grid-cols-3 gap-2 px-5 pb-5">
@@ -250,6 +281,9 @@ function StartScreenContent({ users }: { users: StartUser[] }) {
   const [selectedUser, setSelectedUser] = useState<StartUser | null>(null);
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [greetingInfo, setGreetingInfo] = useState({ text: "Guten Morgen, Meister!", emoji: "👋" });
+  const [priorityTask, setPriorityTask] = useState<string | null>(null);
+  const [deadlineTime, setDeadlineTime] = useState<string>("11:30");
+  const [isEvening, setIsEvening] = useState(false);
   
   const searchParams = useSearchParams();
   const errorMessage = searchParams?.get("message");
@@ -260,6 +294,27 @@ function StartScreenContent({ users }: { users: StartUser[] }) {
     };
     updateGreeting();
     const id = setInterval(updateGreeting, 60000);
+
+    // Fetch dynamic task priority
+    const fetchTask = async () => {
+      try {
+        const res = await getTodayTopPriority();
+        if (res && res.taskText) {
+          setPriorityTask(res.taskText);
+        }
+        // Calculate dynamic deadline (e.g. current hour + 2)
+        const d = new Date();
+        const currentHour = d.getHours();
+        const nextHour = currentHour + 2;
+        const formattedHour = Math.min(nextHour, 23).toString().padStart(2, "0");
+        setDeadlineTime(`${formattedHour}:00`);
+        setIsEvening(currentHour >= 16);
+      } catch (e) {
+        console.error("Failed to fetch priority task", e);
+      }
+    };
+    fetchTask();
+
     return () => clearInterval(id);
   }, []);
 
@@ -294,10 +349,10 @@ function StartScreenContent({ users }: { users: StartUser[] }) {
             </div>
             <div>
               <p className="font-bold text-navy-900 text-sm md:text-base leading-snug">
-                Zuerst steht an: <span className="font-extrabold text-navy-900">3 Teile in den Versand bringen.</span>
+                Zuerst steht an: <span className="font-extrabold text-navy-900">{priorityTask || "Lade Aufgaben..."}</span>
               </p>
               <p className="text-xs md:text-sm text-text-muted mt-1 leading-relaxed">
-                Wenn das bis <span className="text-accent-orange font-bold">11:30 Uhr</span> erledigt ist, bleibt der Nachmittag entspannt.
+                Wenn das bis <span className="text-accent-orange font-bold">{deadlineTime} Uhr</span> erledigt ist, {isEvening ? "starten wir morgen entspannt in den Tag." : "bleibt der Nachmittag entspannt."}
               </p>
             </div>
           </div>
