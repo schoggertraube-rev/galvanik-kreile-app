@@ -152,7 +152,7 @@ function TabInvestition({ kontext }: { kontext: KontextDaten }) {
     setResult(res);
   };
 
-  const ksKeys = Object.keys(kontext.verfuegbare_stunden_je_ks);
+  const kostenstellenListe = kontext.kostenstellen_liste || [];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
@@ -166,11 +166,11 @@ function TabInvestition({ kontext }: { kontext: KontextDaten }) {
             value={kostenstelle} onChange={e => setKostenstelle(e.target.value)}
           >
             <option value="">Bitte wählen...</option>
-            {ksKeys.map(k => <option key={k} value={k}>{k}</option>)}
+            {kostenstellenListe.map((ks: any) => <option key={ks.kuerzel} value={ks.kuerzel}>{ks.kuerzel} — {ks.name}</option>)}
           </select>
           {kostenstelle && kontext.db_marge_je_ks[kostenstelle] === null && (
             <p className="text-xs text-danger-red mt-1 flex items-center gap-1">
-              <AlertCircle className="w-3 h-3" /> Datengrundlage für Station fehlt.
+              <AlertCircle className="w-3 h-3" /> Datengrundlage für Station reicht noch nicht (mind. 3 Aufträge nötig).
             </p>
           )}
         </div>
@@ -258,7 +258,7 @@ function TabMitarbeiter({ kontext }: { kontext: KontextDaten }) {
     setResult(res);
   };
 
-  const ksKeys = Object.keys(kontext.verfuegbare_stunden_je_ks);
+  const kostenstellenListe = kontext.kostenstellen_liste || [];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
@@ -272,7 +272,7 @@ function TabMitarbeiter({ kontext }: { kontext: KontextDaten }) {
             value={kostenstelle} onChange={e => setKostenstelle(e.target.value)}
           >
             <option value="">Bitte wählen...</option>
-            {ksKeys.map(k => <option key={k} value={k}>{k}</option>)}
+            {kostenstellenListe.map((ks: any) => <option key={ks.kuerzel} value={ks.kuerzel}>{ks.kuerzel} — {ks.name}</option>)}
           </select>
           {kostenstelle && kontext.db_marge_je_ks[kostenstelle] === null && (
             <p className="text-xs text-danger-red mt-1 flex items-center gap-1">
@@ -453,7 +453,7 @@ function TabNeukunde({ kontext }: { kontext: KontextDaten }) {
     setResult(res);
   };
 
-  const ksKeys = Object.keys(kontext.verfuegbare_stunden_je_ks);
+  const kostenstellenListe = kontext.kostenstellen_liste || [];
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -467,7 +467,7 @@ function TabNeukunde({ kontext }: { kontext: KontextDaten }) {
             value={kostenstelle} onChange={e => setKostenstelle(e.target.value)}
           >
             <option value="">Bitte wählen...</option>
-            {ksKeys.map(k => <option key={k} value={k}>{k}</option>)}
+            {kostenstellenListe.map((ks: any) => <option key={ks.kuerzel} value={ks.kuerzel}>{ks.kuerzel} — {ks.name}</option>)}
           </select>
           {kostenstelle && kontext.db_marge_je_ks[kostenstelle] === null && (
             <p className="text-xs text-danger-red mt-1 flex items-center gap-1">

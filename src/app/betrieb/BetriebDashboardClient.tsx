@@ -20,13 +20,22 @@ export function BetriebDashboardClient({ isAdminOrDev }: { isAdminOrDev: boolean
 
   const modules: ModuleConfig[] = [
     {
+      id: "kontrolle",
+      label: "Kontrolle",
+      description: "Produktion & Leitstand Übersicht",
+      icon: CheckSquare,
+      href: "/kontrolle",
+      hasAccess: true,
+      color: "text-blue-500",
+    },
+    {
       id: "cockpit",
       label: "Cockpit",
       description: "Wirtschaftliche Steuerung & What-If",
       icon: BarChart3,
       href: "/cockpit",
       hasAccess: isAdminOrDev,
-      color: "text-blue-500",
+      color: "text-blue-700",
     },
     {
       id: "kommunikation",

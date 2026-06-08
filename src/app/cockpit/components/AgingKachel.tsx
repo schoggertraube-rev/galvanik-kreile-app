@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TrendingUp, Loader2, ArrowRight, Bell, Phone, FileText } from "lucide-react";
-import { getAgingDaten, getAgingRechnungen } from "../actions";
+import { TrendingUp, Loader2, ArrowRight, Bell, Phone, FileText, X } from "lucide-react";
+import { getAgingDaten, getAgingRechnungen, savePhoneNote } from "../actions";
 import { sendeZahlungserinnerung, sendeMahnung } from "@/app/actions/mahnung.actions";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import Link from "next/link";
@@ -46,6 +46,11 @@ export function AgingKachel() {
   const [rechnungen, setRechnungen] = useState<any[]>([]);
   const [rechnungenLoading, setRechnungenLoading] = useState(false);
   const [actionStatus, setActionStatus] = useState<Record<string, 'idle'|'loading'|'done'>>({});
+  
+  const [phoneModalOpen, setPhoneModalOpen] = useState(false);
+  const [phoneNote, setPhoneNote] = useState("");
+  const [phoneSaving, setPhoneSaving] = useState(false);
+  const [phoneTargetRechnung, setPhoneTargetRechnung] = useState<any>(null);
 
   useEffect(() => {
     async function load() {
@@ -101,6 +106,32 @@ export function AgingKachel() {
     } catch (e) {
       alert("Fehler: " + (e as Error).message);
       setActionStatus(prev => ({ ...prev, [id]: 'idle' }));
+    }
+  };
+
+  const handlePhoneClick = (rechnung: any) => {
+    setPhoneTargetRechnung(rechnung);
+    setPhoneNote(`Zahlungserinnerung RE-${rechnung.rechnung_nummer}\n\n`);
+    setPhoneModalOpen(true);
+  };
+
+  const handleSavePhoneNote = async () => {
+    if (!phoneNote.trim()) return;
+    setPhoneSaving(true);
+    try {
+      await savePhoneNote({
+        customer_id: phoneTargetRechnung?.kunde_name, // fallback as we might not have customer_id directly here
+        caller_name: phoneTargetRechnung?.kunde_name,
+        raw_text: phoneNote,
+        category: "Buchhaltung",
+        urgency: "Normal"
+      });
+      setPhoneModalOpen(false);
+      setPhoneTargetRechnung(null);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setPhoneSaving(false);
     }
   };
 
@@ -226,9 +257,8 @@ export function AgingKachel() {
                         <Bell className="w-3 h-3" /> {actionStatus[r.invoice_id] === 'done' ? 'Kopiert!' : 'Zahlungserinnerung'}
                       </button>
                       <button 
-                        className="px-3 py-1.5 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-700 font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50"
-                        title="Demnächst verfügbar"
-                        disabled
+                        onClick={() => handlePhoneClick(r)}
+                        className="px-3 py-1.5 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-700 font-semibold rounded-md transition-colors text-xs flex items-center gap-1"
                       >
                         <Phone className="w-3 h-3" /> Anrufen
                       </button>
@@ -247,6 +277,56 @@ export function AgingKachel() {
           </div>
         )}
       </ResponsiveDetailDrawer>
+
+      {phoneModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="p-4 border-b border-neutral-gray-100 flex items-center justify-between">
+              <h3 className="font-bold text-navy-900">Telefonnotiz erfassen</h3>
+              <button onClick={() => setPhoneModalOpen(false)} className="text-neutral-gray-400 hover:text-navy-900">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6">
+              <label className="block text-sm font-semibold text-navy-900 mb-2">
+                Gesprächspartner
+              </label>
+              <input 
+                type="text" 
+                value={phoneTargetRechnung?.kunde_name || ""} 
+                disabled 
+                className="w-full border border-neutral-gray-300 rounded-lg p-2 text-sm bg-neutral-gray-50 mb-4" 
+              />
+              
+              <label className="block text-sm font-semibold text-navy-900 mb-2">
+                Notiz
+              </label>
+              <textarea
+                value={phoneNote}
+                onChange={e => setPhoneNote(e.target.value)}
+                className="w-full border border-neutral-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-navy-500 outline-none h-32 resize-none"
+                placeholder="Gesprächsnotiz hier eingeben..."
+              />
+              
+              <div className="mt-6 flex gap-3">
+                <button 
+                  onClick={() => setPhoneModalOpen(false)}
+                  className="flex-1 py-2 font-semibold text-navy-600 bg-neutral-gray-50 hover:bg-neutral-gray-100 rounded-lg transition-colors"
+                >
+                  Abbrechen
+                </button>
+                <button 
+                  onClick={handleSavePhoneNote}
+                  disabled={phoneSaving || !phoneNote.trim()}
+                  className="flex-1 py-2 font-bold text-white bg-navy-600 hover:bg-navy-700 rounded-lg transition-colors disabled:opacity-50 flex justify-center items-center"
+                >
+                  {phoneSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : "Speichern"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -104,6 +104,11 @@ export function EngpassKachel() {
             </div>
           )}
         </div>
+        <div className="p-4 border-t border-neutral-gray-100 bg-neutral-gray-50 rounded-b-2xl">
+          <Link href="/einstellungen" className="text-xs font-semibold text-navy-600 hover:text-navy-800 flex items-center justify-center gap-1">
+            Stunden pro Station anpassen <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
       </div>
 
       <ResponsiveDetailDrawer
@@ -178,13 +183,12 @@ export function EngpassKachel() {
                 >
                   <Beaker className="w-4 h-4" /> Mitarbeiter-Szenario prüfen
                 </button>
-                <button 
-                  className="px-4 py-2 bg-white border border-neutral-gray-300 hover:bg-neutral-gray-50 text-navy-700 font-semibold rounded-lg transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50"
-                  disabled
-                  title="Demnächst verfügbar: Produktionsboard"
+                <Link 
+                  href={`/orders?station=${selectedStation.kuerzel}`}
+                  className="px-4 py-2 bg-white border border-neutral-gray-300 hover:bg-neutral-gray-50 text-navy-700 font-semibold rounded-lg transition-colors text-sm flex items-center justify-center gap-2"
                 >
-                  <GitPullRequest className="w-4 h-4" /> Aufträge umpriorisieren
-                </button>
+                  <GitPullRequest className="w-4 h-4" /> Aufträge an dieser Station: {details?.waitingOrders?.length || 0} anzeigen
+                </Link>
               </div>
             </div>
           </div>

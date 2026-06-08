@@ -213,12 +213,9 @@ function WarnungCard({ warnung, onDismiss }: { warnung: any, onDismiss: () => vo
         )}
         {warnung.typ === 'abwanderung' && (
           <>
-            <button disabled title="Demnächst verfügbar" className="text-xs font-semibold text-navy-600 flex items-center gap-1 bg-white px-3 py-1.5 rounded-md border border-neutral-gray-200 shadow-sm disabled:opacity-50">
-              Kunden anzeigen
-            </button>
-            <button disabled title="Demnächst verfügbar" className="text-xs font-semibold text-navy-600 flex items-center gap-1 bg-white px-3 py-1.5 rounded-md border border-neutral-gray-200 shadow-sm disabled:opacity-50">
-              Reaktivierungsmail
-            </button>
+            <Link href="/customers" className="text-xs font-semibold text-navy-600 hover:underline flex items-center gap-1 bg-white px-3 py-1.5 rounded-md border border-neutral-gray-200 shadow-sm">
+              Kunden anzeigen <ArrowRight className="w-3 h-3" />
+            </Link>
           </>
         )}
         {warnung.typ.startsWith('db_negativ') && warnung.link && (

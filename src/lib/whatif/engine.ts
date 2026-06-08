@@ -7,6 +7,7 @@ export type KontextDaten = {
   umsatz_12m_je_kundengruppe: Record<string, number>;
   db_marge_gesamt: number;
   top_kunden_je_gruppe: Record<string, { name: string; umsatz: number }[]>;
+  kostenstellen_liste?: { kuerzel: string, name: string }[];
 };
 
 // --- INVESTITION ---

@@ -187,9 +187,8 @@ export function DbRankingKachel() {
                 <FileText className="w-4 h-4" /> Auftrag öffnen
               </button>
               <button 
-                className="flex-1 py-2 font-semibold text-navy-600 bg-neutral-gray-50 hover:bg-neutral-gray-100 border border-neutral-gray-200 shadow-sm rounded-lg transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                disabled
-                title="Demnächst verfügbar: CRM"
+                onClick={() => router.push(`/customers/${details.customer_id}`)}
+                className="flex-1 py-2 font-semibold text-navy-600 bg-neutral-gray-50 hover:bg-neutral-gray-100 border border-neutral-gray-200 shadow-sm rounded-lg transition-colors flex items-center justify-center gap-2"
               >
                 <User className="w-4 h-4" /> Kunde anzeigen
               </button>

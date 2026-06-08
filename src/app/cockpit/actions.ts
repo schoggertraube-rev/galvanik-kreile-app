@@ -31,12 +31,30 @@ export async function getCockpitKpis() {
   const db = monatsergebnis?.ergebnis || 0;
   const dbMarge = umsatz > 0 ? (db / umsatz) : 0;
   
-  // Liquidität (mock logic or simple heuristic)
+  // Liquidität
   let liquiditaet = 'Stabil';
   if (offeneForderungen > (umsatz * 0.5)) {
     liquiditaet = 'Kritisch';
   } else if (offeneForderungen > (umsatz * 0.2)) {
     liquiditaet = 'Warnung';
+  }
+
+  const now = new Date();
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+  const { data: zeiten } = await supabase
+    .from('arbeitszeit_buchung')
+    .select('kostenstelle_kuerzel, dauer_minuten, kostensatz_eur_pro_stunde')
+    .eq('tenant_id', 'galvanik-kreile')
+    .gte('start_zeit', firstDay);
+
+  const umsatzNachStation: Record<string, number> = {};
+  if (zeiten) {
+    for (const z of zeiten) {
+      if (z.kostenstelle_kuerzel) {
+        if (!umsatzNachStation[z.kostenstelle_kuerzel]) umsatzNachStation[z.kostenstelle_kuerzel] = 0;
+        umsatzNachStation[z.kostenstelle_kuerzel] += ((z.dauer_minuten || 0) / 60.0) * (z.kostensatz_eur_pro_stunde || 0);
+      }
+    }
   }
 
   return { 
@@ -45,7 +63,8 @@ export async function getCockpitKpis() {
     dbMarge, 
     offeneForderungen, 
     ueberfaelligCount,
-    liquiditaet 
+    liquiditaet,
+    umsatzNachStation
   };
 }
 
@@ -161,14 +180,16 @@ export async function getWhatIfKontext() {
     verfuegbare_stunden_je_ks: {},
     umsatz_12m_je_kundengruppe: {},
     db_marge_gesamt: 0,
-    top_kunden_je_gruppe: {}
+    top_kunden_je_gruppe: {},
+    kostenstellen_liste: []
   };
 
-  const { data: kostenstellen } = await supabase.from('kostenstelle').select('kuerzel, verfuegbare_stunden_monatlich');
+  const { data: kostenstellen } = await supabase.from('kostenstelle').select('kuerzel, name, verfuegbare_stunden_monatlich').eq('typ', 'produktion');
   if (kostenstellen) {
+    kontext.kostenstellen_liste = kostenstellen.map(ks => ({ kuerzel: ks.kuerzel, name: ks.name }));
     kostenstellen.forEach(ks => {
       if (ks.kuerzel) {
-        kontext.verfuegbare_stunden_je_ks[ks.kuerzel] = ks.verfuegbare_stunden_monatlich || 160;
+        kontext.verfuegbare_stunden_je_ks[ks.kuerzel] = ks.verfuegbare_stunden_monatlich;
       }
     });
   }
@@ -442,4 +463,18 @@ export async function speichereJahresplan(jahr: number, monate: Record<string, n
     throw new Error(error.message);
   }
   return true;
+}
+
+export async function savePhoneNote(data: { customer_id?: string, caller_name?: string, raw_text: string, category: string, urgency: string }) {
+  const supabase = await createClient();
+  const { error } = await supabase.from('phone_notes').insert({
+    tenant_id: 'galvanik-kreile',
+    customer_id: data.customer_id || null,
+    caller_name: data.caller_name || '',
+    raw_text: data.raw_text,
+    category: data.category,
+    urgency: data.urgency,
+    status: 'open'
+  });
+  if (error) throw error;
 }

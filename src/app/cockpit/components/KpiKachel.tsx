@@ -11,7 +11,7 @@ import { ArrowRight } from "lucide-react";
 export function KpiKachel() {
   const [data, setData] = useState<{
     umsatz: number; db: number; dbMarge: number; offeneForderungen: number;
-    ueberfaelligCount: number; liquiditaet: string;
+    ueberfaelligCount: number; liquiditaet: string; umsatzNachStation?: Record<string, number>;
   } | null>(null);
 
   const [umsatzDrawerOpen, setUmsatzDrawerOpen] = useState(false);
@@ -126,17 +126,22 @@ export function KpiKachel() {
           <div>
             <h4 className="font-bold text-navy-900 mb-3 border-b border-neutral-gray-100 pb-2">Umsatz nach Station</h4>
             <div className="flex flex-col gap-2">
-              <div className="flex justify-between text-sm"><span className="text-navy-700">Politur (POL)</span><span className="font-semibold">€ {(data.umsatz * 0.45).toLocaleString('de-DE', {maximumFractionDigits:0})}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-navy-700">Galvanik (GAL)</span><span className="font-semibold">€ {(data.umsatz * 0.30).toLocaleString('de-DE', {maximumFractionDigits:0})}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-navy-700">Schleiferei (SCH)</span><span className="font-semibold">€ {(data.umsatz * 0.25).toLocaleString('de-DE', {maximumFractionDigits:0})}</span></div>
+              {data.umsatzNachStation && Object.keys(data.umsatzNachStation).length > 0 ? (
+                Object.entries(data.umsatzNachStation).map(([ks, wert]) => (
+                  <div key={ks} className="flex justify-between text-sm">
+                    <span className="text-navy-700">{ks}</span>
+                    <span className="font-semibold">€ {(wert as number).toLocaleString('de-DE', {maximumFractionDigits:0})}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="text-sm text-neutral-gray-500">Noch keine Zeitbuchungen im laufenden Monat</div>
+              )}
             </div>
           </div>
 
           <div>
-            <h4 className="font-bold text-navy-900 mb-3 border-b border-neutral-gray-100 pb-2">Top 5 Kunden (Monat)</h4>
             <div className="flex flex-col gap-2">
-              <div className="flex justify-between text-sm"><span className="text-navy-700">Museum Lenzburg</span><span className="font-semibold">€ {(data.umsatz * 0.35).toLocaleString('de-DE', {maximumFractionDigits:0})}</span></div>
-              <div className="flex justify-between text-sm"><span className="text-navy-700">Klassik-Atelier AG</span><span className="font-semibold">€ {(data.umsatz * 0.20).toLocaleString('de-DE', {maximumFractionDigits:0})}</span></div>
+              <div className="text-sm text-neutral-gray-500">Keine Kundenzuordnung für den aktuellen Monat vorhanden.</div>
             </div>
           </div>
 
