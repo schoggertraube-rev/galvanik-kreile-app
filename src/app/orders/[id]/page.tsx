@@ -8,6 +8,7 @@ import { OrderTimeline } from "@/components/orders/OrderTimeline";
 import { OrderProfitabilityCard } from "@/components/orders/OrderProfitabilityCard";
 import { StationCompletionModal } from "@/components/orders/StationCompletionModal";
 import { LabelPrintView } from "@/components/orders/LabelPrintView";
+import { ErfassungCard } from "@/components/erfassung/ErfassungCard";
 import { timelineRepository, TimelineEntry } from "@/lib/repositories/timelineRepository";
 import { ordersRepository, Order } from "@/lib/repositories/ordersRepository";
 import { Clock, Box, PhoneCall, CheckCircle2, AlertTriangle } from "lucide-react";
@@ -134,6 +135,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               ))}
             </div>
           </div>
+          
+          <ErfassungCard orderId={order.id} />
           
           <OrderProfitabilityCard order={order} />
         </div>
