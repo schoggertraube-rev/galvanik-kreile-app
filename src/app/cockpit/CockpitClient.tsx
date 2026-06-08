@@ -5,6 +5,8 @@ import { KpiKachel } from "./components/KpiKachel";
 import { PlaceholderKachel } from "./components/PlaceholderKachel";
 import { TopKundenKachel } from "./components/TopKundenKachel";
 import { EngpassKachel } from "./components/EngpassKachel";
+import { AgingKachel } from "./components/AgingKachel";
+import { DbRankingKachel } from "./components/DbRankingKachel";
 
 export function CockpitClient() {
   return (
@@ -27,8 +29,8 @@ export function CockpitClient() {
 
       {/* Reihe 3: Forderungen-Aging | Auftrags-DB-Ranking */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <PlaceholderKachel title="Forderungen-Aging (Recharts)" icon={<TrendingUp className="w-5 h-5 text-navy-500" />} height="h-[350px]" />
-        <PlaceholderKachel title="Auftrags-DB-Ranking (Table)" icon={<Target className="w-5 h-5 text-navy-500" />} height="h-[350px]" />
+        <AgingKachel />
+        <DbRankingKachel />
       </div>
 
       {/* Reihe 4: Frühwarnungen | What-If-Studio */}

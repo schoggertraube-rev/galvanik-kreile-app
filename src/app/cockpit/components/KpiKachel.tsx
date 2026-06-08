@@ -1,9 +1,31 @@
 "use client";
 
-import { Wallet, TrendingUp, AlertTriangle, Scale, Percent } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Wallet, TrendingUp, AlertTriangle, Scale, Percent, Loader2 } from "lucide-react";
 import { DatenherkunftZeile } from "@/components/analytics/DatenherkunftZeile";
+import { getCockpitKpis } from "../actions";
 
 export function KpiKachel() {
+  const [data, setData] = useState<{
+    umsatz: number; db: number; dbMarge: number; offeneForderungen: number;
+    ueberfaelligCount: number; liquiditaet: string;
+  } | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      const res = await getCockpitKpis();
+      setData(res);
+    }
+    load();
+  }, []);
+
+  if (!data) {
+    return (
+      <div className="bg-white rounded-2xl border border-neutral-gray-200 shadow-sm flex items-center justify-center p-12">
+        <Loader2 className="w-8 h-8 animate-spin text-navy-500" />
+      </div>
+    );
+  }
   return (
     <div className="bg-white rounded-2xl border border-neutral-gray-200 shadow-sm overflow-hidden">
       
@@ -12,32 +34,32 @@ export function KpiKachel() {
         
         <KpiItem 
           title="Monatsumsatz" 
-          value="€ 124.500" 
-          subtext="+5.2% ggü. Vormonat" 
+          value={`€ ${data.umsatz.toLocaleString('de-DE', { maximumFractionDigits: 0 })}`} 
+          subtext="Aktueller Monat" 
           icon={<Wallet className="w-5 h-5 text-accent-orange" />} 
         />
         <KpiItem 
           title="Monats-DB" 
-          value="€ 68.200" 
+          value={`€ ${data.db.toLocaleString('de-DE', { maximumFractionDigits: 0 })}`} 
           subtext="Rohertrag" 
           icon={<Scale className="w-5 h-5 text-navy-500" />} 
         />
         <KpiItem 
           title="DB-Marge" 
-          value="54.8 %" 
+          value={`${(data.dbMarge * 100).toFixed(1)} %`} 
           subtext="Ziel: 55%" 
           icon={<Percent className="w-5 h-5 text-navy-500" />} 
         />
         <KpiItem 
           title="Offene Ford." 
-          value="€ 42.100" 
-          subtext="12 überfällig" 
+          value={`€ ${data.offeneForderungen.toLocaleString('de-DE', { maximumFractionDigits: 0 })}`} 
+          subtext={`${data.ueberfaelligCount} überfällig`} 
           icon={<AlertTriangle className="w-5 h-5 text-amber-500" />} 
         />
         <KpiItem 
           title="Liquidität" 
-          value="Stabil" 
-          subtext="Reichweite: 45 Tage" 
+          value={data.liquiditaet} 
+          subtext="Basierend auf Ford." 
           icon={<TrendingUp className="w-5 h-5 text-emerald-500" />} 
         />
       </div>
