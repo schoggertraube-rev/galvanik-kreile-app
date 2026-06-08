@@ -59,3 +59,11 @@ export const kostensatzDefault = pgTable("kostensatz_default", {
   giltAb: date("gilt_ab").notNull(),
   bemerkung: text("bemerkung"),
 });
+
+export const teileKlassifikator = pgTable("teile_klassifikator", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  klasse: text("klasse").notNull(),
+  keywords: text("keywords").array().notNull(),
+  beispielOberflaechen: text("beispiel_oberflaechen").array(),
+});
