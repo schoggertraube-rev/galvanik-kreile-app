@@ -232,6 +232,8 @@ export async function getWhatIfKontext() {
     
     Object.keys(kontext.top_kunden_je_gruppe).forEach(g => {
       kontext.top_kunden_je_gruppe[g].sort((a: any, b: any) => b.umsatz - a.umsatz);
+    });
+  }
   return kontext;
 }
 
