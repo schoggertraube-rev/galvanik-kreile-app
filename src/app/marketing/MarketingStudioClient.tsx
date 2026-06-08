@@ -59,6 +59,7 @@ export default function MarketingStudioClient({
   const [showToast, setShowToast] = useState(false);
   const [funnelKey, setFunnelKey] = useState(0);
   const [analysisOpen, setAnalysisOpen] = useState<string | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [analysisDataMap, setAnalysisDataMap] = useState<Record<string, any>>({});
   const [igConnected, setIgConnected] = useState(false);
 
@@ -90,6 +91,7 @@ export default function MarketingStudioClient({
         });
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisOpen]);
 
   useEffect(() => {
@@ -99,7 +101,7 @@ export default function MarketingStudioClient({
       const token = params.get('access_token');
       if (token) {
         localStorage.setItem('ig_access_token', token);
-        setIgConnected(true);
+        setTimeout(() => setIgConnected(true), 0);
       }
       window.history.replaceState(null, '', window.location.pathname);
     } else {
@@ -127,6 +129,7 @@ export default function MarketingStudioClient({
 
   const handlePost = useCallback(async () => {
     if (!besteAktion) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await instagramAdapter.publish(besteAktion as any);
     setToastMsg(res.message);
     setShowToast(true);
@@ -148,7 +151,7 @@ export default function MarketingStudioClient({
     if (tab === "Reichweite") setFunnelKey(k => k + 1);
   }, []);
 
-  const handleEntryClick = useCallback((tab: any) => {
+  const handleEntryClick = useCallback((tab: "Reichweite" | "Kunden" | "Studio" | "Ideen" | "Kampagnen" | "Wirkung") => {
     handleTabChange(tab);
   }, [handleTabChange]);
 
@@ -168,6 +171,7 @@ export default function MarketingStudioClient({
     setBesteAktion(p => p ? { ...p, titel: v.titel, caption: v.caption, hashtags: v.hashtags } : p);
   }, [besteAktion, varianteIdx]);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getAnalysisProps = (key: string | null): any => {
     // Keep it minimal for now, logic preserved from original
     if (!key) return {};
@@ -191,7 +195,7 @@ export default function MarketingStudioClient({
         trend: { title: "Anfragen im Zeitverlauf", chartType: "bar", chartData: data.chartData },
         composition: {
           title: "Top Marketing-Kanäle",
-          rows: data.topKategorien.map((k: any) => ({
+          rows: data.topKategorien.map((k: { name: string; amount: string | number }) => ({
             avatar: k.name.substring(0, 2).toUpperCase(), avatarColor: "#E1306C",
             name: k.name, meta: "Zugewiesene Anfragen", amount: `${k.amount}`
           })),
@@ -205,7 +209,7 @@ export default function MarketingStudioClient({
         insight: {
           body: data.insights.beobachtungen.map((b: string) => `<b>Beobachtung:</b> ${b}`).join('<br/>') + 
                 (data.insights.vermutungen.length > 0 ? '<br/><br/>' + data.insights.vermutungen.map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
-          actions: data.insights.vorschlaege.map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
+          actions: data.insights.vorschlaege.map((v: { label: string; href: string }) => ({ label: v.label, onClick: () => window.location.href = v.href }))
         },
         linkedAreas: [
           { label: "Telefonnotiz & CRM", href: "/kunden" },
@@ -331,13 +335,6 @@ export default function MarketingStudioClient({
         <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Marketing',href:'/marketing'}]} />
         <BackButton label="Home" href="/" />
       </div>
-      
-      <div className="mk-crumb">
-        Home
-        <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
-        Marketing
-      </div>
-
       <div className="mk-header">
         <div className="mk-title">
           <div className="mk-logo mk-animated">
