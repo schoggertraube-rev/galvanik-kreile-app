@@ -56,6 +56,11 @@ export const beleg = pgTable("beleg", {
 
   storniertVon: uuid("storniert_von"), // self reference handled below if needed, here just uuid
   bankZahlungId: uuid("bank_zahlung_id"), // FK to zahlung added later in db if circular
+  kontoId: uuid("konto_id"),
+  kostenstelleId: uuid("kostenstelle_id"),
+  periodeId: uuid("periode_id"),
+  istAufAuftragZugeordnet: boolean("ist_auf_auftrag_zugeordnet").default(false),
+  zugeordneterOrderId: text("zugeordneter_order_id"),
   erstelltVon: uuid("erstellt_von").notNull(),
   erstelltAm: timestamp("erstellt_am").defaultNow().notNull(),
 });
@@ -98,6 +103,10 @@ export const ausgangsrechnung = pgTable("ausgangsrechnung", {
   erechnungXml: text("erechnung_xml"),
   leadId: uuid("lead_id"),
   bemerkung: text("bemerkung"),
+  periodeId: uuid("periode_id"),
+  erloesKontoId: uuid("erloes_konto_id"),
+  forderungKontoId: uuid("forderung_konto_id"),
+  agingStatus: text("aging_status"),
   isDemo: boolean("is_demo").default(false),
   erstelltAm: timestamp("erstellt_am").defaultNow().notNull(),
 });
