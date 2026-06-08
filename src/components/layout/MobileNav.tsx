@@ -13,7 +13,7 @@ interface MobileNavProps {
 
 export function MobileNav({ open, onClose }: MobileNavProps) {
   const pathname = usePathname();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, role } = usePermissions();
   
   // Submenu states
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
@@ -135,6 +135,11 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
 
         <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2 pb-24">
           {renderNavItem({ label: "Home", href: "/", icon: Home })}
+          
+          {["inhaber", "admin", "developer"].includes(role?.toLowerCase() || "") && (
+            renderNavItem({ label: "Cockpit", href: "/cockpit", icon: BarChart3 })
+          )}
+          
           {renderNavItem({ label: "Warendurchlauf", href: "/warendurchlauf", icon: PackageCheck })}
           
           {renderNavItem({

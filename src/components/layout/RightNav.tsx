@@ -38,7 +38,7 @@ function SubMenuLink({ label, href, isAvailable, expanded }: { label: string, hr
 
 export function RightNav() {
   const pathname = usePathname();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, role } = usePermissions();
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [isHovered, setIsHovered] = useState(false);
 
@@ -63,6 +63,12 @@ export function RightNav() {
       <div className="flex flex-col items-center w-full px-2 mt-2">
         <RightNavItem label="Home" href="/" icon={<Home className="w-5 h-5" strokeWidth={2} />} isActive={isActive("/")} isExpanded={isHovered} onClick={() => trackUiEvent("nav_click", { target: "/" })} />
       </div>
+
+      {["inhaber", "admin", "developer"].includes(role?.toLowerCase() || "") && (
+        <div className="flex flex-col items-center w-full px-2 mt-2">
+          <RightNavItem label="Cockpit" href="/cockpit" icon={<BarChart3 className="w-5 h-5" strokeWidth={2} />} isActive={isActive("/cockpit")} isExpanded={isHovered} onClick={() => trackUiEvent("nav_click", { target: "/cockpit" })} />
+        </div>
+      )}
 
       <div className="flex flex-col items-center w-full px-2 mt-2">
         <RightNavItem label="Warendurchlauf" href="/warendurchlauf" icon={<PackageCheck className="w-5 h-5" strokeWidth={2} />} isActive={isActive("/station") || isActive("/warendurchlauf")} isExpanded={isHovered} onClick={() => trackUiEvent("nav_click", { target: "/warendurchlauf" })} />

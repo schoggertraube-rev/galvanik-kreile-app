@@ -2,10 +2,12 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Home, PackageCheck, ClipboardList, Users, ShieldCheck, Factory, Archive } from "lucide-react";
+import { Home, PackageCheck, ClipboardList, Users, ShieldCheck, Factory, Archive, BarChart3 } from "lucide-react";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 export function TabletTopFlowNav({ className = "" }: { className?: string }) {
   const pathname = usePathname();
+  const { role } = usePermissions();
 
   const isActive = (path: string) =>
     path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
@@ -13,6 +15,9 @@ export function TabletTopFlowNav({ className = "" }: { className?: string }) {
   return (
     <nav className={`bg-white border-b border-neutral-gray-100 px-4 py-2 flex items-center gap-2 overflow-x-auto scrollbar-hide ${className}`}>
       <FlowTab href="/" icon={<Home className="w-5 h-5" />} label="Home" active={isActive("/")} />
+      {["inhaber", "admin", "developer"].includes(role?.toLowerCase() || "") && (
+        <FlowTab href="/cockpit" icon={<BarChart3 className="w-5 h-5" />} label="Cockpit" active={isActive("/cockpit")} />
+      )}
       
       {/* Warendurchlauf is prominent */}
       <FlowTab 
