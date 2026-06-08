@@ -3,7 +3,7 @@
 import { usePageView } from "@/hooks/usePageView";
 import { PageHeader } from "@/components/ui/PageHeader";
 import Link from "next/link";
-import { CheckSquare, MessageSquare, PhoneCall, Lightbulb, Droplet, Package, FileText, Lock } from "lucide-react";
+import { CheckSquare, MessageSquare, PhoneCall, Lightbulb, Droplet, Package, FileText, Lock, BarChart3 } from "lucide-react";
 
 interface ModuleConfig {
   id: string;
@@ -20,12 +20,12 @@ export function BetriebDashboardClient({ isAdminOrDev }: { isAdminOrDev: boolean
 
   const modules: ModuleConfig[] = [
     {
-      id: "kontrolle",
-      label: "Kontrolle",
-      description: "Produktion & Leitstand Übersicht",
-      icon: CheckSquare,
-      href: "/kontrolle",
-      hasAccess: true, // Assuming everyone gets here has basic access, or we can make it dynamic later
+      id: "cockpit",
+      label: "Cockpit",
+      description: "Wirtschaftliche Steuerung & What-If",
+      icon: BarChart3,
+      href: "/cockpit",
+      hasAccess: isAdminOrDev,
       color: "text-blue-500",
     },
     {

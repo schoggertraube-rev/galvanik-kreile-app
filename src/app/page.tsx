@@ -10,7 +10,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   UserPlus, FilePlus, Camera, AlertTriangle,
-  CheckCircle, Circle, Clock, AlertOctagon, Send, Activity, Info, Phone, RefreshCw, Sparkles
+  CheckCircle, Circle, Clock, AlertOctagon, Send, Activity, Info, Phone, RefreshCw, Sparkles, BarChart3
 } from "lucide-react";
 import { useAppShortcut, ShortcutType } from "@/components/ui/AppShortcutContext";
 import { useSync } from "@/lib/offline/SyncContext";
@@ -207,15 +207,22 @@ export default function HomeDashboard() {
 
         {/* ── GREETING ─────────────────────────────────── */}
         <div
-          className="mb-6"
+          className="mb-6 flex flex-col md:flex-row md:items-end justify-between gap-4"
           style={{ animation: 'hm-floatIn .5s ease both' }}
         >
           <h1 className="font-serif text-[31px] font-bold tracking-tight">
             {greeting}, Norbert.{' '}
-            <span className="font-sans text-[15px] font-medium text-text-muted tracking-normal">
+            <span className="font-sans text-[15px] font-medium text-text-muted tracking-normal block md:inline mt-1 md:mt-0">
               Dein Tag im Überblick — Gehirn aus, Checkliste an.
             </span>
           </h1>
+          
+          <Link 
+            href="/cockpit"
+            className="flex items-center gap-2 text-sm font-bold text-navy-700 bg-white hover:bg-navy-50 px-4 py-2.5 rounded-xl transition-colors border border-neutral-gray-200 shadow-sm shrink-0"
+          >
+            <BarChart3 className="w-4 h-4 text-accent-orange" /> Cockpit öffnen
+          </Link>
         </div>
 
         {/* ── OUTBOX WARNING ──────────────────────────── */}
