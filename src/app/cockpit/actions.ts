@@ -232,10 +232,84 @@ export async function getWhatIfKontext() {
     
     Object.keys(kontext.top_kunden_je_gruppe).forEach(g => {
       kontext.top_kunden_je_gruppe[g].sort((a: any, b: any) => b.umsatz - a.umsatz);
-    });
-  }
-
   return kontext;
+}
+
+export async function getEngpassDetails(station: string) {
+  const supabase = await createClient();
+  
+  const { data: waitingOrders } = await supabase.from('orders')
+    .select('id, order_number, intake_date, current_station')
+    .eq('current_station', station)
+    .not('status', 'in', '("completed","abgeschlossen","cancelled","storniert")')
+    .order('intake_date', { ascending: true })
+    .limit(10);
+    
+  return {
+    waitingOrders: waitingOrders || []
+  };
+}
+
+export async function getAuftragDbDetails(orderId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase.from('v_auftrag_db').select('*').eq('order_id', orderId).single();
+  return data;
+}
+
+export async function getKundenDetails(customerId: string) {
+  const supabase = await createClient();
+  
+  const { data: clv } = await supabase.from('v_kunde_clv').select('*').eq('customer_id', customerId).single();
+  
+  const { data: orders } = await supabase.from('orders')
+    .select('id, order_number, intake_date, due_date, status')
+    .eq('customer_id', customerId)
+    .order('intake_date', { ascending: false })
+    .limit(5);
+
+  const { data: auftraegeDb } = await supabase.from('v_auftrag_db')
+    .select('order_id, order_number, deckungsbeitrag, erloes_netto, intake_date')
+    .eq('customer_id', customerId);
+
+  let details = orders ? await Promise.all(orders.map(async o => {
+    const dbInfo = auftraegeDb?.find(x => x.order_id === o.id);
+    return {
+      ...o,
+      umsatz: dbInfo?.erloes_netto || 0,
+      db: dbInfo?.deckungsbeitrag || 0
+    };
+  })) : [];
+
+  return { clv, letzeAuftraege: details };
+}
+
+export async function getInaktiveKunden() {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from('v_kunde_clv')
+    .select('*')
+    .lt('letzter_auftrag', new Date(Date.now() - 9 * 30 * 24 * 60 * 60 * 1000).toISOString())
+    .gte('auftraege_gesamt', 3)
+    .order('umsatz_gesamt', { ascending: false });
+  if (error) {
+    console.error("Error getInaktiveKunden:", error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function getAgingRechnungen(bucket: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('v_aging')
+    .select('order_id, invoice_id, rechnung_nummer, kunde_name, netto, faellig_seit_tagen, faellig_am')
+    .eq('aging_bucket', bucket)
+    .order('faellig_seit_tagen', { ascending: false });
+
+  if (error) {
+    console.error("Error getAgingRechnungen:", error);
+    return [];
+  }
+  return data || [];
 }
 
 export async function getAktiveWarnungen() {

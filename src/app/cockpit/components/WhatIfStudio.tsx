@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { ChevronDown, ChevronUp, Beaker, Loader2, AlertCircle } from "lucide-react";
 import { getWhatIfKontext } from "../actions";
 import { berechneInvestition, berechneMitarbeiter, berechnePreis, berechneNeukunde, KontextDaten } from "@/lib/whatif/engine";
+import { KachelInfo } from "@/components/ui/KachelInfo";
 
 export function WhatIfStudio() {
   const [open, setOpen] = useState(false);
@@ -24,6 +25,7 @@ export function WhatIfStudio() {
   if (!open) {
     return (
       <div 
+        id="whatif-studio-btn"
         className="bg-navy-900 rounded-2xl shadow-sm p-4 flex items-center justify-between cursor-pointer hover:bg-navy-800 transition-colors"
         onClick={() => setOpen(true)}
       >
@@ -116,7 +118,14 @@ function TabInvestition({ kontext }: { kontext: KontextDaten }) {
   const ksKeys = Object.keys(kontext.verfuegbare_stunden_je_ks);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
+      <div className="absolute top-0 right-0 z-10 -mt-2 -mr-2">
+        <KachelInfo 
+          wasZeigtDieKachel="Prüfen Sie ob sich eine Anschaffung rechnet."
+          wasBedeutetDas="Die Berechnung nutzt Ihre echten Kosten- und Auslastungsdaten."
+          datenquelle="Berechnet aus Monats-DB und Station-Auslastung"
+        />
+      </div>
       <div className="flex flex-col gap-4">
         <h4 className="font-bold text-navy-900">Annahmen & Parameter</h4>
         
@@ -224,7 +233,14 @@ function TabMitarbeiter({ kontext }: { kontext: KontextDaten }) {
   const ksKeys = Object.keys(kontext.verfuegbare_stunden_je_ks);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
+      <div className="absolute top-0 right-0 z-10 -mt-2 -mr-2">
+        <KachelInfo 
+          wasZeigtDieKachel="Prüfen Sie ob sich eine Anschaffung rechnet."
+          wasBedeutetDas="Die Berechnung nutzt Ihre echten Kosten- und Auslastungsdaten."
+          datenquelle="Berechnet aus Monats-DB und Station-Auslastung"
+        />
+      </div>
       <div className="flex flex-col gap-4">
         <h4 className="font-bold text-navy-900">Annahmen & Parameter</h4>
         
@@ -320,7 +336,14 @@ function TabPreis({ kontext }: { kontext: KontextDaten }) {
   const umsatzIst0 = kontext.umsatz_12m_je_kundengruppe[gruppe] === 0 || !kontext.umsatz_12m_je_kundengruppe[gruppe];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative">
+      <div className="absolute top-0 right-0 z-10 -mt-2 -mr-2">
+        <KachelInfo 
+          wasZeigtDieKachel="Prüfen Sie ob sich eine Anschaffung rechnet."
+          wasBedeutetDas="Die Berechnung nutzt Ihre echten Kosten- und Auslastungsdaten."
+          datenquelle="Berechnet aus Monats-DB und Station-Auslastung"
+        />
+      </div>
       <div className="flex flex-col gap-4">
         <h4 className="font-bold text-navy-900">Annahmen & Parameter</h4>
         

@@ -5,6 +5,7 @@ import { AlertCircle, CheckCircle2, ArrowRight, Loader2, X } from "lucide-react"
 import { getAktiveWarnungen, refreshWarnungen, dismissWarnung } from "../actions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { KachelInfo } from "@/components/ui/KachelInfo";
 
 export function FruehwarnungenKachel() {
   const [warnungen, setWarnungen] = useState<any[]>([]);
@@ -68,8 +69,16 @@ export function FruehwarnungenKachel() {
 
   return (
     <>
-      <div className="bg-white rounded-2xl border border-neutral-gray-200 shadow-sm flex flex-col max-h-[500px]">
-        <div className="p-6 pb-4 flex items-center justify-between border-b border-neutral-gray-100">
+      <div className="bg-white rounded-2xl border border-neutral-gray-200 shadow-sm flex flex-col max-h-[500px] relative">
+        <div className="absolute top-4 right-4 z-10">
+          <KachelInfo 
+            wasZeigtDieKachel="Automatisch erkannte Risiken und Handlungsbedarf"
+            wasBedeutetDas="Gelb = beobachten. Rot = sofort handeln. Jede Warnung können Sie mit Begründung quittieren."
+            datenquelle="Berechnet aus Forderungen, Auslastung, Kundenaktivität und DB"
+          />
+        </div>
+
+        <div className="p-6 pb-4 flex items-center justify-between border-b border-neutral-gray-100 pr-14">
           <div className="flex items-center gap-3">
             <AlertCircle className="w-5 h-5 text-accent-orange" />
             <h3 className="font-bold text-navy-900 text-lg">Frühwarnungen (KI)</h3>
@@ -177,19 +186,53 @@ function WarnungCard({ warnung, onDismiss }: { warnung: any, onDismiss: () => vo
       </div>
       
       <p className="text-sm text-neutral-gray-700 ml-5">{warnung.beschreibung}</p>
+
+      <div className="ml-5 mt-1 bg-white/50 rounded p-2 text-xs font-medium text-navy-800">
+        💡 {warnung.typ === 'liquiditaet' && "Verschicken Sie Zahlungserinnerungen"}
+        {warnung.typ.startsWith('auslastung') && "Prüfen Sie ob Sie Personal brauchen"}
+        {warnung.typ === 'abwanderung' && "Kontaktieren Sie inaktive Kunden"}
+        {warnung.typ.startsWith('db_negativ') && "Prüfen Sie die Kostenursache"}
+      </div>
       
-      <div className="flex items-center gap-3 mt-2 ml-5">
-        {warnung.link && (
+      <div className="flex items-center gap-3 mt-2 ml-5 flex-wrap">
+        {warnung.typ === 'liquiditaet' && (
+          <button onClick={() => {
+            const el = document.getElementById("aging-kachel");
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }} className="text-xs font-semibold text-navy-600 hover:underline flex items-center gap-1 bg-white px-3 py-1.5 rounded-md border border-neutral-gray-200 shadow-sm">
+            Überfällige Rechnungen anzeigen <ArrowRight className="w-3 h-3" />
+          </button>
+        )}
+        {warnung.typ.startsWith('auslastung') && (
+          <button onClick={() => {
+            const el = document.getElementById("whatif-studio-btn");
+            if (el) el.click();
+          }} className="text-xs font-semibold text-navy-600 hover:underline flex items-center gap-1 bg-white px-3 py-1.5 rounded-md border border-neutral-gray-200 shadow-sm">
+            Mitarbeiter-Szenario öffnen <ArrowRight className="w-3 h-3" />
+          </button>
+        )}
+        {warnung.typ === 'abwanderung' && (
+          <>
+            <button disabled title="Demnächst verfügbar" className="text-xs font-semibold text-navy-600 flex items-center gap-1 bg-white px-3 py-1.5 rounded-md border border-neutral-gray-200 shadow-sm disabled:opacity-50">
+              Kunden anzeigen
+            </button>
+            <button disabled title="Demnächst verfügbar" className="text-xs font-semibold text-navy-600 flex items-center gap-1 bg-white px-3 py-1.5 rounded-md border border-neutral-gray-200 shadow-sm disabled:opacity-50">
+              Reaktivierungsmail
+            </button>
+          </>
+        )}
+        {warnung.typ.startsWith('db_negativ') && warnung.link && (
           <Link 
             href={warnung.link}
             className="text-xs font-semibold text-navy-600 hover:underline flex items-center gap-1 bg-white px-3 py-1.5 rounded-md border border-neutral-gray-200 shadow-sm"
           >
-            Details ansehen <ArrowRight className="w-3 h-3" />
+            Auftrag analysieren <ArrowRight className="w-3 h-3" />
           </Link>
         )}
+        
         <button 
           onClick={onDismiss}
-          className="text-xs font-semibold text-neutral-gray-600 hover:text-navy-900 transition-colors px-3 py-1.5"
+          className="text-xs font-semibold text-neutral-gray-600 hover:text-navy-900 transition-colors px-3 py-1.5 ml-auto"
         >
           Verstanden
         </button>

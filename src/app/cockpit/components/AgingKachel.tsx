@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TrendingUp, Loader2 } from "lucide-react";
-import { getAgingDaten } from "../actions";
+import { TrendingUp, Loader2, ArrowRight, Bell, Phone, FileText } from "lucide-react";
+import { getAgingDaten, getAgingRechnungen } from "../actions";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { KachelInfo } from "@/components/ui/KachelInfo";
+import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
 
 type AgingData = {
   aging_bucket: string;
@@ -38,7 +39,11 @@ const LABELS: Record<string, string> = {
 export function AgingKachel() {
   const [data, setData] = useState<AgingData[]>([]);
   const [loading, setLoading] = useState(true);
-  const router = useRouter();
+  
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
+  const [rechnungen, setRechnungen] = useState<any[]>([]);
+  const [rechnungenLoading, setRechnungenLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -50,6 +55,19 @@ export function AgingKachel() {
     }
     load();
   }, []);
+
+  const handleBarClick = async (dataPayload: any) => {
+    const bucket = dataPayload?.payload?.bucketId || dataPayload?.bucketId;
+    if (!bucket) return;
+    
+    setSelectedBucket(bucket);
+    setDrawerOpen(true);
+    setRechnungenLoading(true);
+    
+    const result = await getAgingRechnungen(bucket);
+    setRechnungen(result);
+    setRechnungenLoading(false);
+  };
 
   if (loading) {
     return (
@@ -70,48 +88,130 @@ export function AgingKachel() {
     value: r.summe,
     anzahl: r.anzahl
   }));
+  
+  const selectedBucketData = chartData.find(c => c.bucketId === selectedBucket);
 
   return (
-    <div className="bg-white rounded-2xl border border-neutral-gray-200 shadow-sm flex flex-col h-[350px]">
-      <div className="p-6 pb-2 flex items-center justify-between border-b border-neutral-gray-100">
-        <div className="flex items-center gap-3">
-          <TrendingUp className="w-5 h-5 text-navy-500" />
-          <h3 className="font-bold text-navy-900 text-lg">Forderungen-Aging</h3>
+    <>
+      <div className="bg-white rounded-2xl border border-neutral-gray-200 shadow-sm flex flex-col h-[350px] relative" id="aging-kachel">
+        <div className="absolute top-4 right-4 z-10">
+          <KachelInfo 
+            wasZeigtDieKachel="Offene Rechnungen gruppiert nach Überfälligkeitsdauer"
+            wasBedeutetDas="Posten über 30 Tage erfordern aktives Handeln. Über 60 Tage: Mahnverfahren einleiten."
+            datenquelle="Aus Ausgangsrechnungen mit Fälligkeitsdatum"
+          />
+        </div>
+        
+        <div className="p-6 pb-2 flex items-center justify-between border-b border-neutral-gray-100 pr-14">
+          <div className="flex items-center gap-3">
+            <TrendingUp className="w-5 h-5 text-navy-500" />
+            <h3 className="font-bold text-navy-900 text-lg">Forderungen-Aging</h3>
+          </div>
+        </div>
+        
+        <div className="flex-1 p-6 flex flex-col">
+          {totalSum === 0 ? (
+            <div className="flex-1 flex items-center justify-center text-neutral-gray-500 font-medium">
+              Keine offenen Forderungen
+            </div>
+          ) : (
+            <>
+              <div className="flex-1 min-h-0 w-full cursor-pointer">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
+                    <YAxis tickFormatter={(val) => `€${(val / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
+                    <Tooltip 
+                      formatter={(value: any, name: any, props: any) => [`€ ${Number(value).toLocaleString('de-DE')}`, `Summe (${props.payload.anzahl} Rechnungen)`]}
+                      cursor={{ fill: 'transparent' }}
+                    />
+                    <Bar dataKey="value" radius={[4, 4, 0, 0]} onClick={handleBarClick}>
+                      {chartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[entry.bucketId] || '#9E9E9E'} className="hover:opacity-80 transition-opacity" />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {ueber30Tage > 0 && (
+                <div className="mt-4 text-sm font-medium text-danger-red text-center">
+                  {ueber30Tage} Rechnung{ueber30Tage > 1 ? 'en' : ''} über 30 Tage überfällig
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
-      
-      <div className="flex-1 p-6 flex flex-col">
-        {totalSum === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-neutral-gray-500 font-medium">
-            Keine offenen Forderungen
+
+      <ResponsiveDetailDrawer
+        isOpen={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title={selectedBucketData ? `Überfällig ${selectedBucketData.name} (${selectedBucketData.anzahl} Rechnungen, € ${selectedBucketData.value.toLocaleString('de-DE', {maximumFractionDigits:0})})` : 'Rechnungen laden...'}
+      >
+        {rechnungenLoading ? (
+          <div className="flex h-40 items-center justify-center">
+            <Loader2 className="w-8 h-8 animate-spin text-navy-500" />
           </div>
         ) : (
-          <>
-            <div className="flex-1 min-h-0 w-full cursor-pointer">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
-                  <YAxis tickFormatter={(val) => `€${(val / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-                  <Tooltip 
-                    formatter={(value: any, name: any, props: any) => [`€ ${Number(value).toLocaleString('de-DE')}`, `Summe (${props.payload.anzahl} Rechnungen)`]}
-                    cursor={{ fill: 'transparent' }}
-                  />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]} onClick={(data: any) => router.push(`/buchhaltung/rechnungen?filter=${data?.payload?.bucketId || data?.bucketId}`)}>
-                    {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[entry.bucketId] || '#9E9E9E'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-            {ueber30Tage > 0 && (
-              <div className="mt-4 text-sm font-medium text-danger-red text-center">
-                {ueber30Tage} Rechnung{ueber30Tage > 1 ? 'en' : ''} über 30 Tage überfällig
+          <div className="space-y-4">
+            {rechnungen.length === 0 ? (
+              <p className="text-text-muted">Keine Rechnungen in diesem Bereich.</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {rechnungen.map((r) => (
+                  <div key={r.invoice_id} className="p-4 border border-neutral-gray-200 rounded-xl hover:border-navy-300 transition-colors">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-navy-900">{r.rechnung_nummer}</h4>
+                          <span className="text-navy-600 font-medium">{r.kunde_name}</span>
+                        </div>
+                        <div className="text-sm text-danger-red font-medium flex items-center gap-1 mt-1">
+                          Überfällig seit {r.faellig_seit_tagen} Tagen
+                        </div>
+                      </div>
+                      <div className="text-right flex flex-col items-end">
+                        <span className="font-bold text-lg">€ {r.netto?.toLocaleString('de-DE', {maximumFractionDigits:0}) || 0}</span>
+                        <Link href={`/buchhaltung/rechnungen`} className="text-xs text-navy-600 hover:underline flex items-center gap-1">
+                          Zur Rechnung <ArrowRight className="w-3 h-3" />
+                        </Link>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-neutral-gray-50 p-2 rounded-lg text-xs text-text-muted mb-3 flex items-center gap-2">
+                      <FileText className="w-3 h-3" /> Keine bisherige Kommunikation dokumentiert.
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-2">
+                      <button 
+                        className="px-3 py-1.5 bg-navy-600 hover:bg-navy-700 text-white font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50"
+                        title="Demnächst verfügbar: Kommunikationszentrale wird eingerichtet"
+                        disabled
+                      >
+                        <Bell className="w-3 h-3" /> Zahlungserinnerung senden
+                      </button>
+                      <button 
+                        className="px-3 py-1.5 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-700 font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50"
+                        title="Demnächst verfügbar"
+                        disabled
+                      >
+                        <Phone className="w-3 h-3" /> Anrufen
+                      </button>
+                      <button 
+                        className="px-3 py-1.5 bg-danger-red/10 hover:bg-danger-red/20 text-danger-red font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50"
+                        title="Demnächst verfügbar"
+                        disabled
+                      >
+                        <Bell className="w-3 h-3" /> Mahnung senden
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-          </>
+          </div>
         )}
-      </div>
-    </div>
+      </ResponsiveDetailDrawer>
+    </>
   );
 }
