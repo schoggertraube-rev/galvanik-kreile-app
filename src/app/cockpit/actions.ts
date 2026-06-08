@@ -256,6 +256,24 @@ export async function getAuftragDbDetails(orderId: string) {
   return data;
 }
 
+export async function getForecastDaten() {
+  const supabase = await createClient();
+  const { data: results, error } = await supabase.from('v_monatsergebnis')
+    .select('monat, umsatz, db, db_marge_prozent')
+    .order('monat', { ascending: true })
+    .limit(12);
+    
+  const { data: pipeline } = await supabase.from('v_pipeline_forecast')
+    .select('*')
+    .order('erwarteter_monat', { ascending: true });
+
+  if (error) {
+    console.error("Error getForecastDaten:", error);
+    return { monate: [], pipeline: [] };
+  }
+  return { monate: results || [], pipeline: pipeline || [] };
+}
+
 export async function getKundenDetails(customerId: string) {
   const supabase = await createClient();
   

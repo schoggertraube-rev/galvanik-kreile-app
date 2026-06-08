@@ -7,6 +7,7 @@ import { TopKundenKachel } from "./components/TopKundenKachel";
 import { EngpassKachel } from "./components/EngpassKachel";
 import { AgingKachel } from "./components/AgingKachel";
 import { DbRankingKachel } from "./components/DbRankingKachel";
+import { ForecastKachel } from "./components/ForecastKachel";
 import { WhatIfStudio } from "./components/WhatIfStudio";
 import { FruehwarnungenKachel } from "./components/FruehwarnungenKachel";
 
@@ -29,10 +30,11 @@ export function CockpitClient() {
         </div>
       </div>
 
-      {/* Reihe 3: Forderungen-Aging | Auftrags-DB-Ranking */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AgingKachel />
-        <DbRankingKachel />
+      {/* Reihe 3: Forderungen-Aging | Forecast | Auftrags-DB-Ranking */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1"><AgingKachel /></div>
+        <div className="lg:col-span-1"><ForecastKachel /></div>
+        <div className="lg:col-span-1"><DbRankingKachel /></div>
       </div>
 
       {/* Reihe 4: Frühwarnungen | What-If-Studio */}
