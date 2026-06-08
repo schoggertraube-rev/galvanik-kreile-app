@@ -807,10 +807,10 @@ export async function getL7Daten(filter: { belegart?: string, kategorieId?: stri
   for (const b of belege || []) {
     ustEffekt += Number(b.ust_betrag || 0);
     if (b.konto) {
-      kontenMap.set((b.konto as any).nummer, { id: (b.konto as any).nummer, label: \\ - \\ });
+      kontenMap.set((b.konto as any).nummer, { id: (b.konto as any).nummer, label: `${(b.konto as any).nummer} - ${(b.konto as any).bezeichnung}` });
     }
     if (b.kostenstelle) {
-      ksMap.set((b.kostenstelle as any).kuerzel, { id: (b.kostenstelle as any).kuerzel, label: \\ - \\ });
+      ksMap.set((b.kostenstelle as any).kuerzel, { id: (b.kostenstelle as any).kuerzel, label: `${(b.kostenstelle as any).kuerzel} - ${(b.kostenstelle as any).name}` });
     }
   }
 
@@ -823,19 +823,19 @@ export async function getL7Daten(filter: { belegart?: string, kategorieId?: stri
       affectedAccounts: [{ id: 'massenzuordnung', label: 'Noch keine Kontierung vorhanden (Link zur Massenzuordnung)' }],
       affectedCostCenters: [],
       periodImpact: 'Aktueller Monat (offen)',
-      liquidityImpact: filter?.belegart === 'ausgangsrechnung' ? 'verzögert ~30 Tage' : 'zahlungswirksam',
+      liquidityImpact: filter?.belegart === 'ausgangsrechnung' ? 'verzÃ¶gert ~30 Tage' : 'zahlungswirksam',
       taxImpactEur: ustEffekt
     };
   }
 
-  const liquiditaet = filter?.belegart === 'ausgangsrechnung' ? 'verzögert ~30 Tage' : 'zahlungswirksam';
+  const liquiditaet = filter?.belegart === 'ausgangsrechnung' ? 'verzÃ¶gert ~30 Tage' : 'zahlungswirksam';
   
   const { data: periodeData } = await supabase.from('v_periodenabschluss_status').select('periode, status').limit(1).maybeSingle();
 
   return {
     affectedAccounts: konten.length > 0 ? konten : [{ id: 'missing', label: 'Keine spezifischen Konten' }],
     affectedCostCenters: kostenstellen.length > 0 ? kostenstellen : [{ id: 'gesamt', label: 'Gesamtbetrieb' }],
-    periodImpact: periodeData ? \\ (\)\ : 'Aktueller Monat (offen)',
+    periodImpact: periodeData ? `${periodeData.periode} (${periodeData.status})` : 'Aktueller Monat (offen)',
     liquidityImpact: liquiditaet,
     taxImpactEur: ustEffekt
   };
