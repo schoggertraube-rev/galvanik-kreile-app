@@ -16,7 +16,6 @@ import { Button } from "@/components/ui/button";
 import { getStationConfig } from "@/constants/stations";
 import { AppBackButton } from "@/components/ui/AppBackButton";
 import { customersRepository, Customer } from "@/lib/repositories/customersRepository";
-import { Badge } from "@/components/ui/badge";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   usePageView();
@@ -146,7 +145,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white border-2 border-neutral-gray-200 rounded-3xl p-5 hover:border-navy-400 transition-colors shadow-sm">
               <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-2">Kontrolle</span>
-              {Math.random() > 0.5 ? (
+              {(parseInt(order.orderNumber.replace(/\\D/g, '') || "0") % 2 === 0) ? (
                 <div className="flex flex-col gap-1">
                   <span className="text-sm font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> QS Bestanden</span>
                   <Link href={`/kontrolle?order=${order.orderNumber}`} className="text-xs text-navy-600 font-bold hover:underline">Prüfprotokoll öffnen</Link>
@@ -173,7 +172,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               )}
             </div>
             
-            <div className="col-span-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-100 rounded-3xl p-5 shadow-sm">
+            <div className="col-span-2 bg-linear-to-r from-blue-50 to-indigo-50 border-2 border-blue-100 rounded-3xl p-5 shadow-sm">
               <div className="flex justify-between items-center">
                 <div>
                   <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider block mb-1">Marketing-Quelle</span>

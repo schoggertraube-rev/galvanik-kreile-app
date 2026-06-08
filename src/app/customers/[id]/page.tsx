@@ -8,11 +8,11 @@ import { CustomerProfileHeader } from "@/components/customers/CustomerProfileHea
 
 import { PriceAgreementPanel } from "@/components/customers/PriceAgreementPanel";
 import { OrderTimeline } from "@/components/orders/OrderTimeline";
-import { customersRepository, Customer } from "@/lib/repositories/customersRepository";
-import { priceAgreementsRepository, PriceAgreement } from "@/lib/repositories/priceAgreementsRepository";
-import { timelineRepository, TimelineEntry } from "@/lib/repositories/timelineRepository";
-import { ordersRepository, Order } from "@/lib/repositories/ordersRepository";
-import { complaintsRepository, Complaint } from "@/lib/repositories/complaintsRepository";
+import { Customer } from "@/lib/repositories/customersRepository";
+import { PriceAgreement } from "@/lib/repositories/priceAgreementsRepository";
+import { TimelineEntry } from "@/lib/repositories/timelineRepository";
+import { Order } from "@/lib/repositories/ordersRepository";
+import { Complaint } from "@/lib/repositories/complaintsRepository";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,6 @@ import {
   CheckCircle2, 
   Clock, 
   ChevronRight, 
-  ArrowLeft,
   History,
   PhoneCall,
   Mail,
@@ -31,7 +30,6 @@ import {
   TrendingUp,
   Tag
 } from "lucide-react";
-import { AppBackButton } from "@/components/ui/AppBackButton";
 import { useAppShortcut } from "@/components/ui/AppShortcutContext";
 
 export default function CustomerProfilePage({ params }: { params: Promise<{ id: string }> }) {
@@ -60,12 +58,12 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
         if (res.ok && res.data) {
           setCustomer(res.data.customer as unknown as Customer);
           setAgreements(res.data.agreements as unknown as PriceAgreement[]);
-          setOrders(res.data.orders.map((o: any) => ({
+          setOrders(res.data.orders.map((o: Record<string, any>) => ({
              ...o,
              statusText: o.status === "completed" ? "ERLEDIGT" : "IN ARBEIT",
              title: o.title || "Auftrag " + o.orderNumber
-          })));
-          setComplaints(res.data.complaints.map((c: any) => ({
+          })) as Order[]);
+          setComplaints(res.data.complaints.map((c: Record<string, any>) => ({
              id: c.id,
              orderId: c.orderId,
              reason: c.ergebnis,
@@ -75,7 +73,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
              resolution: c.ergebnis === 'bestanden' ? 'OK' : 'Nacharbeit nötig',
              customerId: id,
              photoIds: []
-          })));
+          })) as Complaint[]);
           setTimeline([]);
         } else {
            setCustomer(null);

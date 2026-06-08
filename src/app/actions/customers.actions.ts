@@ -100,3 +100,30 @@ export async function updateCustomerDb(id: string, changes: {
     return null;
   }
 }
+
+export async function getTopKunden(limit = 5) {
+  try {
+    const { sql, desc } = await import("drizzle-orm");
+    const { ausgangsrechnung } = await import("@/db/schema_buchhaltung");
+    
+    const top = await db.select({
+      id: customers.id,
+      name: customers.name,
+      summe: sql<number>`sum(${ausgangsrechnung.netto})`
+    })
+    .from(customers)
+    .innerJoin(ausgangsrechnung, eq(customers.id, ausgangsrechnung.kundeId))
+    .groupBy(customers.id)
+    .orderBy(desc(sql`sum(${ausgangsrechnung.netto})`))
+    .limit(limit);
+
+    return top.map((t, idx) => ({
+      id: t.id || String(idx),
+      name: t.name,
+      wert: Number(t.summe) || 0
+    }));
+  } catch (error) {
+    console.error("Failed to get top customers:", error);
+    return [];
+  }
+}

@@ -54,11 +54,6 @@ export function BuchhaltungCockpitClient() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
-      <div className="mb-6">
-        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Buchhaltung',href:'/buchhaltung'}]} />
-        <BackButton label="Home" href="/" />
-      </div>
-      
         <div className="w-8 h-8 border-3 border-accent-orange/20 border-t-accent-orange rounded-full animate-spin" />
       </div>
     );
@@ -66,11 +61,10 @@ export function BuchhaltungCockpitClient() {
 
   return (
     <div className="w-full pb-24 px-4 sm:px-6 xl:px-8">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-xs font-semibold text-text-muted mt-4 mb-3">
-        <Link href="/betrieb" className="hover:text-navy-900 transition-colors">Betrieb</Link>
-        <ChevronRight className="w-3 h-3" />
-        <span className="text-navy-900">Buchhaltung & Finanzen</span>
+      {/* Breadcrumb & BackButton */}
+      <div className="mb-4">
+        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Betrieb',href:'/betrieb'}, {label:'Buchhaltung & Finanzen'}]} />
+        <BackButton label="Betrieb" href="/betrieb" />
       </div>
 
       {/* Header */}
