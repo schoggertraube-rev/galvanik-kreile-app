@@ -34,7 +34,7 @@ export function berechneInvestition(input: InvestitionInput, kontext: KontextDat
   const zins_monatlich = (input.investitionssumme * (input.zinssatz_prozent / 100)) / 12; // simplified
   const ks_kostensatz = kontext.kostensatz_je_ks[input.kostenstelle_kuerzel] || 0;
   
-  const einsparung = (input.stundenersparnis_tag || 0) * 21 * ks_kostensatz; // approx 21 working days
+  const einsparung = (input.stundenersparnis_tag || 0) * 22 * ks_kostensatz; // 22 Arbeitstage/Monat
   const mehrumsatz_db = (input.mehrumsatz_monat || 0) * (kontext.db_marge_je_ks[input.kostenstelle_kuerzel] || kontext.db_marge_gesamt || 0);
   
   const einsparung_oder_db_monatlich = einsparung + mehrumsatz_db;
