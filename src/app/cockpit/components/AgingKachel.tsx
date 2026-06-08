@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { TrendingUp, Loader2, ArrowRight, Bell, Phone, FileText } from "lucide-react";
 import { getAgingDaten, getAgingRechnungen } from "../actions";
+import { sendeZahlungserinnerung, sendeMahnung } from "@/app/actions/mahnung.actions";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import Link from "next/link";
 import { KachelInfo } from "@/components/ui/KachelInfo";
@@ -44,6 +45,7 @@ export function AgingKachel() {
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
   const [rechnungen, setRechnungen] = useState<any[]>([]);
   const [rechnungenLoading, setRechnungenLoading] = useState(false);
+  const [actionStatus, setActionStatus] = useState<Record<string, 'idle'|'loading'|'done'>>({});
 
   useEffect(() => {
     async function load() {
@@ -67,6 +69,39 @@ export function AgingKachel() {
     const result = await getAgingRechnungen(bucket);
     setRechnungen(result);
     setRechnungenLoading(false);
+  };
+
+  const handleErinnerung = async (id: string) => {
+    setActionStatus(prev => ({ ...prev, [id]: 'loading' }));
+    try {
+      const res = await sendeZahlungserinnerung(id);
+      if (res.modus === 'manuell') {
+        navigator.clipboard.writeText(res.text);
+        alert(`Text in Zwischenablage kopiert. Kein Mail-Provider angebunden.\n\n${res.hinweis}`);
+      }
+      setActionStatus(prev => ({ ...prev, [id]: 'done' }));
+      setTimeout(() => setActionStatus(prev => ({ ...prev, [id]: 'idle' })), 3000);
+    } catch (e) {
+      alert("Fehler: " + (e as Error).message);
+      setActionStatus(prev => ({ ...prev, [id]: 'idle' }));
+    }
+  };
+
+  const handleMahnung = async (id: string) => {
+    setActionStatus(prev => ({ ...prev, [id]: 'loading' }));
+    try {
+      const res = await sendeMahnung(id);
+      if (res.modus === 'manuell') {
+        navigator.clipboard.writeText(res.text);
+        alert(`Text in Zwischenablage kopiert. Kein Mail-Provider angebunden.\n\n${res.hinweis}`);
+      }
+      setActionStatus(prev => ({ ...prev, [id]: 'done' }));
+      setRechnungen(prev => prev.map(r => r.invoice_id === id ? { ...r, mahnstufe: res.neueMahnstufe } : r));
+      setTimeout(() => setActionStatus(prev => ({ ...prev, [id]: 'idle' })), 3000);
+    } catch (e) {
+      alert("Fehler: " + (e as Error).message);
+      setActionStatus(prev => ({ ...prev, [id]: 'idle' }));
+    }
   };
 
   if (loading) {
@@ -184,11 +219,11 @@ export function AgingKachel() {
                     
                     <div className="flex flex-wrap gap-2">
                       <button 
-                        className="px-3 py-1.5 bg-navy-600 hover:bg-navy-700 text-white font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50"
-                        title="Demnächst verfügbar: Kommunikationszentrale wird eingerichtet"
-                        disabled
+                        onClick={() => handleErinnerung(r.invoice_id)}
+                        disabled={actionStatus[r.invoice_id] === 'loading'}
+                        className={`px-3 py-1.5 font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50 ${actionStatus[r.invoice_id] === 'done' ? 'bg-success-green text-white' : 'bg-navy-600 hover:bg-navy-700 text-white'}`}
                       >
-                        <Bell className="w-3 h-3" /> Zahlungserinnerung senden
+                        <Bell className="w-3 h-3" /> {actionStatus[r.invoice_id] === 'done' ? 'Kopiert!' : 'Zahlungserinnerung'}
                       </button>
                       <button 
                         className="px-3 py-1.5 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-700 font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50"
@@ -198,11 +233,11 @@ export function AgingKachel() {
                         <Phone className="w-3 h-3" /> Anrufen
                       </button>
                       <button 
-                        className="px-3 py-1.5 bg-danger-red/10 hover:bg-danger-red/20 text-danger-red font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50"
-                        title="Demnächst verfügbar"
-                        disabled
+                        onClick={() => handleMahnung(r.invoice_id)}
+                        disabled={actionStatus[r.invoice_id] === 'loading'}
+                        className={`px-3 py-1.5 font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50 ${actionStatus[r.invoice_id] === 'done' ? 'bg-success-green text-white' : 'bg-danger-red/10 hover:bg-danger-red/20 text-danger-red'}`}
                       >
-                        <Bell className="w-3 h-3" /> Mahnung senden
+                        <Bell className="w-3 h-3" /> {actionStatus[r.invoice_id] === 'done' ? 'Kopiert!' : `Mahnung (Stufe ${(r.mahnstufe || 0) + 1})`}
                       </button>
                     </div>
                   </div>
