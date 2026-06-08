@@ -7,6 +7,8 @@ import { TopKundenKachel } from "./components/TopKundenKachel";
 import { EngpassKachel } from "./components/EngpassKachel";
 import { AgingKachel } from "./components/AgingKachel";
 import { DbRankingKachel } from "./components/DbRankingKachel";
+import { WhatIfStudio } from "./components/WhatIfStudio";
+import { FruehwarnungenKachel } from "./components/FruehwarnungenKachel";
 
 export function CockpitClient() {
   return (
@@ -34,9 +36,9 @@ export function CockpitClient() {
       </div>
 
       {/* Reihe 4: Frühwarnungen | What-If-Studio */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <PlaceholderKachel title="Frühwarnungen (KI)" icon={<AlertCircle className="w-5 h-5 text-danger-red" />} height="h-[250px]" />
-        <PlaceholderKachel title="What-If-Studio" icon={<BarChart className="w-5 h-5 text-navy-500" />} height="h-[250px]" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 pb-12">
+        <FruehwarnungenKachel />
+        <WhatIfStudio />
       </div>
 
     </div>

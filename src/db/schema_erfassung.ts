@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, uuid, numeric, date } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, uuid, numeric, date, jsonb } from "drizzle-orm/pg-core";
 import { orders, appUsers, inventoryItems } from "./schema";
 
 export const vorlageZeit = pgTable("vorlage_zeit", {
@@ -66,4 +66,20 @@ export const teileKlassifikator = pgTable("teile_klassifikator", {
   klasse: text("klasse").notNull(),
   keywords: text("keywords").array().notNull(),
   beispielOberflaechen: text("beispiel_oberflaechen").array(),
+});
+
+export const warningEvent = pgTable("warning_event", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  typ: text("typ").notNull(),
+  titel: text("titel").notNull(),
+  beschreibung: text("beschreibung").notNull(),
+  schwere: text("schwere").notNull(),
+  payload: jsonb("payload"),
+  link: text("link"),
+  erzeugtAm: timestamp("erzeugt_am", { withTimezone: true }).defaultNow(),
+  dismissedAm: timestamp("dismissed_am", { withTimezone: true }),
+  dismissedVon: uuid("dismissed_von"),
+  begruendung: text("begruendung"),
+  suppressBis: timestamp("suppress_bis", { withTimezone: true }),
 });

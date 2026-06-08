@@ -237,3 +237,69 @@ export async function getWhatIfKontext() {
 
   return kontext;
 }
+
+export async function getAktiveWarnungen() {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('warning_event')
+    .select('*')
+    .eq('tenant_id', 'galvanik-kreile')
+    .is('dismissed_am', null)
+    .order('erzeugt_am', { ascending: false });
+
+  if (error) {
+    console.error("Error getAktiveWarnungen:", error.message, error.details, error.hint);
+    return [];
+  }
+  
+  // Custom sort to put 'kritisch' first, then 'warnung', then 'info'
+  const severityOrder: Record<string, number> = { 'kritisch': 1, 'warnung': 2, 'info': 3 };
+  const sorted = (data || []).sort((a, b) => {
+    const sA = severityOrder[a.schwere] || 99;
+    const sB = severityOrder[b.schwere] || 99;
+    if (sA !== sB) return sA - sB;
+    return new Date(b.erzeugt_am).getTime() - new Date(a.erzeugt_am).getTime();
+  });
+  
+  return sorted;
+}
+
+export async function dismissWarnung(id: string, begruendung: string) {
+  if (!begruendung || begruendung.length < 10) {
+    throw new Error("Begründung muss mindestens 10 Zeichen lang sein.");
+  }
+  
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+  
+  // Set suppress_bis to 7 days in future
+  const suppressDate = new Date();
+  suppressDate.setDate(suppressDate.getDate() + 7);
+
+  const { error } = await supabase
+    .from('warning_event')
+    .update({
+      dismissed_am: new Date().toISOString(),
+      dismissed_von: userId,
+      begruendung: begruendung,
+      suppress_bis: suppressDate.toISOString()
+    })
+    .eq('id', id);
+
+  if (error) {
+    console.error("Error dismissWarnung:", error.message, error.details, error.hint);
+    throw new Error(error.message);
+  }
+  return true;
+}
+
+export async function refreshWarnungen() {
+  const supabase = await createClient();
+  const { error } = await supabase.rpc('fn_compute_warnings', { p_tenant: 'galvanik-kreile' });
+  if (error) {
+    console.error("Error refreshWarnungen:", error.message, error.details, error.hint);
+    return false;
+  }
+  return true;
+}

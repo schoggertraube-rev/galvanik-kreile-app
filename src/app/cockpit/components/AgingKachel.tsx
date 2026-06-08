@@ -96,7 +96,7 @@ export function AgingKachel() {
                     formatter={(value: any, name: any, props: any) => [`€ ${Number(value).toLocaleString('de-DE')}`, `Summe (${props.payload.anzahl} Rechnungen)`]}
                     cursor={{ fill: 'transparent' }}
                   />
-                  <Bar dataKey="value" radius={[4, 4, 0, 0]} onClick={(data) => router.push(`/buchhaltung/rechnungen?filter=${data.bucketId}`)}>
+                  <Bar dataKey="value" radius={[4, 4, 0, 0]} onClick={(data: any) => router.push(`/buchhaltung/rechnungen?filter=${data?.payload?.bucketId || data?.bucketId}`)}>
                     {chartData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[entry.bucketId] || '#9E9E9E'} />
                     ))}
