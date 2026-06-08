@@ -10,6 +10,7 @@ export function ZahlungKachel() {
   return (
     <>
       <Tile
+        datenherkunft={{ belege: 142, rechnungen: 38, zeitbuchungen: 0, verbrauchsbuchungen: 0, periodeLabel: "06/2026", periodeStatus: "offen" }}
         title="Bankkonto & Cashflow"
         description="Liquidität, Kontostände, Zahlungslinks und Zahlungsmoral."
         icon={<CreditCard className="w-5 h-5 text-teal-600" strokeWidth={1.8} />}

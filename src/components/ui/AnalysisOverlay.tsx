@@ -101,6 +101,13 @@ export interface AnalysisOverlayProps {
   composition?: CompositionSection;
   crossKpi?: CrossKpiCard[];
   insight?: InsightSection;
+  l7Data?: {
+    affectedAccounts: { id: string; label: string }[];
+    affectedCostCenters: { id: string; label: string }[];
+    periodImpact: string;
+    liquidityImpact: string;
+    taxImpactEur: number;
+  };
   linkedAreas?: { label: string; href: string; previewText?: string }[];
 }
 
@@ -141,7 +148,7 @@ function MiniSparkline({ values }: { values: number[] }) {
 export function AnalysisOverlay({
   open, onClose, icon, title, subtitle, accentBg,
   tabs, activeTab, onTabChange,
-  hero, trend, composition, crossKpi, insight, linkedAreas,
+  hero, trend, composition, crossKpi, insight, l7Data, linkedAreas,
 }: AnalysisOverlayProps) {
   const [previewDrawer, setPreviewDrawer] = useState<{ open: boolean; href: string; label: string; previewText?: string }>({ open: false, href: "", label: "" });
 
@@ -416,6 +423,78 @@ export function AnalysisOverlay({
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── G · Wirtschaftliche Wirkung (L7) ── */}
+      {l7Data && (
+        <div style={{ padding: "18px 0", borderBottom: "0.5px solid var(--line, rgba(20,18,12,.08))" }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            fontSize: 11, fontWeight: 700, letterSpacing: 0.5, textTransform: "uppercase",
+            color: "var(--blue, #0C447C)", marginBottom: 10,
+          }}>
+            G · Wirtschaftliche Wirkung (L7)
+          </div>
+          <div style={{
+            background: "var(--surface3, #FAF8F3)",
+            borderRadius: "16px",
+            padding: 16,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 16,
+          }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink2, #615F58)", marginBottom: 4 }}>
+                Betroffene Konten
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {l7Data.affectedAccounts.map((acc: any) => (
+                  <a key={acc.id} href={`/buchhaltung/belege?konto=${acc.id}`} style={{
+                    fontSize: 12, fontWeight: 500, color: "var(--blue, #0C447C)",
+                    background: "var(--blue-bg, #E7F1FB)", padding: "2px 8px", borderRadius: 6, textDecoration: "none"
+                  }}>{acc.label}</a>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink2, #615F58)", marginBottom: 4 }}>
+                Kostenstellen
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {l7Data.affectedCostCenters.map((cc: any) => (
+                  <span key={cc.id} style={{
+                    fontSize: 12, fontWeight: 500, color: "var(--text, #1B1A16)",
+                    background: "var(--surface, #fff)", border: "1px solid var(--line2, rgba(20,18,12,.16))", padding: "2px 8px", borderRadius: 6,
+                  }}>{cc.label}</span>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink2, #615F58)", marginBottom: 4 }}>
+                Periodenwirkung
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text, #1B1A16)" }}>
+                {l7Data.periodImpact}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink2, #615F58)", marginBottom: 4 }}>
+                Liquiditätswirkung
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text, #1B1A16)" }}>
+                {l7Data.liquidityImpact}
+              </div>
+            </div>
+            <div style={{ gridColumn: "1 / -1", borderTop: "1px dashed var(--line2, rgba(20,18,12,.16))", paddingTop: 12, marginTop: -4 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: "var(--ink2, #615F58)", marginBottom: 2 }}>
+                Steuerwirkung (USt-Effekt)
+              </div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "var(--pos, #059669)" }}>
+                {l7Data.taxImpactEur > 0 ? "+" : ""}{l7Data.taxImpactEur.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €
+              </div>
+            </div>
           </div>
         </div>
       )}

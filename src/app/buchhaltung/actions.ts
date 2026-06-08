@@ -214,6 +214,23 @@ export async function stornoBelegAction(id: string, grund: string): Promise<Bele
   return mapToClientBeleg(data)
 }
 
+export async function assignBelegeBatchAction(belegIds: string[], updates: { kontoId?: string, kostenstelleId?: string }) {
+  if (!belegIds.length) return true;
+  const supabase = await createClient();
+  const payload: any = {};
+  if (updates.kontoId) payload.konto_id = updates.kontoId;
+  if (updates.kostenstelleId) payload.kostenstelle_id = updates.kostenstelleId;
+
+  if (Object.keys(payload).length === 0) return true;
+
+  const { error } = await supabase.from('beleg').update(payload).in('id', belegIds);
+  if (error) {
+    console.error('Fehler bei Massenzuordnung:', error);
+    throw new Error('Fehler bei Massenzuordnung.');
+  }
+  return true;
+}
+
 export async function getKraftstoffTankungenAction() {
   const supabase = await createClient()
   const { data, error } = await supabase.from('beleg')

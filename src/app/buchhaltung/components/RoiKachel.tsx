@@ -73,7 +73,8 @@ export function RoiKachel() {
   return (
     <>
       <Tile
-        title="Profit of Invest"
+        datenherkunft={{ belege: 0, rechnungen: 0, zeitbuchungen: 0, verbrauchsbuchungen: 0, periodeLabel: "06/2026", periodeStatus: "offen" }}
+        title="ROI & Kennzahlen"
         description="Return on Investment (ROI) der App-Nutzung."
         icon={<Calculator className="w-5 h-5 text-indigo-600" strokeWidth={1.8} />}
         iconColor="bg-indigo-50"

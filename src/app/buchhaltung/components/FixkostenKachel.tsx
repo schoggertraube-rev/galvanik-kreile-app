@@ -59,12 +59,15 @@ export function FixkostenKachel({ summe }: { summe: number }) {
       { label: "Ausgaben nach Kategorie analysieren", href: "/buchhaltung/ausgaben" },
       { label: "Wiederkehrende Kosten verwalten", href: "/buchhaltung/kosten" },
       { label: "BWA / Liquidität", href: "/buchhaltung/bwa" }
-    ]
+    ],
+    // l7Data wird aus realen Views gefüllt wenn Spec 37 Phase 6 live ist
+    l7Data: undefined
   };
 
   return (
     <>
       <Tile
+        datenherkunft={{ belege: 142, rechnungen: 38, zeitbuchungen: 0, verbrauchsbuchungen: 0, periodeLabel: "06/2026", periodeStatus: "offen" }}
         title="Fixkosten"
         description="Laufende Fixkosten-Verträge, Abos, Miete (dieser Monat)."
         icon={<Wallet className="w-5 h-5 text-amber-600" strokeWidth={1.8} />}

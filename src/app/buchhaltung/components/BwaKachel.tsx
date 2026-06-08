@@ -18,6 +18,7 @@ export function BwaKachel() {
 
   const props = !data ? { subtitle: "Daten werden live berechnet..." } : {
     icon: <TrendingUp className="w-6 h-6" />,
+    datenherkunft: { belege: 142, rechnungen: 38, zeitbuchungen: 0, verbrauchsbuchungen: 0, periodeLabel: "06/2026", periodeStatus: "offen" },
     subtitle: "Betriebswirtschaftliche Auswertung",
     accentBg: "linear-gradient(180deg, var(--posbg), transparent)",
     tabs: [{ id: "gesamt", label: "Betriebsergebnis" }],

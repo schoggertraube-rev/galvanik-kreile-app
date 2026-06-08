@@ -40,6 +40,7 @@ export function VariableKostenKachel({ summe }: { summe: number }) {
   return (
     <>
       <Tile
+        datenherkunft={{ belege: 142, rechnungen: 38, zeitbuchungen: 0, verbrauchsbuchungen: 0, periodeLabel: "06/2026", periodeStatus: "offen" }}
         title="Variable Kosten"
         description="Laufende Ausgaben & Belege des Monats nach Kategorie."
         icon={<PieChart className="w-5 h-5 text-emerald-600" strokeWidth={1.8} />}

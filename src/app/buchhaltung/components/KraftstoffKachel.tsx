@@ -40,6 +40,7 @@ export function KraftstoffKachel() {
   return (
     <>
       <Tile
+        datenherkunft={{ belege: 142, rechnungen: 38, zeitbuchungen: 0, verbrauchsbuchungen: 0, periodeLabel: "06/2026", periodeStatus: "offen" }}
         title="Kraftstoff & Kfz"
         description="Diesel auf einen Blick: 18 Tankungen, Ø 1,71 €/l. Filterbar nach Ort & Zeit."
         icon={<Fuel className="w-5 h-5 text-blue-600" strokeWidth={1.8} />}

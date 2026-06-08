@@ -10,8 +10,9 @@ import { ChevronRight, Camera, Upload, CheckCircle2, Calendar as CalendarIcon, R
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { BelegUploadOverlay } from "@/components/buchhaltung/BelegUploadOverlay";
 import type { OcrResult, Beleg } from "@/lib/buchhaltung/types";
-import { createBelegAction } from "@/app/buchhaltung/actions";
+import { createBelegAction, assignBelegeBatchAction } from "@/app/buchhaltung/actions";
 import { useOfflineManager } from "../../../hooks/useOfflineManager";
+import { MassenzuordnungModal } from "@/components/buchhaltung/MassenzuordnungModal";
 
 const CATEGORIES = [
   { id: "alle", label: "Alle", color: "bg-black" },
@@ -112,6 +113,8 @@ export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [overlayMode, setOverlayMode] = useState<"foto" | "upload">("upload");
   const offlineManager = useOfflineManager();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [massenzuordnungOpen, setMassenzuordnungOpen] = useState(false);
   
   useEffect(() => {
     setBelege(initialBelege);
@@ -170,6 +173,22 @@ export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }
   const filteredBelege = belegeEntries; // Data is already filtered by server
 
   const recentBelege = belegeEntries.slice(0, 3);
+
+  const toggleSelection = (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const handleMassenzuordnung = async (kontoId: string, kostenstelleId: string) => {
+    await assignBelegeBatchAction(Array.from(selectedIds), { kontoId, kostenstelleId });
+    // Optimistic uncheck
+    setSelectedIds(new Set());
+    // In a real app we'd refresh the data here.
+  };
 
   return (
     <div className="w-full pb-24 px-4 sm:px-6 xl:px-8 min-h-screen">
@@ -417,12 +436,23 @@ export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }
         <div className="flex flex-col">
           {filteredBelege.map((beleg, idx) => {
             const cat = CATEGORIES.find(c => c.id === beleg.categoryId);
+            const isSelected = selectedIds.has(beleg.id);
             return (
               <div key={beleg.id}>
-                <Link
-                  href={`/buchhaltung/belege/${beleg.id}`}
-                  className="flex items-center gap-3 sm:gap-4 p-3 hover:bg-neutral-50 rounded-2xl transition-colors cursor-pointer group"
+                <div
+                  className={`flex items-center gap-3 sm:gap-4 p-3 hover:bg-neutral-50 rounded-2xl transition-colors cursor-pointer group ${isSelected ? 'bg-blue-50/50' : ''}`}
+                  onClick={(e) => {
+                    // Navigation logic: only if not clicking the checkbox or its container
+                    if ((e.target as HTMLElement).closest('.checkbox-container')) return;
+                    router.push(`/buchhaltung/belege/${beleg.id}`);
+                  }}
                 >
+                  <div className="checkbox-container p-2 -ml-2" onClick={(e) => toggleSelection(beleg.id, e)}>
+                    <div className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isSelected ? 'bg-blue-600 border-blue-600' : 'bg-white border-neutral-300'}`}>
+                      {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-white" />}
+                    </div>
+                  </div>
+
                   {/* Icon */}
                   <div className={`w-10 h-10 rounded-[14px] flex items-center justify-center shrink-0 border border-neutral-100 ${cat?.iconBg ?? "bg-neutral-50"}`}>
                     <ReceiptText className={`w-4 h-4 ${cat?.iconColor ?? "text-neutral-400"}`} />
@@ -454,7 +484,7 @@ export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }
                     <div className="text-sm sm:text-base font-extrabold text-[#1e1b18]">{beleg.amount.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</div>
                     <div className="text-[10px] font-medium text-neutral-400">{beleg.vst.toLocaleString("de-DE", { minimumFractionDigits: 2 })} € VSt</div>
                   </div>
-                </Link>
+                </div>
                 {idx < filteredBelege.length - 1 && <div className="w-full h-px bg-neutral-100 my-1 ml-14" />}
               </div>
             );
@@ -475,6 +505,35 @@ export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }
       />
 
       <FeedbackFooter pageTitle="Belege" route="/buchhaltung/belege" variant="full" />
+
+      {/* Sticky Action Bar */}
+      {selectedIds.size > 0 && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#1e1b18] text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 z-40 animate-in slide-in-from-bottom-10 fade-in duration-300">
+          <div className="font-bold text-sm">
+            {selectedIds.size} Belege ausgewählt
+          </div>
+          <div className="h-6 w-px bg-white/20" />
+          <button
+            onClick={() => setMassenzuordnungOpen(true)}
+            className="text-sm font-bold bg-white text-[#1e1b18] px-4 py-2 rounded-xl hover:bg-neutral-100 transition-colors"
+          >
+            Massenzuordnung
+          </button>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-sm font-bold text-neutral-400 hover:text-white transition-colors"
+          >
+            Abbrechen
+          </button>
+        </div>
+      )}
+
+      <MassenzuordnungModal
+        isOpen={massenzuordnungOpen}
+        onClose={() => setMassenzuordnungOpen(false)}
+        onAssign={handleMassenzuordnung}
+        count={selectedIds.size}
+      />
     </div>
   );
 }

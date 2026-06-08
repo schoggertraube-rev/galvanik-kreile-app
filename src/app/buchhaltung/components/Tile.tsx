@@ -2,6 +2,7 @@
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, BarChart3 } from "lucide-react";
+import { DatenherkunftZeile } from "@/components/analytics/DatenherkunftZeile";
 
 export type TileProps = {
   title: string;
@@ -14,9 +15,17 @@ export type TileProps = {
   footer?: string;
   analyseLink?: { label: string; href?: string; onClick?: () => void };
   onClick?: () => void;
+  datenherkunft?: {
+    belege: number;
+    rechnungen: number;
+    zeitbuchungen: number;
+    verbrauchsbuchungen: number;
+    periodeLabel: string;
+    periodeStatus: string;
+  };
 };
 
-export function Tile({ title, description, icon, iconColor, href, kpi, status, footer, analyseLink, onClick }: TileProps) {
+export function Tile({ title, description, icon, iconColor, href, kpi, status, footer, analyseLink, onClick, datenherkunft }: TileProps) {
   const router = useRouter();
   const statusColors = {
     action: "bg-red-50 text-red-600 border-red-100",
@@ -66,6 +75,16 @@ export function Tile({ title, description, icon, iconColor, href, kpi, status, f
           )
         )}
       </div>
+      {datenherkunft && (
+        <DatenherkunftZeile 
+          belege={datenherkunft.belege}
+          rechnungen={datenherkunft.rechnungen}
+          zeitbuchungen={datenherkunft.zeitbuchungen}
+          verbrauchsbuchungen={datenherkunft.verbrauchsbuchungen}
+          periodeLabel={datenherkunft.periodeLabel}
+          periodeStatus={datenherkunft.periodeStatus}
+        />
+      )}
     </>
   );
 
@@ -103,6 +122,16 @@ export function Tile({ title, description, icon, iconColor, href, kpi, status, f
             </button>
           )}
         </div>
+        {datenherkunft && (
+          <DatenherkunftZeile 
+            belege={datenherkunft.belege}
+            rechnungen={datenherkunft.rechnungen}
+            zeitbuchungen={datenherkunft.zeitbuchungen}
+            verbrauchsbuchungen={datenherkunft.verbrauchsbuchungen}
+            periodeLabel={datenherkunft.periodeLabel}
+            periodeStatus={datenherkunft.periodeStatus}
+          />
+        )}
       </div>
     );
   }

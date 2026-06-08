@@ -41,6 +41,7 @@ export function OffenePostenKachel() {
   return (
     <>
       <Tile
+        datenherkunft={{ belege: 142, rechnungen: 38, zeitbuchungen: 0, verbrauchsbuchungen: 0, periodeLabel: "06/2026", periodeStatus: "offen" }}
         title="Offene Posten"
         description="3 Zahlungen überfällig. Mahnstufen & Zahlungserinnerung automatisch."
         icon={<AlertCircle className="w-5 h-5 text-red-500" strokeWidth={1.8} />}

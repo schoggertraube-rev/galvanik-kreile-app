@@ -5,7 +5,8 @@ import { Tile } from "./Tile";
 export function SteuerprofilKachel() {
   return (
     <Tile
-      title="Steuerprofil & UStVA"
+      datenherkunft={{ belege: 142, rechnungen: 38, zeitbuchungen: 0, verbrauchsbuchungen: 0, periodeLabel: "06/2026", periodeStatus: "offen" }}
+      title="Steuerprofil & Gewinn"
       description="USt-Sätze, Voranmeldungs-Rhythmus, Berater-Nr. ELSTER-Einstellungen."
       icon={<Banknote className="w-5 h-5 text-purple-600" strokeWidth={1.8} />}
       iconColor="bg-purple-50"
