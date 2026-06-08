@@ -303,19 +303,6 @@ export async function getKundenDetails(customerId: string) {
   return { clv, letzeAuftraege: details };
 }
 
-export async function getInaktiveKunden() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.from('v_kunde_clv')
-    .select('*')
-    .lt('letzter_auftrag', new Date(Date.now() - 9 * 30 * 24 * 60 * 60 * 1000).toISOString())
-    .gte('auftraege_gesamt', 3)
-    .order('umsatz_gesamt', { ascending: false });
-  if (error) {
-    console.error("Error getInaktiveKunden:", error);
-    return [];
-  }
-  return data || [];
-}
 
 export async function getAgingRechnungen(bucket: string) {
   const supabase = await createClient();
