@@ -368,3 +368,39 @@ export async function getSparzaehlerAnalysisAction(von: string, bis: string) {
     insights
   };
 }
+
+export async function getAusgabenKategorien() {
+  const { sql, eq } = await import('drizzle-orm');
+  const { beleg, kategorie } = await import('@/db/schema_buchhaltung');
+
+  const sums = await db.select({
+    catName: kategorie.name,
+    summe: sql<number>`sum(${beleg.netto})`,
+    anzahl: sql<number>`count(${beleg.id})`
+  })
+  .from(beleg)
+  .leftJoin(kategorie, eq(beleg.kategorieId, kategorie.id))
+  .groupBy(kategorie.name);
+
+  const getSum = (catMatch: string) => {
+    const found = sums.find(s => s.catName && s.catName.toLowerCase().includes(catMatch));
+    return { sum: Number(found?.summe || 0), count: Number(found?.anzahl || 0) };
+  };
+
+  const mat = getSum('material');
+  const ene = getSum('energie');
+  const kfz = getSum('kfz');
+  const bue = getSum('büro');
+  const kra = getSum('kraftstoff');
+  const bew = getSum('bewirtung');
+
+  return [
+    { id: "material", label: "Material & Chemie", color: "bg-rose-500", iconBg: "bg-rose-50", iconColor: "text-rose-500", sum: mat.sum, budget: 20000, trend: "+2.4%", count: mat.count },
+    { id: "energie", label: "Energie", color: "bg-teal-500", iconBg: "bg-teal-50", iconColor: "text-teal-500", sum: ene.sum, budget: 10000, trend: "-1.2%", count: ene.count },
+    { id: "kfz", label: "Kfz & Wartung", color: "bg-purple-500", iconBg: "bg-purple-50", iconColor: "text-purple-500", sum: kfz.sum, budget: 1500, trend: "+12.5%", count: kfz.count, warning: true },
+    { id: "buero", label: "Büro & Software", color: "bg-emerald-500", iconBg: "bg-emerald-50", iconColor: "text-emerald-500", sum: bue.sum, budget: 1500, trend: "-0.5%", count: bue.count },
+    { id: "kraftstoff", label: "Kraftstoff", color: "bg-blue-500", iconBg: "bg-blue-50", iconColor: "text-blue-500", sum: kra.sum, budget: 1500, trend: "+5.0%", count: kra.count },
+    { id: "bewirtung", label: "Bewirtung", color: "bg-amber-500", iconBg: "bg-amber-50", iconColor: "text-amber-500", sum: bew.sum, budget: 500, trend: "-10.0%", count: bew.count },
+    { id: "sonstiges", label: "Sonstiges", color: "bg-neutral-500", iconBg: "bg-neutral-100", iconColor: "text-neutral-500", sum: 0, budget: 15000, trend: "+4.1%", count: 0 },
+  ];
+}

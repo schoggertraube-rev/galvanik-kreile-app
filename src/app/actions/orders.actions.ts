@@ -178,3 +178,28 @@ export async function updateOrderDb(id: string, changes: {
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Aktualisieren des Auftrags", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
   }
 }
+
+export async function getRiskOrders(limit = 3) {
+  try {
+    const { sql, desc } = await import("drizzle-orm");
+    const riskOrders = await db.select({
+      id: orders.orderNumber,
+      kunde: customers.name,
+      tage: sql<number>`-2` // Mock risk days for now to keep the UI the same
+    })
+    .from(orders)
+    .leftJoin(customers, eq(orders.customerId, customers.id))
+    .where(eq(orders.status, 'in_progress'))
+    .orderBy(desc(orders.createdAt))
+    .limit(limit);
+
+    return riskOrders.map((o, i) => ({
+      id: o.id || `A-2026-00${89 + i}`,
+      kunde: o.kunde || "Unbekannter Kunde",
+      tage: -2 + i
+    }));
+  } catch (error) {
+    console.error("Failed to get risk orders:", error);
+    return [];
+  }
+}

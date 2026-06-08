@@ -7,9 +7,15 @@ import Link from 'next/link';
 import { Banknote, TrendingUp, ArrowRight, Target, BarChart3, Users, Zap, Calculator } from 'lucide-react';
 import { PerformanceDetailLayout } from '../PerformanceDetailLayout';
 import { AnalysisOverlay } from '@/components/ui/AnalysisOverlay';
+import { getTopKunden } from '@/app/actions/customers.actions';
 
 export default function UmsatzMargeDetail() {
   const [overlay, setOverlay] = useState<string | null>(null);
+  const [topKunden, setTopKunden] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    getTopKunden(4).then(setTopKunden);
+  }, []);
 
   return (
     <PerformanceDetailLayout
@@ -172,18 +178,17 @@ export default function UmsatzMargeDetail() {
               <div className="pd-tile-name">Stärkste Kunden</div>
             </div>
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {[
-                { name: 'Museum Lenzburg', val: '18.400 €', pct: 100 },
-                { name: 'Schrauben Meier', val: '12.200 €', pct: 66 },
-                { name: 'Autohaus Berger', val: '8.600 €', pct: 47 },
-                { name: 'Schlosserei Brunner', val: '6.400 €', pct: 35 },
-              ].map(k => (
-                <div key={k.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-                  <span style={{ width: 110, fontWeight: 500, flexShrink: 0 }}>{k.name}</span>
-                  <div className="pd-bar-track"><div className="pd-bar-fill" style={{ width: `${k.pct}%`, background: 'var(--info)' }} /></div>
-                  <span style={{ fontWeight: 600, width: 60, textAlign: 'right', flexShrink: 0 }}>{k.val}</span>
-                </div>
-              ))}
+              {topKunden.length === 0 ? <div style={{fontSize:11, color:'var(--ink3)'}}>Noch keine Kunden</div> : topKunden.map((k, i) => {
+                const maxVal = topKunden[0]?.wert || 1;
+                const pct = Math.max(5, Math.round((k.wert / maxVal) * 100));
+                return (
+                  <div key={k.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                    <span style={{ width: 110, fontWeight: 500, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.name}</span>
+                    <div className="pd-bar-track"><div className="pd-bar-fill" style={{ width: `${pct}%`, background: 'var(--info)' }} /></div>
+                    <span style={{ fontWeight: 600, width: 60, textAlign: 'right', flexShrink: 0 }}>{k.wert.toLocaleString('de-DE')} €</span>
+                  </div>
+                );
+              })}
             </div>
             <div className="pd-tile-foot">Zur Kundenkartei <ArrowRight className="w-3 h-3" /></div>
           </div>

@@ -10,9 +10,16 @@ import { AnalysisOverlay } from '@/components/ui/AnalysisOverlay';
 import { useFeatureFlag } from '@/lib/analytics/useFeatureFlag';
 import { AnalyticsDrillDrawer } from '@/components/analytics/AnalyticsDrillDrawer';
 import type { PeriodType } from '@/lib/analytics/plainLanguage';
+import { getRiskOrders } from '@/app/actions/orders.actions';
 
 export default function WerkstattPulsDetail() {
   const [overlay, setOverlay] = useState<string | null>(null);
+  const [riskOrders, setRiskOrders] = useState<any[]>([]);
+
+  React.useEffect(() => {
+    getRiskOrders(3).then(setRiskOrders);
+  }, []);
+
   const analyticsDrawerEnabled = useFeatureFlag('analyticsDrawer');
   const [drillKpi, setDrillKpi] = useState<string | null>(null);
   const [drillPeriod, setDrillPeriod] = useState<PeriodType>('monat');
@@ -180,14 +187,10 @@ export default function WerkstattPulsDetail() {
           <div className="pd-tile-val" style={{ color: 'var(--neg)' }}>8</div>
           <div className="pd-tile-desc">Aufträge mit akutem Terminrisiko · Gesamtwert 22.400 €</div>
           <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {[
-              { id: 'A-2026-0089', kunde: 'Museum Lenzburg', tage: -2 },
-              { id: 'A-2026-0091', kunde: 'Autohaus Berger', tage: -1 },
-              { id: 'A-2026-0094', kunde: 'Schlosserei Brunner', tage: 0 },
-            ].map(a => (
+            {riskOrders.length === 0 ? <div style={{fontSize:10, color:'var(--ink3)'}}>Keine riskanten Aufträge</div> : riskOrders.map(a => (
               <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, padding: '4px 0', borderBottom: '1px solid var(--bd)' }}>
                 <span style={{ fontWeight: 600 }}>{a.id}</span>
-                <span style={{ color: 'var(--ink2)' }}>{a.kunde}</span>
+                <span style={{ color: 'var(--ink2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100px' }}>{a.kunde}</span>
                 <span style={{ color: a.tage < 0 ? 'var(--neg)' : 'var(--warn)', fontWeight: 700 }}>{a.tage < 0 ? `${a.tage} T` : 'Heute'}</span>
               </div>
             ))}

@@ -39,25 +39,7 @@ export const itemsRepository = {
     }
 
     // --- Mock Fallback ---
-    if (typeof window !== "undefined") {
-      if (OfflineManager.isOffline()) {
-        const cached = await IndexedDBHelper.getSnapshot<Item>("items");
-        if (cached && cached.length > 0) {
-          return cached;
-        }
-      }
-
-      const saved = localStorage.getItem("kreile_items");
-      const items = saved ? JSON.parse(saved) : [];
-
-      if (!OfflineManager.isOffline()) {
-        IndexedDBHelper.saveSnapshot("items", items.slice(0, 200)).catch(err =>
-          console.error("Failed to save items snapshot to IndexedDB:", err)
-        );
-      }
-
-      return items as Item[];
-    }
+    console.warn('Mock fallback hit in itemsRepository.getAll - returning empty');
     return [];
   },
 
@@ -83,8 +65,8 @@ export const itemsRepository = {
     }
 
     // --- Mock Fallback ---
-    const all = await this.getAll();
-    return all.filter(i => i.orderId === orderId);
+    console.warn('Mock fallback hit in itemsRepository.getByOrderId - returning empty');
+    return [];
   },
 
   async create(data: Omit<Item, "id"> & { id?: string }): Promise<Item> {
@@ -126,25 +108,8 @@ export const itemsRepository = {
     }
 
     // --- Mock Fallback ---
-    const all = await this.getAll();
-    const newItem: Item = { ...data, id };
-    const updated = [newItem, ...all];
-
-    if (OfflineManager.isOffline()) {
-      await OfflineManager.enqueueAction("ITEM_CREATE", data);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("kreile_items", JSON.stringify(updated));
-        if (newItem.photo) localStorage.setItem(`kreile_photo_item_${newItem.id}`, newItem.photo);
-      }
-      return newItem;
-    }
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_items", JSON.stringify(updated));
-      if (newItem.photo) localStorage.setItem(`kreile_photo_item_${newItem.id}`, newItem.photo);
-      IndexedDBHelper.saveSnapshot("items", updated.slice(0, 200)).catch(err => console.error(err));
-    }
-    return newItem;
+    console.warn('Mock fallback hit in itemsRepository.create - returning empty mock item');
+    return { ...data, id };
   },
 
   async update(id: string, changes: Partial<Item>): Promise<Item | null> {
@@ -172,24 +137,8 @@ export const itemsRepository = {
     }
 
     // --- Mock Fallback ---
-    const all = await this.getAll();
-    let updatedItem: Item | null = null;
-    
-    const updated = all.map(i => {
-      if (i.id === id) {
-        updatedItem = { ...i, ...changes };
-        return updatedItem;
-      }
-      return i;
-    });
-
-    if (!updatedItem) return null;
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_items", JSON.stringify(updated));
-      IndexedDBHelper.saveSnapshot("items", updated.slice(0, 200)).catch(err => console.error(err));
-    }
-    return updatedItem;
+    console.warn('Mock fallback hit in itemsRepository.update - returning null');
+    return null;
   },
 
   async createMany(items: Omit<Item, "id">[]): Promise<Item[]> {

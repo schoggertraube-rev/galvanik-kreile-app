@@ -52,34 +52,8 @@ export const ordersRepository = {
     }
 
     // --- Mock Fallback ---
-    if (typeof window !== "undefined") {
-      // If offline or error, try reading from IndexedDB Read-Cache snapshot
-      if (OfflineManager.isOffline()) {
-        const cached = await IndexedDBHelper.getSnapshot<Order>("orders");
-        if (cached && cached.length > 0) {
-          console.log("📴 Loaded orders from IndexedDB cache (Offline Mode)");
-          return cached;
-        }
-      }
-
-      // Fallback to localStorage
-      const saved = localStorage.getItem("kreile_orders");
-      const orders = saved ? JSON.parse(saved) : INITIAL_ORDERS;
-      
-      if (!saved) {
-        localStorage.setItem("kreile_orders", JSON.stringify(INITIAL_ORDERS));
-      }
-
-      // Update the IndexedDB cache snapshot for next time
-      if (!OfflineManager.isOffline()) {
-        IndexedDBHelper.saveSnapshot("orders", orders.slice(0, 50)).catch(err =>
-          console.error("Failed to save orders snapshot to IndexedDB:", err)
-        );
-      }
-
-      return orders as Order[];
-    }
-    return INITIAL_ORDERS as unknown as Order[];
+    console.warn("Mock fallback hit in ordersRepository - returning empty");
+    return [];
   },
 
   async create(data: Omit<Order, "id" | "orderNumber" | "status" | "risk"> & { id?: string }): Promise<Order> {

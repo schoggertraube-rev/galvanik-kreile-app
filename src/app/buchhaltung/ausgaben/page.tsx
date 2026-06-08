@@ -6,21 +6,18 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ChevronRight, TrendingDown, AlertCircle, CheckCircle2, Wallet, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
-
-const CATEGORIES = [
-  { id: "material", label: "Material & Chemie", color: "bg-rose-500", iconBg: "bg-rose-50", iconColor: "text-rose-500", sum: 18400, budget: 20000, trend: "+2.4%", count: 42 },
-  { id: "energie", label: "Energie", color: "bg-teal-500", iconBg: "bg-teal-50", iconColor: "text-teal-500", sum: 9800, budget: 10000, trend: "-1.2%", count: 3 },
-  { id: "kfz", label: "Kfz & Wartung", color: "bg-purple-500", iconBg: "bg-purple-50", iconColor: "text-purple-500", sum: 2100, budget: 1500, trend: "+12.5%", count: 8, warning: true },
-  { id: "buero", label: "Büro & Software", color: "bg-emerald-500", iconBg: "bg-emerald-50", iconColor: "text-emerald-500", sum: 1480, budget: 1500, trend: "-0.5%", count: 24 },
-  { id: "kraftstoff", label: "Kraftstoff", color: "bg-blue-500", iconBg: "bg-blue-50", iconColor: "text-blue-500", sum: 1240, budget: 1500, trend: "+5.0%", count: 18 },
-  { id: "bewirtung", label: "Bewirtung", color: "bg-amber-500", iconBg: "bg-amber-50", iconColor: "text-amber-500", sum: 340, budget: 500, trend: "-10.0%", count: 4 },
-  { id: "sonstiges", label: "Sonstiges", color: "bg-neutral-500", iconBg: "bg-neutral-100", iconColor: "text-neutral-500", sum: 15840, budget: 15000, trend: "+4.1%", count: 43 },
-];
+import { getAusgabenKategorien } from '@/app/buchhaltung/analysis.actions';
 
 export default function AusgabenPage() {
   usePageView();
 
-  const gesamt = CATEGORIES.reduce((s, k) => s + k.sum, 0);
+  const [categories, setCategories] = useState<any[]>([]);
+
+  useEffect(() => {
+    getAusgabenKategorien().then(setCategories);
+  }, []);
+
+  const gesamt = categories.reduce((s, k) => s + k.sum, 0);
 
   return (
     <div className="w-full pb-24 px-4 sm:px-6 xl:px-8 min-h-screen">
@@ -90,7 +87,7 @@ export default function AusgabenPage() {
               <span className="text-[10px] font-bold text-emerald-600 tracking-wider">VERIFIZIERT</span>
             </div>
             <p className="text-xs text-neutral-600 leading-relaxed">
-              Die Energiekosten (<strong className="text-[#1e1b18]">9.800 €</strong>) bewegen sich im budgetierten Rahmen und sind im Vergleich zum Vorjahreszeitraum um <strong className="text-emerald-600">1,2 % gesunken</strong>.
+              Die Energiekosten (<strong className="text-[#1e1b18]">{categories.find(c => c.id === 'energie')?.sum?.toLocaleString("de-DE") || 0} €</strong>) bewegen sich im budgetierten Rahmen und sind im Vergleich zum Vorjahreszeitraum um <strong className="text-emerald-600">1,2 % gesunken</strong>.
             </p>
           </div>
         </div>
@@ -100,7 +97,7 @@ export default function AusgabenPage() {
       {/* Kategorie-Karten */}
       <h2 className="text-sm font-semibold text-neutral-600 mb-3">Detail-Aufschlüsselung</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-        {CATEGORIES.map(k => {
+        {categories.map(k => {
           const anteil = ((k.sum / gesamt) * 100).toFixed(1);
           const isOverBudget = k.sum > k.budget;
           return (

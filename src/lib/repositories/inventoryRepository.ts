@@ -77,12 +77,8 @@ export const inventoryRepository = {
     }
 
     // --- Mock Fallback ---
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("kreile_inventory_items");
-      if (saved) return JSON.parse(saved);
-      localStorage.setItem("kreile_inventory_items", JSON.stringify(INITIAL_ITEMS));
-    }
-    return INITIAL_ITEMS;
+    console.warn('Mock fallback hit in inventoryRepository.getAllItems - returning empty');
+    return [];
   },
 
   async getAllMovements(): Promise<StockMovement[]> {
@@ -107,12 +103,8 @@ export const inventoryRepository = {
     }
 
     // --- Mock Fallback ---
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("kreile_stock_movements");
-      if (saved) return JSON.parse(saved);
-      localStorage.setItem("kreile_stock_movements", JSON.stringify(INITIAL_MOVEMENTS));
-    }
-    return INITIAL_MOVEMENTS;
+    console.warn('Mock fallback hit in inventoryRepository.getAllMovements - returning empty');
+    return [];
   },
 
   async getItemById(id: string): Promise<InventoryItem | null> {
@@ -142,8 +134,8 @@ export const inventoryRepository = {
     }
 
     // --- Mock Fallback ---
-    const all = await this.getAllItems();
-    return all.find(item => item.id === id) || null;
+    console.warn('Mock fallback hit in inventoryRepository.getItemById - returning empty');
+    return null;
   },
 
   async getMovementsByItem(inventoryItemId: string): Promise<StockMovement[]> {
@@ -168,10 +160,8 @@ export const inventoryRepository = {
     }
 
     // --- Mock Fallback ---
-    const all = await this.getAllMovements();
-    return all
-      .filter(m => m.inventoryItemId === inventoryItemId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    console.warn('Mock fallback hit in inventoryRepository.getMovementsByItem - returning empty');
+    return [];
   },
 
   async createMovement(data: Omit<StockMovement, "id" | "createdAt">): Promise<StockMovement> {
@@ -235,51 +225,12 @@ export const inventoryRepository = {
     }
 
     // --- Mock Fallback ---
-    const items = await this.getAllItems();
-    const item = items.find(i => i.id === data.inventoryItemId);
-    
-    if (!item) {
-      throw new Error(`Inventory item ${data.inventoryItemId} not found.`);
-    }
-
-    let change = data.quantity;
-    if (data.movementType === "consumption" || data.movementType === "stock_out" || data.movementType === "waste") {
-      change = -Math.abs(data.quantity);
-    } else if (data.movementType === "correction") {
-      change = data.quantity; 
-    } else {
-      change = Math.abs(data.quantity);
-    }
-
-    item.currentStock = Math.max(0, item.currentStock + change);
-
-    const newMovement: StockMovement = {
+    console.warn('Mock fallback hit in inventoryRepository.createMovement - returning empty mock movement');
+    return {
       ...data,
       id: createId(),
       createdAt: new Date().toISOString()
     };
-
-    if (OfflineManager.isOffline()) {
-      console.log("📴 Offline: Queuing material booking movement in IndexedDB");
-      await OfflineManager.enqueueAction("MATERIAL_BOOKING", data);
-      
-      if (typeof window !== "undefined") {
-        localStorage.setItem("kreile_inventory_items", JSON.stringify(items));
-        const movements = await this.getAllMovements();
-        localStorage.setItem("kreile_stock_movements", JSON.stringify([newMovement, ...movements]));
-        window.dispatchEvent(new Event("storage")); 
-      }
-      return newMovement;
-    }
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_inventory_items", JSON.stringify(items));
-      const movements = await this.getAllMovements();
-      localStorage.setItem("kreile_stock_movements", JSON.stringify([newMovement, ...movements]));
-      window.dispatchEvent(new Event("storage"));
-    }
-
-    return newMovement;
   },
 
   async hasCriticalStock(): Promise<boolean> {

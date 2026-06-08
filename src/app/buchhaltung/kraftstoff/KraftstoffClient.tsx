@@ -96,19 +96,7 @@ export function KraftstoffClient({ initialTankungen, gesamtLiter, gesamtKosten }
              </p>
            </div>
            
-           {/* Card 2 */}
-           <div className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100 flex flex-col">
-             <div className="flex items-center gap-2 mb-2">
-               <AlertTriangle className="w-4 h-4 text-amber-500" />
-               <h3 className="text-sm font-extrabold text-[#1e1b18]">Tanklücke erkannt</h3>
-             </div>
-             <div className="flex items-center gap-1 mb-3">
-               <span className="text-[10px] font-bold text-amber-600 tracking-wider bg-amber-50 px-2 py-0.5 rounded">HINWEIS</span>
-             </div>
-             <p className="text-xs text-neutral-600 leading-relaxed flex-1">
-               Zwischen <strong className="text-[#1e1b18]">12.-19. Mai</strong> fehlt eine Tankung beim F-GK 101. Die Fahrleistung laut GPS-Daten erfordert hier eigentlich Kraftstoff.
-             </p>
-           </div>
+           {/* Card 2 wurde entfernt: Nur anzeigen wenn das Backend eine echte Lücke meldet */}
         </div>
 
       </div>
@@ -119,9 +107,11 @@ export function KraftstoffClient({ initialTankungen, gesamtLiter, gesamtKosten }
         <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
           {[
             { id: "alle", label: "Alle Fahrzeuge", color: "bg-black" },
-            { id: "101", label: "F-GK 101", color: "bg-blue-500" },
-            { id: "102", label: "F-GK 102", color: "bg-teal-500" },
-            { id: "Privat", label: "Privat-PKW", color: "bg-neutral-400" },
+            ...Array.from(new Set(tankungenUi.map(t => t.kfz))).map((kfz, i) => ({
+              id: kfz,
+              label: kfz,
+              color: ["bg-blue-500", "bg-teal-500", "bg-rose-500", "bg-purple-500", "bg-amber-500"][i % 5]
+            }))
           ].map(f => (
             <button
               key={f.id}
