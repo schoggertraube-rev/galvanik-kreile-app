@@ -201,3 +201,67 @@ export const bhEinstellungen = pgTable("bh_einstellungen", {
   erstelltAm: timestamp("erstellt_am").defaultNow().notNull(),
   aktualisiertAm: timestamp("aktualisiert_am").defaultNow().notNull(),
 });
+
+export const kostenstelle = pgTable("kostenstelle", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  kuerzel: text("kuerzel").notNull(),
+  name: text("name").notNull(),
+  typ: text("typ").notNull(),
+  capacityCenterId: uuid("capacity_center_id"),
+  istAktiv: boolean("ist_aktiv").default(true),
+  geplantePersonalkostenMonatlich: numeric("geplante_personalkosten_monatlich", { precision: 12, scale: 2 }),
+  geplanteSachkostenMonatlich: numeric("geplante_sachkosten_monatlich", { precision: 12, scale: 2 }),
+  verfuegbareStundenMonatlich: numeric("verfuegbare_stunden_monatlich", { precision: 8, scale: 2 }),
+  notiz: text("notiz"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const konto = pgTable("konto", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  nummer: text("nummer").notNull(),
+  bezeichnung: text("bezeichnung").notNull(),
+  kategorie: text("kategorie").notNull(),
+  istErfolgskonto: boolean("ist_erfolgskonto").notNull(),
+  steuerprofilId: uuid("steuerprofil_id").references(() => steuerprofil.id),
+  externesKontoLexware: text("externes_konto_lexware"),
+  externesKontoDatev: text("externes_konto_datev"),
+  istAktiv: boolean("ist_aktiv").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const periode = pgTable("periode", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  jahr: integer("jahr").notNull(),
+  monat: integer("monat").notNull(),
+  status: text("status").notNull(),
+  geschlossenAm: timestamp("geschlossen_am"),
+  geschlossenVon: uuid("geschlossen_von"),
+  bemerkung: text("bemerkung"),
+});
+
+export const forecastVersion = pgTable("forecast_version", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  jahr: integer("jahr").notNull(),
+  monat: integer("monat"),
+  versionTyp: text("version_typ").notNull(),
+  erstelltAm: timestamp("erstellt_am").defaultNow(),
+  erstelltVon: uuid("erstellt_von"),
+  basisData: jsonb("basis_data").notNull(),
+  werte: jsonb("werte").notNull(),
+  bemerkung: text("bemerkung"),
+  istAktiv: boolean("ist_aktiv").default(false),
+});
+
+export const kostenstellenEnergieMonat = pgTable("kostenstellen_energie_monat", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  kostenstelleId: uuid("kostenstelle_id").references(() => kostenstelle.id),
+  monat: date("monat").notNull(),
+  energieEurProStunde: numeric("energie_eur_pro_stunde", { precision: 8, scale: 2 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
