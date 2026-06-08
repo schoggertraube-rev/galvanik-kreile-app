@@ -3,9 +3,17 @@ import { useState } from "react";
 import { CreditCard } from "lucide-react";
 import { Tile } from "./Tile";
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
+import { getL7Daten } from "@/app/buchhaltung/actions";
+import { useEffect } from "react";
 
 export function ZahlungKachel() {
   const [open, setOpen] = useState(false);
+  const [l7Data, setL7Data] = useState<any>(null);
+
+  useEffect(() => {
+    if (!open || l7Data) return;
+    getL7Daten({}).then(setL7Data);
+  }, [open, l7Data]);
 
   return (
     <>
@@ -26,6 +34,7 @@ export function ZahlungKachel() {
         open={open}
         onClose={() => setOpen(false)}
         title="Bankkonto & Cashflow"
+        l7Data={l7Data}
         subtitle="Live-Übersicht der Liquidität und Transaktionen."
         hero={{
           kicker: "Gesamtliquidität",

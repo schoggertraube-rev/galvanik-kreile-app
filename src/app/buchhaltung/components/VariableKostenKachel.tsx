@@ -5,16 +5,19 @@ import { PieChart } from "lucide-react";
 import { Tile } from "./Tile";
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { getAusgabenAnalysisAction } from "@/app/buchhaltung/analysis.actions";
+import { getL7Daten } from "@/app/buchhaltung/actions";
 
 export function VariableKostenKachel({ summe }: { summe: number }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("variabel");
   const [data, setData] = useState<any>(null);
+  const [l7Data, setL7Data] = useState<any>(null);
 
   useEffect(() => {
-    if (!open || data) return;
-    getAusgabenAnalysisAction("2026-06-01", "2026-06-30").then(setData);
-  }, [open, data]);
+    if (!open) return;
+    if (!data) getAusgabenAnalysisAction("2026-06-01", "2026-06-30").then(setData);
+    if (!l7Data) getL7Daten({ kategorieId: "variable_kosten" }).then(setL7Data);
+  }, [open, data, l7Data]);
 
   const props = !data ? { subtitle: "Daten werden live berechnet..." } : {
     // same props block as Fixkosten
@@ -50,7 +53,7 @@ export function VariableKostenKachel({ summe }: { summe: number }) {
         footer="Auswertung"
         analyseLink={{ label: "Analyse", onClick: () => { setTab("variabel"); setOpen(true); } }}
       />
-          <AnalysisOverlay open={open} onClose={() => setOpen(false)} title="Analyse: Variable Kosten" activeTab={tab} onTabChange={setTab} {...props} />
+          <AnalysisOverlay open={open} onClose={() => setOpen(false)} title="Analyse: Variable Kosten" activeTab={tab} onTabChange={setTab} l7Data={l7Data} {...props} />
     </>
   );
 }

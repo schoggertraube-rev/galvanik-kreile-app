@@ -5,13 +5,16 @@ import { Calculator } from "lucide-react";
 import { Tile } from "./Tile";
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { getSparzaehlerAnalysisAction } from "@/app/buchhaltung/analysis.actions";
+import { getL7Daten } from "@/app/buchhaltung/actions";
 
 export function RoiKachel() {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<any>(null);
+  const [l7Data, setL7Data] = useState<any>(null);
 
   useEffect(() => {
-    if (!open && data) return; // Only fetch if we need to and haven't yet, actually fetch on mount to show KPI
+    if (!open && data) return;
+    if (open && !l7Data) getL7Daten({}).then(setL7Data);
     const fetchRoi = async () => {
       const now = new Date();
       const von = `${now.getFullYear()}-01-01`;
@@ -67,7 +70,8 @@ export function RoiKachel() {
       { label: "Sparzähler", href: "/buchhaltung" },
       { label: "Marketing & Performance", href: "/marketing" },
       { label: "App-Einstellungen", href: "/einstellungen" }
-    ]
+    ],
+    l7Data: l7Data
   };
 
   return (

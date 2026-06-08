@@ -5,16 +5,21 @@ import { TrendingUp } from "lucide-react";
 import { Tile } from "./Tile";
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { getBwaAnalysisAction } from "@/app/buchhaltung/analysis.actions";
+import { getL7Daten } from "@/app/buchhaltung/actions";
 
 export function BwaKachel() {
   const [open, setOpen] = useState(false);
   const [data, setData] = useState<any>(null);
+  const [l7Data, setL7Data] = useState<any>(null);
 
   useEffect(() => {
-    if (!open || data) return;
-    const now = new Date();
-    getBwaAnalysisAction(`${now.getFullYear()}-01-01`, `${now.getFullYear()}-12-31`).then(setData);
-  }, [open, data]);
+    if (!open) return;
+    if (!data) {
+      const now = new Date();
+      getBwaAnalysisAction(`${now.getFullYear()}-01-01`, `${now.getFullYear()}-12-31`).then(setData);
+    }
+    if (!l7Data) getL7Daten({}).then(setL7Data);
+  }, [open, data, l7Data]);
 
   const props = !data ? { subtitle: "Daten werden live berechnet..." } : {
     icon: <TrendingUp className="w-6 h-6" />,
@@ -35,7 +40,8 @@ export function BwaKachel() {
             ((data.insights?.vermutungen?.length || 0) > 0 ? '<br/><br/>' + data.insights.vermutungen.map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
       actions: (data.insights?.vorschlaege || []).map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
     },
-    linkedAreas: [{ label: "Umsätze ansehen", href: "/performance/umsatz-marge" }]
+    linkedAreas: [{ label: "Umsätze ansehen", href: "/performance/umsatz-marge" }],
+    l7Data: l7Data
   };
 
   return (
@@ -48,6 +54,7 @@ export function BwaKachel() {
         href="/buchhaltung/bwa"
         kpi="+19.200 €"
         footer="Details"
+        analyseLink={{ label: "Analyse", onClick: () => setOpen(true) }}
       />
        
           <AnalysisOverlay open={open} onClose={() => setOpen(false)} title="Analyse: BWA" activeTab={"gesamt"} onTabChange={() => {}} {...props} />

@@ -5,17 +5,22 @@ import { AlertCircle } from "lucide-react";
 import { Tile } from "./Tile";
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { getOffenePostenAnalysisAction } from "@/app/buchhaltung/analysis.actions";
+import { getL7Daten } from "@/app/buchhaltung/actions";
 
 export function OffenePostenKachel() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("gesamt");
   const [data, setData] = useState<any>(null);
+  const [l7Data, setL7Data] = useState<any>(null);
 
   useEffect(() => {
-    if (!open || data) return;
-    const now = new Date();
-    getOffenePostenAnalysisAction(`${now.getFullYear()}-01-01`, `${now.getFullYear()}-12-31`).then(setData);
-  }, [open, data]);
+    if (!open) return;
+    if (!data) {
+      const now = new Date();
+      getOffenePostenAnalysisAction(`${now.getFullYear()}-01-01`, `${now.getFullYear()}-12-31`).then(setData);
+    }
+    if (!l7Data) getL7Daten({ belegart: "ausgangsrechnung" }).then(setL7Data);
+  }, [open, data, l7Data]);
 
   const props = !data ? { subtitle: "Daten werden live berechnet..." } : {
     icon: <AlertCircle className="w-6 h-6" />,
@@ -35,7 +40,8 @@ export function OffenePostenKachel() {
             ((data.insights?.vermutungen?.length || 0) > 0 ? '<br/><br/>' + data.insights.vermutungen.map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
       actions: (data.insights?.vorschlaege || []).map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
     },
-    linkedAreas: [{ label: "Rechnungen verwalten", href: "/buchhaltung/rechnungen" }]
+    linkedAreas: [{ label: "Rechnungen verwalten", href: "/buchhaltung/rechnungen" }],
+    l7Data: l7Data
   };
 
   return (

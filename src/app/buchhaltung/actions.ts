@@ -780,3 +780,63 @@ export async function generateLexwareExportAction(von: string, bis: string): Pro
 
 
 
+
+export async function getL7Daten(filter: { belegart?: string, kategorieId?: string }) {
+  const supabase = await createClient()
+  
+  let query = supabase.from('beleg').select('konto_id, kostenstelle_id, ust_betrag, konto(nummer, bezeichnung), kostenstelle(kuerzel, name)');
+  
+  if (filter?.belegart) {
+    query = query.eq('belegart', filter.belegart);
+  }
+  if (filter?.kategorieId) {
+    query = query.eq('kategorie_id', filter.kategorieId);
+  }
+
+  const { data: belege, error } = await query;
+
+  if (error) {
+    console.error('Fehler bei getL7Daten:', error);
+    return undefined;
+  }
+
+  const kontenMap = new Map();
+  const ksMap = new Map();
+  let ustEffekt = 0;
+
+  for (const b of belege || []) {
+    ustEffekt += Number(b.ust_betrag || 0);
+    if (b.konto) {
+      kontenMap.set((b.konto as any).nummer, { id: (b.konto as any).nummer, label: \\ - \\ });
+    }
+    if (b.kostenstelle) {
+      ksMap.set((b.kostenstelle as any).kuerzel, { id: (b.kostenstelle as any).kuerzel, label: \\ - \\ });
+    }
+  }
+
+  const konten = Array.from(kontenMap.values());
+  const kostenstellen = Array.from(ksMap.values());
+  
+  const hasKontierung = konten.length > 0 || ksMap.size > 0;
+  if (!hasKontierung && (belege || []).length > 0) {
+    return {
+      affectedAccounts: [{ id: 'massenzuordnung', label: 'Noch keine Kontierung vorhanden (Link zur Massenzuordnung)' }],
+      affectedCostCenters: [],
+      periodImpact: 'Aktueller Monat (offen)',
+      liquidityImpact: filter?.belegart === 'ausgangsrechnung' ? 'verzögert ~30 Tage' : 'zahlungswirksam',
+      taxImpactEur: ustEffekt
+    };
+  }
+
+  const liquiditaet = filter?.belegart === 'ausgangsrechnung' ? 'verzögert ~30 Tage' : 'zahlungswirksam';
+  
+  const { data: periodeData } = await supabase.from('v_periodenabschluss_status').select('periode, status').limit(1).maybeSingle();
+
+  return {
+    affectedAccounts: konten.length > 0 ? konten : [{ id: 'missing', label: 'Keine spezifischen Konten' }],
+    affectedCostCenters: kostenstellen.length > 0 ? kostenstellen : [{ id: 'gesamt', label: 'Gesamtbetrieb' }],
+    periodImpact: periodeData ? \\ (\)\ : 'Aktueller Monat (offen)',
+    liquidityImpact: liquiditaet,
+    taxImpactEur: ustEffekt
+  };
+}

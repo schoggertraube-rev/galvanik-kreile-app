@@ -5,16 +5,19 @@ import { Wallet } from "lucide-react";
 import { Tile } from "./Tile";
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { getAusgabenAnalysisAction } from "@/app/buchhaltung/analysis.actions";
+import { getL7Daten } from "@/app/buchhaltung/actions";
 
 export function FixkostenKachel({ summe }: { summe: number }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("fix");
   const [data, setData] = useState<any>(null);
+  const [l7Data, setL7Data] = useState<any>(null);
 
   useEffect(() => {
-    if (!open || data) return;
-    getAusgabenAnalysisAction("2026-06-01", "2026-06-30").then(setData);
-  }, [open, data]);
+    if (!open) return;
+    if (!data) getAusgabenAnalysisAction("2026-06-01", "2026-06-30").then(setData);
+    if (!l7Data) getL7Daten({ kategorieId: "fixkosten" }).then(setL7Data);
+  }, [open, data, l7Data]);
 
   const props = !data ? { subtitle: "Daten werden live berechnet..." } : {
     icon: <Wallet className="w-6 h-6" />,
@@ -60,8 +63,7 @@ export function FixkostenKachel({ summe }: { summe: number }) {
       { label: "Wiederkehrende Kosten verwalten", href: "/buchhaltung/kosten" },
       { label: "BWA / Liquidität", href: "/buchhaltung/bwa" }
     ],
-    // l7Data wird aus realen Views gefüllt wenn Spec 37 Phase 6 live ist
-    l7Data: undefined
+    l7Data: l7Data
   };
 
   return (
