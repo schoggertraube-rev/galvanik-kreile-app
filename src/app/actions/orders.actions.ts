@@ -15,8 +15,8 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   try {
-    const dbOrders = await db.select().from(orders).orderBy(orders.createdAt);
-    const dbItems = await db.select().from(items).orderBy(items.createdAt);
+    const dbOrders = await db.select().from(orders).where(eq(orders.tenantId, "galvanik-kreile")).orderBy(orders.createdAt);
+    const dbItems = await db.select().from(items).where(eq(items.tenantId, "galvanik-kreile")).orderBy(items.createdAt);
     const dbCustomers = await db.select().from(customers);
     
     const data = dbOrders.map(o => {
