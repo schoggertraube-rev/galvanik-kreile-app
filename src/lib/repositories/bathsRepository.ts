@@ -48,7 +48,15 @@ export const bathsRepository = {
     }
 
     return data.map(b => {
-      const targetValues = b.target_values && Object.keys(b.target_values).length > 0 ? (b.target_values as BathTargetValues) : undefined;
+      let targetValues = b.target_values && Object.keys(b.target_values).length > 0 ? (b.target_values as BathTargetValues) : undefined;
+      if (!targetValues && (b.temperature_min != null || b.temperature_max != null || b.ph_min != null || b.ph_max != null)) {
+        targetValues = {
+          temperatureMin: b.temperature_min != null ? Number(b.temperature_min) : undefined,
+          temperatureMax: b.temperature_max != null ? Number(b.temperature_max) : undefined,
+          phMin: b.ph_min != null ? Number(b.ph_min) : undefined,
+          phMax: b.ph_max != null ? Number(b.ph_max) : undefined,
+        };
+      }
       const configurationMissing = !targetValues;
 
       return {
@@ -111,7 +119,15 @@ export const bathsRepository = {
     }
     if (!data) return null;
 
-    const targetValues = data.target_values && Object.keys(data.target_values).length > 0 ? (data.target_values as BathTargetValues) : undefined;
+    let targetValues = data.target_values && Object.keys(data.target_values).length > 0 ? (data.target_values as BathTargetValues) : undefined;
+    if (!targetValues && (data.temperature_min != null || data.temperature_max != null || data.ph_min != null || data.ph_max != null)) {
+      targetValues = {
+        temperatureMin: data.temperature_min != null ? Number(data.temperature_min) : undefined,
+        temperatureMax: data.temperature_max != null ? Number(data.temperature_max) : undefined,
+        phMin: data.ph_min != null ? Number(data.ph_min) : undefined,
+        phMax: data.ph_max != null ? Number(data.ph_max) : undefined,
+      };
+    }
     const configurationMissing = !targetValues;
 
     return {

@@ -386,7 +386,11 @@ export const baeder = pgTable("baths", {
   name: varchar("name", { length: 100 }).notNull(),
   status: varchar("status", { length: 50 }).notNull().default("ok"), // "ok", "warnung", "kritisch"
   temperatur: numeric("temperatur", { precision: 5, scale: 2 }),
+  temperatureMin: numeric("temperature_min", { precision: 5, scale: 2 }),
+  temperatureMax: numeric("temperature_max", { precision: 5, scale: 2 }),
   phWert: numeric("ph_wert", { precision: 4, scale: 2 }),
+  phMin: numeric("ph_min", { precision: 4, scale: 2 }),
+  phMax: numeric("ph_max", { precision: 4, scale: 2 }),
   letzteWartung: timestamp("letzte_wartung"),
   targetValues: jsonb("target_values").notNull().default({}),
   processType: text("process_type").notNull().default("unknown"),
