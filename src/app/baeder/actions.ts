@@ -16,7 +16,11 @@ export async function getBaederListAction() {
     const messwerteRecords = await db.select().from(badMesswerte);
 
     const enriched = baederRecords.map(b => {
-      const bMesswerte = messwerteRecords.filter(m => m.badId === b.id).sort((x, y) => new Date(y.timestamp).getTime() - new Date(x.timestamp).getTime());
+      const bMesswerte = messwerteRecords.filter(m => m.badId === b.id).sort((x, y) => {
+        const t1 = y.measuredAt ? new Date(y.measuredAt).getTime() : 0;
+        const t2 = x.measuredAt ? new Date(x.measuredAt).getTime() : 0;
+        return t1 - t2;
+      });
       return {
         ...b,
         messwerte: bMesswerte

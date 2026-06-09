@@ -5,7 +5,7 @@ import {
   priceAgreements, 
   events, 
   complaints, 
-  baths, 
+  baeder, 
   inventoryItems, 
   appUsers 
 } from "./schema";
@@ -27,7 +27,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
       await db.delete(orders);
       await db.delete(priceAgreements);
       await db.delete(customers);
-      await db.delete(baths);
+      await db.delete(baeder);
       await db.delete(inventoryItems);
       await db.delete(appUsers);
     } else {

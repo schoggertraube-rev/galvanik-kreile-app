@@ -1,5 +1,8 @@
 import { createId } from "@paralleldrive/cuid2";
-import { createClient } from "@/lib/supabase/client";
+import {
+  getBathMeasurementsDb,
+  createBathMeasurementDb
+} from "@/app/actions/baths.actions";
 
 export type BathMeasurementBase = {
   temperature?: number | null;
@@ -28,29 +31,23 @@ const measurementsStore = new Map<string, BathMeasurement[]>();
 export const bathMeasurementsRepository = {
   async list(bathId: string): Promise<BathMeasurement[]> {
     if (isSupabase) {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from('bath_measurements')
-        .select('*')
-        .eq('bath_id', bathId)
-        .order('measured_at', { ascending: false });
-
-      if (error) {
-        console.error("Supabase bathMeasurementsRepository.list error:", error);
-        throw error;
+      const result = await getBathMeasurementsDb(bathId);
+      if (!result.ok) {
+        console.error("Supabase bathMeasurementsRepository.list error:", result.message);
+        throw new Error(result.message);
       }
 
-      return data.map(m => ({
-        id: m.id,
-        bathId: m.bath_id,
-        temperature: m.temperature,
-        ph: m.ph,
-        concentration: m.concentration,
-        conductivity: m.conductivity,
-        statusAfterMeasurement: m.status_after_measurement,
-        note: m.note || undefined,
-        measuredAt: m.measured_at,
-        measuredBy: m.measured_by || 'unknown'
+      return result.data.map(row => ({
+        id: row.id,
+        bathId: row.badId,
+        temperature: row.temperature != null ? Number(row.temperature) : null,
+        ph: row.phValue != null ? Number(row.phValue) : null,
+        concentration: null,
+        conductivity: null,
+        statusAfterMeasurement: "stable", // Default fallback if not computed on server yet
+        note: row.notes || undefined,
+        measuredAt: row.measuredAt ? new Date(row.measuredAt).toISOString() : new Date().toISOString(),
+        measuredBy: 'System'
       })) as BathMeasurement[];
     }
 
@@ -63,24 +60,16 @@ export const bathMeasurementsRepository = {
     const measuredAt = measurement.measuredAt || new Date().toISOString();
 
     if (isSupabase) {
-      const supabase = createClient();
-      const dbMeasurement = {
-        id: newId,
-        bath_id: measurement.bathId,
+      const res = await createBathMeasurementDb({
+        bathId: measurement.bathId,
         temperature: measurement.temperature || null,
-        ph: measurement.ph || null,
-        concentration: measurement.concentration || null,
-        conductivity: measurement.conductivity || null,
-        status_after_measurement: measurement.statusAfterMeasurement,
-        note: measurement.note || null,
-        measured_at: measuredAt,
-        measured_by: measurement.measuredBy || null
-      };
-
-      const { error } = await supabase.from('bath_measurements').insert(dbMeasurement);
-      if (error) {
-        console.error("Supabase bathMeasurementsRepository.add error:", error);
-        throw error;
+        phValue: measurement.ph || null,
+        notes: measurement.note || undefined,
+        measuredAt
+      });
+      if (!res.ok) {
+        console.error("Supabase bathMeasurementsRepository.add error:", res.message);
+        throw new Error(res.message);
       }
 
       return {
@@ -105,34 +94,26 @@ export const bathMeasurementsRepository = {
 
   async getLatest(bathId: string): Promise<BathMeasurement | null> {
     if (isSupabase) {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from('bath_measurements')
-        .select('*')
-        .eq('bath_id', bathId)
-        .order('measured_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (error) {
-        if (error.code === 'PGRST116') return null; // No rows found
-        console.error("Supabase bathMeasurementsRepository.getLatest error:", error);
-        throw error;
+      const result = await getBathMeasurementsDb(bathId);
+      if (!result.ok) {
+        console.error("Supabase bathMeasurementsRepository.getLatest error:", result.message);
+        throw new Error(result.message);
       }
       
-      if (!data) return null;
+      if (result.data.length === 0) return null;
+      const data = result.data[0];
 
       return {
         id: data.id,
-        bathId: data.bath_id,
-        temperature: data.temperature,
-        ph: data.ph,
-        concentration: data.concentration,
-        conductivity: data.conductivity,
-        statusAfterMeasurement: data.status_after_measurement,
-        note: data.note || undefined,
-        measuredAt: data.measured_at,
-        measuredBy: data.measured_by || 'unknown'
+        bathId: data.badId,
+        temperature: data.temperature != null ? Number(data.temperature) : null,
+        ph: data.phValue != null ? Number(data.phValue) : null,
+        concentration: null,
+        conductivity: null,
+        statusAfterMeasurement: "stable",
+        note: data.notes || undefined,
+        measuredAt: data.measuredAt ? new Date(data.measuredAt).toISOString() : new Date().toISOString(),
+        measuredBy: 'System'
       } as BathMeasurement;
     }
 
@@ -140,7 +121,6 @@ export const bathMeasurementsRepository = {
     const existing = measurementsStore.get(bathId) || [];
     if (existing.length === 0) return null;
     
-    // They are inserted unshifted, so index 0 is latest
     return existing[0];
   }
 };

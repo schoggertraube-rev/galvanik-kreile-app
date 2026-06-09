@@ -1,6 +1,12 @@
 import { createId } from "@paralleldrive/cuid2";
 import { computeBathStatus, BathStatus, BathTargetValues, BathMeasurement } from "@/lib/baths/computeBathStatus";
-import { createClient } from "@/lib/supabase/client";
+import {
+  getBathsDb,
+  getBathByIdDb,
+  getBathMeasurementsDb,
+  createBathMeasurementDb,
+  updateBathDb
+} from "@/app/actions/baths.actions";
 
 export interface Bath {
   id: string;
@@ -39,22 +45,20 @@ export interface BathAddition {
 
 export const bathsRepository = {
   async getAllBaths(): Promise<Bath[]> {
-    const supabase = createClient();
-    const { data, error } = await supabase.from('baths').select('*').order('name', { ascending: true });
-
-    if (error) {
-      console.error("Supabase getAllBaths error:", error);
-      throw error;
+    const result = await getBathsDb();
+    if (!result.ok) {
+      console.error("bathsRepository.getAllBaths failed:", result.message);
+      throw new Error(result.message);
     }
 
-    return data.map(b => {
-      let targetValues = b.target_values && Object.keys(b.target_values).length > 0 ? (b.target_values as BathTargetValues) : undefined;
-      if (!targetValues && (b.temperature_min != null || b.temperature_max != null || b.ph_min != null || b.ph_max != null)) {
+    return result.data.map(b => {
+      let targetValues = b.targetValues && Object.keys(b.targetValues).length > 0 ? (b.targetValues as BathTargetValues) : undefined;
+      if (!targetValues && (b.temperatureMin != null || b.temperatureMax != null || b.phMin != null || b.phMax != null)) {
         targetValues = {
-          temperatureMin: b.temperature_min != null ? Number(b.temperature_min) : undefined,
-          temperatureMax: b.temperature_max != null ? Number(b.temperature_max) : undefined,
-          phMin: b.ph_min != null ? Number(b.ph_min) : undefined,
-          phMax: b.ph_max != null ? Number(b.ph_max) : undefined,
+          temperatureMin: b.temperatureMin != null ? Number(b.temperatureMin) : undefined,
+          temperatureMax: b.temperatureMax != null ? Number(b.temperatureMax) : undefined,
+          phMin: b.phMin != null ? Number(b.phMin) : undefined,
+          phMax: b.phMax != null ? Number(b.phMax) : undefined,
         };
       }
       const configurationMissing = !targetValues;
@@ -63,47 +67,41 @@ export const bathsRepository = {
         id: b.id,
         bathNumber: b.name.substring(0, 3).toUpperCase(),
         name: b.name,
-        processType: b.process_type || "unknown",
+        processType: b.processType || "unknown",
         status: (b.status as BathStatus) || "stable",
-        stationId: b.station_id || undefined,
+        stationId: b.stationId || undefined,
         targetValues: targetValues,
-        lastMeasurementAt: b.letzte_wartung || undefined,
+        lastMeasurementAt: b.letzteWartung ? new Date(b.letzteWartung).toISOString() : undefined,
         configurationMissing
       };
     });
   },
 
   async getAllMeasurements(): Promise<BathMeasurementLog[]> {
-    const supabase = createClient();
-    const { data, error } = await supabase.from('bath_measurements').select('*').order('timestamp', { ascending: false });
-
-    if (error) {
-      console.error("Supabase getAllMeasurements error:", error);
-      throw error;
+    const result = await getBathMeasurementsDb();
+    if (!result.ok) {
+      console.error("bathsRepository.getAllMeasurements failed:", result.message);
+      throw new Error(result.message);
     }
 
-    const grouped = new Map<string, any>();
-    for (const row of data) {
-      const key = `${row.bad_id}_${row.timestamp}`;
-      if (!grouped.has(key)) {
-        grouped.set(key, {
-          id: row.id,
-          bathId: row.bad_id,
-          measuredAt: row.timestamp,
-          measuredBy: row.gemessen_von || "Unbekannt",
-          statusAfterMeasurement: "stable" as BathStatus,
-          temperature: null,
-          ph: null,
-          concentration: null
-        });
-      }
-      const entry = grouped.get(key);
-      if (row.wert_typ === 'temperatur') entry.temperature = Number(row.wert);
-      if (row.wert_typ === 'ph') entry.ph = Number(row.wert);
-      if (row.wert_typ === 'chemie') entry.concentration = Number(row.wert);
-    }
-
-    return Array.from(grouped.values());
+    // In the new schema, bath_measurements has:
+    // id, tenant_id, bath_id, measured_at, temperature, ph_value, notes, created_at.
+    // Each row represents a single measurement run with both temperature and ph_value.
+    // We map this directly to BathMeasurementLog.
+    return result.data.map(row => {
+      const tsStr = row.measuredAt ? new Date(row.measuredAt).toISOString() : new Date().toISOString();
+      return {
+        id: row.id,
+        bathId: row.badId,
+        measuredAt: tsStr,
+        measuredBy: "System", // Not stored in schema, default to System
+        statusAfterMeasurement: "stable" as BathStatus, // Will be computed if we have targetValues
+        temperature: row.temperature != null ? Number(row.temperature) : null,
+        ph: row.phValue != null ? Number(row.phValue) : null,
+        concentration: null, // Concentration not present in remote schema
+        note: row.notes || undefined
+      };
+    });
   },
 
   async getAllAdditions(): Promise<BathAddition[]> {
@@ -111,21 +109,21 @@ export const bathsRepository = {
   },
 
   async getBathById(id: string): Promise<Bath | null> {
-    const supabase = createClient();
-    const { data, error } = await supabase.from('baths').select('*').eq('id', id).single();
-    if (error) {
-      if (error.code === 'PGRST116') return null;
-      throw error;
+    const result = await getBathByIdDb(id);
+    if (!result.ok) {
+      console.error("bathsRepository.getBathById failed:", result.message);
+      throw new Error(result.message);
     }
-    if (!data) return null;
+    if (!result.data) return null;
+    const data = result.data;
 
-    let targetValues = data.target_values && Object.keys(data.target_values).length > 0 ? (data.target_values as BathTargetValues) : undefined;
-    if (!targetValues && (data.temperature_min != null || data.temperature_max != null || data.ph_min != null || data.ph_max != null)) {
+    let targetValues = data.targetValues && Object.keys(data.targetValues).length > 0 ? (data.targetValues as BathTargetValues) : undefined;
+    if (!targetValues && (data.temperatureMin != null || data.temperatureMax != null || data.phMin != null || data.phMax != null)) {
       targetValues = {
-        temperatureMin: data.temperature_min != null ? Number(data.temperature_min) : undefined,
-        temperatureMax: data.temperature_max != null ? Number(data.temperature_max) : undefined,
-        phMin: data.ph_min != null ? Number(data.ph_min) : undefined,
-        phMax: data.ph_max != null ? Number(data.ph_max) : undefined,
+        temperatureMin: data.temperatureMin != null ? Number(data.temperatureMin) : undefined,
+        temperatureMax: data.temperatureMax != null ? Number(data.temperatureMax) : undefined,
+        phMin: data.phMin != null ? Number(data.phMin) : undefined,
+        phMax: data.phMax != null ? Number(data.phMax) : undefined,
       };
     }
     const configurationMissing = !targetValues;
@@ -134,11 +132,11 @@ export const bathsRepository = {
       id: data.id,
       bathNumber: data.name.substring(0, 3).toUpperCase(),
       name: data.name,
-      processType: data.process_type || "unknown",
+      processType: data.processType || "unknown",
       status: (data.status as BathStatus) || "stable",
-      stationId: data.station_id || undefined,
+      stationId: data.stationId || undefined,
       targetValues: targetValues,
-      lastMeasurementAt: data.letzte_wartung || undefined,
+      lastMeasurementAt: data.letzteWartung ? new Date(data.letzteWartung).toISOString() : undefined,
       configurationMissing
     };
   },
@@ -155,53 +153,33 @@ export const bathsRepository = {
   },
 
   async addMeasurement(bathId: string, data: Omit<BathMeasurementLog, "id" | "bathId" | "measuredAt" | "statusAfterMeasurement">): Promise<BathMeasurementLog> {
-    const supabase = createClient();
     const ts = new Date().toISOString();
 
-    if (data.temperature) {
-      await supabase.from('bath_measurements').insert({
-        bad_id: bathId,
-        wert_typ: 'temperatur',
-        wert: data.temperature,
-        gemessen_von: data.measuredBy || 'System',
-        timestamp: ts
-      });
-    }
-    if (data.ph) {
-      await supabase.from('bath_measurements').insert({
-        bad_id: bathId,
-        wert_typ: 'ph',
-        wert: data.ph,
-        gemessen_von: data.measuredBy || 'System',
-        timestamp: ts
-      });
-    }
-    if (data.concentration) {
-      await supabase.from('bath_measurements').insert({
-        bad_id: bathId,
-        wert_typ: 'chemie',
-        wert: data.concentration,
-        gemessen_von: data.measuredBy || 'System',
-        timestamp: ts
-      });
-    }
+    const res = await createBathMeasurementDb({
+      bathId,
+      temperature: data.temperature || null,
+      phValue: data.ph || null,
+      notes: data.note || undefined,
+      measuredAt: ts
+    });
+    if (!res.ok) throw new Error(res.message);
 
     const bath = await this.getBathById(bathId);
     let newStatus = bath?.status || "stable";
 
-    // Only compute if target values exist
     if (bath && bath.targetValues) {
       newStatus = computeBathStatus(data, bath.targetValues);
     }
 
-    await supabase.from('baths').update({
-      letzte_wartung: ts,
+    const updateRes = await updateBathDb(bathId, {
+      letzteWartung: ts,
       status: newStatus
-    }).eq('id', bathId);
+    });
+    if (!updateRes.ok) throw new Error(updateRes.message);
 
     return {
       ...data,
-      id: createId(),
+      id: res.data.id,
       bathId,
       measuredAt: ts,
       statusAfterMeasurement: newStatus
@@ -213,9 +191,8 @@ export const bathsRepository = {
   },
 
   async updateBathStatusManual(bathId: string, status: BathStatus, notes: string): Promise<Bath> {
-    const supabase = createClient();
-    const { error } = await supabase.from('baths').update({ status }).eq('id', bathId);
-    if (error) throw error;
+    const res = await updateBathDb(bathId, { status });
+    if (!res.ok) throw new Error(res.message);
 
     const updated = await this.getBathById(bathId);
     if (!updated) throw new Error("Bath not found after update");
@@ -223,9 +200,8 @@ export const bathsRepository = {
   },
 
   async hasCriticalBath(): Promise<boolean> {
-    const supabase = createClient();
-    const { data, error } = await supabase.from('baths').select('id').eq('status', 'critical').limit(1);
-    if (error) throw error;
-    return (data && data.length > 0);
+    const result = await getBathsDb();
+    if (!result.ok) throw new Error(result.message);
+    return result.data.some(b => b.status === 'critical');
   }
 };
