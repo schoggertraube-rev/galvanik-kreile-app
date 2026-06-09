@@ -1,5 +1,4 @@
 import { createId } from "@paralleldrive/cuid2";
-import { INITIAL_ORDERS } from "@/lib/mockData";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { IndexedDBHelper } from "@/lib/offline/IndexedDBHelper";
 import { getOrdersDb, createOrderDb, updateOrderDb } from "@/app/actions/orders.actions";
@@ -40,6 +39,7 @@ export const ordersRepository = {
             throw new Error(`AUTH_ERROR: ${result.message}`);
           }
           console.warn("Drizzle ordersRepository fallback:", result.message, result.error);
+          return [];
         } else {
           return result.data as unknown as Order[];
         }
@@ -48,11 +48,9 @@ export const ordersRepository = {
           throw error; // hard crash for auth errors
         }
         console.warn("Drizzle ordersRepository.getAll error. Message:", error instanceof Error ? error.message : "Unknown", "Details:", error);
+        return [];
       }
     }
-
-    // --- Mock Fallback ---
-    console.warn("Mock fallback hit in ordersRepository - returning empty");
     return [];
   },
 
@@ -61,153 +59,31 @@ export const ordersRepository = {
     const dueDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
     
     if (isSupabase) {
-      try {
-        const result = await createOrderDb(data as Record<string, unknown>);
-        if (!result.ok) {
-          if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
-            throw new Error(`AUTH_ERROR: ${result.message}`);
-          }
-          console.warn("Drizzle Server Action failed: " + result.message + ". Falling back to mock.");
-        } else {
-          return result.data as unknown as Order;
+      const result = await createOrderDb(data as Record<string, unknown>);
+      if (!result.ok) {
+        if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
+          throw new Error(`AUTH_ERROR: ${result.message}`);
         }
-      } catch (error) {
-        if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
-          throw error;
-        }
-        console.warn("Drizzle ordersRepository.create error:", error, ". Falling back to mock.");
+        throw new Error("Drizzle Server Action failed: " + result.message);
       }
+      return result.data as unknown as Order;
     }
-
-    // --- Mock Fallback ---
-    const all = await this.getAll();
-    const orderNumber = `A-${202600 + all.length}`;
-    
-    const cleanOrderNum = String(202600 + all.length);
-    const mappedParts = (data.parts || []).map((part: Record<string, unknown>, index: number) => {
-      const partNum = index + 1;
-      const generatedPartId = `T-A-${cleanOrderNum}-${partNum}`;
-      return {
-        id: part.id || generatedPartId,
-        name: part.name,
-        quantity: typeof part.quantity === "number" ? part.quantity : parseInt(String(part.quantity)) || 1,
-        surfaceRequested: part.surfaceRequested || "",
-        status: part.status || "in_progress",
-        station: part.station || data.currentStationId || "wareneingang"
-      };
-    });
-
-    let customerName = "Unbekannter Kunde";
-    try {
-      const savedCustomers = localStorage.getItem("kreile_customers");
-      if (savedCustomers) {
-        const customers = JSON.parse(savedCustomers);
-        const customer = customers.find((c: { id: string, name: string }) => c.id === data.customerId);
-        if (customer) {
-          customerName = customer.name;
-        }
-      }
-    } catch (e) {
-      console.warn("Failed to find customerName in local storage lookup", e);
-    }
-
-    const newOrder: Order = {
-      ...data,
-      id: data.id || createId(),
-      orderNumber,
-      customerName,
-      status: "in_progress",
-      risk: "green",
-      intakeDate,
-      dueDate,
-      dueLabel: "Fällig in",
-      dueValue: "10 Tagen",
-      parts: mappedParts
-    };
-
-    const updated = [newOrder, ...all];
-
-    if (OfflineManager.isOffline()) {
-      console.log("📴 Offline: Queuing order creation in IndexedDB");
-      await OfflineManager.enqueueAction("ORDER_CREATE", data);
-      
-      if (typeof window !== "undefined") {
-        localStorage.setItem("kreile_orders", JSON.stringify(updated));
-      }
-      return newOrder;
-    }
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_orders", JSON.stringify(updated));
-      IndexedDBHelper.saveSnapshot("orders", updated.slice(0, 50)).catch(err =>
-        console.error("Failed to update orders snapshot:", err)
-      );
-    }
-    return newOrder;
+    throw new Error("Supabase is not enabled.");
   },
 
   async updateOrder(idOrNumber: string, changes: Partial<Order>): Promise<Order | null> {
     if (isSupabase) {
-      try {
-        const result = await updateOrderDb(idOrNumber, changes);
-        if (!result.ok) {
-          if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
-            throw new Error(`AUTH_ERROR: ${result.message}`);
-          }
-          console.warn("Update failed: " + result.message + ". Falling back to mock.");
-        } else {
-          // Return the updated object by re-fetching all and finding it,
-          // ensuring we have the exact UI format mapped correctly.
-          const all = await this.getAll();
-          const updatedOrder = all.find(o => o.id === idOrNumber || o.orderNumber === idOrNumber);
-          return updatedOrder || null;
+      const result = await updateOrderDb(idOrNumber, changes);
+      if (!result.ok) {
+        if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
+          throw new Error(`AUTH_ERROR: ${result.message}`);
         }
-      } catch (error) {
-        if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
-          throw error;
-        }
-        console.warn("Drizzle ordersRepository.updateOrder error:", error, ". Falling back to mock.");
+        throw new Error("Update failed: " + result.message);
       }
+      const all = await this.getAll();
+      const updatedOrder = all.find(o => o.id === idOrNumber || o.orderNumber === idOrNumber);
+      return updatedOrder || null;
     }
-
-    // --- Mock Fallback ---
-    const all = await this.getAll();
-    let updatedOrder: Order | null = null;
-
-    const updated = all.map(o => {
-      if (o.id === idOrNumber || o.orderNumber === idOrNumber) {
-        updatedOrder = { ...o, ...changes };
-        return updatedOrder;
-      }
-      return o;
-    });
-
-    if (!updatedOrder) return null;
-
-    if (OfflineManager.isOffline()) {
-      console.log("📴 Offline: Queuing order status update in IndexedDB");
-      await OfflineManager.enqueueAction("ORDER_STATUS_UPDATE", {
-        id: (updatedOrder as Order).id,
-        orderNumber: (updatedOrder as Order).orderNumber,
-        changes
-      });
-
-      if (typeof window !== "undefined") {
-        localStorage.setItem("kreile_orders", JSON.stringify(updated));
-        window.dispatchEvent(new Event("storage"));
-      }
-      return updatedOrder;
-    }
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_orders", JSON.stringify(updated));
-      window.dispatchEvent(new Event("storage"));
-      
-      IndexedDBHelper.saveSnapshot("orders", updated.slice(0, 50)).catch(err =>
-        console.error("Failed to update orders snapshot:", err)
-      );
-    }
-
-    return updatedOrder;
+    throw new Error("Supabase is not enabled.");
   }
 };

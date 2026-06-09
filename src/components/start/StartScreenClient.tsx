@@ -8,6 +8,7 @@ import { getGreeting } from "@/lib/greeting";
 import { EmailLoginDialog } from "@/components/start/EmailLoginDialog";
 import { useSearchParams } from "next/navigation";
 import { getTodayTopPriority, getFeierabendEvents, notifyAdminPinReset } from "@/app/actions/start.actions";
+import { loginWithPin } from "@/app/actions/auth.actions";
 
 export type StartUser = {
   id: string;
@@ -46,7 +47,7 @@ function WeatherCard() {
         } else if (temp < 12) {
           condition = "Etwas frisch heute – die Galvanikbäder wärmen uns auf! ☕";
         }
-        
+
         // Fetch event if after 15:00
         const hour = new Date().getHours();
         if (hour >= 15) {
@@ -59,7 +60,7 @@ function WeatherCard() {
             console.error(e);
           }
         }
-        
+
         // Simulating the 600ms skeleton requirement
         setTimeout(() => {
           setWeatherText(condition);
@@ -124,62 +125,51 @@ function PinDialog({ user, onClose }: { user: StartUser; onClose: () => void }) 
   const [isInitializing, setIsInitializing] = useState(false);
   const router = useRouter();
 
-  const handleInput = (num: string) => {
+  const handleInput = async (num: string) => {
     if (pin.length >= 4) return;
     const newPin = pin + num;
     setPin(newPin);
     setError(false);
-    
+
     if (newPin.length === 4) {
-      if (newPin === (user.pinHash || "1234")) {
-        setIsInitializing(true);
-        try {
-          // Store current user in localStorage for application state
-          localStorage.setItem("kreile_user_role", user.role);
-          localStorage.setItem("kreile_user_initials", user.initials);
-        } catch (e) {
-          console.warn("localStorage is blocked, skipping user info storage", e);
-        }
-        
-        if (localStorage.getItem("setup_done")) {
-          // Setup bereits erledigt -> direkt weiter
-          const isHttps = window.location.protocol === "https:";
-          
-          // WARNING: Demo Cookies (bypass-auth, kreile_role) sind nur für die lokale Entwicklung
-          // und dienen NICHT als sicheres Production-Rechtemodell. In Production werden sie ignoriert.
-          document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-          document.cookie = `kreile_role=${user.role}; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-          
+      setIsInitializing(true);
+
+      try {
+        const res = await loginWithPin(user.id, newPin);
+
+        if (res.ok) {
+          // Setup / Initialisierung im Hintergrund falls ntig
+          if (!localStorage.getItem("setup_done")) {
+            try {
+              const initRes = await initializeDemoIfNeeded();
+              if (initRes?.initialized || initRes?.reason === "data_exists" || initRes?.reason === "not_supabase") {
+                localStorage.setItem("setup_done", "true");
+              }
+            } catch (e) {
+              console.warn("Demo setup failed", e);
+            }
+          }
+
+          // UI state in localStorage (not auth relevant)
+          try {
+            localStorage.setItem("kreile_user_role", res.role || user.role);
+            localStorage.setItem("kreile_user_initials", user.initials);
+          } catch (e) {
+            console.warn("localStorage is blocked, skipping user info storage", e);
+          }
+
+          // Redirect to home
           window.location.href = "/";
         } else {
-          initializeDemoIfNeeded().then((res) => {
-            if (res?.initialized) {
-              localStorage.setItem("setup_done", "true");
-            } else if (res?.reason === "data_exists" || res?.reason === "not_supabase") {
-              localStorage.setItem("setup_done", "true");
-            }
-            const isHttps = window.location.protocol === "https:";
-            
-            // WARNING: Demo Cookies (bypass-auth, kreile_role) sind nur für die lokale Entwicklung
-            // und dienen NICHT als sicheres Production-Rechtemodell. In Production werden sie ignoriert.
-            document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-            document.cookie = `kreile_role=${user.role}; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-            
-            window.location.href = "/";
-          }).catch(() => {
-            const isHttps = window.location.protocol === "https:";
-            
-            // WARNING: Demo Cookies (bypass-auth, kreile_role) sind nur für die lokale Entwicklung
-            // und dienen NICHT als sicheres Production-Rechtemodell. In Production werden sie ignoriert.
-            document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-            document.cookie = `kreile_role=${user.role}; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-            
-            window.location.href = "/";
-          });
+          setError(true);
+          setTimeout(() => setPin(""), 600);
+          setIsInitializing(false);
         }
-      } else {
+      } catch (e) {
+        console.error("Login failed:", e);
         setError(true);
         setTimeout(() => setPin(""), 600);
+        setIsInitializing(false);
       }
     }
   };
@@ -284,7 +274,7 @@ function StartScreenContent({ users }: { users: StartUser[] }) {
   const [priorityTask, setPriorityTask] = useState<string | null>(null);
   const [deadlineTime, setDeadlineTime] = useState<string>("11:30");
   const [isEvening, setIsEvening] = useState(false);
-  
+
   const searchParams = useSearchParams();
   const errorMessage = searchParams?.get("message");
 
@@ -392,7 +382,7 @@ function StartScreenContent({ users }: { users: StartUser[] }) {
             {errorMessage}
           </p>
         )}
-        <button 
+        <button
           onClick={() => setShowEmailLogin(true)}
           className="text-xs text-text-muted hover:text-navy-900 font-bold uppercase tracking-wider transition-colors cursor-pointer"
         >
@@ -407,12 +397,12 @@ function StartScreenContent({ users }: { users: StartUser[] }) {
               localStorage.setItem("kreile_user_role", "werkstatt");
               localStorage.setItem("kreile_user_initials", "CD");
               const isHttps = window.location.protocol === "https:";
-              
-              // WARNING: Demo Cookies (bypass-auth, kreile_role) sind nur für die lokale Entwicklung
-              // und dienen NICHT als sicheres Production-Rechtemodell. In Production werden sie ignoriert.
+
+              // WARNING: Demo Cookies (bypass-auth, kreile_role) are no longer used for secure auth.
+              // They are still set here for the tablet test login fallback, but checkAppAuth will reject them in production.
               document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
               document.cookie = `kreile_role=werkstatt; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-              
+
               window.location.href = "/";
             } catch (err: unknown) {
               alert("Fehler beim Login: " + (err as Error).message);
