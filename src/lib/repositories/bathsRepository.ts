@@ -1,17 +1,19 @@
 import { createId } from "@paralleldrive/cuid2";
 import { computeBathStatus, BathStatus, BathTargetValues, BathMeasurement } from "@/lib/baths/computeBathStatus";
+import { createClient } from "@/lib/supabase/client";
 
 export interface Bath {
   id: string;
   bathNumber: string;
   name: string;
-  processType: "nickel" | "chrome" | "degreasing" | "stripping";
+  processType: string;
   status: BathStatus;
-  stationId: "beschichtung" | "entmetallisierung";
-  targetValues: BathTargetValues;
+  stationId?: string;
+  targetValues?: BathTargetValues;
   lastMeasurementAt?: string;
   nextMeasurementDueAt?: string;
   notes?: string;
+  configurationMissing?: boolean;
 }
 
 export interface BathMeasurementLog extends BathMeasurement {
@@ -35,98 +37,94 @@ export interface BathAddition {
   createdAt: string;
 }
 
-const INITIAL_BATHS: Bath[] = [
-  {
-    id: "bath-1",
-    bathNumber: "B1",
-    name: "Nickelbad 1",
-    processType: "nickel",
-    status: "stable",
-    stationId: "beschichtung",
-    targetValues: { temperatureMin: 52, temperatureMax: 58, phMin: 3.8, phMax: 4.5, concentrationMin: 90, concentrationMax: 105 },
-    lastMeasurementAt: "2026-05-21T07:15:00Z",
-    nextMeasurementDueAt: "2026-05-21T15:00:00Z",
-    notes: "Premium Nickelbad für Automobil-Restaurierungen."
-  },
-  {
-    id: "bath-2",
-    bathNumber: "B2",
-    name: "Chrombad 1",
-    processType: "chrome",
-    status: "stable",
-    stationId: "beschichtung",
-    targetValues: { temperatureMin: 40, temperatureMax: 50, phMin: 1.0, phMax: 2.2, concentrationMin: 200, concentrationMax: 250 },
-    lastMeasurementAt: "2026-05-21T08:00:00Z",
-    nextMeasurementDueAt: "2026-05-21T16:00:00Z",
-    notes: "Hexavalentes Glanzchrombad."
-  },
-  {
-    id: "bath-3",
-    bathNumber: "B3",
-    name: "Entfettung 1",
-    processType: "degreasing",
-    status: "critical", // Temperature under 60°C target
-    stationId: "entmetallisierung",
-    targetValues: { temperatureMin: 60, temperatureMax: 75, phMin: 11.0, phMax: 13.5, concentrationMin: 80, concentrationMax: 120 },
-    lastMeasurementAt: "2026-05-21T09:30:00Z",
-    nextMeasurementDueAt: "2026-05-21T13:30:00Z",
-    notes: "Alkalische Heißentfettung."
-  },
-  {
-    id: "bath-4",
-    bathNumber: "B4",
-    name: "Entmetallisierung 1",
-    processType: "stripping",
-    status: "stable",
-    stationId: "entmetallisierung",
-    targetValues: { temperatureMin: 20, temperatureMax: 30, phMin: 5.5, phMax: 7.0, concentrationMin: 50, concentrationMax: 80 },
-    lastMeasurementAt: "2026-05-21T06:45:00Z",
-    nextMeasurementDueAt: "2026-05-21T14:45:00Z",
-    notes: "Schonende Elektrolytische Entkupferung / Entnickelungsbad."
-  }
-];
-
-const INITIAL_MEASUREMENTS: BathMeasurementLog[] = [
-  { id: "bm-1", bathId: "bath-1", measuredAt: "2026-05-21T07:15:00Z", measuredBy: "meister@kreile.de", temperature: 55, ph: 4.1, concentration: 98, visualState: "clean", statusAfterMeasurement: "stable", note: "Messwerte voll im Soll." },
-  { id: "bm-2", bathId: "bath-2", measuredAt: "2026-05-21T08:00:00Z", measuredBy: "werkstatt1@kreile.de", temperature: 42, ph: 1.8, concentration: 210, visualState: "clean", statusAfterMeasurement: "stable" },
-  { id: "bm-3", bathId: "bath-3", measuredAt: "2026-05-21T09:30:00Z", measuredBy: "werkstatt2@kreile.de", temperature: 58, ph: 11.5, concentration: 90, visualState: "cloudy", statusAfterMeasurement: "critical", note: "Heizung kontrollieren – Temperatur zu niedrig!" }
-];
-
-const INITIAL_ADDITIONS: BathAddition[] = [
-  { id: "ba-1", bathId: "bath-1", inventoryItemId: "inv-2", inventoryItemName: "Nickelzusatz Typ S", quantity: 5, unit: "l", reason: "Standarddosierung nach Messung", createdBy: "meister@kreile.de", createdAt: "2026-05-20T10:00:00Z" }
-];
-
 export const bathsRepository = {
   async getAllBaths(): Promise<Bath[]> {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("kreile_baths");
-      if (saved) return JSON.parse(saved);
-      localStorage.setItem("kreile_baths", JSON.stringify(INITIAL_BATHS));
+    const supabase = createClient();
+    const { data, error } = await supabase.from('baeder').select('*').order('name', { ascending: true });
+
+    if (error) {
+      console.error("Supabase getAllBaths error:", error);
+      throw error;
     }
-    return INITIAL_BATHS;
+
+    return data.map(b => {
+      const targetValues = b.target_values && Object.keys(b.target_values).length > 0 ? (b.target_values as BathTargetValues) : undefined;
+      const configurationMissing = !targetValues;
+
+      return {
+        id: b.id,
+        bathNumber: b.name.substring(0, 3).toUpperCase(),
+        name: b.name,
+        processType: b.process_type || "unknown",
+        status: (b.status as BathStatus) || "stable",
+        stationId: b.station_id || undefined,
+        targetValues: targetValues,
+        lastMeasurementAt: b.letzte_wartung || undefined,
+        configurationMissing
+      };
+    });
   },
 
   async getAllMeasurements(): Promise<BathMeasurementLog[]> {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("kreile_bath_measurements");
-      if (saved) return JSON.parse(saved);
-      localStorage.setItem("kreile_bath_measurements", JSON.stringify(INITIAL_MEASUREMENTS));
+    const supabase = createClient();
+    const { data, error } = await supabase.from('bad_messwerte').select('*').order('timestamp', { ascending: false });
+
+    if (error) {
+      console.error("Supabase getAllMeasurements error:", error);
+      throw error;
     }
-    return INITIAL_MEASUREMENTS;
+
+    const grouped = new Map<string, any>();
+    for (const row of data) {
+      const key = `${row.bad_id}_${row.timestamp}`;
+      if (!grouped.has(key)) {
+        grouped.set(key, {
+          id: row.id,
+          bathId: row.bad_id,
+          measuredAt: row.timestamp,
+          measuredBy: row.gemessen_von || "Unbekannt",
+          statusAfterMeasurement: "stable" as BathStatus,
+          temperature: null,
+          ph: null,
+          concentration: null
+        });
+      }
+      const entry = grouped.get(key);
+      if (row.wert_typ === 'temperatur') entry.temperature = Number(row.wert);
+      if (row.wert_typ === 'ph') entry.ph = Number(row.wert);
+      if (row.wert_typ === 'chemie') entry.concentration = Number(row.wert);
+    }
+
+    return Array.from(grouped.values());
   },
 
   async getAllAdditions(): Promise<BathAddition[]> {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("kreile_bath_additions");
-      if (saved) return JSON.parse(saved);
-      localStorage.setItem("kreile_bath_additions", JSON.stringify(INITIAL_ADDITIONS));
-    }
-    return INITIAL_ADDITIONS;
+    return [];
   },
 
   async getBathById(id: string): Promise<Bath | null> {
-    const all = await this.getAllBaths();
-    return all.find(b => b.id === id) || null;
+    const supabase = createClient();
+    const { data, error } = await supabase.from('baeder').select('*').eq('id', id).single();
+    if (error) {
+      if (error.code === 'PGRST116') return null;
+      throw error;
+    }
+    if (!data) return null;
+
+    const targetValues = data.target_values && Object.keys(data.target_values).length > 0 ? (data.target_values as BathTargetValues) : undefined;
+    const configurationMissing = !targetValues;
+
+    return {
+      id: data.id,
+      bathNumber: data.name.substring(0, 3).toUpperCase(),
+      name: data.name,
+      processType: data.process_type || "unknown",
+      status: (data.status as BathStatus) || "stable",
+      stationId: data.station_id || undefined,
+      targetValues: targetValues,
+      lastMeasurementAt: data.letzte_wartung || undefined,
+      configurationMissing
+    };
   },
 
   async getMeasurementsByBath(bathId: string): Promise<BathMeasurementLog[]> {
@@ -137,100 +135,81 @@ export const bathsRepository = {
   },
 
   async getAdditionsByBath(bathId: string): Promise<BathAddition[]> {
-    const all = await this.getAllAdditions();
-    return all
-      .filter(a => a.bathId === bathId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return [];
   },
 
   async addMeasurement(bathId: string, data: Omit<BathMeasurementLog, "id" | "bathId" | "measuredAt" | "statusAfterMeasurement">): Promise<BathMeasurementLog> {
-    const baths = await this.getAllBaths();
-    const bathIndex = baths.findIndex(b => b.id === bathId);
-    
-    if (bathIndex === -1) {
-      throw new Error(`Bath ${bathId} not found.`);
+    const supabase = createClient();
+    const ts = new Date().toISOString();
+
+    if (data.temperature) {
+      await supabase.from('bad_messwerte').insert({
+        bad_id: bathId,
+        wert_typ: 'temperatur',
+        wert: data.temperature,
+        gemessen_von: data.measuredBy || 'System',
+        timestamp: ts
+      });
+    }
+    if (data.ph) {
+      await supabase.from('bad_messwerte').insert({
+        bad_id: bathId,
+        wert_typ: 'ph',
+        wert: data.ph,
+        gemessen_von: data.measuredBy || 'System',
+        timestamp: ts
+      });
+    }
+    if (data.concentration) {
+      await supabase.from('bad_messwerte').insert({
+        bad_id: bathId,
+        wert_typ: 'chemie',
+        wert: data.concentration,
+        gemessen_von: data.measuredBy || 'System',
+        timestamp: ts
+      });
     }
 
-    const bath = baths[bathIndex];
-    // Compute new status using worst-status-wins rules
-    const newStatus = computeBathStatus(data, bath.targetValues);
-    
-    // Update bath status
-    bath.status = newStatus;
-    bath.lastMeasurementAt = new Date().toISOString();
-    
-    // Set next measurement 8 hours later
-    const nextDue = new Date();
-    nextDue.setHours(nextDue.getHours() + 8);
-    bath.nextMeasurementDueAt = nextDue.toISOString();
+    const bath = await this.getBathById(bathId);
+    let newStatus = bath?.status || "stable";
 
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_baths", JSON.stringify(baths));
+    // Only compute if target values exist
+    if (bath && bath.targetValues) {
+      newStatus = computeBathStatus(data, bath.targetValues);
     }
 
-    // Add measurement log
-    const logs = await this.getAllMeasurements();
-    const newLog: BathMeasurementLog = {
+    await supabase.from('baeder').update({
+      letzte_wartung: ts,
+      status: newStatus
+    }).eq('id', bathId);
+
+    return {
       ...data,
       id: createId(),
       bathId,
-      measuredAt: new Date().toISOString(),
+      measuredAt: ts,
       statusAfterMeasurement: newStatus
     };
-    
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_bath_measurements", JSON.stringify([newLog, ...logs]));
-      
-      // Dispatch custom event to notify components
-      window.dispatchEvent(new Event("storage"));
-    }
-
-    return newLog;
   },
 
   async addAddition(bathId: string, data: Omit<BathAddition, "id" | "bathId" | "createdAt">): Promise<BathAddition> {
-    const additions = await this.getAllAdditions();
-    const newAddition: BathAddition = {
-      ...data,
-      id: createId(),
-      bathId,
-      createdAt: new Date().toISOString()
-    };
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_bath_additions", JSON.stringify([newAddition, ...additions]));
-      
-      // Dispatch custom event
-      window.dispatchEvent(new Event("storage"));
-    }
-
-    return newAddition;
+    throw new Error("addAddition not implemented in DB schema yet.");
   },
 
   async updateBathStatusManual(bathId: string, status: BathStatus, notes: string): Promise<Bath> {
-    const baths = await this.getAllBaths();
-    const bathIndex = baths.findIndex(b => b.id === bathId);
-    if (bathIndex === -1) {
-      throw new Error(`Bath ${bathId} not found.`);
-    }
+    const supabase = createClient();
+    const { error } = await supabase.from('baeder').update({ status }).eq('id', bathId);
+    if (error) throw error;
 
-    baths[bathIndex].status = status;
-    if (notes) {
-      baths[bathIndex].notes = notes;
-    }
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_baths", JSON.stringify(baths));
-      
-      // Dispatch custom event
-      window.dispatchEvent(new Event("storage"));
-    }
-
-    return baths[bathIndex];
+    const updated = await this.getBathById(bathId);
+    if (!updated) throw new Error("Bath not found after update");
+    return updated;
   },
 
   async hasCriticalBath(): Promise<boolean> {
-    const baths = await this.getAllBaths();
-    return baths.some(b => b.status === "critical");
+    const supabase = createClient();
+    const { data, error } = await supabase.from('baeder').select('id').eq('status', 'critical').limit(1);
+    if (error) throw error;
+    return (data && data.length > 0);
   }
 };

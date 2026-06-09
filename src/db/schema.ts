@@ -388,6 +388,9 @@ export const baeder = pgTable("baeder", {
   temperatur: numeric("temperatur", { precision: 5, scale: 2 }),
   phWert: numeric("ph_wert", { precision: 4, scale: 2 }),
   letzteWartung: timestamp("letzte_wartung"),
+  targetValues: jsonb("target_values").notNull().default({}),
+  processType: text("process_type").notNull().default("unknown"),
+  stationId: text("station_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
