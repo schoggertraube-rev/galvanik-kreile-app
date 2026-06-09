@@ -10,10 +10,13 @@ import { getRecentSearches, addRecentSearch } from '@/lib/search/recent'
 import type { SearchSuggestion } from '@/types/search'
 import { globalSearchAction } from '@/app/global-search-actions'
 import { GlobalSearchAIResult } from './GlobalSearchAIResult'
+import { useOrderModal } from "@/components/orders/OrderModalProvider";
 
 export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChange: (v: boolean) => void }) {
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
+  const [activeAIQuery, setActiveAIQuery] = useState("");
+  const { openOrder } = useOrderModal();
   const [globalResults, setGlobalResults] = useState<Record<string, any>[]>([]);
   const [prevOpen, setPrevOpen] = useState(open)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -56,10 +59,21 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
     }
   }, [searchTerm])
 
+  // Determine if we should show the AI Result component. 
+  // We explicitly show AI mode if the user clicks the AI fallback suggestion or if they type a question format.
+  const [forceAiMode, setForceAiMode] = useState(false);
+
+  // Reset forceAiMode when searchTerm changes
+  useEffect(() => {
+    // Only reset if forceAiMode is true and it's not naturally aiMode
+    const isNaturallyAiMode = /^(wie|was|wo|warum|welche|zeige|vergleiche|analysiere)/i.test(searchTerm.trim().toLowerCase()) || searchTerm.trim().toLowerCase().endsWith("?");
+    if (forceAiMode && !isNaturallyAiMode) setForceAiMode(false);
+  }, [searchTerm, forceAiMode]);
+
   if (!open) return null
 
   const cleanTerm = searchTerm.trim().toLowerCase()
-  const isAiMode = /^(wie|was|wo|warum|welche|zeige|vergleiche|analysiere)/i.test(cleanTerm) || cleanTerm.endsWith("?");
+  const isAiMode = forceAiMode || /^(wie|was|wo|warum|welche|zeige|vergleiche|analysiere)/i.test(cleanTerm) || cleanTerm.endsWith("?");
 
   const filteredOrders = globalResults.filter(r => r.type === 'order')
   const filteredCustomers = globalResults.filter(r => r.type === 'customer')
@@ -90,26 +104,20 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   }
   
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      if (actionSuggestions.length > 0 && globalResults.length === 0) {
-        router.push(actionSuggestions[0].routeOnSelect)
-        handleClose()
-        return
-      }
-      if (globalResults.length > 0) {
-        const first = globalResults[0]
-        if (first.type === 'order') router.push(`/orders/${first.id}`)
-        else if (first.type === 'customer') router.push(`/customers/${first.id}`)
-        else if (first.type === 'beleg') router.push(`/buchhaltung/belege/${first.id}`)
-        else if (first.type === 'rechnung') router.push(`/buchhaltung/rechnungen/${first.id}`)
-        else if (first.type === 'lieferant') router.push(`/lieferanten/${first.id}`)
-        else if (first.type === 'bad') router.push(`/baths/${first.id}`)
-        else if (first.type === 'lager') router.push(`/inventory/${first.id}`)
-        else if (first.type === 'kostenposten') router.push(`/buchhaltung/kosten/${first.id}`)
-        handleClose()
-      }
+    if (e.key === 'Enter' && searchTerm.trim().length > 0) {
+      router.push(`/search?q=${encodeURIComponent(searchTerm.trim())}`)
+      handleClose()
     }
   }
+
+  const handleSuggestionClick = (route: string) => {
+    if (route.startsWith('?ai_search=')) {
+      setForceAiMode(true);
+    } else {
+      router.push(route);
+      handleClose();
+    }
+  };
 
   const getAvatarColor = (name: string) => {
     if (!name) return "bg-neutral-gray-100 text-navy-900 border-neutral-gray-100"
@@ -131,7 +139,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
 
   return (
     <div 
-      className="fixed inset-0 z-50 bg-navy-900/40 backdrop-blur-xs flex items-start justify-center pt-[15vh] px-4 font-sans text-navy-900"
+      className="fixed inset-0 z-200 bg-navy-900/40 backdrop-blur-xs flex items-start justify-center pt-[15vh] px-4 font-sans text-navy-900"
       onClick={handleClose}
     >
       <div 
@@ -296,11 +304,10 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                   </div>
                   <div className="space-y-1">
                     {filteredOrders.map(o => (
-                      <Link 
+                      <button 
                         key={o.id} 
-                        href={`/orders/${o.id}`}
-                        onClick={handleClose}
-                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
+                        onClick={() => { handleClose(); openOrder(o.id); }}
+                        className="w-full text-left flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-8 h-8 rounded-xl bg-linear-to-br from-blue-50 to-blue-100 border border-navy-700/50 flex items-center justify-center text-navy-900 shrink-0">
@@ -312,7 +319,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                           </div>
                         </div>
                         <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
-                      </Link>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -500,7 +507,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                   {fallbackSuggestions.map((s) => (
                     <button
                       key={s.routeOnSelect}
-                      onClick={() => { router.push(s.routeOnSelect); handleClose(); }}
+                      onClick={() => handleSuggestionClick(s.routeOnSelect)}
                       className="flex items-center justify-between w-full p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-neutral-gray-100 group text-left"
                     >
                       <div>

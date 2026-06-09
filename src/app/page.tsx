@@ -8,6 +8,7 @@ import { MockOrder } from "@/lib/mockData";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import {
   UserPlus, FilePlus, Camera, AlertTriangle,
   CheckCircle, Circle, Clock, AlertOctagon, Send, Activity, Info, Phone, RefreshCw, Sparkles, BarChart3
@@ -77,9 +78,11 @@ export default function HomeDashboard() {
   
   // Drilldown Overlay State
   const [activeOverlay, setActiveOverlay] = useState<{title: string, desc: string, targetLink?: string} | null>(null);
+  const [showCriticalOrders, setShowCriticalOrders] = useState(false);
   
   // Unified App Shortcuts
   const { openShortcut } = useAppShortcut();
+  const { openOrder } = useOrderModal();
 
   const { isOnline, outboxItems, syncNow } = useSync();
 
@@ -110,7 +113,7 @@ export default function HomeDashboard() {
       if (auslieferungen.length > 0) {
          newTodos.push({
             id: 2, title: `Auslieferungen klären (${auslieferungen.length})`, reason: "Aufträge sind im Warenausgang",
-            area: "Warenausgang", urgency: "Normal", action: "Versand prüfen", targetHref: "/warendurchlauf",
+            area: "Warenausgang", urgency: "Normal", action: "Versand prüfen", targetHref: "/warendurchlauf/warenausgang",
             completionType: "live", source: "live", done: false
          });
       }
@@ -138,9 +141,20 @@ export default function HomeDashboard() {
         prev.map(t => {
           if (t.done) return t;
           if (t.completionType === "auto") return { ...t, done: true, completionHint: "Auto-erledigt" };
-          if (t.id === 1 && orders.length > 0 && orders.filter(o => o.station === 'warenausgang').length === 0) return { ...t, done: true, completionHint: "Alle Auslieferungen erledigt" };
-          if (t.id === 3 && openQuotes === 0) return { ...t, done: true, completionHint: "Keine offenen Anfragen" };
-          if (t.id === 6 && orders.filter(o => o.risk === "red").length === 0) return { ...t, done: true, completionHint: "Keine kritischen Aufträge" };
+          
+          // ID 1: Kritische Aufträge
+          if (t.id === 1 && orders.length > 0 && orders.filter(o => o.risk === 'red' || o.risk === 'orange').length === 0) {
+            return { ...t, done: true, completionHint: "Keine kritischen Aufträge mehr" };
+          }
+          // ID 2: Auslieferungen
+          if (t.id === 2 && orders.length > 0 && orders.filter(o => o.station === 'warenausgang').length === 0) {
+            return { ...t, done: true, completionHint: "Alle Auslieferungen erledigt" };
+          }
+          // ID 3: Offene Anfragen
+          if (t.id === 3 && openQuotes === 0) {
+            return { ...t, done: true, completionHint: "Keine offenen Anfragen" };
+          }
+          
           return t;
         })
       );
@@ -193,6 +207,10 @@ export default function HomeDashboard() {
   const greeting = now.getHours() < 12 ? 'Guten Morgen' : now.getHours() < 17 ? 'Guten Tag' : 'Guten Abend';
 
   const handleQuickClick = (card: any) => {
+    if (card.id === 'kritisch') {
+      setShowCriticalOrders(true);
+      return;
+    }
     if (card.shortcut) {
       openShortcut(card.shortcut as ShortcutType);
     } else if (card.href) {
@@ -211,7 +229,7 @@ export default function HomeDashboard() {
           style={{ animation: 'hm-floatIn .5s ease both' }}
         >
           <h1 className="font-serif text-[31px] font-bold tracking-tight">
-            {greeting}, Norbert.{' '}
+            {greeting}, Aktueller Nutzer.{' '}
             <span className="font-sans text-[15px] font-medium text-text-muted tracking-normal block md:inline mt-1 md:mt-0">
               Dein Tag im Überblick — Gehirn aus, Checkliste an.
             </span>
@@ -266,8 +284,7 @@ export default function HomeDashboard() {
                 { id: 'telefon', label: 'Telefonnotiz', sub: 'schnell festhalten', grad: 'linear-gradient(135deg,#0E8C8C,#13B0A6)', shadow: 'rgba(14,140,140,.35)', icon: 'phone', href: '/telefonnotiz?source=home', shortcut: undefined as string | undefined },
                 { id: 'kunde', label: 'Neuer Kunde', sub: 'in 30 Sekunden', grad: 'linear-gradient(135deg,#2E9E6B,#46C285)', shadow: 'rgba(46,158,107,.35)', icon: 'userplus', href: undefined as string | undefined, shortcut: 'new_customer' },
                 { id: 'auftrag', label: 'Neuer Auftrag', sub: 'Teil annehmen', grad: 'linear-gradient(135deg,#3A6EA5,#4F8BC9)', shadow: 'rgba(58,110,165,.35)', icon: 'fileplus', href: undefined as string | undefined, shortcut: 'new_order' },
-                { id: 'foto', label: 'Foto / Scan', sub: 'Beleg & Teil', grad: 'linear-gradient(135deg,#C98A12,#E6A82E)', shadow: 'rgba(201,138,18,.35)', icon: 'camera', href: undefined as string | undefined, shortcut: 'new_document' },
-                { id: 'kritisch', label: 'Kritische Aufträge', sub: kritisch > 0 ? `${kritisch} brauchen dich` : 'Alles im Lot', grad: 'linear-gradient(135deg,#D8453C,#EE6A5A)', shadow: 'rgba(216,69,60,.35)', icon: 'alert', href: '/kontrolle', badge: kritisch > 0 ? kritisch.toString() : undefined },
+                { id: 'kritisch', label: 'Kritische Aufträge', sub: kritisch > 0 ? `${kritisch} brauchen dich` : 'Alles im Lot', grad: 'linear-gradient(135deg,#D8453C,#EE6A5A)', shadow: 'rgba(216,69,60,.35)', icon: 'alert', href: undefined as string | undefined, badge: kritisch > 0 ? kritisch.toString() : undefined },
                 { id: 'marketing', label: 'Marketing', sub: 'Keine Aktion', grad: 'linear-gradient(115deg,#7A3FB0,#C2185B 55%,#F2643C)', shadow: 'rgba(194,24,91,.4)', icon: 'sparkles', href: '/marketing', badge: undefined },
               ];
               return QUICK_CARDS;
@@ -616,6 +633,45 @@ export default function HomeDashboard() {
                 </Link>
               )}
             </div>
+          </div>
+        </DetailOverlay>
+
+        {/* ── CRITICAL ORDERS MODAL ───────────────────── */}
+        <DetailOverlay open={showCriticalOrders} onClose={() => setShowCriticalOrders(false)} title="Kritische Aufträge">
+          <div className="space-y-4 text-navy-900 max-h-[60vh] overflow-y-auto pr-2">
+            {orders.filter(o => o.risk === 'red' || o.risk === 'orange' || o.risk === 'yellow').length === 0 ? (
+              <div className="p-4 rounded-xl border bg-success-green-soft border-success-green flex gap-3 text-success-green">
+                <CheckCircle className="w-5 h-5 shrink-0 mt-0.5" />
+                <div>
+                  <h4 className="font-bold">Alles im Lot</h4>
+                  <p className="text-sm mt-1">Es gibt aktuell keine kritischen Aufträge im System.</p>
+                </div>
+              </div>
+            ) : (
+              orders.filter(o => o.risk === 'red' || o.risk === 'orange' || o.risk === 'yellow').map(o => (
+                <div key={o.id} className={`p-4 rounded-xl border flex items-start gap-4 transition-all hover:bg-neutral-gray-50 ${o.risk === 'red' ? 'bg-red-50/50 border-red-200' : 'bg-gold-50/50 border-gold-200'}`}>
+                  <div className={`p-2 rounded-lg shrink-0 mt-1 ${o.risk === 'red' ? 'bg-red-100 text-red-600' : 'bg-gold-200 text-gold-700'}`}>
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                      <button onClick={() => { openOrder(o.id); setShowCriticalOrders(false); }} className="font-bold text-navy-900 text-base hover:underline text-left">
+                        {(o as any).title || o.task || "Unbekannter Auftrag"}
+                      </button>
+                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${o.risk === 'red' ? 'bg-red-100 text-red-700' : 'bg-gold-200 text-gold-800'}`}>
+                        {o.risk === 'red' ? 'Kritisch' : 'Warnung'}
+                      </span>
+                    </div>
+                    <p className="text-sm text-navy-700 mt-1">{o.customerName || "Kreile System"}</p>
+                    <div className="text-xs text-text-muted mt-2 flex items-center gap-2">
+                      <span className="bg-white border px-2 py-0.5 rounded-md shadow-xs">{o.station}</span>
+                      <span>•</span>
+                      <span>{o.task}</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </DetailOverlay>
       </div>
