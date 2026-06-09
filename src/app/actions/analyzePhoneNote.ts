@@ -1,7 +1,7 @@
 "use server";
 
-import { GoogleGenAI, Type } from "@google/genai";
-import { MockCustomer, MockOrder } from "@/lib/mockData";
+import { Type } from "@google/genai";
+import { generateGeminiContentWithFallback } from "@/lib/ai/geminiClient";
 
 export type PhoneNoteCategory =
   | "pickup_request"
@@ -37,18 +37,6 @@ export interface AIAnalysisInput {
 
 export async function analyzePhoneNoteWithAI(input: AIAnalysisInput) {
   if (!input.text || input.text.trim().length < 3) return null;
-
-  const apiKey =
-    process.env.GEMINI_API_KEY ||
-    process.env.GOOGLE_API_KEY ||
-    process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-
-  if (!apiKey) {
-    console.warn("AI Escalation requested but no GEMINI_API_KEY found.");
-    return null;
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
 
   const schema = {
     type: Type.OBJECT,
@@ -110,8 +98,7 @@ REGELN FÜR DEN ANTWORTVORSCHLAG:
 6. Keine trockenen Standard-Phrasen wie "Ich nehme die Anfrage auf" bei jedem Fall. Sei kontextbezogen!
 `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
+    const response = await generateGeminiContentWithFallback({
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -132,6 +119,12 @@ REGELN FÜR DEN ANTWORTVORSCHLAG:
 
   } catch (error) {
     console.error("Gemini AI Analysis Error:", error);
-    return null;
+    return {
+      category: "general",
+      material: null,
+      surfaceRequested: null,
+      suggestedAnswer: "Die KI-Analyse ist aktuell wegen hoher Auslastung nicht verfügbar. Die Notiz wurde dennoch gespeichert.",
+      overallConfidence: 0
+    };
   }
 }
