@@ -98,7 +98,6 @@ export default function HomeDashboard() {
     const load = async () => {
       
       const dbOrders = await ordersRepository.getAll();
-      const qsRes = await fetch('/api/get-qs').catch(()=>({ok:false})); // just mock logic for checklist
       
       const newTodos: ChecklistTask[] = [];
       const kritisch = dbOrders.filter(o => o.risk === 'red' || o.risk === 'orange');

@@ -117,7 +117,7 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
   };
 
   return (
-    <div className="w-full pt-6 pb-2 relative z-99">
+    <div className="w-full pt-6 pb-2 relative z-[105]">
       <nav className="w-full px-5 md:px-8 lg:px-12 xl:px-16 mx-auto flex items-center justify-around gap-2">
         {STATIONS.map((station, i) => {
           const isActive = getIsActive(station);
@@ -126,15 +126,15 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
             <React.Fragment key={station.id}>
               <Link
                 href={station.path}
-                className={`group flex flex-col items-center gap-3 cursor-pointer transition-all shrink-0 px-2 py-2 rounded-2xl relative ${isActive ? "opacity-100 z-20" : "opacity-80 hover:opacity-100 z-10"
-                  } hover:-translate-y-1`}
+                className={`group flex flex-col items-center gap-3 cursor-pointer transition-all duration-300 shrink-0 px-2 py-2 rounded-2xl relative ${isActive ? "opacity-100 z-20 -translate-y-6 md:-translate-y-10 lg:-translate-y-12" : "opacity-80 hover:opacity-100 z-10 hover:-translate-y-1"
+                  }`}
               >
                 {/* Circle with image */}
                 <div
                   className={`rounded-full overflow-hidden flex items-center justify-center transition-all duration-300 bg-white shadow-sm ${compact
                       ? "w-[76px] h-[76px]"
                       : "w-[115px] h-[115px] md:w-[144px] md:h-[144px] lg:w-[168px] lg:h-[168px]"
-                    } ${isActive ? "relative -mt-6 md:-mt-10 lg:-mt-12 ring-4 ring-[#1a6b38] ring-opacity-100" : ""}`}
+                    } ${isActive ? "relative ring-4 ring-[#1a6b38] ring-opacity-100" : ""}`}
                   style={{
                     border: isActive
                       ? "none"
