@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from "framer-motion";
 function SubMenuLink({ label, href, isAvailable, expanded }: { label: string, href: string, isAvailable: boolean, expanded: boolean }) {
   const pathname = usePathname();
   const isActive = pathname === href;
-  
+
   if (!isAvailable) {
     return (
       <div className={`text-[12px] font-bold py-2 px-3 rounded-xl text-left mx-2 mb-1 flex items-center gap-2 opacity-40 cursor-not-allowed text-neutral-gray-500 grayscale select-none ${expanded ? "block" : "hidden"}`}>
@@ -23,11 +23,10 @@ function SubMenuLink({ label, href, isAvailable, expanded }: { label: string, hr
   }
 
   return (
-    <Link 
+    <Link
       href={href}
-      className={`text-[12px] font-bold py-2 px-3 rounded-xl text-left transition-colors mx-2 mb-1 flex items-center gap-2 ${
-        isActive ? "text-navy-900 bg-neutral-gray-100" : "text-text-muted hover:text-navy-900 hover:bg-bg-app"
-      } ${expanded ? "block" : "hidden"}`}
+      className={`text-[12px] font-bold py-2 px-3 rounded-xl text-left transition-colors mx-2 mb-1 flex items-center gap-2 ${isActive ? "text-navy-900 bg-neutral-gray-100" : "text-text-muted hover:text-navy-900 hover:bg-bg-app"
+        } ${expanded ? "block" : "hidden"}`}
       onClick={() => trackUiEvent("nav_click", { target: href, type: "sub_menu" })}
     >
       <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-navy-900' : 'bg-neutral-gray-300'}`} />
@@ -51,14 +50,13 @@ export function RightNav() {
   }, [isHovered]);
 
   return (
-    <motion.aside 
+    <motion.aside
       initial={false}
       animate={{ width: isHovered ? 200 : 72 }}
       transition={{ type: "spring", stiffness: 400, damping: 25 }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="bg-transparent flex flex-col items-center py-4 gap-2 h-full overflow-y-auto overflow-x-hidden scrollbar-hide relative z-50 border-r border-neutral-gray-200/50"
-      style={{ backgroundColor: "rgba(255,255,255,0.6)", backdropFilter: "blur(12px)" }}
+      className="bg-transparent flex flex-col items-center py-4 gap-2 h-full overflow-y-auto overflow-x-hidden scrollbar-hide relative"
     >
       <div className="flex flex-col items-center w-full px-2 mt-2">
         <RightNavItem label="Home" href="/" icon={<Home className="w-5 h-5" strokeWidth={2} />} isActive={isActive("/")} isExpanded={isHovered} onClick={() => trackUiEvent("nav_click", { target: "/" })} />
@@ -102,7 +100,7 @@ export function RightNav() {
           <RightNavItem label="Verwaltung" href="/settings" icon={<Settings className="w-5 h-5" strokeWidth={2} />} isActive={isActive("/settings") || isActive("/admin/") || isActive("/kvp")} isExpanded={isHovered} onClick={() => trackUiEvent("nav_click", { target: "/settings" })} />
         </div>
       )}
-      
+
     </motion.aside>
   );
 }

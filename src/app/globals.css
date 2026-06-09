@@ -339,3 +339,17 @@
     margin: 0;
   }
 }
+
+/* Quick CSS-Filter Dark Mode (Night Mode Fallback) */
+html.dark {
+  /* invert(0.92) turns #FFFFFF into #141414 (dark grey) instead of #000000 */
+  /* saturate(0.5) neutralizes the reddish/brownish hue from the inverted warm background */
+  filter: invert(0.92) hue-rotate(180deg) saturate(0.5);
+}
+
+/* Reverse filter for images, videos, backgrounds, and specific elements to keep them normal */
+html.dark img,
+html.dark video,
+html.dark .kreile-logo {
+  filter: invert(1.08) hue-rotate(180deg) saturate(2);
+}

@@ -6,7 +6,7 @@ import { askGlobalAiAction } from '@/app/actions/aiSearch';
 
 interface AIResultProps {
   query: string;
-  onClose: () => void;
+  onClose?: () => void;
 }
 
 export function GlobalSearchAIResult({ query, onClose }: AIResultProps) {

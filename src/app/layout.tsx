@@ -53,6 +53,7 @@ import { AppShortcutProvider } from "@/components/ui/AppShortcutContext";
 import { SyncProvider } from "@/lib/offline/SyncContext";
 import { FeatureFlagProvider } from "@/lib/analytics/useFeatureFlag";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
+import { OrderModalProvider } from "@/components/orders/OrderModalProvider";
 
 import { isAdminOrDeveloper } from "@/lib/auth/permissions";
 
@@ -78,9 +79,11 @@ export default async function RootLayout({
                 <LicenseProvider>
                   <AppShortcutProvider>
                     <FeatureFlagProvider>
-                    <KreileAppShell>
-                      {children}
-                    </KreileAppShell>
+                      <OrderModalProvider>
+                        <KreileAppShell>
+                          {children}
+                        </KreileAppShell>
+                      </OrderModalProvider>
                     </FeatureFlagProvider>
                   </AppShortcutProvider>
                 </LicenseProvider>

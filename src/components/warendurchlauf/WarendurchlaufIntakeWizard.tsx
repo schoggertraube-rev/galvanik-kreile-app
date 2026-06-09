@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
@@ -49,14 +49,14 @@ interface WizardProps {
 
 export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps = {}) {
   usePageView();
-  
+
   const searchParams = useSearchParams();
   const initialDraftId = searchParams.get("draftId");
-  
+
   const [step, setStep] = useState<WizardStep>(
     initialMode === "manual" || searchParams.get("mode") === "new-order" ? "manual_customer" : "camera"
   );
-  
+
   const [draftLoaded, setDraftLoaded] = useState(false);
   const [draftMissing, setDraftMissing] = useState(false);
   const [draftNotes, setDraftNotes] = useState("");
@@ -103,7 +103,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
               setCustomerSelection({ id: draft.customerId || null, newName: draft.customerName || "" });
               setStep("manual_items"); // Skip to items if customer is somewhat known
             }
-            
+
             if (draft.itemName || draft.material || draft.surfaceRequested) {
               setManualItems([{
                 name: draft.itemName || draft.material || "",
@@ -112,7 +112,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
                 photo: ""
               }]);
             }
-            
+
             if (draft.notes) {
               setDraftNotes(draft.notes);
             }
@@ -132,8 +132,8 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
     const term = manualSearch.trim();
     if (!term) return;
 
-    // Wenn der Nutzer denselben Begriff bereits gesucht hat und die Enter-Taste erneut drückt,
-    // gehen wir direkt zur Neukundenerfassung über.
+    // Wenn der Nutzer denselben Begriff bereits gesucht hat und die Enter-Taste erneut drÃ¼ckt,
+    // gehen wir direkt zur Neukundenerfassung Ã¼ber.
     if (term === lastSearchedTerm && manualSearchResults.length > 0) {
       setCustomerSelection({ id: null, newName: term });
       setStep("manual_customer_edit");
@@ -157,7 +157,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
     if (!file) return;
 
     setManualSearching(true); // Re-using this state for loading indicator
-    
+
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64 = event.target?.result as string;
@@ -218,7 +218,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
       setIsScanningIndex(index);
       try {
         const scanResult = await processImage(base64Photo);
-        
+
         setManualItems((prev) => {
           const updated = [...prev];
           let { name, quantity, surfaceRequested } = updated[index];
@@ -249,7 +249,12 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
   const cameraSteps = ["camera", "ocr_review", "customer_match", "items", "summary"];
 
   return (
-    <div className="min-h-screen bg-transparent pt-8 pb-24 px-4 md:px-8">
+    <div
+      className="min-h-screen bg-transparent pt-8 pb-24 px-4 md:px-8"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && onClose) onClose();
+      }}
+    >
       {/* Progress indicator for camera flow */}
       {cameraSteps.includes(step) && (
         <div className="max-w-3xl mx-auto mb-8 flex justify-center gap-2">
@@ -274,11 +279,11 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
       )}
 
       {step === "camera" && (
-        <CameraCapture 
+        <CameraCapture
           onScanComplete={(scan, base64Image) => {
             setParsedOcrData({
               customerName: scan.customerName || scan.company || "",
-              customerNumber: "", 
+              customerNumber: "",
               itemName: scan.articleDescription || "",
               quantity: scan.quantity?.toString() || "",
               surfaceRequested: scan.surface || "",
@@ -287,7 +292,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
               setOcrPreviewUrl(base64Image);
             }
             setStep("ocr_match_result");
-          }} 
+          }}
           onCancel={() => {
               setAbortModalOpen(true);
             }}
@@ -301,7 +306,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
             className="flex items-center gap-2 text-text-muted hover:text-navy-900 font-bold text-sm mb-6 px-3 py-2 rounded-xl hover:bg-bg-app-soft transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
-            Zurück zur Prüfung
+            ZurÃ¼ck zur PrÃ¼fung
           </button>
           <CustomerMatchPanel
             ocrData={parsedOcrData}
@@ -320,7 +325,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
             className="flex items-center gap-2 text-text-muted hover:text-navy-900 font-bold text-sm mb-6 px-3 py-2 rounded-xl hover:bg-bg-app-soft transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
-            Zurück zur Kundenzuordnung
+            ZurÃ¼ck zur Kundenzuordnung
           </button>
           <SuggestedItemsPanel
             ocrData={parsedOcrData}
@@ -339,16 +344,16 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
           onBack={() => setStep("items")}
         />
       )}
-      
+
       {/* Draft Notices */}
       {draftLoaded && step.startsWith("manual_") && (
         <div className="max-w-3xl mx-auto mb-6 bg-navy-50 border border-navy-200 rounded-xl p-4 flex flex-col gap-2">
           <div className="flex items-center gap-2 font-bold text-navy-900">
             <span className="flex items-center justify-center w-6 h-6 rounded-full bg-navy-100 text-navy-600"><CheckCircle size={14}/></span>
-            Telefonnotiz übernommen
+            Telefonnotiz Ã¼bernommen
           </div>
           <div className="text-sm text-navy-700">
-            Diese Angaben wurden aus dem laufenden Gespräch vorbereitet. Bitte prüfen und ergänzen.
+            Diese Angaben wurden aus dem laufenden GesprÃ¤ch vorbereitet. Bitte prÃ¼fen und ergÃ¤nzen.
           </div>
           {draftNotes && (
             <div className="mt-2 text-xs text-navy-600 bg-white p-3 rounded-lg border border-navy-100">
@@ -364,12 +369,12 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
             Telefonnotiz-Draft nicht gefunden
           </div>
           <div className="text-sm text-red-700">
-            Bitte Daten manuell erfassen oder zur Telefonnotiz zurückkehren.
+            Bitte Daten manuell erfassen oder zur Telefonnotiz zurÃ¼ckkehren.
           </div>
         </div>
       )}
 
-      {/* ── MANUAL FLOW – Step 1: Kundensuche ── */}
+      {/* â”€â”€ MANUAL FLOW â€“ Step 1: Kundensuche â”€â”€ */}
       {step === "manual_customer" && (
         <div className="w-full max-w-3xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
           <button
@@ -399,7 +404,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
               Manuelle Auftragserfassung
             </h2>
             <p className="text-text-muted font-medium">
-              Schritt 1 von 3 — Kunden suchen oder neu anlegen
+              Schritt 1 von 3 â€” Kunden suchen oder neu anlegen
             </p>
           </div>
 
@@ -462,7 +467,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
                         {c.name}
                       </h4>
                       <p className="text-sm text-text-muted font-medium">
-                        {c.customerNumber} · {c.city || "Kein Ort"}
+                        {c.customerNumber} Â· {c.city || "Kein Ort"}
                       </p>
                     </div>
                     <UserCheck className="h-6 w-6 text-navy-700 shrink-0" />
@@ -475,7 +480,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
               manualSearchResults.length === 0 &&
               manualSearch.trim() && (
                 <div className="bg-bg-app-soft border-2 border-dashed border-neutral-gray-300 rounded-2xl p-6 text-center text-text-muted font-medium">
-                  Kein Ergebnis für &bdquo;{manualSearch}&ldquo;
+                  Kein Ergebnis fÃ¼r &bdquo;{manualSearch}&ldquo;
                 </div>
               )}
 
@@ -494,7 +499,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
               >
                 <UserPlus className="mr-3 h-5 w-5" />
                 {manualSearch.trim()
-                  ? `Neu anlegen: „${manualSearch.trim()}"`
+                  ? `Neu anlegen: â€ž${manualSearch.trim()}"`
                   : "Neuen Kunden anlegen"}
               </Button>
             </div>
@@ -502,20 +507,20 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
         </div>
       )}
 
-      {/* ── MANUAL FLOW – Step 1b: Neukunde Details ── */}
+      {/* â”€â”€ MANUAL FLOW â€“ Step 1b: Neukunde Details â”€â”€ */}
       {step === "manual_customer_edit" && customerSelection && (
         <NewCustomerForm
           customerId={customerSelection.id}
           onClose={() => setStep("manual_customer")}
           onSave={(id) => {
-            setCustomerSelection({ id, newName: customerSelection.newName }); 
+            setCustomerSelection({ id, newName: customerSelection.newName });
             setManualItems([{ name: "", quantity: 1, surfaceRequested: "" }]);
             setStep("manual_items");
           }}
         />
       )}
 
-      {/* ── MANUAL FLOW – Step 2: Teile ── */}
+      {/* â”€â”€ MANUAL FLOW â€“ Step 2: Teile â”€â”€ */}
       {step === "manual_items" && customerSelection && (
         <div className="w-full max-w-3xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
           <button
@@ -523,7 +528,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
             className="flex items-center gap-2 text-text-muted hover:text-navy-900 font-bold text-sm px-3 py-2 rounded-xl hover:bg-bg-app-soft transition-all"
           >
             <ArrowLeft className="w-4 h-4" />
-            Zurück zur {customerSelection.id === null ? "Kundenkarte" : "Kundensuche"}
+            ZurÃ¼ck zur {customerSelection.id === null ? "Kundenkarte" : "Kundensuche"}
           </button>
 
           <div className="text-center space-y-2">
@@ -545,7 +550,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
               Bauteile erfassen
             </h2>
             <p className="text-text-muted font-medium">
-              Schritt 2 von 3 — Kunde:{" "}
+              Schritt 2 von 3 â€” Kunde:{" "}
               <strong className="text-navy-900">
                 {customerSelection.newName || "Bestandskunde"}
               </strong>
@@ -589,8 +594,8 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
                         />
                         <label
                           className={`h-[50px] w-[50px] rounded-xl border-2 shrink-0 flex items-center justify-center transition-all cursor-pointer ${
-                            isScanningIndex === i 
-                              ? "border-navy-700 bg-gold-100 text-navy-700" 
+                            isScanningIndex === i
+                              ? "border-navy-700 bg-gold-100 text-navy-700"
                               : "border-neutral-gray-300 hover:border-navy-700 hover:bg-gold-100 text-navy-700"
                           }`}
                           title="Teil scannen (OCR)"
@@ -600,12 +605,12 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
                           ) : (
                             <Scan className="w-5 h-5" />
                           )}
-                          <input 
-                            type="file" 
-                            accept="image/*" 
-                            capture="environment" 
-                            className="hidden" 
-                            onChange={(e) => handleInlineItemScan(i, e)} 
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            onChange={(e) => handleInlineItemScan(i, e)}
                           />
                         </label>
                       </div>
@@ -614,7 +619,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
                   </div>
                   <div>
                     <label className="block text-[11px] font-extrabold text-text-muted uppercase tracking-widest mb-1 pl-1">
-                      Gewünschte Oberfläche (optional)
+                      GewÃ¼nschte OberflÃ¤che (optional)
                     </label>
                     <input
                       type="text"
@@ -629,7 +634,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
                 </div>
 
                 <div className="flex flex-col gap-3 shrink-0 pt-6">
-                  <label className="cursor-pointer" title="Vorher-Foto ergänzen">
+                  <label className="cursor-pointer" title="Vorher-Foto ergÃ¤nzen">
                     <div className={`h-12 w-12 flex items-center justify-center rounded-xl border-2 transition-all ${item.photo ? 'bg-gold-100 border-green-300 text-green-600' : 'bg-gold-100 hover:bg-navy-700 border-navy-700 text-navy-700'}`}>
                       {item.photo ? <CheckCircle className="w-6 h-6"/> : <Camera className="w-6 h-6"/>}
                     </div>
@@ -653,7 +658,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
               className="w-full h-16 border-2 border-dashed border-gold-600 text-text-muted font-extrabold hover:bg-bg-app-soft hover:border-white/30 hover:text-navy-700 rounded-3xl transition-all flex items-center justify-center gap-2"
             >
               <Plus className="h-6 w-6" />
-              Weiteres Teil hinzufügen
+              Weiteres Teil hinzufÃ¼gen
             </button>
           </div>
 
@@ -663,7 +668,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
               // Try to validate parts using Zod schema's part definition
               let hasErrors = false;
               const newErrors: Record<number, Record<string, string[]>> = {};
-              
+
               manualItems.forEach((it, idx) => {
                 const partSchema = orderSchema.shape.parts.element;
                 const parsed = partSchema.safeParse(it);
@@ -672,12 +677,12 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
                   newErrors[idx] = parsed.error.flatten().fieldErrors;
                 }
               });
-              
+
               if (hasErrors) {
                 setItemErrors(newErrors);
                 return;
               }
-              
+
               const valid = manualItems.filter((it) => it.name.trim());
               setItems(valid);
               setStep("manual_summary");
@@ -686,12 +691,12 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
             icon={<ChevronRight className="w-5 h-5" />}
             className="w-full h-16 text-lg"
           >
-            Teile bestätigen
+            Teile bestÃ¤tigen
           </AppActionButton>
         </div>
       )}
 
-      {/* ── MANUAL FLOW – Step 3: Zusammenfassung & Speichern ── */}
+      {/* â”€â”€ MANUAL FLOW â€“ Step 3: Zusammenfassung & Speichern â”€â”€ */}
       {step === "manual_summary" && customerSelection && (
         <IntakeCompletionSummary
           customerSelection={customerSelection}
@@ -701,7 +706,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
         />
       )}
 
-      {/* ── OCR MATCH RESULT (N3 & N4) ── */}
+      {/* â”€â”€ OCR MATCH RESULT (N3 & N4) â”€â”€ */}
       {step === "ocr_match_result" && parsedOcrData && (
         <div className="w-full h-full flex flex-col pt-10">
           <div className="mb-4 text-center">
@@ -713,7 +718,7 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
               Abbrechen
             </button>
           </div>
-          <OcrMatchResult 
+          <OcrMatchResult
             ocrData={parsedOcrData}
             previewUrl={ocrPreviewUrl}
             onComplete={() => {
@@ -733,10 +738,10 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
             </div>
             <div>
               <h3 className="text-xl font-black font-serif text-navy-900 mb-2">Wirklich abbrechen?</h3>
-              <p className="text-sm font-medium text-text-muted">Alle bisherigen Eingaben gehen verloren. Dieser Vorgang kann nicht rückgängig gemacht werden.</p>
+              <p className="text-sm font-medium text-text-muted">Alle bisherigen Eingaben gehen verloren. Dieser Vorgang kann nicht rÃ¼ckgÃ¤ngig gemacht werden.</p>
             </div>
             <div className="flex flex-col gap-3 pt-2">
-              <AppActionButton 
+              <AppActionButton
                 onClick={() => {
                   setAbortModalOpen(false);
                   if (onClose) {
@@ -744,18 +749,18 @@ export function WarendurchlaufIntakeWizard({ initialMode, onClose }: WizardProps
                   } else {
                     window.location.href = "/warendurchlauf";
                   }
-                }} 
-                variant="danger" 
+                }}
+                variant="danger"
                 className="w-full h-12"
               >
                 Ja, abbrechen
               </AppActionButton>
-              <Button 
-                onClick={() => setAbortModalOpen(false)} 
-                variant="outline" 
+              <Button
+                onClick={() => setAbortModalOpen(false)}
+                variant="outline"
                 className="w-full h-12 rounded-xl font-bold border-2 border-neutral-gray-200 text-navy-900"
               >
-                Zurück zum Formular
+                ZurÃ¼ck zum Formular
               </Button>
             </div>
           </div>

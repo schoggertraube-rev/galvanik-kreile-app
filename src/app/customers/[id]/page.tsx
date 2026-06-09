@@ -293,7 +293,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
 
             {/* Reklamationen & Nacharbeit */}
             <Card className="border-2 border-danger-red rounded-3xl overflow-hidden shadow-xs bg-white">
-              <div className="bg-accent-orange-soft/50 border-b border-danger-red p-6 md:px-8 py-5 flex justify-between items-center">
+              <div className="bg-linear-to-br from-navy-900 to-black p-6 rounded-[24px] text-white flex flex-col justify-between relative overflow-hidden group">
                 <div className="flex items-center gap-2">
                   <AlertCircle className="w-5 h-5 text-danger-red" />
                   <h3 className="text-lg font-bold font-serif text-danger-red">Qualitätswarnungen & Reklamationen</h3>
@@ -496,7 +496,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
           <div className="lg:col-span-4 space-y-8">
             
             {/* Marketing & Insights */}
-            <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-3xl overflow-hidden shadow-sm">
+            <Card className="border-2 border-blue-200 bg-linear-to-br from-blue-50 to-indigo-50 rounded-3xl overflow-hidden shadow-sm">
               <CardContent className="p-6 space-y-5">
                 <h3 className="text-lg font-bold font-serif text-blue-900 flex items-center gap-2 border-b border-blue-200 pb-3">
                   <TrendingUp className="w-5 h-5 text-blue-600" />

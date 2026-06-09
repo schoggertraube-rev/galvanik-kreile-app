@@ -8,6 +8,7 @@ import Link from "next/link";
 import { ChevronRight, CreditCard, QrCode, Smartphone, BarChart3, Lock, Info, Globe, Users, TrendingUp, ArrowLeft } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { useState } from "react";
+import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
 
 const TABS = [
   { id: "provider", label: "Dienstleister", icon: CreditCard },
@@ -97,7 +98,7 @@ function ZahlungContent() {
                       <div className="flex-1 min-w-0">
                         <Link href={`/customers/${m.kundeId}`} className="text-base font-extrabold text-navy-900 truncate hover:text-blue-600 transition-colors inline-block">{m.kunde}</Link>
                         <div className="text-xs font-semibold text-text-muted mt-0.5">
-                          <Link href={`/orders/${m.auftragId}`} className="hover:text-navy-900 hover:underline">{m.auftragId}</Link>
+                          <OrderModalTrigger orderId={m.auftragId} className="hover:text-navy-900 hover:underline">{m.auftragId}</OrderModalTrigger>
                           <span className="mx-1.5">•</span>
                           <span>{m.letzteRechnung}</span>
                         </div>

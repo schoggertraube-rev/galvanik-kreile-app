@@ -245,6 +245,7 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
       isOpen={true} 
       onClose={onClose}
       title={customerId ? "Kunde bearbeiten" : "Neuen Kunden anlegen"}
+      centered={true}
     >
       <div className="flex flex-col lg:flex-row gap-6">
         

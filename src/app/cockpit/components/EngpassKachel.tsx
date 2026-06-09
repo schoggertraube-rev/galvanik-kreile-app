@@ -6,6 +6,7 @@ import { getEngpassDaten, getEngpassDetails } from "../actions";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
 import Link from "next/link";
+import { useOrderModal } from "@/components/orders/OrderModalProvider";
 
 export function EngpassKachel() {
   const [data, setData] = useState<any[]>([]);
@@ -15,6 +16,7 @@ export function EngpassKachel() {
   const [selectedStation, setSelectedStation] = useState<any>(null);
   const [details, setDetails] = useState<any>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const { openOrder } = useOrderModal();
 
   useEffect(() => {
     async function load() {
@@ -147,7 +149,7 @@ export function EngpassKachel() {
               ) : (
                 <div className="flex flex-col gap-2">
                   {details?.waitingOrders?.map((o: any) => (
-                    <Link key={o.id} href={`/orders/${o.id}`} className="flex justify-between items-center p-3 hover:bg-neutral-gray-50 rounded-lg border border-transparent hover:border-neutral-gray-200">
+                    <button key={o.id} onClick={() => { openOrder(o.id); setDrawerOpen(false); }} className="w-full text-left flex justify-between items-center p-3 hover:bg-neutral-gray-50 rounded-lg border border-transparent hover:border-neutral-gray-200">
                       <div className="flex flex-col">
                         <span className="font-bold text-navy-900 text-sm">{o.order_number}</span>
                       </div>
@@ -155,7 +157,7 @@ export function EngpassKachel() {
                         <span className="text-xs text-text-muted">Eingang: {new Date(o.intake_date).toLocaleDateString()}</span>
                         <ArrowRight className="w-4 h-4 text-neutral-gray-400" />
                       </div>
-                    </Link>
+                    </button>
                   ))}
                 </div>
               )}

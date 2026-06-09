@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 // Image from next/image available but not used for dynamic logo URLs
@@ -25,7 +25,9 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const [isOffline, setIsOffline] = useState(false);
   const [orderCount, setOrderCount] = useState(0);
   const [logoUrl, setLogoUrl] = useState("/assets/logo/kreile-wordmark-skyline.svg");
-  
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationsRef = useRef<HTMLDivElement>(null);
+
   const { initials } = usePermissions();
   const { status: realtimeStatus } = useRealtimeStatus();
   const { isRecording } = useTestpilot();
@@ -48,15 +50,18 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
   // Click outside to close user dropdown
   useEffect(() => {
-    if (!userDropdownOpen) return;
+    if (!userDropdownOpen && !notificationsOpen) return;
     const handleOutsideClick = (e: MouseEvent) => {
-      if (userDropdownRef.current && !userDropdownRef.current.contains(e.target as Node)) {
+      if (userDropdownOpen && userDropdownRef.current && !userDropdownRef.current.contains(e.target as Node)) {
         setUserDropdownOpen(false);
+      }
+      if (notificationsOpen && notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) {
+        setNotificationsOpen(false);
       }
     };
     document.addEventListener("mousedown", handleOutsideClick);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, [userDropdownOpen]);
+  }, [userDropdownOpen, notificationsOpen]);
 
   const handleLogout = async () => {
     localStorage.removeItem("kreile_user_role");
@@ -95,7 +100,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   return (
     <header className="h-[72px] shrink-0 bg-transparent flex items-center px-4 md:px-6 gap-4 z-40 relative">
       {/* Hamburger Menu Mobile & Tablet (< 1024px) */}
-      <button 
+      <button
         className="flex lg:hidden p-3 -ml-2 text-navy-900 hover:bg-neutral-gray-100 rounded-full min-w-[48px] min-h-[48px] items-center justify-center shrink-0"
         onClick={onMenuToggle}
       >
@@ -111,14 +116,14 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           className="h-10 w-auto object-contain max-w-[200px]"
         />
       </Link>
-      
+
       {/* Mobile Logo Only */}
       <Link href="/" className="md:hidden flex items-center shrink-0">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={logoUrl}
           alt="Firmenlogo"
-          className="h-7 w-auto object-contain max-w-[140px]"
+          className="h-7 w-auto object-contain kreile-logo max-w-[140px]"
         />
       </Link>
 
@@ -166,11 +171,11 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         {/* Datum-Pill */}
         <Link href="/kalender" className="hidden lg:flex items-center gap-2 bg-white/50 backdrop-blur-sm border border-white/60 rounded-full px-3 h-9 text-sm font-semibold text-navy-900 shadow-sm hover:bg-white hover:border-neutral-gray-200 transition-all duration-300">
           <Calendar className="w-4 h-4 text-text-muted" />
-          <span>Heute · {dateString}</span>
+          <span>Heute Â· {dateString}</span>
           <span className="w-2 h-2 rounded-full bg-accent-orange animate-pulse" />
         </Link>
 
-        {/* Online/Offline Pill mit Zähler */}
+        {/* Online/Offline Pill mit ZÃ¤hler */}
         <button
           onClick={() => {
             if (isOnline) {
@@ -217,13 +222,42 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         )}
 
         {/* Glocke mit rotem Badge */}
-        <div className="relative hidden md:block">
-          <button className="w-9 h-9 rounded-full bg-white/50 backdrop-blur-sm border border-white/60 flex items-center justify-center text-navy-900 hover:bg-white hover:border-neutral-gray-200 transition-all duration-300 shadow-sm">
+        <div className="relative hidden md:block" ref={notificationsRef}>
+          <button
+            onClick={() => setNotificationsOpen(!notificationsOpen)}
+            className="w-9 h-9 rounded-full bg-white/50 backdrop-blur-sm border border-white/60 flex items-center justify-center text-navy-900 hover:bg-white hover:border-neutral-gray-200 transition-all duration-300 shadow-sm"
+          >
             <Bell className="w-4 h-4" />
           </button>
           <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-danger-red rounded-full text-[9px] text-white font-black flex items-center justify-center">
             3
           </span>
+
+          {notificationsOpen && (
+            <div className="absolute right-0 top-12 mt-2 w-72 bg-white border-2 border-neutral-gray-100 rounded-2xl shadow-xl z-50 p-2 animate-in slide-in-from-top-2 fade-in duration-200">
+              <div className="px-3 py-2 border-b border-neutral-gray-100 mb-1 flex justify-between items-center">
+                <p className="text-xs font-bold text-navy-900">Benachrichtigungen</p>
+                <span className="text-[10px] bg-bg-app px-2 py-0.5 rounded-full text-text-muted">3 Neu</span>
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                <div className="px-3 py-2 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer mb-1 border-l-2 border-accent-orange">
+                  <p className="text-[11px] font-bold text-navy-900">Materialengpass Galvanik</p>
+                  <p className="text-[10px] text-text-muted mt-0.5">Nickel-Bad 3 benÃ¶tigt zeitnah neues Material fÃ¼r anstehende GroÃŸauftrÃ¤ge.</p>
+                  <p className="text-[9px] text-text-muted mt-1 opacity-60">Vor 12 Min</p>
+                </div>
+                <div className="px-3 py-2 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer mb-1 border-l-2 border-success-green">
+                  <p className="text-[11px] font-bold text-navy-900">5 AuftrÃ¤ge fertiggestellt</p>
+                  <p className="text-[10px] text-text-muted mt-0.5">Die QS hat 5 WerkstÃ¼cke freigegeben. Bereit fÃ¼r den Warenausgang.</p>
+                  <p className="text-[9px] text-text-muted mt-1 opacity-60">Vor 45 Min</p>
+                </div>
+                <div className="px-3 py-2 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer border-l-2 border-danger-red">
+                  <p className="text-[11px] font-bold text-navy-900">Kundenanfrage verzÃ¶gert</p>
+                  <p className="text-[10px] text-text-muted mt-0.5">Auftrag A-202611 nÃ¤hert sich dem Abgabetermin (morgen).</p>
+                  <p className="text-[9px] text-text-muted mt-1 opacity-60">Vor 2 Std</p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         {/* Theme Switcher (Desktop & Mobile) */}
         <div className="ml-2">
@@ -232,13 +266,13 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
         {/* Profilbild rund (Kreis 48px) */}
         <div className="relative" ref={userDropdownRef}>
-          <button 
+          <button
             onClick={() => setUserDropdownOpen(!userDropdownOpen)}
             className="w-10 h-10 rounded-full bg-navy-700/90 backdrop-blur-sm border border-navy-500 hover:bg-navy-900 transition-all duration-300 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-sm cursor-pointer"
           >
             {userInitials}
           </button>
-          
+
           {userDropdownOpen && (
             <div className="absolute right-0 top-14 mt-2 w-48 bg-white border-2 border-neutral-gray-100 rounded-2xl shadow-xl z-50 p-2 animate-in slide-in-from-top-2 fade-in duration-200">
               <div className="px-3 py-2 border-b border-neutral-gray-100 mb-1">

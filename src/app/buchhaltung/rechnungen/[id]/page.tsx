@@ -4,6 +4,7 @@ import { getRechnungAction } from "@/app/buchhaltung/actions";
 import Link from "next/link";
 import { ChevronRight, FileText, CheckCircle2, AlertTriangle, Euro, Anchor, Briefcase, User } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
+import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
 
 export default async function RechnungDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -56,9 +57,9 @@ export default async function RechnungDetailPage({ params }: { params: Promise<{
           <div className="flex items-center gap-2 text-sm font-semibold text-neutral-500 mt-1">
             <Briefcase className="w-4 h-4" />
             <span>Auftrag:</span>
-            <Link href={`/orders/${"A-" + rechnung.nummer.replace("RE-", "")}`} className="text-navy-900 font-bold hover:underline hover:text-navy-600 transition-colors">
+            <OrderModalTrigger orderId={"A-" + rechnung.nummer.replace("RE-", "")} className="text-navy-900 font-bold hover:underline hover:text-navy-600 transition-colors">
               {"A-" + rechnung.nummer.replace("RE-", "")}
-            </Link>
+            </OrderModalTrigger>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -132,7 +133,7 @@ export default async function RechnungDetailPage({ params }: { params: Promise<{
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-[#1e1b18] to-navy-900 rounded-3xl shadow-sm p-6 text-white border border-[#1e1b18]">
+          <div className="bg-linear-to-br from-[#1e1b18] to-navy-900 rounded-3xl shadow-sm p-6 text-white border border-[#1e1b18]">
             <h3 className="text-sm font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Anchor className="w-4 h-4" /> Vernetzte Bereiche
             </h3>

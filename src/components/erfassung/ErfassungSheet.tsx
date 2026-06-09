@@ -202,7 +202,7 @@ export function ErfassungSheet({
                           <div className="text-xs font-semibold text-text-muted mt-1">Häufigkeit: {item.haeufigkeit}%</div>
                         )}
                       </div>
-                      <div className="flex-shrink-0 ml-4">
+                      <div className="shrink-0 flex items-center ml-4">
                         {m > 0 ? (
                           <MengenStepper value={m} onChange={(val) => handleMengeChange(item.id, val)} einheit={item.einheit} />
                         ) : (
