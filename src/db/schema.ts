@@ -141,7 +141,7 @@ export const complaints = pgTable("complaints", {
 });
 
 // 7. Inventory & Baths
-export const baths = pgTable("baths", {
+export const bathsOld = pgTable("baths", {
   id: cuidPrimaryKey("id"),
   name: text("name").notNull(),
   status: varchar("status", { length: 50 }).default("stable"),
@@ -392,31 +392,28 @@ export const qs = pgTable("qs", {
 // 15. Bäder (Galvanik)
 export const baeder = pgTable("baths", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   name: varchar("name", { length: 100 }).notNull(),
-  status: varchar("status", { length: 50 }).notNull().default("ok"), // "ok", "warnung", "kritisch"
-  temperatur: numeric("temperatur", { precision: 5, scale: 2 }),
+  status: varchar("status", { length: 50 }).notNull().default("stable"), // ok, warning, critical, stable
   temperatureMin: numeric("temperature_min", { precision: 5, scale: 2 }),
   temperatureMax: numeric("temperature_max", { precision: 5, scale: 2 }),
-  phWert: numeric("ph_wert", { precision: 4, scale: 2 }),
   phMin: numeric("ph_min", { precision: 4, scale: 2 }),
   phMax: numeric("ph_max", { precision: 4, scale: 2 }),
-  letzteWartung: timestamp("letzte_wartung"),
+  letzteWartung: timestamp("last_measured_at"),
   targetValues: jsonb("target_values").notNull().default({}),
   processType: text("process_type").notNull().default("unknown"),
   stationId: text("station_id"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // 16. Bad-Messwerte (Historie)
 export const badMesswerte = pgTable("bath_measurements", {
   id: cuidPrimaryKey("id"),
   tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
-  badId: text("bad_id").notNull().references(() => baeder.id, { onDelete: "cascade" }),
-  wertTyp: varchar("wert_typ", { length: 50 }).notNull(), // "temperatur", "ph", "chemie"
-  wert: numeric("wert", { precision: 10, scale: 2 }).notNull(),
-  gemessenVon: text("gemessen_von"),
-  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  badId: text("bath_id").notNull().references(() => baeder.id, { onDelete: "cascade" }),
+  temperature: numeric("temperature", { precision: 10, scale: 2 }),
+  phValue: numeric("ph_value", { precision: 10, scale: 2 }),
+  notes: text("notes"),
+  measuredAt: timestamp("measured_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // 17. Lager & Chemie
