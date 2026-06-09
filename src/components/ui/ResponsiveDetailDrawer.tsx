@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
@@ -9,9 +9,10 @@ interface ResponsiveDetailDrawerProps {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  centered?: boolean;
 }
 
-export function ResponsiveDetailDrawer({ isOpen, onClose, title, children }: ResponsiveDetailDrawerProps) {
+export function ResponsiveDetailDrawer({ isOpen, onClose, title, children, centered = false }: ResponsiveDetailDrawerProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -32,20 +33,20 @@ export function ResponsiveDetailDrawer({ isOpen, onClose, title, children }: Res
   if (!isOpen || !mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end md:items-stretch justify-end">
+    <div className={`fixed inset-0 z-50 flex ${centered ? "items-center justify-center p-4 md:p-8" : "items-end md:items-stretch justify-end"}`}>
       {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-navy-900/40 backdrop-blur-sm animate-in fade-in duration-200"
         onClick={onClose}
       />
 
-      {/* Drawer */}
-      <div 
-        className={`relative bg-white w-full md:w-[600px] lg:w-[800px] flex flex-col shadow-2xl
-          /* Mobile Bottom Sheet */
-          h-[90vh] rounded-t-3xl mt-auto md:mt-0 md:h-full md:rounded-none
-          /* Animations */
-          animate-in slide-in-from-bottom-full md:slide-in-from-right-full duration-300
+      {/* Drawer / Modal */}
+      <div
+        className={`relative bg-white w-full flex flex-col shadow-2xl
+          ${centered
+            ? "max-w-4xl max-h-full rounded-3xl animate-in zoom-in-95 duration-200 overflow-hidden"
+            : "md:w-[600px] lg:w-[800px] h-[90vh] rounded-t-3xl mt-auto md:mt-0 md:h-full md:rounded-none animate-in slide-in-from-bottom-full md:slide-in-from-right-full duration-300"
+          }
         `}
       >
         {/* Pull Handle for mobile */}
@@ -54,9 +55,9 @@ export function ResponsiveDetailDrawer({ isOpen, onClose, title, children }: Res
         </div>
 
         {/* Header */}
-        <div className="flex items-center justify-between p-4 md:p-6 pt-8 md:pt-6 border-b border-neutral-gray-100 bg-bg-app-soft shrink-0 rounded-t-3xl md:rounded-none">
+        <div className={`flex items-center justify-between p-4 md:p-6 pt-8 md:pt-6 border-b border-neutral-gray-100 bg-bg-app-soft shrink-0 ${centered ? "rounded-t-3xl" : "rounded-t-3xl md:rounded-none"}`}>
           <h2 className="text-lg md:text-xl font-bold text-navy-900 truncate pr-4">{title}</h2>
-          <button 
+          <button
             onClick={onClose}
             className="w-10 h-10 rounded-full bg-white border border-neutral-gray-200 flex items-center justify-center text-text-muted hover:text-navy-900 hover:border-navy-900 transition-colors shrink-0 shadow-sm"
           >

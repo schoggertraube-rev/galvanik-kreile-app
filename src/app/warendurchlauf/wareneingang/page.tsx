@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
@@ -8,28 +8,74 @@ import {
   ChevronRight, Zap
 } from "lucide-react";
 import { useState, Suspense, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { WarendurchlaufIntakeWizard } from "@/components/warendurchlauf/WarendurchlaufIntakeWizard";
+import { ordersRepository } from "@/lib/repositories/ordersRepository";
+import { MockOrder } from "@/lib/mockData";
 
-/* ═══════════════════════════════════════════
-   Warendurchlauf Leitstand — v4 Layout
-   ═══════════════════════════════════════════ */
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   Warendurchlauf Leitstand â€” v4 Layout
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 function WarendurchlaufLeitstandContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [wizardMode, setWizardMode] = useState<"camera" | "manual" | null>(
     searchParams.get("mode") === "new-order" ? "manual" : null
   );
 
+  const [orders, setOrders] = useState<MockOrder[]>([]);
+  const [todos, setTodos] = useState<{ id: number; title: string; subtitle: string; tags: string[]; action: string; priority?: string; live?: boolean; targetHref?: string; done: boolean }[]>([]);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const dbOrders = await ordersRepository.getAll();
+        if (dbOrders) {
+          const typedOrders = dbOrders as unknown as MockOrder[];
+          setOrders(typedOrders);
+
+          // Build dynamic checklist
+          const newTodos = [];
+          const kritisch = typedOrders.filter(o => o.risk === 'red' || o.risk === 'orange');
+          if (kritisch.length > 0) {
+             newTodos.push({
+                id: 1, title: `Kritische AuftrÃ¤ge (${kritisch.length})`, subtitle: "AuftrÃ¤ge mit hohem Risiko",
+                tags: ["Warendurchlauf"], action: "Ansehen", priority: "Hoch", targetHref: "/kontrolle",
+                live: true, done: false
+             });
+          }
+          const auslieferungen = typedOrders.filter(o => o.station === 'warenausgang');
+          if (auslieferungen.length > 0) {
+             newTodos.push({
+                id: 2, title: `Auslieferungen klÃ¤ren (${auslieferungen.length})`, subtitle: "AuftrÃ¤ge im Warenausgang",
+                tags: ["Warenausgang"], action: "PrÃ¼fen", targetHref: "/warendurchlauf/warenausgang",
+                live: true, done: false
+             });
+          }
+          setTodos(newTodos);
+        }
+      } catch (err) {}
+    };
+    load();
+  }, []);
+
+  const countUeberfaellig = orders.filter(o => o.risk === 'red').length;
+  const countDieseWoche = orders.filter(o => o.risk === 'orange' || o.risk === 'yellow').length;
+  const countWartend = orders.filter(o => o.risk === 'blocked').length;
+  const countImPlan = orders.filter(o => o.risk === 'green').length;
+
+  const totalBar = (countUeberfaellig + countDieseWoche + countWartend + countImPlan) || 1;
+
   return (
     <div className="w-full h-full font-sans antialiased text-[#1a1a1a]">
-      <div className="mb-6">
-        <Breadcrumb items={[{label:'Home',href:'/'}, {label:'Warendurchlauf',href:'/warendurchlauf'}, {label:'Wareneingang'}]} />
-        <BackButton label="Warendurchlauf" href="/warendurchlauf" />
-      </div>
-      
       {wizardMode && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black/60 backdrop-blur-sm overflow-y-auto">
+        <div
+          className="fixed inset-0 z-100 flex flex-col bg-black/60 backdrop-blur-sm overflow-y-auto"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setWizardMode(null);
+          }}
+        >
           <WarendurchlaufIntakeWizard
             initialMode={wizardMode}
             onClose={() => setWizardMode(null)}
@@ -41,7 +87,7 @@ function WarendurchlaufLeitstandContent() {
 
 
 
-        {/* ── UNTERER BEREICH ── */}
+        {/* â”€â”€ UNTERER BEREICH â”€â”€ */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(280px,380px)] gap-6" style={{ animation: "fadeUp .4s .1s ease both" }}>
 
           {/* LINKE SEITE */}
@@ -54,7 +100,7 @@ function WarendurchlaufLeitstandContent() {
 
             {/* Aktionskarten */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-              {/* Kamera — primary */}
+              {/* Kamera â€” primary */}
               <button
                 onClick={() => setWizardMode("camera")}
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md text-center text-white"
@@ -135,16 +181,17 @@ function WarendurchlaufLeitstandContent() {
               </div>
               {/* Bar */}
               <div className="h-2 rounded flex gap-0.5 overflow-hidden mb-2">
-                <div className="rounded bg-[#c0392b]" style={{ flex: 3 }} />
-                <div className="rounded bg-[#d4850a]" style={{ flex: 5 }} />
-                <div className="rounded bg-[#2471a3]" style={{ flex: 2 }} />
-                <div className="rounded bg-[#1e7e45]" style={{ flex: 18 }} />
+                <div className="rounded bg-[#c0392b]" style={{ flex: countUeberfaellig, display: countUeberfaellig ? 'block' : 'none' }} />
+                <div className="rounded bg-[#d4850a]" style={{ flex: countDieseWoche, display: countDieseWoche ? 'block' : 'none' }} />
+                <div className="rounded bg-[#2471a3]" style={{ flex: countWartend, display: countWartend ? 'block' : 'none' }} />
+                <div className="rounded bg-[#1e7e45]" style={{ flex: countImPlan, display: countImPlan ? 'block' : 'none' }} />
+                {totalBar === 1 && orders.length === 0 && <div className="rounded bg-neutral-gray-200" style={{ flex: 1 }} />}
               </div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                <StatRow color="#c0392b" label="Überfällig" value="3" />
-                <StatRow color="#2471a3" label="Diese Woche" value="5" />
-                <StatRow color="#d4850a" label="Wartend" value="2" />
-                <StatRow color="#1e7e45" label="Im Plan" value="18" />
+                <StatRow color="#c0392b" label="ÃœberfÃ¤llig" value={countUeberfaellig.toString()} />
+                <StatRow color="#d4850a" label="Diese Woche" value={countDieseWoche.toString()} />
+                <StatRow color="#2471a3" label="Wartend" value={countWartend.toString()} />
+                <StatRow color="#1e7e45" label="Im Plan" value={countImPlan.toString()} />
               </div>
             </div>
 
@@ -164,33 +211,35 @@ function WarendurchlaufLeitstandContent() {
               <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-[7px] bg-[#fef3e2] mb-2 text-[10px]">
                 <Zap className="w-3 h-3 text-[#c8922a]" />
                 <span className="text-[#5e5850]">Hebel: </span>
-                <b className="text-[#c8922a]">Kritische Aufträge entschärfen</b>
+                <b className="text-[#c8922a]">Kritische AuftrÃ¤ge entschÃ¤rfen</b>
               </div>
 
               {/* Items */}
               <div className="flex flex-col">
-                <CheckItem
-                  title="Salzsäure nachbestellen"
-                  subtitle="Bestand unter 20%"
-                  tags={["Chemie"]}
-                  action="Lieferant"
-                  priority="Hoch"
-                  live
-                />
-                <CheckItem
-                  title="Material fehlt #8102"
-                  subtitle="Frontteile nicht auffindbar"
-                  tags={["Eingang"]}
-                  action="Palette suchen"
-                  live
-                />
-                <CheckItem
-                  title="QS: Teile nacharbeiten"
-                  subtitle="2 Trommeln Nickel"
-                  tags={["Galvanik"]}
-                  action="Entlacken"
-                  live
-                />
+                {todos.length === 0 ? (
+                  <div className="text-[11px] text-[#9e9689] p-2 text-center border border-dashed rounded-[7px] border-[#d8d0c4]">
+                    Alles erledigt fÃ¼r heute!
+                  </div>
+                ) : (
+                  todos.map(t => (
+                    <CheckItem
+                      key={t.id}
+                      title={t.title}
+                      subtitle={t.subtitle}
+                      tags={t.tags}
+                      action={t.action}
+                      priority={t.priority}
+                      live={t.live}
+                      done={t.done}
+                      onClick={() => {
+                        if (t.targetHref) router.push(t.targetHref);
+                        else {
+                          setTodos(prev => prev.map(td => td.id === t.id ? { ...td, done: !td.done } : td));
+                        }
+                      }}
+                    />
+                  ))
+                )}
               </div>
             </div>
 
@@ -225,7 +274,7 @@ export default function WarendurchlaufLeitstand() {
   );
 }
 
-/* ── Hilfskomponenten ── */
+/* â”€â”€ Hilfskomponenten â”€â”€ */
 
 function StatRow({ color, label, value }: { color: string; label: string; value: string }) {
   return (
@@ -246,6 +295,8 @@ function CheckItem({
   action,
   priority,
   live,
+  done,
+  onClick,
 }: {
   title: string;
   subtitle: string;
@@ -253,11 +304,18 @@ function CheckItem({
   action: string;
   priority?: string;
   live?: boolean;
+  done?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <div className="flex items-start gap-2 py-[7px] border-b border-[#d8d0c4] last:border-b-0 cursor-pointer transition-colors hover:bg-[#f4f0e8] hover:mx-[-6px] hover:px-[6px] hover:rounded-md">
-      <div className="w-4 h-4 rounded-full border-2 border-[#d8d0c4] shrink-0 mt-0.5" />
-      <div className="flex-1 min-w-0">
+    <div
+      onClick={onClick}
+      className={`flex items-start gap-2 py-[7px] border-b border-[#d8d0c4] last:border-b-0 cursor-pointer transition-colors hover:bg-[#f4f0e8] hover:mx-[-6px] hover:px-[6px] hover:rounded-md ${done ? 'opacity-50' : ''}`}
+    >
+      <div className={`w-4 h-4 rounded-full border-2 shrink-0 mt-0.5 flex items-center justify-center ${done ? 'border-[#1e7e45] bg-[#1e7e45]' : 'border-[#d8d0c4]'}`}>
+        {done && <svg viewBox="0 0 24 24" className="w-2.5 h-2.5"><path d="M5 12l5 5 9-11" stroke="#fff" strokeWidth="3" fill="none" /></svg>}
+      </div>
+      <div className={`flex-1 min-w-0 ${done ? 'line-through text-[#9e9689]' : ''}`}>
         <div className="text-[11px] font-bold text-[#1a1a1a]">{title}</div>
         <div className="text-[10px] text-[#9e9689]">{subtitle}</div>
         <div className="flex gap-1 items-center mt-0.5 flex-wrap">

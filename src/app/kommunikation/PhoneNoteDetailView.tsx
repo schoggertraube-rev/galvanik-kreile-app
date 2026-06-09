@@ -8,6 +8,7 @@ import {
 import Link from "next/link";
 import { smartMatchText, MatchResult } from "./smartMatcher";
 import { updatePhoneNote } from "@/app/actions/phoneNotes.actions";
+import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
 
 export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: Record<string, any>, onUpdate: () => void, onClose: () => void }) {
   const [matchData, setMatchData] = useState<MatchResult | null>(null);
@@ -106,10 +107,10 @@ export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: Record<
               </Link>
             )}
             {matchData.matchedOrder && (
-              <Link href={`/orders/${matchData.matchedOrder.id}`} target="_blank" className="bg-purple-50 text-purple-800 border border-purple-200 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-purple-100 transition group">
+              <OrderModalTrigger orderId={matchData.matchedOrder.id} className="bg-purple-50 text-purple-800 border border-purple-200 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-purple-100 transition group">
                 <FileText className="w-4 h-4" /> Auftrag {matchData.matchedOrder.id}
                 <ExternalLink className="w-3 h-3 opacity-50 group-hover:opacity-100" />
-              </Link>
+              </OrderModalTrigger>
             )}
             {matchData.matchedMaterial && (
               <span className="bg-amber-50 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-lg text-sm font-bold capitalize">

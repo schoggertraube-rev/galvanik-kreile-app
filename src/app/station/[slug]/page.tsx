@@ -4,6 +4,7 @@ import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, use } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -214,11 +215,11 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
                   </div>
 
                   <div className="pt-4 border-t border-neutral-gray-100">
-                    <Link href={`/orders/${selectedOrder.id}`}>
+                    <OrderModalTrigger orderId={selectedOrder.id} className="w-full">
                        <Button className="w-full bg-navy-900 hover:bg-navy-700 text-white shadow-sm font-bold h-11 rounded-xl">
                          Auftrag Details & Bearbeiten
                        </Button>
-                    </Link>
+                    </OrderModalTrigger>
                   </div>
                 </CardContent>
               </Card>

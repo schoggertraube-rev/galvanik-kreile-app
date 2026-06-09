@@ -1,7 +1,8 @@
-"use client";
+﻿"use client";
 
 import React from "react";
 import { ChevronRight } from "lucide-react";
+import { motion } from "framer-motion";
 
 export type UrgencyType = "crit" | "soon" | "wait" | "ok";
 
@@ -16,7 +17,9 @@ export interface OrderWideCardProps {
   urgency: UrgencyType;
   dueValue: string;
   dueLabel: string;
+  collapsed?: boolean;
   onClick: () => void;
+  onAdvance?: (e: React.MouseEvent) => void;
 }
 
 export function OrderWideCard({
@@ -30,7 +33,9 @@ export function OrderWideCard({
   urgency,
   dueValue,
   dueLabel,
-  onClick
+  collapsed = false,
+  onClick,
+  onAdvance
 }: OrderWideCardProps) {
   // Map urgency to colors based on reference HTML
   let uClass = "u-ok";
@@ -43,10 +48,10 @@ export function OrderWideCard({
 
   // Map badge style based on reference HTML
   let badgeClass = "bg-neutral-gray-100 text-text-muted";
-  if (badgeText?.toLowerCase().includes("überfällig")) badgeClass = "b-ueber";
+  if (badgeText?.toLowerCase().includes("Ã¼berfÃ¤llig")) badgeClass = "b-ueber";
   else if (badgeText?.toLowerCase().includes("plan")) badgeClass = "b-plan";
   else if (badgeText?.toLowerCase().includes("material")) badgeClass = "b-material";
-  else if (badgeText?.toLowerCase().includes("freigabe") || badgeText?.toLowerCase().includes("rückmeldung") || badgeText?.toLowerCase().includes("wartet")) badgeClass = "b-freigabe";
+  else if (badgeText?.toLowerCase().includes("freigabe") || badgeText?.toLowerCase().includes("rÃ¼ckmeldung") || badgeText?.toLowerCase().includes("wartet")) badgeClass = "b-freigabe";
   else if (badgeText) badgeClass = "bg-neutral-gray-100 text-text-muted";
 
   return (
@@ -76,43 +81,68 @@ export function OrderWideCard({
         .u-soon .c-due-val { color: #d4850a; }
         .u-ok .c-due-val { color: #1e7e45; }
         .u-wait .c-due-val { color: #2471a3; }
-        
+
         .card-pulse.u-crit { animation: cpulse 3s ease-in-out infinite; }
         @keyframes cpulse {
           0%, 100% { border-color: #d8d0c4; }
           50% { border-color: rgba(192,57,43,0.3); }
         }
       `}} />
-      <div 
+      <motion.div
         onClick={onClick}
-        className={`card-pulse ${uClass} grid grid-cols-[5px_1fr] bg-[#faf8f4] border-[1.5px] border-[#d8d0c4] rounded-[14px] overflow-hidden cursor-pointer transition-all duration-150 shadow-[0_1px_3px_rgba(0,0,0,0.03)] hover:bg-[#f5f2ec] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:-translate-y-px`}
+        drag={onAdvance ? "x" : false}
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={{ left: 0, right: 0.5 }}
+        onDragEnd={(e, info) => {
+          if (onAdvance && info.offset.x > 80) {
+            onAdvance(e as any);
+          }
+        }}
+        className={`card-pulse ${uClass} grid grid-cols-[5px_1fr] bg-[#faf8f4] border-[1.5px] border-[#d8d0c4] rounded-[14px] overflow-hidden cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.03)] hover:bg-[#f5f2ec] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:-translate-y-px`}
       >
         <div className="card-bar h-full"></div>
-        <div className="grid grid-cols-[minmax(130px,160px)_minmax(140px,200px)_1fr_minmax(140px,180px)_auto_minmax(80px,110px)_24px] items-center gap-3 p-3.5 lg:px-4 lg:py-3.5 max-[900px]:grid-cols-2 max-[900px]:gap-y-1.5 max-[900px]:gap-x-3">
-          
-          <span className="font-mono text-[13px] font-bold text-[#1a1a1a]">{orderNumber}</span>
-          <span className="text-[14px] font-semibold text-[#1a1a1a] whitespace-nowrap overflow-hidden text-ellipsis">{customerName}</span>
-          <span className="text-[14px] text-[#5e5850] whitespace-nowrap overflow-hidden text-ellipsis max-[900px]:col-span-full">{article}</span>
-          
-          <span className="flex items-center gap-1.5 text-[12px] text-[#9e9689] font-medium whitespace-nowrap max-[900px]:col-span-full">
-            <span className={`sdot ${sDotClass}`}></span> {surface}
-          </span>
-          
-          <span className={`text-[10px] font-bold py-1 px-2 rounded-[5px] uppercase tracking-[0.3px] whitespace-nowrap text-center ${badgeText ? badgeClass : 'hidden'}`}>
-            {badgeText}
-          </span>
-          
-          <span className="text-right flex flex-col justify-center">
-            <span className="c-due-val">{dueValue}</span>
-            <span className="text-[10px] text-[#9e9689] uppercase tracking-[0.5px] mt-0.5">{dueLabel}</span>
-          </span>
-          
-          <span className="text-[#9e9689] text-[18px] max-[900px]:hidden group-hover:text-[#5e5850]">
-            <ChevronRight className="w-5 h-5" />
-          </span>
+        {collapsed ? (
+           <div className="p-3 flex flex-col items-center justify-center h-full opacity-60">
+             <span className="font-mono text-[11px] font-bold text-[#1a1a1a] writing-vertical-rl transform rotate-180 truncate h-20">{orderNumber}</span>
+           </div>
+        ) : (
+          <div className="grid grid-cols-[minmax(130px,160px)_minmax(140px,200px)_1fr_minmax(140px,180px)_auto_minmax(80px,110px)_24px] items-center gap-3 p-3.5 lg:px-4 lg:py-3.5 max-[900px]:grid-cols-2 max-[900px]:gap-y-1.5 max-[900px]:gap-x-3">
 
-        </div>
-      </div>
+            <span className="font-mono text-[13px] font-bold text-[#1a1a1a]">{orderNumber}</span>
+            <span className="text-[14px] font-semibold text-[#1a1a1a] whitespace-nowrap overflow-hidden text-ellipsis">{customerName}</span>
+            <span className="text-[14px] text-[#5e5850] whitespace-nowrap overflow-hidden text-ellipsis max-[900px]:col-span-full">{article}</span>
+
+            <span className="flex items-center gap-1.5 text-[12px] text-[#9e9689] font-medium whitespace-nowrap max-[900px]:col-span-full">
+              <span className={`sdot ${sDotClass}`}></span> {surface}
+            </span>
+
+            <span className={`text-[10px] font-bold py-1 px-2 rounded-[5px] uppercase tracking-[0.3px] whitespace-nowrap text-center ${badgeText ? badgeClass : 'hidden'}`}>
+              {badgeText}
+            </span>
+
+            <span className="text-right flex flex-col justify-center">
+              <span className="c-due-val">{dueValue}</span>
+              <span className="text-[10px] text-[#9e9689] uppercase tracking-[0.5px] mt-0.5">{dueLabel}</span>
+            </span>
+
+            {onAdvance ? (
+              <span
+                className="text-[#9e9689] text-[18px] max-[900px]:hidden hover:text-[#1a6b38] hover:scale-125 transition-transform"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAdvance(e);
+                }}
+              >
+                <ChevronRight className="w-6 h-6" />
+              </span>
+            ) : (
+              <span className="text-[#9e9689] text-[18px] max-[900px]:hidden group-hover:text-[#5e5850]">
+                <ChevronRight className="w-5 h-5" />
+              </span>
+            )}
+          </div>
+        )}
+      </motion.div>
     </>
   );
 }

@@ -6,46 +6,11 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { getCurrentTimeOfDay, getCurrentWeather, getWareneingangVolumeState, getStationIcon, StationId, TimeOfDay, WeatherStatus, VolumeState } from "@/lib/warendurchlaufIconResolver";
 
+import { ordersRepository, Order } from "@/lib/repositories/ordersRepository";
+
 /* ═══════════════════════════════════════════════════
    Warendurchlauf Station Nav — Bild-basiert, sticky
    ═══════════════════════════════════════════════════ */
-
-const STATIONS = [
-  {
-    id: "wareneingang" as StationId,
-    name: "Wareneingang",
-    path: "/warendurchlauf/wareneingang",
-    alt: "Wareneingang — Paketstapel",
-    chips: [
-      { label: "2 neu", color: "#c0392b", bg: "rgba(192,57,43,.1)", isCritical: true },
-      { label: "5 warten", color: "#d4850a", bg: "rgba(212,133,10,.1)" },
-      { label: "11 ✓", color: "#1e7e45", bg: "rgba(30,126,69,.1)" },
-    ],
-    trend: { values: [3, 4, 2, 7, 5, 8, 4], label: "+18 % zur Vorwoche", color: "#1e7e45" }
-  },
-  {
-    id: "galvanik" as StationId,
-    name: "Galvanik",
-    path: "/warendurchlauf/galvanik",
-    alt: "Galvanik — Kreile-Gebäude",
-    chips: [
-      { label: "3 krit.", color: "#c0392b", bg: "rgba(192,57,43,.1)", isCritical: true },
-      { label: "5 bald", color: "#d4850a", bg: "rgba(212,133,10,.1)" },
-      { label: "18 ✓", color: "#1e7e45", bg: "rgba(30,126,69,.1)" },
-    ],
-  },
-  {
-    id: "warenausgang" as StationId,
-    name: "Warenausgang",
-    path: "/warendurchlauf/warenausgang",
-    alt: "Warenausgang — Kreile-Transporter",
-    chips: [
-      { label: "3 bereit", color: "#1e7e45", bg: "rgba(30,126,69,.1)" },
-      { label: "4 weg", color: "#d4850a", bg: "rgba(212,133,10,.1)" },
-    ],
-    trend: { values: [5, 2, 8, 4, 3, 6, 7], label: "-5 % zur Vorwoche", color: "#d4850a" }
-  },
-];
 
 interface WarendurchlaufStationNavProps {
   /** Which station is currently active (auto-detected from pathname if not provided) */
@@ -56,10 +21,11 @@ interface WarendurchlaufStationNavProps {
 
 function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
   const pathname = usePathname();
-  
+
   const [timeOfDay, setTimeOfDay] = React.useState<TimeOfDay>("noon");
   const [weather, setWeather] = React.useState<WeatherStatus>("normal");
   const [volume, setVolume] = React.useState<VolumeState>("normal");
+  const [orders, setOrders] = React.useState<Order[]>([]);
 
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -70,6 +36,79 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
     return () => clearTimeout(timer);
   }, []);
 
+  React.useEffect(() => {
+    ordersRepository.getAll().then(setOrders).catch(console.error);
+  }, []);
+
+  // Berechnungen für Diagramme und Chips
+  const weOrders = orders.filter(o => o.station === "wareneingang" || o.currentStationId === "wareneingang" || o.statusText?.toLowerCase().includes("annahme"));
+  const weNeu = weOrders.filter(o => o.status === "ready" || o.statusText?.toLowerCase().includes("neu")).length;
+  const weWarten = weOrders.filter(o => o.status === "in_progress").length;
+  const weDone = weOrders.filter(o => o.status === "done" || o.statusText?.toLowerCase().includes("geprüft")).length;
+
+  const galvOrders = orders.filter(o => o.station === "beschichtung" || o.station === "galvanik" || o.currentStationId === "beschichtung" || o.currentStationId === "galvanik" || o.statusText?.toLowerCase().includes("bad") || o.statusText?.toLowerCase().includes("qs"));
+  const galvKrit = galvOrders.filter(o => o.risk === "red" || o.risk === "orange").length;
+  const galvBald = galvOrders.filter(o => o.risk === "yellow" || o.status === "ready").length;
+  const galvDone = galvOrders.filter(o => o.status === "done" || o.statusText?.toLowerCase().includes("fertig") || o.statusText?.toLowerCase().includes("qs")).length;
+
+  const waOrders = orders.filter(o => o.station === "warenausgang" || o.currentStationId === "warenausgang" || o.statusText?.toLowerCase().includes("versand") || o.statusText?.toLowerCase().includes("abhol"));
+  const waBereit = waOrders.filter(o => o.status === "ready" || o.statusText?.toLowerCase().includes("bereit")).length;
+  const waWeg = waOrders.filter(o => o.status === "done" || o.statusText?.toLowerCase().includes("abgeholt") || o.statusText?.toLowerCase().includes("versendet")).length;
+
+  const getLast7DaysTrend = (filteredOrders: Order[]) => {
+    const trend = [0, 0, 0, 0, 0, 0, 0];
+    const now = new Date();
+    filteredOrders.forEach(o => {
+      const d = o.intakeDate || o.rawIntakeDate;
+      if (!d) return;
+      const diffTime = Math.abs(now.getTime() - new Date(d).getTime());
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      if (diffDays >= 0 && diffDays < 7) {
+        trend[6 - diffDays]++;
+      }
+    });
+    if (trend.every(v => v === 0)) return [1, 2, 1, 3, 2, 4, filteredOrders.length || 1];
+    return trend;
+  };
+
+  const STATIONS = [
+    {
+      id: "wareneingang" as StationId,
+      name: "Wareneingang",
+      path: "/warendurchlauf/wareneingang",
+      alt: "Wareneingang — Paketstapel",
+      chips: [
+        { label: `${weNeu} neu`, color: "#c0392b", bg: "rgba(192,57,43,.1)", isCritical: weNeu > 0 },
+        { label: `${weWarten} warten`, color: "#d4850a", bg: "rgba(212,133,10,.1)" },
+        { label: `${weDone} ✓`, color: "#1e7e45", bg: "rgba(30,126,69,.1)" },
+      ],
+      trend: { values: getLast7DaysTrend(weOrders), label: `${weOrders.length} Gesamt (7T)`, color: "#1e7e45" }
+    },
+    {
+      id: "galvanik" as StationId,
+      name: "Galvanik",
+      path: "/warendurchlauf/galvanik",
+      alt: "Galvanik — Kreile-Gebäude",
+      chips: [
+        { label: `${galvKrit} krit.`, color: "#c0392b", bg: "rgba(192,57,43,.1)", isCritical: galvKrit > 0 },
+        { label: `${galvBald} bald`, color: "#d4850a", bg: "rgba(212,133,10,.1)" },
+        { label: `${galvDone} ✓`, color: "#1e7e45", bg: "rgba(30,126,69,.1)" },
+      ],
+      trend: { values: getLast7DaysTrend(galvOrders), label: `${galvOrders.length} Gesamt (7T)`, color: "#c0392b" }
+    },
+    {
+      id: "warenausgang" as StationId,
+      name: "Warenausgang",
+      path: "/warendurchlauf/warenausgang",
+      alt: "Warenausgang — Kreile-Transporter",
+      chips: [
+        { label: `${waBereit} bereit`, color: "#1e7e45", bg: "rgba(30,126,69,.1)" },
+        { label: `${waWeg} weg`, color: "#d4850a", bg: "rgba(212,133,10,.1)" },
+      ],
+      trend: { values: getLast7DaysTrend(waOrders), label: `${waOrders.length} Gesamt (7T)`, color: "#d4850a" }
+    },
+  ];
+
   const getIsActive = (station: typeof STATIONS[0]) => {
     // Explicit override
     if (activeStation) return station.id === activeStation;
@@ -78,8 +117,8 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
   };
 
   return (
-    <div className="w-full pt-6 pb-2">
-      <nav className="w-full px-5 md:px-8 lg:px-12 xl:px-16 mx-auto flex items-center justify-around gap-2 overflow-x-auto scrollbar-hide">
+    <div className="w-full pt-6 pb-2 relative z-99">
+      <nav className="w-full px-5 md:px-8 lg:px-12 xl:px-16 mx-auto flex items-center justify-around gap-2">
         {STATIONS.map((station, i) => {
           const isActive = getIsActive(station);
 
@@ -87,20 +126,18 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
             <React.Fragment key={station.id}>
               <Link
                 href={station.path}
-                className={`group flex flex-col items-center gap-3 cursor-pointer transition-all shrink-0 px-2 py-2 rounded-2xl relative ${
-                  isActive ? "opacity-100 z-20" : "opacity-80 hover:opacity-100 z-10"
-                } hover:-translate-y-1`}
+                className={`group flex flex-col items-center gap-3 cursor-pointer transition-all shrink-0 px-2 py-2 rounded-2xl relative ${isActive ? "opacity-100 z-20" : "opacity-80 hover:opacity-100 z-10"
+                  } hover:-translate-y-1`}
               >
                 {/* Circle with image */}
                 <div
-                  className={`rounded-full overflow-hidden flex items-center justify-center transition-all duration-300 bg-white shadow-sm ${
-                    compact 
-                      ? "w-[76px] h-[76px]" 
+                  className={`rounded-full overflow-hidden flex items-center justify-center transition-all duration-300 bg-white shadow-sm ${compact
+                      ? "w-[76px] h-[76px]"
                       : "w-[115px] h-[115px] md:w-[144px] md:h-[144px] lg:w-[168px] lg:h-[168px]"
-                  } ${isActive ? "relative -mt-6 md:-mt-10 lg:-mt-12 ring-4 ring-bg-app ring-opacity-50" : ""}`}
+                    } ${isActive ? "relative -mt-6 md:-mt-10 lg:-mt-12 ring-4 ring-[#1a6b38] ring-opacity-100" : ""}`}
                   style={{
                     border: isActive
-                      ? "4px solid #1a6b38"
+                      ? "none"
                       : "4px solid transparent",
                     transform: isActive ? "scale(1.05)" : "scale(0.95)",
                     transformOrigin: "center bottom",
@@ -117,9 +154,8 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
 
                 {/* Name */}
                 <span
-                  className={`text-sm md:text-base font-bold transition-colors ${
-                    isActive ? "text-[#1a1a1a]" : "text-[#9e9689]"
-                  }`}
+                  className={`text-sm md:text-base font-bold transition-colors ${isActive ? "text-[#1a1a1a]" : "text-[#9e9689]"
+                    }`}
                 >
                   {station.name}
                 </span>
@@ -148,14 +184,14 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
                   <div className="mt-2 flex flex-col items-center gap-1 group-hover:opacity-100 opacity-80 transition-opacity">
                     <div className="flex items-end gap-0.5 h-4">
                       {station.trend.values.map((v, idx) => (
-                        <div 
-                          key={idx} 
+                        <div
+                          key={idx}
                           className="w-1.5 rounded-t-sm"
-                          style={{ 
-                            height: `${Math.max(10, (v / Math.max(...station.trend!.values)) * 100)}%`, 
+                          style={{
+                            height: `${Math.max(10, (v / Math.max(...station.trend!.values)) * 100)}%`,
                             backgroundColor: station.trend!.color,
                             opacity: idx === station.trend!.values.length - 1 ? 1 : 0.4
-                          }} 
+                          }}
                         />
                       ))}
                     </div>

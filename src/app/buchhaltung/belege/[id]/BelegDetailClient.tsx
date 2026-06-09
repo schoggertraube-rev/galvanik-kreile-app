@@ -221,7 +221,7 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
           </div>
           
           {/* Vernetzte Bereiche */}
-          <div className="bg-gradient-to-br from-[#1e1b18] to-navy-900 rounded-3xl shadow-sm p-4 sm:p-6 text-white border-2 border-[#1e1b18]">
+          <div className="bg-linear-to-br from-[#1e1b18] to-navy-900 rounded-3xl shadow-sm p-4 sm:p-6 text-white border-2 border-[#1e1b18]">
             <h3 className="text-xs font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Anchor className="w-4 h-4" /> Wo wurde dieser Beleg verwendet?
             </h3>
