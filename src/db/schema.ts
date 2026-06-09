@@ -380,7 +380,7 @@ export const qs = pgTable("qs", {
 });
 
 // 15. Bäder (Galvanik)
-export const baeder = pgTable("baeder", {
+export const baeder = pgTable("baths", {
   id: cuidPrimaryKey("id"),
   tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   name: varchar("name", { length: 100 }).notNull(),
@@ -395,7 +395,7 @@ export const baeder = pgTable("baeder", {
 });
 
 // 16. Bad-Messwerte (Historie)
-export const badMesswerte = pgTable("bad_messwerte", {
+export const badMesswerte = pgTable("bath_measurements", {
   id: cuidPrimaryKey("id"),
   tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   badId: text("bad_id").notNull().references(() => baeder.id, { onDelete: "cascade" }),

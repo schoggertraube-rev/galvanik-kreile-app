@@ -40,7 +40,7 @@ export interface BathAddition {
 export const bathsRepository = {
   async getAllBaths(): Promise<Bath[]> {
     const supabase = createClient();
-    const { data, error } = await supabase.from('baeder').select('*').order('name', { ascending: true });
+    const { data, error } = await supabase.from('baths').select('*').order('name', { ascending: true });
 
     if (error) {
       console.error("Supabase getAllBaths error:", error);
@@ -67,7 +67,7 @@ export const bathsRepository = {
 
   async getAllMeasurements(): Promise<BathMeasurementLog[]> {
     const supabase = createClient();
-    const { data, error } = await supabase.from('bad_messwerte').select('*').order('timestamp', { ascending: false });
+    const { data, error } = await supabase.from('bath_measurements').select('*').order('timestamp', { ascending: false });
 
     if (error) {
       console.error("Supabase getAllMeasurements error:", error);
@@ -104,7 +104,7 @@ export const bathsRepository = {
 
   async getBathById(id: string): Promise<Bath | null> {
     const supabase = createClient();
-    const { data, error } = await supabase.from('baeder').select('*').eq('id', id).single();
+    const { data, error } = await supabase.from('baths').select('*').eq('id', id).single();
     if (error) {
       if (error.code === 'PGRST116') return null;
       throw error;
@@ -143,7 +143,7 @@ export const bathsRepository = {
     const ts = new Date().toISOString();
 
     if (data.temperature) {
-      await supabase.from('bad_messwerte').insert({
+      await supabase.from('bath_measurements').insert({
         bad_id: bathId,
         wert_typ: 'temperatur',
         wert: data.temperature,
@@ -152,7 +152,7 @@ export const bathsRepository = {
       });
     }
     if (data.ph) {
-      await supabase.from('bad_messwerte').insert({
+      await supabase.from('bath_measurements').insert({
         bad_id: bathId,
         wert_typ: 'ph',
         wert: data.ph,
@@ -161,7 +161,7 @@ export const bathsRepository = {
       });
     }
     if (data.concentration) {
-      await supabase.from('bad_messwerte').insert({
+      await supabase.from('bath_measurements').insert({
         bad_id: bathId,
         wert_typ: 'chemie',
         wert: data.concentration,
@@ -178,7 +178,7 @@ export const bathsRepository = {
       newStatus = computeBathStatus(data, bath.targetValues);
     }
 
-    await supabase.from('baeder').update({
+    await supabase.from('baths').update({
       letzte_wartung: ts,
       status: newStatus
     }).eq('id', bathId);
@@ -198,7 +198,7 @@ export const bathsRepository = {
 
   async updateBathStatusManual(bathId: string, status: BathStatus, notes: string): Promise<Bath> {
     const supabase = createClient();
-    const { error } = await supabase.from('baeder').update({ status }).eq('id', bathId);
+    const { error } = await supabase.from('baths').update({ status }).eq('id', bathId);
     if (error) throw error;
 
     const updated = await this.getBathById(bathId);
@@ -208,7 +208,7 @@ export const bathsRepository = {
 
   async hasCriticalBath(): Promise<boolean> {
     const supabase = createClient();
-    const { data, error } = await supabase.from('baeder').select('id').eq('status', 'critical').limit(1);
+    const { data, error } = await supabase.from('baths').select('id').eq('status', 'critical').limit(1);
     if (error) throw error;
     return (data && data.length > 0);
   }
