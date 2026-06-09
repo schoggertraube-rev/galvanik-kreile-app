@@ -79,7 +79,11 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
 
             {/* Scroll-Container für Seiteninhalt */}
             <main
-              className={`flex-1 bg-transparent lg:rounded-tl-[40px] border-l border-t border-[#d8d0c4] shadow-[-4px_-4px_16px_rgba(0,0,0,0.02)] relative flex flex-col overflow-y-auto overflow-x-hidden ${pathname.startsWith('/warendurchlauf') || pathname.startsWith('/kommunikation') ? '' : 'p-4 md:p-6 lg:p-8'}`}
+              className={`flex-1 relative flex flex-col ${
+                pathname.startsWith('/warendurchlauf') ? "bg-[#fcfbf9] lg:rounded-tl-[40px] border-l border-t border-neutral-gray-200/50 shadow-[-4px_-4px_16px_rgba(0,0,0,0.02)] overflow-x-hidden" :
+                pathname.startsWith('/kommunikation') ? "bg-transparent overflow-hidden overflow-x-hidden" : 
+                "bg-transparent lg:rounded-tl-[40px] border-l border-t border-[#d8d0c4] shadow-[-4px_-4px_16px_rgba(0,0,0,0.02)] overflow-y-auto overflow-x-hidden p-4 md:p-6 lg:p-8"
+              }`}
             >
               {/* Max-Width Container — auf großen Screens zentriert */}
               <div className="w-full h-full pb-24 md:pb-0 flex flex-col min-h-0">

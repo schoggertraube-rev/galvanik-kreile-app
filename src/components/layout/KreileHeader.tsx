@@ -98,7 +98,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   }, []);
 
   return (
-    <header className="h-[72px] shrink-0 bg-transparent flex items-center px-4 md:px-6 gap-4 z-40 relative">
+    <header className="h-[72px] shrink-0 bg-transparent flex items-center px-4 md:px-6 gap-4 z-[100] relative">
       {/* Hamburger Menu Mobile & Tablet (< 1024px) */}
       <button
         className="flex lg:hidden p-3 -ml-2 text-navy-900 hover:bg-neutral-gray-100 rounded-full min-w-[48px] min-h-[48px] items-center justify-center shrink-0"
@@ -174,11 +174,11 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         {/* Datum-Pill */}
         <Link href="/kalender" className="hidden lg:flex items-center gap-2 bg-white/50 backdrop-blur-sm border border-white/60 rounded-full px-3 h-9 text-sm font-semibold text-navy-900 shadow-sm hover:bg-white hover:border-neutral-gray-200 transition-all duration-300">
           <Calendar className="w-4 h-4 text-text-muted" />
-          <span>Heute Â· {dateString}</span>
+          <span>Heute · {dateString}</span>
           <span className="w-2 h-2 rounded-full bg-accent-orange animate-pulse" />
         </Link>
 
-        {/* Online/Offline Pill mit ZÃ¤hler */}
+        {/* Online/Offline Pill mit Zähler */}
         <button
           onClick={() => {
             if (isOnline) {
@@ -245,17 +245,17 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
               <div className="max-h-64 overflow-y-auto">
                 <div className="px-3 py-2 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer mb-1 border-l-2 border-accent-orange">
                   <p className="text-[11px] font-bold text-navy-900">Materialengpass Galvanik</p>
-                  <p className="text-[10px] text-text-muted mt-0.5">Nickel-Bad 3 benÃ¶tigt zeitnah neues Material fÃ¼r anstehende GroÃŸauftrÃ¤ge.</p>
+                  <p className="text-[10px] text-text-muted mt-0.5">Nickel-Bad 3 benötigt zeitnah neues Material für anstehende Großaufträge.</p>
                   <p className="text-[9px] text-text-muted mt-1 opacity-60">Vor 12 Min</p>
                 </div>
                 <div className="px-3 py-2 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer mb-1 border-l-2 border-success-green">
-                  <p className="text-[11px] font-bold text-navy-900">5 AuftrÃ¤ge fertiggestellt</p>
-                  <p className="text-[10px] text-text-muted mt-0.5">Die QS hat 5 WerkstÃ¼cke freigegeben. Bereit fÃ¼r den Warenausgang.</p>
+                  <p className="text-[11px] font-bold text-navy-900">5 Aufträge fertiggestellt</p>
+                  <p className="text-[10px] text-text-muted mt-0.5">Die QS hat 5 Werkstücke freigegeben. Bereit für den Warenausgang.</p>
                   <p className="text-[9px] text-text-muted mt-1 opacity-60">Vor 45 Min</p>
                 </div>
                 <div className="px-3 py-2 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer border-l-2 border-danger-red">
-                  <p className="text-[11px] font-bold text-navy-900">Kundenanfrage verzÃ¶gert</p>
-                  <p className="text-[10px] text-text-muted mt-0.5">Auftrag A-202611 nÃ¤hert sich dem Abgabetermin (morgen).</p>
+                  <p className="text-[11px] font-bold text-navy-900">Kundenanfrage verzögert</p>
+                  <p className="text-[10px] text-text-muted mt-0.5">Auftrag A-202611 nähert sich dem Abgabetermin (morgen).</p>
                   <p className="text-[9px] text-text-muted mt-1 opacity-60">Vor 2 Std</p>
                 </div>
               </div>
