@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 // Image from next/image available but not used for dynamic logo URLs
@@ -129,12 +129,15 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
       {/* CENTER: Suchleiste mit Skyline */}
       <div className="flex-1 max-w-2xl mx-auto hidden md:block relative">
-        <button
+        <div
           onClick={() => setSearchOpen(true)}
-          className="w-full relative flex items-center bg-white/50 backdrop-blur-md border border-white/60 rounded-2xl h-14 px-5 gap-3 hover:bg-white hover:border-neutral-gray-200 hover:shadow-md transition-all duration-300 group shadow-sm"
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter') setSearchOpen(true); }}
+          className="w-full relative flex items-center bg-white/50 backdrop-blur-md border border-white/60 rounded-2xl h-14 px-5 gap-3 hover:bg-white hover:border-neutral-gray-200 hover:shadow-md transition-all duration-300 group shadow-sm cursor-text"
         >
-          <Search className="w-5 h-5 text-navy-500 shrink-0" strokeWidth={1.5} />
-          <span className="text-sm text-text-muted flex-1 text-left">
+          <Search className="w-5 h-5 text-navy-500 shrink-0 pointer-events-none" strokeWidth={1.5} />
+          <span className="text-sm text-text-muted flex-1 text-left pointer-events-none">
             Bei Auftrag, Kunde, Teilenummer suchen...
           </span>
           {/* Skyline decorative SVG in der Mitte */}
@@ -154,7 +157,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           >
             <Camera className="w-5 h-5 text-navy-500 shrink-0 group-hover:text-accent-orange transition-colors" strokeWidth={1.5} />
           </Link>
-        </button>
+        </div>
       </div>
 
       {/* RIGHT: Aktionen */}
