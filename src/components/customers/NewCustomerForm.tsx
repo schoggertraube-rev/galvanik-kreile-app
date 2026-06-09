@@ -212,14 +212,12 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
           notes,
           imageUrls: allImageUrls,
         });
-        if (res?.success && res.data) {
-          savedId = res.data.id;
-        } else if (res?.errors) {
-          setErrors(res.errors);
+        if (!res.ok) {
+          setErrors({ submit: [res.message || "Unbekannter Fehler"] });
           setLoading(false);
           return;
-        } else {
-          throw new Error(res?.error || "Fehler beim Speichern");
+        } else if (res.data) {
+          savedId = res.data.id;
         }
       }
 
