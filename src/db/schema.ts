@@ -380,19 +380,26 @@ export const qs = pgTable("qs", {
 });
 
 // 15. Bäder (Galvanik)
-export const baeder = pgTable("baeder", {
+export const baeder = pgTable("baths", {
   id: cuidPrimaryKey("id"),
   tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   name: varchar("name", { length: 100 }).notNull(),
   status: varchar("status", { length: 50 }).notNull().default("ok"), // "ok", "warnung", "kritisch"
   temperatur: numeric("temperatur", { precision: 5, scale: 2 }),
+  temperatureMin: numeric("temperature_min", { precision: 5, scale: 2 }),
+  temperatureMax: numeric("temperature_max", { precision: 5, scale: 2 }),
   phWert: numeric("ph_wert", { precision: 4, scale: 2 }),
+  phMin: numeric("ph_min", { precision: 4, scale: 2 }),
+  phMax: numeric("ph_max", { precision: 4, scale: 2 }),
   letzteWartung: timestamp("letzte_wartung"),
+  targetValues: jsonb("target_values").notNull().default({}),
+  processType: text("process_type").notNull().default("unknown"),
+  stationId: text("station_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // 16. Bad-Messwerte (Historie)
-export const badMesswerte = pgTable("bad_messwerte", {
+export const badMesswerte = pgTable("bath_measurements", {
   id: cuidPrimaryKey("id"),
   tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   badId: text("bad_id").notNull().references(() => baeder.id, { onDelete: "cascade" }),
