@@ -21,7 +21,7 @@ import { smartMatchText, MatchResult } from "./smartMatcher";
 import { useParkedCall } from "@/contexts/ParkedCallContext";
 import { ContextAnalysisOverlay, ContextAnalysisOverlayProps } from "@/components/kommunikation/ContextAnalysisOverlay";
 import { ReactivationGeneratorOverlay } from "@/components/kommunikation/ReactivationGeneratorOverlay";
-import { CustomerDetailView } from "@/components/customers/CustomerDetailView";
+import { useCustomerOverlay } from "@/components/customers/useCustomerOverlay";
 import type { CustomerLike } from "@/lib/types/customerLike";
 import type { Customer } from "@/lib/types/customer";
 import { supabase } from '@/lib/supabase/client';
@@ -144,6 +144,7 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
   const [chatFilter, setChatFilter] = useState("all");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const { activeParkedCall, resumeCall } = useParkedCall();
+  const { open: openCustomer } = useCustomerOverlay();
   const [overlayConfig, setOverlayConfig] = useState<ContextAnalysisOverlayProps | null>(null);
   const [showCustomerOverlay, setShowCustomerOverlay] = useState<CustomerLike | null>(null);
   const [showKommandozentrale, setShowKommandozentrale] = useState(false);
@@ -374,7 +375,7 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
             kind: "secondary", 
             onClick: () => {
               if (matchData.matchedCustomer) {
-                setShowCustomerOverlay(matchData.matchedCustomer as CustomerLike);
+                openCustomer(matchData.matchedCustomer.id);
                 setOverlayConfig(null);
               }
             } 
@@ -879,14 +880,7 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
           />
         )}
 
-        {showCustomerOverlay && (
-          <div className="fixed inset-0 z-100 flex items-center justify-center p-4 lg:p-8 bg-navy-900/40 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowCustomerOverlay(null); }}>
-             <div className="bg-white rounded-[24px] w-full max-w-5xl max-h-[90vh] overflow-y-auto relative shadow-2xl animate-in fade-in slide-in-from-bottom-4">
-               <button onClick={() => setShowCustomerOverlay(null)} className="absolute top-4 right-4 z-110 w-10 h-10 bg-white/20 hover:bg-white/40 flex items-center justify-center rounded-full text-white backdrop-blur-md transition-colors"><X size={20} /></button>
-               <CustomerDetailView customer={showCustomerOverlay as unknown as Customer} onEdit={() => {}} />
-             </div>
-          </div>
-        )}
+        {/* Removed inline customer overlay since we now use the global CustomerOverlay */}
 
         {/* ═══ KLIENTEN-KOMMANDOZENTRALE v2 ═══ */}
         {activeContact && (

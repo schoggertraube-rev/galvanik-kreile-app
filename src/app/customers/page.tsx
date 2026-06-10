@@ -31,7 +31,7 @@ import {
   ArrowRight,
   Check
 } from "lucide-react";
-import { CustomerDetailView } from "@/components/customers/CustomerDetailView";
+
 import { CustomerTypeConsequences } from "@/components/customers/CustomerTypeConsequences";
 import { Customer } from "@/lib/types/customer";
 // Mock data removed
@@ -240,7 +240,18 @@ export default function CustomersPage() {
         {/* RIGHT COLUMN: Detail View Panel (CRM Customer File) */}
         <div className="lg:col-span-2">
           {selectedCustomer ? (
-            <CustomerDetailView customer={selectedCustomer as Customer} onEdit={handleStartEdit} />
+            <Card className="border-dashed border-2 border-neutral-gray-100 text-center p-16 text-text-muted bg-white">
+              <div className="w-14 h-14 bg-bg-app-soft rounded-full border border-neutral-gray-100 flex items-center justify-center mx-auto mb-4 shadow-inner">
+                <User className="h-7 w-7 text-navy-900" />
+              </div>
+              <h3 className="font-bold text-navy-700 text-base font-serif">Kundenkarte {selectedCustomer.name} geöffnet</h3>
+              <p className="text-xs max-w-[280px] mx-auto mt-2 leading-relaxed">
+                Das Overlay mit den Kundendetails ist jetzt aktiv. Schließe das Overlay, um zur Liste zurückzukehren.
+              </p>
+              <Button onClick={() => openCustomer(selectedCustomer.id)} className="mt-4" variant="outline">
+                Overlay erneut öffnen
+              </Button>
+            </Card>
           ) : (
             <Card className="border-dashed border-2 border-neutral-gray-100 text-center p-16 text-text-muted bg-white">
               <div className="w-14 h-14 bg-bg-app-soft rounded-full border border-neutral-gray-100 flex items-center justify-center mx-auto mb-4 shadow-inner">
@@ -248,7 +259,7 @@ export default function CustomersPage() {
               </div>
               <h3 className="font-bold text-navy-700 text-base font-serif">Kein Kunde ausgewählt</h3>
               <p className="text-xs max-w-[280px] mx-auto mt-2 leading-relaxed">
-                Wähle einen Kunden aus der linken Liste, um das vollständige technische Profil, Preisvereinbarungen und Werkstücke einzusehen.
+                Wähle einen Kunden aus der linken Liste, um das vollständige Profil einzusehen.
               </p>
             </Card>
           )}

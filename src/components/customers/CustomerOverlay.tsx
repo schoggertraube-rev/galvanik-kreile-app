@@ -2,22 +2,30 @@
 
 import React, { useEffect, useState } from 'react';
 import { useCustomerOverlay } from './useCustomerOverlay';
-import { useCustomerKpi } from './useCustomerKpi';
+
 import { X } from 'lucide-react';
 import { CustomerTagEditor } from './CustomerTagEditor';
 import { useOverlayStore } from '@/lib/overlayStore';
 import { CustomerHeader } from './CustomerHeader';
 import { CustomerKpiRow } from './CustomerKpiRow';
-import { CustomerStammdaten } from './CustomerStammdaten';
-import { CustomerAuftraege } from './CustomerAuftraege';
-import { CustomerZahlungen } from './CustomerZahlungen';
-import { CustomerKommHistorie } from './CustomerKommHistorie';
-import { CustomerQuickActions } from './CustomerQuickActions';
+import { CustomerOverviewTab } from './tabs/CustomerOverviewTab';
+import { CustomerOrdersTab } from './tabs/CustomerOrdersTab';
+import { CustomerHistorySimilarTab } from './tabs/CustomerHistorySimilarTab';
+import { CustomerItemsProfileTab } from './tabs/CustomerItemsProfileTab';
+import { CustomerPricesTab } from './tabs/CustomerPricesTab';
+import { CustomerCommunicationTab } from './tabs/CustomerCommunicationTab';
+import { CustomerComplaintsTab } from './tabs/CustomerComplaintsTab';
+import { CustomerInvoicesTab } from './tabs/CustomerInvoicesTab';
+import { CustomerPhotosTab } from './tabs/CustomerPhotosTab';
+import { CustomerAnalysisTab } from './tabs/CustomerAnalysisTab';
+import { CustomerNotesTab } from './tabs/CustomerNotesTab';
+import { useCustomerData } from './useCustomerData';
 
 export function CustomerOverlay() {
   const { customerId, isOpen, close } = useCustomerOverlay();
-  const { data: kpiData, isLoading } = useCustomerKpi(customerId);
+  const { data: customerData, isLoading } = useCustomerData(customerId);
   const stack = useOverlayStore(state => state.stack);
+  const [activeTab, setActiveTab] = useState('ueberblick');
 
   if (!isOpen) return null;
 
@@ -47,37 +55,53 @@ export function CustomerOverlay() {
           <div className="w-full">
             {isLoading ? (
               <div className="h-16 animate-pulse bg-gray-200 rounded"></div>
-            ) : kpiData ? (
-              <CustomerHeader data={kpiData} />
+            ) : customerData?.kpi ? (
+              <CustomerHeader data={customerData.kpi} />
             ) : (
               <div className="h-16 flex items-center justify-center text-red-500">Kunde nicht gefunden.</div>
             )}
           </div>
         </div>
 
-        {kpiData && (
+        {customerData && (
           <>
             <div className="px-6 py-4 border-b border-[var(--ci-border)] bg-[var(--ci-bg)]">
-              <CustomerKpiRow data={kpiData} />
+              {customerData.kpi ? <CustomerKpiRow data={customerData.kpi} /> : null}
             </div>
 
-            <div className="flex flex-col lg:flex-row min-h-[600px]">
-              {/* Left Column (Content) */}
-              <div className="flex-1 border-r border-[var(--ci-border)] p-6 space-y-8">
-                <CustomerStammdaten customerId={customerId!} />
-                <CustomerTagEditor customerId={customerId!} />
-                <CustomerAuftraege customerId={customerId!} />
-                <CustomerZahlungen customerId={customerId!} />
+            {/* Main Tabs UI */}
+            <div className="flex-1 bg-[var(--ci-surface)] flex flex-col min-h-[600px] max-h-[80vh] overflow-hidden">
+              <div className="w-full overflow-x-auto border-b border-[var(--ci-border)] bg-[var(--ci-bg)] scrollbar-hide">
+                <div className="flex gap-1 px-4 py-2 min-w-max">
+                  {['Ueberblick', 'Auftraege', 'Historie', 'Teile', 'Preise', 'Kommunikation', 'Reklamationen', 'Rechnungen', 'Fotos', 'Analyse', 'Notizen'].map((tabName) => (
+                    <button
+                      key={tabName}
+                      onClick={() => setActiveTab(tabName.toLowerCase())}
+                      className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${
+                        activeTab === tabName.toLowerCase() 
+                          ? 'bg-white text-[var(--ci-ink)] shadow-sm' 
+                          : 'text-[var(--ci-ink-3)] hover:text-[var(--ci-ink)] hover:bg-gray-50'
+                      }`}
+                    >
+                      {tabName}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {/* Right Column (Sidebar) */}
-              <div className="w-full lg:w-96 bg-[var(--ci-bg)] flex flex-col">
-                <div className="p-6 border-b border-[var(--ci-border)]">
-                  <CustomerQuickActions customerId={customerId!} />
-                </div>
-                <div className="flex-1 p-6 overflow-y-auto">
-                  <CustomerKommHistorie customerId={customerId!} />
-                </div>
+              {/* Tab Content Area */}
+              <div className="flex-1 overflow-y-auto p-6 bg-white">
+                {activeTab === 'ueberblick' && <CustomerOverviewTab customerId={customerId!} customerData={customerData} />}
+                {activeTab === 'auftraege' && <CustomerOrdersTab customerId={customerId!} />}
+                {activeTab === 'historie' && <CustomerHistorySimilarTab customerId={customerId!} />}
+                {activeTab === 'teile' && <CustomerItemsProfileTab customerId={customerId!} />}
+                {activeTab === 'preise' && <CustomerPricesTab customerId={customerId!} />}
+                {activeTab === 'kommunikation' && <CustomerCommunicationTab customerId={customerId!} />}
+                {activeTab === 'reklamationen' && <CustomerComplaintsTab customerId={customerId!} />}
+                {activeTab === 'rechnungen' && <CustomerInvoicesTab customerId={customerId!} />}
+                {activeTab === 'fotos' && <CustomerPhotosTab customerId={customerId!} />}
+                {activeTab === 'analyse' && <CustomerAnalysisTab customerId={customerId!} customerData={customerData} />}
+                {activeTab === 'notizen' && <CustomerNotesTab customerId={customerId!} customerData={customerData} />}
               </div>
             </div>
           </>
