@@ -1,57 +1,42 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.6";
+// supabase/functions/email-webhook/index.ts
+
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { verifySignature } from "https://deno.land/x/svix@0.1.5/mod.ts"; // Svix for signature verification
+
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
 serve(async (req) => {
-  try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    // Basic webhook signature verification would go here using RESEND_WEBHOOK_SECRET
-    // Currently skipping strict verification for demo/MVP
-
-    const payload = await req.json();
-    const type = payload.type; // e.g., 'email.delivered', 'email.bounced'
-    const data = payload.data;
-    const messageId = data?.email_id;
-
-    if (!messageId) {
-      return new Response("No message ID", { status: 400 });
-    }
-
-    let status = 'queued';
-    const updateData: any = {};
-
-    if (type === 'email.delivered') {
-      status = 'delivered';
-      updateData.status = status;
-    } else if (type === 'email.opened') {
-      updateData.opened_at = new Date().toISOString();
-    } else if (type === 'email.bounced') {
-      status = 'bounced';
-      updateData.status = status;
-      updateData.bounced_at = new Date().toISOString();
-    } else if (type === 'email.complained') {
-      status = 'complained';
-      updateData.status = status;
-      updateData.complained_at = new Date().toISOString();
-    } else {
-      return new Response("Ignored", { status: 200 });
-    }
-
-    const { error } = await supabase
-      .from('communications')
-      .update(updateData)
-      .eq('resend_message_id', messageId);
-
-    if (error) {
-      console.error("Error updating communications:", error);
-      return new Response(JSON.stringify({ error: error.message }), { status: 500 });
-    }
-
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
-  } catch (err: any) {
-    console.error("Webhook Error:", err);
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+  if (req.method !== "POST") {
+    return new Response("Method Not Allowed", { status: 405 });
   }
+  const signature = req.headers.get("svix-signature") ?? "";
+  const secret = Deno.env.get("RESEND_WEBHOOK_SECRET");
+  if (!secret) {
+    return new Response("Missing RESEND_WEBHOOK_SECRET", { status: 500 });
+  }
+  const rawBody = await req.text();
+  try {
+    verifySignature(secret, rawBody, signature);
+  } catch (e) {
+    console.error("Invalid webhook signature", e);
+    return new Response("Invalid signature", { status: 401 });
+  }
+  const payload = JSON.parse(rawBody);
+  const event = payload.type; // e.g. "email.delivered", "email.bounced", "email.opened"
+  const data = payload.data ?? {};
+  const messageId = data.id;
+  let statusUpdate: string | null = null;
+  if (event === "email.delivered") statusUpdate = "delivered";
+  else if (event === "email.bounced") statusUpdate = "bounced";
+  else if (event === "email.opened") statusUpdate = "opened";
+  if (statusUpdate && messageId) {
+    await supabase
+      .from("communications")
+      .update({ status: statusUpdate })
+      .eq("resend_message_id", messageId);
+  }
+  return new Response(JSON.stringify({ received: true }));
 });

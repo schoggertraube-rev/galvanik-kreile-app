@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import { orders, items, customers, events } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 
 // DTO Typen (zur Vereinfachung)
