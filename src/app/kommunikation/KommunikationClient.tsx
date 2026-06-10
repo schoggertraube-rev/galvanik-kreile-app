@@ -23,7 +23,8 @@ import { ContextAnalysisOverlay, ContextAnalysisOverlayProps } from "@/component
 import { ReactivationGeneratorOverlay } from "@/components/kommunikation/ReactivationGeneratorOverlay";
 import { CustomerDetailView } from "@/components/customers/CustomerDetailView";
 import type { CustomerLike } from "@/lib/types/customerLike";
-import { Customer } from "@/lib/types/customer";
+import type { Customer } from "@/lib/types/customer";
+import { supabase } from '@/lib/supabase/client';
 import { Kommandozentrale } from "@/components/kommunikation/kommandozentrale/Kommandozentrale";
 
 /* ═══════════════════════════════════════════════════════════════
@@ -164,6 +165,20 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
     getOrdersDb().then(res => { if(mounted && res.ok) setAllOrders(res.data as any); }).catch(() => { if(mounted) setAllOrders([]); });
     getCustomersDb().then(res => { if(mounted && res.ok) setAllCustomers(res.data); }).catch(() => { if(mounted) setAllCustomers([]); });
     return () => { mounted = false; };
+  }, []);
+
+  // Real-time subscription for communication_messages to keep chat up‑to‑date
+  useEffect(() => {
+    const channel = supabase
+      .channel('communication_messages')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'communication_messages' }, payload => {
+        // Refresh recent notes which include new communication messages
+        getRecentPhoneNotes(20).then(n => setRecentNotes(n)).catch(() => setRecentNotes([]));
+      })
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   // Phone note threads from DB

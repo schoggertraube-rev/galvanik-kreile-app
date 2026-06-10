@@ -11,6 +11,7 @@ import type { SearchSuggestion } from '@/types/search'
 import { globalSearchAction } from '@/app/global-search-actions'
 import { GlobalSearchAIResult } from './GlobalSearchAIResult'
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
+import { motion } from 'framer-motion';
 
 export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChange: (v: boolean) => void }) {
   const router = useRouter()
@@ -138,14 +139,23 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   }
 
   return (
-    <div 
-      className="fixed inset-0 z-200 bg-navy-900/40 backdrop-blur-xs flex items-start justify-center pt-[15vh] px-4 font-sans text-navy-900"
-      onClick={handleClose}
+  <motion.div
+    className="fixed inset-0 z-200 bg-navy-900/40 backdrop-blur-xs flex items-start justify-center pt-[15vh] px-4 font-sans text-navy-900"
+    onClick={handleClose}
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1, transition: { duration: 0.18, ease: 'easeOut' } }}
+    exit={{ opacity: 0, transition: { duration: 0.18, ease: 'easeOut' } }}
+  >
+    <motion.div
+      className="bg-white w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden border border-neutral-gray-100 flex flex-col max-h-[70vh]"
+      onClick={e => e.stopPropagation()}
+      initial={{ scale: 0.96, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1, transition: { duration: 0.18, ease: 'easeOut' } }}
+      exit={{ scale: 0.96, opacity: 0, transition: { duration: 0.18, ease: 'easeOut' } }}
     >
-      <div 
-        className="bg-white w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden border border-neutral-gray-100 flex flex-col max-h-[70vh] animate-in fade-in zoom-in-95 duration-150"
-        onClick={e => e.stopPropagation()}
-      >
+
+
+  
         <div className="flex items-center border-b border-neutral-gray-100 px-4 py-4 gap-3 bg-bg-app-soft/50">
           <Search className="w-5 h-5 text-text-muted shrink-0" />
           <input 
@@ -526,7 +536,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
           )}
 
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }
