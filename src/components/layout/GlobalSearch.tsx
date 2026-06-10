@@ -12,6 +12,7 @@ import { globalSearchAction } from '@/app/global-search-actions'
 import { GlobalSearchAIResult } from './GlobalSearchAIResult'
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import { motion } from 'framer-motion';
+import { useGlobalSearch } from '@/features/analyse/hooks/useGlobalSearch';
 
 export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChange: (v: boolean) => void }) {
   const router = useRouter()
@@ -64,6 +65,14 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   // We explicitly show AI mode if the user clicks the AI fallback suggestion or if they type a question format.
   const [forceAiMode, setForceAiMode] = useState(false);
 
+  // New Global Search Hook (Postgres-driven)
+  const [debouncedTerm, setDebouncedTerm] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedTerm(searchTerm), 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+  const { data: hookResults = [] } = useGlobalSearch(debouncedTerm);
+
   // Reset forceAiMode when searchTerm changes
   useEffect(() => {
     // Only reset if forceAiMode is true and it's not naturally aiMode
@@ -85,7 +94,13 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   const filteredLager = globalResults.filter(r => r.type === 'lager')
   const filteredKosten = globalResults.filter(r => r.type === 'kostenposten')
 
-  const hasResults = globalResults.length > 0
+  // Hook results
+  const hookTeile = hookResults.filter(r => r.typ === 'teil');
+  const kpiMatches = ['termintreue', 'durchlaufzeit', 'wochenziel'].some(k => cleanTerm.includes(k)) 
+    ? [{ typ: 'kpi', label: 'Werkstatt-Puls', sublabel: 'Zur Analyse-Kachel', id: 'werkstatt-puls' }] 
+    : [];
+
+  const hasResults = globalResults.length > 0 || hookResults.length > 0 || kpiMatches.length > 0
 
   // Intent-based action suggestions (shown above entity results)
   const actionSuggestions: SearchSuggestion[] = cleanTerm
@@ -273,6 +288,62 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                         </div>
                         <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform shrink-0" />
                       </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {kpiMatches.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="px-2">
+                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">📊 Analyse & KPI</span>
+                  </div>
+                  <div className="space-y-1">
+                    {kpiMatches.map(k => (
+                      <Link 
+                        key={k.id} 
+                        href={`/analyse`}
+                        onClick={handleClose}
+                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-indigo-50 to-indigo-100 border border-indigo-200 flex items-center justify-center text-indigo-700 shrink-0">
+                            <Activity className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-sm text-navy-900 block leading-tight">{k.label}</span>
+                            <span className="text-xs text-navy-500 font-medium block mt-0.5">{k.sublabel}</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {hookTeile.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="px-2">
+                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">🔩 Teile ({hookTeile.length} Treffer)</span>
+                  </div>
+                  <div className="space-y-1">
+                    {hookTeile.map(t => (
+                      <div 
+                        key={t.id} 
+                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-gray-50 to-gray-100 border border-gray-200 flex items-center justify-center text-gray-700 shrink-0">
+                            <Package className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-sm text-navy-900 block leading-tight">{t.label}</span>
+                            <span className="text-xs text-navy-500 font-medium block mt-0.5">{t.sublabel}</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
+                      </div>
                     ))}
                   </div>
                 </div>

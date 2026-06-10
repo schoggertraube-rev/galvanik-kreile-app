@@ -199,7 +199,12 @@ export function OrderOverlay() {
                       const ICONS = [Droplet, Wrench, Wrench, Droplet, Package];
                       
                       const currentStation = orderData.station || 'wareneingang';
-                      const currentIndex = STATIONS.indexOf(currentStation) >= 0 ? STATIONS.indexOf(currentStation) : 0;
+                      let currentIndex = STATIONS.indexOf(currentStation);
+                      if (orderData.status === 'completed') {
+                        currentIndex = STATIONS.length;
+                      } else if (currentIndex < 0) {
+                        currentIndex = 0;
+                      }
                       
                       const handleStationClick = async (newStation: string) => {
                         try {
@@ -248,9 +253,11 @@ export function OrderOverlay() {
                 {/* KPIs */}
                 <div className="ci-section">
                   <div className="ci-kpi-row">
-                    <div className="ci-kpi-card">
+                    <div className={`ci-kpi-card ${orderData.risk === 'red' ? 'bg-[var(--ci-danger-soft)] border-red-200' : orderData.risk === 'yellow' ? 'bg-[var(--ci-warn-soft)] border-yellow-200' : ''}`}>
                       <div className="ci-kpi-label"><Clock className="w-3 h-3 inline-block" /> Risiko</div>
-                      <div className="ci-kpi-value">{orderData.risk || 'Grün'}</div>
+                      <div className={`ci-kpi-value ${orderData.risk === 'red' ? 'text-[var(--ci-danger)]' : orderData.risk === 'yellow' ? 'text-[#6B4A0D]' : ''}`}>
+                        {orderData.risk === 'red' ? 'Kritisch' : orderData.risk === 'yellow' ? 'Achtung' : 'Im Plan'}
+                      </div>
                     </div>
                     <div className="ci-kpi-card ci-warn">
                       <div className="ci-kpi-label">Status</div>
@@ -285,7 +292,7 @@ export function OrderOverlay() {
                               <span className="ci-item-name">{item.name}</span>
                               <span className="ci-item-condition ci-cond-light">Menge: {item.quantity}</span>
                             </div>
-                            <div className="ci-item-meta">{item.material || 'Kein Material'} → {item.surfaceRequested || 'Keine Zielfinish'}</div>
+                            <div className="ci-item-meta">{item.material || 'Material erfassen'} → {item.surfaceRequested || 'Zielfinish erfassen'}</div>
                           </div>
                           <div className="ci-item-price">
                             {item.price ? (

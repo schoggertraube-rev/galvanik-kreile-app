@@ -1,0 +1,2 @@
+-- Migration: 20260622000003_seed_analyse.sql
+-- Seed data moved to scripts/seed-analyse.ts
