@@ -203,3 +203,31 @@ export async function getRiskOrders(limit = 3) {
     return [];
   }
 }
+
+export async function setOrderStationDb(orderId: string, newStation: string): Promise<ActionResult<{ success: boolean }>> {
+  const auth = await checkAppAuth("write");
+  if (!auth.ok) return auth;
+
+  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  try {
+    const { createId } = await import("@paralleldrive/cuid2");
+    await db.update(orders).set({ currentStationId: newStation }).where(eq(orders.id, orderId));
+    
+    // Create event
+    const { events } = await import("@/db/schema");
+    await db.insert(events).values({
+      id: createId(),
+      orderId,
+      eventType: "STATION_CHANGED",
+      description: `Station gesetzt: ${newStation}`,
+      status: "success",
+      createdAt: new Date(),
+      tenantId: "galvanik-kreile"
+    });
+
+    return { ok: true, data: { success: true } };
+  } catch (error) {
+    console.error("Failed to update station:", error);
+    return { ok: false, error: "DB_ERROR", message: "Fehler beim Setzen der Station", details: String(error) };
+  }
+}

@@ -2,9 +2,9 @@
 
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, useRef } from "react";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
-import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
-import { MockOrder } from "@/lib/mockData";
+import { getOrdersDb } from "@/app/actions/orders.actions";
+import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository"; // Will keep this if no actions exist
+type Order = any;
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -72,7 +72,7 @@ const IconComponents: Record<string, React.ComponentType<{ className?: string }>
 export default function HomeDashboard() {
   usePageView();
   const router = useRouter();
-  const [orders, setOrders] = useState<MockOrder[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [openQuotes, setOpenQuotes] = useState(0);
   const [mounted, setMounted] = useState(false);
   
@@ -97,7 +97,8 @@ export default function HomeDashboard() {
   useEffect(() => {
     const load = async () => {
       
-      const dbOrders = await ordersRepository.getAll();
+      const dbOrdersRes = await getOrdersDb();
+      const dbOrders = dbOrdersRes.ok ? dbOrdersRes.data : [];
       
       const newTodos: ChecklistTask[] = [];
       const kritisch = dbOrders.filter(o => o.risk === 'red' || o.risk === 'orange');
@@ -119,7 +120,7 @@ export default function HomeDashboard() {
       
       setTodos(newTodos);
 
-      if (dbOrders) setOrders(dbOrders as unknown as MockOrder[]);
+      if (dbOrders) setOrders(dbOrders as unknown as Order[]);
       const qCount = await inquiriesRepository.getOpenCount();
       setOpenQuotes(qCount);
     };

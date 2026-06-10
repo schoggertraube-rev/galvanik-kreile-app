@@ -1,0 +1,24 @@
+@layer base {
+  :root {
+    --ci-bg: #F1E9DC;
+    --ci-surface: #FBF6ED;
+    --ci-surface-soft: #EFE6D6;
+    --ci-ink: #1A1F2E;
+    --ci-ink-2: #5D5A4F;
+    --ci-ink-3: #8E8775;
+    --ci-border: #E5DDC9;
+    --ci-accent: #C2185B;
+    --ci-success: #4F8F58;
+    --ci-warn: #D89A2C;
+    --ci-danger: #B0413E;
+    --ci-success-soft: #D9E8D3;
+    --ci-warn-soft: #F4E1B6;
+    --ci-danger-soft: #EBC9C2;
+    --ci-radius-card: 18px;
+    --ci-radius-button: 12px;
+    --ci-radius-pill: 999px;
+    --ci-shadow: 0 1px 2px rgba(20,15,5,0.04), 0 12px 32px rgba(20,15,5,0.08);
+    --ci-font-serif: "Fraunces", "EB Garamond", "Lora", "Georgia", serif;
+    --ci-font-sans: "Inter", system-ui, sans-serif;
+  }
+}

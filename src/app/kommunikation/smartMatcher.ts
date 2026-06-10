@@ -1,20 +1,22 @@
-import { INITIAL_CUSTOMERS, INITIAL_ORDERS, MockCustomer, MockOrder } from "@/lib/mockData";
+import type { Customer } from "@/lib/types/customer";
+
+type Order = any; // fallback type
 
 export interface MatchResult {
-  matchedCustomer: MockCustomer | null;
-  matchedOrder: MockOrder | null;
-  scoredOrders: { order: MockOrder; score: number; reasons: string[] }[];
+  matchedCustomer: Customer | null;
+  matchedOrder: Order | null;
+  scoredOrders: { order: Order; score: number; reasons: string[] }[];
   matchedMaterial: string | null;
   matchedKeywords: string[];
   suggestedAnswer: string;
 }
 
-export function smartMatchText(val: string): MatchResult {
+export function smartMatchText(val: string, allCustomers: Customer[], allOrders: Order[]): MatchResult {
   const lower = val.toLowerCase();
   
   // 1. Kunden-Suche
   let foundCust = null;
-  for (const cust of INITIAL_CUSTOMERS) {
+  for (const cust of allCustomers) {
     if (cust.name && lower.includes(cust.name.toLowerCase())) {
       foundCust = cust;
       break;
@@ -36,9 +38,9 @@ export function smartMatchText(val: string): MatchResult {
   if (lower.includes("angebot") || lower.includes("preis") || lower.includes("kosten")) keywords.push("Angebot");
 
   // 4. Auftrags-Scoring
-  const scoredOrders: { order: MockOrder; score: number; reasons: string[] }[] = [];
+  const scoredOrders: { order: Order; score: number; reasons: string[] }[] = [];
   
-  for (const ord of INITIAL_ORDERS) {
+  for (const ord of allOrders) {
     let score = 0;
     const reasons: string[] = [];
 
@@ -59,8 +61,9 @@ export function smartMatchText(val: string): MatchResult {
     let hasFinish = false;
     if (ord.parts && ord.parts.length > 0) {
       for (const p of ord.parts) {
-        if (foundMat && p.material.toLowerCase().includes(foundMat)) hasMat = true;
-        if (foundFinish && p.finish.toLowerCase().includes(foundFinish)) hasFinish = true;
+        const part = p as any;
+        if (foundMat && typeof part.material === 'string' && part.material.toLowerCase().includes(foundMat)) hasMat = true;
+        if (foundFinish && typeof part.finish === 'string' && part.finish.toLowerCase().includes(foundFinish)) hasFinish = true;
       }
     }
     if (hasMat) {
@@ -73,7 +76,7 @@ export function smartMatchText(val: string): MatchResult {
     }
 
     // Status / Intent Match
-    if (keywords.includes("Termin/Logistik") && (ord.statusText.toLowerCase().includes("warenausgang") || ord.statusText.toLowerCase().includes("fertig") || ord.statusText.toLowerCase().includes("abholbereit"))) {
+    if (keywords.includes("Termin/Logistik") && ord.statusText && (ord.statusText.toLowerCase().includes("warenausgang") || ord.statusText.toLowerCase().includes("fertig") || ord.statusText.toLowerCase().includes("abholbereit"))) {
       score += 15;
       reasons.push("Thema Abholung & Status Warenausgang");
     }
@@ -97,8 +100,8 @@ export function smartMatchText(val: string): MatchResult {
   let suggestedAnswer = "";
   if (topOrder) {
     const isLogistics = keywords.includes("Termin/Logistik");
-    const isReady = topOrder.statusText.toLowerCase().includes("warenausgang") || topOrder.statusText.toLowerCase().includes("fertig") || topOrder.statusText.toLowerCase().includes("abholbereit");
-    suggestedAnswer = `Ich sehe den Auftrag ${topOrder.id} für ${foundCust ? foundCust.name : 'Sie'}. `;
+    const isReady = topOrder.statusText && (topOrder.statusText.toLowerCase().includes("warenausgang") || topOrder.statusText.toLowerCase().includes("fertig") || topOrder.statusText.toLowerCase().includes("abholbereit"));
+    suggestedAnswer = `Ich sehe den Auftrag ${topOrder.orderNumber || topOrder.id} für ${foundCust ? foundCust.name : 'Sie'}. `;
     suggestedAnswer += `Der aktuelle Status ist "${topOrder.statusText}". `;
     
     if (isLogistics && isReady) {

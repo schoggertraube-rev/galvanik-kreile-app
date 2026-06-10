@@ -4,27 +4,27 @@ import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { INITIAL_ORDERS, MockOrder } from "@/lib/mockData";
 import { Archive as ArchiveIcon, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { getStationConfig } from "@/constants/stations";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
+import { getOrdersDb } from "@/app/actions/orders.actions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AppBackButton } from "@/components/ui/AppBackButton";
 
+type Order = any; // fallback
+
 export default function ArchivePage() {
   usePageView();
-  const [orders, setOrders] = useState<MockOrder[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const dbOrders = await ordersRepository.getAll();
-        if (dbOrders && dbOrders.length > 0) {
-          const parsed = dbOrders as unknown as MockOrder[];
-          setOrders(parsed.filter(o => o.statusText === "closed" || o.statusText === "completed" || o.statusText === "shipped"));
+        const dbOrdersRes = await getOrdersDb();
+        if (dbOrdersRes.ok && dbOrdersRes.data && dbOrdersRes.data.length > 0) {
+          setOrders(dbOrdersRes.data.filter((o: any) => o.status === "done" || o.statusText === "closed" || o.statusText === "completed" || o.statusText === "shipped"));
         } else {
-           setOrders(INITIAL_ORDERS.filter(o => o.statusText === "closed" || o.statusText === "completed" || o.statusText === "shipped"));
+           setOrders([]);
         }
       } catch (e) {
         console.error("Fehler beim Laden aus dem Repository", e);
@@ -52,7 +52,7 @@ export default function ArchivePage() {
           <div className="h-16 w-16 rounded-full bg-bg-app-soft flex items-center justify-center mx-auto text-text-muted">
             <ArchiveIcon className="h-8 w-8" />
           </div>
-          <h4 className="font-extrabold text-lg text-navy-900">Keine archivierten Aufträge</h4>
+          <h4 className="font-extrabold text-lg text-navy-900">Noch keine Aufträge erfasst</h4>
           <p className="text-sm text-text-muted max-w-sm mx-auto leading-relaxed">
             Aktuell befinden sich keine Aufträge im Archiv. Sobald ein Auftrag den Warenausgang verlässt, taucht er hier auf.
           </p>

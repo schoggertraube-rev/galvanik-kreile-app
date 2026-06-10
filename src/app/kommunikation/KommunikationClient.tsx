@@ -12,8 +12,11 @@ import {
 import Link from "next/link";
 import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
 import { usePageView } from "@/hooks/usePageView";
-import { INITIAL_ORDERS } from "@/lib/mockData";
 import { getRecentPhoneNotes, updatePhoneNote } from "@/app/actions/phoneNotes.actions";
+import { getOrdersDb } from "@/app/actions/orders.actions";
+import { getCustomersDb } from "@/app/actions/customers.actions";
+
+type Order = any; // fallback
 import { smartMatchText, MatchResult } from "./smartMatcher";
 import { useParkedCall } from "@/contexts/ParkedCallContext";
 import { ContextAnalysisOverlay, ContextAnalysisOverlayProps } from "@/components/kommunikation/ContextAnalysisOverlay";
@@ -63,54 +66,7 @@ interface Thread {
 /* ═══════════════════════════════════════════════════════════════
    DEMO DATA
    ═══════════════════════════════════════════════════════════════ */
-const DEMO_THREADS: Thread[] = [
-  {
-    id: "demo_t1", sender: "Maier GmbH · Herr Zill", senderCity: "Frankfurt", initials: "MZ", initialsColor: "#C2410C",
-    subject: "Beschädigt angekommen — Foto", time: "08:14", channel: "email",
-    status: "new", priority: "high", content: "Beschäd. angekommen — Foto",
-    category: "Reklamation", unread: 2,
-    messages: [{ id: "m1a", from: "customer", channel: "email", text: "Guten Morgen, leider weisen 14 Teile der gestrigen Lieferung (Charge 8102) tiefe Kratzer auf. Wie gehen wir vor? Bilder anbei.", time: "08:14" }]
-  },
-  {
-    id: "demo_t2", sender: "Autohaus Berger", senderCity: "Offenbach", initials: "AB", initialsColor: "#7C3AED",
-    subject: "Wann ist mein Auftrag fertig?", time: "09:30", channel: "website",
-    status: "open", priority: "medium", content: "Wann ist mein Auftrag fertig? Wün…",
-    category: "Terminanfrage", unread: 1,
-    messages: [{ id: "m2a", from: "customer", channel: "website", text: "Hallo, könnt ihr mir sagen wann die Oldtimer-Stoßstangen abholbereit sind?", time: "09:30" }]
-  },
-  {
-    id: "demo_t3", sender: "Müller (Privat)", senderCity: "Berlin", initials: "M", initialsColor: "#1E3A8A",
-    subject: "Zinkteile fertig? Abholung morgen.", time: "11:08", channel: "phone",
-    status: "open", priority: "medium", content: "✓ Zinkteile fertig? Abholung morgen…",
-    category: "Abholung", unread: 0,
-    messages: [
-      { id: "m3a", from: "system", channel: "system", text: "TELEFONNOTIZ · 11:08\nHerr Müller fragt, ob die Zinkteile vom Auftrag A-2026-0042 schon fertig sind und ob er morgen abholen kann. Bitte Zahlungsstatus prüfen.", time: "11:08", date: "Heute, 3. Juni 2026" },
-      { id: "m3b", from: "kreile", channel: "email", text: "Guten Tag Herr Müller: anbei die Auftragsbestätigung für A-2026-0042 (Zinkteile, Wasserhahn historisch). Liefertermin 4.6.\nMit freundlichen Grüßen, P. Kreile.", time: "09:32", date: "28. Mai 2026" },
-      { id: "m3c", from: "customer", channel: "email", text: "Vielen Dank! Wenn fertig bitte kurze Info — würde gerne selbst abholen.", time: "10:22" },
-    ]
-  },
-  {
-    id: "demo_t4", sender: "Schmidt AG", senderCity: "Darmstadt", initials: "SA", initialsColor: "#059669",
-    subject: "Bitte Angebot bestätigen", time: "Gestern", channel: "email",
-    status: "open", priority: "medium", content: "Bitte Angebot bestätigen — Auftr…",
-    category: "Freigabe",
-    messages: [{ id: "m4a", from: "customer", channel: "email", text: "Anbei unser Angebot für die Verzinkung der 500 Rahmen. Bitte um kurze Freigabe.", time: "Gestern" }]
-  },
-  {
-    id: "demo_t5", sender: "Schlosserei Brunner", senderCity: "Hanau", initials: "SB", initialsColor: "#92400E",
-    subject: "Rechnung fehlt — A-2026-0033", time: "Gestern", channel: "phone",
-    status: "open", priority: "low", content: "✓ Rechnung fehlt — A-2026-0033",
-    category: "Buchhaltung",
-    messages: [{ id: "m5a", from: "system", channel: "phone", text: "(Telefonnotiz) Herr Brunner hat angerufen, ihm fehlt die Rechnung zur Lieferung vom 12.05.", time: "Gestern" }]
-  },
-  {
-    id: "demo_t6", sender: "Unbekannt (Website)", initials: "?", initialsColor: "#6B7280",
-    subject: "Neue Anfrage Oldtimerteile", time: "Vorgestern", channel: "website",
-    status: "new", priority: "low", content: "Anfrage: Oldtimerteile galvanisieren",
-    category: "Neuanfrage",
-    messages: [{ id: "m6a", from: "customer", channel: "website", text: "Hallo, verchromen Sie auch Motorradtanks? Was würde das grob kosten?", time: "Vorgestern" }]
-  }
-];
+// DEMO DATA REMOVED
 
 /* ═══════════════════════════════════════════════════════════════
    SIDEBAR CHANNELS
@@ -177,6 +133,8 @@ interface PhoneNoteData {
 }
 
   const [recentNotes, setRecentNotes] = useState<PhoneNoteData[]>([]);
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
 
 interface CustomerContact { id: string; name: string; city: string; initials: string; initialsColor: string; latestTime: string; lastChannel: Channel; openTopics: number; priority: "high" | "medium" | "low"; latestContent: string; threads: Thread[]; messages: ChatMessage[]; unread: number; isPhoneNote?: boolean; }
   const [isMobile, setIsMobile] = useState(false);
@@ -200,11 +158,17 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  useEffect(() => { getRecentPhoneNotes(20).then(n => setRecentNotes(n)).catch(() => setRecentNotes([])); }, []);
+  useEffect(() => { 
+    let mounted = true;
+    getRecentPhoneNotes(20).then(n => { if(mounted) setRecentNotes(n); }).catch(() => { if(mounted) setRecentNotes([]); }); 
+    getOrdersDb().then(res => { if(mounted && res.ok) setAllOrders(res.data as any); }).catch(() => { if(mounted) setAllOrders([]); });
+    getCustomersDb().then(res => { if(mounted && res.ok) setAllCustomers(res.data); }).catch(() => { if(mounted) setAllCustomers([]); });
+    return () => { mounted = false; };
+  }, []);
 
   // Phone note threads from DB
   const phoneNoteThreads: Thread[] = useMemo(() => recentNotes.map(note => {
-    const match = smartMatchText(note.rawText || "");
+    const match = smartMatchText(note.rawText || "", allCustomers, allOrders);
     const initials = note.callerName ? note.callerName.split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase() : "📞";
     return {
       id: `pn_${note.id}`, sender: note.callerName || note.company || "Unbekannter Anrufer",
@@ -217,9 +181,9 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
       isPhoneNote: true, rawNote: note, matchData: match,
       messages: [{ id: `pnm_${note.id}`, from: "system" as const, channel: "phone" as const, text: note.rawText || "", time: new Date(note.createdAt || new Date()).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }), date: new Date(note.createdAt || new Date()).toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) }],
     };
-  }), [recentNotes]);
+  }), [recentNotes, allCustomers, allOrders]);
 
-  const allThreads = useMemo(() => [...phoneNoteThreads, ...DEMO_THREADS], [phoneNoteThreads]);
+  const allThreads = useMemo(() => [...phoneNoteThreads], [phoneNoteThreads]);
   const filteredThreads = useMemo(() => {
     let f = allThreads;
     if (activeChannel === "phone") f = f.filter(t => t.channel === "phone");
@@ -313,13 +277,13 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
 
   const matchData = useMemo(() => {
     if (!activeContact) return null;
-    return smartMatchText(activeContact.messages.map(m => m.text).join(" "));
-  }, [activeContact]);
+    return smartMatchText(activeContact.messages.map(m => m.text).join(" "), allCustomers, allOrders);
+  }, [activeContact, allCustomers, allOrders]);
 
   
   const actionCards = useMemo(() => activeContact ? buildActions(activeContact.threads[0], matchData) : [], [activeContact, matchData]);
   const matchedCustomer = matchData?.matchedCustomer || null;
-  const customerOrders = matchedCustomer ? INITIAL_ORDERS.filter(o => o.customerId === matchedCustomer.id) : [];
+  const customerOrders = matchedCustomer ? allOrders.filter(o => o.customerId === matchedCustomer.id) : [];
 
   const handleStatusChange = async (s: NoteStatus) => {
     const thread = activeContact?.threads[0]; if (!thread?.isPhoneNote || !thread.rawNote) return;

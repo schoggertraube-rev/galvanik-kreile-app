@@ -9,6 +9,9 @@ import Link from "next/link";
 import { smartMatchText, MatchResult } from "./smartMatcher";
 import { updatePhoneNote } from "@/app/actions/phoneNotes.actions";
 import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
+import { ordersRepository, type Order } from "@/lib/repositories/ordersRepository";
+import { customersRepository } from "@/lib/repositories/customersRepository";
+import { type Customer } from "@/lib/types/customer";
 
 export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: Record<string, any>, onUpdate: () => void, onClose: () => void }) {
   const [matchData, setMatchData] = useState<MatchResult | null>(null);
@@ -17,10 +20,17 @@ export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: Record<
   const [assignStatus, setAssignStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
   const [showLogisticsModal, setShowLogisticsModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
+
+  useEffect(() => {
+    ordersRepository.getAll().then(setAllOrders).catch(() => setAllOrders([]));
+    customersRepository.getAll().then(setAllCustomers).catch(() => setAllCustomers([]));
+  }, []);
 
   useEffect(() => {
     if (note && note.rawText) {
-      const data = smartMatchText(note.rawText);
+      const data = smartMatchText(note.rawText, allCustomers, allOrders);
       // eslint-disable-next-line
       setMatchData(data);
       // eslint-disable-next-line
@@ -29,7 +39,7 @@ export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: Record<
         orderId: note.orderId || data.matchedOrder?.id || ""
       });
     }
-  }, [note]);
+  }, [note, allCustomers, allOrders]);
 
   const handleAssign = async () => {
     setAssignStatus("saving");

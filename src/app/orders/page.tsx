@@ -23,11 +23,15 @@ import {
   CheckCircle2,
   Edit2
 } from "lucide-react";
-import { INITIAL_ORDERS, INITIAL_CUSTOMERS, MockOrder, MockCustomer } from "@/lib/mockData";
+// Mock data removed
 import { getStationConfig, getAllStations } from "@/constants/stations";
 import { evaluateOrderPriority } from "@/lib/priority";
-import { ordersRepository, type Order } from "@/lib/repositories/ordersRepository";
-import { customersRepository, type Customer } from "@/lib/repositories/customersRepository";
+import { getOrdersDb } from "@/app/actions/orders.actions";
+import { getCustomersDb } from "@/app/actions/customers.actions";
+import type { Customer } from "@/lib/types/customer";
+import type { OrderResponse } from "@/app/actions/orders.actions";
+
+type Order = any; // Fallback since Order was from repo
 import { getUrgency, Urgency } from "@/lib/orders/getUrgency";
 import { OrderEditModal } from "@/components/orders/OrderEditModal";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -60,8 +64,8 @@ function OrdersPageInner() {
     }
   }
 
-  // Initialize orders state from centralized mock data
-  const [orders, setOrders] = useState<MockOrder[]>(INITIAL_ORDERS);
+  // Initialize orders state empty
+  const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [prevOrderParam, setPrevOrderParam] = useState<string | null>(null);
 
@@ -72,7 +76,7 @@ function OrdersPageInner() {
       setSelectedOrderId(orderParam);
     }
   }
-  const [customersList, setCustomersList] = useState<MockCustomer[]>(INITIAL_CUSTOMERS as unknown as MockCustomer[]);
+  const [customersList, setCustomersList] = useState<Customer[]>([]);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
   const [isEditingOrder, setIsEditingOrder] = useState(false);
 
@@ -81,14 +85,14 @@ function OrdersPageInner() {
     let isMounted = true;
     const loadData = async () => {
       try {
-        const dbOrders = await ordersRepository.getAll();
-        if (isMounted && dbOrders && dbOrders.length > 0) {
-          setOrders(dbOrders as unknown as MockOrder[]);
+        const dbOrdersResult = await getOrdersDb();
+        if (isMounted && dbOrdersResult.ok) {
+          setOrders(dbOrdersResult.data as any);
         }
         
-        const dbCustomers = await customersRepository.getAll();
-        if (isMounted && dbCustomers && dbCustomers.length > 0) {
-          setCustomersList(dbCustomers as unknown as MockCustomer[]);
+        const dbCustomersResult = await getCustomersDb();
+        if (isMounted && dbCustomersResult.ok) {
+          setCustomersList(dbCustomersResult.data as any);
         }
       } catch (e) {
         console.error("Fehler beim Laden aus Repositories", e);
@@ -154,18 +158,20 @@ function OrdersPageInner() {
     try {
       const orderToUpdate = updated.find(o => o.id === orderId);
       if (orderToUpdate) {
-        ordersRepository.updateOrder(orderId, (orderToUpdate as unknown) as Parameters<typeof ordersRepository.updateOrder>[1]);
+        import("@/app/actions/orders.actions").then(({ updateOrderDb }) => {
+          updateOrderDb(orderId, { risk: orderToUpdate.risk, statusText: orderToUpdate.statusText } as any);
+        });
       }
     } catch (e) {
       console.error("Fehler beim Speichern des Status", e);
     }
   };
 
-  const handleStationUpdate = (orderId: string, newStation: MockOrder["station"]) => {
+  const handleStationUpdate = (orderId: string, newStation: string) => {
     const updated = orders.map(o => {
       if (o.id === orderId) {
-        // Also update all parts' station to the new station, so they display in /items if lager
-        const updatedParts = o.parts.map(p => ({ ...p, station: newStation }));
+        // Also update all parts' station to the new station, so they display in /items immediately
+        const updatedParts = o.parts.map((p: any) => ({ ...p, station: newStation }));
         return { ...o, station: newStation, currentStationId: newStation, parts: updatedParts };
       }
       return o;
@@ -176,16 +182,15 @@ function OrdersPageInner() {
       localStorage.setItem("kreile_orders", JSON.stringify(updated));
     }
     try {
-      const orderToUpdate = updated.find(o => o.id === orderId);
-      if (orderToUpdate) {
-        ordersRepository.updateOrder(orderId, (orderToUpdate as unknown) as Parameters<typeof ordersRepository.updateOrder>[1]);
-      }
+      import("@/app/actions/orders.actions").then(({ updateOrderDb }) => {
+        updateOrderDb(orderId, { currentStationId: newStation } as any);
+      });
     } catch (e) {
       console.error("Fehler beim Speichern der Station", e);
     }
   };
 
-  const handleRecommendedActionClick = (order: MockOrder) => {
+  const handleRecommendedActionClick = (order: Order) => {
     const updated = orders.map(o => {
       if (o.id === order.id) {
         return {
@@ -206,10 +211,9 @@ function OrdersPageInner() {
       localStorage.setItem("kreile_orders", JSON.stringify(updated));
     }
     try {
-      const orderToUpdate = updated.find(o => o.id === order.id);
-      if (orderToUpdate) {
-        ordersRepository.updateOrder(order.id, (orderToUpdate as unknown) as Parameters<typeof ordersRepository.updateOrder>[1]);
-      }
+      import("@/app/actions/orders.actions").then(({ updateOrderDb }) => {
+        updateOrderDb(order.id, { risk: "green" } as any);
+      });
     } catch (e) {
       console.error("Fehler beim Speichern der Maßnahme", e);
     }
@@ -223,9 +227,10 @@ function OrdersPageInner() {
   const handleSaveOrder = async (changes: Partial<Order>) => {
     if (!selectedOrderId) return;
     try {
-      const updatedOrder = await ordersRepository.updateOrder(selectedOrderId, changes);
-      if (updatedOrder) {
-        setOrders(prev => prev.map(o => o.id === selectedOrderId ? (updatedOrder as unknown as MockOrder) : o));
+      const { updateOrderDb } = await import("@/app/actions/orders.actions");
+      const res = await updateOrderDb(selectedOrderId, changes as any);
+      if (res.ok) {
+        setOrders(prev => prev.map(o => o.id === selectedOrderId ? { ...o, ...changes } : o));
       }
     } catch (e: unknown) {
       console.error("Fehler beim Speichern der Auftragsdaten", e);
@@ -265,7 +270,7 @@ function OrdersPageInner() {
 
     // 5. Surface filter
     if (surfaceFilter) {
-      const text = (o.task + " " + (o.parts?.map(p => p.surfaceRequested || p.finish).join(" "))).toLowerCase();
+      const text = (o.task + " " + (o.parts?.map((p: any) => p.surfaceRequested || p.finish).join(" ") || "")).toLowerCase();
       if (!text.includes(surfaceFilter.toLowerCase())) return false;
     }
 
@@ -434,14 +439,14 @@ function OrdersPageInner() {
             else if (order.risk === "orange" || u === "gefaehrdet") urgencyType = "soon";
             else if (order.risk === "blocked") urgencyType = "wait";
 
-            const textForSurface = (order.task + " " + (order.parts?.map(p => p.surfaceRequested || p.finish).join(" "))).toLowerCase();
+            const textForSurface = (order.task + " " + (order.parts?.map((p: any) => p.surfaceRequested || p.finish).join(" ") || "")).toLowerCase();
             let surfaceKey: "chrom" | "nickel" | "gold" | "kupfer" | "zink" | "offen" = "offen";
             if (textForSurface.includes("chrom")) surfaceKey = "chrom";
             else if (textForSurface.includes("nickel")) surfaceKey = "nickel";
             else if (textForSurface.includes("gold")) surfaceKey = "gold";
             else if (textForSurface.includes("kupfer")) surfaceKey = "kupfer";
             else if (textForSurface.includes("zink")) surfaceKey = "zink";
-            
+
             let surfaceLabel = surfaceKey !== "offen" ? surfaceKey.charAt(0).toUpperCase() + surfaceKey.slice(1) : "Oberfläche offen";
             if (surfaceKey === "chrom") surfaceLabel = "Vernickeln → Chrom";
             if (surfaceKey === "zink") surfaceLabel = "Verzinken";
@@ -452,7 +457,7 @@ function OrdersPageInner() {
                 id={order.id}
                 orderNumber={order.orderNumber}
                 customerName={order.customerName || "Unbekannter Kunde"}
-                article={order.task}
+                article={order.task || ""}
                 surface={surfaceLabel}
                 surfaceKey={surfaceKey}
                 badgeText={order.statusText}
@@ -470,7 +475,7 @@ function OrdersPageInner() {
       ) : (
         <div className="p-12 text-center text-text-muted bg-[#faf8f4] border border-[#d8d0c4] rounded-xl space-y-2 mt-4">
           <Package className="h-8 w-8 mx-auto text-[#9e9689] animate-pulse" />
-          <p className="font-bold text-[#5e5850]">Keine Aufträge in dieser Ansicht</p>
+          <p className="font-bold text-[#5e5850]">Noch keine Aufträge erfasst</p>
           <p className="text-xs">Passe den Filter oder den Suchbegriff an.</p>
         </div>
       )}
@@ -531,22 +536,24 @@ function OrdersPageInner() {
             {selectedOrder.parts && selectedOrder.parts.length > 0 && (
               <div className="space-y-2">
                 <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block font-sans">Zu bearbeitende Teile</span>
-                <div className="bg-white border border-neutral-gray-100 rounded-lg overflow-hidden divide-y divide-neutral-gray-100">
-                  {selectedOrder.parts.map((p, i) => (
+                <div className="bg-white border border-neutral-gray-100 rounded-lg overflow-hidden divide-y divide-neutral-gray-100 shadow-sm mb-6">
+                  {selectedOrder.parts.map((p: any, i: number) => {
+                    const part = p as Record<string, any>;
+                    return (
                     <div key={i} className="p-3 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-3">
                         <span className="bg-navy-900 text-white font-mono text-[10px] px-2 py-0.5 rounded font-bold">
-                          {p.quantity}x
+                          {part.quantity}x
                         </span>
-                        <span className="font-bold text-navy-900">{p.name || "Unbekanntes Teil"}</span>
+                        <span className="font-bold text-navy-900">{part.name || "Unbekanntes Teil"}</span>
                       </div>
-                      {p.surfaceRequested && (
+                      {part.surfaceRequested && (
                         <span className="text-[10px] font-mono bg-bg-app-soft text-text-muted px-2 py-1 rounded">
-                          {p.surfaceRequested}
+                          {part.surfaceRequested}
                         </span>
                       )}
                     </div>
-                  ))}
+                  )})}
                 </div>
               </div>
             )}
@@ -627,8 +634,10 @@ function OrdersPageInner() {
               </div>
 
               <div className="space-y-2">
-                {(selectedOrder.parts || []).map(part => (
-                  <div key={part.id} className="p-3 bg-bg-app-soft border rounded-lg flex flex-col gap-1 text-xs hover:border-gold-600 transition-colors">
+                {(selectedOrder.parts || []).map((p: any, index: number) => {
+                  const part = p as any;
+                  return (
+                  <div key={part.id || String(index)} className="p-3 bg-bg-app-soft border rounded-lg flex flex-col gap-1 text-xs hover:border-gold-600 transition-colors">
                     <div className="flex items-center gap-1.5">
                       <span className="font-bold text-navy-900">{part.name}</span>
                       <span className="font-mono text-[9px] bg-neutral-gray-100 text-text-muted px-1 rounded">{part.id}</span>
@@ -642,14 +651,14 @@ function OrdersPageInner() {
                       <Package className="h-3 w-3 text-slate-450" /> Soll: {part.hours}
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             </div>
 
             {/* Touch actions with robust Phone Fallback Logic */}
             <div className="flex flex-col gap-3 pt-6 border-t pb-4">
               {(() => {
-                const phoneDetails = getCustomerPhoneDetails(selectedOrder.customerName, selectedOrder.customerId);
+                const phoneDetails = getCustomerPhoneDetails(selectedOrder.customerName || "", selectedOrder.customerId);
                 if (phoneDetails.hasPhone) {
                   return (
                     <a 

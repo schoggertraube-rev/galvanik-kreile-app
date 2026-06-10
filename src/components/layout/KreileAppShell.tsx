@@ -13,6 +13,7 @@ import { AlertTriangle } from "lucide-react";
 import { RealtimeSyncProvider } from "./RealtimeSyncManager";
 import { ParkedCallProvider } from "@/contexts/ParkedCallContext";
 import { FloatingParkedCall } from "@/components/telefonnotiz/FloatingParkedCall";
+import { OrderOverlay } from "@/components/orders/OrderOverlay";
 
 export function KreileAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -37,6 +38,7 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
             <PwaRegister />
             {children}
             <FloatingParkedCall />
+            <OrderOverlay />
           </div>
         </RealtimeSyncProvider>
       </ParkedCallProvider>
@@ -97,6 +99,9 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
 
           {/* Global Floating Parked Call Button & Prompt */}
           <FloatingParkedCall />
+          
+          {/* Global Order Overlay Drawer */}
+          <OrderOverlay />
         </div>
       </RealtimeSyncProvider>
     </ParkedCallProvider>

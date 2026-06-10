@@ -59,10 +59,19 @@ REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLE public.baths FROM public;
 REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLE public.bath_measurements FROM public;
 
 -- 4. Set service_role policies to permit admin backend operations if queried through PostgREST (Supabase Serverless REST API)
+DROP POLICY IF EXISTS "service_role_orders" ON public.orders;
 CREATE POLICY "service_role_orders" ON public.orders FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "service_role_items" ON public.items;
 CREATE POLICY "service_role_items" ON public.items FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "service_role_customers" ON public.customers;
 CREATE POLICY "service_role_customers" ON public.customers FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "service_role_baths" ON public.baths;
 CREATE POLICY "service_role_baths" ON public.baths FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "service_role_bath_measurements" ON public.bath_measurements;
 CREATE POLICY "service_role_bath_measurements" ON public.bath_measurements FOR ALL TO service_role USING (true) WITH CHECK (true);
 
 -- 5. Rollback (Information purposes only - NOT ACTIVE IN PRODUCTION):

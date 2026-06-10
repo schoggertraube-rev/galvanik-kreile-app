@@ -86,7 +86,10 @@ export const orders = pgTable("orders", {
   dbIst: numeric("db_ist", { precision: 12, scale: 2 }),
   dbLetzteBerechnung: timestamp("db_letzte_berechnung", { withTimezone: true }),
   intakeDate: timestamp("intake_date").defaultNow(),
+  priority: text("priority").default("normal"),
   dueDate: timestamp("due_date"),
+  promisedDueDate: timestamp("promised_due_date", { withTimezone: true }),
+  completedDate: timestamp("completed_date", { withTimezone: true }),
   attachmentUrl: text("attachment_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -104,6 +107,10 @@ export const items = pgTable("items", {
   surfaceRequested: text("surface_requested"),
   photoIds: jsonb("photo_ids").$type<string[]>(),
   photo: text("photo"),
+  repairTypes: text("repair_types").array().default([]),
+  stationSequence: jsonb("station_sequence").default([]),
+  currentStep: integer("current_step").default(0),
+  internalNotes: text("internal_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -120,6 +127,7 @@ export const events = pgTable("events", {
   status: varchar("status", { length: 50 }).default("success"),
   userId: uuid("user_id").references(() => appUsers.id),
   workerId: varchar("worker_id", { length: 100 }),
+  station: text("station"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -435,3 +443,64 @@ export * from "./schema_buchhaltung";
 
 // 18. Erfassung (Zeit & Verbrauch)
 export * from "./schema_erfassung";
+
+// --- Phase 2: Mollie, Resend & Networking ---
+
+export const communications = pgTable("communications", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  customerId: text("customer_id").references(() => customers.id),
+  orderId: text("order_id").references(() => orders.id, { onDelete: "cascade" }),
+  subject: text("subject"),
+  body: text("body"),
+  type: text("type"),
+  channelType: text("channel_type"),
+  resendMessageId: text("resend_message_id"),
+  status: text("status").default("queued"),
+  openedAt: timestamp("opened_at"),
+  bouncedAt: timestamp("bounced_at"),
+  complainedAt: timestamp("complained_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const emailTemplates = pgTable("email_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  templateKey: text("template_key").notNull().unique(),
+  name: text("name").notNull(),
+  subjectTemplate: text("subject_template").notNull(),
+  bodyHtmlTemplate: text("body_html_template").notNull(),
+  bodyTextTemplate: text("body_text_template"),
+  variables: jsonb("variables").default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const priceLines = pgTable("price_lines", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  itemId: text("item_id").references(() => items.id, { onDelete: "cascade" }),
+  positionText: text("position_text").notNull(),
+  qty: numeric("qty", { precision: 10, scale: 2 }).default("1"),
+  unitPriceEur: numeric("unit_price_eur", { precision: 10, scale: 2 }).notNull(),
+  unitTotalEur: numeric("unit_total_eur", { precision: 10, scale: 2 }), // Generated
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const payments = pgTable("payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  orderId: text("order_id").references(() => orders.id, { onDelete: "set null" }),
+  amountEur: numeric("amount_eur", { precision: 10, scale: 2 }).notNull(),
+  status: text("status").notNull().default("pending"),
+  provider: text("provider").notNull(),
+  providerIntentId: text("provider_intent_id"),
+  mollieStatus: text("mollie_status"),
+  mollieMethod: text("mollie_method"),
+  receiptUrl: text("receipt_url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

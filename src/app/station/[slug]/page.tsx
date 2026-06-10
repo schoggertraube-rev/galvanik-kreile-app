@@ -9,14 +9,16 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, Package, ArrowLeft, X } from "lucide-react";
-import { INITIAL_ORDERS, MockOrder } from "@/lib/mockData";
+// Mock data removed
 import { getStationConfig } from "@/constants/stations";
 import { evaluateOrderPriority } from "@/lib/priority";
-import { ordersRepository, type Order } from "@/lib/repositories/ordersRepository";
+import { getOrdersDb } from "@/app/actions/orders.actions";
 import { GalvanikQueue } from "@/components/galvanik/GalvanikQueue";
 import { WarenausgangQueue } from "@/components/warenausgang/WarenausgangQueue";
 
 const VALID_SLUGS = ["wareneingang", "entmetallisierung", "schleiferei", "beschichtung", "warenausgang"];
+
+type Order = any; // Fallback since it was from repo
 
 export default function StationPage({ params }: { params: Promise<{ slug: string }> }) {
   usePageView();
@@ -26,15 +28,15 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
     notFound();
   }
 
-  const [orders, setOrders] = useState<MockOrder[]>(INITIAL_ORDERS);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
       try {
-        const dbOrders = await ordersRepository.getAll();
-        if (dbOrders && dbOrders.length > 0) {
-          setOrders(dbOrders as unknown as MockOrder[]);
+        const dbOrdersRes = await getOrdersDb();
+        if (dbOrdersRes.ok && dbOrdersRes.data && dbOrdersRes.data.length > 0) {
+          setOrders(dbOrdersRes.data as any);
         }
       } catch (e) {
         console.error("Fehler beim Laden aus dem Repository", e);
@@ -103,7 +105,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
                   </Card>
                 )}
                 {filteredOrders.map((order) => {
-                  const evalRes = evaluateOrderPriority(order);
+                  const evalRes = evaluateOrderPriority({ ...order, dueDate: order.dueDate || "" });
                   const isSelected = order.id === selectedOrderId;
                   const isRed = evalRes.risk === "red";
                   const isOrange = evalRes.risk === "orange";
@@ -161,8 +163,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
             ) : (
               <div className="p-12 text-center text-text-muted bg-white border border-neutral-gray-300 rounded-xl space-y-2">
                 <Package className="h-8 w-8 mx-auto text-text-muted animate-pulse" />
-                <p className="font-bold text-text-muted">Keine Aufträge in dieser Station</p>
-                <p className="text-xs">Alle Aufträge sind bereits in Folgestationen abgearbeitet.</p>
+                <p className="font-bold text-text-muted">Noch keine Aufträge erfasst</p>
               </div>
             )}
           </div>
@@ -201,17 +202,19 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
 
                   <div className="space-y-2 pt-2">
                     <span className="text-[10px] font-bold uppercase text-text-muted tracking-wider">Erfasste Werkstücke</span>
-                    {(selectedOrder.parts || []).map((p, i) => (
-                    <div key={p.id ?? `part-${i}`} className="p-2.5 bg-bg-app-soft border border-neutral-gray-100 rounded-lg flex items-center justify-between text-xs">
+                    {(selectedOrder.parts || []).map((p: any, i: number) => {
+                      const part = p as any;
+                      return (
+                    <div key={part.id ?? `part-${i}`} className="p-2.5 bg-bg-app-soft border border-neutral-gray-100 rounded-lg flex items-center justify-between text-xs">
                       <div>
-                        <span className="font-bold text-navy-900 block">{p.name}</span>
-                        <span className="text-text-muted text-[10px]">Material: {p.material} | Finish: {p.finish}</span>
+                        <span className="font-bold text-navy-900 block">{part.name}</span>
+                        <span className="text-text-muted text-[10px]">Material: {part.material} | Finish: {part.finish}</span>
                       </div>
                       <Badge variant="outline" className="font-mono text-[9px] bg-white text-text-muted">
-                        {p.id ?? `part-${i}`}
+                        {part.id ?? `part-${i}`}
                       </Badge>
                     </div>
-                  ))}
+                  )})}
                   </div>
 
                   <div className="pt-4 border-t border-neutral-gray-100">

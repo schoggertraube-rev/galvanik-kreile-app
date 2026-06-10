@@ -34,12 +34,12 @@ import {
 import { CustomerDetailView } from "@/components/customers/CustomerDetailView";
 import { CustomerTypeConsequences } from "@/components/customers/CustomerTypeConsequences";
 import { Customer } from "@/lib/types/customer";
-import { EXTENDED_CUSTOMERS as INITIAL_CUSTOMERS } from "@/lib/mockCustomersExtended";
+// Mock data removed
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchToolbar } from "@/components/ui/SearchToolbar";
 import type { CustomerType } from "@/types/customerType";
 import { NewCustomerForm } from "@/components/customers/NewCustomerForm";
-import { customersRepository } from "@/lib/repositories/customersRepository";
+import { getCustomersDb } from "@/app/actions/customers.actions";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 
 const safe = (value: unknown) => String(value ?? "").toLowerCase();
@@ -51,15 +51,17 @@ export default function CustomersPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS as unknown as Customer[]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
 
   useEffect(() => {
     let isMounted = true;
     
     const loadCustomers = async () => {
       try {
-        const data = await customersRepository.getAll();
-        if (isMounted) setCustomers(data);
+        const res = await getCustomersDb();
+        if (isMounted && res.ok) {
+          setCustomers(res.data);
+        }
       } catch (err) {
         console.error("Failed to load customers:", err);
       }
@@ -226,7 +228,7 @@ export default function CustomersPage() {
           ) : (
             <div className="p-12 text-center text-text-muted bg-white border border-neutral-gray-300 rounded-xl space-y-2">
               <User className="h-8 w-8 mx-auto text-text-muted animate-pulse" />
-              <p className="font-bold text-text-muted">Keine passenden Kunden</p>
+              <p className="font-bold text-text-muted">Noch keine Aufträge erfasst</p>
               <p className="text-xs">Ändere den Filter oder passe den Suchbegriff an.</p>
             </div>
           )}
@@ -257,10 +259,12 @@ export default function CustomersPage() {
               onSave={async (id) => {
                 setShowAddModal(false);
                 setEditingCustomerId(null);
-                const updated = await customersRepository.getAll();
-                setCustomers(updated);
-                const newCust = updated.find(c => c.id === id);
-                if (newCust) setSelectedCustomer(newCust);
+                const res = await getCustomersDb();
+                if (res.ok) {
+                  setCustomers(res.data);
+                  const newCust = res.data.find(c => c.id === id);
+                  if (newCust) setSelectedCustomer(newCust);
+                }
               }}
             />
           )}

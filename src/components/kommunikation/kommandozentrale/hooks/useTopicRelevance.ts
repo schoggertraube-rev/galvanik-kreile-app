@@ -19,7 +19,7 @@ export function useTopicRelevance(
   const matchResult = useMemo(() => {
     if (existingMatch) return existingMatch;
     const combined = messages.join(" ");
-    return smartMatchText(combined);
+    return smartMatchText(combined, [], []);
   }, [messages, existingMatch]);
 
   const relevantKeys = useMemo(() => {

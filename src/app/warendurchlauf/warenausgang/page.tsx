@@ -1,24 +1,28 @@
-﻿"use client";
+"use client";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
 import Link from "next/link";
 import { CheckCircle2, Package, Truck, MessageSquare, CreditCard, Send } from "lucide-react";
 import { useState, useEffect } from "react";
-import { PaymentCaptureModal } from "./PaymentCaptureModal";
-import { ordersRepository, Order } from "@/lib/repositories/ordersRepository";
+import { PaymentDrawer } from "@/components/orders/PaymentDrawer";
+import { getOrdersDb } from "@/app/actions/orders.actions";
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 
 export default function WarenausgangPage() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
   const [sendingInvoice, setSendingInvoice] = useState<string | null>(null);
   const { openOrder } = useOrderModal();
 
   useEffect(() => {
-    ordersRepository.getAll().then(all => {
-      setOrders(all.filter(o => o.station === "warenausgang" || o.currentStationId === "warenausgang"));
-    });
+    const fetchOrders = async () => {
+      const res = await getOrdersDb();
+      if (res.ok && res.data) {
+        setOrders(res.data.filter((o: any) => o.station === "warenausgang" || o.currentStationId === "warenausgang"));
+      }
+    };
+    fetchOrders();
   }, []);
 
   const sendInvoice = async (orderId: string) => {
@@ -47,7 +51,7 @@ export default function WarenausgangPage() {
           Warenausgang
           <span className="flex-1 h-px bg-[#d8d0c4]" />
         </div>
-        <p className="text-sm text-[#9e9689] mb-5">Fertige AuftrÃ¤ge, Abholung, Versand und Zahlung</p>
+        <p className="text-sm text-[#9e9689] mb-5">Fertige Aufträge, Abholung, Versand und Zahlung</p>
 
         {/* Aktionskarten */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
@@ -112,22 +116,20 @@ export default function WarenausgangPage() {
           </button>
         </div>
 
-        {/* Warenausgang AuftrÃ¤ge & Zahlungsstatus */}
+        {/* Warenausgang Aufträge & Zahlungsstatus */}
         <div className="mt-8 bg-white border border-[#d8d0c4] rounded-[14px] overflow-hidden shadow-sm">
           <div className="p-5 border-b border-[#d8d0c4] bg-[#faf8f4] flex items-center justify-between">
             <div>
-              <h2 className="text-[15px] font-bold text-[#1a1a1a]">AuftrÃ¤ge im Warenausgang</h2>
-              <p className="text-xs text-[#9e9689]">Ãœbersicht, Zahlungsstatus & Automatischer Rechnungsversand</p>
+              <h2 className="text-[15px] font-bold text-[#1a1a1a]">Aufträge im Warenausgang</h2>
+              <p className="text-xs text-[#9e9689]">Übersicht, Zahlungsstatus & Automatischer Rechnungsversand</p>
             </div>
           </div>
 
           <div className="flex flex-col">
             {orders.length === 0 ? (
-              <div className="p-6 text-center text-[#9e9689] text-sm">Keine AuftrÃ¤ge im Warenausgang.</div>
+              <div className="p-6 text-center text-[#9e9689] text-sm">Noch keine Aufträge erfasst</div>
             ) : (
               orders.map(o => {
-                // Mock payment status based on random or specific logic.
-                // For demonstration, we assume orders with "red" risk are unpaid, others might be paid.
                 const isPaid = o.risk === "green";
 
                 return (
@@ -135,7 +137,7 @@ export default function WarenausgangPage() {
                     <div className="flex flex-col">
                       <span className="font-mono text-[13px] font-bold text-[#1a1a1a]">{o.orderNumber}</span>
                       <span className="text-[14px] font-semibold text-[#1a1a1a]">{o.customerName || "Unbekannt"}</span>
-                      <span className="text-[12px] text-[#5e5850]">{o.task}</span>
+                      <span className="text-[12px] text-[#5e5850]">{o.title || o.task || "Kein Titel"}</span>
                     </div>
 
                     <div className="flex items-center gap-6">
@@ -178,10 +180,12 @@ export default function WarenausgangPage() {
 
       </div>
 
-      <PaymentCaptureModal
-        isOpen={paymentModalOpen}
-        onClose={() => setPaymentModalOpen(false)}
-      />
+      {paymentModalOpen && (
+        <PaymentDrawer 
+          orderData={{}} 
+          onClose={() => setPaymentModalOpen(false)} 
+        />
+      )}
     </div>
   );
 }
