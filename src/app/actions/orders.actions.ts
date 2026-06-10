@@ -1,9 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { orders, items, customers } from "@/db/schema";
+import { orders, items, customers, events } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 
 // DTO Typen (zur Vereinfachung)
@@ -210,19 +209,35 @@ export async function setOrderStationDb(orderId: string, newStation: string): Pr
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   try {
-    const { createId } = await import("@paralleldrive/cuid2");
+    // removed unused createId import
+    
+    // fetch current order to get current station
+    const currentOrder = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+    const aktuelleStation = currentOrder[0]?.currentStationId || currentOrder[0]?.station || "wareneingang";
+    // update order to new station
     await db.update(orders).set({ currentStationId: newStation }).where(eq(orders.id, orderId));
     
-    // Create event
-    const { events } = await import("@/db/schema");
+    // Insert exit event
+    // events are imported statically
     await db.insert(events).values({
-      id: createId(),
+      id: crypto.randomUUID(),
+      tenantId: "galvanik-kreile",
       orderId,
-      eventType: "STATION_CHANGED",
-      description: `Station gesetzt: ${newStation}`,
-      status: "success",
-      createdAt: new Date(),
-      tenantId: "galvanik-kreile"
+      eventType: "STATION_AUSGANG",
+      station: aktuelleStation,
+      description: `Station verlassen: ${aktuelleStation}`,
+      createdAt: new Date()
+    });
+    
+    // Insert entry event
+    await db.insert(events).values({
+      id: crypto.randomUUID(),
+      tenantId: "galvanik-kreile",
+      orderId,
+      eventType: "STATION_EINGANG",
+      station: newStation,
+      description: `Station betreten: ${newStation}`,
+      createdAt: new Date()
     });
 
     return { ok: true, data: { success: true } };

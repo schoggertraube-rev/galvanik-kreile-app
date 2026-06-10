@@ -502,5 +502,4 @@ export const payments = pgTable("payments", {
   mollieMethod: text("mollie_method"),
   receiptUrl: text("receipt_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
