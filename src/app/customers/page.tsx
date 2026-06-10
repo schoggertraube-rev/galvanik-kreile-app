@@ -41,6 +41,7 @@ import type { CustomerType } from "@/types/customerType";
 import { NewCustomerForm } from "@/components/customers/NewCustomerForm";
 import { getCustomersDb } from "@/app/actions/customers.actions";
 import { trackUiEvent } from "@/lib/tracking/tracking";
+import { useCustomerOverlay } from "@/components/customers/useCustomerOverlay";
 
 const safe = (value: unknown) => String(value ?? "").toLowerCase();
 
@@ -50,6 +51,7 @@ export default function CustomersPage() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const { open: openCustomer } = useCustomerOverlay();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
 
@@ -100,6 +102,7 @@ export default function CustomersPage() {
   const selectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
     trackUiEvent("detail_open", { target: "customer", id: customer.id, name: customer.name });
+    openCustomer(customer.id);
   };
 
   const handleStartEdit = (customer: Customer) => {

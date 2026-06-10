@@ -75,7 +75,7 @@ export const WerkstattPulsOverlay: React.FC<WerkstattPulsOverlayProps> = ({ isOp
         {/* Section B: Chart */}
         <section className="space-y-4">
           <h3 className="font-semibold text-gray-900">Termintreue im Zeitverlauf</h3>
-          <TermintreueChart currentWeekPct={termintreue.termintreue_pct} />
+          <TermintreueChart data={data.snapshots} />
           <div className="bg-blue-50 text-blue-800 text-sm p-4 rounded-lg flex items-start gap-3">
             <span className="text-xl">💡</span>
             <p><strong>So liest du das:</strong> Die blaue Fläche zeigt deine Pünktlichkeit diese Woche. Die gestrichelte Linie ist der Vergleichswert aus dem Vorjahr. Werte unter 80% bedeuten meist, dass Teile in einer Station zu lange liegen.</p>

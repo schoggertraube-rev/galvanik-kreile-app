@@ -28,6 +28,7 @@ export interface WerkstattPulsData {
   snapshotTrend?: {
     vorjahr: number;
   };
+  snapshots: Array<{ kw: string; wert: number | null; vorjahr?: number | null }>;
 }
 
 export function useWerkstattPuls() {
@@ -49,7 +50,7 @@ export function useWerkstattPuls() {
           supabase.from('v_analyse_wochenziel').select('*').single(),
           supabase.from('v_analyse_engpass').select('*'),
           supabase.from('kpi_snapshots')
-            .select('wert')
+            .select('wert, periode_start')
             .eq('kpi_key', 'termintreue')
             .eq('periode', 'woche')
             .order('periode_start', { ascending: false })
@@ -60,6 +61,15 @@ export function useWerkstattPuls() {
           ? kpiSnapshots.data[51].wert 
           : null;
 
+        const chartSnapshots = (kpiSnapshots.data || [])
+          .slice(0, 12)
+          .reverse()
+          .map(s => ({
+            kw: 'KW ' + new Date(s.periode_start).toLocaleDateString('de-DE', { week: 'numeric' } as any), // Fallback formatting for demo
+            wert: s.wert ? Number(s.wert) : null,
+            vorjahr: null // Would need a self-join for true last year
+          }));
+
         if (isMounted) {
           setData({
             termintreue: termintreue.data || { puenktlich: 0, nenner: 0, termintreue_pct: null, ohne_zusagetermin: 0 },
@@ -67,7 +77,8 @@ export function useWerkstattPuls() {
             stationen: stationen.data || [],
             wochenziel: wochenziel.data || { fertig_diese_woche: 0 },
             engpass: engpass.data || [],
-            snapshotTrend: vorjahrTrend !== null ? { vorjahr: Number(vorjahrTrend) } : undefined
+            snapshotTrend: vorjahrTrend !== null ? { vorjahr: Number(vorjahrTrend) } : undefined,
+            snapshots: chartSnapshots
           });
         }
       } catch (err: any) {

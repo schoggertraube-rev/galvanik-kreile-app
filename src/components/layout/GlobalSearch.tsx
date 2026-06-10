@@ -11,6 +11,7 @@ import type { SearchSuggestion } from '@/types/search'
 import { globalSearchAction } from '@/app/global-search-actions'
 import { GlobalSearchAIResult } from './GlobalSearchAIResult'
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
+import { useCustomerOverlay } from "@/components/customers/useCustomerOverlay";
 import { motion } from 'framer-motion';
 import { useGlobalSearch } from '@/features/analyse/hooks/useGlobalSearch';
 
@@ -19,6 +20,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   const [searchTerm, setSearchTerm] = useState('')
   const [activeAIQuery, setActiveAIQuery] = useState("");
   const { openOrder } = useOrderModal();
+  const { open: openCustomer } = useCustomerOverlay();
   const [globalResults, setGlobalResults] = useState<Record<string, any>[]>([]);
   const [prevOpen, setPrevOpen] = useState(open)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -413,11 +415,10 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                   </div>
                   <div className="space-y-1">
                     {filteredCustomers.map(c => (
-                      <Link 
+                      <button 
                         key={c.id} 
-                        href={`/customers/${c.id}`}
-                        onClick={handleClose}
-                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
+                        onClick={() => { handleClose(); openCustomer(c.id); }}
+                        className="w-full text-left flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
                       >
                         <div className="flex items-center gap-3">
                           <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-bold text-xs shrink-0 shadow-inner ${getAvatarColor(c.title)}`}>
@@ -429,7 +430,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                           </div>
                         </div>
                         <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
-                      </Link>
+                      </button>
                     ))}
                   </div>
                 </div>

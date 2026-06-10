@@ -10,8 +10,10 @@ import {
 } from "lucide-react";
 
 export function OrderOverlay() {
+  const stack = useOverlayStore(state => state.stack);
   const orderStack = useOverlayStore((state) => state.orderStack);
   const popOrder = useOverlayStore((state) => state.popOrder);
+  const openCustomer = useOverlayStore((state) => state.openCustomer);
   const [showPayment, setShowPayment] = useState(false);
   const [showMail, setShowMail] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | 'new' | null>(null);
@@ -22,9 +24,13 @@ export function OrderOverlay() {
 
   if (!currentOrderId) return null;
 
+  // Calculate dynamic z-index based on stack position
+  const stackIndex = stack.findLastIndex(item => item.type === 'order' && item.id === currentOrderId);
+  const zIndex = 1000 + stackIndex * 10;
+
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-[var(--ci-ink)]/40 backdrop-blur-sm z-[999] flex items-center justify-center">
+      <div className="fixed inset-0 bg-[var(--ci-ink)]/40 backdrop-blur-sm flex items-center justify-center" style={{ zIndex }}>
         <div className="bg-[var(--ci-surface)] p-8 rounded-[18px] shadow-lg flex flex-col items-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--ci-ink)] mb-4"></div>
           <span className="text-[var(--ci-ink-2)] font-medium text-sm">Lade Auftragsdaten...</span>
@@ -35,7 +41,7 @@ export function OrderOverlay() {
 
   if (!orderData) {
     return (
-      <div className="fixed inset-0 bg-[var(--ci-ink)]/40 backdrop-blur-sm z-[999] flex items-center justify-center">
+      <div className="fixed inset-0 bg-[var(--ci-ink)]/40 backdrop-blur-sm flex items-center justify-center" style={{ zIndex }}>
         <div className="bg-[var(--ci-surface)] p-8 rounded-[18px] shadow-lg max-w-md w-full text-center">
           <AlertTriangle className="h-10 w-10 text-[var(--ci-warn)] mx-auto mb-4" />
           <h3 className="text-lg font-serif text-[var(--ci-ink)] mb-2">Auftrag nicht gefunden</h3>
@@ -60,8 +66,8 @@ export function OrderOverlay() {
         .ci-modal-wrap {
           /* Tokens from ci-tokens.css are applied globally */
         }
-        .ci-backdrop { position: fixed; inset: 0; background: rgba(26, 31, 46, 0.42); backdrop-filter: blur(8px); z-index: 998; }
-        .ci-modal-container { position: fixed; inset: 0; z-index: 999; display: flex; justify-content: center; align-items: flex-start; padding-top: 32px; overflow-y: auto; padding-bottom: 32px; }
+        .ci-backdrop { position: fixed; inset: 0; background: rgba(26, 31, 46, 0.42); backdrop-filter: blur(8px); z-index: -1; }
+        .ci-modal-container { position: fixed; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 32px; overflow-y: auto; padding-bottom: 32px; }
         .ci-modal { width: 100%; max-width: 1080px; background: var(--ci-surface); border-radius: var(--ci-radius-card); box-shadow: 0 1px 2px rgba(20,15,5,0.04), 0 12px 32px rgba(20,15,5,0.08); overflow: hidden; border: 1px solid var(--ci-border); font-family: var(--ci-font-sans); color: var(--ci-ink); }
         .ci-modal-head { padding: 24px 28px 18px; border-bottom: 1px solid var(--ci-border); display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
         .ci-head-left { flex: 1; }
@@ -160,7 +166,7 @@ export function OrderOverlay() {
         .ci-btn-primary:hover { background: #2A3045; }
       `}</style>
 
-      <div className="ci-modal-wrap">
+      <div className="ci-modal-wrap fixed inset-0" style={{ zIndex }}>
         <div className="ci-backdrop" onClick={popOrder}></div>
         <div className="ci-modal-container">
           <div className="ci-modal">
@@ -174,7 +180,13 @@ export function OrderOverlay() {
                   {orderData.priority === 'express' && <span className="ci-pill ci-pill-accent"><AlertTriangle className="w-3 h-3"/>Express</span>}
                   <span className="ci-pill ci-pill-warn"><span className="w-1.5 h-1.5 bg-[var(--ci-warn)] rounded-full"></span>{orderData.station || 'Wareneingang'}</span>
                   {orderData.dueDate && <span className="ci-pill ci-pill-success">Fällig {new Date(orderData.dueDate).toLocaleDateString()}</span>}
-                  <button className="ci-pill ci-pill-customer flex items-center gap-1">
+                  <button 
+                    className="ci-pill ci-pill-customer flex items-center gap-1"
+                    onClick={() => {
+                      const cid = orderData.customer?.id || orderData.customerId;
+                      if (cid) openCustomer(cid);
+                    }}
+                  >
                     <Info className="w-3 h-3"/> {orderData.customer?.name || orderData.customerName || "Unbekannter Kunde"} <ArrowRight className="w-3 h-3"/>
                   </button>
                 </div>

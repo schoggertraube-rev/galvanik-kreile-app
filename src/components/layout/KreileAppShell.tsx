@@ -14,6 +14,7 @@ import { RealtimeSyncProvider } from "./RealtimeSyncManager";
 import { ParkedCallProvider } from "@/contexts/ParkedCallContext";
 import { FloatingParkedCall } from "@/components/telefonnotiz/FloatingParkedCall";
 import { OrderOverlay } from "@/components/orders/OrderOverlay";
+import { CustomerOverlay } from "@/components/customers/CustomerOverlay";
 
 export function KreileAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -39,6 +40,7 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
             {children}
             <FloatingParkedCall />
             <OrderOverlay />
+            <CustomerOverlay />
           </div>
         </RealtimeSyncProvider>
       </ParkedCallProvider>
@@ -102,6 +104,9 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
           
           {/* Global Order Overlay Drawer */}
           <OrderOverlay />
+          
+          {/* Global Customer Overlay */}
+          <CustomerOverlay />
         </div>
       </RealtimeSyncProvider>
     </ParkedCallProvider>
