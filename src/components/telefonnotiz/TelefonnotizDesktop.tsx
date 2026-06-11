@@ -84,6 +84,9 @@ export function TelefonnotizDesktop() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [forceAI, setForceAI] = useState(false);
+  
+  // Saved Note State
+  const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
 
   // ===== SPEECH RECOGNITION (Stable) =====
   const [recordingWanted, setRecordingWanted] = useState(false);
@@ -227,8 +230,26 @@ export function TelefonnotizDesktop() {
   }, []);
 
   // Handlers
-  const handleAnalyze = useCallback(() => {
+  const handleAnalyze = useCallback(async () => {
     if (!text.trim()) return;
+    
+    // Save to DB before proceeding (Phase 3 requirement)
+    try {
+      setIsSaving(true);
+      const noteData = {
+        rawText: text,
+        category: "Neuanfrage",
+        urgency: "Normal",
+        status: "open",
+        extractionJson: { mode: "auto" }
+      };
+      await createPhoneNote(noteData);
+    } catch (e) {
+      console.error("Fehler beim Speichern der Notiz:", e);
+    } finally {
+      setIsSaving(false);
+    }
+
     setStep(3);
   }, [text]);
 
@@ -305,17 +326,7 @@ export function TelefonnotizDesktop() {
         setShowSuccess(true);
         setShowUndo(true);
         setTimeout(() => setShowUndo(false), 10000);
-        
-        // Spec 44: ErfassungModal aufrufen
-        openErfassung("phone", {
-          id: res.data?.id,
-          extracted: {
-            customer: result?.matchedCustomer,
-            items: [],
-            order: result?.matchedOrder,
-            behaviorNote: null
-          }
-        });
+        setSavedNoteId(res.data?.id || null);
       }
     } catch (err) {
       console.error("Save failed:", err);
@@ -773,13 +784,25 @@ export function TelefonnotizDesktop() {
                   ))}
                 </div>
               )}
-              <div style={{ display: "flex", gap: 8, maxWidth: 320, width: "100%" }}>
-                <Link href="/" style={{ flex: 1, textAlign: "center", padding: "12px 16px", borderRadius: 12, border: "1px solid var(--tn-line)", background: "var(--tn-paper)", fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, color: "var(--tn-ink)", textDecoration: "none" }}>
-                  Zur Startseite
-                </Link>
-                <Link href="/kommunikation" style={{ flex: 1, textAlign: "center", padding: "12px 16px", borderRadius: 12, border: "none", background: "var(--tn-ink)", fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, color: "var(--tn-cream)", textDecoration: "none" }}>
-                  Kommunikation
-                </Link>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 320, width: "100%" }}>
+                <button
+                  onClick={() => openErfassung({ mode: "customer", intent: "create_customer", source: "phone", sourceRef: savedNoteId, prefill: { rawText: text, ...result?.fields } })}
+                  style={{ padding: "12px 16px", borderRadius: 12, border: "1px solid var(--tn-line)", background: "var(--tn-paper)", fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, color: "var(--tn-ink)", cursor: "pointer" }}
+                >
+                  Kunde aus Notiz anlegen
+                </button>
+                <button
+                  onClick={() => openErfassung({ mode: "order", intent: "create_order", source: "phone", sourceRef: savedNoteId, customerId: result?.matchedCustomer?.id, prefill: { rawText: text, ...result?.fields } })}
+                  style={{ padding: "12px 16px", borderRadius: 12, border: "1px solid var(--tn-line)", background: "var(--tn-paper)", fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, color: "var(--tn-ink)", cursor: "pointer" }}
+                >
+                  Auftrag/KV aus Notiz anlegen
+                </button>
+                <button
+                  onClick={() => { clearDraft(); router.push(returnPath); }}
+                  style={{ padding: "12px 16px", borderRadius: 12, border: "none", background: "var(--tn-ink)", fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, color: "var(--tn-cream)", cursor: "pointer" }}
+                >
+                  Nur Notiz behalten
+                </button>
               </div>
             </div>
           )}

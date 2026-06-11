@@ -688,24 +688,32 @@ export function Kommandozentrale({
   }, [actionsApplied, dossier.preparedActions.length, onClose]);
 
   const handleApplyAll = useCallback(() => {
-    // Öffne den InquiryFlow mit den erkannten Daten
-    openErfassung("inquiry", {
-      id: `inquiry_${Date.now()}`,
-      extracted: {
-        customer: matchData?.matchedCustomer || {
-          id: customerId || "unknown",
-          name: customerName,
-          city: customerCity || ""
-        },
-        order: matchData?.matchedOrder || null,
-        items: [],
-        behaviorNote: null
-      }
-    });
+    // Phase 4: Route to central flow for quotes
+    if (customerId) {
+      openErfassung({
+        mode: "order",
+        intent: "create_quote",
+        customerId: customerId,
+        source: "inquiry",
+        sourceRef: `inquiry_${Date.now()}`,
+        prefill: {
+          customer: matchData?.matchedCustomer || { id: customerId, name: customerName, city: customerCity },
+          order: matchData?.matchedOrder || null,
+        }
+      });
+    } else {
+      openErfassung({
+        mode: "gate",
+        intent: "create_quote",
+        source: "inquiry",
+        sourceRef: `inquiry_${Date.now()}`,
+        prefill: {
+          rawText: messages.map(m => m.text).join('\n')
+        }
+      });
+    }
     setActionsApplied(true);
-    // Wir schließen die Kommandozentrale nach kurzer Zeit oder belassen sie offen, 
-    // aber setActionsApplied(true) zeigt den Haken an.
-  }, [openErfassung, matchData, customerId, customerName, customerCity]);
+  }, [openErfassung, matchData, customerId, customerName, customerCity, messages]);
 
   const handleHighlightClick = useCallback((key: TileKey) => {
     setActiveDetail(key);

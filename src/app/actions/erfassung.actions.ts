@@ -333,3 +333,162 @@ export async function uebernehmeVorlage(input: {
 
   return { success: true, zeit_buchungen: zCount, verbrauch_buchungen: vCount, gesamt_kosten_eur: kostenGesamt };
 }
+
+import { db } from "@/db";
+import { customers, orders, items, events } from "@/db/schema";
+import { eq, desc, like } from "drizzle-orm";
+import { createId } from "@paralleldrive/cuid2";
+import { checkAppAuth } from "@/lib/server/authHelper";
+import { revalidatePath } from "next/cache";
+
+export async function createCustomerFromErfassung(input: any) {
+  // Check write permissions
+  const auth = await checkAppAuth("write");
+  if (!auth.ok) return { ok: false, error: auth.message };
+
+  // Validate required fields per spec
+  const validationErrors: string[] = [];
+  if (!input.contactName && !input.company) validationErrors.push("Name oder Firma ist erforderlich");
+  if (!input.source) validationErrors.push("Quelle (source) ist erforderlich");
+  if (validationErrors.length) {
+    return { ok: false, error: validationErrors.join(", ") };
+  }
+
+  if (!db) return { ok: false, error: "DB_ERROR" };
+
+  try {
+    const customerId = createId();
+    const isCompany = !!input.company;
+    const customerType = input.isLead ? "lead" : (isCompany ? "business" : "privat");
+
+    const newCustomer = {
+      id: customerId,
+      name: input.contactName || input.company || "Unbenannter Kunde",
+      companyName: input.company || null,
+      contactPerson: input.contactName || null,
+      email: input.email || null,
+      phone: input.phone || null,
+      address: input.address || null,
+      type: customerType,
+      isLead: input.isLead || false,
+      source: input.source || "manual",
+      sourceRef: input.sourceRef || null,
+      behaviorNotes: input.behaviorNote || null,
+      // No spreading of arbitrary input fields to prevent schema crashes
+    };
+
+    await db.insert(customers).values(newCustomer);
+    const verify = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
+    if (verify.length === 0) {
+      throw new Error("Insert failed silently");
+    }
+    revalidatePath("/");
+    return { ok: true, customer: verify[0] };
+  } catch (err: any) {
+    console.error("Failed to create customer:", {
+      message: err.message,
+      details: (err as any).details,
+      hint: (err as any).hint,
+    });
+    return { ok: false, error: err.message || "Failed to create customer" };
+  }
+}
+
+export async function createOrderFromErfassung(input: any) {
+  // Check write permissions
+  const auth = await checkAppAuth("write");
+  if (!auth.ok) return { ok: false, error: auth.message };
+
+  if (!db) return { ok: false, error: "DB_ERROR" };
+
+  // Validate required fields per spec
+  const validationErrors: string[] = [];
+  if (!input.customerId) validationErrors.push("Kunden-ID ist erforderlich");
+  if (!input.title) validationErrors.push("Titel ist erforderlich");
+  if (!input.source) validationErrors.push("Quelle (source) ist erforderlich");
+  if (validationErrors.length) {
+    return { ok: false, error: validationErrors.join(", ") };
+  }
+
+  try {
+    const orderId = createId();
+    const year = new Date().getFullYear();
+
+    // Generate robust order number
+    const prefix = input.isQuote ? "KV" : "A";
+    const pattern = `${prefix}-${year}-%`;
+    const existingOrders = await db
+      .select({ orderNumber: orders.orderNumber })
+      .from(orders)
+      .where(like(orders.orderNumber, pattern))
+      .orderBy(desc(orders.orderNumber))
+      .limit(1);
+
+    let sequenceNum = 1;
+    if (existingOrders.length > 0 && existingOrders[0].orderNumber) {
+      const parts = existingOrders[0].orderNumber.split("-");
+      if (parts.length === 3) {
+        sequenceNum = parseInt(parts[2], 10) + 1;
+      }
+    }
+    const sequenceString = sequenceNum.toString().padStart(4, "0");
+    const orderNumber = `${prefix}-${year}-${sequenceString}`;
+
+    const newOrder = {
+      id: orderId,
+      tenantId: "galvanik-kreile",
+      orderNumber,
+      customerId: input.customerId,
+      title: input.title,
+      currentStationId: "wareneingang",
+      status: "in_progress",
+      priorityComputed: input.priority || "green",
+      isQuote: input.isQuote || false,
+      quoteStatus: input.isQuote ? "offen" : null,
+      source: input.source,
+      sourceRef: input.sourceRef || null,
+      freetextOriginal: input.freetextOriginal || null,
+      dueDate: input.dueDate ? new Date(input.dueDate) : null,
+    };
+
+    await db.insert(orders).values(newOrder);
+
+    if (input.items && Array.isArray(input.items) && input.items.length > 0) {
+      const newItems = input.items.map((p: any) => ({
+        id: createId(),
+        tenantId: "galvanik-kreile",
+        orderId,
+        customerId: input.customerId,
+        name: p.name || "Unbekanntes Teil",
+        quantity: parseInt(p.quantity) || 1,
+        currentStationId: "wareneingang",
+      }));
+      await db.insert(items).values(newItems);
+    }
+
+    await db.insert(events).values({
+      id: createId(),
+      tenantId: "galvanik-kreile",
+      orderId,
+      eventType: "ORDER_CREATED",
+      description: input.isQuote ? "KV erstellt" : "Auftrag erstellt",
+      station: "wareneingang",
+    });
+
+    const verify = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+    if (verify.length === 0) {
+      throw new Error("Insert failed silently");
+    }
+
+    revalidatePath("/");
+
+    return { ok: true, order: verify[0] };
+  } catch (err: any) {
+    console.error("Failed to create order:", {
+      message: err.message,
+      details: (err as any).details,
+      hint: (err as any).hint,
+    });
+    return { ok: false, error: err.message || "Failed to create order" };
+  }
+}

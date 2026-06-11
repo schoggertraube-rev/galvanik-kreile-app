@@ -6,21 +6,35 @@ import { ManualWizard } from "./ManualFlow/ManualWizard";
 import { ScanResult } from "./ScanFlow/ScanResult";
 import { ScanUpload } from "./ScanFlow/ScanUpload";
 import { InquiryToQuote } from "./InquiryFlow/InquiryToQuote";
+import { CustomerWizard } from "./ManualFlow/CustomerWizard";
+import { StartGate } from "./StartGate";
 
 export function ErfassungModal() {
-  const { flow, contextData, closeErfassung } = useErfassung();
+  const { options, isDirty, closeErfassung } = useErfassung();
+
+  if (!options) return null;
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget && !isDirty) {
+      closeErfassung();
+    }
+  };
 
   const renderFlow = () => {
-    switch (flow) {
-      case "manual":
+    switch (options.mode) {
+      case "gate":
+        return <StartGate />;
+      case "order":
         return <ManualWizard />;
+      case "customer":
+        return <CustomerWizard />;
       case "scan":
-        if (contextData?.scanResult) {
-          return <ScanResult data={contextData.scanResult} />;
+        if (options.prefill?.scanResult) {
+          return <ScanResult data={options.prefill.scanResult} />;
         }
         return <ScanUpload />;
       case "inquiry":
-        return <InquiryToQuote data={contextData} />;
+        return <InquiryToQuote data={options.prefill} />;
       case "phone":
         return <div>Telefon Flow (additiv, nicht im Haupt-Modal)</div>;
       default:
@@ -29,7 +43,10 @@ export function ErfassungModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-white/40 backdrop-blur-md animate-in fade-in duration-200">
+    <div 
+      className="fixed inset-0 z-[2000] flex items-center justify-center p-4 sm:p-6 bg-[#1a1c23]/40 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={handleBackdropClick}
+    >
       <div className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col max-h-[90vh] overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
         
         {/* Header (optional, if flows provide their own headers this can be minimized) */}

@@ -8,6 +8,7 @@ export function ScanUpload() {
   const { openErfassung, closeErfassung } = useErfassung();
   const [isUploading, setIsUploading] = useState(false);
   const [statusText, setStatusText] = useState("");
+  const [fallbackState, setFallbackState] = useState<{ type: "ai_failed" | "storage_failed", record?: any } | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -50,18 +51,57 @@ export function ScanUpload() {
       }
 
       if (scanRecord?.status === "processed") {
-        openErfassung("scan", { scanResult: scanRecord });
+        openErfassung({ mode: "scan", prefill: { scanResult: scanRecord } });
       } else {
-        alert("Analyse fehlgeschlagen oder Timeout.");
-        closeErfassung();
+        // Fallback: Uploaded but AI failed
+        setFallbackState({ type: "ai_failed", record: scanRecord });
+        setIsUploading(false);
       }
       
     } catch (err) {
       console.error(err);
-      alert("Fehler beim Scan-Vorgang");
+      // Fallback: Complete failure (storage/network)
+      setFallbackState({ type: "storage_failed" });
       setIsUploading(false);
     }
   };
+
+  if (fallbackState) {
+    return (
+      <div className="p-10 flex flex-col items-center justify-center min-h-[60vh] text-center">
+        <div className="w-16 h-16 bg-yellow-100 text-yellow-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+          <FileText className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-semibold text-gray-900 mb-3 tracking-tight">
+          Manuelle Weiterverarbeitung
+        </h2>
+        {fallbackState.type === "ai_failed" ? (
+          <p className="text-gray-500 mb-8 max-w-md mx-auto">
+            Die Datei wurde erfolgreich gespeichert, aber die KI-Auswertung konnte nicht abgeschlossen werden. Du kannst die Datei nun manuell einem neuen Vorgang zuweisen.
+          </p>
+        ) : (
+          <p className="text-gray-500 mb-8 max-w-md mx-auto">
+            Es gab ein Problem beim Hochladen der Datei. Du kannst den Vorgang trotzdem manuell ohne Datei fortsetzen.
+          </p>
+        )}
+        
+        <div className="flex flex-col gap-3 w-full max-w-xs mx-auto">
+          <button 
+            onClick={() => openErfassung({ mode: "order", source: "scan", sourceRef: fallbackState.record?.id })}
+            className="w-full py-3 px-4 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
+          >
+            Manuell weiterverarbeiten
+          </button>
+          <button 
+            onClick={() => { setFallbackState(null); setIsUploading(false); }}
+            className="w-full py-3 px-4 bg-white text-gray-700 border border-gray-300 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+          >
+            Erneut versuchen
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-10 flex flex-col items-center justify-center min-h-[60vh] text-center">

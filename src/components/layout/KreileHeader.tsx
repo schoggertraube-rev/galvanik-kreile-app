@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 // Image from next/image available but not used for dynamic logo URLs
-import { Search, Camera, Bell, Calendar, Menu } from "lucide-react";
+import { Search, Camera, Bell, Calendar, Menu, Plus } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { useState, useEffect, useRef } from "react";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
@@ -151,7 +151,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              openErfassung("scan");
+              openErfassung({ mode: "scan" });
             }}
             className="p-2 hover:bg-neutral-gray-100 rounded-full transition-colors z-10"
             title="Schnellannahme (Scan)"
@@ -170,6 +170,15 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           className="md:hidden w-9 h-9 rounded-full bg-white border border-neutral-gray-100 flex items-center justify-center text-navy-900"
         >
           <Search className="w-4 h-4" />
+        </button>
+
+        {/* Header Plus (Generic Erfassung) */}
+        <button
+          onClick={() => openErfassung({ mode: "gate" })}
+          className="w-9 h-9 rounded-full bg-accent-orange text-white flex items-center justify-center hover:bg-accent-orange/90 transition-all shadow-sm"
+          title="Neu anlegen"
+        >
+          <Plus className="w-5 h-5" />
         </button>
 
         {/* Datum-Pill */}

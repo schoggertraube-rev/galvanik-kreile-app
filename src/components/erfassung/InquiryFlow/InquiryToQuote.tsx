@@ -9,9 +9,10 @@ export function InquiryToQuote({ data }: { data: any }) {
 
   const handleCreateQuote = () => {
     // Open manual wizard prefilled with inquiry extraction and isQuote = true
-    openErfassung("manual", {
-      prefill: data.extracted,
-      isQuote: true,
+    openErfassung({
+      mode: "order",
+      intent: "create_quote",
+      prefill: { customer: data.customer, order: { title: "KV-Anfrage aus Web" }, rawText: data.text },
       source: "inquiry",
       sourceRef: data.id
     });

@@ -78,7 +78,8 @@ export async function createOrderDb(data: Record<string, unknown>): Promise<Acti
   try {
     const orderId = (typeof data.id === 'string' ? data.id : undefined) || createId();
     const year = new Date().getFullYear();
-    const sequenceNumber = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+    // Generate sequence number based on timestamp since this is an older action
+    const sequenceNumber = Math.floor(Date.now() % 10000).toString().padStart(4, '0');
     const orderNumber = `A-${year}-${sequenceNumber}`;
     
     const newOrder = {

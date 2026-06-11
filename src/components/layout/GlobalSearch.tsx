@@ -8,10 +8,11 @@ import { findActions, buildFallbackSuggestion } from '@/lib/search/fuzzy'
 import { SEARCH_ACTIONS } from '@/lib/search/actionRegistry'
 import { getRecentSearches, addRecentSearch } from '@/lib/search/recent'
 import type { SearchSuggestion } from '@/types/search'
-import { globalSearchAction } from '@/app/global-search-actions'
+import { globalSearch } from '@/app/actions/search.actions'
 import { GlobalSearchAIResult } from './GlobalSearchAIResult'
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import { useCustomerOverlay } from "@/components/customers/useCustomerOverlay";
+import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 import { motion } from 'framer-motion';
 import { useGlobalSearch } from '@/features/analyse/hooks/useGlobalSearch';
 
@@ -21,6 +22,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   const [activeAIQuery, setActiveAIQuery] = useState("");
   const { openOrder } = useOrderModal();
   const { open: openCustomer } = useCustomerOverlay();
+  const { openErfassung } = useErfassung();
   const [globalResults, setGlobalResults] = useState<Record<string, any>[]>([]);
   const [prevOpen, setPrevOpen] = useState(open)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -55,7 +57,13 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   useEffect(() => {
     if (searchTerm.length > 2) {
       const timer = setTimeout(() => {
-        globalSearchAction(searchTerm).then(res => setGlobalResults(res))
+        globalSearch(searchTerm).then(res => {
+          if (res.ok && res.results) {
+            setGlobalResults(res.results);
+          } else {
+            setGlobalResults([]);
+          }
+        })
       }, 300)
       return () => clearTimeout(timer)
     } else {
@@ -89,6 +97,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
 
   const filteredOrders = globalResults.filter(r => r.type === 'order')
   const filteredCustomers = globalResults.filter(r => r.type === 'customer')
+  const filteredItems = globalResults.filter(r => r.type === 'item')
   const filteredBelege = globalResults.filter(r => r.type === 'beleg')
   const filteredRechnungen = globalResults.filter(r => r.type === 'rechnung')
   const filteredLieferanten = globalResults.filter(r => r.type === 'lieferant')
@@ -131,6 +140,13 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   const handleSuggestionClick = (route: string) => {
     if (route.startsWith('?ai_search=')) {
       setForceAiMode(true);
+    } else if (route.startsWith('?erfassung_gate=')) {
+      const text = decodeURIComponent(route.split('=')[1] || "");
+      openErfassung({
+        mode: "gate",
+        prefill: { rawText: text }
+      });
+      handleClose();
     } else {
       router.push(route);
       handleClose();
@@ -427,6 +443,34 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                           <div>
                             <span className="font-extrabold text-sm text-navy-900 block leading-tight">{c.title}</span>
                             <span className="text-xs text-navy-500 font-medium block mt-0.5">{c.subtitle}</span>
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {filteredItems.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="px-2">
+                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">🔩 Teile ({filteredItems.length} Treffer)</span>
+                  </div>
+                  <div className="space-y-1">
+                    {filteredItems.map(t => (
+                      <button 
+                        key={t.id} 
+                        onClick={() => { handleClose(); router.push(t.url); }}
+                        className="w-full text-left flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-gray-50 to-gray-100 border border-gray-200 flex items-center justify-center text-gray-700 shrink-0">
+                            <Package className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="font-extrabold text-sm text-navy-900 block leading-tight">{t.title}</span>
+                            <span className="text-xs text-navy-500 font-medium block mt-0.5">{t.subtitle}</span>
                           </div>
                         </div>
                         <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />

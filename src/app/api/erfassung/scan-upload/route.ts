@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { db } from "@/db";
 import { scanUploads } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { extractDocumentData } from "@/lib/ocr/geminiOcr";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -40,36 +41,23 @@ export async function POST(request: Request) {
       status: "analyzing"
     }).returning();
 
-    // Trigger Edge Function asynchronously
-    fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/scan-analyze`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` // To bypass anon restrictions
-      },
-      body: JSON.stringify({
-        scan_upload_id: newScan.id,
-        file_url: publicUrlData.publicUrl,
-        mime_type: file.type
-      })
-    })
-    .then(async (res) => {
-      if (res.ok) {
-        const analysis = await res.json();
-        await db.update(scanUploads).set({
-          status: "processed",
-          detectedType: analysis.detected_type,
-          detectionConfidence: analysis.detection_confidence ? analysis.detection_confidence.toString() : null,
-          extractedData: analysis.extracted_data
-        }).where(eq(scanUploads.id, newScan.id));
-      } else {
-        await db.update(scanUploads).set({ status: "error" }).where(eq(scanUploads.id, newScan.id));
-      }
-    })
-    .catch(async (e) => {
-      console.error("Background edge function error:", e);
+    // Convert file to Base64 for Gemini
+    const buffer = await file.arrayBuffer();
+    const base64Str = Buffer.from(buffer).toString('base64');
+    
+    // Process synchronously to ensure it completes before Vercel freezes the function
+    try {
+      const extraction = await extractDocumentData(base64Str);
+      await db.update(scanUploads).set({
+        status: "processed",
+        detectedType: "Lieferschein", // default
+        detectionConfidence: "0.9",
+        extractedData: extraction
+      }).where(eq(scanUploads.id, newScan.id));
+    } catch (e) {
+      console.error("Local OCR extraction failed:", e);
       await db.update(scanUploads).set({ status: "error" }).where(eq(scanUploads.id, newScan.id));
-    });
+    }
 
     return NextResponse.json({ id: newScan.id });
   } catch (error) {

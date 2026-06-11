@@ -93,7 +93,7 @@ function WarendurchlaufLeitstandContent() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
               {/* Kamera — primary */}
               <button
-                onClick={() => openErfassung("scan")}
+                onClick={() => openErfassung({ mode: "scan" })}
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md text-center text-white"
                 style={{ background: "#1a6b38", border: "1.5px solid #1a6b38" }}
               >
@@ -119,7 +119,7 @@ function WarendurchlaufLeitstandContent() {
 
               {/* Manuell anlegen */}
               <button
-                onClick={() => openErfassung("manual")}
+                onClick={() => openErfassung({ mode: "gate" })}
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
                 style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
               >

@@ -8,9 +8,10 @@ export function ScanResult({ data }: { data: any }) {
   const { openErfassung, closeErfassung } = useErfassung();
 
   const handleNewOrder = () => {
-    openErfassung("manual", { 
-      prefill: data.extractedData,
-      source: "foto",
+    openErfassung({
+      mode: "order",
+      prefill: data.extracted,
+      source: "scan",
       sourceRef: data.id
     });
   };

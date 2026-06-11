@@ -100,13 +100,13 @@ export function buildFallbackSuggestion(input: string): SearchSuggestion[] {
     }
   }
 
-  // Ultimate fallback: help page
+  // Ultimate fallback: ErfassungGate
   return [
     {
       type: "fuzzy",
-      label: "🔍 Suchhilfe & Tipps",
-      secondary: "Suche nach Kunden, Auftragsnummern, Teilen oder Aktionen",
-      routeOnSelect: "/",
+      label: "✨ Neu anlegen",
+      secondary: `Erfassung für "${input}" starten`,
+      routeOnSelect: `?erfassung_gate=${encodeURIComponent(input)}`,
       score: 0.1,
     },
   ];

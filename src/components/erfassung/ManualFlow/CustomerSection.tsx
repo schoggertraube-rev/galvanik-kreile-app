@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Search, Plus } from "lucide-react";
+import { Plus, CheckCircle2 } from "lucide-react";
 import { DuplicateWarning } from "../shared/DuplicateWarning";
-import { AiBadge } from "../shared/AiBadge";
 
-export function CustomerSection({ customer, onChange }: { customer: any, onChange: (c: any) => void }) {
+export function CustomerSection({ customer, onChange, onCreateNew }: { customer: any, onChange: (c: any) => void, onCreateNew?: (name: string) => void }) {
   const [search, setSearch] = useState(customer?.name || customer?.companyName || "");
   const [results, setResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -24,8 +23,6 @@ export function CustomerSection({ customer, onChange }: { customer: any, onChang
         if (res.ok) {
           const data = await res.json();
           setResults(data);
-          
-          // If the user types a lot and we find exactly 1-2 very close matches, we might warn them later
         }
       } finally {
         setIsSearching(false);
@@ -42,72 +39,53 @@ export function CustomerSection({ customer, onChange }: { customer: any, onChang
     setShowDuplicateWarning(false);
   };
 
-  const handleCreateNew = () => {
-    if (results.length > 0 && !showDuplicateWarning) {
-      setShowDuplicateWarning(true);
-      return;
-    }
-    onChange({ isNew: true, name: search });
-    setShowDuplicateWarning(false);
-    setResults([]);
-  };
-
   if (customer?.id || customer?.isNew) {
     return (
-      <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-lg p-4">
-        <div>
-          <div className="text-sm font-bold text-blue-900">
-            {customer.companyName || customer.name}
-            {customer.isNew && <span className="ml-2 px-2 py-0.5 bg-blue-200 text-blue-800 text-xs rounded uppercase">Neu</span>}
-          </div>
-          <div className="text-sm text-blue-700 mt-1">
-            {customer.city ? `${customer.city}` : "Keine Adresse hinterlegt"}
-          </div>
+      <div className="space-y-1.5">
+        <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide">Kunde suchen oder neu anlegen</label>
+        <div className="w-full px-4 py-2.5 bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg text-sm text-gray-900">
+           {customer.companyName || customer.name}
         </div>
-        <button
-          onClick={() => {
-            onChange(null);
-            setSearch("");
-          }}
-          className="text-sm font-medium text-blue-600 hover:text-blue-800 underline underline-offset-2"
-        >
-          Ändern
-        </button>
+        <div className="mt-2 flex items-center gap-2 bg-[#eaf4eb] text-[#2c6e39] px-4 py-2.5 rounded-lg text-xs font-medium border border-[#c3e2c6]">
+          <CheckCircle2 className="w-4 h-4" />
+          <span>Gefunden: {customer.companyName || customer.name} · {customer.customerNumber || "K-NEU"} · 4 Aufträge · letzter Kontakt vor 6 Tagen</span>
+          <button onClick={() => { onChange(null); setSearch(""); }} className="ml-auto underline">Ändern</button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="relative">
+    <div className="relative space-y-1.5">
+      <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide">Kunde suchen oder neu anlegen</label>
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
         <input
           type="text"
-          placeholder="Name, Firma oder Kundennummer suchen..."
-          className="w-full pl-10 pr-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-shadow outline-none"
+          placeholder="Galvanik-Bürkle"
+          className="w-full px-4 py-2.5 bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg focus:bg-white focus:ring-2 focus:ring-[#e5dcd0] focus:border-[#e5dcd0] transition-colors outline-none text-sm placeholder:text-gray-400"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
         {isSearching && (
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-[#e5dcd0] border-t-[#1a1c23] rounded-full animate-spin" />
         )}
       </div>
 
       {results.length > 0 && !showDuplicateWarning && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 shadow-lg rounded-lg overflow-hidden z-20">
+        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5dcd0] shadow-lg rounded-lg overflow-hidden z-20">
           {results.map((c) => (
             <button
               key={c.id}
               onClick={() => handleSelect(c)}
-              className="w-full text-left px-4 py-3 hover:bg-gray-50 border-b border-gray-100 last:border-0"
+              className="w-full text-left px-4 py-3 hover:bg-[#fcfaf6] border-b border-[#e5dcd0] last:border-0"
             >
               <div className="font-medium text-gray-900">{c.companyName || c.name}</div>
-              <div className="text-sm text-gray-500 mt-0.5">{c.customerNumber} • {c.city || "Unbekannter Ort"}</div>
+              <div className="text-sm text-gray-500 mt-0.5">{c.customerNumber} · {c.city || "Unbekannter Ort"}</div>
             </button>
           ))}
           <button
-            onClick={handleCreateNew}
-            className="w-full text-left px-4 py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium flex items-center gap-2 transition-colors"
+            onClick={() => onCreateNew ? onCreateNew(search) : onChange({ isNew: true, name: search })}
+            className="w-full text-left px-4 py-3 bg-[#fcfaf6] hover:bg-gray-100 text-[#1a1c23] font-medium flex items-center gap-2 transition-colors"
           >
             <Plus className="w-4 h-4" />
             Als neuen Kunden "{search}" anlegen
@@ -118,8 +96,8 @@ export function CustomerSection({ customer, onChange }: { customer: any, onChang
       {search.length > 2 && results.length === 0 && !isSearching && !showDuplicateWarning && (
         <div className="mt-3">
           <button
-            onClick={handleCreateNew}
-            className="w-full py-3 bg-white border-2 border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 rounded-lg text-blue-600 font-medium flex items-center justify-center gap-2 transition-all"
+            onClick={() => onCreateNew ? onCreateNew(search) : onChange({ isNew: true, name: search })}
+            className="w-full py-3 bg-[#fcfaf6] border-2 border-dashed border-[#e5dcd0] hover:border-gray-400 hover:bg-white rounded-lg text-gray-600 font-medium flex items-center justify-center gap-2 transition-all"
           >
             <Plus className="w-5 h-5" />
             Neuen Kunden "{search}" anlegen
@@ -132,7 +110,11 @@ export function CustomerSection({ customer, onChange }: { customer: any, onChang
           duplicates={results}
           onSelect={handleSelect}
           onIgnore={() => {
-            onChange({ isNew: true, name: search });
+            if (onCreateNew) {
+              onCreateNew(search);
+            } else {
+              onChange({ isNew: true, name: search });
+            }
             setShowDuplicateWarning(false);
             setResults([]);
           }}

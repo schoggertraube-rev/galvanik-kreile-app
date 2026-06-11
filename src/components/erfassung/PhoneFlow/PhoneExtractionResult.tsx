@@ -8,16 +8,18 @@ export function PhoneExtractionResult({ data }: { data: any }) {
   const { openErfassung, closeErfassung } = useErfassung();
 
   const handleCreateQuote = () => {
-    openErfassung("manual", {
+    openErfassung({
+      mode: "order",
+      intent: "create_quote",
       prefill: data.extracted,
-      isQuote: true,
       source: "phone",
       sourceRef: data.id
     });
   };
 
   const handleOnlyCustomer = () => {
-    openErfassung("manual", {
+    openErfassung({
+      mode: "customer",
       prefill: { customer: data.extracted?.customer, behaviorNote: data.extracted?.behaviorNote },
       source: "phone",
       sourceRef: data.id

@@ -9,6 +9,7 @@ import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
+import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 import {
   UserPlus, FilePlus, Camera, AlertTriangle,
   CheckCircle, Circle, Clock, AlertOctagon, Send, Activity, Info, Phone, RefreshCw, Sparkles, BarChart3
@@ -83,6 +84,7 @@ export default function HomeDashboard() {
   // Unified App Shortcuts
   const { openShortcut } = useAppShortcut();
   const { openOrder } = useOrderModal();
+  const { openErfassung } = useErfassung();
 
   const { isOnline, outboxItems, syncNow } = useSync();
 
@@ -209,6 +211,14 @@ export default function HomeDashboard() {
   const handleQuickClick = (card: any) => {
     if (card.id === 'kritisch') {
       setShowCriticalOrders(true);
+      return;
+    }
+    if (card.id === 'auftrag') {
+      openErfassung({ mode: 'order', source: 'manual' });
+      return;
+    }
+    if (card.id === 'kunde') {
+      openErfassung({ mode: 'customer', intent: 'create_customer', source: 'manual' });
       return;
     }
     if (card.shortcut) {

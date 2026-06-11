@@ -3,62 +3,56 @@
 import { useState, useEffect } from "react";
 import { useErfassung } from "../ErfassungProvider";
 import { User, Sparkles, ChevronDown, Check, Loader2 } from "lucide-react";
-import { CustomerSection } from "./CustomerSection";
-import { ItemsSection } from "./ItemsSection";
-import { DateSection } from "./DateSection";
-import { createOrderFromErfassung } from "@/app/actions/erfassung.actions";
+import { createCustomerFromErfassung } from "@/app/actions/erfassung.actions";
 
-export function ManualWizard() {
-  const { options, closeErfassung, setIsDirty } = useErfassung();
+export function CustomerWizard() {
+  const { options, closeErfassung, openErfassung, setIsDirty } = useErfassung();
   
-  // State for the three mandatory sections
-  const [customer, setCustomer] = useState<any>(options?.prefill?.customer || null);
-  const [items, setItems] = useState<any[]>(options?.prefill?.items || []);
-  const [dateInfo, setDateInfo] = useState<any>({ priority: options?.prefill?.order?.priority || "normal", shipping: "abholung" });
+  // State for the mandatory sections
+  const [company, setCompany] = useState(options?.prefill?.company || "");
+  const [contactName, setContactName] = useState(options?.prefill?.contactName || "");
+  const [email, setEmail] = useState(options?.prefill?.email || "");
+  const [phone, setPhone] = useState(options?.prefill?.phone || "");
+  const [address, setAddress] = useState(options?.prefill?.address || "");
   
   // Optional toggles
   const [showFreetext, setShowFreetext] = useState(false);
-  const [freetext, setFreetext] = useState("");
+  const [freetext, setFreetext] = useState(options?.prefill?.rawText || "");
   const [showBehavior, setShowBehavior] = useState(!!options?.prefill?.behaviorNote);
-  const [behaviorNote, setBehaviorNote] = useState(options?.prefill?.behaviorNote?.text || "");
-
+  const [behaviorNote, setBehaviorNote] = useState(options?.prefill?.behaviorNote || "");
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { openErfassung } = useErfassung();
+  const [successResult, setSuccessResult] = useState<any>(null);
 
   useEffect(() => {
-    const dirty = !!customer || items.length > 0 || freetext.trim().length > 0 || behaviorNote.trim().length > 0;
+    const dirty = company.trim().length > 0 || contactName.trim().length > 0 || email.trim().length > 0 || freetext.trim().length > 0 || behaviorNote.trim().length > 0;
     setIsDirty(dirty);
-  }, [customer, items, freetext, behaviorNote, setIsDirty]);
+  }, [company, contactName, email, freetext, behaviorNote, setIsDirty]);
 
   const handleSave = async () => {
-    // Basic validation
-    if (!customer?.id) return alert("Bitte wähle einen Kunden aus.");
-    if (items.length === 0) return alert("Bitte füge mindestens ein Teil hinzu.");
-    if (!dateInfo.dueDate) return alert("Bitte gib einen Liefertermin an.");
-
+    if (!company && !contactName) return alert("Bitte Firma oder Name angeben.");
+    
     setIsSubmitting(true);
     try {
-      const result = await createOrderFromErfassung({
-        customerId: customer.id,
-        items,
-        priority: dateInfo.priority,
-        dueDate: dateInfo.dueDate,
-        freetextOriginal: freetext,
+      const result = await createCustomerFromErfassung({
+        company,
+        contactName,
+        email,
+        phone,
+        address,
         behaviorNote,
-        isQuote: options?.intent === "create_quote",
         source: options?.source || "manual",
         sourceRef: options?.sourceRef || null,
-        title: items[0]?.name || "Unbenannt",
+        isLead: false // Default
       });
-
+      
       if (!result.ok) {
         alert("Fehler beim Speichern: " + result.error);
         setIsSubmitting(false);
         return;
       }
-
-      alert("Auftrag erfolgreich angelegt!");
-      closeErfassung();
+      
+      setSuccessResult(result.customer);
     } catch (e: any) {
       alert("Fehler beim Speichern: " + e.message);
     } finally {
@@ -66,68 +60,113 @@ export function ManualWizard() {
     }
   };
 
-  const handleCreateNewCustomer = (searchName: string) => {
+  const handleNextToOrder = () => {
     openErfassung({
-      mode: "customer",
-      intent: "create_customer",
-      source: "order", // we came from order
-      prefill: { company: searchName, items, order: dateInfo, rawText: freetext }
+      mode: "order",
+      customerId: successResult.id,
+      source: options?.source,
+      sourceRef: options?.sourceRef,
+      prefill: { ...options?.prefill, customer: successResult }
     });
   };
+
+  if (successResult) {
+    return (
+      <div className="flex flex-col h-full bg-[#fcfaf6] rounded-2xl overflow-hidden relative justify-center items-center p-8 text-center">
+        <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
+          <Check className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-serif text-[#1a1c23] mb-2">Kunde erfolgreich angelegt!</h2>
+        <p className="text-gray-600 mb-8">
+          Der Kunde <strong>{successResult.name}</strong> wurde in der Datenbank gespeichert.
+        </p>
+        
+        <div className="flex flex-col gap-3 w-full max-w-sm">
+          <button
+            onClick={handleNextToOrder}
+            className="w-full px-6 py-3 font-bold text-white bg-[#1a1c23] rounded-lg hover:bg-black transition-all"
+          >
+            Auftrag für diesen Kunden anlegen
+          </button>
+          <button
+            onClick={closeErfassung}
+            className="w-full px-6 py-3 font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all"
+          >
+            Schließen
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-[#fcfaf6] rounded-2xl overflow-hidden">
       {/* Header */}
       <div className="px-8 py-6 sticky top-0 z-10 bg-[#fcfaf6]">
         <h2 className="text-2xl font-serif text-[#1a1c23] mb-1">
-          {options?.intent === "create_quote" ? "KV-Anfrage anlegen" : "Auftrag manuell erfassen"}
+          Kunde manuell erfassen
         </h2>
         <p className="text-sm text-gray-500">
-          Drei Pflichtsektionen — Freitext und Verhaltensnotiz als optionale Ergänzungen unten.
+          Stamm- und Kontaktdaten — Freitext und Verhaltensnotiz als optionale Ergänzungen unten.
         </p>
       </div>
 
       {/* Main Form */}
       <div className="px-8 pb-8 space-y-6 overflow-y-auto flex-1">
         
-        {/* 1. Kunde */}
+        {/* 1. Stammdaten */}
         <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-6 h-6 rounded-full bg-[#1a1c23] text-white flex items-center justify-center text-xs font-bold">1</div>
-              <h3 className="font-serif text-lg text-[#1a1c23]">Kunde</h3>
+              <h3 className="font-serif text-lg text-[#1a1c23]">Stammdaten</h3>
             </div>
             <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 rounded-full">PFLICHT</span>
           </div>
-          <CustomerSection 
-            customer={customer} 
-            onChange={setCustomer} 
-            onCreateNew={handleCreateNewCustomer}
-          />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Firma</label>
+              <input type="text" value={company} onChange={e => setCompany(e.target.value)} placeholder="z.B. Galvanik-Bürkle GmbH" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Ansprechpartner</label>
+              <input type="text" value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Max Mustermann" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+            </div>
+          </div>
         </section>
 
-        {/* 2. Teile */}
+        {/* 2. Kontaktdaten */}
         <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-6 h-6 rounded-full bg-[#1a1c23] text-white flex items-center justify-center text-xs font-bold">2</div>
-              <h3 className="font-serif text-lg text-[#1a1c23]">Teile</h3>
+              <h3 className="font-serif text-lg text-[#1a1c23]">Kontaktdaten</h3>
             </div>
-            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 rounded-full">PFLICHT</span>
           </div>
-          <ItemsSection items={items} onChange={setItems} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">E-Mail</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="info@beispiel.de" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Telefon</label>
+              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+49 123 45678" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+            </div>
+          </div>
         </section>
 
-        {/* 3. Termin */}
+        {/* 3. Adresse */}
         <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-6 h-6 rounded-full bg-[#1a1c23] text-white flex items-center justify-center text-xs font-bold">3</div>
-              <h3 className="font-serif text-lg text-[#1a1c23]">Termin & Lieferung</h3>
+              <h3 className="font-serif text-lg text-[#1a1c23]">Adresse</h3>
             </div>
-            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 rounded-full">PFLICHT</span>
           </div>
-          <DateSection dateInfo={dateInfo} onChange={setDateInfo} />
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Straße, PLZ, Ort</label>
+            <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="Musterstraße 1, 12345 Musterstadt" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+          </div>
         </section>
 
         {/* Accordions */}
@@ -154,7 +193,7 @@ export function ManualWizard() {
                  <textarea 
                   className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" 
                   rows={3} 
-                  placeholder="Kunde hat angerufen, liefert 50 Stahlrohre zum Verzinken..." 
+                  placeholder="Kunde angerufen, neue E-Mail ist max@... Adresse bleibt." 
                   value={freetext} 
                   onChange={(e) => setFreetext(e.target.value)} 
                 />
@@ -174,7 +213,7 @@ export function ManualWizard() {
                 </div>
                 <div className="text-left">
                   <div className="font-semibold text-gray-900 text-sm">Verhaltensnotiz zum Kunden</div>
-                  <div className="text-xs text-gray-500">Optional. Geht ins Kundenprofil, nicht in den Auftrag.</div>
+                  <div className="text-xs text-gray-500">Optional. Geht ins Kundenprofil.</div>
                 </div>
               </div>
               <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showBehavior ? 'rotate-180' : ''}`} />
@@ -208,7 +247,7 @@ export function ManualWizard() {
           disabled={isSubmitting}
           className="px-6 py-2.5 text-sm font-bold text-white bg-[#1a1c23] rounded-lg hover:bg-black transition-all flex items-center gap-2 disabled:opacity-50"
         >
-          {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Auftrag anlegen"} {!isSubmitting && <Check className="w-4 h-4" />}
+          {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Kunde anlegen"} {!isSubmitting && <Check className="w-4 h-4" />}
         </button>
       </div>
     </div>
