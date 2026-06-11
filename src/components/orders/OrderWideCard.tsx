@@ -48,10 +48,10 @@ export function OrderWideCard({
 
   // Map badge style based on reference HTML
   let badgeClass = "bg-neutral-gray-100 text-text-muted";
-  if (badgeText?.toLowerCase().includes("Ã¼berfÃ¤llig")) badgeClass = "b-ueber";
+  if (badgeText?.toLowerCase().includes("überfällig")) badgeClass = "b-ueber";
   else if (badgeText?.toLowerCase().includes("plan")) badgeClass = "b-plan";
   else if (badgeText?.toLowerCase().includes("material")) badgeClass = "b-material";
-  else if (badgeText?.toLowerCase().includes("freigabe") || badgeText?.toLowerCase().includes("rÃ¼ckmeldung") || badgeText?.toLowerCase().includes("wartet")) badgeClass = "b-freigabe";
+  else if (badgeText?.toLowerCase().includes("freigabe") || badgeText?.toLowerCase().includes("rückmeldung") || badgeText?.toLowerCase().includes("wartet")) badgeClass = "b-freigabe";
   else if (badgeText) badgeClass = "bg-neutral-gray-100 text-text-muted";
 
   return (

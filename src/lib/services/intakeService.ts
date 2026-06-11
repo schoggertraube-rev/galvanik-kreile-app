@@ -85,6 +85,11 @@ export const intakeService = {
     // 4. Abschluss
     await eventsRepository.addEvent({ eventType: "WARENEINGANG_COMPLETED", orderId: order.id });
     
+    // Dispatch global event so listeners (like Warendurchlauf Leitstand) reload the orders
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("kreile-orders-updated"));
+    }
+    
     return order;
   }
 };

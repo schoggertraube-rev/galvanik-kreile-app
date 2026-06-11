@@ -28,13 +28,8 @@ export async function createPhoneNote(input: CreatePhoneNoteInput) {
   }
 
   try {
-    const isMockCustomer = input.customerId?.startsWith("inst_") || input.customerId?.startsWith("cust_");
-    const isMockOrder = input.orderId?.startsWith("ord_");
-    
     const extractionJson = {
-      ...(input.extractionJson || {}),
-      mockCustomerId: isMockCustomer ? input.customerId : undefined,
-      mockOrderId: isMockOrder ? input.orderId : undefined
+      ...(input.extractionJson || {})
     };
 
     const inserted = await db.insert(phoneNotes).values({
@@ -42,8 +37,8 @@ export async function createPhoneNote(input: CreatePhoneNoteInput) {
       generatedAnswer: input.generatedAnswer || null,
       category: input.category || "Neuanfrage",
       urgency: input.urgency || "Normal",
-      customerId: isMockCustomer ? null : (input.customerId || null),
-      orderId: isMockOrder ? null : (input.orderId || null),
+      customerId: input.customerId || null,
+      orderId: input.orderId || null,
       callerName: input.callerName || null,
       company: input.company || null,
       phone: input.phone || null,
@@ -80,9 +75,7 @@ export async function updatePhoneNote(id: string, input: Partial<CreatePhoneNote
   if (!db) throw new Error("Database connection not available.");
   
   try {
-    const isMockCustomer = input.customerId?.startsWith("inst_") || input.customerId?.startsWith("cust_");
-    const isMockOrder = input.orderId?.startsWith("ord_");
-    
+
     let updateData: any = {};
     if (input.rawText) updateData.rawText = input.rawText;
     if (input.generatedAnswer !== undefined) updateData.generatedAnswer = input.generatedAnswer;
@@ -94,17 +87,15 @@ export async function updatePhoneNote(id: string, input: Partial<CreatePhoneNote
     if (input.phone !== undefined) updateData.phone = input.phone;
     
     if (input.customerId !== undefined) {
-      updateData.customerId = isMockCustomer ? null : input.customerId;
+      updateData.customerId = input.customerId;
     }
     if (input.orderId !== undefined) {
-      updateData.orderId = isMockOrder ? null : input.orderId;
+      updateData.orderId = input.orderId;
     }
     
     if (input.extractionJson) {
       updateData.extractionJson = {
-        ...input.extractionJson,
-        mockCustomerId: isMockCustomer ? input.customerId : undefined,
-        mockOrderId: isMockOrder ? input.orderId : undefined
+        ...input.extractionJson
       };
     }
     

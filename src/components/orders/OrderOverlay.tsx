@@ -8,6 +8,8 @@ import {
   X, Check, AlertTriangle, Clock, Droplet, Package, Info, Plus, 
   Send, Camera, Phone, FileText, Receipt, Truck, ArrowRight, CameraOff, Wrench
 } from "lucide-react";
+import { StationContextBlock } from "./StationContextBlock";
+import { HeadCostBadge } from "./HeadCostBadge";
 
 export function OrderOverlay() {
   const stack = useOverlayStore(state => state.stack);
@@ -17,12 +19,15 @@ export function OrderOverlay() {
   const [showPayment, setShowPayment] = useState(false);
   const [showMail, setShowMail] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | 'new' | null>(null);
+  const [activeStationOverride, setActiveStationOverride] = useState<string | null>(null);
 
   const currentOrderId = orderStack.length > 0 ? orderStack[orderStack.length - 1] : null;
 
   const { orderData, loading } = useOrderLive(currentOrderId);
 
   if (!currentOrderId) return null;
+  
+  const activeStation = activeStationOverride || orderData?.station || 'wareneingang';
 
   // Calculate dynamic z-index based on stack position
   const stackIndex = stack.findLastIndex(item => item.type === 'order' && item.id === currentOrderId);
@@ -191,6 +196,15 @@ export function OrderOverlay() {
                   </button>
                 </div>
               </div>
+
+              <HeadCostBadge 
+                currentCostEur={orderData.cost_ist || 0}
+                benchmarkEur={orderData.cost_benchmark || undefined}
+                onClick={() => {
+                  document.getElementById('station-context-block')?.scrollIntoView({ behavior: 'smooth' });
+                }}
+              />
+
               <button className="ci-close-btn" onClick={popOrder} aria-label="Schließen">
                 <X className="w-5 h-5"/>
               </button>
@@ -250,7 +264,7 @@ export function OrderOverlay() {
                         if (isActive) circleClass = "ci-station-active";
                         
                         return (
-                          <div key={station} className="ci-station" onClick={() => handleStationClick(station)}>
+                          <div key={station} className="ci-station" onClick={() => { setActiveStationOverride(station); }}>
                             <div className={`ci-station-circle ${circleClass}`}>
                               {isDone ? <Check className="w-5 h-5"/> : <Icon className="w-5 h-5"/>}
                             </div>
@@ -261,6 +275,17 @@ export function OrderOverlay() {
                     })()}
                   </div>
                 </div>
+
+                <StationContextBlock 
+                  orderId={orderData.id}
+                  activeStation={activeStation}
+                  orderCurrentStation={orderData.station || 'wareneingang'}
+                  orderRevenue={orderData.quoteTotalGross || orderData.dbGeplant || 0}
+                  orderMargin={0} // Needs actual margin data
+                  orderMarginPercent={0} // Needs actual margin data
+                  customerName={orderData.customer?.name || orderData.customerName || "Kunde"}
+                  isOrderCompleted={orderData.status === 'completed'}
+                />
 
                 {/* KPIs */}
                 <div className="ci-section">
@@ -361,13 +386,22 @@ export function OrderOverlay() {
                 <div className="ci-section">
                   <div className="ci-section-label">Schnellaktionen</div>
                   <div className="ci-quick-actions">
+                    <button 
+                      className="ci-qa accent-link" 
+                      title="Springt zur Erfassung oben"
+                      onClick={() => document.getElementById('station-context-block')?.scrollIntoView({ behavior: 'smooth' })}
+                      style={{ background: 'var(--ci-accent)', color: '#fff', borderColor: 'var(--ci-accent)' }}
+                    >
+                      <Package className="w-[18px] h-[18px]"/><span className="ci-qa-label">Verbrauch ↑</span>
+                    </button>
                     <button className="ci-qa ci-primary" onClick={() => setShowMail(true)}>
                       <Send className="w-[18px] h-[18px]"/><span className="ci-qa-label">Status-Mail</span>
                     </button>
                     <button className="ci-qa"><Camera className="w-[18px] h-[18px]"/><span className="ci-qa-label">Foto +</span></button>
                     <button className="ci-qa"><Phone className="w-[18px] h-[18px]"/><span className="ci-qa-label">Anrufen</span></button>
+                    <button className="ci-qa"><FileText className="w-[18px] h-[18px]"/><span className="ci-qa-label">KV</span></button>
                     <button className="ci-qa" onClick={() => setShowPayment(true)}>
-                      <Receipt className="w-[18px] h-[18px]"/><span className="ci-qa-label">Zahlung</span>
+                      <Receipt className="w-[18px] h-[18px]"/><span className="ci-qa-label">Rechnung</span>
                     </button>
                     <button className="ci-qa"><Truck className="w-[18px] h-[18px]"/><span className="ci-qa-label">Versand</span></button>
                     <button className="ci-qa"><AlertTriangle className="w-[18px] h-[18px]"/><span className="ci-qa-label">Reklam.</span></button>

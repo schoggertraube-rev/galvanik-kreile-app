@@ -1,14 +1,12 @@
 import React from 'react';
 import { PerformanceCockpitClient } from './PerformanceCockpitClient';
-import { getPerformanceKPIsAction } from './actions';
+import { getAnalyseOverview } from '@/features/analyse/analyse.actions';
 
 export default async function PerformanceCockpitPage() {
-  const result = await getPerformanceKPIsAction();
-  const perfData = result.ok && result.data ? result.data : {
-    totalRevenue: 0, totalOrders: 0, completedOrders: 0, reklas: 0, activeWarnings: 0, durchlaufzeit: 0
-  };
+  const result = await getAnalyseOverview("Monat");
+  const perfData = result.data || [];
 
   return (
-    <PerformanceCockpitClient perfData={perfData} />
+    <PerformanceCockpitClient overviews={perfData} />
   );
 }

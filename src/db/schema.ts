@@ -54,6 +54,13 @@ export const customers = pgTable("customers", {
   internalNotes: text("internal_notes"),
   marketingOptOut: boolean("marketing_opt_out").default(false),
   lastReactivatedAt: timestamp("last_reactivated_at"),
+  behaviorNotes: text("behavior_notes"),
+  source: text("source"),
+  sourceRef: text("source_ref"),
+  enrichedFields: jsonb("enriched_fields").default([]),
+  isLead: boolean("is_lead").default(false),
+  leadSince: timestamp("lead_since", { withTimezone: true }),
+  convertedAt: timestamp("converted_at", { withTimezone: true }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -95,6 +102,12 @@ export const orders = pgTable("orders", {
   promisedDueDate: timestamp("promised_due_date", { withTimezone: true }),
   completedDate: timestamp("completed_date", { withTimezone: true }),
   attachmentUrl: text("attachment_url"),
+  source: text("source"),
+  sourceRef: text("source_ref"),
+  freetextOriginal: text("freetext_original"),
+  isQuote: boolean("is_quote").default(false),
+  quoteStatus: text("quote_status"),
+  quoteConvertedOrderId: text("quote_converted_order_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -228,8 +241,28 @@ export const inquiries = pgTable("inquiries", {
     risikopuffer: number;
     marge: number;
   }>(),
+  extractedData: jsonb("extracted_data"),
+  convertedToOrderId: text("converted_to_order_id"),
+  convertedToCustomerId: text("converted_to_customer_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// 8.5 Scan Uploads
+export const scanUploads = pgTable("scan_uploads", {
+  id: text("id").primaryKey().$defaultFn(() => createId()),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  fileUrl: text("file_url").notNull(),
+  fileType: text("file_type"),
+  uploadedBy: uuid("uploaded_by").references(() => appUsers.id),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
+  detectedType: text("detected_type"),
+  detectionConfidence: numeric("detection_confidence", { precision: 3, scale: 2 }),
+  extractedData: jsonb("extracted_data"),
+  status: text("status").notNull().default("new"),
+  linkedOrderId: text("linked_order_id"),
+  linkedCustomerId: text("linked_customer_id"),
+  linkedInvoiceId: text("linked_invoice_id"),
 });
 
 // 9. UI Events Tracking

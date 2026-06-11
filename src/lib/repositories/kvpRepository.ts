@@ -43,7 +43,7 @@ export const kvpRepository = {
       const { data, error } = await supabase.from('kvp_items').select('*').order('created_at', { ascending: false });
       if (error) {
         console.error("Supabase kvpRepository.getAll error:", error.message, error.details, error.hint);
-        return DEMO_ITEMS;
+        return [];
       }
       
       const mapped = data.map(c => ({
@@ -59,7 +59,7 @@ export const kvpRepository = {
       }));
 
       // If DB is empty, return mock data
-      if (mapped.length === 0) return DEMO_ITEMS;
+      if (mapped.length === 0) return [];
       return mapped;
     }
 
@@ -89,7 +89,7 @@ export const kvpRepository = {
 
       return items as KvpItem[];
     }
-    return DEMO_ITEMS;
+    return [];
   },
 
   async addItem(item: Omit<KvpItem, "id">): Promise<KvpItem> {

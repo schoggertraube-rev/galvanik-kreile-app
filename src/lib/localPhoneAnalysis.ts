@@ -1,4 +1,6 @@
-import { INITIAL_CUSTOMERS, INITIAL_ORDERS, MockCustomer, MockOrder } from "@/lib/mockData";
+import { MockCustomer, MockOrder } from "@/lib/mockData";
+const INITIAL_CUSTOMERS: MockCustomer[] = [];
+const INITIAL_ORDERS: MockOrder[] = [];
 
 export interface LocalAnalysisResult {
   matchedCustomer: MockCustomer | null;
@@ -74,6 +76,7 @@ function findCustomerCandidates(nameHint: string): LocalAnalysisResult["customer
   const lower = nameHint.toLowerCase();
   
   const candidates: LocalAnalysisResult["customerCandidates"] = [];
+
   for (const c of INITIAL_CUSTOMERS) {
     const cLower = c.name.toLowerCase();
     // Exact substring match
@@ -130,6 +133,7 @@ export function performLocalAnalysis(text: string): LocalAnalysisResult {
   const customerCandidates: LocalAnalysisResult["customerCandidates"] = [];
   
   // First, check if the text contains any customer name directly
+
   for (const c of INITIAL_CUSTOMERS) {
       // Very naive extraction: just find matching tokens
       const nameParts = c.name.toLowerCase().split(' ');

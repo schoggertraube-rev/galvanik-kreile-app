@@ -50,7 +50,7 @@ export function AppShortcutOverlay({ type, onClose }: AppShortcutOverlayProps) {
             icon={<Edit3 className="w-6 h-6" />}
             title="Manuell anlegen"
             description="Klassische Eingabe aller Auftragsdaten ohne Vorlage."
-            onClick={() => handleAction("/warendurchlauf/neu")}
+            onClick={() => handleAction("/warendurchlauf/neu?mode=new-order")}
           />
           <AppActionTile
             icon={<Upload className="w-6 h-6" />}

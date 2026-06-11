@@ -9,7 +9,7 @@ import { Customer } from "@/lib/types/customer";
 import { createClient } from "@/lib/supabase/client";
 import { createCustomerDb } from "@/app/actions/customers.actions";
 import { Loader } from "@googlemaps/js-api-loader";
-import { Building2, Copy, FilePlus2, Save, Upload, X } from "lucide-react";
+import { Building2, Mail, MapPin, Phone, Save, User, UserPlus, Upload, FilePlus2, Copy, AlertTriangle, Camera, X } from "lucide-react";
 import Image from "next/image";
 
 interface NewCustomerFormProps {
@@ -17,9 +17,10 @@ interface NewCustomerFormProps {
   customerId?: string | null; // If provided, load existing customer
   previewUrl?: string; // Initial image base64 from OCR
   onSave?: (customerId: string) => void;
+  inline?: boolean; // If true, renders without the modal/drawer wrapper
 }
 
-export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: NewCustomerFormProps) {
+export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inline = false }: NewCustomerFormProps) {
   const [loading, setLoading] = useState(false);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
@@ -238,14 +239,8 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
     }
   };
 
-  return (
-    <ResponsiveDetailDrawer 
-      isOpen={true} 
-      onClose={onClose}
-      title={customerId ? "Kunde bearbeiten" : "Neuen Kunden anlegen"}
-      centered={true}
-    >
-      <div className="flex flex-col lg:flex-row gap-6">
+  const content = (
+      <div className="flex flex-col lg:flex-row gap-6 w-full">
         
         {/* Left Column: Form */}
         <div className="flex-1 flex flex-col gap-6">
@@ -293,7 +288,14 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
                     placeholder="Musterstraße 1"
                     className="font-medium"
                   />
-                  <p className="text-[10px] text-text-muted">Unterstützt Google Maps Autocomplete beim Tippen</p>
+                  {!process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY ? (
+                    <p className="text-[10px] text-danger-red font-bold flex items-center gap-1 mt-1">
+                      <AlertTriangle className="w-3 h-3" />
+                      Google Maps Autocomplete deaktiviert (API Key fehlt in .env)
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-text-muted mt-1">Unterstützt Google Maps Autocomplete beim Tippen</p>
+                  )}
                 </div>
                 <div className="grid grid-cols-3 gap-4">
                   <div className="col-span-1 space-y-2">
@@ -355,10 +357,22 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
             {/* Bilder Upload */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-navy-900">Bilder & Dokumente (JPG/PNG)</label>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-wrap">
+                <label className="cursor-pointer bg-white border-2 border-dashed border-neutral-gray-300 hover:border-navy-900 hover:bg-bg-app-soft transition-all rounded-xl p-4 flex flex-col items-center justify-center min-w-[120px]">
+                  <Camera className="w-5 h-5 text-navy-900 mb-2" />
+                  <span className="text-[10px] font-bold text-navy-900 text-center">Kamera<br/>starten</span>
+                  <input 
+                    type="file" 
+                    accept="image/jpeg, image/png" 
+                    capture="environment"
+                    className="hidden" 
+                    onChange={handleFileChange}
+                  />
+                </label>
+
                 <label className="cursor-pointer bg-white border-2 border-dashed border-neutral-gray-300 hover:border-navy-900 hover:bg-bg-app-soft transition-all rounded-xl p-4 flex flex-col items-center justify-center min-w-[120px]">
                   <Upload className="w-5 h-5 text-navy-900 mb-2" />
-                  <span className="text-[10px] font-bold text-navy-900">Hochladen</span>
+                  <span className="text-[10px] font-bold text-navy-900 text-center">Datei<br/>hochladen</span>
                   <input 
                     type="file" 
                     multiple 
@@ -460,8 +474,21 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave }: New
             </p>
           </div>
         </div>
-
       </div>
+  );
+
+  if (inline) {
+    return content;
+  }
+
+  return (
+    <ResponsiveDetailDrawer 
+      isOpen={true} 
+      onClose={onClose}
+      title={customerId ? "Kunde bearbeiten" : "Neuen Kunden anlegen"}
+      centered={true}
+    >
+      {content}
     </ResponsiveDetailDrawer>
   );
 }

@@ -9,6 +9,7 @@ import { useLiveContext } from "@/hooks/useLiveContext";
 import { useAutosaveDraft } from "@/hooks/useAutosaveDraft";
 import { createPhoneNote } from "@/app/actions/phoneNotes.actions";
 import { useParkedCall } from "@/contexts/ParkedCallContext";
+import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 
 /* ===== Step definitions ===== */
 const STEPS = [
@@ -39,6 +40,7 @@ function escapeHtml(str: string): string {
 export function TelefonnotizDesktop() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { openErfassung } = useErfassung();
   const source = searchParams.get("source") || "home";
   const returnTo = searchParams.get("returnTo");
 
@@ -298,12 +300,22 @@ export function TelefonnotizDesktop() {
         setShowExitDialog(false);
         router.push(returnPath);
       } else {
-        clearDraft();
         setShowSaveSheet(false);
         setStep(4);
         setShowSuccess(true);
         setShowUndo(true);
         setTimeout(() => setShowUndo(false), 10000);
+        
+        // Spec 44: ErfassungModal aufrufen
+        openErfassung("phone", {
+          id: res.data?.id,
+          extracted: {
+            customer: result?.matchedCustomer,
+            items: [],
+            order: result?.matchedOrder,
+            behaviorNote: null
+          }
+        });
       }
     } catch (err) {
       console.error("Save failed:", err);

@@ -1,6 +1,7 @@
 "use client";
 import { useMemo } from "react";
-import { INITIAL_ORDERS, MockCustomer, MockOrder } from "@/lib/mockData";
+import { MockCustomer, MockOrder } from "@/lib/mockData";
+const INITIAL_ORDERS: MockOrder[] = [];
 
 export interface LiveContextData {
   customer: {

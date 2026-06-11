@@ -1,6 +1,8 @@
 "use client";
 import { useState, useCallback, useRef, useEffect } from "react";
-import { INITIAL_CUSTOMERS, INITIAL_ORDERS, MockCustomer, MockOrder } from "@/lib/mockData";
+import { MockCustomer, MockOrder } from "@/lib/mockData";
+const INITIAL_CUSTOMERS: MockCustomer[] = [];
+const INITIAL_ORDERS: MockOrder[] = [];
 import { analyzePhoneNoteWithAI, AIAnalysisInput, PhoneNoteCategory } from "@/app/actions/analyzePhoneNote";
 import { performLocalAnalysis, LocalAnalysisResult } from "@/lib/localPhoneAnalysis";
 

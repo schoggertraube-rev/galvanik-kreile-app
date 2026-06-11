@@ -15,6 +15,7 @@ import { getCompanySettings } from "@/app/actions/company.actions";
 import { useTestpilot } from "@/components/testpilot/TestpilotProvider";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
+import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 
 interface KreileHeaderProps {
   onMenuToggle: () => void;
@@ -32,6 +33,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const { status: realtimeStatus } = useRealtimeStatus();
   const { isRecording } = useTestpilot();
   const { isOnline, outboxItems, syncNow } = useSync();
+  const { openErfassung } = useErfassung();
 
   // User Dropdown State
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -146,17 +148,16 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
               <polyline points="0,30 0,20 10,20 10,12 15,12 15,18 20,18 20,8 25,8 25,18 30,18 30,14 35,14 35,6 40,6 40,14 45,14 45,20 50,20 50,10 55,10 55,20 60,20 60,4 65,4 65,20 70,20 70,16 75,16 75,20 80,20 80,12 85,12 85,20 90,20 90,16 95,16 95,20 100,20 100,8 105,8 105,20 110,20 110,14 115,14 115,20 120,20 120,10 125,10 125,20 130,20 130,16 135,16 135,20 140,20 140,18 145,18 145,22 150,22 150,18 155,18 155,24 160,24 160,30" stroke="#B8923F" strokeWidth="1.5" fill="none"/>
             </svg>
           </div>
-          <Link
-            href="/scan"
+          <button
             onClick={(e) => {
               e.stopPropagation();
-              trackUiEvent("nav_click", { target: "/scan", source: "quick_action" });
+              openErfassung("scan");
             }}
             className="p-2 hover:bg-neutral-gray-100 rounded-full transition-colors z-10"
             title="Schnellannahme (Scan)"
           >
             <Camera className="w-5 h-5 text-navy-500 shrink-0 group-hover:text-accent-orange transition-colors" strokeWidth={1.5} />
-          </Link>
+          </button>
         </div>
       </div>
 

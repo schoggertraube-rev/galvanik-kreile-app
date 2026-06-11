@@ -354,3 +354,4 @@ html.dark video,
 html.dark .kreile-logo {
   filter: invert(1.08) hue-rotate(180deg) saturate(2);
 }
+.pac-container { z-index: 10000 !important; }

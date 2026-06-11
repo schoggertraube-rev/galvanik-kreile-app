@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const orderSchema = z.object({
   customerId: z.string().optional(),
-  customerName: z.string().min(2, "Der Kundenname muss mindestens 2 Zeichen lang sein."),
+  customerName: z.string().optional(),
   title: z.string().optional(),
   currentStationId: z.string().optional(),
   dueDate: z.coerce.date().refine((date) => date > new Date(), {

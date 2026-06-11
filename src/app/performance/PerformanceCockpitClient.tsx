@@ -4,6 +4,8 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { AnalyseTileSummary, AnalyseTileKey } from '@/lib/analyse/dataContracts';
+import { AnalyseDrillOverlay } from '@/features/analyse/AnalyseDrillOverlay';
 
 import { 
   Moon, Sun, Sparkles, TrendingUp
@@ -17,10 +19,11 @@ import { KundenMarktKachel } from "./components/KundenMarktKachel";
 import { MarketingWirkungKachel } from "./components/MarketingWirkungKachel";
 
 interface Props {
-  perfData: any;
+  overviews: AnalyseTileSummary[];
 }
 
-export function PerformanceCockpitClient({ perfData }: Props) {
+export function PerformanceCockpitClient({ overviews }: Props) {
+  const [drillTile, setDrillTile] = useState<AnalyseTileKey | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [tab, setTab] = useState('Monat');
   const [cmpOn, setCmpOn] = useState(false);
@@ -249,22 +252,31 @@ export function PerformanceCockpitClient({ perfData }: Props) {
 
         {/* 3. Hauptkacheln */}
         <div className="t-grid">
-          <WerkstattPulsKachel perfData={perfData} cmpOn={cmpOn} cmpPer={cmpPer} getDeltaText={getDeltaText} />
+          <WerkstattPulsKachel summary={overviews.find(o => o.key === 'werkstatt_puls')} onClick={() => setDrillTile('werkstatt_puls')} />
         </div>
 
         <div className="t-grid t-g2">
-          <UmsatzMargeKachel perfData={perfData} cmpOn={cmpOn} cmpPer={cmpPer} getDeltaText={getDeltaText} />
-          <QualitaetRisikoKachel perfData={perfData} cmpOn={cmpOn} cmpPer={cmpPer} getDeltaText={getDeltaText} />
-          <BaederMaterialKachel perfData={perfData} cmpOn={cmpOn} cmpPer={cmpPer} getDeltaText={getDeltaText} />
-          <KundenMarktKachel perfData={perfData} cmpOn={cmpOn} cmpPer={cmpPer} getDeltaText={getDeltaText} />
+          <UmsatzMargeKachel summary={overviews.find(o => o.key === 'umsatz_marge')} onClick={() => setDrillTile('umsatz_marge')} />
+          <QualitaetRisikoKachel summary={overviews.find(o => o.key === 'qualitaet_risiko')} onClick={() => setDrillTile('qualitaet_risiko')} />
+          <BaederMaterialKachel summary={overviews.find(o => o.key === 'baeder_material')} onClick={() => setDrillTile('baeder_material')} />
+          <KundenMarktKachel summary={overviews.find(o => o.key === 'kunden_markt')} onClick={() => setDrillTile('kunden_markt')} />
         </div>
 
         {/* F) Marketing & Kundenreaktivierung */}
         <div className="t-grid" style={{marginTop: 16}}>
-          <MarketingWirkungKachel perfData={perfData} cmpOn={cmpOn} cmpPer={cmpPer} getDeltaText={getDeltaText} />
+          <MarketingWirkungKachel summary={overviews.find(o => o.key === 'marketing_reaktivierung')} onClick={() => setDrillTile('marketing_reaktivierung')} />
         </div>
 
       </div>
+      
+      {/* Drilldown Overlay */}
+      {drillTile && (
+        <AnalyseDrillOverlay 
+          tileKey={drillTile} 
+          period={tab} 
+          onClose={() => setDrillTile(null)} 
+        />
+      )}
     </div>
   );
 }

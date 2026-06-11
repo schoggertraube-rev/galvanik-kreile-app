@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
@@ -8,23 +8,23 @@ import {
   ChevronRight, Zap
 } from "lucide-react";
 import { useState, Suspense, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams, useRouter } from "next/navigation";
-import { WarendurchlaufIntakeWizard } from "@/components/warendurchlauf/WarendurchlaufIntakeWizard";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
-import { MockOrder } from "@/lib/mockData";
+import { useErfassung } from "@/components/erfassung/ErfassungProvider";
+import { ordersRepository, Order } from "@/lib/repositories/ordersRepository";
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-   Warendurchlauf Leitstand â€” v4 Layout
+   Warendurchlauf Leitstand — v4 Layout
    â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
 
 function WarendurchlaufLeitstandContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [wizardMode, setWizardMode] = useState<"camera" | "manual" | null>(
-    searchParams.get("mode") === "new-order" ? "manual" : null
-  );
+  const { openErfassung } = useErfassung();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
-  const [orders, setOrders] = useState<MockOrder[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [todos, setTodos] = useState<{ id: number; title: string; subtitle: string; tags: string[]; action: string; priority?: string; live?: boolean; targetHref?: string; done: boolean }[]>([]);
 
   useEffect(() => {
@@ -32,7 +32,7 @@ function WarendurchlaufLeitstandContent() {
       try {
         const dbOrders = await ordersRepository.getAll();
         if (dbOrders) {
-          const typedOrders = dbOrders as unknown as MockOrder[];
+          const typedOrders = dbOrders as Order[];
           setOrders(typedOrders);
 
           // Build dynamic checklist
@@ -40,7 +40,7 @@ function WarendurchlaufLeitstandContent() {
           const kritisch = typedOrders.filter(o => o.risk === 'red' || o.risk === 'orange');
           if (kritisch.length > 0) {
              newTodos.push({
-                id: 1, title: `Kritische AuftrÃ¤ge (${kritisch.length})`, subtitle: "AuftrÃ¤ge mit hohem Risiko",
+                id: 1, title: `Kritische Aufträge (${kritisch.length})`, subtitle: "Aufträge mit hohem Risiko",
                 tags: ["Warendurchlauf"], action: "Ansehen", priority: "Hoch", targetHref: "/kontrolle",
                 live: true, done: false
              });
@@ -48,8 +48,8 @@ function WarendurchlaufLeitstandContent() {
           const auslieferungen = typedOrders.filter(o => o.station === 'warenausgang');
           if (auslieferungen.length > 0) {
              newTodos.push({
-                id: 2, title: `Auslieferungen klÃ¤ren (${auslieferungen.length})`, subtitle: "AuftrÃ¤ge im Warenausgang",
-                tags: ["Warenausgang"], action: "PrÃ¼fen", targetHref: "/warendurchlauf/warenausgang",
+                id: 2, title: `Auslieferungen klären (${auslieferungen.length})`, subtitle: "Aufträge im Warenausgang",
+                tags: ["Warenausgang"], action: "Prüfen", targetHref: "/warendurchlauf/warenausgang",
                 live: true, done: false
              });
           }
@@ -58,6 +58,10 @@ function WarendurchlaufLeitstandContent() {
       } catch (err) {}
     };
     load();
+
+    const handleUpdate = () => load();
+    window.addEventListener("kreile-orders-updated", handleUpdate);
+    return () => window.removeEventListener("kreile-orders-updated", handleUpdate);
   }, []);
 
   const countUeberfaellig = orders.filter(o => o.risk === 'red').length;
@@ -69,19 +73,6 @@ function WarendurchlaufLeitstandContent() {
 
   return (
     <div className="w-full h-full font-sans antialiased text-[#1a1a1a]">
-      {wizardMode && (
-        <div
-          className="fixed inset-0 z-100 flex flex-col bg-black/60 backdrop-blur-sm overflow-y-auto"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) setWizardMode(null);
-          }}
-        >
-          <WarendurchlaufIntakeWizard
-            initialMode={wizardMode}
-            onClose={() => setWizardMode(null)}
-          />
-        </div>
-      )}
       <div className="w-full mx-auto px-5 md:px-8 lg:px-12 xl:px-16 py-6">
 
 
@@ -100,9 +91,9 @@ function WarendurchlaufLeitstandContent() {
 
             {/* Aktionskarten */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-              {/* Kamera â€” primary */}
+              {/* Kamera — primary */}
               <button
-                onClick={() => setWizardMode("camera")}
+                onClick={() => openErfassung("scan")}
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md text-center text-white"
                 style={{ background: "#1a6b38", border: "1.5px solid #1a6b38" }}
               >
@@ -128,7 +119,7 @@ function WarendurchlaufLeitstandContent() {
 
               {/* Manuell anlegen */}
               <button
-                onClick={() => setWizardMode("manual")}
+                onClick={() => openErfassung("manual")}
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
                 style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
               >
@@ -188,7 +179,7 @@ function WarendurchlaufLeitstandContent() {
                 {totalBar === 1 && orders.length === 0 && <div className="rounded bg-neutral-gray-200" style={{ flex: 1 }} />}
               </div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                <StatRow color="#c0392b" label="ÃœberfÃ¤llig" value={countUeberfaellig.toString()} />
+                <StatRow color="#c0392b" label="Überfällig" value={countUeberfaellig.toString()} />
                 <StatRow color="#d4850a" label="Diese Woche" value={countDieseWoche.toString()} />
                 <StatRow color="#2471a3" label="Wartend" value={countWartend.toString()} />
                 <StatRow color="#1e7e45" label="Im Plan" value={countImPlan.toString()} />
@@ -200,7 +191,7 @@ function WarendurchlaufLeitstandContent() {
               <div className="flex items-center justify-between mb-1.5">
                 <span className="text-[13px] font-bold text-[#1a1a1a]">Checkliste Heute</span>
                 <span
-                  className="text-[9px] font-semibold px-2 py-[3px] rounded-[5px] border cursor-pointer uppercase tracking-[.4px]"
+                  className="text-[9px] font-semibold px-2 py-[3px] rounded-[5px] border cursor-pointer uppercase tracking-[.4px] hidden"
                   style={{ background: "#f4f0e8", borderColor: "#d8d0c4", color: "#5e5850" }}
                 >
                   Auswertung
@@ -211,14 +202,14 @@ function WarendurchlaufLeitstandContent() {
               <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-[7px] bg-[#fef3e2] mb-2 text-[10px]">
                 <Zap className="w-3 h-3 text-[#c8922a]" />
                 <span className="text-[#5e5850]">Hebel: </span>
-                <b className="text-[#c8922a]">Kritische AuftrÃ¤ge entschÃ¤rfen</b>
+                <b className="text-[#c8922a]">Kritische Aufträge entschärfen</b>
               </div>
 
               {/* Items */}
               <div className="flex flex-col">
                 {todos.length === 0 ? (
                   <div className="text-[11px] text-[#9e9689] p-2 text-center border border-dashed rounded-[7px] border-[#d8d0c4]">
-                    Alles erledigt fÃ¼r heute!
+                    Alles erledigt für heute!
                   </div>
                 ) : (
                   todos.map(t => (
@@ -243,12 +234,7 @@ function WarendurchlaufLeitstandContent() {
               </div>
             </div>
 
-            {/* Demo-Badge */}
-            <div className="text-center">
-              <span className="text-[9px] font-bold px-2 py-1 rounded-full bg-[rgba(212,133,10,.1)] border border-[rgba(212,133,10,.2)] text-[#d4850a] uppercase tracking-wider">
-                Demo-Daten
-              </span>
-            </div>
+            {/* Demo-Badge removed */}
           </div>
         </div>
       </div>

@@ -16,7 +16,9 @@ import {
   Phone,
   Calendar
 } from "lucide-react";
-import { INITIAL_ORDERS, INITIAL_CUSTOMERS, MockOrder, MockCustomer } from "@/lib/mockData";
+import { MockOrder, MockCustomer } from "@/lib/mockData";
+const INITIAL_ORDERS: MockOrder[] = [];
+const INITIAL_CUSTOMERS: MockCustomer[] = [];
 import { getRiskConfig } from "@/constants/status";
 import { getStationConfig } from "@/constants/stations";
 import { evaluateOrderPriority } from "@/lib/priority";

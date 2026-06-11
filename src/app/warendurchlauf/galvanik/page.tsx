@@ -58,7 +58,7 @@ export default function GalvanikPage() {
 
   // Buckets assignment
   const readyOrders = sortByUrgency(galvanikOrders.filter(o => o.status === "ready" || o.statusText?.toLowerCase().includes("bereit") || o.statusText?.toLowerCase().includes("warte") || o.station === "beschichtung" || o.currentStationId === "beschichtung"));
-  const inProgressOrders = sortByUrgency(galvanikOrders.filter(o => o.status === "in_progress" || o.statusText?.toLowerCase().includes("bad") || o.statusText?.toLowerCase().includes("lÃ¤uft") || o.station === "galvanik" || o.currentStationId === "galvanik"));
+  const inProgressOrders = sortByUrgency(galvanikOrders.filter(o => o.status === "in_progress" || o.statusText?.toLowerCase().includes("bad") || o.statusText?.toLowerCase().includes("läuft") || o.station === "galvanik" || o.currentStationId === "galvanik"));
   const finishedOrders = sortByUrgency(galvanikOrders.filter(o => o.status === "done" || o.status === "quality_check" || o.statusText?.toLowerCase().includes("fertig") || o.statusText?.toLowerCase().includes("qs")));
 
   // Top Urgent overall
@@ -105,7 +105,7 @@ export default function GalvanikPage() {
       <div className={`flex flex-col gap-3 transition-all duration-500 ${isActive ? 'opacity-100' : ''}`}>
         {orders.length === 0 ? (
           <div className="text-xs text-[#9e9689] italic p-4 border border-dashed border-[#d8d0c4] rounded-[14px] text-center">
-            {isActive ? "Keine AuftrÃ¤ge in dieser Kategorie" : "-"}
+            {isActive ? "Keine Aufträge in dieser Kategorie" : "-"}
           </div>
         ) : (
           orders.map((o) => (
@@ -144,7 +144,7 @@ export default function GalvanikPage() {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 text-[#9e9689]">
             <Loader2 className="w-8 h-8 animate-spin mb-4" />
-            <p>Lade Galvanik AuftrÃ¤ge...</p>
+            <p>Lade Galvanik Aufträge...</p>
           </div>
         ) : (
           <>
@@ -191,7 +191,7 @@ export default function GalvanikPage() {
                 </div>
                 <div className="flex flex-col flex-1 min-w-0">
                   <span className={`text-[13px] font-bold truncate ${activeBucket === "ready" ? "text-[#1a6b38]" : "text-[#1a1a1a]"}`}>Bereit</span>
-                  <span className="text-[10px] text-[#9e9689]">{readyOrders.length} AuftrÃ¤ge</span>
+                  <span className="text-[10px] text-[#9e9689]">{readyOrders.length} Aufträge</span>
                 </div>
               </button>
 
@@ -207,7 +207,7 @@ export default function GalvanikPage() {
                 </div>
                 <div className="flex flex-col flex-1 min-w-0">
                   <span className={`text-[13px] font-bold truncate ${activeBucket === "in_progress" ? "text-[#1a6b38]" : "text-[#1a1a1a]"}`}>In Bearbeitung</span>
-                  <span className="text-[10px] text-[#9e9689]">{inProgressOrders.length} AuftrÃ¤ge</span>
+                  <span className="text-[10px] text-[#9e9689]">{inProgressOrders.length} Aufträge</span>
                 </div>
               </button>
 
@@ -223,7 +223,7 @@ export default function GalvanikPage() {
                 </div>
                 <div className="flex flex-col flex-1 min-w-0">
                   <span className={`text-[13px] font-bold truncate ${activeBucket === "finished" ? "text-[#1a6b38]" : "text-[#1a1a1a]"}`}>Fertig (QS)</span>
-                  <span className="text-[10px] text-[#9e9689]">{finishedOrders.length} AuftrÃ¤ge</span>
+                  <span className="text-[10px] text-[#9e9689]">{finishedOrders.length} Aufträge</span>
                 </div>
               </button>
 
@@ -242,7 +242,7 @@ export default function GalvanikPage() {
               </Link>
             </div>
 
-            {/* Listen Bereich (3 Spalten mit VerdrÃ¤ngungslogik) */}
+            {/* Listen Bereich (3 Spalten mit Verdrängungslogik) */}
             <div className="flex flex-col lg:flex-row gap-6 lg:gap-4 items-start w-full">
               <div className={`transition-all duration-500 ease-in-out ${activeBucket === "ready" ? "w-full lg:w-[80%]" : "w-full lg:w-[10%] opacity-50 grayscale-[0.8]"}`}>
                 <h3 className="text-sm font-bold text-[#9e9689] uppercase tracking-wider mb-4 border-b border-[#d8d0c4] pb-2 truncate">Bereit</h3>

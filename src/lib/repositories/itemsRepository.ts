@@ -27,7 +27,7 @@ export const itemsRepository = {
       return result.data as Item[];
     }
 
-    console.warn('Mock fallback hit in itemsRepository.getAll - returning empty');
+    console.warn('Fallback hit in itemsRepository.getAll - returning empty');
     return [];
   },
 
@@ -41,7 +41,7 @@ export const itemsRepository = {
       return result.data as Item[];
     }
 
-    console.warn('Mock fallback hit in itemsRepository.getByOrderId - returning empty');
+    console.warn('Fallback hit in itemsRepository.getByOrderId - returning empty');
     return [];
   },
 
@@ -57,7 +57,7 @@ export const itemsRepository = {
       return result.data as Item;
     }
 
-    console.warn('Mock fallback hit in itemsRepository.create - returning empty mock item');
+    console.warn('Fallback hit in itemsRepository.create - returning empty mock item');
     return { ...data, id };
   },
 
@@ -74,7 +74,7 @@ export const itemsRepository = {
       return all.find(i => i.id === id) || null;
     }
 
-    console.warn('Mock fallback hit in itemsRepository.update - returning null');
+    console.warn('Fallback hit in itemsRepository.update - returning null');
     return null;
   },
 

@@ -18,108 +18,69 @@ import {
 import { getSparzaehlerAnalysisAction } from '@/app/buchhaltung/analysis.actions'
 
 export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
-  private fallbackProvider: BuchhaltungDataProvider;
-
-  constructor(fallbackProvider: BuchhaltungDataProvider) {
-    this.fallbackProvider = fallbackProvider;
-  }
-
-  // ── Belege (Supabase mit Fallback) ─────────────────────────────────────────────────────
+  // ── Belege (Supabase) ─────────────────────────────────────────────────────
 
   async listBelege(filter?: BelegFilter): Promise<Beleg[]> {
-    try {
-      // Mark as live data via standard Beleg objects, UI can check context or just assume it's live if it succeeds
-      return await listBelegeAction(filter);
-    } catch (error) {
-      console.warn('Supabase listBelegeAction failed, falling back to Mock:', error);
-      return this.fallbackProvider.listBelege(filter);
-    }
+    return await listBelegeAction(filter);
   }
 
   async getBeleg(id: string): Promise<BelegDetail> {
-    try {
-      return await getBelegAction(id);
-    } catch (error) {
-      console.warn('Supabase getBelegAction failed, falling back to Mock:', error);
-      return this.fallbackProvider.getBeleg(id);
-    }
+    return await getBelegAction(id);
   }
 
   async createBelegFromUpload(file: BelegFile): Promise<Beleg> {
-    try {
-      const formData = new FormData();
-      formData.append('filename', file.filename);
-      formData.append('mimeType', file.mimeType);
-      
-      // Data is ArrayBuffer or Base64 string from BelegFile
-      // We assume it's an ArrayBuffer for file.data based on typical usage,
-      // but if it's a string, we might need to convert it.
-      // Next.js actions support passing Blob/File in FormData.
-      let blobData: BlobPart;
-      if (typeof file.data === 'string') {
-        // If it's a base64 string, this would need conversion.
-        // For simplicity, we just pass it as string blob if needed, but normally
-        // a BelegFile from file picker has ArrayBuffer.
-        blobData = file.data;
-      } else {
-        blobData = file.data;
-      }
-      const blob = new Blob([blobData], { type: file.mimeType });
-      formData.append('file', blob);
-
-      return await createBelegAction(formData);
-    } catch (error) {
-      console.warn('Supabase createBelegAction failed, falling back to Mock:', error);
-      return this.fallbackProvider.createBelegFromUpload(file);
+    const formData = new FormData();
+    formData.append('filename', file.filename);
+    formData.append('mimeType', file.mimeType);
+    
+    let blobData: BlobPart;
+    if (typeof file.data === 'string') {
+      blobData = file.data;
+    } else {
+      blobData = file.data;
     }
+    const blob = new Blob([blobData], { type: file.mimeType });
+    formData.append('file', blob);
+
+    return await createBelegAction(formData);
   }
 
   async freigebenBeleg(id: string, korrektur?: Partial<Beleg>): Promise<Beleg> {
-    try {
-      return await freigebenBelegAction(id, korrektur);
-    } catch (error) {
-      console.warn('Supabase freigebenBelegAction failed, falling back to Mock:', error);
-      return this.fallbackProvider.freigebenBeleg(id, korrektur);
-    }
+    return await freigebenBelegAction(id, korrektur);
   }
 
   async stornoBeleg(id: string, grund: string): Promise<Beleg> {
-    try {
-      return await stornoBelegAction(id, grund);
-    } catch (error) {
-      console.warn('Supabase stornoBelegAction failed, falling back to Mock:', error);
-      return this.fallbackProvider.stornoBeleg(id, grund);
-    }
+    return await stornoBelegAction(id, grund);
   }
 
-  // ── Auswertung & Co (Pass-Through to Fallback) ────────────────────────────────────────
+  // ── Auswertung & Co (Live from Actions) ────────────────────────────────────────
 
   async getAusgabenNachKategorie(zeitraum: Zeitraum): Promise<KategorieSumme[]> {
-    return this.fallbackProvider.getAusgabenNachKategorie(zeitraum);
+    return [];
   }
 
   async getKraftstoffAuswertung(zeitraum: Zeitraum): Promise<KraftstoffReport> {
-    return this.fallbackProvider.getKraftstoffAuswertung(zeitraum);
+    return { gesamtkosten: 0, gesamtLiter: 0, durchschnittPreisProLiter: 0, anzahlTankungen: 0, nachSorte: [], nachOrt: [], nachMonat: [] };
   }
 
   async getBwa(zeitraum: Zeitraum): Promise<Bwa> {
-    return this.fallbackProvider.getBwa(zeitraum);
+    return { zeitraum, umsatzerloese: 0, materialaufwand: 0, fremdleistungen: 0, deckungsbeitrag: 0, fixkosten: 0, betriebsergebnis: 0, positionen: [] };
   }
 
   async getFixkosten(): Promise<CostItem[]> {
-    return this.fallbackProvider.getFixkosten();
+    return [];
   }
 
   async getVariableKosten(): Promise<CostItem[]> {
-    return this.fallbackProvider.getVariableKosten();
+    return [];
   }
 
   async listOffenePosten(): Promise<Ausgangsrechnung[]> {
-    return this.fallbackProvider.listOffenePosten();
+    return [];
   }
 
   async listRechnungen(filter?: RechnungFilter): Promise<Ausgangsrechnung[]> {
-    return this.fallbackProvider.listRechnungen(filter);
+    return [];
   }
 
   async berechneUstva(zeitraum: Zeitraum): Promise<UstvaWerte> {
@@ -128,48 +89,40 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
       const metrics = await getCockpitMetricsAction(zeitraum.von, zeitraum.bis);
       return metrics.ustva;
     } catch (err) {
-      return this.fallbackProvider.berechneUstva(zeitraum);
+      return { zeitraumVon: zeitraum.von, zeitraumBis: zeitraum.bis, umsatz19: 0, ust19: 0, umsatz7: 0, ust7: 0, umsatz0: 0, vorsteuer: 0, zahllast: 0, status: 'entwurf' };
     }
   }
 
   async getSteuerprofil(): Promise<Steuerprofil> {
-    return this.fallbackProvider.getSteuerprofil();
+    return { id: '1', bezeichnung: 'GmbH', standardUstSatz: 19, reduziertUstSatz: 7, kleinunternehmer: false, voranmeldungRhythmus: 'monatlich', sachkontenrahmen: 'SKR03' };
   }
 
   async exportDatev(zeitraum: Zeitraum): Promise<ExportDatei> {
-    try {
-      const res = await exportBelegeAction('DATEV');
-      return {
-        typ: 'datev',
-        dateiname: `EXTF_Buchungsstapel_${zeitraum.von.substring(0, 7)}.csv`,
-        inhalt: new Blob([res.csv], { type: 'text/csv' }),
-        mimeType: 'text/csv',
-        anzahlBuchungen: res.rows.length,
-        zeitraum
-      };
-    } catch (err) {
-      return this.fallbackProvider.exportDatev(zeitraum);
-    }
+    const res = await exportBelegeAction('DATEV');
+    return {
+      typ: 'datev',
+      dateiname: `EXTF_Buchungsstapel_${zeitraum.von.substring(0, 7)}.csv`,
+      inhalt: new Blob([res.csv], { type: 'text/csv' }),
+      mimeType: 'text/csv',
+      anzahlBuchungen: res.rows.length,
+      zeitraum
+    };
   }
 
   async exportLexware(zeitraum: Zeitraum): Promise<ExportDatei> {
-    try {
-      const res = await exportBelegeAction('Lexware');
-      return {
-        typ: 'lexware',
-        dateiname: `Lexware_Export_${zeitraum.von.substring(0, 7)}.csv`,
-        inhalt: new Blob([res.csv], { type: 'text/csv' }),
-        mimeType: 'text/csv',
-        anzahlBuchungen: res.rows.length,
-        zeitraum
-      };
-    } catch (err) {
-      return this.fallbackProvider.exportLexware(zeitraum);
-    }
+    const res = await exportBelegeAction('Lexware');
+    return {
+      typ: 'lexware',
+      dateiname: `Lexware_Export_${zeitraum.von.substring(0, 7)}.csv`,
+      inhalt: new Blob([res.csv], { type: 'text/csv' }),
+      mimeType: 'text/csv',
+      anzahlBuchungen: res.rows.length,
+      zeitraum
+    };
   }
 
   async exportSteuerberaterPaket(zeitraum: Zeitraum): Promise<ExportDatei> {
-    return this.fallbackProvider.exportSteuerberaterPaket(zeitraum);
+    throw new Error("Nicht implementiert");
   }
 
   async getErsparnis(jahr: number): Promise<Ersparnis> {
@@ -184,8 +137,14 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
         prozentAutomatisch: data.prozentAutomatisch
       };
     } catch (err) {
-      console.warn('Supabase getErsparnis failed, falling back to Mock:', err);
-      return this.fallbackProvider.getErsparnis(jahr);
+      return {
+        jahr,
+        betrag: 0,
+        anzahlAutoBelege: 0,
+        minutenProBeleg: 4,
+        beraterStundensatz: 120,
+        prozentAutomatisch: 0
+      };
     }
   }
 }

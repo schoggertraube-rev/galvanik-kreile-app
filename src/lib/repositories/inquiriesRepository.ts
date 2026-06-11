@@ -1,7 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { IndexedDBHelper } from "@/lib/offline/IndexedDBHelper";
-import { MOCK_REQUESTS } from "@/lib/mockData";
+
 import { createClient } from "@/lib/supabase/client";
 
 export type QuoteRequest = {
@@ -82,7 +82,7 @@ export const inquiriesRepository = {
       }
     }
     
-    return MOCK_REQUESTS as QuoteRequest[];
+    return [];
   },
 
   async getOpenCount(): Promise<number> {

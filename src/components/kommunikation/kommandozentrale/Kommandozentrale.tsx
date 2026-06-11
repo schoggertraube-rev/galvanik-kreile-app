@@ -9,6 +9,7 @@ import {
 import { useClientDossier, ClientDossier } from "./hooks/useClientDossier";
 import { useTopicRelevance, TileKey } from "./hooks/useTopicRelevance";
 import { MatchResult } from "@/app/kommunikation/smartMatcher";
+import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 import dynamic from "next/dynamic";
 import "./kommandozentrale.css";
 
@@ -639,6 +640,7 @@ export function Kommandozentrale({
   const [showToast, setShowToast] = useState(false);
   const [composerText, setComposerText] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const { openErfassung } = useErfassung();
 
   const dossier = useClientDossier(customerId, matchData);
   const messageTexts = useMemo(() => messages.map(m => m.text), [messages]);
@@ -686,8 +688,24 @@ export function Kommandozentrale({
   }, [actionsApplied, dossier.preparedActions.length, onClose]);
 
   const handleApplyAll = useCallback(() => {
+    // Öffne den InquiryFlow mit den erkannten Daten
+    openErfassung("inquiry", {
+      id: `inquiry_${Date.now()}`,
+      extracted: {
+        customer: matchData?.matchedCustomer || {
+          id: customerId || "unknown",
+          name: customerName,
+          city: customerCity || ""
+        },
+        order: matchData?.matchedOrder || null,
+        items: [],
+        behaviorNote: null
+      }
+    });
     setActionsApplied(true);
-  }, []);
+    // Wir schließen die Kommandozentrale nach kurzer Zeit oder belassen sie offen, 
+    // aber setActionsApplied(true) zeigt den Haken an.
+  }, [openErfassung, matchData, customerId, customerName, customerCity]);
 
   const handleHighlightClick = useCallback((key: TileKey) => {
     setActiveDetail(key);

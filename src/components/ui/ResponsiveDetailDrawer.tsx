@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
@@ -33,7 +33,7 @@ export function ResponsiveDetailDrawer({ isOpen, onClose, title, children, cente
   if (!isOpen || !mounted) return null;
 
   return createPortal(
-    <div className={`fixed inset-0 z-50 flex ${centered ? "items-center justify-center p-4 md:p-8" : "items-end md:items-stretch justify-end"}`}>
+    <div className={`fixed inset-0 z-[2500] flex ${centered ? "items-center justify-center p-4 md:p-8" : "items-end md:items-stretch justify-end"}`}>
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-navy-900/40 backdrop-blur-sm animate-in fade-in duration-200"

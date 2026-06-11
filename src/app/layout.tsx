@@ -54,6 +54,7 @@ import { SyncProvider } from "@/lib/offline/SyncContext";
 import { FeatureFlagProvider } from "@/lib/analytics/useFeatureFlag";
 import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { OrderModalProvider } from "@/components/orders/OrderModalProvider";
+import { ErfassungProvider } from "@/components/erfassung/ErfassungProvider";
 
 import { isAdminOrDeveloper } from "@/lib/auth/permissions";
 
@@ -80,9 +81,11 @@ export default async function RootLayout({
                   <AppShortcutProvider>
                     <FeatureFlagProvider>
                       <OrderModalProvider>
-                        <KreileAppShell>
-                          {children}
-                        </KreileAppShell>
+                        <ErfassungProvider>
+                          <KreileAppShell>
+                            {children}
+                          </KreileAppShell>
+                        </ErfassungProvider>
                       </OrderModalProvider>
                     </FeatureFlagProvider>
                   </AppShortcutProvider>

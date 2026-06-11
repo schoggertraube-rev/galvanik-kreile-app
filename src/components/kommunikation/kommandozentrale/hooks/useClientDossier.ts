@@ -2,7 +2,9 @@
 
 import React, { useMemo, useCallback } from "react";
 import { MatchResult } from "@/app/kommunikation/smartMatcher";
-import { INITIAL_ORDERS, INITIAL_CUSTOMERS, MockCustomer } from "@/lib/mockData";
+import { MockCustomer } from "@/lib/mockData";
+const INITIAL_ORDERS: any[] = [];
+const INITIAL_CUSTOMERS: MockCustomer[] = [];
 
 /* ═══════════════════════════════════════════════════════════
    CLIENT DOSSIER TYPES

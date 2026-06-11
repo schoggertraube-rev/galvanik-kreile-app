@@ -33,6 +33,7 @@ export function IntakeCompletionSummary({
       setSaving(false);
     } catch (e) {
       console.error(e);
+      alert(`Fehler beim Speichern: ${e instanceof Error ? e.message : String(e)}`);
       setSaving(false);
     }
   };
@@ -108,11 +109,11 @@ export function IntakeCompletionSummary({
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-4">
           <AppActionButton
-            onClick={() => router.push("/warendurchlauf")}
+            onClick={() => router.push("/warendurchlauf/wareneingang")}
             variant="outline"
             className="flex-1 h-16 text-sm font-bold"
           >
-            Zum Leitstand
+            Zurück zur Liste (Wareneingang)
           </AppActionButton>
           <AppActionButton
             onClick={() => router.push(`/customers/${createdOrder.customerId}`)}
