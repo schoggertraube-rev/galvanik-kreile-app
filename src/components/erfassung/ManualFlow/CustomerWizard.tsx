@@ -31,6 +31,7 @@ export function CustomerWizard() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
   const [successResult, setSuccessResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const dirty = company.trim().length > 0 || contactName.trim().length > 0 || email.trim().length > 0 || freetext.trim().length > 0 || behaviorNote.trim().length > 0;
@@ -67,14 +68,14 @@ export function CustomerWizard() {
       });
       
       if (!result.ok) {
-        alert("Fehler beim Speichern: " + result.error);
+        setError("Fehler beim Speichern: " + result.error);
         setIsSubmitting(false);
         return;
       }
       
       setSuccessResult(result.customer);
     } catch (e: any) {
-      alert("Fehler beim Speichern: " + e.message);
+      setError("Fehler beim Speichern: " + e.message);
     } finally {
       setIsSubmitting(false);
     }
@@ -336,6 +337,9 @@ export function CustomerWizard() {
         >
           {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Speichern"}
         </button>
+          {error && (
+            <p className="text-sm text-red-600 mt-2">{error}</p>
+          )}
       </div>
     </div>
   );

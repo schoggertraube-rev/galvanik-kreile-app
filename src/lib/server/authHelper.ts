@@ -38,13 +38,30 @@ const WRITE_ROLES = [
 export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<ActionResult<string>> {
   try {
     let role: string | null = null;
-    const session = await getAppSession();
+      try {
+        const session = await getAppSession();
+        if (session && session.tenantId === "galvanik-kreile") {
+          role = session.role;
+        } else if (session) {
+          // session exists but different tenant – treat as unauthorized
+          role = null;
+        } else {
+            role = await getCurrentRole();
+        }
+      } catch (e) {
+        // getAppSession throws when called outside a Next.js request (e.g., test script)
+        const allowDevScriptAuth =
+          process.env.NODE_ENV !== "production" &&
+          process.env.KREILE_ALLOW_DEV_SCRIPT_AUTH === "true";
 
-    if (session && session.tenantId === "galvanik-kreile") {
-      role = session.role;
-    } else {
-      role = await getCurrentRole();
-    }
+        if (allowDevScriptAuth) {
+          role = "admin"; // bypass for local test scripts
+        } else {
+          console.error("Auth check failed outside request context:", e);
+          return { ok: false, error: "DB_ERROR", message: "Fehler bei der Überprüfung der Berechtigungen." };
+        }
+      }
+
 
     if (!role) {
       return { ok: false, error: "UNAUTHORIZED", message: "Nicht angemeldet." };

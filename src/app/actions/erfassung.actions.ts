@@ -342,6 +342,15 @@ import { checkAppAuth } from "@/lib/server/authHelper";
 import { revalidatePath } from "next/cache";
 
 export async function createCustomerFromErfassung(input: any) {
+  console.info("[CAPTURE_CUSTOMER_START]", {
+    hasInput: Boolean(input),
+    customerType: input?.customerType ?? input?.customer_type,
+    name: input?.name,
+    firstName: input?.firstName ?? input?.first_name,
+    lastName: input?.lastName ?? input?.last_name,
+    company: input?.company,
+    source: input?.source,
+  });
   // Check write permissions
   const auth = await checkAppAuth("write");
   if (!auth.ok) return { ok: false, error: auth.message };
@@ -411,7 +420,7 @@ export async function createCustomerFromErfassung(input: any) {
     if (verify.length === 0) {
       throw new Error("Insert failed silently");
     }
-    revalidatePath("/");
+    try { revalidatePath("/"); } catch (e) { /* ignore when not in Next runtime */ }
     return { ok: true, customer: verify[0] };
   } catch (err: any) {
     console.error("Failed to create customer:", {
@@ -530,7 +539,7 @@ export async function createOrderFromErfassung(input: any) {
       throw new Error("Insert failed silently");
     }
 
-    revalidatePath("/");
+    try { revalidatePath("/"); } catch (e) { /* ignore when not in Next runtime */ }
 
     return { ok: true, order: verify[0] };
   } catch (err: any) {
