@@ -368,17 +368,19 @@ export async function createCustomerFromErfassung(input: any) {
     const existingCustomers = await db
       .select({ customerNumber: customers.customerNumber })
       .from(customers)
-      .where(like(customers.customerNumber, pattern))
-      .orderBy(desc(customers.customerNumber))
-      .limit(1);
+      .where(like(customers.customerNumber, pattern));
 
-    let sequenceNum = 1;
-    if (existingCustomers.length > 0 && existingCustomers[0].customerNumber) {
-      const parts = existingCustomers[0].customerNumber.split("-");
-      if (parts.length === 3) {
-        sequenceNum = parseInt(parts[2], 10) + 1;
+    let maxNum = 0;
+    for (const ec of existingCustomers) {
+      if (ec.customerNumber) {
+        const parts = ec.customerNumber.split("-");
+        if (parts.length === 3) {
+          const num = parseInt(parts[2], 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
       }
     }
+    let sequenceNum = maxNum + 1;
     const sequenceString = sequenceNum.toString().padStart(4, "0");
     const customerNumber = `${prefix}-${year}-${sequenceString}`;
 
@@ -447,17 +449,19 @@ export async function createOrderFromErfassung(input: any) {
     const existingOrders = await db
       .select({ orderNumber: orders.orderNumber })
       .from(orders)
-      .where(like(orders.orderNumber, pattern))
-      .orderBy(desc(orders.orderNumber))
-      .limit(1);
+      .where(like(orders.orderNumber, pattern));
 
-    let sequenceNum = 1;
-    if (existingOrders.length > 0 && existingOrders[0].orderNumber) {
-      const parts = existingOrders[0].orderNumber.split("-");
-      if (parts.length === 3) {
-        sequenceNum = parseInt(parts[2], 10) + 1;
+    let maxNum = 0;
+    for (const eo of existingOrders) {
+      if (eo.orderNumber) {
+        const parts = eo.orderNumber.split("-");
+        if (parts.length === 3) {
+          const num = parseInt(parts[2], 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
       }
     }
+    let sequenceNum = maxNum + 1;
     const sequenceString = sequenceNum.toString().padStart(4, "0");
     const orderNumber = `${prefix}-${year}-${sequenceString}`;
 

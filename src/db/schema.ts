@@ -28,9 +28,11 @@ export const customers = pgTable("customers", {
   customerNumber: varchar("customer_number", { length: 50 }),
   name: text("name").notNull(),
   type: varchar("type", { length: 50 }).notNull(), // business, privat, institution
+  street: text("street"),
   city: text("city"),
   zipCode: text("zip_code"),
-  address: text("address"),
+  country: text("country"),
+  address: text("address"), // Raw full address string
   companyName: text("company_name"),
   contactPerson: text("contact_person"),
   phone: text("phone"),
@@ -109,6 +111,23 @@ export const orders = pgTable("orders", {
   quoteStatus: text("quote_status"),
   quoteConvertedOrderId: text("quote_converted_order_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 4.5 Calendar Events
+export const calendarEvents = pgTable("calendar_events", {
+  id: cuidPrimaryKey("id"),
+  tenantId: text("tenant_id").notNull(),
+  orderId: text("order_id"),
+  customerId: text("customer_id"),
+  title: text("title").notNull(),
+  eventType: text("event_type").notNull(),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  endsAt: timestamp("ends_at", { withTimezone: true }),
+  timeSlot: text("time_slot"),
+  status: text("status").notNull().default("planned"),
+  source: text("source"),
+  sourceRef: text("source_ref"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
 // 4.5 Items (Standalone table for parts, referenced by orders.actions.ts)

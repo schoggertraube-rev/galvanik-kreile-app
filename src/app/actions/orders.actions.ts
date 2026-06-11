@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { orders, items, customers, events } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, like, desc } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 
@@ -53,8 +53,15 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
     });
     
     return { ok: true, data };
-  } catch (error) {
-    console.error("Failed to get orders from DB:", error);
+  } catch (error: any) {
+    console.error("[DB_ERROR_DETAIL]", {
+      message: error?.message,
+      code: error?.code,
+      detail: error?.detail,
+      details: error?.details,
+      hint: error?.hint,
+      stack: error?.stack,
+    });
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Laden der Aufträge", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
   }
 }
@@ -78,9 +85,23 @@ export async function createOrderDb(data: Record<string, unknown>): Promise<Acti
   try {
     const orderId = (typeof data.id === 'string' ? data.id : undefined) || createId();
     const year = new Date().getFullYear();
-    // Generate sequence number based on timestamp since this is an older action
-    const sequenceNumber = Math.floor(Date.now() % 10000).toString().padStart(4, '0');
-    const orderNumber = `A-${year}-${sequenceNumber}`;
+    const pattern = `A-${year}-%`;
+    const existingOrders = await db
+      .select({ orderNumber: orders.orderNumber })
+      .from(orders)
+      .where(like(orders.orderNumber, pattern))
+      .orderBy(desc(orders.orderNumber))
+      .limit(1);
+
+    let sequenceNum = 1;
+    if (existingOrders.length > 0 && existingOrders[0].orderNumber) {
+      const parts = existingOrders[0].orderNumber.split("-");
+      if (parts.length === 3) {
+        sequenceNum = parseInt(parts[2], 10) + 1;
+      }
+    }
+    const sequenceString = sequenceNum.toString().padStart(4, "0");
+    const orderNumber = `A-${year}-${sequenceString}`;
     
     const newOrder = {
       id: orderId,
