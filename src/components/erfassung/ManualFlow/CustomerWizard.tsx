@@ -2,26 +2,34 @@
 
 import { useState, useEffect } from "react";
 import { useErfassung } from "../ErfassungProvider";
-import { User, Sparkles, ChevronDown, Check, Loader2 } from "lucide-react";
+import { User, Sparkles, ChevronDown, Check, Loader2, MapPin, Search } from "lucide-react";
 import { createCustomerFromErfassung } from "@/app/actions/erfassung.actions";
+import { extractCustomerDataFromFreetext, enrichCustomerData } from "@/app/actions/ai-enrichment.actions";
 
 export function CustomerWizard() {
   const { options, closeErfassung, openErfassung, setIsDirty } = useErfassung();
   
   // State for the mandatory sections
+  const [customerType, setCustomerType] = useState<"privat" | "business" | "lead">("privat");
   const [company, setCompany] = useState(options?.prefill?.company || "");
   const [contactName, setContactName] = useState(options?.prefill?.contactName || "");
   const [email, setEmail] = useState(options?.prefill?.email || "");
   const [phone, setPhone] = useState(options?.prefill?.phone || "");
-  const [address, setAddress] = useState(options?.prefill?.address || "");
   
-  // Optional toggles
-  const [showFreetext, setShowFreetext] = useState(false);
-  const [freetext, setFreetext] = useState(options?.prefill?.rawText || "");
-  const [showBehavior, setShowBehavior] = useState(!!options?.prefill?.behaviorNote);
+  // Structured Address
+  const [address, setAddress] = useState(options?.prefill?.address || "");
+  const [street, setStreet] = useState("");
+  const [zipCode, setZipCode] = useState("");
+  const [city, setCity] = useState("");
+  const [country, setCountry] = useState("");
+  
+  const [notes, setNotes] = useState("");
   const [behaviorNote, setBehaviorNote] = useState(options?.prefill?.behaviorNote || "");
   
+  const [freetext, setFreetext] = useState(options?.prefill?.rawText || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [isEnriching, setIsEnriching] = useState(false);
   const [successResult, setSuccessResult] = useState<any>(null);
 
   useEffect(() => {
@@ -30,7 +38,13 @@ export function CustomerWizard() {
   }, [company, contactName, email, freetext, behaviorNote, setIsDirty]);
 
   const handleSave = async () => {
-    if (!company && !contactName) return alert("Bitte Firma oder Name angeben.");
+    if (customerType === "privat") {
+      if (!contactName) return alert("Vor- und Nachname sind für Privatkunden erforderlich.");
+    } else if (customerType === "business") {
+      if (!company) return alert("Firma ist für Geschäftskunden erforderlich.");
+    } else {
+      if (!company && !contactName) return alert("Name oder Firma ist für Leads erforderlich.");
+    }
     
     setIsSubmitting(true);
     try {
@@ -40,10 +54,16 @@ export function CustomerWizard() {
         email,
         phone,
         address,
+        street,
+        zipCode,
+        city,
+        country,
+        notes,
         behaviorNote,
         source: options?.source || "manual",
         sourceRef: options?.sourceRef || null,
-        isLead: false // Default
+        type: customerType,
+        isLead: customerType === "lead"
       });
       
       if (!result.ok) {
@@ -57,6 +77,57 @@ export function CustomerWizard() {
       alert("Fehler beim Speichern: " + e.message);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleExtractFreetext = async () => {
+    if (!freetext) return;
+    setIsExtracting(true);
+    try {
+      const res = await extractCustomerDataFromFreetext(freetext);
+      if (res.ok && res.data) {
+        const d = res.data;
+        if (d.type) setCustomerType(d.type);
+        if (d.company) setCompany(d.company);
+        if (d.contactName) setContactName(d.contactName);
+        if (d.email) setEmail(d.email);
+        if (d.phone) setPhone(d.phone);
+        if (d.street) setStreet(d.street);
+        if (d.zipCode) setZipCode(d.zipCode);
+        if (d.city) setCity(d.city);
+        if (d.notes) setNotes(d.notes);
+        // Build address line
+        setAddress([d.street, d.zipCode, d.city].filter(Boolean).join(", "));
+        alert("Daten aus Freitext erkannt und ausgefüllt!");
+      } else {
+        alert(res.error || "Fehler beim Extrahieren");
+      }
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const handleEnrichWeb = async () => {
+    if (!company && !city) return alert("Mindestens Firma oder Stadt muss angegeben werden.");
+    setIsEnriching(true);
+    try {
+      const res = await enrichCustomerData(company, city);
+      if (res.ok && res.data) {
+        const d = res.data;
+        if (d.street) setStreet(d.street);
+        if (d.zipCode) setZipCode(d.zipCode);
+        if (d.city) setCity(d.city);
+        if (d.website && !notes.includes(d.website)) setNotes(prev => prev ? prev + "\\nWeb: " + d.website : "Web: " + d.website);
+        if (d.phone && !phone) setPhone(d.phone);
+        if (d.email && !email) setEmail(d.email);
+        
+        setAddress([d.street || street, d.zipCode || zipCode, d.city || city].filter(Boolean).join(", "));
+        alert("Daten per Web/Gemini ergänzt! (Confidence: " + d.confidence + ")");
+      } else {
+        alert(res.error || "Fehler beim Recherchieren");
+      }
+    } finally {
+      setIsEnriching(false);
     }
   };
 
@@ -78,7 +149,7 @@ export function CustomerWizard() {
         </div>
         <h2 className="text-2xl font-serif text-[#1a1c23] mb-2">Kunde erfolgreich angelegt!</h2>
         <p className="text-gray-600 mb-8">
-          Der Kunde <strong>{successResult.name}</strong> wurde in der Datenbank gespeichert.
+          Der Kunde <strong>{successResult.name}</strong> wurde mit der Nummer <strong>{successResult.customerNumber}</strong> gespeichert.
         </p>
         
         <div className="flex flex-col gap-3 w-full max-w-sm">
@@ -104,44 +175,94 @@ export function CustomerWizard() {
       {/* Header */}
       <div className="px-8 py-6 sticky top-0 z-10 bg-[#fcfaf6]">
         <h2 className="text-2xl font-serif text-[#1a1c23] mb-1">
-          Kunde manuell erfassen
+          Kunde erfassen (V2)
         </h2>
         <p className="text-sm text-gray-500">
-          Stamm- und Kontaktdaten — Freitext und Verhaltensnotiz als optionale Ergänzungen unten.
+          KI-Assistent für die strukturierte Erfassung von Neukunden.
         </p>
       </div>
 
       {/* Main Form */}
       <div className="px-8 pb-8 space-y-6 overflow-y-auto flex-1">
         
-        {/* 1. Stammdaten */}
-        <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-[#1a1c23] text-white flex items-center justify-center text-xs font-bold">1</div>
-              <h3 className="font-serif text-lg text-[#1a1c23]">Stammdaten</h3>
-            </div>
-            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 rounded-full">PFLICHT</span>
+        {/* KI Assistenz */}
+        <section className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-3 text-indigo-900">
+            <Sparkles className="w-5 h-5 text-indigo-600" />
+            <h3 className="font-serif text-lg">Assistenz & Autofill</h3>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Firma</label>
-              <input type="text" value={company} onChange={e => setCompany(e.target.value)} placeholder="z.B. Galvanik-Bürkle GmbH" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Ansprechpartner</label>
-              <input type="text" value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Max Mustermann" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
-            </div>
+          <textarea 
+            value={freetext} 
+            onChange={e => setFreetext(e.target.value)} 
+            placeholder="Z.B. 'Herr Müller aus Fulda, Oldtimerteile, möchte Rückruf, Tel: 0151...'"
+            className="w-full bg-white border border-indigo-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-300 focus:outline-none mb-3"
+            rows={2}
+          />
+          <div className="flex gap-3">
+            <button 
+              onClick={handleExtractFreetext}
+              disabled={isExtracting || !freetext}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors"
+            >
+              {isExtracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              Aus Freitext erkennen
+            </button>
+            <button 
+              onClick={handleEnrichWeb}
+              disabled={isEnriching || (!company && !city)}
+              className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 disabled:opacity-50 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-semibold transition-colors"
+            >
+              {isEnriching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+              Per Web/Gemini ergänzen
+            </button>
           </div>
         </section>
 
-        {/* 2. Kontaktdaten */}
+        {/* 1. Kundentyp */}
+        <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5">
+          <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-3">Kundentyp</label>
+          <div className="flex gap-6 p-1 bg-gray-100 rounded-lg max-w-md">
+            {["privat", "business", "lead"].map((type) => (
+              <label key={type} className={`flex-1 flex justify-center items-center gap-2 cursor-pointer py-2 px-4 rounded-md transition-all ${customerType === type ? 'bg-white shadow-sm font-bold text-navy-900' : 'text-gray-500 hover:text-gray-700'}`}>
+                <input type="radio" checked={customerType === type} onChange={() => setCustomerType(type as any)} className="hidden" />
+                <span className="text-sm capitalize">{type === "business" ? "Firma" : type}</span>
+              </label>
+            ))}
+          </div>
+        </section>
+
+        {/* 2. Stammdaten */}
         <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-[#1a1c23] text-white flex items-center justify-center text-xs font-bold">2</div>
-              <h3 className="font-serif text-lg text-[#1a1c23]">Kontaktdaten</h3>
-            </div>
+            <h3 className="font-serif text-lg text-[#1a1c23]">Stammdaten</h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(customerType === "business" || customerType === "lead" || company) && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                  Firma {customerType === "business" && <span className="text-red-500">*</span>}
+                </label>
+                <input type="text" value={company} onChange={e => setCompany(e.target.value)} placeholder="Galvanik-Bürkle GmbH" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+              </div>
+            )}
+            
+            {(customerType === "privat" || customerType === "lead" || customerType === "business") && (
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+                  {customerType === "privat" ? "Vor- / Nachname" : "Ansprechpartner"} {customerType === "privat" && <span className="text-red-500">*</span>}
+                </label>
+                <input type="text" value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Max Mustermann" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* 3. Kontaktdaten */}
+        <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-serif text-lg text-[#1a1c23]">Kontaktdaten</h3>
+            {customerType === "privat" && <span className="text-xs text-gray-500 font-medium">Empfohlen: Tel oder E-Mail</span>}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -155,99 +276,65 @@ export function CustomerWizard() {
           </div>
         </section>
 
-        {/* 3. Adresse */}
+        {/* 4. Adresse (Smart Field) */}
         <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-[#1a1c23] text-white flex items-center justify-center text-xs font-bold">3</div>
-              <h3 className="font-serif text-lg text-[#1a1c23]">Adresse</h3>
-            </div>
+            <h3 className="font-serif text-lg text-[#1a1c23] flex items-center gap-2"><MapPin className="w-5 h-5 text-gray-400" /> Adresse</h3>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Straße, PLZ, Ort</label>
-            <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="Musterstraße 1, 12345 Musterstadt" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+              <div className="flex-1">
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Anschrift (Gesamt)</label>
+                <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="Musterstraße 1, 12345 Musterstadt" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+              </div>
+              <button disabled className="shrink-0 h-[46px] px-4 bg-gray-100 text-gray-400 border border-gray-200 rounded-lg text-xs font-semibold flex items-center gap-2 cursor-not-allowed">
+                <MapPin className="w-4 h-4" />
+                Google Places nicht verbunden
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-3 md:col-span-1">
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Straße & Nr</label>
+                <input type="text" value={street} onChange={e => setStreet(e.target.value)} className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+              </div>
+              <div className="col-span-1">
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">PLZ</label>
+                <input type="text" value={zipCode} onChange={e => setZipCode(e.target.value)} className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+              </div>
+              <div className="col-span-2 md:col-span-1">
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Stadt</label>
+                <input type="text" value={city} onChange={e => setCity(e.target.value)} className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+              </div>
+            </div>
+            {(!street || !city) && (
+               <p className="text-xs text-gray-400 italic flex items-center gap-1">Nutze "Per Web ergänzen" oder "Freitext erkennen" zum Auffüllen.</p>
+            )}
           </div>
         </section>
 
-        {/* Accordions */}
-        <div className="space-y-3 pt-2">
-          {/* Freitext */}
-          <div className="bg-[#fcfaf6] border border-[#e5dcd0] rounded-xl overflow-hidden">
-            <button 
-              onClick={() => setShowFreetext(!showFreetext)}
-              className="w-full p-4 flex items-center justify-between hover:bg-white transition-colors"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
-                  <Sparkles className="w-4 h-4" />
-                </div>
-                <div className="text-left">
-                  <div className="font-semibold text-gray-900 text-sm">Freitext nutzen — KI ergänzt Felder oben</div>
-                  <div className="text-xs text-gray-500">Optional. Schreib drauflos, die KI füllt die strukturierten Felder.</div>
-                </div>
-              </div>
-              <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showFreetext ? 'rotate-180' : ''}`} />
-            </button>
-            {showFreetext && (
-              <div className="p-4 bg-white border-t border-[#e5dcd0]">
-                 <textarea 
-                  className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" 
-                  rows={3} 
-                  placeholder="Kunde angerufen, neue E-Mail ist max@... Adresse bleibt." 
-                  value={freetext} 
-                  onChange={(e) => setFreetext(e.target.value)} 
-                />
-              </div>
-            )}
+        {/* 5. Bemerkungen & Verhaltensnotiz */}
+        <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Interne Bemerkung (Allgemein)</label>
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Hat mehrere Oldtimer. Bringt Teile meist persönlich..." className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" rows={2} />
           </div>
-          
-          {/* Verhaltensnotiz */}
-          <div className="bg-[#fcfaf6] border border-[#e5dcd0] rounded-xl overflow-hidden">
-            <button 
-              onClick={() => setShowBehavior(!showBehavior)}
-              className="w-full p-4 flex items-center justify-between hover:bg-white transition-colors"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600">
-                  <User className="w-4 h-4" />
-                </div>
-                <div className="text-left">
-                  <div className="font-semibold text-gray-900 text-sm">Verhaltensnotiz zum Kunden</div>
-                  <div className="text-xs text-gray-500">Optional. Geht ins Kundenprofil.</div>
-                </div>
-              </div>
-              <ChevronDown className={`w-5 h-5 text-gray-400 transition-transform ${showBehavior ? 'rotate-180' : ''}`} />
-            </button>
-            {showBehavior && (
-              <div className="p-4 bg-white border-t border-[#e5dcd0]">
-                 <textarea 
-                  className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" 
-                  rows={3} 
-                  placeholder="Besondere Vorlieben, typisches Verhalten..." 
-                  value={behaviorNote} 
-                  onChange={(e) => setBehaviorNote(e.target.value)} 
-                />
-              </div>
-            )}
+          <div>
+            <label className="block text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2">Verhaltensnotiz (Wichtig!)</label>
+            <textarea value={behaviorNote} onChange={e => setBehaviorNote(e.target.value)} placeholder="Will telefonisch informiert werden. Sehr preissensibel..." className="w-full bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-amber-300 focus:outline-none" rows={2} />
           </div>
-        </div>
+        </section>
 
       </div>
 
-      {/* Footer / Actions */}
-      <div className="bg-[#f3eee8] border-t border-[#e5dcd0] px-8 py-5 flex justify-between items-center sticky bottom-0">
-        <button
-          onClick={closeErfassung}
-          className="text-sm font-medium text-gray-600 hover:text-gray-900"
-        >
-          Abbrechen
-        </button>
+      {/* Footer */}
+      <div className="px-8 py-4 bg-white border-t border-[#e5dcd0] flex justify-between items-center z-10 sticky bottom-0">
+        <button onClick={closeErfassung} className="px-6 py-3 font-semibold text-gray-600 hover:text-gray-900 transition-colors">Abbrechen</button>
         <button
           onClick={handleSave}
-          disabled={isSubmitting}
-          className="px-6 py-2.5 text-sm font-bold text-white bg-[#1a1c23] rounded-lg hover:bg-black transition-all flex items-center gap-2 disabled:opacity-50"
+          disabled={isSubmitting || (customerType === "privat" && !contactName)}
+          className="flex items-center gap-2 px-8 py-3 bg-[#1a1c23] hover:bg-black text-white rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
         >
-          {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Kunde anlegen"} {!isSubmitting && <Check className="w-4 h-4" />}
+          {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Speichern"}
         </button>
       </div>
     </div>

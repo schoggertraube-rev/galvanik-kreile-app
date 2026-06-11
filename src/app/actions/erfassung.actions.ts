@@ -335,7 +335,7 @@ export async function uebernehmeVorlage(input: {
 }
 
 import { db } from "@/db";
-import { customers, orders, items, events } from "@/db/schema";
+import { customers, orders, items, events, calendarEvents } from "@/db/schema";
 import { eq, desc, like } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth } from "@/lib/server/authHelper";
@@ -359,20 +359,47 @@ export async function createCustomerFromErfassung(input: any) {
   try {
     const customerId = createId();
     const isCompany = !!input.company;
-    const customerType = input.isLead ? "lead" : (isCompany ? "business" : "privat");
+    const customerType = input.type || (input.isLead ? "lead" : (isCompany ? "business" : "privat"));
+
+    // Generate robust customer number
+    const year = new Date().getFullYear();
+    const prefix = "K";
+    const pattern = `${prefix}-${year}-%`;
+    const existingCustomers = await db
+      .select({ customerNumber: customers.customerNumber })
+      .from(customers)
+      .where(like(customers.customerNumber, pattern))
+      .orderBy(desc(customers.customerNumber))
+      .limit(1);
+
+    let sequenceNum = 1;
+    if (existingCustomers.length > 0 && existingCustomers[0].customerNumber) {
+      const parts = existingCustomers[0].customerNumber.split("-");
+      if (parts.length === 3) {
+        sequenceNum = parseInt(parts[2], 10) + 1;
+      }
+    }
+    const sequenceString = sequenceNum.toString().padStart(4, "0");
+    const customerNumber = `${prefix}-${year}-${sequenceString}`;
 
     const newCustomer = {
       id: customerId,
+      customerNumber,
       name: input.contactName || input.company || "Unbenannter Kunde",
       companyName: input.company || null,
       contactPerson: input.contactName || null,
       email: input.email || null,
       phone: input.phone || null,
+      street: input.street || null,
+      zipCode: input.zipCode || null,
+      city: input.city || null,
+      country: input.country || null,
       address: input.address || null,
       type: customerType,
       isLead: input.isLead || false,
       source: input.source || "manual",
       sourceRef: input.sourceRef || null,
+      notes: input.notes || null,
       behaviorNotes: input.behaviorNote || null,
       // No spreading of arbitrary input fields to prevent schema crashes
     };
@@ -434,6 +461,10 @@ export async function createOrderFromErfassung(input: any) {
     const sequenceString = sequenceNum.toString().padStart(4, "0");
     const orderNumber = `${prefix}-${year}-${sequenceString}`;
 
+    const timeWindowStr = input.timeWindow && input.timeWindow !== 'ganztaegig' ? `\n[Termin: ${input.timeWindow}]` : '';
+    const calSyncStr = input.calendarSync ? ` [Kalender-Sync aktiv]` : '';
+    const combinedFreetext = `${input.freetextOriginal || ''}${timeWindowStr}${calSyncStr}`.trim();
+
     const newOrder = {
       id: orderId,
       tenantId: "galvanik-kreile",
@@ -447,11 +478,26 @@ export async function createOrderFromErfassung(input: any) {
       quoteStatus: input.isQuote ? "offen" : null,
       source: input.source,
       sourceRef: input.sourceRef || null,
-      freetextOriginal: input.freetextOriginal || null,
+      freetextOriginal: combinedFreetext || null,
       dueDate: input.dueDate ? new Date(input.dueDate) : null,
     };
 
     await db.insert(orders).values(newOrder);
+
+    if (input.calendarSync && input.dueDate) {
+      await db.insert(calendarEvents).values({
+        id: createId(),
+        tenantId: "galvanik-kreile",
+        orderId: orderId,
+        customerId: input.customerId,
+        title: `Abgabe/Lieferung: ${input.title}`,
+        eventType: "delivery",
+        startsAt: new Date(input.dueDate),
+        timeSlot: input.timeWindow || "ganztaegig",
+        status: "planned",
+        source: input.source,
+      });
+    }
 
     if (input.items && Array.isArray(input.items) && input.items.length > 0) {
       const newItems = input.items.map((p: any) => ({

@@ -28,18 +28,7 @@ export type Complaint = {
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
-const INITIAL_COMPLAINTS: Complaint[] = [
-  {
-    id: "complaint-1",
-    customerId: "cust-1",
-    orderId: "A-2026-0042",
-    reason: "surface_quality",
-    description: "Kunde meldet matte Stellen an der Stoßstange",
-    photoIds: [],
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-    status: "open"
-  }
-];
+const INITIAL_COMPLAINTS: Complaint[] = [];
 
 export const complaintsRepository = {
   async getAll(): Promise<Complaint[]> {
@@ -66,31 +55,7 @@ export const complaintsRepository = {
       }
     }
 
-    // --- Mock Fallback ---
-    if (typeof window !== "undefined") {
-      if (OfflineManager.isOffline()) {
-        const cached = await IndexedDBHelper.getSnapshot<Complaint>("complaints");
-        if (cached && cached.length > 0) {
-          return cached;
-        }
-      }
-
-      const saved = localStorage.getItem("kreile_complaints");
-      const complaints = saved ? JSON.parse(saved) : INITIAL_COMPLAINTS;
-
-      if (!saved) {
-        localStorage.setItem("kreile_complaints", JSON.stringify(INITIAL_COMPLAINTS));
-      }
-
-      if (!OfflineManager.isOffline()) {
-        IndexedDBHelper.saveSnapshot("complaints", complaints.slice(0, 100)).catch(err =>
-          console.error("Failed to save complaints snapshot to IndexedDB:", err)
-        );
-      }
-
-      return complaints as Complaint[];
-    }
-    return INITIAL_COMPLAINTS;
+    return [];
   },
 
   async getByCustomer(customerId: string): Promise<Complaint[]> {
@@ -148,30 +113,7 @@ export const complaintsRepository = {
       }
     }
 
-    // --- Mock Fallback ---
-    const all = await this.getAll();
-    const newComplaint: Complaint = {
-      ...complaint,
-      id,
-      createdAt
-    };
-    
-    const updated = [newComplaint, ...all];
-
-    if (OfflineManager.isOffline()) {
-      await OfflineManager.enqueueAction("COMPLAINT_CREATE", newComplaint);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("kreile_complaints", JSON.stringify(updated));
-      }
-      return newComplaint;
-    }
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_complaints", JSON.stringify(updated));
-      IndexedDBHelper.saveSnapshot("complaints", updated.slice(0, 100)).catch(err => console.error(err));
-    }
-    
-    return newComplaint;
+    throw new Error("Supabase is required for addComplaint");
   },
   
   async updateComplaint(id: string, changes: Partial<Complaint>): Promise<Complaint | null> {
@@ -200,24 +142,6 @@ export const complaintsRepository = {
       }
     }
 
-    // --- Mock Fallback ---
-    const all = await this.getAll();
-    let updatedComplaint: Complaint | null = null;
-    
-    const updated = all.map(c => {
-      if (c.id === id) {
-        updatedComplaint = { ...c, ...changes };
-        return updatedComplaint;
-      }
-      return c;
-    });
-
-    if (!updatedComplaint) return null;
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_complaints", JSON.stringify(updated));
-      IndexedDBHelper.saveSnapshot("complaints", updated.slice(0, 100)).catch(err => console.error(err));
-    }
-    return updatedComplaint;
+    return null;
   }
 };

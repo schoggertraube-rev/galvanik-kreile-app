@@ -17,7 +17,7 @@ export interface OpenErfassungOptions {
   mode: ErfassungMode;
   intent?: "create_customer" | "create_order" | "create_quote";
   customerId?: string | null;
-  source?: "manual" | "phone" | "inquiry" | "scan" | "search" | "customer" | "order";
+  source?: "manual" | "phone" | "inquiry" | "scan" | "search" | "customer" | "order" | "shortcut";
   sourceRef?: string | null;
   prefill?: ErfassungPrefill;
   returnTo?: string;

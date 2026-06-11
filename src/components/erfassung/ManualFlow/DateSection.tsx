@@ -20,18 +20,30 @@ export function DateSection({ dateInfo, onChange }: { dateInfo: any, onChange: (
           />
         </div>
         <div>
-          <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Priorität</label>
+          <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Uhrzeitfenster</label>
           <select
             className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg px-3 py-2.5 text-sm focus:bg-white focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none transition-colors appearance-none"
-            value={dateInfo.priority || "normal"}
-            onChange={(e) => handleChange("priority", e.target.value)}
+            value={dateInfo.timeWindow || "ganztaegig"}
+            onChange={(e) => handleChange("timeWindow", e.target.value)}
           >
-            <option value="normal">Normal</option>
-            <option value="express">Express</option>
+            <option value="ganztaegig">Ganztägig</option>
+            <option value="vormittags">Vormittags (08:00 - 12:00)</option>
+            <option value="nachmittags">Nachmittags (12:00 - 16:00)</option>
+            <option value="spaet">Spätnachmittag (16:00 - 18:00)</option>
           </select>
         </div>
       </div>
       
+      <div className="flex items-center justify-between bg-white border border-[#e5dcd0] rounded-lg p-3">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">Kalender-Anbindung</p>
+          <p className="text-[10px] font-bold text-amber-600 uppercase tracking-wider mt-0.5">Kalenderverknüpfung vorbereitet</p>
+        </div>
+        <label className="relative inline-flex items-center cursor-pointer">
+          <input type="checkbox" className="sr-only peer" checked={dateInfo.calendarSync || false} onChange={(e) => handleChange("calendarSync", e.target.checked)} />
+          <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#1a1c23]"></div>
+        </label>
+      </div>
       <div>
         <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Rücklieferung</label>
         <div className="flex gap-2">
