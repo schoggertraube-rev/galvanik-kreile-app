@@ -23,6 +23,7 @@ export function ManualWizard() {
   const [behaviorNote, setBehaviorNote] = useState(options?.prefill?.behaviorNote?.text || "");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successResult, setSuccessResult] = useState<any>(null);
   const { openErfassung } = useErfassung();
 
   useEffect(() => {
@@ -43,6 +44,8 @@ export function ManualWizard() {
         items,
         priority: dateInfo.priority,
         dueDate: dateInfo.dueDate,
+        timeWindow: dateInfo.timeWindow,
+        calendarSync: dateInfo.calendarSync,
         freetextOriginal: freetext,
         behaviorNote,
         isQuote: options?.intent === "create_quote",
@@ -57,8 +60,7 @@ export function ManualWizard() {
         return;
       }
 
-      alert("Auftrag erfolgreich angelegt!");
-      closeErfassung();
+      setSuccessResult(result.order);
     } catch (e: any) {
       alert("Fehler beim Speichern: " + e.message);
     } finally {
@@ -74,6 +76,29 @@ export function ManualWizard() {
       prefill: { company: searchName, items, order: dateInfo, rawText: freetext }
     });
   };
+
+  if (successResult) {
+    return (
+      <div className="flex flex-col h-full bg-[#fcfaf6] rounded-2xl overflow-hidden relative justify-center items-center p-8 text-center">
+        <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
+          <Check className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-serif text-[#1a1c23] mb-2">Auftrag erfolgreich angelegt!</h2>
+        <p className="text-gray-600 mb-8">
+          Der {successResult.isQuote ? "Kostenvoranschlag" : "Auftrag"} wurde mit der Nummer <strong>{successResult.orderNumber}</strong> gespeichert.
+        </p>
+        
+        <div className="flex flex-col gap-3 w-full max-w-sm">
+          <button
+            onClick={closeErfassung}
+            className="w-full px-6 py-3 font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all"
+          >
+            Schließen
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-[#fcfaf6] rounded-2xl overflow-hidden">
@@ -106,29 +131,34 @@ export function ManualWizard() {
           />
         </section>
 
-        {/* 2. Teile */}
-        <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-[#1a1c23] text-white flex items-center justify-center text-xs font-bold">2</div>
-              <h3 className="font-serif text-lg text-[#1a1c23]">Teile</h3>
-            </div>
-            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 rounded-full">PFLICHT</span>
-          </div>
-          <ItemsSection items={items} onChange={setItems} />
-        </section>
+        {/* The Gate: Only show Items and Date if customer is selected */}
+        {customer && (
+          <>
+            {/* 2. Teile */}
+            <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5 animate-in fade-in duration-300">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 rounded-full bg-[#1a1c23] text-white flex items-center justify-center text-xs font-bold">2</div>
+                  <h3 className="font-serif text-lg text-[#1a1c23]">Teile</h3>
+                </div>
+                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 rounded-full">PFLICHT</span>
+              </div>
+              <ItemsSection items={items} onChange={setItems} />
+            </section>
 
-        {/* 3. Termin */}
-        <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-6 h-6 rounded-full bg-[#1a1c23] text-white flex items-center justify-center text-xs font-bold">3</div>
-              <h3 className="font-serif text-lg text-[#1a1c23]">Termin & Lieferung</h3>
-            </div>
-            <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 rounded-full">PFLICHT</span>
-          </div>
-          <DateSection dateInfo={dateInfo} onChange={setDateInfo} />
-        </section>
+            {/* 3. Termin */}
+            <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5 animate-in fade-in duration-300">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-6 h-6 rounded-full bg-[#1a1c23] text-white flex items-center justify-center text-xs font-bold">3</div>
+                  <h3 className="font-serif text-lg text-[#1a1c23]">Termin & Lieferung</h3>
+                </div>
+                <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 rounded-full">PFLICHT</span>
+              </div>
+              <DateSection dateInfo={dateInfo} onChange={setDateInfo} customer={customer} />
+            </section>
+          </>
+        )}
 
         {/* Accordions */}
         <div className="space-y-3 pt-2">
@@ -195,22 +225,24 @@ export function ManualWizard() {
 
       </div>
 
-      {/* Footer / Actions */}
-      <div className="bg-[#f3eee8] border-t border-[#e5dcd0] px-8 py-5 flex justify-between items-center sticky bottom-0">
-        <button
-          onClick={closeErfassung}
-          className="text-sm font-medium text-gray-600 hover:text-gray-900"
-        >
-          Abbrechen
-        </button>
-        <button
-          onClick={handleSave}
-          disabled={isSubmitting}
-          className="px-6 py-2.5 text-sm font-bold text-white bg-[#1a1c23] rounded-lg hover:bg-black transition-all flex items-center gap-2 disabled:opacity-50"
-        >
-          {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Auftrag anlegen"} {!isSubmitting && <Check className="w-4 h-4" />}
-        </button>
-      </div>
+      {/* Footer (Only show if customer selected) */}
+      {customer && (
+        <div className="px-8 py-4 bg-white border-t border-[#e5dcd0] flex justify-between items-center z-10 sticky bottom-0">
+          <button onClick={closeErfassung} className="px-6 py-3 font-semibold text-gray-600 hover:text-gray-900 transition-colors">Abbrechen</button>
+          <button
+            onClick={handleSave}
+            disabled={isSubmitting || items.length === 0}
+            className="flex items-center gap-2 px-8 py-3 bg-[#1a1c23] hover:bg-black text-white rounded-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+          >
+            {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : (options?.intent === "create_quote" ? "KV-Anfrage senden" : "Auftrag anlegen")}
+          </button>
+        </div>
+      )}
+      {!customer && (
+        <div className="px-8 py-4 bg-white border-t border-[#e5dcd0] flex justify-between items-center z-10 sticky bottom-0">
+          <button onClick={closeErfassung} className="px-6 py-3 font-semibold text-gray-600 hover:text-gray-900 transition-colors">Abbrechen</button>
+        </div>
+      )}
     </div>
   );
 }

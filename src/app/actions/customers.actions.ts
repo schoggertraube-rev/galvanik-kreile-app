@@ -2,18 +2,21 @@
 
 import { db } from "@/db";
 import { customers } from "@/db/schema";
-import { eq, ilike, or } from "drizzle-orm";
+import { eq, ilike, or, and, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
+import { InferSelectModel } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { Customer } from "@/lib/types/customer";
 
-function mapDbCustomer(c: any): Customer {
+type DbCustomer = InferSelectModel<typeof customers>;
+
+function mapDbCustomer(c: DbCustomer): Customer {
   return {
     id: c.id,
     customerNumber: c.customerNumber || c.id.substring(0, 8),
     name: c.name,
     companyName: c.companyName || undefined,
-    type: c.type,
+    type: c.type as import("@/lib/types/customer").CustomerType,
     contactPerson: c.contactPerson || undefined,
     email: c.email || undefined,
     phone: c.phone || undefined,
@@ -21,11 +24,11 @@ function mapDbCustomer(c: any): Customer {
     approvalProfile: c.approvalProfile || undefined,
     expectationProfile: c.expectationProfile || undefined,
     technicalProfile: c.technicalProfile || undefined,
-    trustLevel: c.trustLevel || undefined,
+    trustLevel: c.trustLevel as import("@/lib/types/customer").Customer["trustLevel"] || undefined,
     internalWarning: c.internalWarning || undefined,
-    tags: c.tags || [],
+    tags: (c.tags as string[]) || [],
     creditRating: c.creditRating || undefined,
-    imageUrls: c.imageUrls || [],
+    imageUrls: (c.imageUrls as string[]) || [],
     address: c.address || undefined,
     city: c.city || undefined,
     zipCode: c.zipCode || undefined,
@@ -34,7 +37,7 @@ function mapDbCustomer(c: any): Customer {
   };
 }
 
-function sanitizeCustomerPayload(data: Record<string, any>, isUpdate = false): Record<string, unknown> {
+function sanitizeCustomerPayload(data: Record<string, unknown>, isUpdate = false): Record<string, unknown> {
   const result: Record<string, unknown> = {};
 
   for (const [key, value] of Object.entries(data)) {
@@ -64,7 +67,12 @@ export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
-    const dbCustomers = await db.select().from(customers).orderBy(customers.createdAt);
+    const dbCustomers = await db.select().from(customers).where(
+      and(
+        sql`coalesce(${customers.source}, '') != 'test'`,
+        sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
+      )
+    ).orderBy(customers.createdAt);
     const data = dbCustomers.map(mapDbCustomer).reverse(); // Order by createdAt desc
     return { ok: true, data };
   } catch (error) {
@@ -119,26 +127,33 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
       city: validData.city || null,
       zipCode: validData.zipCode || null,
       imageUrls: validData.imageUrls || [],
-      contactPerson: (data as any).contactPerson,
+      contactPerson: (data as Record<string, unknown>).contactPerson as string,
       email: validData.email,
       phone: validData.phone,
-      paymentProfile: (data as any).paymentProfile || null,
-      approvalProfile: (data as any).approvalProfile || null,
-      expectationProfile: (data as any).expectationProfile || null,
-      technicalProfile: (data as any).technicalProfile || null,
-      trustLevel: (data as any).trustLevel || null,
-      internalWarning: (data as any).internalWarning || null,
-      tags: (data as any).tags || null,
-      creditRating: (data as any).creditRating || null,
+      paymentProfile: (data as Record<string, unknown>).paymentProfile || null,
+      approvalProfile: (data as Record<string, unknown>).approvalProfile || null,
+      expectationProfile: (data as Record<string, unknown>).expectationProfile || null,
+      technicalProfile: (data as Record<string, unknown>).technicalProfile || null,
+      trustLevel: (data as Record<string, unknown>).trustLevel as string || null,
+      internalWarning: (data as Record<string, unknown>).internalWarning as string || null,
+      tags: (data as Record<string, unknown>).tags || null,
+      creditRating: (data as Record<string, unknown>).creditRating as string || null,
       notes: validData.notes || null,
     };
     
     const newCustomerDb = sanitizeCustomerPayload(rawCustomerDb, false);
     
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await db.insert(customers).values(newCustomerDb as any);
     
     const dbCustomers = await db.select().from(customers).where(eq(customers.id, newId)).limit(1);
     if (dbCustomers.length === 0) throw new Error("Insert failed to return data");
+    
+    try { 
+      const { revalidatePath } = await import("next/cache");
+      revalidatePath("/"); 
+      revalidatePath("/customers");
+    } catch { /* ignore when not in Next runtime */ }
     
     return { ok: true, data: mapDbCustomer(dbCustomers[0]) };
   } catch (error) {
@@ -154,7 +169,7 @@ export async function updateCustomerDb(id: string, changes: Partial<Customer>): 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
-    const rawUpdateData: Record<string, any> = {};
+    const rawUpdateData: Record<string, unknown> = {};
     if (changes.name !== undefined) rawUpdateData.name = changes.name;
     if (changes.companyName !== undefined) rawUpdateData.companyName = changes.companyName;
     if (changes.type !== undefined) rawUpdateData.type = changes.type;
@@ -178,6 +193,7 @@ export async function updateCustomerDb(id: string, changes: Partial<Customer>): 
     
     if (Object.keys(updateData).length > 0) {
       updateData.updatedAt = new Date();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await db.update(customers).set(updateData as any).where(eq(customers.id, id));
     }
     
@@ -201,10 +217,14 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
   try {
     const searchPattern = `%${query.trim()}%`;
     const dbCustomers = await db.select().from(customers).where(
-      or(
-        ilike(customers.name, searchPattern),
-        ilike(customers.phone, searchPattern),
-        ilike(customers.email, searchPattern)
+      and(
+        or(
+          ilike(customers.name, searchPattern),
+          ilike(customers.phone, searchPattern),
+          ilike(customers.email, searchPattern)
+        ),
+        sql`coalesce(${customers.source}, '') != 'test'`,
+        sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     );
     

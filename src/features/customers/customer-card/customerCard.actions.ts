@@ -1,9 +1,9 @@
 "use server";
 
 import { db } from "@/db";
-import { customers, orders, items, events, complaints, priceAgreements, communicationDrafts, phoneNotes } from "@/db/schema";
-import { ausgangsrechnung, zahlung } from "@/db/schema_buchhaltung";
-import { eq, desc, and, or, sql } from "drizzle-orm";
+import { customers, orders, events, complaints, priceAgreements, communicationDrafts, phoneNotes } from "@/db/schema";
+import { ausgangsrechnung } from "@/db/schema_buchhaltung";
+import { eq, desc, and, sql } from "drizzle-orm";
 import { checkAppAuth } from "@/lib/server/authHelper";
 
 // 1. Core Customer Data
@@ -18,8 +18,16 @@ export async function getCustomerCard(customerId: string) {
     if (!customer) return { ok: false, error: "NOT_FOUND" };
 
     // 2. KPI aus View (Raw SQL fallback if view not directly accessible via drizzle-orm object without defining it, but we can use sql helper)
-    const kpiRows: any = await db.execute(sql`SELECT * FROM v_analyse_kunden_kpi WHERE customer_id = ${customerId}`);
-    const kpi = (kpiRows.rows ? kpiRows.rows[0] : kpiRows[0]) || null;
+    let kpi = null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const kpiRows: any = await db.execute(sql`SELECT * FROM v_analyse_kunden_kpi WHERE customer_id = ${customerId}`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      kpi = (kpiRows.rows ? kpiRows.rows[0] : kpiRows[0]) || null;
+    } catch (e) {
+      console.warn("Could not fetch KPI view for customer", customerId, e);
+      kpi = null;
+    }
 
     // 3. Offene Aufträge (limit 5 for overview)
     const openOrders = await db.select()
@@ -39,9 +47,9 @@ export async function getCustomerCard(customerId: string) {
         openOrders
       } 
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("getCustomerCard error", err);
-    return { ok: false, error: err.message };
+    return { ok: false, error: (err as Error).message };
   }
 }
 

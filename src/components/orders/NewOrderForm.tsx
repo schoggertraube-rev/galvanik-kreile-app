@@ -22,6 +22,7 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
   const [quantity, setQuantity] = useState(ocrData?.quantity || "1");
   const [surface, setSurface] = useState(ocrData?.surfaceRequested || "");
   const [task, setTask] = useState("");
+  const [success, setSuccess] = useState(false);
   
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -67,13 +68,38 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
           }
         ]
       });
-      if (onSuccess) onSuccess();
+      setSuccess(true);
     } catch (err) {
       console.error("Fehler beim Erfassen des Auftrags", err);
     } finally {
       setLoading(false);
     }
   };
+
+  if (success) {
+    return (
+      <FocusOverlay isOpen={true} onClose={() => { if (onSuccess) onSuccess(); else onClose(); }}>
+        <div className="flex flex-col h-[400px] max-w-[500px] mx-auto mt-20 bg-white rounded-2xl relative justify-center items-center p-8 text-center shadow-xl border border-neutral-gray-200">
+          <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
+            <CheckCircle2 className="w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-serif text-navy-900 mb-2">Auftrag gespeichert!</h2>
+          <p className="text-gray-600 mb-8">
+            Der Auftrag <strong>{title}</strong> für {customerName} wurde erfolgreich angelegt.
+          </p>
+          <Button
+            onClick={() => {
+              if (onSuccess) onSuccess();
+              else onClose();
+            }}
+            className="w-full max-w-xs h-12 bg-navy-900 text-white font-bold rounded-lg hover:bg-navy-800 transition-all"
+          >
+            Schließen
+          </Button>
+        </div>
+      </FocusOverlay>
+    );
+  }
 
   return (
     <FocusOverlay isOpen={true} onClose={onClose}>

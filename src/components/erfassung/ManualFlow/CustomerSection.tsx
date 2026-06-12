@@ -48,7 +48,7 @@ export function CustomerSection({ customer, onChange, onCreateNew }: { customer:
         </div>
         <div className="mt-2 flex items-center gap-2 bg-[#eaf4eb] text-[#2c6e39] px-4 py-2.5 rounded-lg text-xs font-medium border border-[#c3e2c6]">
           <CheckCircle2 className="w-4 h-4" />
-          <span>Gefunden: {customer.companyName || customer.name} · {customer.customerNumber || "K-NEU"} · 4 Aufträge · letzter Kontakt vor 6 Tagen</span>
+          <span>Gefunden: {customer.companyName || customer.name} · {customer.customerNumber || "K-NEU"}{typeof customer.ordersCount === 'number' ? ` · ${customer.ordersCount} Aufträge` : ''}</span>
           <button onClick={() => { onChange(null); setSearch(""); }} className="ml-auto underline">Ändern</button>
         </div>
       </div>

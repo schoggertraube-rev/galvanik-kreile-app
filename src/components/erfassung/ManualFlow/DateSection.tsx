@@ -2,10 +2,18 @@
 
 import { Truck, PackageSearch, PackageOpen } from "lucide-react";
 
-export function DateSection({ dateInfo, onChange }: { dateInfo: any, onChange: (info: any) => void }) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function DateSection({ dateInfo, onChange, customer }: { dateInfo: any, onChange: (info: any) => void, customer?: any }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleChange = (field: string, value: any) => {
     onChange({ ...dateInfo, [field]: value });
   };
+
+  const hasFullAddress = !!(
+    (customer?.street || customer?.address) && 
+    (customer?.zipCode || customer?.postalCode || customer?.postal_code || (customer?.address && /\b\d{4,5}\b/.test(customer.address))) && 
+    (customer?.city || (customer?.address && customer?.address.length > 10))
+  );
 
   return (
     <div className="space-y-4">
@@ -54,8 +62,9 @@ export function DateSection({ dateInfo, onChange }: { dateInfo: any, onChange: (
             <PackageOpen className="w-4 h-4" /> Abholung
           </button>
           <button 
-            onClick={() => handleChange("shipping", "versand")}
-             className={`flex-1 py-2.5 px-3 rounded-full flex items-center justify-center gap-2 text-sm transition-all ${dateInfo.shipping === 'versand' ? 'bg-[#1a1c23] text-white font-medium border-transparent shadow-md' : 'bg-[#fcfaf6] border border-[#e5dcd0] text-gray-700 hover:bg-white'}`}
+            onClick={() => hasFullAddress && handleChange("shipping", "versand")}
+            disabled={!hasFullAddress}
+             className={`flex-1 py-2.5 px-3 rounded-full flex items-center justify-center gap-2 text-sm transition-all ${dateInfo.shipping === 'versand' ? 'bg-[#1a1c23] text-white font-medium border-transparent shadow-md' : 'bg-[#fcfaf6] border border-[#e5dcd0] text-gray-700 hover:bg-white'} ${!hasFullAddress ? 'opacity-50 cursor-not-allowed' : ''}`}
           >
             <PackageSearch className="w-4 h-4" /> Versand
           </button>
@@ -66,6 +75,11 @@ export function DateSection({ dateInfo, onChange }: { dateInfo: any, onChange: (
             <Truck className="w-4 h-4" /> Spedition
           </button>
         </div>
+        {!hasFullAddress && (
+          <p className="text-xs text-amber-600 mt-2">
+            Versand erst möglich, wenn Straße, PLZ und Ort beim Kunden hinterlegt sind.
+          </p>
+        )}
       </div>
     </div>
   );

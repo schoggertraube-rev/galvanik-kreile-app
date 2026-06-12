@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useCustomerOverlay } from './useCustomerOverlay';
 
 import { X } from 'lucide-react';
-import { CustomerTagEditor } from './CustomerTagEditor';
 import { useOverlayStore } from '@/lib/overlayStore';
 import { CustomerHeader } from './CustomerHeader';
 import { CustomerKpiRow } from './CustomerKpiRow';
@@ -66,7 +65,11 @@ export function CustomerOverlay() {
         {customerData && (
           <>
             <div className="px-6 py-4 border-b border-[var(--ci-border)] bg-[var(--ci-bg)]">
-              {customerData.kpi ? <CustomerKpiRow data={customerData.kpi} /> : null}
+              {customerData.kpi ? <CustomerKpiRow data={customerData.kpi} /> : (
+                <div className="bg-bg-app-soft/30 border border-neutral-gray-100 rounded-2xl p-6 text-center">
+                  <p className="text-sm font-medium text-text-muted">Noch keine belastbaren Analysedaten vorhanden</p>
+                </div>
+              )}
             </div>
 
             {/* Main Tabs UI */}

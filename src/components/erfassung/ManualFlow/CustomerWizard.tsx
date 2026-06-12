@@ -32,6 +32,10 @@ export function CustomerWizard() {
   const [isEnriching, setIsEnriching] = useState(false);
   const [successResult, setSuccessResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [autofilledFields, setAutofilledFields] = useState<string[]>([]);
+  const [inlineMessage, setInlineMessage] = useState<{ type: 'success'|'error', text: string } | null>(null);
+
+  const getHighlight = (field: string) => autofilledFields.includes(field) ? ' ring-2 ring-green-400 !bg-green-50 transition-all duration-300' : '';
 
   useEffect(() => {
     const dirty = company.trim().length > 0 || contactName.trim().length > 0 || email.trim().length > 0 || freetext.trim().length > 0 || behaviorNote.trim().length > 0;
@@ -39,12 +43,13 @@ export function CustomerWizard() {
   }, [company, contactName, email, freetext, behaviorNote, setIsDirty]);
 
   const handleSave = async () => {
+    setError(null);
     if (customerType === "privat") {
-      if (!contactName) return alert("Vor- und Nachname sind für Privatkunden erforderlich.");
+      if (!contactName) return setError("Vor- und Nachname sind für Privatkunden erforderlich.");
     } else if (customerType === "business") {
-      if (!company) return alert("Firma ist für Geschäftskunden erforderlich.");
+      if (!company) return setError("Firma ist für Geschäftskunden erforderlich.");
     } else {
-      if (!company && !contactName) return alert("Name oder Firma ist für Leads erforderlich.");
+      if (!company && !contactName) return setError("Name oder Firma ist für Leads erforderlich.");
     }
     
     setIsSubmitting(true);
@@ -84,24 +89,33 @@ export function CustomerWizard() {
   const handleExtractFreetext = async () => {
     if (!freetext) return;
     setIsExtracting(true);
+    setInlineMessage(null);
     try {
       const res = await extractCustomerDataFromFreetext(freetext);
       if (res.ok && res.data) {
         const d = res.data;
-        if (d.type) setCustomerType(d.type);
-        if (d.company) setCompany(d.company);
-        if (d.contactName) setContactName(d.contactName);
-        if (d.email) setEmail(d.email);
-        if (d.phone) setPhone(d.phone);
-        if (d.street) setStreet(d.street);
-        if (d.zipCode) setZipCode(d.zipCode);
-        if (d.city) setCity(d.city);
-        if (d.notes) setNotes(d.notes);
+        const filled: string[] = [];
+        if (d.type) { setCustomerType(d.type); filled.push("customerType"); }
+        if (d.company) { setCompany(d.company); filled.push("company"); }
+        if (d.contactName) { setContactName(d.contactName); filled.push("contactName"); }
+        if (d.email) { setEmail(d.email); filled.push("email"); }
+        if (d.phone) { setPhone(d.phone); filled.push("phone"); }
+        if (d.street) { setStreet(d.street); filled.push("street"); }
+        if (d.zipCode) { setZipCode(d.zipCode); filled.push("zipCode"); }
+        if (d.city) { setCity(d.city); filled.push("city"); }
+        if (d.notes) { setNotes(d.notes); filled.push("notes"); }
+        
         // Build address line
         setAddress([d.street, d.zipCode, d.city].filter(Boolean).join(", "));
-        alert("Daten aus Freitext erkannt und ausgefüllt!");
+        
+        setAutofilledFields(filled);
+        setInlineMessage({ type: 'success', text: "Daten aus Freitext erkannt und ausgefüllt!" });
+        setTimeout(() => {
+          setAutofilledFields([]);
+          setInlineMessage(null);
+        }, 2000);
       } else {
-        alert(res.error || "Fehler beim Extrahieren");
+        setInlineMessage({ type: 'error', text: res.error || "Fehler beim Extrahieren" });
       }
     } finally {
       setIsExtracting(false);
@@ -109,23 +123,34 @@ export function CustomerWizard() {
   };
 
   const handleEnrichWeb = async () => {
-    if (!company && !city) return alert("Mindestens Firma oder Stadt muss angegeben werden.");
+    if (!company && !city) {
+      setInlineMessage({ type: 'error', text: "Mindestens Firma oder Stadt muss angegeben werden." });
+      return;
+    }
     setIsEnriching(true);
+    setInlineMessage(null);
     try {
       const res = await enrichCustomerData(company, city);
       if (res.ok && res.data) {
         const d = res.data;
-        if (d.street) setStreet(d.street);
-        if (d.zipCode) setZipCode(d.zipCode);
-        if (d.city) setCity(d.city);
-        if (d.website && !notes.includes(d.website)) setNotes(prev => prev ? prev + "\\nWeb: " + d.website : "Web: " + d.website);
-        if (d.phone && !phone) setPhone(d.phone);
-        if (d.email && !email) setEmail(d.email);
+        const filled: string[] = [];
+        if (d.street) { setStreet(d.street); filled.push("street"); }
+        if (d.zipCode) { setZipCode(d.zipCode); filled.push("zipCode"); }
+        if (d.city) { setCity(d.city); filled.push("city"); }
+        if (d.website && !notes.includes(d.website)) { setNotes(prev => prev ? prev + "\\nWeb: " + d.website : "Web: " + d.website); filled.push("notes"); }
+        if (d.phone && !phone) { setPhone(d.phone); filled.push("phone"); }
+        if (d.email && !email) { setEmail(d.email); filled.push("email"); }
         
         setAddress([d.street || street, d.zipCode || zipCode, d.city || city].filter(Boolean).join(", "));
-        alert("Daten per Web/Gemini ergänzt! (Confidence: " + d.confidence + ")");
+        
+        setAutofilledFields(filled);
+        setInlineMessage({ type: 'success', text: "Daten per Web/Gemini ergänzt! (Confidence: " + d.confidence + ")" });
+        setTimeout(() => {
+          setAutofilledFields([]);
+          setInlineMessage(null);
+        }, 2000);
       } else {
-        alert(res.error || "Fehler beim Recherchieren");
+        setInlineMessage({ type: 'error', text: res.error || "Fehler beim Recherchieren" });
       }
     } finally {
       setIsEnriching(false);
@@ -187,7 +212,7 @@ export function CustomerWizard() {
       <div className="px-8 pb-8 space-y-6 overflow-y-auto flex-1">
         
         {/* KI Assistenz */}
-        <section className="bg-gradient-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 shadow-sm p-5">
+        <section className="bg-linear-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 shadow-sm p-5">
           <div className="flex items-center gap-2 mb-3 text-indigo-900">
             <Sparkles className="w-5 h-5 text-indigo-600" />
             <h3 className="font-serif text-lg">Assistenz & Autofill</h3>
@@ -217,6 +242,11 @@ export function CustomerWizard() {
               Per Web/Gemini ergänzen
             </button>
           </div>
+          {inlineMessage && (
+            <div className={`mt-3 p-3 rounded-md text-sm ${inlineMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+              {inlineMessage.text}
+            </div>
+          )}
         </section>
 
         {/* 1. Kundentyp */}
@@ -244,7 +274,7 @@ export function CustomerWizard() {
                 <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
                   Firma {customerType === "business" && <span className="text-red-500">*</span>}
                 </label>
-                <input type="text" value={company} onChange={e => setCompany(e.target.value)} placeholder="Galvanik-Bürkle GmbH" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+                <input type="text" value={company} onChange={e => setCompany(e.target.value)} placeholder="Galvanik-Bürkle GmbH" className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("company")}`} />
               </div>
             )}
             
@@ -253,7 +283,7 @@ export function CustomerWizard() {
                 <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
                   {customerType === "privat" ? "Vor- / Nachname" : "Ansprechpartner"} {customerType === "privat" && <span className="text-red-500">*</span>}
                 </label>
-                <input type="text" value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Max Mustermann" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+                <input type="text" value={contactName} onChange={e => setContactName(e.target.value)} placeholder="Max Mustermann" className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("contactName")}`} />
               </div>
             )}
           </div>
@@ -268,11 +298,11 @@ export function CustomerWizard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">E-Mail</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="info@beispiel.de" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="info@beispiel.de" className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("email")}`} />
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Telefon</label>
-              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+49 123 45678" className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+              <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="+49 123 45678" className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("phone")}`} />
             </div>
           </div>
         </section>
@@ -296,15 +326,15 @@ export function CustomerWizard() {
             <div className="grid grid-cols-3 gap-4">
               <div className="col-span-3 md:col-span-1">
                 <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Straße & Nr</label>
-                <input type="text" value={street} onChange={e => setStreet(e.target.value)} className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+                <input type="text" value={street} onChange={e => setStreet(e.target.value)} className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("street")}`} />
               </div>
               <div className="col-span-1">
                 <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">PLZ</label>
-                <input type="text" value={zipCode} onChange={e => setZipCode(e.target.value)} className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+                <input type="text" value={zipCode} onChange={e => setZipCode(e.target.value)} className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("zipCode")}`} />
               </div>
               <div className="col-span-2 md:col-span-1">
                 <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Stadt</label>
-                <input type="text" value={city} onChange={e => setCity(e.target.value)} className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" />
+                <input type="text" value={city} onChange={e => setCity(e.target.value)} className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("city")}`} />
               </div>
             </div>
             {(!street || !city) && (
@@ -317,7 +347,7 @@ export function CustomerWizard() {
         <section className="bg-white rounded-xl border border-[#e5dcd0] shadow-sm p-5 space-y-4">
           <div>
             <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Interne Bemerkung (Allgemein)</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Hat mehrere Oldtimer. Bringt Teile meist persönlich..." className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none" rows={2} />
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Hat mehrere Oldtimer. Bringt Teile meist persönlich..." className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("notes")}`} rows={2} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2">Verhaltensnotiz (Wichtig!)</label>

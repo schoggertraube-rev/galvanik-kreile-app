@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { customers, orders } from "@/db/schema";
-import { ilike, or, eq, sql } from "drizzle-orm";
+import { ilike, or, eq, sql, and } from "drizzle-orm";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -24,10 +24,14 @@ export async function GET(request: Request) {
       .from(customers)
       .leftJoin(orders, eq(orders.customerId, customers.id))
       .where(
-        or(
-          ilike(customers.name, `%${q}%`),
-          ilike(customers.companyName, `%${q}%`),
-          ilike(customers.customerNumber, `%${q}%`)
+        and(
+          or(
+            ilike(customers.name, `%${q}%`),
+            ilike(customers.companyName, `%${q}%`),
+            ilike(customers.customerNumber, `%${q}%`)
+          ),
+          sql`coalesce(${customers.source}, '') != 'test'`,
+          sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
         )
       )
       .groupBy(customers.id)

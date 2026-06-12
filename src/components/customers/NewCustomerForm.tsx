@@ -9,7 +9,7 @@ import { Customer } from "@/lib/types/customer";
 import { createClient } from "@/lib/supabase/client";
 import { createCustomerDb } from "@/app/actions/customers.actions";
 import { Loader } from "@googlemaps/js-api-loader";
-import { Building2, Mail, MapPin, Phone, Save, User, UserPlus, Upload, FilePlus2, Copy, AlertTriangle, Camera, X } from "lucide-react";
+import { Building2, Mail, MapPin, Phone, Save, User, UserPlus, Upload, FilePlus2, Copy, AlertTriangle, Camera, X, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
 
 interface NewCustomerFormProps {
@@ -39,6 +39,7 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
   // Images
   const [files, setFiles] = useState<File[]>([]);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [success, setSuccess] = useState(false);
   
   const streetInputRef = useRef<HTMLInputElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -224,8 +225,12 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
 
       if (onSave && savedId) {
         onSave(savedId);
+        // We still let the parent handle the visual if it wants, 
+        // but if it's inline or we want to show it, we can just close.
+        // Actually, if onSave is passed, let parent handle it or show success here:
+        setSuccess(true);
       } else {
-        onClose();
+        setSuccess(true);
       }
     } catch (err: unknown) {
       console.error("Failed to save customer", {
@@ -238,6 +243,33 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
       setLoading(false);
     }
   };
+
+  if (success) {
+    const successContent = (
+      <div className="flex flex-col h-[400px] max-w-[500px] mx-auto bg-white rounded-2xl relative justify-center items-center p-8 text-center border border-neutral-gray-100">
+        <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
+          <CheckCircle2 className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-serif text-navy-900 mb-2">Kunde gespeichert!</h2>
+        <p className="text-gray-600 mb-8">
+          Der Kunde <strong>{name}</strong> wurde erfolgreich gespeichert.
+        </p>
+        <Button
+          onClick={onClose}
+          className="w-full max-w-xs h-12 bg-navy-900 text-white font-bold rounded-lg hover:bg-navy-800 transition-all"
+        >
+          Schließen
+        </Button>
+      </div>
+    );
+
+    if (inline) return successContent;
+    return (
+      <ResponsiveDetailDrawer isOpen={true} onClose={onClose} title="Erfolg" centered={true}>
+        {successContent}
+      </ResponsiveDetailDrawer>
+    );
+  }
 
   const content = (
       <div className="flex flex-col lg:flex-row gap-6 w-full">

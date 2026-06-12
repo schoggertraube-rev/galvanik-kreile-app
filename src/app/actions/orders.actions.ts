@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { orders, items, customers, events } from "@/db/schema";
-import { eq, like, desc } from "drizzle-orm";
+import { eq, like, desc, and, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 
@@ -15,9 +15,22 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   try {
-    const dbOrders = await db.select().from(orders).where(eq(orders.tenantId, "galvanik-kreile")).orderBy(orders.createdAt);
+    const dbOrders = await db.select().from(orders).where(
+      and(
+        eq(orders.tenantId, "galvanik-kreile"),
+        sql`coalesce(${orders.source}, '') != 'test'`,
+        sql`coalesce(${orders.title}, '') NOT LIKE 'Capture%'`
+      )
+    ).orderBy(orders.createdAt);
+    
     const dbItems = await db.select().from(items).where(eq(items.tenantId, "galvanik-kreile")).orderBy(items.createdAt);
-    const dbCustomers = await db.select().from(customers);
+    
+    const dbCustomers = await db.select().from(customers).where(
+      and(
+        sql`coalesce(${customers.source}, '') != 'test'`,
+        sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
+      )
+    );
     
     const data = dbOrders.map(o => {
       const orderItems = dbItems.filter(item => item.orderId === o.id);
@@ -128,6 +141,24 @@ export async function createOrderDb(data: Record<string, unknown>): Promise<Acti
       }));
       await db.insert(items).values(newItems);
     }
+    
+    await db.insert(events).values({
+      id: createId(),
+      tenantId: "galvanik-kreile",
+      orderId,
+      eventType: "ORDER_CREATED",
+      description: "Auftrag erstellt",
+      station: "wareneingang",
+    });
+
+    try { 
+      const { revalidatePath } = await import("next/cache");
+      revalidatePath("/"); 
+      revalidatePath("/orders");
+      revalidatePath("/customers");
+      revalidatePath("/warendurchlauf");
+      revalidatePath("/warendurchlauf/wareneingang");
+    } catch { /* ignore when not in Next runtime */ }
     
     return {
       ok: true,
