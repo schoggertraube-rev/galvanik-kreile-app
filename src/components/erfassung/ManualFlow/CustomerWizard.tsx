@@ -358,7 +358,7 @@ export function CustomerWizard() {
       </div>
 
       {/* Footer */}
-      <div className="px-8 py-4 bg-white border-t border-[#e5dcd0] flex justify-between items-center z-10 sticky bottom-0">
+      <div className="px-4 sm:px-8 py-4 bg-white/95 backdrop-blur border-t border-[#e5dcd0] flex flex-col sm:flex-row justify-between items-center gap-3 z-20 sticky bottom-0">
         <button onClick={closeErfassung} className="px-6 py-3 font-semibold text-gray-600 hover:text-gray-900 transition-colors">Abbrechen</button>
         <button
           onClick={handleSave}

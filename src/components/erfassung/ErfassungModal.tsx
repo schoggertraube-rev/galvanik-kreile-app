@@ -47,7 +47,7 @@ export function ErfassungModal() {
       className="fixed inset-0 z-[2000] flex items-center justify-center p-4 sm:p-6 bg-[#1a1c23]/40 backdrop-blur-md animate-in fade-in duration-200"
       onClick={handleBackdropClick}
     >
-      <div className="relative w-full max-w-5xl bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col max-h-[90vh] overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
+      <div className="relative w-[calc(100vw-16px)] sm:w-[calc(100vw-24px)] md:w-[92vw] lg:w-[860px] max-w-5xl bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col max-h-[calc(100dvh-16px)] overflow-hidden animate-in slide-in-from-bottom-4 duration-300">
         
         {/* Header (optional, if flows provide their own headers this can be minimized) */}
         <div className="absolute top-4 right-4 z-10">

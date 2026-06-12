@@ -34,12 +34,12 @@ export function CustomerOverlay() {
 
   return (
     <div 
-      className="fixed inset-0 bg-[rgba(26,31,46,0.42)] backdrop-blur-[8px] flex items-start justify-center pt-12 pb-12 overflow-y-auto" 
+      className="fixed inset-0 bg-[rgba(26,31,46,0.42)] backdrop-blur-[8px] flex items-start justify-center pt-2 sm:pt-6 lg:pt-12 pb-2 sm:pb-6 lg:pb-12 px-2 overflow-y-auto" 
       style={{ zIndex }}
       onClick={close}
     >
       <div 
-        className="w-full max-w-[1200px] mx-4 bg-[var(--ci-surface)] rounded-[18px] border border-[var(--ci-border)] shadow-[0_1px_2px_rgba(20,15,5,0.04),0_12px_32px_rgba(20,15,5,0.08)]" 
+        className="w-full max-w-[1200px] bg-[var(--ci-surface)] rounded-xl lg:rounded-[18px] border border-[var(--ci-border)] shadow-[0_1px_2px_rgba(20,15,5,0.04),0_12px_32px_rgba(20,15,5,0.08)]" 
         onClick={e => e.stopPropagation()}
       >
         {/* Header Close Button */}

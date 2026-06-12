@@ -150,7 +150,7 @@ export default function CustomersPage() {
       />
 
       {/* CRM Master-Detail Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-4 items-start">
         
         {/* LEFT COLUMN: Master Customers List */}
         <div className="lg:col-span-1 space-y-3">

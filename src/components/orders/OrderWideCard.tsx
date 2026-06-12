@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React from "react";
 import { ChevronRight } from "lucide-react";
@@ -106,13 +106,13 @@ export function OrderWideCard({
              <span className="font-mono text-[11px] font-bold text-[#1a1a1a] writing-vertical-rl transform rotate-180 truncate h-20">{orderNumber}</span>
            </div>
         ) : (
-          <div className="grid grid-cols-[minmax(130px,160px)_minmax(140px,200px)_1fr_minmax(140px,180px)_auto_minmax(80px,110px)_24px] items-center gap-3 p-3.5 lg:px-4 lg:py-3.5 max-[900px]:grid-cols-2 max-[900px]:gap-y-1.5 max-[900px]:gap-x-3">
+          <div className="grid grid-cols-[minmax(130px,160px)_minmax(140px,200px)_1fr_minmax(140px,180px)_auto_minmax(80px,110px)_24px] items-center gap-3 p-3.5 lg:px-4 lg:py-3.5 max-[900px]:grid-cols-2 max-[900px]:gap-y-1.5 max-[900px]:gap-x-3 w-full overflow-hidden">
 
             <span className="font-mono text-[13px] font-bold text-[#1a1a1a]">{orderNumber}</span>
-            <span className="text-[14px] font-semibold text-[#1a1a1a] whitespace-nowrap overflow-hidden text-ellipsis">{customerName}</span>
-            <span className="text-[14px] text-[#5e5850] whitespace-nowrap overflow-hidden text-ellipsis max-[900px]:col-span-full">{article}</span>
+            <span className="text-[14px] font-semibold text-[#1a1a1a] min-w-0 break-words">{customerName}</span>
+            <span className="text-[14px] text-[#5e5850] min-w-0 break-words max-[900px]:col-span-full">{article}</span>
 
-            <span className="flex items-center gap-1.5 text-[12px] text-[#9e9689] font-medium whitespace-nowrap max-[900px]:col-span-full">
+            <span className="flex items-center gap-1.5 text-[12px] text-[#9e9689] font-medium min-w-0 break-words max-[900px]:col-span-full">
               <span className={`sdot ${sDotClass}`}></span> {surface}
             </span>
 

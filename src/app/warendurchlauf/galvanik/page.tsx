@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
@@ -243,16 +243,16 @@ export default function GalvanikPage() {
             </div>
 
             {/* Listen Bereich (3 Spalten mit Verdrängungslogik) */}
-            <div className="flex flex-col lg:flex-row gap-6 lg:gap-4 items-start w-full">
-              <div className={`transition-all duration-500 ease-in-out ${activeBucket === "ready" ? "w-full lg:w-[80%]" : "w-full lg:w-[10%] opacity-50 grayscale-[0.8]"}`}>
+            <div className="flex gap-3 overflow-x-auto snap-x md:grid md:grid-cols-3 md:overflow-visible w-full pb-4">
+              <div className={`transition-all duration-500 ease-in-out snap-center min-w-[85vw] md:min-w-0 ${activeBucket === "ready" ? "w-full md:w-[80%]" : "w-full md:w-[10%] opacity-50 grayscale-[0.8]"}`}>
                 <h3 className="text-sm font-bold text-[#9e9689] uppercase tracking-wider mb-4 border-b border-[#d8d0c4] pb-2 truncate">Bereit</h3>
                 {renderOrderList(readyOrders, "ready")}
               </div>
-              <div className={`transition-all duration-500 ease-in-out ${activeBucket === "in_progress" ? "w-full lg:w-[80%]" : "w-full lg:w-[10%] opacity-50 grayscale-[0.8]"}`}>
+              <div className={`transition-all duration-500 ease-in-out snap-center min-w-[85vw] md:min-w-0 ${activeBucket === "in_progress" ? "w-full md:w-[80%]" : "w-full md:w-[10%] opacity-50 grayscale-[0.8]"}`}>
                 <h3 className="text-sm font-bold text-[#9e9689] uppercase tracking-wider mb-4 border-b border-[#d8d0c4] pb-2 truncate">In Bearbeitung</h3>
                 {renderOrderList(inProgressOrders, "in_progress")}
               </div>
-              <div className={`transition-all duration-500 ease-in-out ${activeBucket === "finished" ? "w-full lg:w-[80%]" : "w-full lg:w-[10%] opacity-50 grayscale-[0.8]"}`}>
+              <div className={`transition-all duration-500 ease-in-out snap-center min-w-[85vw] md:min-w-0 ${activeBucket === "finished" ? "w-full md:w-[80%]" : "w-full md:w-[10%] opacity-50 grayscale-[0.8]"}`}>
                 <h3 className="text-sm font-bold text-[#9e9689] uppercase tracking-wider mb-4 border-b border-[#d8d0c4] pb-2 truncate">Fertig (QS)</h3>
                 {renderOrderList(finishedOrders, "finished")}
               </div>
