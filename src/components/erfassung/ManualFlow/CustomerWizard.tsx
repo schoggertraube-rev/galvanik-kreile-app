@@ -164,7 +164,7 @@ export function CustomerWizard() {
   const handleNextToOrder = () => {
     openErfassung({
       mode: "order",
-      customerId: successResult.id,
+      customerId: successResult?.id || "",
       source: options?.source,
       sourceRef: options?.sourceRef,
       prefill: { ...options?.prefill, customer: successResult }
