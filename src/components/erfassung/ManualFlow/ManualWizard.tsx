@@ -23,7 +23,7 @@ export function ManualWizard() {
   const [behaviorNote, setBehaviorNote] = useState(options?.prefill?.behaviorNote?.text || "");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successResult, setSuccessResult] = useState<Record<string, unknown> | null>(null);
+  const [successResult, setSuccessResult] = useState<{ isQuote?: boolean; orderNumber?: string } | null>(null);
   const { openErfassung } = useErfassung();
 
   useEffect(() => {
@@ -60,7 +60,7 @@ export function ManualWizard() {
         return;
       }
 
-      setSuccessResult(result.order);
+      setSuccessResult(result.order as { isQuote?: boolean; orderNumber?: string });
     } catch (e: unknown) {
       if (e instanceof Error) {
         alert("Fehler beim Speichern: " + e.message);

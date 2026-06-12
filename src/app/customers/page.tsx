@@ -6,20 +6,18 @@ import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   ChevronRight,
   Building,
   User,
-  School
+  School,
+  UserPlus
 } from "lucide-react";
 
-import { CustomerTypeConsequences } from "@/components/customers/CustomerTypeConsequences";
 import { Customer } from "@/lib/types/customer";
 // Mock data removed
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchToolbar } from "@/components/ui/SearchToolbar";
-import type { CustomerType } from "@/types/customerType";
 import { NewCustomerForm } from "@/components/customers/NewCustomerForm";
 import { getCustomersDb } from "@/app/actions/customers.actions";
 import { trackUiEvent } from "@/lib/tracking/tracking";
@@ -85,19 +83,6 @@ export default function CustomersPage() {
     setSelectedCustomer(customer);
     trackUiEvent("detail_open", { target: "customer", id: customer.id, name: customer.name });
     openCustomer(customer.id);
-  };
-
-  const handleStartEdit = (customer: Customer) => {
-    setEditingCustomerId(customer.id);
-    setShowAddModal(true);
-  };
-
-  const handleSimulateMail = (email: string, name: string) => {
-    if (email && email !== "Keine E-Mail hinterlegt" && email.includes("@")) {
-      window.location.href = `mailto:${email}?subject=Status-Update%20zu%20Ihrem%20Galvanik-Auftrag%20-%20Kreile%20WerkstattCockpit&body=Hallo%20${encodeURIComponent(name)},%0A%0A`;
-    } else {
-      alert("Keine gültige E-Mail-Adresse für diesen Kunden hinterlegt.");
-    }
   };
 
   return (

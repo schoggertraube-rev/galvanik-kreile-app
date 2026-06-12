@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useErfassung } from "../ErfassungProvider";
-import { Sparkles, ChevronDown, Check, Loader2, MapPin, Search } from "lucide-react";
+import { Sparkles, Check, Loader2, MapPin, Search } from "lucide-react";
 import { createCustomerFromErfassung } from "@/app/actions/erfassung.actions";
 import { extractCustomerDataFromFreetext, enrichCustomerData } from "@/app/actions/ai-enrichment.actions";
 
@@ -30,7 +30,7 @@ export function CustomerWizard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
-  const [successResult, setSuccessResult] = useState<Record<string, unknown> | null>(null);
+  const [successResult, setSuccessResult] = useState<{ id: string; customerNumber: string | null; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [autofilledFields, setAutofilledFields] = useState<string[]>([]);
   const [inlineMessage, setInlineMessage] = useState<{ type: 'success'|'error', text: string } | null>(null);
@@ -78,7 +78,7 @@ export function CustomerWizard() {
         return;
       }
       
-      setSuccessResult(result.customer);
+      setSuccessResult(result.customer as { id: string; customerNumber: string | null; name: string });
     } catch (e: unknown) {
       if (e instanceof Error) {
         setError("Fehler beim Speichern: " + e.message);

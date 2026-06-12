@@ -1,6 +1,4 @@
 "use client";
-import { Breadcrumb } from "@/components/ui/Breadcrumb";
-import { BackButton } from "@/components/ui/BackButton";
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
