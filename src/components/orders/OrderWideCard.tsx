@@ -23,7 +23,7 @@ export interface OrderWideCardProps {
 }
 
 export function OrderWideCard({
-  id,
+  
   orderNumber,
   customerName,
   article,
@@ -95,7 +95,7 @@ export function OrderWideCard({
         dragElastic={{ left: 0, right: 0.5 }}
         onDragEnd={(e, info) => {
           if (onAdvance && info.offset.x > 80) {
-            onAdvance(e as any);
+            onAdvance(e as unknown as React.MouseEvent);
           }
         }}
         className={`card-pulse ${uClass} grid grid-cols-[5px_1fr] bg-[#faf8f4] border-[1.5px] border-[#d8d0c4] rounded-[14px] overflow-hidden cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.03)] hover:bg-[#f5f2ec] hover:shadow-[0_2px_8px_rgba(0,0,0,0.06)] hover:-translate-y-px`}

@@ -12,9 +12,9 @@ export function ManualWizard() {
   const { options, closeErfassung, setIsDirty } = useErfassung();
   
   // State for the three mandatory sections
-  const [customer, setCustomer] = useState<any>(options?.prefill?.customer || null);
-  const [items, setItems] = useState<any[]>(options?.prefill?.items || []);
-  const [dateInfo, setDateInfo] = useState<any>({ priority: options?.prefill?.order?.priority || "normal", shipping: "abholung" });
+  const [customer, setCustomer] = useState<Record<string, unknown> | null>(options?.prefill?.customer || null);
+  const [items, setItems] = useState<Record<string, unknown>[]>(options?.prefill?.items || []);
+  const [dateInfo, setDateInfo] = useState<Record<string, unknown>>({ priority: options?.prefill?.order?.priority || "normal", shipping: "abholung" });
   
   // Optional toggles
   const [showFreetext, setShowFreetext] = useState(false);
@@ -23,7 +23,7 @@ export function ManualWizard() {
   const [behaviorNote, setBehaviorNote] = useState(options?.prefill?.behaviorNote?.text || "");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successResult, setSuccessResult] = useState<any>(null);
+  const [successResult, setSuccessResult] = useState<Record<string, unknown> | null>(null);
   const { openErfassung } = useErfassung();
 
   useEffect(() => {
@@ -61,8 +61,12 @@ export function ManualWizard() {
       }
 
       setSuccessResult(result.order);
-    } catch (e: any) {
-      alert("Fehler beim Speichern: " + e.message);
+    } catch (e: unknown) {
+      if (e instanceof Error) {
+        alert("Fehler beim Speichern: " + e.message);
+      } else {
+        alert("Fehler beim Speichern");
+      }
     } finally {
       setIsSubmitting(false);
     }

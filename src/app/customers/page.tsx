@@ -6,30 +6,12 @@ import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import {
-  Search,
-  UserPlus,
-  Phone,
-  Mail,
-  MapPin,
   ChevronRight,
-  Sparkles,
-  AlertTriangle,
-  CheckCircle2,
-  MessageSquare,
-  Euro,
-  X,
-  Clock,
-  ArrowUpRight,
-  ShieldAlert,
   Building,
   User,
-  School,
-  ArrowLeft,
-  ArrowRight,
-  Check
+  School
 } from "lucide-react";
 
 import { CustomerTypeConsequences } from "@/components/customers/CustomerTypeConsequences";

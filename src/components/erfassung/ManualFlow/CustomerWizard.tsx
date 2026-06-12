@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useErfassung } from "../ErfassungProvider";
-import { User, Sparkles, ChevronDown, Check, Loader2, MapPin, Search } from "lucide-react";
+import { Sparkles, ChevronDown, Check, Loader2, MapPin, Search } from "lucide-react";
 import { createCustomerFromErfassung } from "@/app/actions/erfassung.actions";
 import { extractCustomerDataFromFreetext, enrichCustomerData } from "@/app/actions/ai-enrichment.actions";
 
@@ -21,7 +21,7 @@ export function CustomerWizard() {
   const [street, setStreet] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [city, setCity] = useState("");
-  const [country, setCountry] = useState("");
+  
   
   const [notes, setNotes] = useState("");
   const [behaviorNote, setBehaviorNote] = useState(options?.prefill?.behaviorNote || "");
@@ -30,7 +30,7 @@ export function CustomerWizard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
-  const [successResult, setSuccessResult] = useState<any>(null);
+  const [successResult, setSuccessResult] = useState<Record<string, unknown> | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [autofilledFields, setAutofilledFields] = useState<string[]>([]);
   const [inlineMessage, setInlineMessage] = useState<{ type: 'success'|'error', text: string } | null>(null);
@@ -63,7 +63,7 @@ export function CustomerWizard() {
         street,
         zipCode,
         city,
-        country,
+        country: "",
         notes,
         behaviorNote,
         source: options?.source || "manual",
@@ -79,8 +79,12 @@ export function CustomerWizard() {
       }
       
       setSuccessResult(result.customer);
-    } catch (e: any) {
-      setError("Fehler beim Speichern: " + e.message);
+    } catch (e: unknown) {
+      if (e instanceof Error) {
+        setError("Fehler beim Speichern: " + e.message);
+      } else {
+        setError("Fehler beim Speichern");
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -255,7 +259,7 @@ export function CustomerWizard() {
           <div className="flex gap-6 p-1 bg-gray-100 rounded-lg max-w-md">
             {["privat", "business", "lead"].map((type) => (
               <label key={type} className={`flex-1 flex justify-center items-center gap-2 cursor-pointer py-2 px-4 rounded-md transition-all ${customerType === type ? 'bg-white shadow-sm font-bold text-navy-900' : 'text-gray-500 hover:text-gray-700'}`}>
-                <input type="radio" checked={customerType === type} onChange={() => setCustomerType(type as any)} className="hidden" />
+                <input type="radio" checked={customerType === type} onChange={() => setCustomerType(type as "privat" | "business" | "lead")} className="hidden" />
                 <span className="text-sm capitalize">{type === "business" ? "Firma" : type}</span>
               </label>
             ))}
@@ -338,7 +342,7 @@ export function CustomerWizard() {
               </div>
             </div>
             {(!street || !city) && (
-               <p className="text-xs text-gray-400 italic flex items-center gap-1">Nutze "Per Web ergänzen" oder "Freitext erkennen" zum Auffüllen.</p>
+               <p className="text-xs text-gray-400 italic flex items-center gap-1">Nutze &quot;Per Web ergänzen&quot; oder &quot;Freitext erkennen&quot; zum Auffüllen.</p>
             )}
           </div>
         </section>

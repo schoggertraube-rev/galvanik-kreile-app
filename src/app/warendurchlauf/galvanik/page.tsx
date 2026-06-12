@@ -115,8 +115,8 @@ export default function GalvanikPage() {
               orderNumber={o.orderNumber}
               customerName={o.customerName || "Unbekannt"}
               article={o.task || "Unbekannt"}
-              surface={((o.parts?.[0] as any)?.finish) || "Offen"}
-              surfaceKey={((o.parts?.[0] as any)?.finish?.toLowerCase()?.includes("chrom")) ? "chrom" : ((o.parts?.[0] as any)?.finish?.toLowerCase()?.includes("nickel")) ? "nickel" : ((o.parts?.[0] as any)?.finish?.toLowerCase()?.includes("gold")) ? "gold" : "offen"}
+              surface={((o.parts?.[0] as { finish?: string })?.finish) || "Offen"}
+              surfaceKey={((o.parts?.[0] as { finish?: string })?.finish?.toLowerCase()?.includes("chrom")) ? "chrom" : ((o.parts?.[0] as { finish?: string })?.finish?.toLowerCase()?.includes("nickel")) ? "nickel" : ((o.parts?.[0] as { finish?: string })?.finish?.toLowerCase()?.includes("gold")) ? "gold" : "offen"}
               urgency={mapRiskToUrgency(o.risk)}
               dueValue={o.dueValue || "--"}
               dueLabel={o.dueLabel || "Tage"}
@@ -163,8 +163,8 @@ export default function GalvanikPage() {
                       orderNumber={o.orderNumber}
                       customerName={o.customerName || "Unbekannt"}
                       article={o.task || "Unbekannt"}
-                      surface={((o.parts?.[0] as any)?.finish) || "Offen"}
-                      surfaceKey={((o.parts?.[0] as any)?.finish?.toLowerCase()?.includes("chrom")) ? "chrom" : "offen"}
+                      surface={((o.parts?.[0] as { finish?: string })?.finish) || "Offen"}
+                      surfaceKey={((o.parts?.[0] as { finish?: string })?.finish?.toLowerCase()?.includes("chrom")) ? "chrom" : "offen"}
                       urgency={mapRiskToUrgency(o.risk)}
                       dueValue={o.dueValue || "--"}
                       dueLabel={o.dueLabel || "Tage"}
