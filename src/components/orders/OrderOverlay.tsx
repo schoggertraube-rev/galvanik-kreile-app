@@ -74,11 +74,7 @@ export function OrderOverlay() {
     );
   }
 
-  // Calculate sum of parts
   const hasItems = orderData.items && orderData.items.length > 0;
-  const partsSum = hasItems ? orderData.items.reduce((acc: number, item: any) => acc + (Number(item.price) || 0), 0) : 0;
-  const dbPrice = Number(orderData.quoteTotalGross || orderData.dbGeplant || 0);
-  const totalValue = partsSum > 0 ? partsSum : dbPrice;
 
   return (
     <AppOverlayPortal>
@@ -272,33 +268,11 @@ export function OrderOverlay() {
                       } else if (currentIndex < 0) {
                         currentIndex = 0;
                       }
-                      
-                      const handleStationClick = async (newStation: string) => {
-                        try {
-                          const { setOrderStationDb } = await import("@/app/actions/orders.actions");
-                          await setOrderStationDb(orderData.id, newStation);
-                          // We emit a custom event to show a toast, or use a toast library if one exists.
-                          // For simplicity, using alert or custom toast logic (omitted complex toast for basic one)
-                          const el = document.createElement("div");
-                          el.className = "fixed bottom-4 right-4 bg-gray-800 text-white px-4 py-2 rounded-lg shadow-lg z-[9999] transition-opacity";
-                          el.textContent = "Station aktualisiert. Rückgängig machen?";
-                          el.style.cursor = "pointer";
-                          el.onclick = async () => {
-                            await setOrderStationDb(orderData.id, currentStation);
-                            el.remove();
-                          };
-                          document.body.appendChild(el);
-                          setTimeout(() => { if (document.body.contains(el)) el.remove(); }, 5000);
-                        } catch (e) {
-                          console.error(e);
-                        }
-                      };
 
                       return STATIONS.map((station, idx) => {
                         const Icon = ICONS[idx];
                         const isDone = idx < currentIndex;
                         const isActive = idx === currentIndex;
-                        const isWait = idx > currentIndex;
                         
                         let circleClass = "ci-station-wait";
                         if (isDone) circleClass = "ci-station-done";
@@ -455,7 +429,7 @@ export function OrderOverlay() {
                             const supabase = createClient();
                             const fileName = `galvanik-kreile/${currentOrderId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
                             
-                            const { data: uploadData, error: uploadError } = await supabase.storage
+                            const { error: uploadError } = await supabase.storage
                               .from("scans")
                               .upload(fileName, file);
 
