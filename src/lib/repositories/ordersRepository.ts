@@ -23,6 +23,7 @@ export type Order = {
   task?: string;
   customerName?: string;
   rawIntakeDate?: string;
+  source?: string;
   rawDueDate?: string;
   attachmentUrl?: string;
 }

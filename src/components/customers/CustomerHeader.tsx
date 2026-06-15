@@ -1,10 +1,10 @@
 import React from 'react';
 import { CustomerKpi } from './useCustomerKpi';
 import { Mail, Phone, PlusSquare, FileText, AlertCircle } from 'lucide-react';
-import { useOverlayStore } from '@/lib/overlayStore';
+import { useErfassung } from '@/components/erfassung/ErfassungProvider';
 
 export function CustomerHeader({ data }: { data: CustomerKpi }) {
-  const openOrder = useOverlayStore(state => state.openOrder);
+  const { openErfassung } = useErfassung();
 
   return (
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full pr-12">
@@ -36,7 +36,7 @@ export function CustomerHeader({ data }: { data: CustomerKpi }) {
           <Phone className="w-4 h-4 text-gray-500" /> <span className="hidden sm:inline">Anrufen</span>
         </button>
         <button 
-          onClick={() => openOrder('new')}
+          onClick={() => openErfassung({ mode: "order", intent: "create_order", source: "customer", customerId: data.customer_id })}
           className="flex items-center gap-2 px-3 py-1.5 bg-[var(--ci-orange)] text-white border border-[var(--ci-orange)] rounded-lg hover:bg-orange-600 text-sm font-semibold transition-colors"
           title="Neuer Auftrag"
         >

@@ -124,6 +124,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
         recommendedAction: o.recommendedAction,
         intakeDate,
         dueDate,
+        source: 'seed',
       });
     }
 

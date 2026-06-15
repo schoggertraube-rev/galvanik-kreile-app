@@ -6,11 +6,17 @@ import { ErfassungModal } from "./ErfassungModal";
 export type ErfassungMode = "gate" | "customer" | "order" | "quote" | "scan" | "phone" | "inquiry";
 
 export interface ErfassungPrefill {
-  customer?: any;
-  items?: any[];
-  order?: any;
-  behaviorNote?: any;
-  [key: string]: any;
+  customer?: Record<string, unknown> | null;
+  items?: Record<string, unknown>[];
+  order?: Record<string, unknown>;
+  behaviorNote?: string;
+  company?: string;
+  contactName?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  rawText?: string;
+  [key: string]: unknown;
 }
 
 export interface OpenErfassungOptions {
@@ -28,7 +34,7 @@ interface ErfassungContextType {
   options: OpenErfassungOptions | null;
   isDirty: boolean;
   setIsDirty: (dirty: boolean) => void;
-  openErfassung: (options: OpenErfassungOptions | ErfassungMode, legacyData?: any) => void;
+  openErfassung: (options: OpenErfassungOptions | ErfassungMode, legacyData?: Record<string, unknown>) => void;
   closeErfassung: () => void;
 }
 
@@ -39,7 +45,7 @@ export function ErfassungProvider({ children }: { children: ReactNode }) {
   const [options, setOptions] = useState<OpenErfassungOptions | null>(null);
   const [isDirty, setIsDirty] = useState(false);
 
-  const openErfassung = (newOptions: OpenErfassungOptions | ErfassungMode, legacyData?: any) => {
+  const openErfassung = (newOptions: OpenErfassungOptions | ErfassungMode, legacyData?: Record<string, unknown>) => {
     if (typeof newOptions === 'string') {
       // Legacy support
       const mode = (newOptions as string) === 'manual' ? 'gate' : newOptions; // Map manual to gate initially or order
@@ -56,6 +62,10 @@ export function ErfassungProvider({ children }: { children: ReactNode }) {
 
   const closeErfassung = () => {
     setIsOpen(false);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event('kreile-sync-orders'));
+      window.dispatchEvent(new Event('kreile-orders-updated'));
+    }
     setTimeout(() => {
       setOptions(null);
     }, 300); // Wait for transition

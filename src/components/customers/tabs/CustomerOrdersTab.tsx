@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { getCustomerOrders } from '@/features/customers/customer-card/customerCard.actions';
 import { useOverlayStore } from '@/lib/overlayStore';
+import { useErfassung } from '@/components/erfassung/ErfassungProvider';
 import { FileSearch, Sparkles, Loader2 } from 'lucide-react';
 import { OrderWideCard, UrgencyType } from '@/components/orders/OrderWideCard';
 
@@ -8,6 +9,7 @@ export function CustomerOrdersTab({ customerId }: { customerId: string }) {
   const [orders, setOrders] = useState<Record<string, any>[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const openOrder = useOverlayStore(state => state.openOrder);
+  const { openErfassung } = useErfassung();
 
   useEffect(() => {
     let isMounted = true;
@@ -25,7 +27,7 @@ export function CustomerOrdersTab({ customerId }: { customerId: string }) {
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-bold font-serif text-navy-900">Auftragshistorie</h3>
         <button 
-          onClick={() => openOrder('new')}
+          onClick={() => openErfassung({ mode: "order", intent: "create_order", source: "customer", customerId })}
           className="bg-white border border-gray-200 text-(--ci-orange) hover:bg-gray-50 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors"
         >
           <Sparkles className="w-4 h-4" /> Neuer Auftrag

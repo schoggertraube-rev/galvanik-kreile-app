@@ -71,7 +71,7 @@ export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
   try {
     const dbCustomers = await db.select().from(customers).where(
       and(
-        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo')`,
+        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     ).orderBy(customers.createdAt);
@@ -229,7 +229,7 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
           ilike(customers.phone, searchPattern),
           ilike(customers.email, searchPattern)
         ),
-        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo')`,
+        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     );

@@ -11,22 +11,23 @@ export function CustomerWizard() {
   
   // State for the mandatory sections
   const [customerType, setCustomerType] = useState<"privat" | "business" | "lead">("privat");
-  const [company, setCompany] = useState(options?.prefill?.company || "");
-  const [contactName, setContactName] = useState(options?.prefill?.contactName || "");
-  const [email, setEmail] = useState(options?.prefill?.email || "");
-  const [phone, setPhone] = useState(options?.prefill?.phone || "");
+  const [company, setCompany] = useState((options?.prefill?.company as string) || "");
+  const [contactName, setContactName] = useState((options?.prefill?.contactName as string) || "");
+  const [email, setEmail] = useState((options?.prefill?.email as string) || "");
+  const [phone, setPhone] = useState((options?.prefill?.phone as string) || "");
   
   // Structured Address
-  const [address, setAddress] = useState(options?.prefill?.address || "");
+  const [address, setAddress] = useState((options?.prefill?.address as string) || "");
   const [street, setStreet] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [city, setCity] = useState("");
+  const [country, setCountry] = useState("DE");
   
   
   const [notes, setNotes] = useState("");
-  const [behaviorNote, setBehaviorNote] = useState(options?.prefill?.behaviorNote || "");
+  const [behaviorNote, setBehaviorNote] = useState((options?.prefill?.behaviorNote as string) || "");
   
-  const [freetext, setFreetext] = useState(options?.prefill?.rawText || "");
+  const [freetext, setFreetext] = useState((options?.prefill?.rawText as string) || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
@@ -42,6 +43,15 @@ export function CustomerWizard() {
     setIsDirty(dirty);
   }, [company, contactName, email, freetext, behaviorNote, setIsDirty]);
 
+  const validatePostalCode = (c: string, z: string) => {
+    if (!z) return true; // Optional field, only validate if provided
+    const normalized = z.trim();
+    if (c === "DE") return /^\d{5}$/.test(normalized);
+    if (c === "CH") return /^\d{4}$/.test(normalized);
+    if (c === "AT") return /^\d{4}$/.test(normalized);
+    return normalized.length >= 3 && normalized.length <= 10;
+  };
+
   const handleSave = async () => {
     setError(null);
     if (customerType === "privat") {
@@ -50,6 +60,10 @@ export function CustomerWizard() {
       if (!company) return setError("Firma ist für Geschäftskunden erforderlich.");
     } else {
       if (!company && !contactName) return setError("Name oder Firma ist für Leads erforderlich.");
+    }
+    
+    if (zipCode && !validatePostalCode(country, zipCode)) {
+      return setError("Die Postleitzahl passt nicht zum ausgewählten Land.");
     }
     
     setIsSubmitting(true);
@@ -63,7 +77,7 @@ export function CustomerWizard() {
         street,
         zipCode,
         city,
-        country: "",
+        country,
         notes,
         behaviorNote,
         source: options?.source || "manual",
@@ -138,14 +152,13 @@ export function CustomerWizard() {
       if (res.ok && res.data) {
         const d = res.data;
         const filled: string[] = [];
-        if (d.street) { setStreet(d.street); filled.push("street"); }
-        if (d.zipCode) { setZipCode(d.zipCode); filled.push("zipCode"); }
-        if (d.city) { setCity(d.city); filled.push("city"); }
-        if (d.website && !notes.includes(d.website)) { setNotes(prev => prev ? prev + "\\nWeb: " + d.website : "Web: " + d.website); filled.push("notes"); }
+        if (d.website && !notes.includes(d.website)) { setNotes(prev => prev ? prev + "\nWeb: " + d.website : "Web: " + d.website); filled.push("notes"); }
         if (d.phone && !phone) { setPhone(d.phone); filled.push("phone"); }
         if (d.email && !email) { setEmail(d.email); filled.push("email"); }
-        
-        setAddress([d.street || street, d.zipCode || zipCode, d.city || city].filter(Boolean).join(", "));
+        if (d.street && !street) { setStreet(d.street); filled.push("street"); }
+        if (d.zipCode && !zipCode) { setZipCode(d.zipCode); filled.push("zipCode"); }
+        if (d.city && !city) { setCity(d.city); filled.push("city"); }
+        if (d.country) { setCountry(d.country); filled.push("country"); }
         
         setAutofilledFields(filled);
         setInlineMessage({ type: 'success', text: "Daten per Web/Gemini ergänzt! (Confidence: " + d.confidence + ")" });
@@ -327,16 +340,28 @@ export function CustomerWizard() {
                 Google Places nicht verbunden
               </button>
             </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-3 md:col-span-1">
+            <div className="grid grid-cols-4 gap-4">
+              <div className="col-span-4 md:col-span-2">
                 <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Straße & Nr</label>
                 <input type="text" value={street} onChange={e => setStreet(e.target.value)} className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("street")}`} />
               </div>
-              <div className="col-span-1">
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">PLZ</label>
-                <input type="text" value={zipCode} onChange={e => setZipCode(e.target.value)} className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("zipCode")}`} />
+              <div className="col-span-2 md:col-span-1">
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Land</label>
+                <select value={country} onChange={e => setCountry(e.target.value)} className="w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none">
+                  <option value="DE">Deutschland</option>
+                  <option value="AT">Österreich</option>
+                  <option value="CH">Schweiz</option>
+                  <option value="OTHER">Anderes</option>
+                </select>
               </div>
               <div className="col-span-2 md:col-span-1">
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">PLZ</label>
+                <input type="text" value={zipCode} onChange={e => setZipCode(e.target.value)} className={`w-full bg-[#fcfaf6] border ${zipCode && !validatePostalCode(country, zipCode) ? 'border-red-500 bg-red-50' : 'border-[#e5dcd0]'} rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("zipCode")}`} />
+                {zipCode && !validatePostalCode(country, zipCode) && (
+                  <p className="text-[10px] text-red-500 mt-1">Ungültige PLZ für {country}</p>
+                )}
+              </div>
+              <div className="col-span-4">
                 <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Stadt</label>
                 <input type="text" value={city} onChange={e => setCity(e.target.value)} className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("city")}`} />
               </div>

@@ -59,7 +59,8 @@ export const intakeService = {
       customerId,
       title: data.orderTitle,
       station: "wareneingang",
-      parts: data.items 
+      parts: data.items,
+      source: "manual"
     });
     await eventsRepository.addEvent({ eventType: "ORDER_CREATED_MANUAL", orderId: order.id, customerId });
 

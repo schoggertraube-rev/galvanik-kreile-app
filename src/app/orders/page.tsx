@@ -88,6 +88,7 @@ function OrdersPageInner() {
         const dbOrdersResult = await getOrdersDb();
         if (isMounted && dbOrdersResult.ok) {
           setOrders(dbOrdersResult.data as any);
+      console.log("[ORDERS_CLIENT]", (dbOrdersResult.data as any).map((o:any)=>({id:o.id, number:o.orderNumber, source:o.source})) );
         }
         
         const dbCustomersResult = await getCustomersDb();

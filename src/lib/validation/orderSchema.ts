@@ -1,10 +1,24 @@
 import { z } from "zod";
 
+export const VALID_ORDER_SOURCES = [
+  "manual",
+  "customer",
+  "capture",
+  "integration-test",
+  "seed",
+  "demo"
+] as const;
+
+export type OrderSource = typeof VALID_ORDER_SOURCES[number];
+
 export const orderSchema = z.object({
   customerId: z.string().optional(),
   customerName: z.string().optional(),
   title: z.string().optional(),
   currentStationId: z.string().optional(),
+  source: z.enum(VALID_ORDER_SOURCES, {
+    message: "Source ist ein Pflichtfeld oder ungültig"
+  }),
   dueDate: z.coerce.date().refine((date) => date > new Date(), {
     message: "Das Fälligkeitsdatum muss in der Zukunft liegen.",
   }).optional(),
