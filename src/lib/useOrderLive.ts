@@ -16,7 +16,6 @@ export function useOrderLive(orderId: string | null) {
     let isMounted = true;
 
     const fetchInitial = async () => {
-      setLoading(true);
       const data = await getOrderWithDetails(orderId);
       if (isMounted) {
         setOrderData(data);
@@ -24,6 +23,8 @@ export function useOrderLive(orderId: string | null) {
       }
     };
 
+    setOrderData(null);
+    setLoading(true);
     fetchInitial();
 
     // Supabase Realtime Subscription for this order

@@ -7,6 +7,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { InferSelectModel } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { Customer } from "@/lib/types/customer";
+import { unstable_noStore as noStore } from "next/cache";
 
 type DbCustomer = InferSelectModel<typeof customers>;
 
@@ -61,6 +62,7 @@ function sanitizeCustomerPayload(data: Record<string, unknown>, isUpdate = false
 }
 
 export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
+  noStore();
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
@@ -69,7 +71,7 @@ export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
   try {
     const dbCustomers = await db.select().from(customers).where(
       and(
-        sql`coalesce(${customers.source}, '') != 'test'`,
+        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo')`,
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     ).orderBy(customers.createdAt);
@@ -82,6 +84,7 @@ export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
 }
 
 export async function getCustomerByIdDb(id: string): Promise<ActionResult<Customer | null>> {
+  noStore();
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
@@ -153,6 +156,8 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
       const { revalidatePath } = await import("next/cache");
       revalidatePath("/"); 
       revalidatePath("/customers");
+      revalidatePath("/orders");
+      revalidatePath("/warendurchlauf");
     } catch { /* ignore when not in Next runtime */ }
     
     return { ok: true, data: mapDbCustomer(dbCustomers[0]) };
@@ -205,6 +210,7 @@ export async function updateCustomerDb(id: string, changes: Partial<Customer>): 
 }
 
 export async function searchCustomersDb(query: string): Promise<ActionResult<Customer[]>> {
+  noStore();
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
@@ -223,7 +229,7 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
           ilike(customers.phone, searchPattern),
           ilike(customers.email, searchPattern)
         ),
-        sql`coalesce(${customers.source}, '') != 'test'`,
+        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo')`,
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     );

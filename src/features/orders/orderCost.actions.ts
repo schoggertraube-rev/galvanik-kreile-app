@@ -2,6 +2,9 @@
 
 import { createClient } from '@/lib/supabase/server';
 import type { WorkEntry, MaterialEntry, ExtraCostEntry } from '@/lib/orders/costCalculation';
+import { db } from "@/db";
+import { arbeitszeitBuchung, events } from "@/db/schema";
+import { getCurrentAppUser } from "@/lib/auth/permissions";
 
 // ─────────────────────────────────────────────
 // Book station costs (Erfassung buchen)
@@ -19,25 +22,55 @@ export async function bookStationCosts(params: {
   const { orderId, station, workEntries, consumableEntries, extraCostEvents, employeeId, kostenstelleKuerzel } = params;
   const errors: string[] = [];
 
-  // 1) Arbeitszeit → arbeitszeit_buchung
-  for (const entry of workEntries) {
-    if (entry.minutes <= 0) continue;
-    const { error } = await supabase.from('arbeitszeit_buchung').insert({
-      tenant_id: 'galvanik-kreile',
-      auftrag_id: orderId,
-      employee_id: employeeId,
-      kostenstelle_kuerzel: kostenstelleKuerzel,
-      station_kuerzel: station,
-      start_zeit: new Date().toISOString(),
-      dauer_minuten: entry.minutes,
-      kostensatz_eur_pro_stunde: entry.costPerHour,
-      erfasst_modus: 'rueckwirkend',
-      bemerkung: entry.step,
-    });
-    if (error) errors.push(`Arbeitszeit "${entry.step}": ${error.message} ${error.details || ''} ${error.hint || ''}`);
+  // Resolve active employee ID on the server
+  let realEmployeeId = employeeId;
+  if (employeeId === '00000000-0000-0000-0000-000000000000' || !employeeId) {
+    try {
+      const user = await getCurrentAppUser();
+      if (!user) {
+        return { success: false, errors: ['Für den angemeldeten Benutzer ist kein Mitarbeiterkonto hinterlegt.'] };
+      }
+      realEmployeeId = user.id;
+    } catch (authError) {
+      return { success: false, errors: ['Für den angemeldeten Benutzer ist kein Mitarbeiterkonto hinterlegt.'] };
+    }
   }
 
-  // 2) Material → consumable_uses
+  // Atomically book work entries and create the event log via Drizzle transaction
+  try {
+    await db.transaction(async (tx) => {
+      // 1) Arbeitszeit → arbeitszeit_buchung
+      for (const entry of workEntries) {
+        if (entry.minutes <= 0) continue;
+        await tx.insert(arbeitszeitBuchung).values({
+          tenantId: 'galvanik-kreile',
+          auftragId: orderId,
+          employeeId: realEmployeeId,
+          kostenstelleKuerzel: kostenstelleKuerzel,
+          stationKuerzel: station,
+          startZeit: new Date(),
+          dauerMinuten: entry.minutes,
+          kostensatzEurProStunde: String(entry.costPerHour),
+          erfasstModus: 'rueckwirkend',
+          bemerkung: entry.step,
+        });
+      }
+
+      // 4) Event-Log -> events (using correct column userId instead of non-existent created_by)
+      await tx.insert(events).values({
+        tenantId: 'galvanik-kreile',
+        orderId: orderId,
+        eventType: 'STATION_COST_BOOKED',
+        description: `Erfassung ${station} gebucht`,
+        userId: realEmployeeId,
+      });
+    });
+  } catch (txError: any) {
+    console.error("Drizzle transaction failed in bookStationCosts:", txError);
+    return { success: false, errors: [`Datenbankfehler bei der Buchung: ${txError.message || txError}`] };
+  }
+
+  // 2) Material → consumable_uses (inserted via Supabase client, since table is not in Drizzle schema)
   for (const mat of consumableEntries) {
     if (mat.quantity <= 0) continue;
     const { error } = await supabase.from('consumable_uses').insert({
@@ -50,12 +83,12 @@ export async function bookStationCosts(params: {
       unit: 'stk',
       unit_cost_eur: mat.unitCostEur,
       vorlage_id: mat.vorlageId || null,
-      erfasst_von: employeeId,
+      erfasst_von: realEmployeeId,
     });
     if (error) errors.push(`Material "${mat.itemName}": ${error.message} ${error.details || ''} ${error.hint || ''}`);
   }
 
-  // 3) Extras → order_cost_events
+  // 3) Extras → order_cost_events (inserted via Supabase client, since table is not in Drizzle schema)
   for (const extra of extraCostEvents) {
     if (!extra.active || extra.costEur <= 0) continue;
     const { error } = await supabase.from('order_cost_events').insert({
@@ -69,16 +102,6 @@ export async function bookStationCosts(params: {
     });
     if (error) errors.push(`Extra "${extra.name}": ${error.message} ${error.details || ''} ${error.hint || ''}`);
   }
-
-  // 4) Event-Log
-  const { error: evtErr } = await supabase.from('events').insert({
-    tenant_id: 'galvanik-kreile',
-    order_id: orderId,
-    event_type: 'STATION_COST_BOOKED',
-    description: `Erfassung ${station} gebucht`,
-    created_by: employeeId,
-  });
-  if (evtErr) errors.push(`Event: ${evtErr.message} ${evtErr.details || ''} ${evtErr.hint || ''}`);
 
   if (errors.length > 0) {
     return { success: false, errors };

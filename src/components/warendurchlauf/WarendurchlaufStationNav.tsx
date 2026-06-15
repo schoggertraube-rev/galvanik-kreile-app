@@ -215,13 +215,15 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
         })}
 
         {/* Demo badge */}
-        <div className="hidden xl:flex items-center shrink-0 ml-4">
-          <span
-            className="text-[9px] font-bold px-3 py-1 rounded-full uppercase tracking-wider bg-[#fef3e2] text-[#c8922a] border border-[#c8922a]/20"
-          >
-            Demo-Modus
-          </span>
-        </div>
+        {process.env.NEXT_PUBLIC_DEMO_MODE === "true" && (
+          <div className="hidden xl:flex items-center shrink-0 ml-4">
+            <span
+              className="text-[9px] font-bold px-3 py-1 rounded-full uppercase tracking-wider bg-[#fef3e2] text-[#c8922a] border border-[#c8922a]/20"
+            >
+              Demo-Modus
+            </span>
+          </div>
+        )}
       </nav>
     </div>
   );

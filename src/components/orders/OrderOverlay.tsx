@@ -397,7 +397,10 @@ export function OrderOverlay() {
                     <button className="ci-qa ci-primary" onClick={() => setShowMail(true)}>
                       <Send className="w-[18px] h-[18px]"/><span className="ci-qa-label">Status-Mail</span>
                     </button>
-                    <button className="ci-qa"><Camera className="w-[18px] h-[18px]"/><span className="ci-qa-label">Foto +</span></button>
+                    <button className="ci-qa" disabled title="Foto-Upload wird gerade verbunden" style={{ opacity: 0.5, cursor: 'not-allowed' }}>
+                      <Camera className="w-[18px] h-[18px]"/>
+                      <span className="ci-qa-label">Foto +</span>
+                    </button>
                     <button className="ci-qa"><Phone className="w-[18px] h-[18px]"/><span className="ci-qa-label">Anrufen</span></button>
                     <button className="ci-qa"><FileText className="w-[18px] h-[18px]"/><span className="ci-qa-label">KV</span></button>
                     <button className="ci-qa" onClick={() => setShowPayment(true)}>

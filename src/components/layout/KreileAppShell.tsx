@@ -22,11 +22,15 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   useEffect(() => {
-    getSystemStats().then(stats => {
-      if (!stats.reachable || stats.provider !== 'supabase') {
-        setIsDemoMode(true);
-      }
-    }).catch(() => setIsDemoMode(true));
+    if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
+      getSystemStats().then(stats => {
+        if (!stats.reachable || stats.provider !== 'supabase') {
+          setIsDemoMode(true);
+        }
+      }).catch(() => setIsDemoMode(true));
+    } else {
+      setIsDemoMode(false);
+    }
   }, []);
 
   const isStartScreen = pathname === "/start" || pathname === "/login";

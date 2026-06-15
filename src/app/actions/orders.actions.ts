@@ -5,11 +5,13 @@ import { orders, items, customers, events } from "@/db/schema";
 import { eq, like, desc, and, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
+import { unstable_noStore as noStore } from "next/cache";
 
 // DTO Typen (zur Vereinfachung)
 export type OrderResponse = Record<string, unknown>;
 
 export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
+  noStore();
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
@@ -18,7 +20,7 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
     const dbOrders = await db.select().from(orders).where(
       and(
         eq(orders.tenantId, "galvanik-kreile"),
-        sql`coalesce(${orders.source}, '') != 'test'`,
+        sql`coalesce(${orders.source}, '') not in ('seed', 'test', 'demo')`,
         sql`coalesce(${orders.title}, '') NOT LIKE 'Capture%'`
       )
     ).orderBy(orders.createdAt);
@@ -27,7 +29,7 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
     
     const dbCustomers = await db.select().from(customers).where(
       and(
-        sql`coalesce(${customers.source}, '') != 'test'`,
+        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo')`,
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     );
@@ -99,56 +101,61 @@ export async function createOrderDb(data: Record<string, unknown>): Promise<Acti
     const orderId = (typeof data.id === 'string' ? data.id : undefined) || createId();
     const year = new Date().getFullYear();
     const pattern = `A-${year}-%`;
-    const existingOrders = await db
-      .select({ orderNumber: orders.orderNumber })
-      .from(orders)
-      .where(like(orders.orderNumber, pattern))
-      .orderBy(desc(orders.orderNumber))
-      .limit(1);
 
-    let sequenceNum = 1;
-    if (existingOrders.length > 0 && existingOrders[0].orderNumber) {
-      const parts = existingOrders[0].orderNumber.split("-");
-      if (parts.length === 3) {
-        sequenceNum = parseInt(parts[2], 10) + 1;
+    const newOrder = await db.transaction(async (tx) => {
+      const existingOrders = await tx
+        .select({ orderNumber: orders.orderNumber })
+        .from(orders)
+        .where(like(orders.orderNumber, pattern))
+        .orderBy(desc(orders.orderNumber))
+        .limit(1);
+
+      let sequenceNum = 1;
+      if (existingOrders.length > 0 && existingOrders[0].orderNumber) {
+        const parts = existingOrders[0].orderNumber.split("-");
+        if (parts.length === 3) {
+          sequenceNum = parseInt(parts[2], 10) + 1;
+        }
       }
-    }
-    const sequenceString = sequenceNum.toString().padStart(4, "0");
-    const orderNumber = `A-${year}-${sequenceString}`;
-    
-    const newOrder = {
-      id: orderId,
-      tenantId: "galvanik-kreile",
-      orderNumber,
-      customerId: validData.customerId || "",
-      title: validData.title || "Unbenannt",
-      currentStationId: validData.currentStationId || "wareneingang",
-      status: "in_progress",
-      priorityComputed: "green",
-    };
-    
-    await db.insert(orders).values(newOrder);
-    
-    if (validData.parts && validData.parts.length > 0) {
-      const newItems = validData.parts.map(p => ({
-        id: p.id || createId(),
+      const sequenceString = sequenceNum.toString().padStart(4, "0");
+      const orderNumber = `A-${year}-${sequenceString}`;
+      
+      const newOrderVal = {
+        id: orderId,
+        tenantId: "galvanik-kreile",
+        orderNumber,
+        customerId: validData.customerId || "",
+        title: validData.title || "Unbenannt",
+        currentStationId: validData.currentStationId || "wareneingang",
+        status: "in_progress",
+        priorityComputed: "green",
+      };
+      
+      await tx.insert(orders).values(newOrderVal);
+      
+      if (validData.parts && validData.parts.length > 0) {
+        const newItems = validData.parts.map(p => ({
+          id: p.id || createId(),
+          tenantId: "galvanik-kreile",
+          orderId,
+          customerId: validData.customerId || "",
+          name: p.name,
+          quantity: typeof p.quantity === "number" ? p.quantity : parseInt(p.quantity as string) || 1,
+          currentStationId: validData.currentStationId || "wareneingang"
+        }));
+        await tx.insert(items).values(newItems);
+      }
+      
+      await tx.insert(events).values({
+        id: createId(),
         tenantId: "galvanik-kreile",
         orderId,
-        customerId: validData.customerId || "",
-        name: p.name,
-        quantity: typeof p.quantity === "number" ? p.quantity : parseInt(p.quantity as string) || 1,
-        currentStationId: validData.currentStationId || "wareneingang"
-      }));
-      await db.insert(items).values(newItems);
-    }
-    
-    await db.insert(events).values({
-      id: createId(),
-      tenantId: "galvanik-kreile",
-      orderId,
-      eventType: "ORDER_CREATED",
-      description: "Auftrag erstellt",
-      station: "wareneingang",
+        eventType: "ORDER_CREATED",
+        description: "Auftrag erstellt",
+        station: "wareneingang",
+      });
+
+      return newOrderVal;
     });
 
     try { 

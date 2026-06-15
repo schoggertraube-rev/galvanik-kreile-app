@@ -33,7 +33,7 @@ export function RightNavItem({
         // Heights:
         "h-[56px]",
         // Widths:
-        isExpanded ? "w-[184px]" : isActive ? "w-[64px]" : "w-[56px]",
+        isExpanded ? "w-[184px]" : "w-[56px]",
         // Active visual state
         isActive 
           ? "bg-[#2E9E6B] text-white shadow-md scale-105" 

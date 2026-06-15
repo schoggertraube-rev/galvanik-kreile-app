@@ -54,8 +54,19 @@ export function CustomerOverlay() {
           <div className="w-full">
             {isLoading ? (
               <div className="h-16 animate-pulse bg-gray-200 rounded"></div>
-            ) : customerData?.kpi ? (
-              <CustomerHeader data={customerData.kpi} />
+            ) : customerData ? (
+              <CustomerHeader data={customerData.kpi || {
+                customer_id: customerData.id,
+                kunde: customerData.name,
+                classification: customerData.classification || 'B',
+                kunde_seit: customerData.createdAt || new Date().toISOString(),
+                umsatz_ltv: 0,
+                gewinn_ltv: 0,
+                offene_posten: 0,
+                aktive_auftraege: 0,
+                puenktlichkeit_pct: null,
+                reklamationen: 0
+              }} />
             ) : (
               <div className="h-16 flex items-center justify-center text-red-500">Kunde nicht gefunden.</div>
             )}

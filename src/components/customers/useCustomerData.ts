@@ -11,10 +11,14 @@ export function useCustomerData(customerId: string | null) {
   useEffect(() => {
     if (!customerId) {
       setData(null);
+      setError(null);
+      setIsLoading(false);
       return;
     }
 
     let isMounted = true;
+    setData(null);
+    setError(null);
     setIsLoading(true);
 
     async function fetchData() {
