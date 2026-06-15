@@ -336,12 +336,13 @@ export async function uebernehmeVorlage(input: {
 
 import { db } from "@/db";
 import { customers, orders, items, events, calendarEvents } from "@/db/schema";
-import { eq, desc, like } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth } from "@/lib/server/authHelper";
 import { revalidatePath } from "next/cache";
 
-export async function createCustomerFromErfassung(input: any) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function createCustomerFromErfassung(input: Record<string, any>) {
   console.info("[CAPTURE_CUSTOMER_START]", {
     hasInput: Boolean(input),
     customerType: input?.customerType ?? input?.customer_type,
@@ -389,7 +390,7 @@ export async function createCustomerFromErfassung(input: any) {
         }
       }
     }
-    let sequenceNum = maxNum + 1;
+    const sequenceNum = maxNum + 1;
     const sequenceString = sequenceNum.toString().padStart(4, "0");
     const customerNumber = `${prefix}-${year}-${sequenceString}`;
 
@@ -420,19 +421,22 @@ export async function createCustomerFromErfassung(input: any) {
     if (verify.length === 0) {
       throw new Error("Insert failed silently");
     }
-    try { revalidatePath("/"); } catch (e) { /* ignore when not in Next runtime */ }
+    try { revalidatePath("/"); } catch { /* ignore when not in Next runtime */ }
     return { ok: true, customer: verify[0] };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Failed to create customer:", {
-      message: err.message,
-      details: (err as any).details,
-      hint: (err as any).hint,
+      message: (err as Error).message,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      details: (err as Record<string, any>).details,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      hint: (err as Record<string, any>).hint,
     });
-    return { ok: false, error: err.message || "Failed to create customer" };
+    return { ok: false, error: (err as Error).message || "Failed to create customer" };
   }
 }
 
-export async function createOrderFromErfassung(input: any) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function createOrderFromErfassung(input: Record<string, any>) {
   // Check write permissions
   const auth = await checkAppAuth("write");
   if (!auth.ok) return { ok: false, error: auth.message };
@@ -470,7 +474,7 @@ export async function createOrderFromErfassung(input: any) {
         }
       }
     }
-    let sequenceNum = maxNum + 1;
+    const sequenceNum = maxNum + 1;
     const sequenceString = sequenceNum.toString().padStart(4, "0");
     const orderNumber = `${prefix}-${year}-${sequenceString}`;
 
@@ -513,7 +517,8 @@ export async function createOrderFromErfassung(input: any) {
     }
 
     if (input.items && Array.isArray(input.items) && input.items.length > 0) {
-      const newItems = input.items.map((p: any) => ({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const newItems = input.items.map((p: Record<string, any>) => ({
         id: createId(),
         tenantId: "galvanik-kreile",
         orderId,
@@ -539,15 +544,23 @@ export async function createOrderFromErfassung(input: any) {
       throw new Error("Insert failed silently");
     }
 
-    try { revalidatePath("/"); } catch (e) { /* ignore when not in Next runtime */ }
+    try { 
+      revalidatePath("/"); 
+      revalidatePath("/orders");
+      revalidatePath("/customers");
+      revalidatePath("/warendurchlauf");
+      revalidatePath("/warendurchlauf/wareneingang");
+    } catch { /* ignore when not in Next runtime */ }
 
     return { ok: true, order: verify[0] };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Failed to create order:", {
-      message: err.message,
-      details: (err as any).details,
-      hint: (err as any).hint,
+      message: (err as Error).message,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      details: (err as Record<string, any>).details,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      hint: (err as Record<string, any>).hint,
     });
-    return { ok: false, error: err.message || "Failed to create order" };
+    return { ok: false, error: (err as Error).message || "Failed to create order" };
   }
 }

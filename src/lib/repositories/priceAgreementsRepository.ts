@@ -1,3 +1,5 @@
+import { createClient } from "@/lib/supabase/client";
+
 export type PriceAgreement = {
   id: string;
   customerId: string;
@@ -12,31 +14,56 @@ export type PriceAgreement = {
   note?: string;
 };
 
-const INITIAL_AGREEMENTS: PriceAgreement[] = [
-  {
-    id: "price-1",
-    customerId: "cust-1", // Museum Lenzburg
-    title: "Pauschalpreis Jugendstil",
-    surfaceType: "Brünieren",
-    price: 150,
-    currency: "EUR",
-    validFrom: "2026-01-01T00:00:00Z",
-    note: "Rabatt für öffentliche Einrichtungen",
-  }
-];
+const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
 export const priceAgreementsRepository = {
   async getAll(): Promise<PriceAgreement[]> {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("kreile_price_agreements");
-      if (saved) return JSON.parse(saved);
-      localStorage.setItem("kreile_price_agreements", JSON.stringify(INITIAL_AGREEMENTS));
+    if (!isSupabase) return [];
+    
+    const supabase = createClient();
+    const { data, error } = await supabase.from('price_agreements').select('*');
+    if (error) {
+      console.error("Supabase priceAgreementsRepository error:", error);
+      return [];
     }
-    return INITIAL_AGREEMENTS;
+    
+    return data.map(r => ({
+      id: r.id,
+      customerId: r.customer_id,
+      title: r.title,
+      description: r.description,
+      surfaceType: r.surface_type,
+      itemPattern: r.item_pattern,
+      price: r.price,
+      currency: r.currency || "EUR",
+      validFrom: r.valid_from,
+      validUntil: r.valid_until,
+      note: r.note
+    }));
   },
 
   async getByCustomer(customerId: string): Promise<PriceAgreement[]> {
-    const all = await this.getAll();
-    return all.filter(p => p.customerId === customerId);
+    if (!isSupabase) return [];
+    
+    const supabase = createClient();
+    const { data, error } = await supabase.from('price_agreements').select('*').eq('customer_id', customerId);
+    if (error) {
+      console.error("Supabase priceAgreementsRepository.getByCustomer error:", error);
+      return [];
+    }
+    
+    return data.map(r => ({
+      id: r.id,
+      customerId: r.customer_id,
+      title: r.title,
+      description: r.description,
+      surfaceType: r.surface_type,
+      itemPattern: r.item_pattern,
+      price: r.price,
+      currency: r.currency || "EUR",
+      validFrom: r.valid_from,
+      validUntil: r.valid_until,
+      note: r.note
+    }));
   }
 };

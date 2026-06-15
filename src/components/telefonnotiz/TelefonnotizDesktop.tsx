@@ -277,9 +277,9 @@ export function TelefonnotizDesktop() {
         source: "phone-note",
         draftId
       });
-      router.push(`/warendurchlauf/wareneingang?${query.toString()}`);
+      openErfassung({ mode: "order", intent: "create_order", source: "phone", prefill: { rawText: text } });
     } else if (action.type === "create_customer") {
-      router.push(`/customers?mode=new`);
+      openErfassung({ mode: "customer", intent: "create_customer", source: "phone", prefill: { rawText: text } });
     } else if (action.type === "review_email") {
       setShowEmailMock(true);
     } else if (action.type === "prepare_quote") {

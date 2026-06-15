@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import { createPortal } from "react-dom";
+import { AppOverlayPortal } from "./AppOverlayPortal";
 
 interface ResponsiveDetailDrawerProps {
   isOpen: boolean;
@@ -10,9 +10,10 @@ interface ResponsiveDetailDrawerProps {
   title: string;
   children: React.ReactNode;
   centered?: boolean;
+  zIndex?: number;
 }
 
-export function ResponsiveDetailDrawer({ isOpen, onClose, title, children, centered = false }: ResponsiveDetailDrawerProps) {
+export function ResponsiveDetailDrawer({ isOpen, onClose, title, children, centered = false, zIndex = 1010 }: ResponsiveDetailDrawerProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -20,35 +21,33 @@ export function ResponsiveDetailDrawer({ isOpen, onClose, title, children, cente
   }, []);
 
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
+    // Body scroll locking is now handled by AppOverlayPortal
   }, [isOpen]);
 
   if (!isOpen || !mounted) return null;
 
-  return createPortal(
-    <div className={`fixed inset-0 z-[2500] flex ${centered ? "items-center justify-center p-4 md:p-8" : "items-end md:items-stretch justify-end"}`}>
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-navy-900/40 backdrop-blur-sm animate-in fade-in duration-200"
-        onClick={onClose}
-      />
+  return (
+    <AppOverlayPortal>
+      <div className="fixed inset-0" style={{ zIndex }}>
+        {/* Backdrop */}
+        <div
+          className="absolute inset-0 bg-black/35 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={onClose}
+        />
 
-      {/* Drawer / Modal */}
-      <div
-        className={`relative bg-white w-full flex flex-col shadow-2xl
-          ${centered
-            ? "max-w-4xl max-h-full rounded-3xl animate-in zoom-in-95 duration-200 overflow-hidden"
-            : "md:w-[600px] lg:w-[800px] h-[90vh] rounded-t-3xl mt-auto md:mt-0 md:h-full md:rounded-none animate-in slide-in-from-bottom-full md:slide-in-from-right-full duration-300"
-          }
-        `}
-      >
+        {/* Drawer / Modal Container */}
+        <div className="relative h-full w-full flex items-center justify-center p-0 sm:p-3">
+          <div
+            className={`
+              flex flex-col bg-white shadow-2xl
+              fixed inset-0 h-[100dvh] w-screen overflow-y-auto
+              sm:inset-auto sm:relative
+              sm:w-full sm:md:w-[92vw] sm:lg:max-w-6xl
+              sm:h-auto sm:max-h-[92dvh]
+              sm:rounded-2xl
+              animate-in zoom-in-95 duration-200
+            `}
+          >
         {/* Pull Handle for mobile */}
         <div className="w-full flex justify-center pt-3 pb-1 md:hidden absolute top-0 left-0">
           <div className="w-12 h-1.5 bg-neutral-gray-200 rounded-full" />
@@ -70,7 +69,8 @@ export function ResponsiveDetailDrawer({ isOpen, onClose, title, children, cente
           {children}
         </div>
       </div>
-    </div>,
-    document.body
+        </div>
+      </div>
+    </AppOverlayPortal>
   );
 }

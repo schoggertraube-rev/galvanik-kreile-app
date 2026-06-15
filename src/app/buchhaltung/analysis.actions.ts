@@ -48,8 +48,8 @@ export async function getUstvaAnalysisAction(von: string, bis: string) {
   // 12 Months Chart Data (Mock trend shape based on current zahllast)
   const chartData = Array.from({length: 12}).map((_, i) => ({
     name: `Monat \${i+1}`,
-    ist: Math.round(zahllast * (0.8 + Math.random() * 0.4)),
-    vorjahr: Math.round(zahllast * (0.7 + Math.random() * 0.4))
+    ist: 0,
+    vorjahr: 0
   }));
 
   const trendProzent = vmZahllast === 0 ? 0 : ((zahllast - vmZahllast) / Math.abs(vmZahllast)) * 100;
@@ -113,8 +113,8 @@ export async function getKraftstoffAnalysisAction(von: string, bis: string) {
   // Chart
   const chartData = Array.from({length: 12}).map((_, i) => ({
     name: `Monat \${i+1}`,
-    ist: Math.round(gesamtKosten * (0.8 + Math.random() * 0.4)),
-    vorjahr: Math.round(gesamtKosten * (0.7 + Math.random() * 0.4))
+    ist: 0,
+    vorjahr: 0
   }));
 
   const umsatzRaw = await db.select({ netto: ausgangsrechnung.netto }).from(ausgangsrechnung)
@@ -163,8 +163,8 @@ export async function getOffenePostenAnalysisAction(von: string, bis: string) {
   // Trend: Dummy chart since we don't have historical snapshot data for OPOS
   const chartData = Array.from({length: 6}).map((_, i) => ({
     name: `Monat \${i+1}`,
-    ist: Math.round(offeneSumme * (0.8 + Math.random() * 0.4)),
-    vorjahr: Math.round(offeneSumme * (0.7 + Math.random() * 0.4))
+    ist: 0,
+    vorjahr: 0
   }));
 
   const umsatzRaw = await db.select({ netto: ausgangsrechnung.netto }).from(ausgangsrechnung)
@@ -213,8 +213,8 @@ export async function getBwaAnalysisAction(von: string, bis: string) {
 
   const chartData = Array.from({length: 12}).map((_, i) => ({
     name: `Monat \${i+1}`,
-    ist: Math.round(betriebsergebnis * (0.8 + Math.random() * 0.4)),
-    vorjahr: Math.round(betriebsergebnis * (0.7 + Math.random() * 0.4))
+    ist: 0,
+    vorjahr: 0
   }));
 
   const materialQuote = einnahmen > 0 ? (material / einnahmen) * 100 : 0;
@@ -273,8 +273,8 @@ export async function getAusgabenAnalysisAction(von: string, bis: string) {
   // Mock Trend for Chart
   const chartData = Array.from({length: 12}).map((_, i) => ({
     name: `Monat \${i+1}`,
-    variabel: Math.round(variabel * (0.8 + Math.random() * 0.4)),
-    fix: Math.round(fix * (0.9 + Math.random() * 0.2)),
+    variabel: 0,
+    fix: 0,
     gesamt: 0 // calculated below
   })).map(d => ({ ...d, gesamt: d.variabel + d.fix }));
 

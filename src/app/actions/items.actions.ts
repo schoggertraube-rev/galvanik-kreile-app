@@ -142,3 +142,18 @@ export async function updateItemDb(id: string, changes: any): Promise<ActionResu
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Aktualisieren des Artikels", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
   }
 }
+
+export async function deleteItemDb(id: string): Promise<ActionResult<{ success: boolean }>> {
+  const auth = await checkAppAuth("write");
+  if (!auth.ok) return auth;
+
+  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  
+  try {
+    await db.delete(items).where(eq(items.id, id));
+    return { ok: true, data: { success: true } };
+  } catch (error) {
+    console.error("Failed to delete item from DB:", error);
+    return { ok: false, error: "DB_ERROR", message: "Fehler beim Löschen des Artikels", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
+  }
+}

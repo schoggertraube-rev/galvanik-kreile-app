@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { X, Camera, Edit3, Upload, Phone, UserPlus, Send, Copy, FileText } from "lucide-react";
 import { AppActionTile } from "./AppActionTile";
 import { ShortcutType } from "./AppShortcutContext";
+import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 
 interface AppShortcutOverlayProps {
   type: ShortcutType;
@@ -14,6 +15,7 @@ interface AppShortcutOverlayProps {
 export function AppShortcutOverlay({ type, onClose }: AppShortcutOverlayProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { openErfassung } = useErfassung();
 
   // Prevent background scrolling
   useEffect(() => {
@@ -50,7 +52,10 @@ export function AppShortcutOverlay({ type, onClose }: AppShortcutOverlayProps) {
             icon={<Edit3 className="w-6 h-6" />}
             title="Manuell anlegen"
             description="Klassische Eingabe aller Auftragsdaten ohne Vorlage."
-            onClick={() => handleAction("/warendurchlauf/neu?mode=new-order")}
+            onClick={() => {
+              onClose();
+              openErfassung({ mode: "order", intent: "create_order", source: "shortcut" });
+            }}
           />
           <AppActionTile
             icon={<Upload className="w-6 h-6" />}
@@ -84,7 +89,10 @@ export function AppShortcutOverlay({ type, onClose }: AppShortcutOverlayProps) {
             icon={<UserPlus className="w-6 h-6" />}
             title="Manuell anlegen"
             description="Kundendaten per Formular eingeben."
-            onClick={() => alert("Manuelle Kundenanlage wird angebunden.")}
+            onClick={() => {
+              onClose();
+              openErfassung({ mode: "customer", intent: "create_customer", source: "shortcut" });
+            }}
           />
           <AppActionTile
             icon={<Copy className="w-6 h-6" />}

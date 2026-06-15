@@ -152,9 +152,6 @@ function OrdersPageInner() {
     });
 
     setOrders(updated);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_orders", JSON.stringify(updated));
-    }
     try {
       const orderToUpdate = updated.find(o => o.id === orderId);
       if (orderToUpdate) {
@@ -176,11 +173,7 @@ function OrdersPageInner() {
       }
       return o;
     });
-
     setOrders(updated);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_orders", JSON.stringify(updated));
-    }
     try {
       import("@/app/actions/orders.actions").then(({ updateOrderDb }) => {
         updateOrderDb(orderId, { currentStationId: newStation } as any);
@@ -205,11 +198,7 @@ function OrdersPageInner() {
       }
       return o;
     });
-
     setOrders(updated);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_orders", JSON.stringify(updated));
-    }
     try {
       import("@/app/actions/orders.actions").then(({ updateOrderDb }) => {
         updateOrderDb(order.id, { risk: "green" } as any);

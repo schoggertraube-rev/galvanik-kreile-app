@@ -1,6 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { IndexedDBHelper } from "@/lib/offline/IndexedDBHelper";
+
 
 import { createClient } from "@/lib/supabase/client";
 
@@ -32,7 +31,7 @@ const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
 export const inquiriesRepository = {
   async getAll(): Promise<QuoteRequest[]> {
-    if (isSupabase && !OfflineManager.isOffline()) {
+    if (isSupabase) {
       const supabase = createClient();
       const { data, error } = await supabase.from('inquiries').select('*').order('created_at', { ascending: false });
       
@@ -65,28 +64,14 @@ export const inquiriesRepository = {
         }
       })) as QuoteRequest[];
 
-      if (typeof window !== "undefined") {
-        IndexedDBHelper.saveSnapshot("inquiries", mapped.slice(0, 50)).catch(err =>
-          console.error("Failed to save inquiries snapshot to IndexedDB:", err)
-        );
-      }
       return mapped;
-    }
-
-    if (typeof window !== "undefined") {
-      if (OfflineManager.isOffline()) {
-        const cached = await IndexedDBHelper.getSnapshot<QuoteRequest>("inquiries");
-        if (cached && cached.length > 0) {
-          return cached;
-        }
-      }
     }
     
     return [];
   },
 
   async getOpenCount(): Promise<number> {
-    if (isSupabase && !OfflineManager.isOffline()) {
+    if (isSupabase) {
       const supabase = createClient();
       const { count, error } = await supabase.from('inquiries').select('*', { count: 'exact', head: true }).eq('status', 'offen');
       if (!error && count !== null) return count;
@@ -107,7 +92,7 @@ export const inquiriesRepository = {
       marge: 0,
     };
     
-    if (isSupabase && !OfflineManager.isOffline()) {
+    if (isSupabase) {
       const supabase = createClient();
       const dbRow = {
         id: newId,
@@ -127,10 +112,6 @@ export const inquiriesRepository = {
       if (error) {
         console.error("Supabase inquiriesRepository.create error:", error.message, error.details, error.hint);
       }
-    } else {
-      if (typeof window !== "undefined") {
-        OfflineManager.enqueueAction("INQUIRY_CREATE", { payload: { ...data, id: newId, status: 'offen', pricing } }).catch(console.error);
-      }
     }
     
     const newInquiry: QuoteRequest = {
@@ -144,15 +125,11 @@ export const inquiriesRepository = {
   },
 
   async updateStatus(id: string, status: QuoteRequest["status"]): Promise<QuoteRequest | null> {
-    if (isSupabase && !OfflineManager.isOffline()) {
+    if (isSupabase) {
       const supabase = createClient();
       const { error } = await supabase.from('inquiries').update({ status }).eq('id', id);
       if (error) {
         console.error("Supabase inquiriesRepository.updateStatus error:", error);
-      }
-    } else {
-      if (typeof window !== "undefined") {
-        OfflineManager.enqueueAction("INQUIRY_UPDATE_STATUS", { id, status }).catch(console.error);
       }
     }
     
@@ -165,15 +142,11 @@ export const inquiriesRepository = {
   },
 
   async updatePricing(id: string, pricing: QuoteRequest["pricing"]): Promise<QuoteRequest | null> {
-    if (isSupabase && !OfflineManager.isOffline()) {
+    if (isSupabase) {
       const supabase = createClient();
       const { error } = await supabase.from('inquiries').update({ pricing }).eq('id', id);
       if (error) {
         console.error("Supabase inquiriesRepository.updatePricing error:", error);
-      }
-    } else {
-      if (typeof window !== "undefined") {
-        OfflineManager.enqueueAction("INQUIRY_UPDATE_PRICING", { id, pricing }).catch(console.error);
       }
     }
 

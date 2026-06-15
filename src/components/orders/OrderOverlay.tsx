@@ -6,10 +6,13 @@ import { StatusMailDrawer } from "./StatusMailDrawer";
 import { ItemDrawer } from "./ItemDrawer";
 import { 
   X, Check, AlertTriangle, Clock, Droplet, Package, Info, Plus, 
-  Send, Camera, Phone, FileText, Receipt, Truck, ArrowRight, CameraOff, Wrench
+  Send, Camera, Phone, FileText, Receipt, Truck, ArrowRight, CameraOff, Wrench, Loader2
 } from "lucide-react";
 import { StationContextBlock } from "./StationContextBlock";
 import { HeadCostBadge } from "./HeadCostBadge";
+import { AppOverlayPortal } from "@/components/ui/AppOverlayPortal";
+import { uploadOrderPhotoRecord } from "@/features/orders/orderPhoto.actions";
+import { createClient } from "@/lib/supabase/client";
 
 export function OrderOverlay() {
   const stack = useOverlayStore(state => state.stack);
@@ -20,6 +23,8 @@ export function OrderOverlay() {
   const [showMail, setShowMail] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | 'new' | null>(null);
   const [activeStationOverride, setActiveStationOverride] = useState<string | null>(null);
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const currentOrderId = orderStack.length > 0 ? orderStack[orderStack.length - 1] : null;
 
@@ -29,33 +34,43 @@ export function OrderOverlay() {
   
   const activeStation = activeStationOverride || orderData?.station || 'wareneingang';
 
-  // Calculate dynamic z-index based on stack position
+  // Calc z-indexes
   const stackIndex = stack.findLastIndex(item => item.type === 'order' && item.id === currentOrderId);
-  const zIndex = 1000 + stackIndex * 10;
+  const zIndex = 1010 + (stackIndex >= 0 ? stackIndex * 10 : 0);
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-[var(--ci-ink)]/40 backdrop-blur-sm flex items-center justify-center" style={{ zIndex }}>
-        <div className="bg-[var(--ci-surface)] p-8 rounded-[18px] shadow-lg flex flex-col items-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--ci-ink)] mb-4"></div>
-          <span className="text-[var(--ci-ink-2)] font-medium text-sm">Lade Auftragsdaten...</span>
+      <AppOverlayPortal>
+        <div className="fixed inset-0 z-[1000]">
+          <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" />
+          <div className="relative h-full w-full flex items-center justify-center" style={{ zIndex }}>
+            <div className="bg-[var(--ci-surface)] p-8 rounded-[18px] shadow-lg flex flex-col items-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--ci-ink)] mb-4"></div>
+              <span className="text-[var(--ci-ink-2)] font-medium text-sm">Lade Auftragsdaten...</span>
+            </div>
+          </div>
         </div>
-      </div>
+      </AppOverlayPortal>
     );
   }
 
   if (!orderData) {
     return (
-      <div className="fixed inset-0 bg-[var(--ci-ink)]/40 backdrop-blur-sm flex items-center justify-center" style={{ zIndex }}>
-        <div className="bg-[var(--ci-surface)] p-8 rounded-[18px] shadow-lg max-w-md w-full text-center">
-          <AlertTriangle className="h-10 w-10 text-[var(--ci-warn)] mx-auto mb-4" />
-          <h3 className="text-lg font-serif text-[var(--ci-ink)] mb-2">Auftrag nicht gefunden</h3>
-          <p className="text-[var(--ci-ink-3)] text-sm mb-6">Noch keine Daten erfasst oder gelöscht.</p>
-          <button onClick={popOrder} className="px-6 py-2 bg-[var(--ci-ink)] text-white rounded-[12px] font-medium hover:opacity-80 transition-opacity">
-            Schließen
-          </button>
+      <AppOverlayPortal>
+        <div className="fixed inset-0 z-[1000]">
+          <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" />
+          <div className="relative h-full w-full flex items-center justify-center" style={{ zIndex }}>
+            <div className="bg-[var(--ci-surface)] p-8 rounded-[18px] shadow-lg max-w-md w-full text-center">
+              <AlertTriangle className="h-10 w-10 text-[var(--ci-warn)] mx-auto mb-4" />
+              <h3 className="text-lg font-serif text-[var(--ci-ink)] mb-2">Auftrag nicht gefunden</h3>
+              <p className="text-[var(--ci-ink-3)] text-sm mb-6">Noch keine Daten erfasst oder gelöscht.</p>
+              <button onClick={popOrder} className="px-6 py-2 bg-[var(--ci-ink)] text-white rounded-[12px] font-medium hover:opacity-80 transition-opacity">
+                Schließen
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      </AppOverlayPortal>
     );
   }
 
@@ -66,14 +81,32 @@ export function OrderOverlay() {
   const totalValue = partsSum > 0 ? partsSum : dbPrice;
 
   return (
-    <>
+    <AppOverlayPortal>
       <style>{`
         .ci-modal-wrap {
           /* Tokens from ci-tokens.css are applied globally */
         }
-        .ci-backdrop { position: fixed; inset: 0; background: rgba(26, 31, 46, 0.42); backdrop-filter: blur(8px); z-index: -1; }
-        .ci-modal-container { position: fixed; inset: 0; display: flex; justify-content: center; align-items: flex-start; padding-top: 32px; overflow-y: auto; padding-bottom: 32px; }
-        .ci-modal { width: 100%; max-width: 1080px; background: var(--ci-surface); border-radius: var(--ci-radius-card); box-shadow: 0 1px 2px rgba(20,15,5,0.04), 0 12px 32px rgba(20,15,5,0.08); overflow: hidden; border: 1px solid var(--ci-border); font-family: var(--ci-font-sans); color: var(--ci-ink); }
+        .ci-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,0.35); backdrop-filter: blur(4px); }
+        .ci-modal-container { 
+          position: relative; 
+          height: 100%; 
+          width: 100%;
+          display: flex; 
+          justify-content: center; 
+          align-items: center; 
+          padding: 0;
+        }
+        @media (min-width: 640px) {
+          .ci-modal-container { padding: 12px; }
+        }
+        .ci-modal { 
+          background: var(--ci-surface); 
+          box-shadow: 0 12px 32px rgba(20,15,5,0.08); 
+          font-family: var(--ci-font-sans); 
+          color: var(--ci-ink);
+          display: flex;
+          flex-direction: column;
+        }
         .ci-modal-head { padding: 24px 28px 18px; border-bottom: 1px solid var(--ci-border); display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
         .ci-head-left { flex: 1; }
         .ci-order-number { font-family: var(--ci-font-serif); font-size: 38px; font-weight: 400; line-height: 1; color: var(--ci-ink); letter-spacing: -0.5px; }
@@ -171,11 +204,19 @@ export function OrderOverlay() {
         .ci-btn-primary:hover { background: #2A3045; }
       `}</style>
 
-      <div className="ci-modal-wrap fixed inset-0" style={{ zIndex }}>
+      <div className="fixed inset-0 z-[1000]">
         <div className="ci-backdrop" onClick={popOrder}></div>
-        <div className="ci-modal-container">
-          <div className="ci-modal">
-
+        <div className="ci-modal-container" style={{ zIndex }}>
+          <div className={`ci-modal
+            fixed inset-0
+            h-[100dvh] w-screen
+            overflow-y-auto
+            bg-white
+            sm:inset-auto sm:relative
+            sm:w-full sm:md:w-[92vw] sm:lg:max-w-6xl
+            sm:h-auto sm:max-h-[92dvh]
+            sm:rounded-2xl
+          `}>
             {/* HEADER */}
             <div className="ci-modal-head">
               <div className="ci-head-left">
@@ -397,10 +438,53 @@ export function OrderOverlay() {
                     <button className="ci-qa ci-primary" onClick={() => setShowMail(true)}>
                       <Send className="w-[18px] h-[18px]"/><span className="ci-qa-label">Status-Mail</span>
                     </button>
-                    <button className="ci-qa" disabled title="Foto-Upload wird gerade verbunden" style={{ opacity: 0.5, cursor: 'not-allowed' }}>
-                      <Camera className="w-[18px] h-[18px]"/>
+                    
+                    <label className="ci-qa cursor-pointer relative" style={isUploadingPhoto ? { opacity: 0.7, pointerEvents: 'none' } : {}}>
+                      <input 
+                        type="file" 
+                        accept="image/*,capture=camera" 
+                        className="hidden" 
+                        disabled={isUploadingPhoto}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          
+                          setIsUploadingPhoto(true);
+                          setUploadError(null);
+                          try {
+                            const supabase = createClient();
+                            const fileName = `galvanik-kreile/${currentOrderId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+                            
+                            const { data: uploadData, error: uploadError } = await supabase.storage
+                              .from("scans")
+                              .upload(fileName, file);
+
+                            if (uploadError) throw new Error(uploadError.message);
+                            
+                            const { data: publicUrlData } = supabase.storage.from("scans").getPublicUrl(fileName);
+
+                            const dbRes = await uploadOrderPhotoRecord({
+                              orderId: currentOrderId,
+                              fileUrl: publicUrlData.publicUrl,
+                              fileType: file.type
+                            });
+
+                            if (!dbRes.success) throw new Error(dbRes.error);
+                            
+                          } catch (err: any) {
+                            console.error("Foto-Upload fehlgeschlagen:", err);
+                            setUploadError("Fehler beim Upload.");
+                          } finally {
+                            setIsUploadingPhoto(false);
+                            if (e.target) e.target.value = '';
+                          }
+                        }}
+                      />
+                      {isUploadingPhoto ? <Loader2 className="w-[18px] h-[18px] animate-spin text-[var(--ci-accent)]" /> : <Camera className="w-[18px] h-[18px]"/>}
                       <span className="ci-qa-label">Foto +</span>
-                    </button>
+                      {uploadError && <span className="absolute -bottom-5 text-red-500 text-[10px] whitespace-nowrap">{uploadError}</span>}
+                    </label>
+
                     <button className="ci-qa"><Phone className="w-[18px] h-[18px]"/><span className="ci-qa-label">Anrufen</span></button>
                     <button className="ci-qa"><FileText className="w-[18px] h-[18px]"/><span className="ci-qa-label">KV</span></button>
                     <button className="ci-qa" onClick={() => setShowPayment(true)}>
@@ -438,7 +522,7 @@ export function OrderOverlay() {
             </div>
 
             {/* FOOTER */}
-            <div className="ci-modal-foot">
+            <div className="ci-modal-foot sticky bottom-0 z-20 flex flex-col gap-2 border-t bg-white/95 p-4 backdrop-blur sm:flex-row sm:justify-end">
               <button className="ci-btn" onClick={popOrder}>Schließen</button>
               <button className="ci-btn-primary ci-btn" onClick={() => setShowMail(true)}>
                 <Send className="w-4 h-4"/> Kunden-Update senden
@@ -460,6 +544,6 @@ export function OrderOverlay() {
           onSaved={() => {}} 
         />
       )}
-    </>
+    </AppOverlayPortal>
   );
 }

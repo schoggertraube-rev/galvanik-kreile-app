@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Werkstatt-Puls — Analyse · Kreile WerkstattCockpit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream:        #F1E9DC;
+    --cream-deep:   #E8DCC5;
+    --cream-line:   #E0D2B7;
+    --paper:        #FFFFFF;
+    --paper-soft:   #FBF7EE;
+    --navy:         #1A1F2E;
+    --navy-soft:    #3A4256;
+    --ink:          #1A1F2E;
+    --ink-2:        #5C6273;
+    --ink-3:        #9099A8;
+    --magenta:      #C2185B;
+    --teal:         #1F8079;
+    --green:        #16A34A;
+    --green-soft:   #DCFCE7;
+    --amber:        #B45309;
+    --amber-soft:   #FEF3C7;
+    --red:          #C53030;
+    --red-soft:     #FEE2E2;
+    --blue:         #1E40AF;
+    --blue-soft:    #DBEAFE;
+    --shadow:       0 1px 2px rgba(26,31,46,.04), 0 1px 3px rgba(26,31,46,.04);
+    --shadow-l:     0 4px 16px rgba(26,31,46,.06);
+    --radius:       14px;
+    --radius-s:     10px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, system-ui, sans-serif;
+    background: var(--cream);
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .serif { font-family: 'Fraunces', Georgia, serif; }
+
+  /* === LAYOUT === */
+  .page { max-width: 1480px; margin: 0 auto; padding: 28px 32px 64px; }
+
+  /* === HEADER === */
+  .crumbs {
+    display: flex; align-items: center; gap: 10px;
+    color: var(--ink-3); font-size: 13px; margin-bottom: 14px;
+  }
+  .crumbs a { color: var(--ink-2); text-decoration: none; }
+  .crumbs a:hover { color: var(--magenta); }
+  .crumbs .sep { color: var(--cream-line); }
+
+  .header-row {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 24px; margin-bottom: 22px; flex-wrap: wrap;
+  }
+  .title-block { display: flex; align-items: center; gap: 16px; }
+  .title-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    background: linear-gradient(135deg, #E8F4F2 0%, #DCEFEC 100%);
+    color: var(--teal); display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .title-icon svg { width: 22px; height: 22px; }
+  h1 {
+    font-family: 'Inter', sans-serif;
+    font-size: 28px; font-weight: 700; color: var(--navy);
+    margin: 0 0 2px 0; letter-spacing: -0.01em;
+  }
+  .subtitle { color: var(--ink-2); font-size: 14px; }
+
+  .controls { display: flex; gap: 10px; align-items: center; }
+  .seg {
+    display: inline-flex; background: var(--paper); border-radius: 10px;
+    padding: 3px; box-shadow: var(--shadow); border: 1px solid var(--cream-line);
+  }
+  .seg button {
+    border: 0; background: transparent; color: var(--ink-2);
+    padding: 7px 14px; border-radius: 7px; font-weight: 500;
+    cursor: pointer; font-size: 13px;
+  }
+  .seg button.active { background: var(--navy); color: white; }
+  .btn-compare {
+    background: var(--paper); border: 1px solid var(--cream-line);
+    color: var(--ink); padding: 8px 14px; border-radius: 10px;
+    font-weight: 500; cursor: pointer; font-size: 13px;
+    display: inline-flex; align-items: center; gap: 8px;
+    box-shadow: var(--shadow);
+  }
+  .btn-compare:hover { background: var(--paper-soft); }
+  .btn-compare svg { width: 14px; height: 14px; opacity: .6; }
+
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 11px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .pill-warn { background: #FBE9D7; color: #B45309; }
+  .pill-ok { background: #D7EFE3; color: #1F8079; }
+  .pill-bad { background: #FBE0E0; color: #C53030; }
+  .pill-info { background: #E0EAFB; color: #1E40AF; }
+  .pill-mute { background: #EAE3D2; color: #6B6453; }
+
+  /* === SECTION === */
+  .section-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--ink-3); margin: 0 0 12px 4px;
+  }
+
+  .card {
+    background: var(--paper);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border: 1px solid rgba(232,220,197,.5);
+  }
+  .card-h {
+    padding: 18px 22px; border-bottom: 1px solid #F4ECE0;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-h h3 { margin: 0; font-size: 15px; font-weight: 600; color: var(--navy); }
+  .card-body { padding: 22px; }
+
+  /* === HERO === */
+  .hero {
+    background: var(--paper);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 26px 28px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 32px;
+    margin-bottom: 22px;
+    border: 1px solid rgba(232,220,197,.5);
+  }
+  .hero-kpis {
+    display: grid; grid-template-columns: 1.3fr 1fr 1.4fr 0.9fr 0.9fr;
+    gap: 28px; align-items: start;
+  }
+  .kpi-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.06em; color: var(--ink-3); margin-bottom: 6px;
+  }
+  .kpi-value {
+    font-size: 36px; font-weight: 700; color: var(--navy);
+    letter-spacing: -0.02em; line-height: 1;
+  }
+  .kpi-value.bad { color: var(--red); }
+  .kpi-value.warn { color: var(--amber); }
+  .kpi-unit { font-size: 22px; font-weight: 500; color: var(--ink-2); margin-left: 2px; }
+  .kpi-trend {
+    font-size: 12px; margin-top: 8px; color: var(--ink-2);
+    display: flex; align-items: center; gap: 5px;
+  }
+  .trend-down { color: var(--red); }
+  .trend-up { color: var(--green); }
+  .trend-up-bad { color: var(--red); }
+  .kpi-spark { margin-top: 10px; height: 28px; }
+  .kpi-spark svg { width: 100%; height: 100%; display: block; }
+
+  .progress {
+    height: 6px; background: var(--cream-deep); border-radius: 999px;
+    overflow: hidden; margin-top: 10px;
+  }
+  .progress > div { height: 100%; background: var(--teal); border-radius: 999px; }
+
+  .score-ring {
+    width: 132px; height: 132px; position: relative;
+    align-self: center;
+  }
+  .score-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .score-ring .score-num {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    font-size: 28px; font-weight: 700; color: var(--navy);
+    flex-direction: column;
+  }
+  .score-ring .score-label {
+    position: absolute; bottom: -22px; left: 0; right: 0; text-align: center;
+    font-size: 11px; color: var(--ink-3); text-transform: uppercase;
+    letter-spacing: 0.06em; font-weight: 600;
+  }
+
+  /* === GRID === */
+  .grid-2 { display: grid; grid-template-columns: 1.4fr 1fr; gap: 22px; margin-bottom: 22px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+
+  /* === CHART === */
+  .chart-frame {
+    position: relative; padding: 0; height: 220px;
+    background: linear-gradient(180deg, #FBF7EE 0%, #FFFFFF 60%);
+    border-radius: var(--radius-s); border: 1px solid #F4ECE0;
+  }
+  .chart-frame svg { display: block; width: 100%; height: 100%; }
+  .chart-legend {
+    display: flex; gap: 16px; margin-top: 12px; font-size: 12px; color: var(--ink-2);
+  }
+  .lg-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: middle; }
+
+  /* === STATIONEN === */
+  .station-card {
+    background: var(--paper);
+    border-radius: var(--radius-s);
+    padding: 16px;
+    border: 1px solid #F0E6D3;
+    position: relative;
+    transition: transform .12s ease, box-shadow .12s ease;
+    cursor: pointer;
+  }
+  .station-card:hover { transform: translateY(-1px); box-shadow: var(--shadow-l); }
+  .station-card.critical { border-left: 3px solid var(--red); }
+  .station-card.watch    { border-left: 3px solid var(--amber); }
+  .station-card.ok       { border-left: 3px solid var(--green); }
+  .station-card.free     { border-left: 3px solid var(--ink-3); }
+
+  .station-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .station-name { font-size: 14px; font-weight: 600; color: var(--navy); }
+  .station-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .stat-block { }
+  .stat-num { font-size: 22px; font-weight: 700; color: var(--navy); letter-spacing: -0.01em; }
+  .stat-num.crit { color: var(--red); }
+  .stat-key { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); font-weight: 600; }
+  .util-bar { height: 4px; background: var(--cream-deep); border-radius: 999px; overflow: hidden; margin-top: 4px; }
+  .util-bar > div { height: 100%; border-radius: 999px; }
+  .station-cause {
+    font-size: 12px; color: var(--ink-2); padding: 8px 10px;
+    background: var(--cream); border-radius: 8px; margin-bottom: 10px;
+  }
+  .station-link {
+    font-size: 12px; color: var(--magenta); font-weight: 600;
+    display: flex; align-items: center; gap: 4px;
+  }
+
+  /* === KI BOX === */
+  .ki-card {
+    background: linear-gradient(135deg, #FBF6FA 0%, #FFFFFF 100%);
+    border: 1px solid #EAD9E4;
+    border-radius: var(--radius);
+    padding: 22px 24px;
+    margin-bottom: 22px;
+  }
+  .ki-head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+  }
+  .ki-icon {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--magenta) 0%, #7A3FB0 100%);
+    color: white; display: grid; place-items: center;
+  }
+  .ki-icon svg { width: 14px; height: 14px; }
+  .ki-title { font-size: 14px; font-weight: 600; color: var(--navy); }
+  .ki-badge {
+    font-size: 10px; font-weight: 600; padding: 3px 8px;
+    border-radius: 999px; background: #EFE3F0; color: var(--magenta);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .ki-text { font-size: 14px; color: var(--ink); margin-bottom: 6px; }
+  .ki-text strong { color: var(--navy); }
+  .ki-rec {
+    background: white; padding: 14px 16px; border-radius: var(--radius-s);
+    border: 1px solid #F0E0EA; margin-top: 14px;
+    font-size: 13px; color: var(--ink);
+  }
+  .ki-rec-label {
+    font-size: 11px; font-weight: 600; color: var(--magenta);
+    text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px;
+  }
+  .ki-actions { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .ki-btn {
+    background: var(--navy); color: white; border: 0;
+    padding: 9px 14px; border-radius: 8px; font-size: 12px; font-weight: 500;
+    cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .ki-btn.outline { background: white; color: var(--navy); border: 1px solid var(--cream-line); }
+  .ki-btn:hover { background: var(--ink-2); }
+  .ki-btn.outline:hover { background: var(--cream); }
+
+  /* === ENGPASS-RANKING === */
+  .rank-row {
+    display: grid; grid-template-columns: 30px 1fr auto auto;
+    align-items: center; gap: 14px;
+    padding: 12px 0; border-bottom: 1px solid #F4ECE0;
+  }
+  .rank-row:last-child { border-bottom: none; }
+  .rank-num {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: var(--cream); color: var(--ink-2); font-weight: 600;
+    display: grid; place-items: center; font-size: 12px;
+  }
+  .rank-row.r1 .rank-num { background: var(--red-soft); color: var(--red); }
+  .rank-row.r2 .rank-num { background: var(--amber-soft); color: var(--amber); }
+  .rank-bar-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .rank-name { font-size: 13px; font-weight: 600; color: var(--navy); }
+  .rank-bar {
+    height: 5px; background: var(--cream-deep); border-radius: 999px;
+    overflow: hidden; width: 100%;
+  }
+  .rank-bar > div { height: 100%; border-radius: 999px; }
+  .rank-score { font-size: 13px; font-weight: 700; color: var(--navy); }
+  .rank-meta { font-size: 11px; color: var(--ink-3); }
+
+  /* === BETROFFENE AUFTRÄGE === */
+  .orders-table {
+    width: 100%; border-collapse: collapse;
+  }
+  .orders-table th {
+    text-align: left; font-size: 11px; font-weight: 600;
+    color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 12px 14px; border-bottom: 1px solid #F0E6D3;
+    background: var(--paper-soft);
+  }
+  .orders-table td {
+    padding: 14px; border-bottom: 1px solid #F4ECE0; font-size: 13px;
+    color: var(--ink);
+  }
+  .orders-table tr:last-child td { border-bottom: none; }
+  .orders-table tr:hover td { background: var(--paper-soft); cursor: pointer; }
+  .order-num {
+    font-family: 'Fraunces', serif; font-weight: 600;
+    font-size: 14px; color: var(--navy);
+  }
+  .order-title { color: var(--ink-2); font-size: 12px; }
+  .verzug-cell { font-weight: 600; }
+  .verzug-cell.bad { color: var(--red); }
+  .verzug-cell.warn { color: var(--amber); }
+  .verzug-cell.ok { color: var(--green); }
+
+  /* === WIRTSCHAFTLICHKEIT === */
+  .econ-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .econ-tile {
+    padding: 14px 16px; background: var(--paper-soft);
+    border-radius: var(--radius-s); border: 1px solid #F0E6D3;
+  }
+  .econ-key { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); font-weight: 600; margin-bottom: 6px; }
+  .econ-val { font-size: 20px; font-weight: 700; color: var(--navy); letter-spacing: -0.01em; }
+  .econ-note { font-size: 11px; color: var(--ink-2); margin-top: 4px; }
+
+  /* === VERNETZT === */
+  .links-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .link-tile {
+    background: var(--paper); border: 1px solid var(--cream-line);
+    border-radius: var(--radius-s); padding: 14px;
+    cursor: pointer; transition: transform .12s ease;
+  }
+  .link-tile:hover { transform: translateY(-1px); border-color: var(--magenta); }
+  .link-tile-title { font-size: 12px; color: var(--ink-3); margin-bottom: 4px; font-weight: 500; }
+  .link-tile-val { font-size: 14px; color: var(--navy); font-weight: 600; }
+
+  /* === DATENHERKUNFT === */
+  .data-foot {
+    margin-top: 18px; padding: 12px 18px;
+    background: var(--paper-soft); border: 1px dashed var(--cream-line);
+    border-radius: var(--radius-s);
+    display: flex; flex-wrap: wrap; gap: 18px; align-items: center;
+    font-size: 11px; color: var(--ink-2);
+  }
+  .data-foot strong { color: var(--ink); font-weight: 600; }
+  .data-foot .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 6px; }
+  .data-foot .dot.amber { background: var(--amber); }
+
+  /* === SECTION SPACING === */
+  section { margin-bottom: 22px; }
+  .h2 { font-size: 18px; font-weight: 600; color: var(--navy); margin: 0 0 14px 0; }
+  .h2-sub { font-size: 12px; color: var(--ink-2); margin-left: 8px; font-weight: 400; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- BREADCRUMB -->
+  <div class="crumbs">
+    <a href="#">Analyse</a>
+    <span class="sep">›</span>
+    <span>Werkstatt-Puls</span>
+  </div>
+
+  <!-- HEADER -->
+  <div class="header-row">
+    <div class="title-block">
+      <div class="title-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12h4l3-9 4 18 3-9h4"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Werkstatt-Puls</h1>
+        <div class="subtitle">Durchsatz · Stationen · Wochenziel — Datenstand 10.06.2026, 16:42</div>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="seg">
+        <button>Heute</button>
+        <button class="active">Woche</button>
+        <button>Monat</button>
+        <button>Frei</button>
+      </div>
+      <button class="btn-compare">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h10M7 17h10M5 3v18M19 3v18"/></svg>
+        Vergleich: Vorwoche
+      </button>
+      <span class="pill pill-warn">HANDLUNGSBEDARF</span>
+    </div>
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-kpis">
+      <!-- Termintreue -->
+      <div>
+        <div class="kpi-label">Termintreue</div>
+        <div><span class="kpi-value bad">76</span><span class="kpi-unit">%</span></div>
+        <div class="kpi-trend trend-down">
+          <svg width="10" height="10" viewBox="0 0 10 10"><polygon points="0,2 10,2 5,9" fill="currentColor"/></svg>
+          −9 Pkt. vs. Vw. · Ziel ≥ 90 %
+        </div>
+        <div class="kpi-spark">
+          <svg viewBox="0 0 100 30" preserveAspectRatio="none">
+            <polyline points="0,8 12,10 24,7 36,9 48,12 60,16 72,18 84,22 100,24" fill="none" stroke="#C53030" stroke-width="1.6"/>
+          </svg>
+        </div>
+      </div>
+      <!-- DLZ -->
+      <div>
+        <div class="kpi-label">Ø Durchlaufzeit</div>
+        <div><span class="kpi-value warn">9,4</span><span class="kpi-unit">T</span></div>
+        <div class="kpi-trend trend-up-bad">
+          <svg width="10" height="10" viewBox="0 0 10 10"><polygon points="0,7 10,7 5,0" fill="currentColor"/></svg>
+          +1,2 T vs. Vw. · Ziel ≤ 7 T
+        </div>
+        <div class="kpi-spark">
+          <svg viewBox="0 0 100 30" preserveAspectRatio="none">
+            <polyline points="0,22 12,20 24,18 36,16 48,14 60,12 72,10 84,8 100,5" fill="none" stroke="#B45309" stroke-width="1.6"/>
+          </svg>
+        </div>
+      </div>
+      <!-- Wochenziel -->
+      <div>
+        <div class="kpi-label">Wochenziel · KW 24</div>
+        <div><span class="kpi-value">23</span><span class="kpi-unit"> / 25</span></div>
+        <div class="kpi-trend">2 fehlen · Donnerstag/Freitag möglich</div>
+        <div class="progress" style="margin-top:14px"><div style="width:92%; background: linear-gradient(90deg,#1F8079,#16A34A);"></div></div>
+      </div>
+      <!-- Offene -->
+      <div>
+        <div class="kpi-label">Offene Aufträge</div>
+        <div><span class="kpi-value">19</span></div>
+        <div class="kpi-trend">davon <strong style="color:var(--red); margin: 0 3px;">3 kritisch</strong></div>
+        <div class="kpi-spark">
+          <svg viewBox="0 0 100 30" preserveAspectRatio="none">
+            <polyline points="0,18 14,16 28,20 42,15 56,13 70,17 84,14 100,12" fill="none" stroke="#5C6273" stroke-width="1.6"/>
+          </svg>
+        </div>
+      </div>
+      <!-- Dokumentation -->
+      <div>
+        <div class="kpi-label">Dokumentation</div>
+        <div><span class="kpi-value" style="color:var(--green);">84</span><span class="kpi-unit">%</span></div>
+        <div class="kpi-trend trend-up">
+          <svg width="10" height="10" viewBox="0 0 10 10"><polygon points="0,7 10,7 5,0" fill="currentColor"/></svg>
+          +6 Pkt. vs. Vw.
+        </div>
+        <div class="kpi-spark">
+          <svg viewBox="0 0 100 30" preserveAspectRatio="none">
+            <polyline points="0,18 14,16 28,15 42,12 56,10 70,9 84,7 100,5" fill="none" stroke="#16A34A" stroke-width="1.6"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Score-Ring -->
+    <div class="score-ring">
+      <svg viewBox="0 0 120 120">
+        <defs>
+          <linearGradient id="ringG" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#7A3FB0"/>
+            <stop offset="60%" stop-color="#C2185B"/>
+            <stop offset="100%" stop-color="#F2643C"/>
+          </linearGradient>
+        </defs>
+        <circle cx="60" cy="60" r="50" fill="none" stroke="#F0E6D3" stroke-width="9"/>
+        <circle cx="60" cy="60" r="50" fill="none" stroke="url(#ringG)" stroke-width="9"
+          stroke-dasharray="314" stroke-dashoffset="113" stroke-linecap="round"/>
+      </svg>
+      <div class="score-num">64<span style="font-size:14px; font-weight:500; color:var(--ink-3);">/100</span></div>
+      <div class="score-label">Werkstatt-Score</div>
+    </div>
+  </div>
+
+  <!-- KI EMPFEHLUNG -->
+  <div class="ki-card">
+    <div class="ki-head">
+      <div class="ki-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+      </div>
+      <span class="ki-title">KI-Einschätzung</span>
+      <span class="ki-badge">1 Beobachtung · 1 Empfehlung</span>
+    </div>
+    <div class="ki-text">
+      <strong>Schleiferei ist seit 3 Tagen Hauptengpass.</strong> 8 Teile warten (Ø 4,8 Tage), darunter 5 große Oldtimer-Stoßstangen mit Zusatzaufwand. Beschichtung hat in dieser KW 22 % freie Kapazität.
+    </div>
+    <div class="ki-rec">
+      <div class="ki-rec-label">Empfehlung</div>
+      Stoßstangen-Pulk priorisieren oder betroffene Kunden über Terminrisiko informieren. Parallel: ähnliche Kleinteile aus Politur für 25 Min. Rüstzeitpotenzial bündeln.
+    </div>
+    <div class="ki-actions">
+      <button class="ki-btn">
+        Aufträge in Schleifen öffnen (8)
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+      </button>
+      <button class="ki-btn outline">Kapazitätsplan</button>
+      <button class="ki-btn outline">Kunden benachrichtigen</button>
+    </div>
+  </div>
+
+  <!-- TREND + ENGPASS-RANKING -->
+  <div class="grid-2">
+    <!-- TERMINTREUE 12 WOCHEN -->
+    <div class="card">
+      <div class="card-h">
+        <h3>Termintreue · letzte 12 Wochen</h3>
+        <div style="display:flex; gap:14px; font-size:12px; color:var(--ink-2);">
+          <span><span class="lg-dot" style="background:var(--magenta);"></span>2026</span>
+          <span><span class="lg-dot" style="background:#D6C7B7;"></span>Vorjahr</span>
+          <span><span class="lg-dot" style="background:transparent; border:1.5px dashed var(--ink-3);"></span>Ziel 90 %</span>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="chart-frame">
+          <svg viewBox="0 0 600 220" preserveAspectRatio="none">
+            <!-- Grid Lines -->
+            <line x1="0" y1="44"  x2="600" y2="44"  stroke="#F0E6D3" stroke-width="1"/>
+            <line x1="0" y1="88"  x2="600" y2="88"  stroke="#F0E6D3" stroke-width="1"/>
+            <line x1="0" y1="132" x2="600" y2="132" stroke="#F0E6D3" stroke-width="1"/>
+            <line x1="0" y1="176" x2="600" y2="176" stroke="#F0E6D3" stroke-width="1"/>
+            <!-- Y-Labels (rechts) -->
+            <text x="588" y="48"  text-anchor="end" fill="#9099A8" font-size="10">100%</text>
+            <text x="588" y="92"  text-anchor="end" fill="#9099A8" font-size="10">85%</text>
+            <text x="588" y="136" text-anchor="end" fill="#9099A8" font-size="10">70%</text>
+            <text x="588" y="180" text-anchor="end" fill="#9099A8" font-size="10">55%</text>
+            <!-- Ziel-Linie 90% -->
+            <line x1="0" y1="60" x2="600" y2="60" stroke="#9099A8" stroke-width="1.2" stroke-dasharray="4 4" opacity="0.6"/>
+            <!-- Vorjahr -->
+            <polyline points="25,72 75,68 125,70 175,64 225,72 275,68 325,76 375,72 425,68 475,74 525,68 575,72"
+              fill="none" stroke="#D6C7B7" stroke-width="2" stroke-linecap="round"/>
+            <!-- 2026 Fläche -->
+            <defs>
+              <linearGradient id="aktG" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"  stop-color="#C2185B" stop-opacity="0.18"/>
+                <stop offset="100%" stop-color="#C2185B" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <path d="M25,80 L75,72 L125,68 L175,76 L225,84 L275,88 L325,96 L375,104 L425,112 L475,108 L525,116 L575,124 L575,220 L25,220 Z" fill="url(#aktG)"/>
+            <!-- 2026 Linie -->
+            <polyline points="25,80 75,72 125,68 175,76 225,84 275,88 325,96 375,104 425,112 475,108 525,116 575,124"
+              fill="none" stroke="#C2185B" stroke-width="2.4" stroke-linecap="round"/>
+            <!-- Letzter Punkt -->
+            <circle cx="575" cy="124" r="5" fill="white" stroke="#C2185B" stroke-width="2.4"/>
+            <text x="572" y="115" text-anchor="end" fill="#C2185B" font-size="11" font-weight="600">76 %</text>
+            <!-- X-Achse -->
+            <text x="25"  y="210" text-anchor="middle" fill="#9099A8" font-size="10">KW13</text>
+            <text x="175" y="210" text-anchor="middle" fill="#9099A8" font-size="10">KW16</text>
+            <text x="325" y="210" text-anchor="middle" fill="#9099A8" font-size="10">KW19</text>
+            <text x="475" y="210" text-anchor="middle" fill="#9099A8" font-size="10">KW22</text>
+            <text x="575" y="210" text-anchor="middle" fill="#C2185B" font-size="10" font-weight="600">KW24</text>
+          </svg>
+        </div>
+        <div style="margin-top: 14px; font-size: 12px; color: var(--ink-2); display:flex; gap:18px;">
+          <span>Bestwoche: <strong style="color:var(--navy);">KW 16 · 94 %</strong></span>
+          <span>Tiefpunkt: <strong style="color:var(--red);">KW 24 · 76 %</strong></span>
+          <span>Volumen-Trend: <strong style="color:var(--navy);">+12 % YoY</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ENGPASS-RANKING -->
+    <div class="card">
+      <div class="card-h">
+        <h3>Engpass-Ranking</h3>
+        <span class="pill pill-mute" style="font-size: 10px;">Engpass-Score</span>
+      </div>
+      <div class="card-body" style="padding-top: 8px;">
+        <div class="rank-row r1">
+          <div class="rank-num">1</div>
+          <div class="rank-bar-cell">
+            <div class="rank-name">Schleifen</div>
+            <div class="rank-bar"><div style="width:94%; background:var(--red);"></div></div>
+            <div class="rank-meta">94 % Auslastung · 8 wartend · Ø 4,8 T</div>
+          </div>
+          <div class="rank-score">87</div>
+          <div style="margin-left: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9099A8" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+          </div>
+        </div>
+        <div class="rank-row r2">
+          <div class="rank-num">2</div>
+          <div class="rank-bar-cell">
+            <div class="rank-name">Galvanik</div>
+            <div class="rank-bar"><div style="width:78%; background:var(--amber);"></div></div>
+            <div class="rank-meta">78 % Auslastung · 5 wartend · Ø 2,4 T</div>
+          </div>
+          <div class="rank-score">61</div>
+          <div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9099A8" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></div>
+        </div>
+        <div class="rank-row">
+          <div class="rank-num">3</div>
+          <div class="rank-bar-cell">
+            <div class="rank-name">Politur</div>
+            <div class="rank-bar"><div style="width:58%; background:#9CB8B4;"></div></div>
+            <div class="rank-meta">58 % Auslastung · 2 wartend · Ø 1,1 T</div>
+          </div>
+          <div class="rank-score">34</div>
+          <div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9099A8" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></div>
+        </div>
+        <div class="rank-row">
+          <div class="rank-num">4</div>
+          <div class="rank-bar-cell">
+            <div class="rank-name">Vorber.</div>
+            <div class="rank-bar"><div style="width:45%; background:#9CB8B4;"></div></div>
+            <div class="rank-meta">45 % Auslastung · 3 wartend · Ø 0,8 T</div>
+          </div>
+          <div class="rank-score">22</div>
+          <div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9099A8" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></div>
+        </div>
+        <div class="rank-row">
+          <div class="rank-num">5</div>
+          <div class="rank-bar-cell">
+            <div class="rank-name">QK / Vers.</div>
+            <div class="rank-bar"><div style="width:22%; background:#C9D7D5;"></div></div>
+            <div class="rank-meta">22 % Auslastung · 1 wartend · Ø 0,4 T</div>
+          </div>
+          <div class="rank-score">9</div>
+          <div><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9099A8" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATIONEN-ARENA -->
+  <section>
+    <h2 class="h2">Stationen-Arena <span class="h2-sub">Klick auf eine Station öffnet die Auftragsliste</span></h2>
+    <div class="grid-5">
+
+      <!-- Schleifen -->
+      <div class="station-card critical">
+        <div class="station-head">
+          <span class="station-name">Schleifen</span>
+          <span class="pill pill-bad" style="font-size: 9px; padding: 3px 8px;">KRITISCH</span>
+        </div>
+        <div class="station-metrics">
+          <div class="stat-block">
+            <div class="stat-num crit">8</div>
+            <div class="stat-key">Wartend</div>
+          </div>
+          <div class="stat-block">
+            <div class="stat-num">4,8<span style="font-size:14px;font-weight:500;color:var(--ink-2);">T</span></div>
+            <div class="stat-key">Ø Wartezeit</div>
+          </div>
+        </div>
+        <div>
+          <div class="stat-key" style="margin-bottom:4px;">Auslastung 94 %</div>
+          <div class="util-bar"><div style="width:94%; background:var(--red);"></div></div>
+        </div>
+        <div class="station-cause" style="margin-top: 12px;">5 große Stoßstangen mit Zusatzaufwand</div>
+        <div class="station-link">8 Aufträge öffnen →</div>
+      </div>
+
+      <!-- Politur -->
+      <div class="station-card ok">
+        <div class="station-head">
+          <span class="station-name">Politur</span>
+          <span class="pill pill-ok" style="font-size: 9px; padding: 3px 8px;">OK</span>
+        </div>
+        <div class="station-metrics">
+          <div class="stat-block">
+            <div class="stat-num">2</div>
+            <div class="stat-key">Wartend</div>
+          </div>
+          <div class="stat-block">
+            <div class="stat-num">1,1<span style="font-size:14px;font-weight:500;color:var(--ink-2);">T</span></div>
+            <div class="stat-key">Ø Wartezeit</div>
+          </div>
+        </div>
+        <div>
+          <div class="stat-key" style="margin-bottom:4px;">Auslastung 58 %</div>
+          <div class="util-bar"><div style="width:58%; background:var(--green);"></div></div>
+        </div>
+        <div class="station-cause" style="margin-top: 12px;">Stabil, Kleinteile-Bündelung möglich</div>
+        <div class="station-link">2 Aufträge öffnen →</div>
+      </div>
+
+      <!-- Galvanik -->
+      <div class="station-card watch">
+        <div class="station-head">
+          <span class="station-name">Galvanik</span>
+          <span class="pill pill-warn" style="font-size: 9px; padding: 3px 8px;">BEOBACHTEN</span>
+        </div>
+        <div class="station-metrics">
+          <div class="stat-block">
+            <div class="stat-num">5</div>
+            <div class="stat-key">Wartend</div>
+          </div>
+          <div class="stat-block">
+            <div class="stat-num">2,4<span style="font-size:14px;font-weight:500;color:var(--ink-2);">T</span></div>
+            <div class="stat-key">Ø Wartezeit</div>
+          </div>
+        </div>
+        <div>
+          <div class="stat-key" style="margin-bottom:4px;">Auslastung 78 %</div>
+          <div class="util-bar"><div style="width:78%; background:var(--amber);"></div></div>
+        </div>
+        <div class="station-cause" style="margin-top: 12px;">3 Aufträge morgen fällig</div>
+        <div class="station-link">5 Aufträge öffnen →</div>
+      </div>
+
+      <!-- Vorber. -->
+      <div class="station-card ok">
+        <div class="station-head">
+          <span class="station-name">Vorber.</span>
+          <span class="pill pill-ok" style="font-size: 9px; padding: 3px 8px;">OK</span>
+        </div>
+        <div class="station-metrics">
+          <div class="stat-block">
+            <div class="stat-num">3</div>
+            <div class="stat-key">Wartend</div>
+          </div>
+          <div class="stat-block">
+            <div class="stat-num">0,8<span style="font-size:14px;font-weight:500;color:var(--ink-2);">T</span></div>
+            <div class="stat-key">Ø Wartezeit</div>
+          </div>
+        </div>
+        <div>
+          <div class="stat-key" style="margin-bottom:4px;">Auslastung 45 %</div>
+          <div class="util-bar"><div style="width:45%; background:var(--green);"></div></div>
+        </div>
+        <div class="station-cause" style="margin-top: 12px;">Stabil, Material verfügbar</div>
+        <div class="station-link">3 Aufträge öffnen →</div>
+      </div>
+
+      <!-- QK/Vers. -->
+      <div class="station-card free">
+        <div class="station-head">
+          <span class="station-name">QK / Vers.</span>
+          <span class="pill pill-mute" style="font-size: 9px; padding: 3px 8px;">FREI</span>
+        </div>
+        <div class="station-metrics">
+          <div class="stat-block">
+            <div class="stat-num">1</div>
+            <div class="stat-key">Wartend</div>
+          </div>
+          <div class="stat-block">
+            <div class="stat-num">0,4<span style="font-size:14px;font-weight:500;color:var(--ink-2);">T</span></div>
+            <div class="stat-key">Ø Wartezeit</div>
+          </div>
+        </div>
+        <div>
+          <div class="stat-key" style="margin-bottom:4px;">Auslastung 22 %</div>
+          <div class="util-bar"><div style="width:22%; background:var(--ink-3);"></div></div>
+        </div>
+        <div class="station-cause" style="margin-top: 12px;">Kapazität für Versandtag verfügbar</div>
+        <div class="station-link">1 Auftrag öffnen →</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BETROFFENE AUFTRÄGE -->
+  <section>
+    <div class="card">
+      <div class="card-h">
+        <h3>Verzögerte und gefährdete Aufträge</h3>
+        <div style="display:flex; gap:8px;">
+          <span class="pill pill-bad" style="font-size: 10px;">3 kritisch</span>
+          <span class="pill pill-warn" style="font-size: 10px;">4 gefährdet</span>
+          <span class="pill pill-ok" style="font-size: 10px;">12 im Plan</span>
+        </div>
+      </div>
+      <table class="orders-table">
+        <thead>
+          <tr>
+            <th>Auftrag</th>
+            <th>Kunde</th>
+            <th>Station</th>
+            <th>Zugesagt</th>
+            <th>Verzug / Status</th>
+            <th>Priorität</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>
+              <div class="order-num">A-2026-0042</div>
+              <div class="order-title">Stoßstangen Mercedes W108</div>
+            </td>
+            <td>Museum Lenzburg</td>
+            <td>Schleifen</td>
+            <td>12.06.2026</td>
+            <td class="verzug-cell bad">−3 Tage</td>
+            <td><span class="pill pill-bad" style="font-size: 10px;">EXPRESS</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="order-num">A-2026-0028</div>
+              <div class="order-title">Kerzenleuchter Barock</div>
+            </td>
+            <td>Schreinerei Hartmann</td>
+            <td>Schleifen</td>
+            <td>10.06.2026</td>
+            <td class="verzug-cell bad">−4 Tage</td>
+            <td><span class="pill pill-bad" style="font-size: 10px;">KRITISCH</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="order-num">A-2026-0035</div>
+              <div class="order-title">Bestecke 12-tlg</div>
+            </td>
+            <td>Antikladen Wagner</td>
+            <td>Schleifen</td>
+            <td>13.06.2026</td>
+            <td class="verzug-cell bad">−2 Tage</td>
+            <td><span class="pill pill-bad" style="font-size: 10px;">KRITISCH</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="order-num">A-2026-0038</div>
+              <div class="order-title">Türgriffe-Set Jugendstil</div>
+            </td>
+            <td>Restauration Becker</td>
+            <td>Galvanik</td>
+            <td>14.06.2026</td>
+            <td class="verzug-cell warn">−1 Tag</td>
+            <td><span class="pill pill-warn" style="font-size: 10px;">GEFÄHRDET</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="order-num">A-2026-0040</div>
+              <div class="order-title">Türklinken-Set Bauhaus</div>
+            </td>
+            <td>Oldtimer Frankfurt</td>
+            <td>Galvanik</td>
+            <td>15.06.2026</td>
+            <td class="verzug-cell warn">heute</td>
+            <td><span class="pill pill-warn" style="font-size: 10px;">GEFÄHRDET</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="order-num">A-2026-0031</div>
+              <div class="order-title">Motorradteile BMW R75</div>
+            </td>
+            <td>Motorradtechnik Kessler</td>
+            <td>Vorber.</td>
+            <td>17.06.2026</td>
+            <td class="verzug-cell ok">+3 T Puffer</td>
+            <td><span class="pill pill-ok" style="font-size: 10px;">IM PLAN</span></td>
+          </tr>
+          <tr>
+            <td>
+              <div class="order-num">A-2026-0024</div>
+              <div class="order-title">Kühlerfigur</div>
+            </td>
+            <td>Restauration Becker</td>
+            <td>QK / Vers.</td>
+            <td>11.06.2026</td>
+            <td class="verzug-cell ok">heute fertig</td>
+            <td><span class="pill pill-ok" style="font-size: 10px;">IM PLAN</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- WIRTSCHAFTLICHKEIT -->
+  <section>
+    <div class="card">
+      <div class="card-h">
+        <h3>Wirtschaftliche Auswirkung der Engpässe</h3>
+        <span class="pill pill-info" style="font-size: 10px;">SCHÄTZUNG · KW 24</span>
+      </div>
+      <div class="card-body">
+        <div class="econ-grid">
+          <div class="econ-tile">
+            <div class="econ-key">Verspätungskosten Woche</div>
+            <div class="econ-val" style="color:var(--red);">~ 480 €</div>
+            <div class="econ-note">3 Express-Zuschläge, 1 Kulanz-Gutschrift</div>
+          </div>
+          <div class="econ-tile">
+            <div class="econ-key">Opportunitätskosten Engpass</div>
+            <div class="econ-val" style="color:var(--amber);">~ 1.240 €</div>
+            <div class="econ-note">Schleifen-Stau bindet Folge-DB</div>
+          </div>
+          <div class="econ-tile">
+            <div class="econ-key">DB / Stunde aktiv</div>
+            <div class="econ-val">38 €</div>
+            <div class="econ-note">Ziel 45 € · −7 € vs. Ziel</div>
+          </div>
+          <div class="econ-tile">
+            <div class="econ-key">Auslastung gesamt</div>
+            <div class="econ-val">61 %</div>
+            <div class="econ-note">+4 Pkt. vs. Vw.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- VERNETZT MIT -->
+  <section>
+    <h2 class="h2">Vernetzt mit <span class="h2-sub">Klick öffnet den jeweiligen Bereich mit übernommenem Filter</span></h2>
+    <div class="links-grid">
+      <div class="link-tile">
+        <div class="link-tile-title">Bäder & Material</div>
+        <div class="link-tile-val">Nickelbad · Messung in 4 T fällig →</div>
+      </div>
+      <div class="link-tile">
+        <div class="link-tile-title">Kontrolle</div>
+        <div class="link-tile-val">QS-Quote: 96 % · 1 Fall offen →</div>
+      </div>
+      <div class="link-tile">
+        <div class="link-tile-title">Kunden</div>
+        <div class="link-tile-val">3 Kunden mit verzögerten Aufträgen →</div>
+      </div>
+      <div class="link-tile">
+        <div class="link-tile-title">Kommunikation</div>
+        <div class="link-tile-val">2 Freigaben offen · Ø 1,8 T Antwort →</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DATENHERKUNFT -->
+  <div class="data-foot">
+    <span><span class="dot"></span><strong>v_werkstatt_puls</strong> · 47 Aufträge · live</span>
+    <span><span class="dot"></span><strong>v_puls_station_durchlauf</strong> · 312 Events</span>
+    <span><span class="dot"></span><strong>v_puls_station_stau</strong> · 19 items · live</span>
+    <span><span class="dot amber"></span><strong>kpi_snapshots</strong> · Vorjahresvergleich teils synthetisch (S2)</span>
+    <span style="margin-left:auto; color:var(--ink-3);">Letztes Update: vor 12 Sek.</span>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>Kreile Auftragsoverlay v3 · Stations-Kontext · CI-Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+  :root {
+    --ci-bg: #F1E9DC;
+    --ci-surface: #FBF6ED;
+    --ci-surface-soft: #EFE6D6;
+    --ci-ink: #1A1F2E;
+    --ci-ink-2: #5D5A4F;
+    --ci-ink-3: #8E8775;
+    --ci-border: #E5DDC9;
+    --ci-accent: #C2185B;
+    --ci-success: #4F8F58;
+    --ci-warn: #D89A2C;
+    --ci-danger: #B0413E;
+    --ci-success-soft: #D9E8D3;
+    --ci-warn-soft: #F4E1B6;
+    --ci-danger-soft: #EBC9C2;
+    --ci-bench: #EDD89C;
+    --ci-bench-soft: #F7EFD0;
+    --ci-radius-card: 18px;
+    --ci-radius-button: 12px;
+    --ci-shadow: 0 1px 2px rgba(20,15,5,0.04), 0 12px 32px rgba(20,15,5,0.08);
+    --ci-font-serif: "Fraunces", "EB Garamond", Georgia, serif;
+    --ci-font-sans: "Inter", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--ci-bg); font-family: var(--ci-font-sans); color: var(--ci-ink); }
+  body { padding: 24px; min-height: 100vh; }
+
+  /* ====== HINTERGRUND ====== */
+  .app-bg { position: fixed; inset: 0; background: var(--ci-bg); z-index: 0; filter: blur(6px); opacity: 0.55; pointer-events: none; }
+  .app-bg-header { display: flex; justify-content: space-between; align-items: center; padding: 18px 28px; background: var(--ci-surface); border-bottom: 1px solid var(--ci-border); }
+  .app-bg-brand { display: flex; align-items: center; gap: 12px; }
+  .brand-logo { width: 44px; height: 44px; border-radius: 10px; background: var(--ci-ink); color: var(--ci-surface); display: flex; align-items: center; justify-content: center; font-family: var(--ci-font-serif); font-size: 18px; }
+  .brand-name { font-family: var(--ci-font-serif); font-size: 18px; letter-spacing: 1px; }
+  .brand-sub { font-size: 11px; color: var(--ci-ink-3); }
+  .app-bg-tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 28px; }
+  .ghost-tile { background: var(--ci-surface); border: 1px solid var(--ci-border); border-radius: var(--ci-radius-card); height: 110px; }
+
+  .backdrop { position: fixed; inset: 0; background: rgba(26, 31, 46, 0.42); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); z-index: 10; }
+
+  /* ====== MODAL ====== */
+  .modal-wrap { position: relative; z-index: 20; display: flex; justify-content: center; align-items: flex-start; padding-top: 32px; }
+  .modal { width: 100%; max-width: 1080px; background: var(--ci-surface); border-radius: var(--ci-radius-card); box-shadow: var(--ci-shadow); overflow: hidden; border: 1px solid var(--ci-border); }
+
+  /* ====== HEADER ====== */
+  .modal-head { padding: 22px 28px 16px; border-bottom: 1px solid var(--ci-border); display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  .head-left { flex: 1; }
+  .order-number { font-family: var(--ci-font-serif); font-size: 36px; font-weight: 400; line-height: 1; color: var(--ci-ink); letter-spacing: -0.5px; }
+  .order-title { font-family: var(--ci-font-serif); font-size: 20px; font-weight: 400; color: var(--ci-ink); margin-top: 6px; }
+  .head-meta { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+  .pill-accent { background: var(--ci-accent); color: #fff; }
+  .pill-warn { background: var(--ci-warn-soft); color: #6B4A0D; }
+  .pill-success { background: var(--ci-success-soft); color: #2D5132; }
+  .pill-customer { background: var(--ci-ink); color: var(--ci-surface); padding: 7px 14px; text-decoration: none; }
+  .pill-customer:hover { background: #2A3045; }
+
+  /* NEU: Kostenbadge im Header */
+  .head-cost { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0; padding: 0 12px; border-right: 1px solid var(--ci-border); margin-right: 8px; }
+  .head-cost-label { font-size: 9px; color: var(--ci-ink-3); text-transform: uppercase; letter-spacing: 0.8px; }
+  .head-cost-val { font-family: var(--ci-font-serif); font-size: 22px; color: var(--ci-ink); }
+  .head-cost-sub { font-size: 10px; color: var(--ci-ink-3); }
+  .head-cost-sub .over { color: var(--ci-warn); font-weight: 600; }
+
+  .close-btn { background: transparent; border: 1px solid var(--ci-border); width: 40px; height: 40px; border-radius: 999px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--ci-ink-2); flex-shrink: 0; }
+  .close-btn:hover { background: var(--ci-surface-soft); }
+
+  /* ====== BODY ====== */
+  .modal-body { display: grid; grid-template-columns: 1.6fr 1fr; gap: 0; }
+  .col-left { padding: 20px 24px 28px; border-right: 1px solid var(--ci-border); }
+  .col-right { padding: 20px 24px 28px; background: var(--ci-bg); }
+
+  .section { margin-bottom: 22px; }
+  .section:last-child { margin-bottom: 0; }
+  .section-label { font-size: 10px; color: var(--ci-ink-3); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 12px; font-weight: 500; display: flex; justify-content: space-between; align-items: center; }
+  .section-label .hint { font-size: 10px; color: var(--ci-ink-3); letter-spacing: 0; text-transform: none; font-weight: 400; font-style: italic; }
+
+  /* ====== STATIONSSTRIP ====== */
+  .stations { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; align-items: start; }
+  .station { display: flex; flex-direction: column; align-items: center; gap: 8px; cursor: pointer; padding: 6px 4px; border-radius: 12px; transition: background 0.15s; }
+  .station:hover { background: var(--ci-surface-soft); }
+  .station-circle { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .station-done { background: var(--ci-success); color: #fff; }
+  .station-active { background: var(--ci-accent); color: #fff; box-shadow: 0 0 0 4px rgba(194, 24, 91, 0.18); }
+  .station-wait { background: transparent; border: 1.5px dashed var(--ci-border); color: var(--ci-ink-3); }
+  .station-circle i { font-size: 20px; }
+  .station-label { font-size: 12px; font-weight: 500; color: var(--ci-ink); text-align: center; }
+  .station-label.muted { color: var(--ci-ink-3); font-weight: 400; }
+  .station-sub { font-size: 10px; color: var(--ci-ink-3); text-align: center; }
+  .station-sub.accent { color: var(--ci-accent); font-weight: 500; }
+
+  /* ====== NEU: STATIONS-KONTEXT-BLOCK ====== */
+  .station-context { background: var(--ci-bg); border: 1px solid var(--ci-border); border-left: 3px solid var(--ci-accent); border-radius: var(--ci-radius-card); padding: 16px 18px; margin-top: 4px; }
+  .sc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .sc-title { font-family: var(--ci-font-serif); font-size: 16px; color: var(--ci-ink); }
+  .sc-title .sc-station { color: var(--ci-accent); }
+  .sc-toggle { display: flex; gap: 4px; }
+  .sc-collapse { background: transparent; border: 1px solid var(--ci-border); color: var(--ci-ink-3); padding: 4px 10px; border-radius: 999px; font-size: 11px; cursor: pointer; }
+  .sc-collapse:hover { background: var(--ci-surface-soft); }
+
+  /* === ERFASSUNG (Galvanik/Schleif/Entmet) === */
+  .erf-block { margin-bottom: 14px; }
+  .erf-block:last-child { margin-bottom: 0; }
+  .erf-block-label { font-size: 11px; color: var(--ci-ink-2); margin-bottom: 8px; font-weight: 500; display: flex; justify-content: space-between; }
+  .erf-block-label .erf-hint { font-size: 10px; color: var(--ci-ink-3); font-weight: 400; font-style: italic; }
+
+  /* SCHIEBER */
+  .slider-row { margin-bottom: 10px; }
+  .slider-row:last-child { margin-bottom: 0; }
+  .slider-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+  .slider-name { font-size: 13px; color: var(--ci-ink); }
+  .slider-val { font-family: var(--ci-font-serif); font-size: 15px; color: var(--ci-ink); }
+  .slider-val .unit { font-size: 10px; color: var(--ci-ink-2); font-family: var(--ci-font-sans); }
+  .slider-track { position: relative; height: 32px; background: var(--ci-surface); border-radius: 8px; border: 1px solid var(--ci-border); overflow: hidden; cursor: pointer; }
+  .slider-bench { position: absolute; left: 0; top: 0; height: 100%; background: var(--ci-bench-soft); border-right: 2px dashed var(--ci-bench); transition: width 0.2s; }
+  .slider-fill { position: absolute; left: 0; top: 0; height: 100%; background: linear-gradient(90deg, var(--ci-success-soft), var(--ci-success)); border-radius: 8px 0 0 8px; opacity: 0.7; transition: width 0.2s; }
+  .slider-fill.over { background: linear-gradient(90deg, var(--ci-warn-soft), var(--ci-warn)); }
+  .slider-fill.danger { background: linear-gradient(90deg, var(--ci-danger-soft), var(--ci-danger)); }
+  .slider-thumb { position: absolute; top: 1px; width: 28px; height: 28px; background: var(--ci-surface); border: 2px solid var(--ci-ink); border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.12); cursor: grab; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; transition: left 0.1s; }
+  .slider-legend { display: flex; justify-content: space-between; align-items: center; margin-top: 3px; font-size: 10px; color: var(--ci-ink-3); }
+  .bench-hint { display: inline-flex; align-items: center; gap: 4px; }
+  .bench-dot { width: 8px; height: 8px; border-radius: 2px; background: var(--ci-bench); }
+  .bench-link { cursor: help; text-decoration: underline dotted; color: var(--ci-ink-2); }
+  .bench-link .over { color: var(--ci-warn); font-weight: 600; }
+
+  /* MATERIAL */
+  .mat-grid { display: flex; flex-direction: column; gap: 6px; }
+  .mat-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; background: var(--ci-surface); border: 1px solid var(--ci-border); border-radius: 10px; padding: 8px 12px; }
+  .mat-name { font-size: 12px; font-weight: 500; color: var(--ci-ink); }
+  .mat-bench-tag { font-size: 10px; color: var(--ci-ink-3); margin-top: 1px; }
+  .mat-stepper { display: flex; align-items: center; gap: 0; }
+  .mat-btn { width: 28px; height: 28px; border: 1px solid var(--ci-border); background: var(--ci-surface-soft); cursor: pointer; font-size: 14px; font-weight: 600; color: var(--ci-ink); display: flex; align-items: center; justify-content: center; }
+  .mat-btn:first-child { border-radius: 6px 0 0 6px; }
+  .mat-btn:last-child { border-radius: 0 6px 6px 0; }
+  .mat-btn:hover { background: var(--ci-border); }
+  .mat-count { width: 36px; height: 28px; border-top: 1px solid var(--ci-border); border-bottom: 1px solid var(--ci-border); display: flex; align-items: center; justify-content: center; font-family: var(--ci-font-serif); font-size: 14px; background: var(--ci-surface); }
+  .mat-cost { font-family: var(--ci-font-serif); font-size: 13px; color: var(--ci-ink); text-align: right; white-space: nowrap; }
+  .mat-add { padding: 6px 10px; border: 1px dashed var(--ci-border); border-radius: 8px; text-align: center; font-size: 11px; color: var(--ci-ink-3); cursor: pointer; }
+  .mat-add:hover { background: var(--ci-surface); color: var(--ci-ink-2); }
+
+  /* ZUSATZ */
+  .extra-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; background: var(--ci-surface); border: 1px solid var(--ci-border); border-radius: 8px; padding: 7px 12px; margin-bottom: 6px; }
+  .extra-row:last-child { margin-bottom: 0; }
+  .extra-name { font-size: 12px; font-weight: 500; color: var(--ci-ink); }
+  .extra-sub { font-size: 10px; color: var(--ci-ink-3); }
+  .extra-toggle { display: flex; gap: 3px; }
+  .et-btn { padding: 4px 12px; border: 1px solid var(--ci-border); border-radius: 6px; font-size: 10px; background: var(--ci-surface-soft); cursor: pointer; color: var(--ci-ink-2); }
+  .et-btn.active { background: var(--ci-ink); color: var(--ci-surface); border-color: var(--ci-ink); }
+
+  /* ERFASSUNGS-FOOTER */
+  .erf-foot { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--ci-border); display: flex; justify-content: space-between; align-items: center; }
+  .erf-foot-sum { font-size: 11px; color: var(--ci-ink-3); }
+  .erf-foot-sum b { font-family: var(--ci-font-serif); font-size: 16px; color: var(--ci-ink); font-weight: 500; display: block; margin-top: 2px; }
+  .erf-book-btn { padding: 8px 16px; border-radius: 8px; font-size: 12px; font-weight: 500; background: var(--ci-ink); color: var(--ci-surface); border: none; cursor: pointer; }
+  .erf-book-btn:hover { background: #2A3045; }
+
+  /* === VERSAND-BLOCK (Warenausgang) === */
+  .vers-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .vers-card { background: var(--ci-surface); border: 1px solid var(--ci-border); border-radius: 10px; padding: 12px 14px; cursor: pointer; transition: background 0.12s; }
+  .vers-card:hover { background: var(--ci-surface-soft); }
+  .vers-card.active { border-color: var(--ci-accent); background: var(--ci-surface); }
+  .vers-icon { font-size: 22px; color: var(--ci-ink-2); margin-bottom: 6px; }
+  .vers-card.active .vers-icon { color: var(--ci-accent); }
+  .vers-title { font-size: 13px; font-weight: 500; color: var(--ci-ink); }
+  .vers-sub { font-size: 11px; color: var(--ci-ink-3); margin-top: 2px; }
+
+  /* === GESAMTKALKULATION === */
+  .calc-toggle { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ci-ink-3); cursor: pointer; user-select: none; padding: 8px 0; }
+  .calc-toggle:hover { color: var(--ci-ink); }
+  .calc-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }
+  .calc-table th { font-size: 9px; color: var(--ci-ink-3); text-transform: uppercase; letter-spacing: 1px; text-align: left; padding: 6px 0; border-bottom: 1px solid var(--ci-border); font-weight: 500; }
+  .calc-table th.r { text-align: right; }
+  .calc-table td { padding: 7px 0; border-bottom: 1px solid var(--ci-border); }
+  .calc-table td.r { text-align: right; font-family: var(--ci-font-serif); }
+  .calc-table tr.active { background: var(--ci-bench-soft); }
+  .calc-table tr.active td { font-weight: 600; }
+  .calc-table tr.pending { opacity: 0.5; }
+  .calc-table tfoot td { border-top: 2px solid var(--ci-ink); padding-top: 10px; font-weight: 500; }
+  .calc-table .bench-col { font-family: var(--ci-font-sans); font-size: 11px; color: var(--ci-ink-3); }
+  .calc-foot-summary { padding: 10px 0 0; font-size: 11px; color: var(--ci-ink-2); }
+  .calc-foot-summary b { color: var(--ci-success); font-weight: 600; }
+
+  /* ====== KPI-ROW ====== */
+  .kpi-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+  .kpi-card { background: var(--ci-surface); border: 1px solid var(--ci-border); border-radius: var(--ci-radius-button); padding: 12px 14px; }
+  .kpi-card.warn { background: var(--ci-warn-soft); border-color: rgba(216,154,44,0.25); }
+  .kpi-label { font-size: 10px; color: var(--ci-ink-3); letter-spacing: 0.5px; text-transform: uppercase; }
+  .kpi-value { font-family: var(--ci-font-serif); font-size: 20px; font-weight: 400; color: var(--ci-ink); margin-top: 4px; line-height: 1.1; }
+  .kpi-value.warn-text { color: #6B4A0D; }
+  .kpi-trend { font-size: 11px; color: var(--ci-success); margin-top: 4px; }
+  .kpi-trend.warn-text { color: #6B4A0D; }
+  .kpi-sub { font-size: 11px; color: var(--ci-ink-3); margin-top: 2px; }
+
+  /* ====== TEILE-LISTE (unverändert) ====== */
+  .item-list { display: flex; flex-direction: column; gap: 8px; }
+  .item-card { background: var(--ci-surface); border: 1px solid var(--ci-border); border-radius: 14px; padding: 12px 14px; cursor: pointer; transition: transform 0.12s, box-shadow 0.12s; display: grid; grid-template-columns: 56px 1fr auto; gap: 12px; align-items: center; }
+  .item-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(20,15,5,0.06); }
+  .item-photo { width: 56px; height: 56px; border-radius: 10px; background: var(--ci-surface-soft); display: flex; align-items: center; justify-content: center; color: var(--ci-ink-3); font-size: 11px; }
+  .item-photo.has-photo { background: linear-gradient(135deg, #B89F7A, #8E7355); color: rgba(255,255,255,0.85); }
+  .item-body { min-width: 0; }
+  .item-top { display: flex; align-items: center; gap: 8px; }
+  .item-num { font-family: var(--ci-font-serif); font-size: 14px; color: var(--ci-ink); }
+  .item-name { font-size: 14px; font-weight: 500; color: var(--ci-ink); }
+  .item-condition { padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 500; }
+  .cond-mid { background: var(--ci-warn-soft); color: #6B4A0D; }
+  .cond-light { background: var(--ci-success-soft); color: #2D5132; }
+  .cond-strong { background: var(--ci-danger-soft); color: #6B1E1B; }
+  .item-meta { font-size: 12px; color: var(--ci-ink-2); margin-top: 4px; }
+  .item-progress { font-size: 11px; color: var(--ci-ink-3); margin-top: 4px; display: flex; align-items: center; gap: 6px; }
+  .item-progress-dots { display: inline-flex; gap: 3px; }
+  .pdot { width: 6px; height: 6px; border-radius: 50%; }
+  .pdot.done { background: var(--ci-success); }
+  .pdot.active { background: var(--ci-accent); }
+  .pdot.wait { background: var(--ci-border); }
+  .item-price { text-align: right; }
+  .item-price-val { font-family: var(--ci-font-serif); font-size: 18px; color: var(--ci-ink); }
+  .item-price-val.missing { color: var(--ci-danger); font-size: 12px; font-family: var(--ci-font-sans); }
+  .item-price-sub { font-size: 10px; color: var(--ci-ink-3); }
+  .add-item-btn { background: transparent; border: 1.5px dashed var(--ci-border); color: var(--ci-ink-2); padding: 12px; border-radius: 14px; cursor: pointer; font-family: var(--ci-font-sans); font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .add-item-btn:hover { border-color: var(--ci-accent); color: var(--ci-accent); }
+  .item-sum { display: flex; justify-content: space-between; align-items: baseline; padding: 12px 4px 0; border-top: 1px solid var(--ci-border); margin-top: 8px; }
+  .item-sum-label { font-size: 11px; color: var(--ci-ink-3); letter-spacing: 0.5px; text-transform: uppercase; }
+  .item-sum-val { font-family: var(--ci-font-serif); font-size: 22px; color: var(--ci-ink); }
+
+  /* ====== KUNDEN-KPI ====== */
+  .cust-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .cust-card { background: var(--ci-surface); border: 1px solid var(--ci-border); border-radius: 10px; padding: 10px; text-align: left; }
+  .cust-label { font-size: 9px; color: var(--ci-ink-3); letter-spacing: 0.5px; text-transform: uppercase; }
+  .cust-val { font-family: var(--ci-font-serif); font-size: 16px; color: var(--ci-ink); margin-top: 2px; line-height: 1.1; }
+  .cust-val.green { color: var(--ci-success); }
+
+  /* ====== ANDERE AUFTRÄGE ====== */
+  .other-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .other-card { background: var(--ci-surface); border: 1px solid var(--ci-border); border-left: 3px solid var(--ci-success); border-radius: 10px; padding: 9px 12px; cursor: pointer; }
+  .other-card.warn { border-left-color: var(--ci-warn); }
+  .other-top { display: flex; justify-content: space-between; align-items: center; }
+  .other-num { font-family: var(--ci-font-serif); font-size: 13px; color: var(--ci-ink); }
+  .other-stage { font-size: 10px; color: var(--ci-ink-3); }
+  .other-title { font-size: 12px; color: var(--ci-ink-2); margin-top: 3px; }
+
+  /* ====== RECHTE SPALTE ====== */
+  .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .qa { background: var(--ci-surface); border: 1px solid var(--ci-border); padding: 12px 8px; border-radius: var(--ci-radius-button); cursor: pointer; font-family: var(--ci-font-sans); display: flex; flex-direction: column; align-items: center; gap: 5px; color: var(--ci-ink); transition: background 0.12s; }
+  .qa:hover { background: var(--ci-surface-soft); }
+  .qa.primary { background: var(--ci-ink); color: var(--ci-surface); border-color: var(--ci-ink); }
+  .qa.primary:hover { background: #2A3045; }
+  .qa.accent-link { background: var(--ci-accent); color: #fff; border-color: var(--ci-accent); }
+  .qa.accent-link:hover { background: #A11550; }
+  .qa i { font-size: 18px; }
+  .qa-label { font-size: 11px; }
+
+  /* HISTORY */
+  .history { display: flex; flex-direction: column; gap: 2px; }
+  .h-item { display: grid; grid-template-columns: 28px 1fr; gap: 10px; padding: 10px 0; position: relative; }
+  .h-item:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 32px; bottom: -4px; width: 1px; background: var(--ci-border); }
+  .h-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 2; position: relative; flex-shrink: 0; }
+  .h-dot.done { background: var(--ci-success-soft); color: var(--ci-success); }
+  .h-dot.info { background: var(--ci-surface-soft); color: var(--ci-ink-2); }
+  .h-dot.warn { background: var(--ci-warn-soft); color: var(--ci-warn); }
+  .h-dot i { font-size: 14px; }
+  .h-time { font-size: 10px; color: var(--ci-ink-3); }
+  .h-title { font-size: 13px; color: var(--ci-ink); margin-top: 1px; }
+  .h-sub { font-size: 11px; color: var(--ci-ink-3); margin-top: 1px; }
+
+  /* FOOTER */
+  .modal-foot { padding: 16px 28px; background: var(--ci-bg); border-top: 1px solid var(--ci-border); display: flex; justify-content: flex-end; gap: 8px; }
+  .btn { padding: 10px 18px; border-radius: var(--ci-radius-button); font-family: var(--ci-font-sans); font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--ci-border); background: var(--ci-surface); color: var(--ci-ink); }
+  .btn:hover { background: var(--ci-surface-soft); }
+  .btn-primary { background: var(--ci-ink); color: var(--ci-surface); border-color: var(--ci-ink); display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary:hover { background: #2A3045; }
+
+  /* Anker-Highlight (für Sprung von rechter Quick-Action zur Erfassung) */
+  .station-context.highlight { animation: pulseAnchor 0.8s ease-out; }
+  @keyframes pulseAnchor {
+    0% { box-shadow: 0 0 0 0 rgba(194,24,91,0.6); }
+    70% { box-shadow: 0 0 0 14px rgba(194,24,91,0); }
+    100% { box-shadow: 0 0 0 0 rgba(194,24,91,0); }
+  }
+</style>
+</head>
+<body>
+
+<!-- HINTERGRUND -->
+<div class="app-bg">
+  <div class="app-bg-header">
+    <div class="app-bg-brand">
+      <div class="brand-logo">GK</div>
+      <div>
+        <div class="brand-name">KREILE</div>
+        <div class="brand-sub">GALVANIK · RESTAURATION · SEIT 1962</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--ci-ink-3);">Heute · Mi., 03.07.</div>
+  </div>
+  <div class="app-bg-tiles">
+    <div class="ghost-tile"></div><div class="ghost-tile"></div><div class="ghost-tile"></div><div class="ghost-tile"></div>
+    <div class="ghost-tile"></div><div class="ghost-tile"></div><div class="ghost-tile"></div><div class="ghost-tile"></div>
+  </div>
+</div>
+
+<div class="backdrop"></div>
+
+<div class="modal-wrap">
+  <div class="modal">
+
+    <!-- HEADER -->
+    <div class="modal-head">
+      <div class="head-left">
+        <div class="order-number">A-2026-0042</div>
+        <div class="order-title">Stoßstange Opel Rekord C — Restauration</div>
+        <div class="head-meta">
+          <span class="pill pill-accent"><i class="ti ti-bolt"></i>Express</span>
+          <span class="pill pill-warn"><span style="width:6px;height:6px;background:#D89A2C;border-radius:50%;"></span>Schleiferei · 11. Tag</span>
+          <span class="pill pill-success">Fällig 15.07.2026 · in 12 Tagen</span>
+          <a href="#" class="pill pill-customer"><i class="ti ti-user"></i>Max Mustermann — Kundenakte öffnen <i class="ti ti-arrow-right"></i></a>
+        </div>
+      </div>
+
+      <!-- NEU: Kosten-Badge im Header -->
+      <div class="head-cost">
+        <div class="head-cost-label">Bisherige Kosten</div>
+        <div class="head-cost-val">187 €</div>
+        <div class="head-cost-sub">von ~420 € Benchmark · <span class="over">+8 %</span></div>
+      </div>
+
+      <button class="close-btn" aria-label="Schließen"><i class="ti ti-x"></i></button>
+    </div>
+
+    <!-- BODY -->
+    <div class="modal-body">
+
+      <!-- LINKE SPALTE -->
+      <div class="col-left">
+
+        <!-- Stationen -->
+        <div class="section">
+          <div class="section-label">Aktuelle Lage · klick zum Setzen oder Kontext-Wechseln</div>
+          <div class="stations">
+            <div class="station">
+              <div class="station-circle station-done"><i class="ti ti-check"></i></div>
+              <div class="station-label">Wareneingang</div>
+              <div class="station-sub">18.05.</div>
+            </div>
+            <div class="station">
+              <div class="station-circle station-done"><i class="ti ti-check"></i></div>
+              <div class="station-label">Entmetallisierung</div>
+              <div class="station-sub">22.05.</div>
+            </div>
+            <div class="station">
+              <div class="station-circle station-active"><i class="ti ti-tools"></i></div>
+              <div class="station-label">Schleiferei</div>
+              <div class="station-sub accent">seit 11 Tagen</div>
+            </div>
+            <div class="station">
+              <div class="station-circle station-wait"><i class="ti ti-droplet"></i></div>
+              <div class="station-label muted">Galvanik</div>
+              <div class="station-sub">wartet</div>
+            </div>
+            <div class="station">
+              <div class="station-circle station-wait"><i class="ti ti-package"></i></div>
+              <div class="station-label muted">Warenausgang</div>
+              <div class="station-sub">wartet</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ★★★ NEU: STATIONS-KONTEXT-BLOCK ★★★ -->
+        <!-- Inhalt richtet sich nach aktiver Station:
+             - Wareneingang/Entmet/Schleif/Galvanik → ERFASSUNG (unten gezeigt)
+             - Warenausgang → VERSAND/ABHOLUNG (als zweiter Block weiter unten als Variante)
+        -->
+        <div class="section">
+          <div class="station-context highlight">
+            <div class="sc-head">
+              <div class="sc-title">Erfassung · <span class="sc-station">Schleiferei</span></div>
+              <div class="sc-toggle">
+                <button class="sc-collapse"><i class="ti ti-chevron-up" style="font-size:12px;"></i> einklappen</button>
+              </div>
+            </div>
+
+            <!-- ARBEITSZEIT -->
+            <div class="erf-block">
+              <div class="erf-block-label">
+                Arbeitszeit
+                <span class="erf-hint">bisher 0 Min erfasst · Kostensatz 70 €/h</span>
+              </div>
+
+              <div class="slider-row">
+                <div class="slider-head">
+                  <span class="slider-name">Grobschliff</span>
+                  <span class="slider-val">45 <span class="unit">Min</span></span>
+                </div>
+                <div class="slider-track">
+                  <div class="slider-bench" style="width: 47%;"></div>
+                  <div class="slider-fill" style="width: 37.5%;"></div>
+                  <div class="slider-thumb" style="left: calc(37.5% - 14px);">45</div>
+                </div>
+                <div class="slider-legend">
+                  <span>15</span>
+                  <span class="bench-hint"><span class="bench-dot"></span> <a class="bench-link" title="Median aus 8 vergleichbaren Aufträgen">Benchmark 57 Min · n=8</a></span>
+                  <span>120</span>
+                </div>
+              </div>
+
+              <div class="slider-row">
+                <div class="slider-head">
+                  <span class="slider-name">Feinschliff / Politur</span>
+                  <span class="slider-val">30 <span class="unit">Min</span></span>
+                </div>
+                <div class="slider-track">
+                  <div class="slider-bench" style="width: 35%;"></div>
+                  <div class="slider-fill" style="width: 25%;"></div>
+                  <div class="slider-thumb" style="left: calc(25% - 14px);">30</div>
+                </div>
+                <div class="slider-legend">
+                  <span>15</span>
+                  <span class="bench-hint"><span class="bench-dot"></span> <a class="bench-link">Benchmark 42 Min · n=8</a></span>
+                  <span>120</span>
+                </div>
+              </div>
+
+              <div class="slider-row">
+                <div class="slider-head">
+                  <span class="slider-name">Kupfer-Zwischenschliff</span>
+                  <span class="slider-val">90 <span class="unit">Min</span></span>
+                </div>
+                <div class="slider-track">
+                  <div class="slider-bench" style="width: 55%;"></div>
+                  <div class="slider-fill over" style="width: 71%;"></div>
+                  <div class="slider-thumb" style="left: calc(71% - 14px);">90</div>
+                </div>
+                <div class="slider-legend">
+                  <span>15</span>
+                  <span class="bench-hint"><span class="bench-dot"></span> <a class="bench-link">Benchmark 66 Min · n=5 · <span class="over">+36 %</span></a></span>
+                  <span>120</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- MATERIAL -->
+            <div class="erf-block">
+              <div class="erf-block-label">
+                Material
+                <span class="erf-hint">vorgeschlagen aus Vorlage (n=8)</span>
+              </div>
+              <div class="mat-grid">
+                <div class="mat-row">
+                  <div>
+                    <div class="mat-name">Schleifpapier P240</div>
+                    <div class="mat-bench-tag">üblich 3–5 Bg · 1,40 €/Bg</div>
+                  </div>
+                  <div class="mat-stepper">
+                    <button class="mat-btn">−</button>
+                    <div class="mat-count">4</div>
+                    <button class="mat-btn">+</button>
+                  </div>
+                  <div class="mat-cost">5,60 €</div>
+                </div>
+                <div class="mat-row">
+                  <div>
+                    <div class="mat-name">Schleifpapier P600</div>
+                    <div class="mat-bench-tag">üblich 2–3 Bg · 1,60 €/Bg</div>
+                  </div>
+                  <div class="mat-stepper">
+                    <button class="mat-btn">−</button>
+                    <div class="mat-count">2</div>
+                    <button class="mat-btn">+</button>
+                  </div>
+                  <div class="mat-cost">3,20 €</div>
+                </div>
+                <div class="mat-row">
+                  <div>
+                    <div class="mat-name">Polierscheibe Sisal</div>
+                    <div class="mat-bench-tag">üblich 1 Stk · 4,50 €</div>
+                  </div>
+                  <div class="mat-stepper">
+                    <button class="mat-btn">−</button>
+                    <div class="mat-count">1</div>
+                    <button class="mat-btn">+</button>
+                  </div>
+                  <div class="mat-cost">4,50 €</div>
+                </div>
+                <div class="mat-add">+ Weiteres Material</div>
+              </div>
+            </div>
+
+            <!-- ZUSATZAUFWAND -->
+            <div class="erf-block">
+              <div class="erf-block-label">
+                Zusatzaufwand
+                <span class="erf-hint">nur wenn zusätzlich zum Standard</span>
+              </div>
+              <div class="extra-row">
+                <div>
+                  <div class="extra-name">Richten / Dellen</div>
+                  <div class="extra-sub">pauschal 45 Min · 53 €</div>
+                </div>
+                <div class="extra-toggle">
+                  <button class="et-btn active">Ja</button>
+                  <button class="et-btn">Nein</button>
+                </div>
+              </div>
+              <div class="extra-row">
+                <div>
+                  <div class="extra-name">Löten / Reparatur</div>
+                  <div class="extra-sub">pauschal 30 Min · 35 €</div>
+                </div>
+                <div class="extra-toggle">
+                  <button class="et-btn">Ja</button>
+                  <button class="et-btn active">Nein</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- ERFASSUNGS-FOOTER -->
+            <div class="erf-foot">
+              <div class="erf-foot-sum">
+                Stationskosten Schleiferei
+                <b>259,30 €</b>
+                <span style="font-size:10px;">165 Min Arbeit (193 €) + 13,30 € Material + 53 € Richten</span>
+              </div>
+              <button class="erf-book-btn"><i class="ti ti-check" style="font-size:11px;"></i> Erfassung buchen</button>
+            </div>
+
+            <!-- KALKULATION TOGGLE -->
+            <div class="calc-toggle">
+              <i class="ti ti-chevron-down" style="font-size:14px;"></i>
+              Gesamtkalkulation über alle Stationen anzeigen
+            </div>
+            <table class="calc-table">
+              <thead>
+                <tr>
+                  <th>Station</th>
+                  <th class="r">Zeit</th>
+                  <th class="r">Material</th>
+                  <th class="r">Zusatz</th>
+                  <th class="r">Gesamt</th>
+                  <th class="r">Benchmark</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span style="color:var(--ci-success);">✓</span> Wareneingang</td>
+                  <td class="r">20 Min</td>
+                  <td class="r">—</td>
+                  <td class="r">—</td>
+                  <td class="r">23 €</td>
+                  <td class="r bench-col">25 €</td>
+                </tr>
+                <tr>
+                  <td><span style="color:var(--ci-success);">✓</span> Entmetallisierung</td>
+                  <td class="r">30 Min</td>
+                  <td class="r">12 €</td>
+                  <td class="r">—</td>
+                  <td class="r">47 €</td>
+                  <td class="r bench-col">52 €</td>
+                </tr>
+                <tr class="active">
+                  <td><span style="color:var(--ci-accent);">●</span> Schleiferei</td>
+                  <td class="r">165 Min</td>
+                  <td class="r">13 €</td>
+                  <td class="r">53 €</td>
+                  <td class="r">259 €</td>
+                  <td class="r bench-col" style="color:var(--ci-warn);font-weight:600;">218 €</td>
+                </tr>
+                <tr class="pending">
+                  <td><span style="color:var(--ci-ink-3);">○</span> Galvanik</td>
+                  <td class="r">—</td><td class="r">—</td><td class="r">—</td><td class="r">—</td>
+                  <td class="r bench-col">~90 €</td>
+                </tr>
+                <tr class="pending">
+                  <td><span style="color:var(--ci-ink-3);">○</span> Warenausgang</td>
+                  <td class="r">—</td><td class="r">—</td><td class="r">—</td><td class="r">—</td>
+                  <td class="r bench-col">~15 €</td>
+                </tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <td>Auftrag gesamt</td>
+                  <td class="r">215 Min</td>
+                  <td class="r">25 €</td>
+                  <td class="r">53 €</td>
+                  <td class="r" style="font-size:16px;">329 €</td>
+                  <td class="r bench-col">~400 €</td>
+                </tr>
+              </tfoot>
+            </table>
+            <div class="calc-foot-summary">
+              KV-Betrag: 890 € brutto (748 € netto) · <b>voraussichtliche Marge: 419 € (56 %)</b>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- KPIs (unverändert) -->
+        <div class="section">
+          <div class="kpi-row">
+            <div class="kpi-card">
+              <div class="kpi-label"><i class="ti ti-clock" style="font-size:11px;"></i> Durchlaufzeit</div>
+              <div class="kpi-value">18<span style="font-size:13px;color:var(--ci-ink-3);"> / Ø 24 T</span></div>
+              <div class="kpi-trend">6 T unter Ø</div>
+            </div>
+            <div class="kpi-card warn">
+              <div class="kpi-label">Risiko</div>
+              <div class="kpi-value warn-text">Gelb</div>
+              <div class="kpi-trend warn-text">Schleiferei +5 T</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Fällig</div>
+              <div class="kpi-value">in 12 T</div>
+              <div class="kpi-sub">15.07.2026</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TEILE-LISTE (unverändert) -->
+        <div class="section">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">
+            <div class="section-label" style="margin:0;">Teile · 4 · klick zum Bearbeiten</div>
+            <span style="font-size:11px;color:var(--ci-ink-3);">Bearbeitungsreihenfolge ↓</span>
+          </div>
+          <div class="item-list">
+            <div class="item-card">
+              <div class="item-photo has-photo"><i class="ti ti-photo" style="font-size:22px;"></i></div>
+              <div class="item-body">
+                <div class="item-top">
+                  <span class="item-num">T-01</span>
+                  <span class="item-name">Stoßstangenmittelteil</span>
+                  <span class="item-condition cond-mid">Schaden mittel</span>
+                </div>
+                <div class="item-meta">Stahl verzinkt · alter Chrom → Chrom hochglanz · Lötstelle nötig</div>
+                <div class="item-progress">
+                  <span>Schritt 3 / 9 Schleif.</span>
+                  <span class="item-progress-dots">
+                    <span class="pdot done"></span><span class="pdot done"></span><span class="pdot active"></span>
+                    <span class="pdot wait"></span><span class="pdot wait"></span><span class="pdot wait"></span>
+                    <span class="pdot wait"></span><span class="pdot wait"></span><span class="pdot wait"></span>
+                  </span>
+                </div>
+              </div>
+              <div class="item-price">
+                <div class="item-price-val">590 €</div>
+                <div class="item-price-sub">4 Positionen</div>
+              </div>
+            </div>
+
+            <div class="item-card">
+              <div class="item-photo has-photo"><i class="ti ti-photo" style="font-size:22px;"></i></div>
+              <div class="item-body">
+                <div class="item-top">
+                  <span class="item-num">T-02</span>
+                  <span class="item-name">Stoßstangenhorn links</span>
+                  <span class="item-condition cond-light">Schaden leicht</span>
+                </div>
+                <div class="item-meta">Stahl · alter Chrom → Chrom hochglanz</div>
+                <div class="item-progress">
+                  <span>Schritt 3 / 7 Schleif.</span>
+                  <span class="item-progress-dots">
+                    <span class="pdot done"></span><span class="pdot done"></span><span class="pdot active"></span>
+                    <span class="pdot wait"></span><span class="pdot wait"></span><span class="pdot wait"></span>
+                    <span class="pdot wait"></span>
+                  </span>
+                </div>
+              </div>
+              <div class="item-price">
+                <div class="item-price-val">280 €</div>
+                <div class="item-price-sub">3 Positionen</div>
+              </div>
+            </div>
+
+            <div class="item-card">
+              <div class="item-photo has-photo"><i class="ti ti-photo" style="font-size:22px;"></i></div>
+              <div class="item-body">
+                <div class="item-top">
+                  <span class="item-num">T-03</span>
+                  <span class="item-name">Stoßstangenhorn rechts</span>
+                  <span class="item-condition cond-strong">Schaden stark</span>
+                </div>
+                <div class="item-meta">Stahl · alter Chrom → Chrom hochglanz · Aufschweißen + Richten</div>
+                <div class="item-progress">
+                  <span>Schritt 2 / 9 Reparatur</span>
+                  <span class="item-progress-dots">
+                    <span class="pdot done"></span><span class="pdot active"></span><span class="pdot wait"></span>
+                    <span class="pdot wait"></span><span class="pdot wait"></span><span class="pdot wait"></span>
+                    <span class="pdot wait"></span><span class="pdot wait"></span><span class="pdot wait"></span>
+                  </span>
+                </div>
+              </div>
+              <div class="item-price">
+                <div class="item-price-val missing">Preis offen</div>
+                <div class="item-price-sub">noch erfassen</div>
+              </div>
+            </div>
+
+            <div class="item-card">
+              <div class="item-photo"><i class="ti ti-photo-off" style="font-size:22px;"></i></div>
+              <div class="item-body">
+                <div class="item-top">
+                  <span class="item-num">T-04</span>
+                  <span class="item-name">Halter-Set (4 Stück)</span>
+                  <span class="item-condition cond-light">Schaden leicht</span>
+                </div>
+                <div class="item-meta">Stahl verzinkt → vernickeln · Foto fehlt</div>
+                <div class="item-progress">
+                  <span>Schritt 2 / 5 Entmet. fertig</span>
+                  <span class="item-progress-dots">
+                    <span class="pdot done"></span><span class="pdot done"></span><span class="pdot wait"></span>
+                    <span class="pdot wait"></span><span class="pdot wait"></span>
+                  </span>
+                </div>
+              </div>
+              <div class="item-price">
+                <div class="item-price-val">90 €</div>
+                <div class="item-price-sub">2 Positionen</div>
+              </div>
+            </div>
+
+            <button class="add-item-btn"><i class="ti ti-plus"></i> Teil hinzufügen</button>
+
+            <div class="item-sum">
+              <span class="item-sum-label">Summe netto (3 von 4 Teilen erfasst)</span>
+              <span class="item-sum-val">960 €</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- KUNDEN-KPI (unverändert) -->
+        <div class="section">
+          <div class="section-label">Kunde Mustermann · seit März 2024</div>
+          <div class="cust-row">
+            <div class="cust-card">
+              <div class="cust-label">Umsatz LTV</div>
+              <div class="cust-val">12.450 €</div>
+            </div>
+            <div class="cust-card">
+              <div class="cust-label">Gewinn LTV</div>
+              <div class="cust-val green">4.730 €</div>
+            </div>
+            <div class="cust-card">
+              <div class="cust-label">Aktiv</div>
+              <div class="cust-val">3 Aufträge</div>
+            </div>
+            <div class="cust-card">
+              <div class="cust-label">Pünktlichkeit</div>
+              <div class="cust-val green">92 %</div>
+            </div>
+            <div class="cust-card">
+              <div class="cust-label">Reklamation</div>
+              <div class="cust-val green">0 %</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ANDERE AUFTRÄGE (unverändert) -->
+        <div class="section">
+          <div class="section-label">Weitere aktive Aufträge</div>
+          <div class="other-row">
+            <div class="other-card">
+              <div class="other-top">
+                <span class="other-num">A-2026-0017</span>
+                <span class="other-stage">Galvanik</span>
+              </div>
+              <div class="other-title">Stoßstange Mercedes W108</div>
+            </div>
+            <div class="other-card warn">
+              <div class="other-top">
+                <span class="other-num">A-2025-0188</span>
+                <span class="other-stage">Versand</span>
+              </div>
+              <div class="other-title">Motorradteile BMW R75</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RECHTE SPALTE (unverändert, "Verbrauch" springt jetzt zum Kontext-Block) -->
+      <div class="col-right">
+
+        <div class="section">
+          <div class="section-label">Schnellaktionen</div>
+          <div class="quick-actions">
+            <button class="qa accent-link" title="Springt zur Erfassung oben"><i class="ti ti-package"></i><span class="qa-label">Verbrauch ↑</span></button>
+            <button class="qa primary"><i class="ti ti-mail-forward"></i><span class="qa-label">Status-Mail</span></button>
+            <button class="qa"><i class="ti ti-camera"></i><span class="qa-label">Foto +</span></button>
+            <button class="qa"><i class="ti ti-phone"></i><span class="qa-label">Anrufen</span></button>
+            <button class="qa"><i class="ti ti-file-text"></i><span class="qa-label">KV</span></button>
+            <button class="qa"><i class="ti ti-receipt"></i><span class="qa-label">Rechnung</span></button>
+            <button class="qa"><i class="ti ti-truck"></i><span class="qa-label">Versand</span></button>
+            <button class="qa"><i class="ti ti-alert-triangle"></i><span class="qa-label">Reklam.</span></button>
+          </div>
+        </div>
+
+        <!-- AUFTRAGSHISTORIE (unverändert) -->
+        <div class="section">
+          <div class="section-label">Auftragshistorie</div>
+          <div class="history">
+            <div class="h-item">
+              <div class="h-dot done"><i class="ti ti-mail-forward"></i></div>
+              <div>
+                <div class="h-time">heute · 08:14</div>
+                <div class="h-title">Status-Mail „In Bearbeitung" gesendet</div>
+                <div class="h-sub">an max.mustermann@example.de</div>
+              </div>
+            </div>
+            <div class="h-item">
+              <div class="h-dot done"><i class="ti ti-camera"></i></div>
+              <div>
+                <div class="h-time">heute · 07:55</div>
+                <div class="h-title">Foto T-03 · während</div>
+                <div class="h-sub">M. Krause · Schleiferei</div>
+              </div>
+            </div>
+            <div class="h-item">
+              <div class="h-dot done"><i class="ti ti-check"></i></div>
+              <div>
+                <div class="h-time">29.05.2026 · 14:22</div>
+                <div class="h-title">Schleiferei begonnen</div>
+                <div class="h-sub">Vorgänger: Entmetallisierung</div>
+              </div>
+            </div>
+            <div class="h-item">
+              <div class="h-dot done"><i class="ti ti-check"></i></div>
+              <div>
+                <div class="h-time">22.05.2026 · 16:40</div>
+                <div class="h-title">Entmetallisierung abgeschlossen</div>
+              </div>
+            </div>
+            <div class="h-item">
+              <div class="h-dot info"><i class="ti ti-info-circle"></i></div>
+              <div>
+                <div class="h-time">21.05.2026 · 09:30</div>
+                <div class="h-title">KV angenommen</div>
+                <div class="h-sub">890 € brutto · Mail-Freigabe</div>
+              </div>
+            </div>
+            <div class="h-item">
+              <div class="h-dot warn"><i class="ti ti-alert-triangle"></i></div>
+              <div>
+                <div class="h-time">20.05.2026 · 11:00</div>
+                <div class="h-title">Express-Markierung gesetzt</div>
+                <div class="h-sub">Oldtimer-Termin Kunde Anfang August</div>
+              </div>
+            </div>
+            <div class="h-item">
+              <div class="h-dot info"><i class="ti ti-camera"></i></div>
+              <div>
+                <div class="h-time">19.05.2026 · 09:14</div>
+                <div class="h-title">11 Eingangsfotos hochgeladen</div>
+              </div>
+            </div>
+            <div class="h-item">
+              <div class="h-dot done"><i class="ti ti-package"></i></div>
+              <div>
+                <div class="h-time">18.05.2026 · 14:30</div>
+                <div class="h-title">Wareneingang erfasst</div>
+                <div class="h-sub">4 Teile, Standort L-WE-R1-F2</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="modal-foot">
+      <button class="btn">Schließen</button>
+      <button class="btn-primary btn"><i class="ti ti-send"></i> Kunden-Update senden</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ───────────────────────────────────────────────── -->
+<!--  ALTERNATIVE STATIONS-KONTEXT-VARIANTEN          -->
+<!--  (separat für Demo — gehört IM Modal, kontext-  -->
+<!--  abhängig austauschbar)                          -->
+<!-- ───────────────────────────────────────────────── -->
+
+<div style="max-width:1080px;margin:40px auto 0;">
+  <div style="font-family:var(--ci-font-serif);font-size:14px;color:var(--ci-ink-3);text-align:center;margin-bottom:14px;letter-spacing:1px;text-transform:uppercase;">
+    Kontext-Varianten · klick einer anderen Station im Strip oben → wechselt diesen Block
+  </div>
+
+  <!-- VARIANTE: WARENAUSGANG -->
+  <div style="background:var(--ci-surface);border:1px solid var(--ci-border);border-radius:var(--ci-radius-card);padding:18px;margin-bottom:14px;box-shadow:var(--ci-shadow);">
+    <div style="font-size:10px;color:var(--ci-ink-3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">Wenn Station = Warenausgang aktiv</div>
+    <div class="station-context" style="border-left-color:var(--ci-success);">
+      <div class="sc-head">
+        <div class="sc-title">Versand & Übergabe · <span class="sc-station" style="color:var(--ci-success);">Warenausgang</span></div>
+        <div class="sc-toggle">
+          <button class="sc-collapse"><i class="ti ti-chevron-up" style="font-size:12px;"></i> einklappen</button>
+        </div>
+      </div>
+
+      <div class="erf-block">
+        <div class="erf-block-label">Lieferart wählen</div>
+        <div class="vers-grid">
+          <div class="vers-card active">
+            <div class="vers-icon"><i class="ti ti-truck"></i></div>
+            <div class="vers-title">Versand DHL</div>
+            <div class="vers-sub">Kundenwunsch · Adresse Frankfurt</div>
+          </div>
+          <div class="vers-card">
+            <div class="vers-icon"><i class="ti ti-shopping-bag"></i></div>
+            <div class="vers-title">Selbstabholung</div>
+            <div class="vers-sub">Kunde erscheint vor Ort</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="erf-block">
+        <div class="erf-block-label">Versanddetails</div>
+        <div style="background:var(--ci-surface);border:1px solid var(--ci-border);border-radius:10px;padding:10px 12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:12px;">
+            <div>
+              <div style="font-size:10px;color:var(--ci-ink-3);text-transform:uppercase;">Empfänger</div>
+              <div style="margin-top:2px;">Max Mustermann</div>
+              <div style="font-size:11px;color:var(--ci-ink-2);">Bockenheimer Landstr. 42</div>
+              <div style="font-size:11px;color:var(--ci-ink-2);">60325 Frankfurt</div>
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--ci-ink-3);text-transform:uppercase;">Paket</div>
+              <div style="margin-top:2px;font-family:var(--ci-font-serif);">2 Kolli · 12,4 kg</div>
+              <div style="font-size:11px;color:var(--ci-ink-2);">Versicherung 1.500 €</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="erf-block">
+        <div class="erf-block-label">Tracking</div>
+        <div style="display:flex;gap:6px;align-items:center;background:var(--ci-surface);border:1px solid var(--ci-border);border-radius:10px;padding:10px 12px;">
+          <input type="text" placeholder="Tracking-Nr. eintragen" style="flex:1;border:none;background:transparent;font-family:var(--ci-font-sans);font-size:12px;color:var(--ci-ink);outline:none;">
+          <button class="erf-book-btn" style="padding:6px 12px;font-size:11px;"><i class="ti ti-printer" style="font-size:11px;"></i> Label drucken</button>
+        </div>
+      </div>
+
+      <div class="erf-foot">
+        <div class="erf-foot-sum">
+          Versandkosten netto
+          <b>14,90 €</b>
+          <span style="font-size:10px;">DHL Paket bis 31,5 kg + Versicherung</span>
+        </div>
+        <button class="erf-book-btn"><i class="ti ti-send" style="font-size:11px;"></i> Versandmail senden</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VARIANTE: WARENEINGANG (für abgeschlossene Stationen → READ-ONLY) -->
+  <div style="background:var(--ci-surface);border:1px solid var(--ci-border);border-radius:var(--ci-radius-card);padding:18px;box-shadow:var(--ci-shadow);">
+    <div style="font-size:10px;color:var(--ci-ink-3);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px;">Wenn Station = Wareneingang (abgeschlossen) — READ-ONLY-Zusammenfassung</div>
+    <div class="station-context" style="border-left-color:var(--ci-success);">
+      <div class="sc-head">
+        <div class="sc-title">Wareneingang · <span class="sc-station" style="color:var(--ci-success);">abgeschlossen am 18.05.</span></div>
+        <div class="sc-toggle">
+          <button class="sc-collapse"><i class="ti ti-edit" style="font-size:11px;"></i> nacherfassen</button>
+        </div>
+      </div>
+
+      <div class="erf-block">
+        <div class="erf-block-label">Damals erfasst</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;">
+          <div class="kpi-card" style="padding:10px;">
+            <div class="kpi-label">Arbeitszeit</div>
+            <div class="kpi-value" style="font-size:16px;">20 Min</div>
+          </div>
+          <div class="kpi-card" style="padding:10px;">
+            <div class="kpi-label">Material</div>
+            <div class="kpi-value" style="font-size:16px;">—</div>
+          </div>
+          <div class="kpi-card" style="padding:10px;">
+            <div class="kpi-label">Kosten</div>
+            <div class="kpi-value" style="font-size:16px;">23 €</div>
+          </div>
+          <div class="kpi-card" style="padding:10px;">
+            <div class="kpi-label">Standort</div>
+            <div class="kpi-value" style="font-size:13px;">L-WE-R1-F2</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

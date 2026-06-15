@@ -1,13 +1,14 @@
 import { createId } from "@paralleldrive/cuid2";
 
 const DB_NAME = "kreile_offline_db";
-const DB_VERSION = 1;
+const DB_VERSION = 2; // bumped version to clean up old object stores
 
 export interface OfflineAction {
   id: string; // unique cuid
   actionType: "ORDER_CREATE" | "ORDER_STATUS_UPDATE" | "MATERIAL_BOOKING" | "TIME_BOOKING" | "CUSTOMER_CREATE" | "CUSTOMER_UPDATE" | "INQUIRY_CREATE" | "INQUIRY_UPDATE_STATUS" | "INQUIRY_UPDATE_PRICING" | "ITEM_CREATE" | "ITEM_UPDATE" | "COMPLAINT_CREATE" | "COMPLAINT_UPDATE" | "APP_KVP_CREATE" | "BUSINESS_KVP_CREATE";
   payload: unknown;
-  timestamp: string; // ISO format
+  timestamp: string; // ISO format (creation time)
+  expiresAt: string; // ISO format (expiration time)
 }
 
 export const IndexedDBHelper = {
@@ -28,8 +29,9 @@ export const IndexedDBHelper = {
         if (!db.objectStoreNames.contains("write_queue")) {
           db.createObjectStore("write_queue", { keyPath: "id" });
         }
-        if (!db.objectStoreNames.contains("read_cache")) {
-          db.createObjectStore("read_cache"); // key is string (e.g. 'orders', 'customers')
+        // If read_cache exists from V1, delete it to enforce Supabase as source of truth
+        if (db.objectStoreNames.contains("read_cache")) {
+          db.deleteObjectStore("read_cache");
         }
       };
     });
@@ -38,11 +40,16 @@ export const IndexedDBHelper = {
   async pushToQueue(actionType: OfflineAction["actionType"], payload: unknown): Promise<OfflineAction> {
     const db = await this.getDB();
     const id = createId();
+    
+    const now = new Date();
+    const expires = new Date(now.getTime() + 48 * 60 * 60 * 1000); // 48 hours from now
+
     const action: OfflineAction = {
       id,
       actionType,
       payload,
-      timestamp: new Date().toISOString()
+      timestamp: now.toISOString(),
+      expiresAt: expires.toISOString()
     };
 
     return new Promise((resolve, reject) => {
@@ -94,33 +101,5 @@ export const IndexedDBHelper = {
       request.onsuccess = () => resolve();
       request.onerror = () => reject(request.error);
     });
-  },
-
-  async saveSnapshot(key: "orders" | "customers" | "inquiries" | "items" | "complaints", data: unknown[]): Promise<void> {
-    const db = await this.getDB();
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction("read_cache", "readwrite");
-      const store = transaction.objectStore("read_cache");
-      const request = store.put(data, key);
-
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  },
-
-  async getSnapshot<T>(key: "orders" | "customers" | "inquiries" | "items" | "complaints"): Promise<T[] | null> {
-    try {
-      const db = await this.getDB();
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction("read_cache", "readonly");
-        const store = transaction.objectStore("read_cache");
-        const request = store.get(key);
-
-        request.onsuccess = () => resolve(request.result || null);
-        request.onerror = () => reject(request.error);
-      });
-    } catch {
-      return null;
-    }
   }
 };

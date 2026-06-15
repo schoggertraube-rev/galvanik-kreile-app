@@ -64,12 +64,36 @@ export const OfflineManager = {
       return;
     }
 
-    const queue = await IndexedDBHelper.getQueue();
+    const rawQueue = await IndexedDBHelper.getQueue();
+    if (rawQueue.length === 0) {
+      return;
+    }
+
+    const now = new Date();
+    const queue = [];
+    let expiredCount = 0;
+
+    for (const item of rawQueue) {
+      if (item.expiresAt && new Date(item.expiresAt) < now) {
+        expiredCount++;
+        console.warn(`[OfflineManager] Item ${item.id} expired and was removed from outbox.`);
+        await IndexedDBHelper.removeFromQueue(item.id);
+      } else {
+        queue.push(item);
+      }
+    }
+
+    if (expiredCount > 0 && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("kreile-sync-expired", { detail: { count: expiredCount } }));
+      window.dispatchEvent(new Event("kreile-sync-queue-updated"));
+      window.dispatchEvent(new Event("storage"));
+    }
+
     if (queue.length === 0) {
       return;
     }
 
-    console.log(`🔄 Syncing offline queue... Found ${queue.length} actions.`);
+    console.log(`🔄 Syncing offline queue... Found ${queue.length} valid actions (${expiredCount} expired).`);
 
     // Dynamic imports of repositories to prevent circular import loops at bundle time
     const { ordersRepository } = await import("@/lib/repositories/ordersRepository");

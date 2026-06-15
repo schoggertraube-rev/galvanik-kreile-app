@@ -1,4 +1,3 @@
-import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { Customer } from "@/lib/types/customer";
 import { getCustomersDb, getCustomerByIdDb, createCustomerDb, updateCustomerDb, searchCustomersDb } from "@/app/actions/customers.actions";
 
@@ -28,12 +27,6 @@ export const customersRepository = {
   },
 
   async create(data: Omit<Customer, "id" | "customerNumber">): Promise<Customer> {
-    if (OfflineManager.isOffline()) {
-      console.log("📴 Offline: Queuing customer creation");
-      await OfflineManager.enqueueAction("CUSTOMER_CREATE", data);
-      throw new Error("Device is offline. Customer creation queued.");
-    }
-
     const res = await createCustomerDb(data);
     if (!res.ok) {
       throw new Error(res.message);
@@ -53,11 +46,7 @@ export const customersRepository = {
   },
 
   async updateCustomer(id: string, changes: Partial<Customer>): Promise<Customer | null> {
-    if (OfflineManager.isOffline()) {
-      console.log("📴 Offline: Queuing customer update");
-      await OfflineManager.enqueueAction("CUSTOMER_UPDATE", { id, changes });
-      throw new Error("Device is offline. Customer update queued.");
-    }
+
 
     const res = await updateCustomerDb(id, changes);
     if (!res.ok) {

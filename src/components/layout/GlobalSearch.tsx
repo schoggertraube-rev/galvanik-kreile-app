@@ -138,7 +138,17 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   }
 
   const handleSuggestionClick = (route: string) => {
-    if (route.startsWith('?ai_search=')) {
+    if (route === "/customers/new") {
+      openErfassung({ mode: "customer", intent: "create_customer", source: "search" });
+      handleClose();
+    } else if (route === "/orders/new") {
+      openErfassung({ mode: "order", intent: "create_order", source: "search" });
+      handleClose();
+    } else if (route === "/scan") {
+      // Still push to /scan if it's the full page
+      router.push(route);
+      handleClose();
+    } else if (route.startsWith('?ai_search=')) {
       setForceAiMode(true);
     } else if (route.startsWith('?erfassung_gate=')) {
       const text = decodeURIComponent(route.split('=')[1] || "");
@@ -297,8 +307,8 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                     {actionSuggestions.map((s) => (
                       <button
                         key={s.routeOnSelect}
-                        onClick={() => { router.push(s.routeOnSelect); handleClose(); }}
-                        className="flex items-center justify-between w-full p-2.5 rounded-xl hover:bg-gold-100 transition-colors border border-transparent hover:border-navy-700 group text-left"
+                        onClick={() => handleSuggestionClick(s.routeOnSelect)}
+                        className="flex items-center justify-between w-full p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-neutral-gray-100 group text-left"
                       >
                         <div>
                           <span className="font-bold text-sm text-navy-900 block">{s.label}</span>

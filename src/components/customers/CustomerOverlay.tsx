@@ -5,6 +5,7 @@ import { useCustomerOverlay } from './useCustomerOverlay';
 
 import { X } from 'lucide-react';
 import { useOverlayStore } from '@/lib/overlayStore';
+import { AppOverlayPortal } from '@/components/ui/AppOverlayPortal';
 import { CustomerHeader } from './CustomerHeader';
 import { CustomerKpiRow } from './CustomerKpiRow';
 import { CustomerOverviewTab } from './tabs/CustomerOverviewTab';
@@ -33,15 +34,24 @@ export function CustomerOverlay() {
   const zIndex = 1000 + stackIndex * 10;
 
   return (
-    <div 
-      className="fixed inset-0 bg-[rgba(26,31,46,0.42)] backdrop-blur-[8px] flex items-start justify-center pt-2 sm:pt-6 lg:pt-12 pb-2 sm:pb-6 lg:pb-12 px-2 overflow-y-auto" 
-      style={{ zIndex }}
-      onClick={close}
-    >
-      <div 
-        className="w-full max-w-[1200px] bg-[var(--ci-surface)] rounded-xl lg:rounded-[18px] border border-[var(--ci-border)] shadow-[0_1px_2px_rgba(20,15,5,0.04),0_12px_32px_rgba(20,15,5,0.08)]" 
-        onClick={e => e.stopPropagation()}
-      >
+    <AppOverlayPortal>
+      <div className="fixed inset-0 z-[1000]">
+        <div className="absolute inset-0 bg-black/35 backdrop-blur-sm" onClick={close}></div>
+        <div 
+          className="relative h-full w-full flex items-center justify-center p-0 sm:p-3" 
+          style={{ zIndex }}
+        >
+          <div 
+            className={`
+              flex flex-col bg-[var(--ci-surface)] shadow-lg
+              fixed inset-0 h-[100dvh] w-screen overflow-y-auto
+              sm:inset-auto sm:relative
+              sm:w-full sm:md:w-[92vw] sm:lg:max-w-6xl
+              sm:h-auto sm:max-h-[92dvh]
+              sm:rounded-2xl
+            `}
+            onClick={e => e.stopPropagation()}
+          >
         {/* Header Close Button */}
         <div className="flex justify-end p-4 border-b border-[var(--ci-border)] relative">
           <button 
@@ -120,7 +130,9 @@ export function CustomerOverlay() {
             </div>
           </>
         )}
+          </div>
+        </div>
       </div>
-    </div>
+    </AppOverlayPortal>
   );
 }

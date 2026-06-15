@@ -115,9 +115,6 @@ export default function TodayDashboard() {
     });
 
     setOrders(updated);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_orders", JSON.stringify(updated));
-    }
     // Fire async update to DB in background
     try {
       const orderToUpdate = updated.find(o => o.id === orderId || o.orderNumber === orderId);
