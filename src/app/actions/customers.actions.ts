@@ -30,9 +30,11 @@ function mapDbCustomer(c: DbCustomer): Customer {
     tags: (c.tags as string[]) || [],
     creditRating: c.creditRating || undefined,
     imageUrls: (c.imageUrls as string[]) || [],
-    address: c.address || undefined,
+    address: c.address || c.street || undefined, // fallback for legacy
+    street: c.street || undefined,
     city: c.city || undefined,
     zipCode: c.zipCode || undefined,
+    country: c.country || undefined,
     createdAt: c.createdAt ? c.createdAt.toISOString() : new Date().toISOString(),
     updatedAt: c.updatedAt ? c.updatedAt.toISOString() : new Date().toISOString(),
   };
@@ -120,27 +122,32 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
   try {
     const newId = (typeof data.id === 'string' ? data.id : undefined) || createId();
     
+    const nameStr = validData.company || [validData.firstName, validData.lastName].filter(Boolean).join(" ");
+    const streetCombined = validData.street + " " + validData.houseNumber;
+
     const rawCustomerDb = {
       id: newId,
       customerNumber: `K-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      name: validData.name,
-      companyName: validData.companyName || null,
-      type: validData.type || "business",
-      address: validData.address || null,
+      name: nameStr,
+      companyName: validData.company || null,
+      type: "business",
+      address: streetCombined,
+      street: streetCombined,
       city: validData.city || null,
-      zipCode: validData.zipCode || null,
+      zipCode: validData.postalCode || null,
+      country: validData.country || null,
       imageUrls: validData.imageUrls || [],
-      contactPerson: (data as Record<string, unknown>).contactPerson as string,
+      contactPerson: [validData.firstName, validData.lastName].filter(Boolean).join(" ") || null,
       email: validData.email,
       phone: validData.phone,
-      paymentProfile: (data as Record<string, unknown>).paymentProfile || null,
-      approvalProfile: (data as Record<string, unknown>).approvalProfile || null,
-      expectationProfile: (data as Record<string, unknown>).expectationProfile || null,
-      technicalProfile: (data as Record<string, unknown>).technicalProfile || null,
-      trustLevel: (data as Record<string, unknown>).trustLevel as string || null,
-      internalWarning: (data as Record<string, unknown>).internalWarning as string || null,
-      tags: (data as Record<string, unknown>).tags || null,
-      creditRating: (data as Record<string, unknown>).creditRating as string || null,
+      paymentProfile: null,
+      approvalProfile: null,
+      expectationProfile: null,
+      technicalProfile: null,
+      trustLevel: null,
+      internalWarning: null,
+      tags: null,
+      creditRating: null,
       notes: validData.notes || null,
     };
     

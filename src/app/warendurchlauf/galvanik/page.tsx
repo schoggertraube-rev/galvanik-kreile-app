@@ -4,8 +4,9 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, Layers, PlayCircle, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import { ordersRepository, Order } from "@/lib/repositories/ordersRepository";
-import { OrderWideCard, UrgencyType } from "@/components/orders/OrderWideCard";
+import { OrderCompactCard, UrgencyType } from "@/components/orders/OrderCompactCard";
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
+import { getStationOrders, getStationReadyOrders, startProcessingStation } from "@/app/warendurchlauf/actions";
 
 type GalvanikBucket = "ready" | "in_progress" | "finished";
 
@@ -33,15 +34,41 @@ function mapRiskToUrgency(risk: string): UrgencyType {
 
 export default function GalvanikPage() {
   const [activeBucket, setActiveBucket] = useState<GalvanikBucket>("ready");
-  const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [readyOrders, setReadyOrders] = useState<Order[]>([]);
+  const [inProgressOrders, setInProgressOrders] = useState<Order[]>([]);
+  const [finishedOrders, setFinishedOrders] = useState<Order[]>([]);
+  const [topUrgent, setTopUrgent] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { openOrder } = useOrderModal();
 
   useEffect(() => {
     async function load() {
       try {
-        const data = await ordersRepository.getAll();
-        setAllOrders(data);
+        const [resReady, resActive] = await Promise.all([
+          getStationReadyOrders("galvanik"),
+          getStationOrders("galvanik")
+        ]);
+        
+        let ready: any[] = [];
+        if (resReady.ok && resReady.data) {
+          ready = sortByUrgency(resReady.data as any[]);
+        }
+        
+        let active: any[] = [];
+        let done: any[] = [];
+        if (resActive.ok && resActive.data) {
+          const allActive = resActive.data as any[];
+          active = sortByUrgency(allActive.filter(o => o.status === "in_progress"));
+          done = sortByUrgency(allActive.filter(o => o.status === "done" || o.status === "quality_check"));
+        }
+        
+        setReadyOrders(ready);
+        setInProgressOrders(active);
+        setFinishedOrders(done);
+        
+        const combined = [...ready, ...active, ...done];
+        setTopUrgent(sortByUrgency(combined).filter(o => o.risk === "red" || o.risk === "orange").slice(0, 3));
+
       } catch (err) {
         console.error("Failed to load orders in Galvanik", err);
       } finally {
@@ -51,50 +78,25 @@ export default function GalvanikPage() {
     load();
   }, []);
 
-  // Get orders in Beschichtung/Galvanik (we also include some global ones for demo)
-  const galvanikOrders = allOrders.filter(o => o.station === "beschichtung" || o.station === "galvanik" || o.currentStationId === "beschichtung" || o.currentStationId === "galvanik" || o.statusText?.toLowerCase().includes("bad") || o.statusText?.toLowerCase().includes("qs"));
-
-  // Buckets assignment
-  const readyOrders = sortByUrgency(galvanikOrders.filter(o => o.status === "ready" || o.statusText?.toLowerCase().includes("bereit") || o.statusText?.toLowerCase().includes("warte") || o.station === "beschichtung" || o.currentStationId === "beschichtung"));
-  const inProgressOrders = sortByUrgency(galvanikOrders.filter(o => o.status === "in_progress" || o.statusText?.toLowerCase().includes("bad") || o.statusText?.toLowerCase().includes("läuft") || o.station === "galvanik" || o.currentStationId === "galvanik"));
-  const finishedOrders = sortByUrgency(galvanikOrders.filter(o => o.status === "done" || o.status === "quality_check" || o.statusText?.toLowerCase().includes("fertig") || o.statusText?.toLowerCase().includes("qs")));
-
-  // Top Urgent overall
-  const topUrgent = sortByUrgency(galvanikOrders).filter(o => o.risk === "red" || o.risk === "orange").slice(0, 3);
-
   const handleAdvance = async (e: React.MouseEvent, orderId: string, currentBucket: GalvanikBucket) => {
     e.stopPropagation();
-    const targetStatus = currentBucket === "ready" ? "in_progress"
-                         : currentBucket === "in_progress" ? "done"
-                         : "warenausgang";
-
-    if (targetStatus === "warenausgang") {
-       setAllOrders(prev => prev.filter(o => o.id !== orderId));
-       await ordersRepository.updateOrder(orderId, { station: "warenausgang", status: "ready" });
-       return;
-    }
-
-    const isDone = targetStatus === "done";
-    const newStation = isDone ? "warenausgang" : undefined;
-    const newStatusText = isDone ? "Fertig (QS)" : "In Bearbeitung";
-
-    setAllOrders(prev => prev.map(o => {
-      if (o.id === orderId) {
-        return {
-          ...o,
-          status: targetStatus,
-          statusText: newStatusText,
-          ...(newStation && { station: newStation })
-        };
+    
+    if (currentBucket === "ready") {
+      // Move to in progress
+      const order = readyOrders.find(o => o.id === orderId);
+      if (order) {
+         setReadyOrders(prev => prev.filter(o => o.id !== orderId));
+         setInProgressOrders(prev => sortByUrgency([...prev, { ...order, status: "in_progress", statusText: "In Bearbeitung" }]));
+         await startProcessingStation(orderId, "galvanik");
       }
-      return o;
-    }));
-
-    await ordersRepository.updateOrder(orderId, {
-      status: targetStatus,
-      statusText: newStatusText,
-      ...(newStation && { station: newStation })
-    });
+    } else if (currentBucket === "in_progress") {
+      // Move to warenausgang via existing repo locally for demo
+      const order = inProgressOrders.find(o => o.id === orderId);
+      if (order) {
+        setInProgressOrders(prev => prev.filter(o => o.id !== orderId));
+        await ordersRepository.updateOrder(orderId, { station: "warenausgang", status: "ready" });
+      }
+    }
   };
 
   const renderOrderList = (orders: Order[], bucket: GalvanikBucket) => {
@@ -107,19 +109,17 @@ export default function GalvanikPage() {
           </div>
         ) : (
           orders.map((o) => (
-            <OrderWideCard
+            <OrderCompactCard
               key={o.id}
               id={o.id}
               orderNumber={o.orderNumber}
               customerName={o.customerName || "Unbekannt"}
               article={o.task || "Unbekannt"}
-              surface={((o.parts?.[0] as { finish?: string })?.finish) || "Offen"}
-              surfaceKey={((o.parts?.[0] as { finish?: string })?.finish?.toLowerCase()?.includes("chrom")) ? "chrom" : ((o.parts?.[0] as { finish?: string })?.finish?.toLowerCase()?.includes("nickel")) ? "nickel" : ((o.parts?.[0] as { finish?: string })?.finish?.toLowerCase()?.includes("gold")) ? "gold" : "offen"}
+              surface={((o.parts?.[0] as { finish?: string })?.finish) || ((o.parts?.[0] as any)?.surfaceRequested) || "Offen"}
               urgency={mapRiskToUrgency(o.risk)}
               dueValue={o.dueValue || "--"}
               dueLabel={o.dueLabel || "Tage"}
-              badgeText={o.statusText}
-              collapsed={!isActive}
+              badgeText={o.statusText || o.status}
               onClick={() => isActive ? openOrder(o.id) : setActiveBucket(bucket)}
               onAdvance={isActive ? (e) => handleAdvance(e, o.id, bucket) : undefined}
             />
@@ -155,19 +155,17 @@ export default function GalvanikPage() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                   {topUrgent.map(o => (
-                    <OrderWideCard
+                    <OrderCompactCard
                       key={`urg-${o.id}`}
                       id={o.id}
                       orderNumber={o.orderNumber}
                       customerName={o.customerName || "Unbekannt"}
                       article={o.task || "Unbekannt"}
-                      surface={((o.parts?.[0] as { finish?: string })?.finish) || "Offen"}
-                      surfaceKey={((o.parts?.[0] as { finish?: string })?.finish?.toLowerCase()?.includes("chrom")) ? "chrom" : "offen"}
+                      surface={((o.parts?.[0] as { finish?: string })?.finish) || ((o.parts?.[0] as any)?.surfaceRequested) || "Offen"}
                       urgency={mapRiskToUrgency(o.risk)}
                       dueValue={o.dueValue || "--"}
                       dueLabel={o.dueLabel || "Tage"}
-                      badgeText={o.statusText}
-                      collapsed={false}
+                      badgeText={o.statusText || o.status}
                       onClick={() => openOrder(o.id)}
                     />
                   ))}

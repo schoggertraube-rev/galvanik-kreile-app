@@ -14,11 +14,23 @@ export const VersandVariant: React.FC<VersandVariantProps> = ({ orderId, custome
   const [tracking, setTracking] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
 
   const handleSend = async () => {
     setSaving(true);
     setError(null);
-    await saveShipmentInfo({ orderId, carrier, trackingNumber: tracking });
+    setMissingFields([]);
+    
+    const resSave = await saveShipmentInfo({ orderId, carrier, trackingNumber: tracking });
+    
+    if (!resSave.success) {
+      setError(resSave.error || 'Fehler beim Speichern der Versanddaten');
+      // @ts-ignore
+      if (resSave.missingFields) setMissingFields(resSave.missingFields);
+      setSaving(false);
+      return;
+    }
+    
     const res = await sendShippingConfirmation({ orderId, carrier, trackingNumber: tracking });
     setSaving(false);
     if (!res.success) setError('Fehler beim Versand');
@@ -100,7 +112,20 @@ export const VersandVariant: React.FC<VersandVariantProps> = ({ orderId, custome
             </>
           )}
 
-          {error && <div style={{ color: 'var(--ci-danger)', fontSize: '12px', marginBottom: '10px' }}>Fehler: {error}</div>}
+          {error && (
+            <div style={{ color: 'var(--ci-danger)', fontSize: '12px', marginBottom: '10px', background: '#ffebee', padding: '10px', borderRadius: '8px', border: '1px solid #ffcdd2' }}>
+              <strong style={{ display: 'block', marginBottom: '4px' }}>Fehler: {error}</strong>
+              {missingFields.length > 0 && (
+                <div>
+                  <p style={{ margin: '4px 0' }}>Die Versandadresse ist unvollständig. Folgende Felder fehlen:</p>
+                  <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                    {missingFields.map(field => <li key={field}>{field}</li>)}
+                  </ul>
+                  <p style={{ margin: '6px 0 0', fontWeight: 500 }}>Bitte wählen Sie "Selbstabholung" oder ergänzen Sie die Stammdaten des Kunden.</p>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="erf-foot" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--ci-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div className="erf-foot-sum" style={{ fontSize: '11px', color: 'var(--ci-ink-3)' }}>

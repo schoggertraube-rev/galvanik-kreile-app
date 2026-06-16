@@ -10,6 +10,54 @@ export async function saveShipmentInfo(params: {
   const supabase = await createClient();
   const { orderId, carrier, trackingNumber } = params;
 
+  if (carrier !== 'selbstabholung') {
+    // Check customer address
+    const { data: orderData, error: orderFetchErr } = await supabase
+      .from('orders')
+      .select('customer_id')
+      .eq('id', orderId)
+      .single();
+
+    if (orderFetchErr || !orderData?.customer_id) {
+      return { success: false, error: 'Auftrag oder Kunde nicht gefunden' };
+    }
+
+    const { data: customerData, error: customerFetchErr } = await supabase
+      .from('customers')
+      .select('street, zip_code, city, country')
+      .eq('id', orderData.customer_id)
+      .single();
+
+    if (customerFetchErr || !customerData) {
+      return { success: false, error: 'Kunde nicht gefunden' };
+    }
+
+    const hasStreet = Boolean(customerData.street && customerData.street.trim().length > 0);
+    const hasHouseNumber = Boolean(customerData.street && /\d/.test(customerData.street));
+    const hasZipCode = Boolean(customerData.zip_code && customerData.zip_code.trim().length >= 4);
+    const hasCity = Boolean(customerData.city && customerData.city.trim().length > 0);
+    const hasCountry = Boolean(customerData.country && customerData.country.trim().length > 0);
+
+    const isComplete = hasStreet && hasHouseNumber && hasZipCode && hasCity && hasCountry;
+
+    if (!isComplete) {
+      const missingFields = [];
+      if (!hasStreet) missingFields.push('Straße');
+      if (!hasHouseNumber) missingFields.push('Hausnummer');
+      if (!hasZipCode) missingFields.push('PLZ');
+      if (!hasCity) missingFields.push('Ort');
+      if (!hasCountry) missingFields.push('Land');
+
+      return {
+        success: false,
+        error: 'Unvollständige Versandadresse',
+        missingFields,
+        canChoosePickup: true,
+        canEnterAlternativeAddress: true,
+      };
+    }
+  }
+
   // Insert or Update shipment
   const { error: shipmentErr } = await supabase
     .from('shipments')

@@ -75,6 +75,16 @@ export async function getOperationalOrdersByStation(stationId: string) {
   return all.filter((o) => o.currentStationId === stationId);
 }
 
+export async function getOperationalOrdersReadyForStation(stationId: string) {
+  const all = await getOperationalOrders();
+  // Galvanik expects orders that are still in wareneingang and not blocked
+  if (stationId === "galvanik" || stationId === "beschichtung") {
+    return all.filter((o) => o.currentStationId === "wareneingang" && o.status !== "blocked");
+  }
+  // Generic fallback if not galvanik
+  return all.filter((o) => o.currentStationId === "wareneingang" && o.status !== "blocked");
+}
+
 export async function getOperationalOrdersForCustomer(customerId: string) {
   const all = await getOperationalOrders();
   return all.filter((o) => o.customerId === customerId);
@@ -156,6 +166,7 @@ export async function createOperationalOrderService(data: Record<string, unknown
         name: p.name,
         quantity: typeof p.quantity === "number" ? p.quantity : parseInt(p.quantity as string) || 1,
         currentStationId: stationId,
+        surfaceRequested: (p as any).surfaceRequested || (p as any).surface || (p as any).finish || (p as any).verfahren || null,
       }));
       await tx.insert(items).values(newItems);
     }
@@ -185,7 +196,7 @@ export async function moveOperationalOrderToStationService(orderId: string, stat
     if (!currentOrder || currentOrder.length === 0) throw new Error("Order not found");
     const prevStation = currentOrder[0].currentStationId;
 
-    await tx.update(orders).set({ currentStationId: targetStation }).where(eq(orders.id, orderId));
+    await tx.update(orders).set({ currentStationId: targetStation, status: "ready" }).where(eq(orders.id, orderId));
     await tx.update(items).set({ currentStationId: targetStation }).where(eq(items.orderId, orderId));
 
     const eventId = createId();
@@ -200,5 +211,32 @@ export async function moveOperationalOrderToStationService(orderId: string, stat
     });
     
     return { success: true, eventId, prevStation, targetStation };
+  });
+}
+
+export async function startProcessingStationService(orderId: string, stationId: string, actorId?: string) {
+  if (!db) throw new Error("Database not available");
+
+  const targetStation = stationId === "beschichtung" ? "galvanik" : stationId;
+
+  return await db.transaction(async (tx) => {
+    const currentOrder = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+    if (!currentOrder || currentOrder.length === 0) throw new Error("Order not found");
+
+    await tx.update(orders).set({ currentStationId: targetStation, status: "in_progress" }).where(eq(orders.id, orderId));
+    await tx.update(items).set({ currentStationId: targetStation }).where(eq(items.orderId, orderId));
+
+    const eventId = createId();
+    await tx.insert(events).values({
+      id: eventId,
+      tenantId: "galvanik-kreile",
+      orderId,
+      eventType: "PROCESSING_STARTED",
+      description: `Bearbeitung gestartet in ${targetStation}`,
+      station: targetStation,
+      userId: actorId,
+    });
+    
+    return { success: true, eventId, targetStation };
   });
 }

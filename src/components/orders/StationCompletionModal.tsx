@@ -107,13 +107,13 @@ export function StationCompletionModal({
       createStatusEvent({ orderId, eventType: "STATION_COMPLETED", notes: `Station: ${currentStationId}` }).catch(e => console.warn(e));
 
       if (nextStation) {
-        await ordersRepository.updateOrder(orderId, { currentStationId: nextStation, station: nextStation });
+        await ordersRepository.updateOrder(orderId, { currentStationId: nextStation, station: nextStation, status: "ready" });
         await eventsRepository.addEvent({
           orderId, customerId,
-          eventType: "STATION_STARTED",
+          eventType: "STATION_READY",
           metadata: { stationId: nextStation }
         });
-        createStatusEvent({ orderId, eventType: "STATION_STARTED", notes: `Station: ${nextStation}` }).catch(e => console.warn(e));
+        createStatusEvent({ orderId, eventType: "STATION_READY", notes: `Station: ${nextStation}` }).catch(e => console.warn(e));
       } else {
         await ordersRepository.updateOrder(orderId, { status: "shipped", currentStationId: "warenausgang", station: "warenausgang" });
       }

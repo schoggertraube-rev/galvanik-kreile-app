@@ -535,6 +535,7 @@ export async function createOrderFromErfassung(input: Record<string, any>) {
         name: p.name || "Unbekanntes Teil",
         quantity: parseInt(p.quantity) || 1,
         currentStationId: "wareneingang",
+        surfaceRequested: p.surfaceRequested || p.surface || p.finish || p.verfahren || null,
       }));
       await db.insert(items).values(newItems);
     }

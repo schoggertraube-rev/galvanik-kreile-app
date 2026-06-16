@@ -15,68 +15,12 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   try {
-    const dbOrders = await db.select().from(orders).where(
-      and(
-        eq(orders.tenantId, "galvanik-kreile"),
-        sql`coalesce(${orders.source}, '') not in ('seed', 'test', 'demo')`,
-        sql`coalesce(${orders.title}, '') NOT LIKE 'Capture%'`
-      )
-    ).orderBy(orders.createdAt);
-    
-    const dbItems = await db.select().from(items).where(eq(items.tenantId, "galvanik-kreile")).orderBy(items.createdAt);
-    
-    const dbCustomers = await db.select().from(customers).where(
-      and(
-        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo')`,
-        sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
-      )
-    );
-    
-    const data = dbOrders.map(o => {
-      const orderItems = dbItems.filter(item => item.orderId === o.id);
-      const customer = dbCustomers.find(c => c.id === o.customerId);
-      const customerName = customer ? customer.name : "Unbekannter Kunde";
-      
-      const intakeDate = o.intakeDate ? new Date(o.intakeDate).toISOString() : (o.createdAt ? new Date(o.createdAt).toISOString() : "2026-05-01T08:00:00.000Z");
-      const dueDate = o.dueDate ? new Date(o.dueDate).toISOString() : new Date(new Date(intakeDate).getTime() + 10 * 24 * 60 * 60 * 1000).toISOString();
-      const dueLabel = "Fällig in";
-      const dueValue = "10 Tagen";
-      
-      return {
-        id: o.id,
-        orderNumber: o.orderNumber,
-        customerId: o.customerId || "",
-        customerName,
-        title: o.title,
-        station: o.currentStationId || "wareneingang",
-        status: o.status,
-        risk: o.priorityComputed || "green",
-        currentStationId: o.currentStationId || "wareneingang",
-        parts: orderItems.map(item => ({
-          id: item.id,
-          name: item.name,
-          quantity: item.quantity,
-          surfaceRequested: ""
-        })),
-        intakeDate,
-        dueDate,
-        dueLabel,
-        dueValue
-      };
-    });
-    
-    return { ok: true, data };
+    const { getOperationalOrders } = await import("@/lib/server/operationalOrders");
+    const data = await getOperationalOrders();
+    return { ok: true, data: data as any };
   } catch (error: any) {
-    console.error("[DB_ERROR_DETAIL]", {
-      message: error?.message,
-      code: error?.code,
-      detail: error?.detail,
-      details: error?.details,
-      hint: error?.hint,
-      stack: error?.stack,
-    });
+    console.error("[DB_ERROR_DETAIL]", error);
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Laden der Aufträge", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
   }
 }

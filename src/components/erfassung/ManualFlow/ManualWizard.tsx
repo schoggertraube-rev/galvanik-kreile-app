@@ -31,11 +31,35 @@ export function ManualWizard() {
     setIsDirty(dirty);
   }, [customer, items, freetext, behaviorNote, setIsDirty]);
 
+  useEffect(() => {
+    if (options?.customerId && !customer) {
+      // Fetch customer data if only ID was provided
+      fetch(`/api/erfassung/customer-search`) // this might not work perfectly, better to use the server action directly?
+        // Actually, we can just use getCustomerByIdDb directly from an action
+        import("@/app/actions/customers.actions").then(({ getCustomerByIdDb }) => {
+          getCustomerByIdDb(options.customerId as string).then(res => {
+            if (res.ok && res.data) {
+              setCustomer(res.data);
+            }
+          });
+        });
+    }
+  }, [options?.customerId, customer]);
+
   const handleSave = async () => {
     // Basic validation
     if (!customer?.id) return alert("Bitte wähle einen Kunden aus.");
     if (items.length === 0) return alert("Bitte füge mindestens ein Teil hinzu.");
     if (!dateInfo.dueDate) return alert("Bitte gib einen Liefertermin an.");
+    
+    if (dateInfo.dueDate) {
+      const selectedDate = new Date(dateInfo.dueDate as string);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selectedDate < today) {
+        return alert("Der Termin darf nicht in der Vergangenheit liegen.");
+      }
+    }
 
     setIsSubmitting(true);
     try {

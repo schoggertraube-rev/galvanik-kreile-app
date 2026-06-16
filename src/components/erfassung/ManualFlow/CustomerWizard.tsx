@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useErfassung } from "../ErfassungProvider";
 import { Sparkles, Check, Loader2, MapPin, Search } from "lucide-react";
-import { createCustomerFromErfassung } from "@/app/actions/erfassung.actions";
+import { createCustomerDb } from "@/app/actions/customers.actions";
 import { extractCustomerDataFromFreetext, enrichCustomerData } from "@/app/actions/ai-enrichment.actions";
 
 export function CustomerWizard() {
@@ -19,6 +19,7 @@ export function CustomerWizard() {
   // Structured Address
   const [address, setAddress] = useState((options?.prefill?.address as string) || "");
   const [street, setStreet] = useState("");
+  const [houseNumber, setHouseNumber] = useState("");
   const [zipCode, setZipCode] = useState("");
   const [city, setCity] = useState("");
   const [country, setCountry] = useState("DE");
@@ -62,20 +63,26 @@ export function CustomerWizard() {
       if (!company && !contactName) return setError("Name oder Firma ist für Leads erforderlich.");
     }
     
+    if (!street || !houseNumber || !zipCode || !city || !country || !email || !phone) {
+      return setError("Bitte füllen Sie alle Pflichtfelder aus (Name/Firma, Straße, Hausnummer, PLZ, Ort, Land, E-Mail, Telefon).");
+    }
+
     if (zipCode && !validatePostalCode(country, zipCode)) {
       return setError("Die Postleitzahl passt nicht zum ausgewählten Land.");
     }
     
     setIsSubmitting(true);
     try {
-      const result = await createCustomerFromErfassung({
+      const result = await createCustomerDb({
         company,
-        contactName,
+        firstName: contactName.split(' ')[0] || '',
+        lastName: contactName.split(' ').slice(1).join(' ') || '',
         email,
         phone,
         address,
         street,
-        zipCode,
+        houseNumber,
+        postalCode: zipCode,
         city,
         country,
         notes,
@@ -92,7 +99,7 @@ export function CustomerWizard() {
         return;
       }
       
-      setSuccessResult(result.customer as { id: string; customerNumber: string | null; name: string });
+      setSuccessResult(result.data as { id: string; customerNumber: string | null; name: string });
     } catch (e: unknown) {
       if (e instanceof Error) {
         setError("Fehler beim Speichern: " + e.message);
@@ -118,7 +125,17 @@ export function CustomerWizard() {
         if (d.contactName) { setContactName(d.contactName); filled.push("contactName"); }
         if (d.email) { setEmail(d.email); filled.push("email"); }
         if (d.phone) { setPhone(d.phone); filled.push("phone"); }
-        if (d.street) { setStreet(d.street); filled.push("street"); }
+        if (d.street) { 
+          // Attempt to split street and house number
+          const match = d.street.match(/(.*)\s+(\d+[a-zA-Z]*)/);
+          if (match) {
+            setStreet(match[1]);
+            setHouseNumber(match[2]);
+            filled.push("street", "houseNumber");
+          } else {
+            setStreet(d.street); filled.push("street");
+          }
+        }
         if (d.zipCode) { setZipCode(d.zipCode); filled.push("zipCode"); }
         if (d.city) { setCity(d.city); filled.push("city"); }
         if (d.notes) { setNotes(d.notes); filled.push("notes"); }
@@ -155,7 +172,16 @@ export function CustomerWizard() {
         if (d.website && !notes.includes(d.website)) { setNotes(prev => prev ? prev + "\nWeb: " + d.website : "Web: " + d.website); filled.push("notes"); }
         if (d.phone && !phone) { setPhone(d.phone); filled.push("phone"); }
         if (d.email && !email) { setEmail(d.email); filled.push("email"); }
-        if (d.street && !street) { setStreet(d.street); filled.push("street"); }
+        if (d.street && !street) { 
+          const match = d.street.match(/(.*)\s+(\d+[a-zA-Z]*)/);
+          if (match) {
+            setStreet(match[1]);
+            setHouseNumber(match[2]);
+            filled.push("street", "houseNumber");
+          } else {
+            setStreet(d.street); filled.push("street");
+          }
+        }
         if (d.zipCode && !zipCode) { setZipCode(d.zipCode); filled.push("zipCode"); }
         if (d.city && !city) { setCity(d.city); filled.push("city"); }
         if (d.country) { setCountry(d.country); filled.push("country"); }
@@ -203,10 +229,15 @@ export function CustomerWizard() {
             Auftrag für diesen Kunden anlegen
           </button>
           <button
-            onClick={closeErfassung}
+            onClick={() => {
+              closeErfassung();
+              if (typeof window !== "undefined") {
+                window.location.href = `/customers/${successResult.id}`;
+              }
+            }}
             className="w-full px-6 py-3 font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all"
           >
-            Schließen
+            Zur Kundenakte
           </button>
         </div>
       </div>
@@ -341,9 +372,15 @@ export function CustomerWizard() {
               </button>
             </div>
             <div className="grid grid-cols-4 gap-4">
-              <div className="col-span-4 md:col-span-2">
-                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Straße & Nr</label>
-                <input type="text" value={street} onChange={e => setStreet(e.target.value)} className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("street")}`} />
+              <div className="col-span-4 md:col-span-2 flex gap-2">
+                <div className="flex-[2]">
+                  <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Straße</label>
+                  <input type="text" value={street} onChange={e => setStreet(e.target.value)} className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("street")}`} />
+                </div>
+                <div className="flex-[1]">
+                  <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Nr</label>
+                  <input type="text" value={houseNumber} onChange={e => setHouseNumber(e.target.value)} className={`w-full bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg p-3 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none${getHighlight("houseNumber")}`} />
+                </div>
               </div>
               <div className="col-span-2 md:col-span-1">
                 <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">Land</label>

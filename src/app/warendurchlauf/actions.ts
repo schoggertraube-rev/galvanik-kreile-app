@@ -1,28 +1,47 @@
 "use server";
 
-import { db } from "@/db";
-import { orders } from "@/db/schema";
+import { getOperationalOrders, getOperationalOrdersByStation, getOperationalOrdersReadyForStation, startProcessingStationService } from "@/lib/server/operationalOrders";
 import { checkAppAuth } from "@/lib/server/authHelper";
-import { sql } from "drizzle-orm";
+
+export async function getStationOrders(stationId: string) {
+  const auth = await checkAppAuth();
+  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
+  try {
+    const orders = await getOperationalOrdersByStation(stationId);
+    return { ok: true, data: orders };
+  } catch (error) {
+    return { ok: false, error: "QUERY_ERROR", message: String(error) };
+  }
+}
+
+export async function getStationReadyOrders(stationId: string) {
+  const auth = await checkAppAuth();
+  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
+  try {
+    const orders = await getOperationalOrdersReadyForStation(stationId);
+    return { ok: true, data: orders };
+  } catch (error) {
+    return { ok: false, error: "QUERY_ERROR", message: String(error) };
+  }
+}
+
+export async function startProcessingStation(orderId: string, stationId: string) {
+  const auth = await checkAppAuth();
+  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
+  try {
+    const res = await startProcessingStationService(orderId, stationId);
+    return { ok: true, data: res };
+  } catch (error) {
+    return { ok: false, error: "QUERY_ERROR", message: String(error) };
+  }
+}
 
 export async function getWarendurchlaufKPIs() {
   const auth = await checkAppAuth();
   if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
 
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-
   try {
-    // 1. Termintreue
-    // orders where dueDate is not null. ist_am (createdAt/updatedAt vs dueDate)
-    // For simplicity: termintreue = orders with status != 'in_progress' and updatedAt <= dueDate
-    // Or just a general mock logic based on actual data:
-    const allOrdersQuery = await db.select({
-      id: orders.id,
-      status: orders.status,
-      intakeDate: orders.intakeDate,
-      dueDate: orders.dueDate,
-      currentStationId: orders.currentStationId,
-    }).from(orders);
+    const allOrdersQuery = await getOperationalOrders();
 
     const totalOrders = allOrdersQuery.length;
     
