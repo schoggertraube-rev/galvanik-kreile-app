@@ -284,6 +284,7 @@ function WarendurchlaufLeitstandContent() {
 
                 return (
                   <OrderCompactCard
+                    key={order.id}
                     id={order.id}
                     orderNumber={order.orderNumber}
                     customerName={order.customerName || "Unbekannter Kunde"}
