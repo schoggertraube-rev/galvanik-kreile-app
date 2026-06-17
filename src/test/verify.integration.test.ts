@@ -1,9 +1,12 @@
 import { test } from 'vitest';
+
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is required for integration tests");
+}
 import { transitionOrderProcess } from '@/app/actions/orders.actions';
 import { createCustomerDb } from '@/app/actions/customers.actions';
 import { db } from '@/db';
 import { orders, customers } from '@/db/schema';
-import { eq } from 'drizzle-orm';
 import { createId } from '@paralleldrive/cuid2';
 
 test('transitionOrderProcess moves order through chain correctly', async () => {
