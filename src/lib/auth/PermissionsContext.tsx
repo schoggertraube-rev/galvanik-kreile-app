@@ -42,7 +42,15 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       setRole(newRole);
       setPermissions(permData.permissions);
       setName(permData.name);
-      setInitials(permData.initials);
+      
+      let finalInitials = permData.initials;
+      if (finalInitials === "?") {
+        try {
+          const localInitials = localStorage.getItem("kreile_user_initials");
+          if (localInitials) finalInitials = localInitials;
+        } catch { /* ignore */ }
+      }
+      setInitials(finalInitials);
     } catch (err) {
       console.error("Failed to load permissions", err);
     } finally {
@@ -51,21 +59,26 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   };
 
   useEffect(() => {
-    refreshPermissions();
+    let isMounted = true;
+    const init = async () => {
+      await refreshPermissions();
+    };
+    init();
     
     // Listen for cross-tab or explicit re-login events
-    const handleStorage = () => refreshPermissions();
+    const handleStorage = () => { if(isMounted) refreshPermissions(); };
     window.addEventListener("storage", handleStorage);
     
     // Listen to Supabase auth state changes
     const supabase = createClient();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, _session) => {
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
         refreshPermissions();
       }
     });
 
     return () => {
+      isMounted = false;
       window.removeEventListener("storage", handleStorage);
       subscription.unsubscribe();
     };

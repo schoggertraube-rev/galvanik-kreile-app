@@ -36,9 +36,8 @@ export function RightNavItem({
         isExpanded ? "w-[184px]" : "w-[56px]",
         // Active visual state
         isActive 
-          ? "bg-[#2E9E6B] text-white shadow-md scale-105" 
-          : "bg-transparent text-navy-500 hover:bg-white hover:text-navy-900 border border-transparent hover:border-neutral-gray-200",
-        "active:scale-95" // Touch feedback
+          ? "bg-[#2E9E6B] text-white shadow-md" 
+          : "bg-transparent text-navy-500 hover:bg-white hover:text-navy-900 border border-transparent hover:border-neutral-gray-200"
       )}
       onClick={onClick}
     >
@@ -61,8 +60,10 @@ export function RightNavItem({
         </span>
       )}
 
-      <div className="flex items-center justify-center shrink-0">
-        {icon}
+      <div className="relative h-12 w-12 shrink-0">
+        <div className={cn("absolute inset-1 flex items-center justify-center transition-transform", isActive && "scale-110")}>
+          {icon}
+        </div>
       </div>
 
       {isExpanded && (

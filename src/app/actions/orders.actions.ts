@@ -251,3 +251,89 @@ export async function setOrderStationDb(orderId: string, newStation: string): Pr
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Setzen der Station", details: String(error) };
   }
 }
+
+export async function transitionOrderProcess(params: {
+  orderId: string;
+  targetStep?: string;
+  action?: string;
+}) {
+  const { orderId, targetStep, action } = params;
+  const auth = await checkAppAuth("write");
+  if (!auth.ok) return auth;
+  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  
+  try {
+    const currentOrder = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+    if (currentOrder.length === 0) return { ok: false, error: "NOT_FOUND", message: "Auftrag nicht gefunden" };
+    const o = currentOrder[0];
+    
+    let newStation = o.currentStationId || "wareneingang";
+    let newStatus = o.status;
+    let eventType = "STATION_STARTED";
+    let description = "Prozessschritt gestartet";
+    
+    if (action === "start") {
+      newStatus = "in_progress";
+      description = `Bearbeitung gestartet in ${newStation}`;
+    } else if (action === "complete") {
+      const orderProcessChain = ["wareneingang", "entmetallisierung", "schleiferei", "galvanik", "qualitaetssicherung", "warenausgang"];
+      const currIdx = orderProcessChain.indexOf(newStation);
+      if (currIdx >= 0 && currIdx < orderProcessChain.length - 1) {
+        newStation = orderProcessChain[currIdx + 1];
+        if (newStation === "qualitaetssicherung") {
+          newStatus = "QS/Fertigprüfung";
+        } else if (newStation === "warenausgang") {
+          newStatus = "Bereit für Versand";
+        } else {
+          newStatus = "ready";
+        }
+        eventType = "STATION_COMPLETED";
+        description = `Station abgeschlossen. Weitergeleitet an ${newStation}`;
+      } else if (currIdx === orderProcessChain.length - 1) {
+        newStatus = "abgeschlossen";
+        eventType = "STATION_COMPLETED";
+        description = `Auftrag abgeschlossen und versendet.`;
+      }
+    } else if (targetStep) {
+      newStation = targetStep;
+      if (newStation === "qualitaetssicherung") newStatus = "QS/Fertigprüfung";
+      else if (newStation === "warenausgang") newStatus = "Bereit für Versand";
+      else newStatus = "ready";
+      description = `Manuell zu Station ${newStation} gewechselt`;
+    }
+
+    await db.transaction(async (tx) => {
+      await tx.update(orders).set({
+        currentStationId: newStation,
+        status: newStatus
+      }).where(eq(orders.id, orderId));
+      
+      await tx.update(items).set({
+        currentStationId: newStation
+      }).where(eq(items.orderId, orderId));
+      
+      await tx.insert(events).values({
+        id: crypto.randomUUID(),
+        tenantId: "galvanik-kreile",
+        orderId,
+        eventType,
+        station: newStation,
+        description,
+        createdAt: new Date()
+      });
+    });
+
+    try { 
+      const { revalidatePath } = await import("next/cache");
+      revalidatePath("/"); 
+      revalidatePath("/orders");
+      revalidatePath("/warendurchlauf");
+    } catch { /* ignore */ }
+
+    return { ok: true, data: { success: true, newStation, newStatus } };
+  } catch (error) {
+    console.error("Failed transition:", error);
+    return { ok: false, error: "DB_ERROR", message: "Fehler beim Prozesswechsel" };
+  }
+}
+

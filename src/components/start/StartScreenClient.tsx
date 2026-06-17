@@ -138,8 +138,8 @@ function PinDialog({ user, onClose }: { user: StartUser; onClose: () => void }) 
         const res = await loginWithPin(user.id, newPin);
 
         if (res.ok) {
-          // Setup / Initialisierung im Hintergrund falls ntig
-          if (!localStorage.getItem("setup_done")) {
+          // Setup / Initialisierung nur im echten Demo-Modus
+          if (process.env.NEXT_PUBLIC_DEMO_MODE === "true" && !localStorage.getItem("setup_done")) {
             try {
               const initRes = await initializeDemoIfNeeded();
               if (initRes?.initialized || initRes?.reason === "data_exists" || initRes?.reason === "not_supabase") {
@@ -204,7 +204,7 @@ function PinDialog({ user, onClose }: { user: StartUser; onClose: () => void }) 
           <button onClick={onClose} className="text-text-muted hover:text-navy-900 text-2xl leading-none cursor-pointer" disabled={isInitializing}>×</button>
         </div>
 
-        {isInitializing && (
+        {isInitializing && process.env.NEXT_PUBLIC_DEMO_MODE === "true" && !localStorage.getItem("setup_done") && (
           <div className="bg-accent-orange/10 px-6 py-3 border-b border-accent-orange/20 flex flex-col items-center justify-center">
              <span className="text-sm font-semibold text-accent-orange animate-pulse">Beispieldaten werden vorbereitet...</span>
              <span className="text-xs text-text-muted text-center mt-1">Dieser Vorgang dauert einen Moment.</span>

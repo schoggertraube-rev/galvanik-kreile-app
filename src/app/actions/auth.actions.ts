@@ -40,7 +40,7 @@ export async function loginWithPin(userId: string, pin: string) {
       return { ok: false, message: "Ungültige PIN oder inaktiver Benutzer." };
     }
 
-    await createAppSessionCookie(user.role);
+    await createAppSessionCookie(user.role, user.id);
     return { ok: true, role: user.role };
   } catch (error) {
     console.error("Failed to login with pin:", error);

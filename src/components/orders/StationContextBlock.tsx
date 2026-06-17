@@ -4,6 +4,7 @@ import React from 'react';
 import { ErfassungVariant } from './variants/ErfassungVariant';
 import { VersandVariant } from './variants/VersandVariant';
 import { WareneingangReadOnly } from './variants/WareneingangReadOnly';
+import { WareneingangActive } from './variants/WareneingangActive';
 import { getStationVariant } from '@/lib/orders/stationContext';
 import { STATION_ORDER } from '@/lib/orders/stationContext';
 
@@ -59,6 +60,10 @@ export const StationContextBlock: React.FC<StationContextBlockProps> = ({
           orderMargin={orderMargin}
           orderMarginPercent={orderMarginPercent}
         />
+      )}
+      
+      {variant === 'wareneingang_active' && (
+        <WareneingangActive orderId={orderId} />
       )}
     </div>
   );

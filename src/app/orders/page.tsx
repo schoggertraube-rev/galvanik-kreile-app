@@ -324,7 +324,7 @@ function OrdersPageInner() {
                 key={order.id}
                 id={order.id}
                 orderNumber={order.orderNumber}
-                customerName={order.customerName || "Unbekannter Kunde"}
+                customerName={order.customerName || "Kunde nicht hinterlegt"}
                 article={order.task || ""}
                 surface={surfaceLabel}
                 surfaceKey={surfaceKey}

@@ -7,6 +7,7 @@ const EXPIRATION_HOURS = 12;
 export interface AppSessionPayload {
   role: string;
   tenantId: string;
+  userId?: string;
   issuedAt: number;
   expiresAt: number;
 }
@@ -26,13 +27,14 @@ function signPayload(payloadStr: string): string {
   return crypto.createHmac("sha256", getSecretKey()).update(payloadStr).digest("hex");
 }
 
-export async function createAppSessionCookie(role: string): Promise<void> {
+export async function createAppSessionCookie(role: string, userId?: string): Promise<void> {
   const now = Date.now();
   const expiresAt = now + EXPIRATION_HOURS * 60 * 60 * 1000;
   
   const payload: AppSessionPayload = {
     role,
     tenantId: "galvanik-kreile",
+    userId,
     issuedAt: now,
     expiresAt,
   };

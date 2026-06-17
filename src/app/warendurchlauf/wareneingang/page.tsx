@@ -287,9 +287,9 @@ function WarendurchlaufLeitstandContent() {
                     key={order.id}
                     id={order.id}
                     orderNumber={order.orderNumber}
-                    customerName={order.customerName || "Unbekannter Kunde"}
-                    article={order.task || "Unbenanntes Werkstück"}
-                    surface={((order.parts?.[0] as any)?.surfaceRequested) || ((order.parts?.[0] as { finish?: string })?.finish) || "Offen"}
+                    customerName={order.customerName || "Kunde nicht hinterlegt"}
+                    article={order.itemDescription || "Artikel nicht hinterlegt"}
+                    surface={order.surfaceRequested || "Oberfläche nicht hinterlegt"}
                     urgency={urgencyType}
                     dueValue={order.dueValue || "14 T"}
                     dueLabel={order.dueLabel || "Fällig in"}

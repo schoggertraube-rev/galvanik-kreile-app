@@ -16,12 +16,14 @@ import { useTestpilot } from "@/components/testpilot/TestpilotProvider";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
+import { useRouter } from "next/navigation";
 
 interface KreileHeaderProps {
   onMenuToggle: () => void;
 }
 
 export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
+  const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [orderCount, setOrderCount] = useState(0);
@@ -70,7 +72,9 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     localStorage.removeItem("kreile_user_initials");
     document.cookie = "bypass-auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     setUserDropdownOpen(false);
-    await logout(); // Calls server action to destroy supabase session
+    await logout(); // Calls server action to destroy supabase session and app session
+    router.replace("/start");
+    router.refresh();
   };
 
   const today = new Date();

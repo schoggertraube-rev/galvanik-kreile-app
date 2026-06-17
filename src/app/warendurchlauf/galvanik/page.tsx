@@ -113,9 +113,9 @@ export default function GalvanikPage() {
               key={o.id}
               id={o.id}
               orderNumber={o.orderNumber}
-              customerName={o.customerName || "Unbekannt"}
-              article={o.task || "Unbekannt"}
-              surface={((o.parts?.[0] as { finish?: string })?.finish) || ((o.parts?.[0] as any)?.surfaceRequested) || "Offen"}
+              customerName={o.customerName || "Kunde nicht hinterlegt"}
+              article={o.itemDescription || "Artikel nicht hinterlegt"}
+              surface={o.surfaceRequested || "Oberfläche nicht hinterlegt"}
               urgency={mapRiskToUrgency(o.risk)}
               dueValue={o.dueValue || "--"}
               dueLabel={o.dueLabel || "Tage"}
@@ -159,9 +159,9 @@ export default function GalvanikPage() {
                       key={`urg-${o.id}`}
                       id={o.id}
                       orderNumber={o.orderNumber}
-                      customerName={o.customerName || "Unbekannt"}
-                      article={o.task || "Unbekannt"}
-                      surface={((o.parts?.[0] as { finish?: string })?.finish) || ((o.parts?.[0] as any)?.surfaceRequested) || "Offen"}
+                      customerName={o.customerName || "Kunde nicht hinterlegt"}
+                      article={o.itemDescription || "Artikel nicht hinterlegt"}
+                      surface={o.surfaceRequested || "Oberfläche nicht hinterlegt"}
                       urgency={mapRiskToUrgency(o.risk)}
                       dueValue={o.dueValue || "--"}
                       dueLabel={o.dueLabel || "Tage"}

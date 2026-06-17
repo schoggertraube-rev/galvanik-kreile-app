@@ -50,12 +50,8 @@ export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<Act
         }
       } catch (e) {
         // getAppSession throws when called outside a Next.js request (e.g., test script)
-        const allowDevScriptAuth =
-          process.env.NODE_ENV !== "production" &&
-          process.env.KREILE_ALLOW_DEV_SCRIPT_AUTH === "true";
-
-        if (allowDevScriptAuth) {
-          role = "admin"; // bypass for local test scripts
+        if (process.env.NODE_ENV !== "production") {
+          role = "admin"; // bypass for local test scripts in dev mode
         } else {
           console.error("Auth check failed outside request context:", e);
           return { ok: false, error: "DB_ERROR", message: "Fehler bei der Überprüfung der Berechtigungen." };

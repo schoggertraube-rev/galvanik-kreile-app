@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
+import { clearAppSessionCookie } from '@/lib/server/appSession'
 
 import { getCurrentRole } from '@/lib/auth/roles'
 
@@ -64,5 +65,6 @@ export async function logout() {
   } catch (error) {
     console.warn("Supabase signout failed (maybe not configured), redirecting anyway...", error)
   }
-  redirect('/start')
+  await clearAppSessionCookie()
+  return { success: true }
 }

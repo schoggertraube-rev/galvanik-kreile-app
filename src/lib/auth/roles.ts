@@ -32,17 +32,29 @@ async function getSupabase() {
   );
 }
 
+import { getAppSession } from "@/lib/server/appSession";
+
 /**
  * Gets the current authenticated Supabase user AND their DB user profile (role).
+ * Falls back to App Session if Supabase user is not found (e.g. PIN login).
  */
 export async function getCurrentAppUser() {
   const supabase = await getSupabase();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (!user) return null;
+  let targetUserId = user?.id;
+
+  if (!targetUserId) {
+    const appSession = await getAppSession();
+    if (appSession?.userId) {
+      targetUserId = appSession.userId;
+    }
+  }
+
+  if (!targetUserId) return null;
 
   try {
-    const [appUser] = await db.select().from(appUsers).where(eq(appUsers.id, user.id));
+    const [appUser] = await db.select().from(appUsers).where(eq(appUsers.id, targetUserId));
     return appUser || null;
   } catch (error: any) {
     const errorMsg = error?.message || "Unknown error";

@@ -22,6 +22,8 @@ export type Order = {
   intakeDate?: string;
   task?: string;
   customerName?: string;
+  itemDescription?: string;
+  surfaceRequested?: string;
   rawIntakeDate?: string;
   source?: string;
   rawDueDate?: string;
