@@ -2,10 +2,8 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
-import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
-import { clearAppSessionCookie } from '@/lib/server/appSession'
-
+import { clearAppSession } from '@/lib/server/appSession'
 import { getCurrentRole } from '@/lib/auth/roles'
 
 export async function login(formData: FormData) {
@@ -24,21 +22,14 @@ export async function login(formData: FormData) {
 
   // Security Check: Is this an Admin/Developer?
   let role: string | null = null;
-  
+
   try {
     role = await getCurrentRole()
-  } catch (err: any) {
-    if (err.message?.startsWith("DATABASE_ERROR")) {
-      if (process.env.NODE_ENV !== "production") {
-        console.warn("DB failed during email login. Setting dev mode admin cookie.");
-        role = "admin";
-        const cookieStore = await cookies();
-        cookieStore.set("bypass-auth", "true", { path: "/" });
-        cookieStore.set("kreile_role", "admin", { path: "/" });
-      } else {
-        await supabase.auth.signOut()
-        redirect('/start?message=Systemfehler: Datenbank nicht erreichbar (Rollenprüfung fehlgeschlagen).')
-      }
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (errMsg.startsWith("DATABASE_ERROR")) {
+      await supabase.auth.signOut()
+      redirect('/start?message=Systemfehler: Datenbank nicht erreichbar (Rollenprüfung fehlgeschlagen).')
     } else {
       throw err;
     }
@@ -50,7 +41,7 @@ export async function login(formData: FormData) {
   }
 
   revalidatePath('/', 'layout')
-  
+
   if (role === 'developer') {
     redirect('/settings')
   } else {
@@ -58,13 +49,19 @@ export async function login(formData: FormData) {
   }
 }
 
-export async function logout() {
+/**
+ * Kanonische Logout-Action.
+ * Löscht die App-Session garantiert, auch wenn Supabase-Logout fehlschlägt.
+ */
+export async function logout(): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const supabase = await createClient()
     await supabase.auth.signOut()
   } catch (error) {
-    console.warn("Supabase signout failed (maybe not configured), redirecting anyway...", error)
+    // Supabase-Fehler wird geloggt, Cookie-Bereinigung erfolgt trotzdem
+    console.warn("Supabase signOut failed, clearing app session cookie anyway:", error)
+  } finally {
+    await clearAppSession()
   }
-  await clearAppSessionCookie()
-  return { success: true }
+  return { ok: true }
 }

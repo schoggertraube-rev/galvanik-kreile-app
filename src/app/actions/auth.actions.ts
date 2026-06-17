@@ -5,7 +5,7 @@ import { getUserPermissions, getCurrentAppUser } from "@/lib/auth/permissions";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { createAppSessionCookie, clearAppSessionCookie } from "@/lib/server/appSession";
+import { setAppSession, SESSION_TTL_MS } from "@/lib/server/appSession";
 
 export async function getRoleAction() {
   try {
@@ -32,7 +32,10 @@ export async function getMyPermissionsAction() {
   }
 }
 
-export async function loginWithPin(userId: string, pin: string) {
+export async function loginWithPin(
+  userId: string,
+  pin: string,
+): Promise<{ ok: true; role: string } | { ok: false; message: string }> {
   try {
     const [user] = await db.select().from(appUsers).where(eq(appUsers.id, userId));
 
@@ -40,15 +43,19 @@ export async function loginWithPin(userId: string, pin: string) {
       return { ok: false, message: "Ungültige PIN oder inaktiver Benutzer." };
     }
 
-    await createAppSessionCookie(user.role, user.id);
+    const now = Date.now();
+    await setAppSession({
+      userId: user.id,
+      tenantId: "galvanik-kreile",
+      role: user.role,
+      displayName: user.fullName ?? user.id,
+      issuedAt: now,
+      expiresAt: now + SESSION_TTL_MS,
+    });
+
     return { ok: true, role: user.role };
   } catch (error) {
     console.error("Failed to login with pin:", error);
     return { ok: false, message: "Server-Fehler beim Login." };
   }
-}
-
-export async function logoutAppSessionAction() {
-  await clearAppSessionCookie();
-  return { ok: true };
 }

@@ -40,6 +40,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   // User Dropdown State
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [storedInitials, setStoredInitials] = useState<string>("?");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     // Defer the local storage read to avoid hydration mismatch and synchronous setState warnings
@@ -68,13 +69,14 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   }, [userDropdownOpen, notificationsOpen]);
 
   const handleLogout = async () => {
+    if (isLoggingOut) return; // Doppel-Aufruf verhindern
+    setIsLoggingOut(true);
+    setUserDropdownOpen(false);
+    // Entferne nicht-autoritative UI-Cachewerte
     localStorage.removeItem("kreile_user_role");
     localStorage.removeItem("kreile_user_initials");
-    document.cookie = "bypass-auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    setUserDropdownOpen(false);
-    await logout(); // Calls server action to destroy supabase session and app session
+    await logout();
     router.replace("/start");
-    router.refresh();
   };
 
   const today = new Date();
@@ -306,9 +308,10 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
               {/* Settings and other tabs are handled within /settings */}
               <button
                 onClick={handleLogout}
-                className="w-full text-left px-3 py-2 text-sm font-bold text-danger-red hover:bg-danger-red/10 rounded-xl transition-colors cursor-pointer"
+                disabled={isLoggingOut}
+                className="w-full text-left px-3 py-2 text-sm font-bold text-danger-red hover:bg-danger-red/10 rounded-xl transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Abmelden
+                {isLoggingOut ? "Abmelden..." : "Abmelden"}
               </button>
             </div>
           )}

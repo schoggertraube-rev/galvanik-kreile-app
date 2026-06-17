@@ -1,4 +1,3 @@
-import { getCurrentRole } from "@/lib/auth/roles";
 import { getAppSession } from "@/lib/server/appSession";
 
 export type ActionResult<T> =
@@ -35,40 +34,33 @@ const WRITE_ROLES = [
   "quality",
 ];
 
+/**
+ * Server-Guard: Prüft ausschließlich die kanonische App-Session.
+ *
+ * Fehlervertrag:
+ * - kein Cookie        → UNAUTHORIZED "AUTH_ERROR: Nicht angemeldet"
+ * - ungültige Signatur → UNAUTHORIZED "AUTH_ERROR: Ungültige Sitzung"
+ * - abgelaufen         → UNAUTHORIZED "AUTH_ERROR: Sitzung abgelaufen"
+ * - falscher Tenant    → UNAUTHORIZED "AUTH_ERROR: Ungültiger Mandant"
+ * - gültig             → { ok: true, data: role }
+ *
+ * Kein Fallback auf getCurrentRole() oder kreile_role-Cookie.
+ */
 export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<ActionResult<string>> {
   try {
-    let role: string | null = null;
-      try {
-        const session = await getAppSession();
-        if (session && session.tenantId === "galvanik-kreile") {
-          role = session.role;
-        } else if (session) {
-          // session exists but different tenant – treat as unauthorized
-          role = null;
-        } else {
-            role = await getCurrentRole();
-        }
-      } catch (e) {
-        // getAppSession throws when called outside a Next.js request (e.g., test script)
-        if (process.env.NODE_ENV !== "production") {
-          role = "admin"; // bypass for local test scripts in dev mode
-        } else {
-          console.error("Auth check failed outside request context:", e);
-          return { ok: false, error: "DB_ERROR", message: "Fehler bei der Überprüfung der Berechtigungen." };
-        }
-      }
+    const session = await getAppSession();
 
-
-    if (!role) {
-      return { ok: false, error: "UNAUTHORIZED", message: "Nicht angemeldet." };
+    if (!session) {
+      return { ok: false, error: "UNAUTHORIZED", message: "AUTH_ERROR: Nicht angemeldet" };
     }
-    const roleLower = role.toLowerCase();
 
+    const roleLower = session.role.toLowerCase();
     const allowedRoles = mode === "write" ? WRITE_ROLES : READ_ROLES;
 
     if (!allowedRoles.includes(roleLower)) {
       return { ok: false, error: "FORBIDDEN", message: "Keine Berechtigung für diese Aktion." };
     }
+
     return { ok: true, data: roleLower };
   } catch (error) {
     console.error("Auth check failed:", error);
