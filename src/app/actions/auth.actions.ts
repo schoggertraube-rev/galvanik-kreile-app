@@ -32,6 +32,13 @@ export async function getMyPermissionsAction() {
   }
 }
 
+/**
+ * PIN-Login.
+ *
+ * Setzt eine vollständige kanonische AppSession.
+ * displayName kommt ausschließlich aus user.fullName.
+ * Eine UUID wird niemals als sichtbarer Anzeigename verwendet.
+ */
 export async function loginWithPin(
   userId: string,
   pin: string,
@@ -43,12 +50,23 @@ export async function loginWithPin(
       return { ok: false, message: "Ungültige PIN oder inaktiver Benutzer." };
     }
 
+    // Fachliche Anzeigeidentität: fullName ist Pflichtfeld (NOT NULL im Schema).
+    // Leerer String ist ein Datenfehler, der klar zurückgemeldet wird.
+    const displayName = user.fullName?.trim();
+    if (!displayName) {
+      console.error("loginWithPin: user.fullName is empty for userId:", userId);
+      return {
+        ok: false,
+        message: "Kein Anzeigename für diesen Benutzer konfiguriert. Bitte Administrator kontaktieren.",
+      };
+    }
+
     const now = Date.now();
     await setAppSession({
       userId: user.id,
       tenantId: "galvanik-kreile",
       role: user.role,
-      displayName: user.fullName ?? user.id,
+      displayName,
       issuedAt: now,
       expiresAt: now + SESSION_TTL_MS,
     });

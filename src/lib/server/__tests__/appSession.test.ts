@@ -3,30 +3,40 @@
  *
  * Datenbankfreie Unit-Tests für den kanonischen App-Session-Vertrag.
  * Kein Netzwerk, keine echten Secrets, keine Supabase-Verbindung.
+ *
+ * Abgedeckte Szenarien:
+ *  1. Gültiger Token – signAppSession + verifyAppSessionToken
+ *  2. Manipulierte Payload (Signatur-Mismatch)
+ *  3. Falsche Signaturlänge → INVALID_SIGNATURE
+ *  4. Abgelaufene Session → EXPIRED
+ *  5. Falscher Tenant → INVALID_TENANT
+ *  6. MALFORMED-Token (kein Punkt-Separator)
+ *  7. Cookie-Konfiguration: COOKIE_NAME und SESSION_TTL_MS
+ *  8. readAppSession() mit gemocktem Cookie: kein Cookie → NO_COOKIE
+ *  9. readAppSession() mit gültigem Token → AppSession
+ * 10. readAppSession() mit manipulierter Signatur → INVALID_SIGNATURE
+ * 11. readAppSession() mit abgelaufenem Token → EXPIRED
+ * 12. readAppSession() mit falschem Tenant → INVALID_TENANT
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import crypto from "node:crypto";
+import {
+  signAppSession,
+  verifyAppSessionToken,
+  COOKIE_NAME,
+  SESSION_TTL_MS,
+  type AppSession,
+} from "@/lib/server/appSession";
 
-// ─── Testschlüssel – ausschließlich für Tests ───────────────────────────────
+// ─── Testschlüssel ─────────────────────────────────────────────────────────
 const TEST_SECRET = "test-secret-only-for-unit-tests-not-production";
 
-// ─── Hilfsfunktionen (spiegeln die internen Implementierungen) ─────────────
-function signPayload(payloadStr: string, secret: string): string {
-  return crypto.createHmac("sha256", secret).update(payloadStr).digest("hex");
-}
-
-function buildToken(payload: object, secret: string): string {
-  const payloadStr = JSON.stringify(payload);
-  const sig = signPayload(payloadStr, secret);
-  return `${Buffer.from(payloadStr).toString("base64")}.${sig}`;
-}
-
-// ─── Mocking ────────────────────────────────────────────────────────────────
-// next/headers wird gemockt, da es außerhalb eines Next.js-Request-Contexts nicht funktioniert.
-const mockCookieGet = vi.fn();
-const mockCookieSet = vi.fn();
-const mockCookieDelete = vi.fn();
+// ─── Mocks (vi.hoisted → verfügbar in vi.mock-Factories) ─────────────────
+const { mockCookieGet, mockCookieSet, mockCookieDelete } = vi.hoisted(() => ({
+  mockCookieGet: vi.fn(),
+  mockCookieSet: vi.fn(),
+  mockCookieDelete: vi.fn(),
+}));
 
 vi.mock("next/headers", () => ({
   cookies: vi.fn().mockResolvedValue({
@@ -36,160 +46,181 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-// APP_SESSION_SECRET auf den Testschlüssel setzen
+// APP_SESSION_SECRET auf Testschlüssel setzen
 process.env.APP_SESSION_SECRET = TEST_SECRET;
 
-// ─── Tests – Token-Struktur (pure Hilfsfunktionen, kein Next.js) ────────────
-
-describe("AppSession – Token-Vertrag (pure Krypto, kein Next.js)", () => {
+// ─── Hilfsfunktion ──────────────────────────────────────────────────────────
+function makeSession(overrides?: Partial<AppSession>): AppSession {
   const now = Date.now();
-  const validSession = {
+  return {
     userId: "user-123",
     tenantId: "galvanik-kreile",
     role: "werkstatt",
     displayName: "Hans Meister",
     issuedAt: now - 1000,
     expiresAt: now + 60 * 60 * 1000,
+    ...overrides,
   };
+}
 
-  it("gültige Session: Token bauen und Signatur verifizieren", () => {
-    const token = buildToken(validSession, TEST_SECRET);
-    const [b64, sig] = token.split(".");
-    expect(b64).toBeTruthy();
-    expect(sig).toBeTruthy();
+// ─── 1–7: Pure Funktionen (kein Next.js benötigt) ──────────────────────────
 
-    const payloadStr = Buffer.from(b64, "base64").toString("utf8");
-    const expectedSig = signPayload(payloadStr, TEST_SECRET);
-    expect(sig).toBe(expectedSig);
+describe("signAppSession + verifyAppSessionToken – pure Krypto", () => {
+  it("1 – gültiger Token: signieren und verifizieren", () => {
+    const session = makeSession();
+    const token = signAppSession(session, TEST_SECRET);
 
-    const decoded = JSON.parse(payloadStr);
-    expect(decoded.userId).toBe("user-123");
-    expect(decoded.tenantId).toBe("galvanik-kreile");
-    expect(decoded.role).toBe("werkstatt");
-    expect(decoded.displayName).toBe("Hans Meister");
+    const result = verifyAppSessionToken(token, TEST_SECRET);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.session.userId).toBe("user-123");
+      expect(result.session.role).toBe("werkstatt");
+      expect(result.session.displayName).toBe("Hans Meister");
+      expect(result.session.tenantId).toBe("galvanik-kreile");
+    }
   });
 
-  it("manipulierte Signatur: Token mit falschem Secret → Signatur-Mismatch", () => {
-    const token = buildToken(validSession, "wrong-secret-xyz");
-    const [b64, sig] = token.split(".");
-    const payloadStr = Buffer.from(b64, "base64").toString("utf8");
-    const expectedSig = signPayload(payloadStr, TEST_SECRET);
-    expect(sig).not.toBe(expectedSig);
-  });
-
-  it("manipulierte Payload: Payload ändern ohne neue Signatur → Mismatch", () => {
-    const originalToken = buildToken(validSession, TEST_SECRET);
+  it("2 – manipulierte Payload: Token mit Original-Signatur → INVALID_SIGNATURE", () => {
+    const session = makeSession();
+    const originalToken = signAppSession(session, TEST_SECRET);
     const [, originalSig] = originalToken.split(".");
 
-    const tampered = { ...validSession, role: "admin" };
+    // Payload manipulieren und mit Original-Signatur kombinieren
+    const tampered = { ...session, role: "admin" };
     const tamperedB64 = Buffer.from(JSON.stringify(tampered)).toString("base64");
+    const tamperedToken = `${tamperedB64}.${originalSig}`;
 
-    const tamperedStr = Buffer.from(tamperedB64, "base64").toString("utf8");
-    const recomputed = signPayload(tamperedStr, TEST_SECRET);
-    expect(originalSig).not.toBe(recomputed);
+    const result = verifyAppSessionToken(tamperedToken, TEST_SECRET);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("INVALID_SIGNATURE");
   });
 
-  it("abgelaufene Session: expiresAt in der Vergangenheit", () => {
-    const expired = {
-      ...validSession,
-      issuedAt: now - 2 * 3600 * 1000,
-      expiresAt: now - 1000,
-    };
-    const payloadStr = JSON.stringify(expired);
-    const decoded = JSON.parse(payloadStr);
-    expect(decoded.expiresAt).toBeLessThan(Date.now());
+  it("3 – falsche Signaturlänge (zu kurz) → INVALID_SIGNATURE", () => {
+    const session = makeSession();
+    const token = signAppSession(session, TEST_SECRET);
+    const [b64] = token.split(".");
+
+    // Signatur auf 10 Zeichen kürzen
+    const shortSigToken = `${b64}.tooshort12`;
+    const result = verifyAppSessionToken(shortSigToken, TEST_SECRET);
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("INVALID_SIGNATURE");
   });
 
-  it("falscher Tenant: tenantId !== 'galvanik-kreile'", () => {
-    const wrongTenant = { ...validSession, tenantId: "other-company" };
-    const payloadStr = JSON.stringify(wrongTenant);
-    const decoded = JSON.parse(payloadStr);
-    expect(decoded.tenantId).not.toBe("galvanik-kreile");
+  it("4 – abgelaufene Session → EXPIRED", () => {
+    const now = Date.now();
+    const session = makeSession({
+      issuedAt: now - 2 * 3600_000,
+      expiresAt: now - 1000, // bereits abgelaufen
+    });
+    const token = signAppSession(session, TEST_SECRET);
+
+    const result = verifyAppSessionToken(token, TEST_SECRET, now);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("EXPIRED");
+  });
+
+  it("5 – falscher Tenant → INVALID_TENANT", () => {
+    const session = makeSession({ tenantId: "fremdfirma-xyz" });
+    const token = signAppSession(session, TEST_SECRET);
+
+    const result = verifyAppSessionToken(token, TEST_SECRET);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("INVALID_TENANT");
+  });
+
+  it("6 – MALFORMED Token: kein Punkt-Separator", () => {
+    const result = verifyAppSessionToken("ohnetrennzeichen", TEST_SECRET);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("MALFORMED");
+  });
+
+  it("6b – MALFORMED Token: kein Inhalt vor dem Punkt", () => {
+    const result = verifyAppSessionToken(".nurSignatur", TEST_SECRET);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("MALFORMED");
   });
 });
 
-// ─── Tests – Konstanten ──────────────────────────────────────────────────────
+// ─── 7: Cookie-Konfiguration ───────────────────────────────────────────────
 
-describe("AppSession – Konstanten", () => {
-  it("COOKIE_NAME ist 'kreile_app_session'", async () => {
-    const { COOKIE_NAME } = await import("@/lib/server/appSession");
+describe("Konstanten", () => {
+  it("7a – COOKIE_NAME ist 'kreile_app_session'", () => {
     expect(COOKIE_NAME).toBe("kreile_app_session");
   });
 
-  it("SESSION_TTL_MS ist 12 Stunden in Millisekunden", async () => {
-    const { SESSION_TTL_MS } = await import("@/lib/server/appSession");
+  it("7b – SESSION_TTL_MS ist 12 Stunden in Millisekunden", () => {
     expect(SESSION_TTL_MS).toBe(12 * 60 * 60 * 1000);
   });
 });
 
-// ─── Tests – getAppSession() mit gemocktem Cookie ───────────────────────────
+// ─── 8–12: readAppSession() mit gemockten Cookies ─────────────────────────
 
-describe("AppSession – getAppSession() mit gemocktem Cookie", () => {
-  const now = Date.now();
-  const validSession = {
-    userId: "user-abc",
-    tenantId: "galvanik-kreile",
-    role: "buero",
-    displayName: "Büro User",
-    issuedAt: now - 100,
-    expiresAt: now + 3600 * 1000,
-  };
-
+describe("readAppSession() – Cookie-Integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("kein Cookie → null", async () => {
+  it("8 – kein Cookie → NO_COOKIE", async () => {
     mockCookieGet.mockReturnValue(undefined);
-    const { getAppSession } = await import("@/lib/server/appSession");
-    const result = await getAppSession();
-    expect(result).toBeNull();
+    const { readAppSession } = await import("@/lib/server/appSession");
+    const result = await readAppSession();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("NO_COOKIE");
   });
 
-  it("gültiger Token → Session-Objekt", async () => {
-    const token = buildToken(validSession, TEST_SECRET);
+  it("9 – gültiger Token → ok: true, Session-Objekt", async () => {
+    const session = makeSession();
+    const token = signAppSession(session, TEST_SECRET);
     mockCookieGet.mockImplementation((name: string) =>
-      name === "kreile_app_session" ? { name, value: token } : undefined
+      name === COOKIE_NAME ? { name, value: token } : undefined
     );
-    const { getAppSession } = await import("@/lib/server/appSession");
-    const session = await getAppSession();
-    expect(session).not.toBeNull();
-    expect(session?.userId).toBe("user-abc");
-    expect(session?.role).toBe("buero");
-    expect(session?.tenantId).toBe("galvanik-kreile");
+    const { readAppSession } = await import("@/lib/server/appSession");
+    const result = await readAppSession();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.session.userId).toBe("user-123");
+      expect(result.session.displayName).toBe("Hans Meister");
+    }
   });
 
-  it("manipulierte Signatur → null", async () => {
-    const payloadStr = JSON.stringify(validSession);
-    const b64 = Buffer.from(payloadStr).toString("base64");
-    const token = `${b64}.invalidsignatureXXX`;
+  it("10 – manipulierte Signatur → INVALID_SIGNATURE", async () => {
+    const session = makeSession();
+    const b64 = Buffer.from(JSON.stringify(session)).toString("base64");
+    const token = `${b64}.invalidsig0000000000000000000000000000000000000000000000000000000000`;
     mockCookieGet.mockImplementation((name: string) =>
-      name === "kreile_app_session" ? { name, value: token } : undefined
+      name === COOKIE_NAME ? { name, value: token } : undefined
     );
-    const { getAppSession } = await import("@/lib/server/appSession");
-    const session = await getAppSession();
-    expect(session).toBeNull();
+    const { readAppSession } = await import("@/lib/server/appSession");
+    const result = await readAppSession();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("INVALID_SIGNATURE");
   });
 
-  it("abgelaufene Session → null", async () => {
-    const expired = { ...validSession, expiresAt: now - 1000 };
-    const token = buildToken(expired, TEST_SECRET);
+  it("11 – abgelaufene Session → EXPIRED", async () => {
+    const now = Date.now();
+    const expired = makeSession({ expiresAt: now - 1000 });
+    const token = signAppSession(expired, TEST_SECRET);
     mockCookieGet.mockImplementation((name: string) =>
-      name === "kreile_app_session" ? { name, value: token } : undefined
+      name === COOKIE_NAME ? { name, value: token } : undefined
     );
-    const { getAppSession } = await import("@/lib/server/appSession");
-    const session = await getAppSession();
-    expect(session).toBeNull();
+    const { readAppSession } = await import("@/lib/server/appSession");
+    const result = await readAppSession();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("EXPIRED");
   });
 
-  it("falscher Tenant → null", async () => {
-    const wrongTenant = { ...validSession, tenantId: "fremd-firma" };
-    const token = buildToken(wrongTenant, TEST_SECRET);
+  it("12 – falscher Tenant → INVALID_TENANT", async () => {
+    const wrongTenant = makeSession({ tenantId: "fremd-firma" });
+    const token = signAppSession(wrongTenant, TEST_SECRET);
     mockCookieGet.mockImplementation((name: string) =>
-      name === "kreile_app_session" ? { name, value: token } : undefined
+      name === COOKIE_NAME ? { name, value: token } : undefined
     );
-    const { getAppSession } = await import("@/lib/server/appSession");
-    const session = await getAppSession();
-    expect(session).toBeNull();
+    const { readAppSession } = await import("@/lib/server/appSession");
+    const result = await readAppSession();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("INVALID_TENANT");
   });
 });
