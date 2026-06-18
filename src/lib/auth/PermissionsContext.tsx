@@ -3,6 +3,15 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { getMyPermissionsAction, getRoleAction } from "@/app/actions/auth.actions";
 import { createClient } from "@/lib/supabase/client";
+import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
+
+export function deriveInitials(displayName: string): string {
+  if (!displayName || displayName === "Unknown" || displayName === "User") return "";
+  const parts = displayName.split(" ").filter(Boolean);
+  if (parts.length === 0) return "";
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 interface PermissionsContextType {
   role: string | null;
@@ -12,25 +21,40 @@ interface PermissionsContextType {
   loading: boolean;
   hasPermission: (key: string) => boolean;
   refreshPermissions: () => Promise<void>;
+  status: "authenticated" | "unauthenticated" | "error";
 }
 
 const PermissionsContext = createContext<PermissionsContextType>({
   role: null,
   permissions: [],
-  name: "Unknown",
-  initials: "?",
+  name: "",
+  initials: "",
   loading: true,
   hasPermission: () => false,
   refreshPermissions: async () => {},
+  status: "unauthenticated",
 });
 
 export const usePermissions = () => useContext(PermissionsContext);
 
-export function PermissionsProvider({ children }: { children: React.ReactNode }) {
-  const [role, setRole] = useState<string | null>(null);
+export function PermissionsProvider({ 
+  children,
+  initialAuthState
+}: { 
+  children: React.ReactNode;
+  initialAuthState: AuthBootstrapState;
+}) {
+  const [status, setStatus] = useState<"authenticated" | "unauthenticated" | "error">(initialAuthState.status);
+  const [role, setRole] = useState<string | null>(
+    initialAuthState.status === "authenticated" ? initialAuthState.session.role : null
+  );
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [name, setName] = useState<string>("Unknown");
-  const [initials, setInitials] = useState<string>("?");
+  const [name, setName] = useState<string>(
+    initialAuthState.status === "authenticated" ? initialAuthState.session.displayName : ""
+  );
+  const [initials, setInitials] = useState<string>(
+    initialAuthState.status === "authenticated" ? deriveInitials(initialAuthState.session.displayName) : ""
+  );
   const [loading, setLoading] = useState(true);
 
   const refreshPermissions = async () => {
@@ -41,16 +65,15 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       ]);
       setRole(newRole);
       setPermissions(permData.permissions);
-      setName(permData.name);
       
-      let finalInitials = permData.initials;
-      if (finalInitials === "?") {
-        try {
-          const localInitials = localStorage.getItem("kreile_user_initials");
-          if (localInitials) finalInitials = localInitials;
-        } catch { /* ignore */ }
+      const newName = permData.name;
+      if (newName && newName !== "User" && newName !== "Unknown") {
+        setName(newName);
+        setInitials(deriveInitials(newName));
+        setStatus("authenticated");
+      } else if (!newRole) {
+        setStatus("unauthenticated");
       }
-      setInitials(finalInitials);
     } catch (err) {
       console.error("Failed to load permissions", err);
     } finally {
@@ -89,7 +112,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
   };
 
   return (
-    <PermissionsContext.Provider value={{ role, permissions, name, initials, loading, hasPermission, refreshPermissions }}>
+    <PermissionsContext.Provider value={{ role, permissions, name, initials, loading, hasPermission, refreshPermissions, status }}>
       {children}
     </PermissionsContext.Provider>
   );

@@ -57,6 +57,7 @@ import { OrderModalProvider } from "@/components/orders/OrderModalProvider";
 import { ErfassungProvider } from "@/components/erfassung/ErfassungProvider";
 
 import { isAdminOrDeveloper } from "@/lib/auth/permissions";
+import { getAuthBootstrapState } from "@/lib/server/authBootstrap";
 
 export default async function RootLayout({
   children,
@@ -64,6 +65,7 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const isAdmin = await isAdminOrDeveloper();
+  const authState = await getAuthBootstrapState();
 
   return (
     <html
@@ -75,7 +77,7 @@ export default async function RootLayout({
         <Suspense fallback={null}>
         <TestpilotProvider isAdmin={isAdmin}>
           <SyncProvider>
-            <PermissionsProvider>
+            <PermissionsProvider initialAuthState={authState}>
               <DiagnosticsProvider>
                 <LicenseProvider>
                   <AppShortcutProvider>

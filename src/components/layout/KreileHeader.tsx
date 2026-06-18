@@ -31,7 +31,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
 
-  const { initials } = usePermissions();
+  const { initials, status, name } = usePermissions();
   const { status: realtimeStatus } = useRealtimeStatus();
   const { isRecording } = useTestpilot();
   const { isOnline, outboxItems, syncNow } = useSync();
@@ -39,18 +39,8 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
   // User Dropdown State
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [storedInitials, setStoredInitials] = useState<string>("?");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  useEffect(() => {
-    // Defer the local storage read to avoid hydration mismatch and synchronous setState warnings
-    const timer = setTimeout(() => {
-      setStoredInitials(localStorage.getItem("kreile_user_initials") ?? "?");
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const userInitials = initials && initials !== "?" ? initials : storedInitials;
   const userDropdownRef = useRef<HTMLDivElement>(null);
 
   // Click outside to close user dropdown
@@ -288,20 +278,21 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         </div>
 
         {/* Profilbild rund (Kreis 48px) */}
-        <div className="relative" ref={userDropdownRef}>
-          <button
-            onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-            className="w-10 h-10 rounded-full bg-navy-700/90 backdrop-blur-sm border border-navy-500 hover:bg-navy-900 transition-all duration-300 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-sm cursor-pointer"
-          >
-            {userInitials}
-          </button>
+        {status === "authenticated" && initials && (
+          <div className="relative" ref={userDropdownRef}>
+            <button
+              onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+              className="w-10 h-10 rounded-full bg-navy-700/90 backdrop-blur-sm border border-navy-500 hover:bg-navy-900 transition-all duration-300 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-sm cursor-pointer"
+            >
+              {initials}
+            </button>
 
-          {userDropdownOpen && (
-            <div className="absolute right-0 top-14 mt-2 w-48 bg-white border-2 border-neutral-gray-100 rounded-2xl shadow-xl z-50 p-2 animate-in slide-in-from-top-2 fade-in duration-200">
-              <div className="px-3 py-2 border-b border-neutral-gray-100 mb-1">
-                <p className="text-xs font-bold text-navy-900">Angemeldet als</p>
-                <p className="text-[10px] text-text-muted">{userInitials}</p>
-              </div>
+            {userDropdownOpen && (
+              <div className="absolute right-0 top-14 mt-2 w-48 bg-white border-2 border-neutral-gray-100 rounded-2xl shadow-xl z-50 p-2 animate-in slide-in-from-top-2 fade-in duration-200">
+                <div className="px-3 py-2 border-b border-neutral-gray-100 mb-1">
+                  <p className="text-xs font-bold text-navy-900">Angemeldet als</p>
+                  <p className="text-[10px] text-text-muted">{name || initials}</p>
+                </div>
               <Link
                 href="/settings"
                 onClick={() => setUserDropdownOpen(false)}
@@ -320,6 +311,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
             </div>
           )}
         </div>
+        )}
 
       </div>
 
