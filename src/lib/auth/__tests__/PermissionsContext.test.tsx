@@ -1,9 +1,12 @@
+process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
+
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
 import React from "react";
 import { PermissionsProvider, usePermissions, deriveInitials } from "../PermissionsContext";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
-import { getRoleAction, getMyPermissionsAction } from "@/app/actions/auth.actions";
+import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
+import type { AuthorizationResult } from "@/lib/server/authorization";
 
 // Mock Supabase client to avoid real network
 vi.mock("@/lib/supabase/client", () => ({
@@ -18,8 +21,7 @@ vi.mock("@/lib/supabase/client", () => ({
 
 // Mock Server Actions to avoid real requests
 vi.mock("@/app/actions/auth.actions", () => ({
-  getRoleAction: vi.fn(),
-  getMyPermissionsAction: vi.fn(),
+  getAuthorizationSnapshotAction: vi.fn(),
 }));
 
 describe("deriveInitials()", () => {
@@ -33,18 +35,23 @@ describe("deriveInitials()", () => {
   });
 });
 
-describe("PermissionsProvider Bootstrap & Refresh Protection", () => {
+describe("PermissionsProvider Bootstrap & central resolveAuthorization Protection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
     
-    // Default mock behavior
-    vi.mocked(getRoleAction).mockResolvedValue("office");
-    vi.mocked(getMyPermissionsAction).mockResolvedValue({
-      permissions: ["test-perm"],
-      name: "Hans Meister",
-      initials: "HM",
-    });
+    // Default mock response for the single action call
+    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
+      ok: true,
+      data: {
+        userId: "user-1",
+        tenantId: "galvanik-kreile",
+        displayName: "Hans Meister",
+        role: "buero",
+        permissions: ["perm_view_leitstand"],
+        active: true,
+      }
+    } as AuthorizationResult);
   });
 
   afterEach(() => {
@@ -72,20 +79,25 @@ describe("PermissionsProvider Bootstrap & Refresh Protection", () => {
       session: {
         userId: "1",
         tenantId: "t1",
-        role: "office",
+        role: "buero",
         displayName: "Christian Dieter",
         issuedAt: 0,
         expiresAt: 0,
       }
     };
 
-    // Client action returns different name
-    vi.mocked(getRoleAction).mockResolvedValue("office");
-    vi.mocked(getMyPermissionsAction).mockResolvedValue({
-      permissions: ["office-perm"],
-      name: "Anderer Benutzer",
-      initials: "AB",
-    });
+    // Client action returns different name, but context must NOT update name or initials
+    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
+      ok: true,
+      data: {
+        userId: "1",
+        tenantId: "t1",
+        role: "buero",
+        displayName: "Anderer Benutzer",
+        permissions: ["perm_view_leitstand"],
+        active: true,
+      }
+    } as AuthorizationResult);
 
     await act(async () => {
       render(
@@ -95,10 +107,9 @@ describe("PermissionsProvider Bootstrap & Refresh Protection", () => {
       );
     });
 
-    // Name and Initials must remain as initialized, not updated by refreshPermissions
     expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
     expect(screen.getByTestId("initials").textContent).toBe("CD");
-    expect(screen.getByTestId("role").textContent).toBe("office");
+    expect(screen.getByTestId("role").textContent).toBe("buero");
     expect(screen.getByTestId("status").textContent).toBe("authenticated");
   });
 
@@ -108,19 +119,24 @@ describe("PermissionsProvider Bootstrap & Refresh Protection", () => {
       session: {
         userId: "1",
         tenantId: "t1",
-        role: "office",
+        role: "buero",
         displayName: "Christian Dieter",
         issuedAt: 0,
         expiresAt: 0,
       }
     };
 
-    vi.mocked(getRoleAction).mockResolvedValue("office");
-    vi.mocked(getMyPermissionsAction).mockResolvedValue({
-      permissions: ["office-perm"],
-      name: "Christian Dieter",
-      initials: "CD",
-    });
+    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
+      ok: true,
+      data: {
+        userId: "1",
+        tenantId: "t1",
+        role: "buero",
+        displayName: "Christian Dieter",
+        permissions: ["perm_view_leitstand"],
+        active: true,
+      }
+    } as AuthorizationResult);
 
     await act(async () => {
       render(
@@ -131,8 +147,8 @@ describe("PermissionsProvider Bootstrap & Refresh Protection", () => {
     });
 
     expect(screen.getByTestId("status").textContent).toBe("authenticated");
-    expect(screen.getByTestId("role").textContent).toBe("office");
-    expect(screen.getByTestId("permissions").textContent).toBe("office-perm");
+    expect(screen.getByTestId("role").textContent).toBe("buero");
+    expect(screen.getByTestId("permissions").textContent).toBe("perm_view_leitstand");
   });
 
   it("T-03: Rollenwiderspruch", async () => {
@@ -141,19 +157,18 @@ describe("PermissionsProvider Bootstrap & Refresh Protection", () => {
       session: {
         userId: "1",
         tenantId: "t1",
-        role: "office",
+        role: "buero",
         displayName: "Christian Dieter",
         issuedAt: 0,
         expiresAt: 0,
       }
     };
 
-    // Action returns admin instead of office
-    vi.mocked(getRoleAction).mockResolvedValue("admin");
-    vi.mocked(getMyPermissionsAction).mockResolvedValue({
-      permissions: ["admin-perm"],
-      name: "Christian Dieter",
-      initials: "CD",
+    // DB role differs (e.g. resolveAuthorization returns ROLE_MISMATCH error)
+    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
+      ok: false,
+      reason: "ROLE_MISMATCH",
+      message: "AUTH_ERROR: Sitzung veraltet",
     });
 
     await act(async () => {
@@ -164,12 +179,14 @@ describe("PermissionsProvider Bootstrap & Refresh Protection", () => {
       );
     });
 
-    expect(screen.getByTestId("role").textContent).toBe("office");
+    expect(getAuthorizationSnapshotAction).toHaveBeenCalledTimes(1);
+
+    expect(screen.getByTestId("role").textContent).toBe("buero");
     expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
     expect(screen.getByTestId("initials").textContent).toBe("CD");
-    expect(screen.getByTestId("permissions").textContent).toBe(""); // Not adopted
+    expect(screen.getByTestId("permissions").textContent).toBe(""); // Discarded
     expect(screen.getByTestId("status").textContent).toBe("error");
-    expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Rollenwiderspruch");
+    expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Sitzung veraltet");
   });
 
   it("T-04: Permission-Fehler", async () => {
@@ -178,14 +195,14 @@ describe("PermissionsProvider Bootstrap & Refresh Protection", () => {
       session: {
         userId: "1",
         tenantId: "t1",
-        role: "office",
+        role: "buero",
         displayName: "Christian Dieter",
         issuedAt: 0,
         expiresAt: 0,
       }
     };
 
-    vi.mocked(getRoleAction).mockRejectedValue(new Error("Network Failure"));
+    vi.mocked(getAuthorizationSnapshotAction).mockRejectedValue(new Error("Network Failure"));
 
     await act(async () => {
       render(
@@ -195,11 +212,11 @@ describe("PermissionsProvider Bootstrap & Refresh Protection", () => {
       );
     });
 
-    expect(screen.getByTestId("role").textContent).toBe("office");
+    expect(screen.getByTestId("role").textContent).toBe("buero");
     expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
     expect(screen.getByTestId("initials").textContent).toBe("CD");
     expect(screen.getByTestId("status").textContent).toBe("error");
-    expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Abfrage fehlgeschlagen");
+    expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Berechtigungen nicht verfügbar");
   });
 
   it("T-05: Kein Local Storage", async () => {
@@ -211,7 +228,7 @@ describe("PermissionsProvider Bootstrap & Refresh Protection", () => {
       session: {
         userId: "1",
         tenantId: "t1",
-        role: "office",
+        role: "buero",
         displayName: "Christian Dieter",
         issuedAt: 0,
         expiresAt: 0,
@@ -226,7 +243,6 @@ describe("PermissionsProvider Bootstrap & Refresh Protection", () => {
       );
     });
 
-    // Make sure we didn't call localStorage.getItem or setItem for user data
     spyGet.mock.calls.forEach(call => {
       expect(call[0]).not.toMatch(/role|initial|user/);
     });

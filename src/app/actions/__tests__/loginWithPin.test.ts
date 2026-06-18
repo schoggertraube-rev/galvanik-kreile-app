@@ -53,11 +53,12 @@ vi.mock("@/db", () => ({
 }));
 
 vi.mock("@/db/schema", () => ({
-  appUsers: { id: "id", pinHash: "pin_hash", active: "active", role: "role", fullName: "full_name" },
+  appUsers: { id: "id", tenantId: "tenant_id", pinHash: "pin_hash", active: "active", role: "role", fullName: "full_name" },
 }));
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn(),
+  and: vi.fn(),
 }));
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -71,6 +72,7 @@ describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
   it("8a – gültiger PIN mit vollständigem fullName → AppSession wird mit displayName gesetzt", async () => {
     mockDbSelect.mockResolvedValue([{
       id: "user-abc",
+      tenantId: "galvanik-kreile",
       pinHash: "1234",
       active: true,
       role: "werkstatt",
@@ -98,6 +100,7 @@ describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
   it("8b – fullName leer → Fehler statt UUID-Fallback", async () => {
     mockDbSelect.mockResolvedValue([{
       id: "user-def",
+      tenantId: "galvanik-kreile",
       pinHash: "5678",
       active: true,
       role: "buero",
@@ -118,6 +121,7 @@ describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
   it("8c – falscher PIN → nicht-ok, keine Session erstellt", async () => {
     mockDbSelect.mockResolvedValue([{
       id: "user-ghi",
+      tenantId: "galvanik-kreile",
       pinHash: "9999",
       active: true,
       role: "meister",

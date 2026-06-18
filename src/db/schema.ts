@@ -7,7 +7,8 @@ const cuidPrimaryKey = (name: string) => text(name).primaryKey().$defaultFn(() =
 // 1. Users & Roles
 export const appUsers = pgTable("app_users", {
   id: uuid("id").primaryKey().defaultRandom(), // matches Supabase auth.users.id
-  email: text("email").notNull().unique(),
+  tenantId: text("tenant_id").notNull(),
+  email: text("email").notNull(),
   fullName: text("full_name").notNull(),
   role: varchar("role", { length: 50 }).notNull().default("werkstatt"), // developer, admin, meister, buero, werkstatt, readonly
   location: text("location"),

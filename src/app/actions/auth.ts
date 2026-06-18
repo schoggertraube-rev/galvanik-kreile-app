@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { clearAppSession, setAppSession, SESSION_TTL_MS } from '@/lib/server/appSession'
-import { getCurrentRole, getCurrentAppUser } from '@/lib/auth/roles'
+import { resolveLoginIdentityByEmail } from '@/lib/server/authorization'
 
 // ─── Logout-Ergebnistyp ───────────────────────────────────────────────────────
 export type LogoutResult = {
@@ -27,40 +27,35 @@ export async function login(formData: FormData) {
     redirect('/start?message=E-Mail oder Passwort falsch')
   }
 
-  // Rollenprüfung (admin/developer only)
-  let role: string | null = null;
-
-  try {
-    role = await getCurrentRole()
-  } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    if (errMsg.startsWith("DATABASE_ERROR")) {
-      await supabase.auth.signOut()
-      redirect('/start?message=Systemfehler: Datenbank nicht erreichbar (Rollenprüfung fehlgeschlagen).')
-    } else {
-      throw err;
-    }
-  }
-
-  if (role !== 'admin' && role !== 'developer') {
-    await supabase.auth.signOut()
-    redirect('/start?message=Dieser Login ist Administratoren vorbehalten. Bitte nutzen Sie den PIN-Login.')
-  }
-
-  // AppUser laden für displayName
-  let appUser: Awaited<ReturnType<typeof getCurrentAppUser>> = null;
-  try {
-    appUser = await getCurrentAppUser();
-  } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    console.error("AppUser lookup failed after successful email login:", {
-      message: errMsg,
-    });
+  // Supabase E-Mail-Identität erfolgreich
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user || !user.email) {
     await supabase.auth.signOut()
     redirect('/start?message=Systemfehler: Benutzerprofil nicht abrufbar.')
   }
 
-  const displayName = appUser?.fullName?.trim();
+  // tenantgebundenen app_users-Datensatz laden
+  const identityResult = await resolveLoginIdentityByEmail(user.email, 'galvanik-kreile')
+  if (!identityResult.ok) {
+    await supabase.auth.signOut()
+    if (identityResult.message.includes("deaktiviert")) {
+      redirect('/start?message=AUTH_ERROR: Benutzer deaktiviert')
+    }
+    if (identityResult.message.includes("gefunden")) {
+      redirect('/start?message=AUTH_ERROR: Benutzer nicht gefunden')
+    }
+    redirect('/start?message=Systemfehler: Benutzerprofil nicht abrufbar.')
+  }
+
+  const dbUser = identityResult.data
+
+  // Rolle prüfen (admin/developer only)
+  if (dbUser.role !== 'admin' && dbUser.role !== 'developer') {
+    await supabase.auth.signOut()
+    redirect('/start?message=Dieser Login ist Administratoren vorbehalten. Bitte nutzen Sie den PIN-Login.')
+  }
+
+  const displayName = dbUser.fullName?.trim()
   if (!displayName) {
     await supabase.auth.signOut()
     redirect('/start?message=Kein Anzeigename für diesen Benutzer konfiguriert. Bitte Administrator kontaktieren.')
@@ -69,17 +64,17 @@ export async function login(formData: FormData) {
   // Kanonische App-Session setzen
   const now = Date.now();
   await setAppSession({
-    userId: appUser!.id,
-    tenantId: 'galvanik-kreile',
-    role: role!,
-    displayName: displayName!,
+    userId: dbUser.id,
+    tenantId: dbUser.tenantId,
+    role: dbUser.role,
+    displayName: displayName,
     issuedAt: now,
     expiresAt: now + SESSION_TTL_MS,
   });
 
   revalidatePath('/', 'layout')
 
-  if (role === 'developer') {
+  if (dbUser.role === 'developer') {
     redirect('/settings')
   } else {
     redirect('/')

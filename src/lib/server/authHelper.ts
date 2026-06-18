@@ -1,4 +1,5 @@
 import { readAppSession, type AppSession, type SessionReadResult } from "@/lib/server/appSession";
+import { resolveAuthorization } from "@/lib/server/authorization";
 
 export type ActionResult<T> =
   | { ok: true; data: T }
@@ -34,8 +35,6 @@ const WRITE_ROLES = [
   "quality",
 ];
 
-// Typisierte Fehlermeldungen pro SessionReadResult-Grund.
-// NO_COOKIE ist nicht in SessionVerificationResult – daher vollständige Map über alle Gründe.
 const SESSION_ERROR_MESSAGES: Record<
   Exclude<SessionReadResult, { ok: true }>["reason"],
   string
@@ -48,17 +47,7 @@ const SESSION_ERROR_MESSAGES: Record<
 };
 
 /**
- * Kanonischer Session-Guard.
- *
- * Gibt bei Erfolg die vollständige AppSession zurück.
- * Kein Fallback auf kreile_role-Cookie, getCurrentRole() oder localStorage.
- *
- * Fehlervertrag:
- * - NO_COOKIE          → UNAUTHORIZED "AUTH_ERROR: Nicht angemeldet"
- * - MALFORMED          → UNAUTHORIZED "AUTH_ERROR: Ungültige Sitzung"
- * - INVALID_SIGNATURE  → UNAUTHORIZED "AUTH_ERROR: Ungültige Sitzung"
- * - EXPIRED            → UNAUTHORIZED "AUTH_ERROR: Sitzung abgelaufen"
- * - INVALID_TENANT     → UNAUTHORIZED "AUTH_ERROR: Ungültiger Mandant"
+ * Kanonischer Session-Guard (datenbankfrei und unverändert).
  */
 export async function checkAppSession(): Promise<ActionResult<AppSession>> {
   try {
@@ -84,20 +73,30 @@ export async function checkAppSession(): Promise<ActionResult<AppSession>> {
 }
 
 /**
- * Kompatibler Rollen-Guard.
- *
- * Delegiert die Session-Prüfung an checkAppSession() und gibt bei Erfolg
- * nur die Rolle als string zurück (bestehende Konsumenten-API unverändert).
+ * Kompatibler Rollen-Guard auf Basis von resolveAuthorization().
  */
 export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<ActionResult<string>> {
-  const sessionResult = await checkAppSession();
+  const result = await resolveAuthorization();
 
-  if (!sessionResult.ok) {
-    // Fehlerstatus direkt weitergeben – keine Transformation
-    return sessionResult;
+  if (!result.ok) {
+    const errorMap: Record<string, "UNAUTHORIZED" | "DB_ERROR" | "UNKNOWN"> = {
+      NO_SESSION: "UNAUTHORIZED",
+      INVALID_SESSION: "UNAUTHORIZED",
+      USER_NOT_FOUND: "UNAUTHORIZED",
+      USER_INACTIVE: "UNAUTHORIZED",
+      ROLE_MISMATCH: "UNAUTHORIZED",
+      UNKNOWN_ROLE: "UNAUTHORIZED",
+      AUTHORIZATION_UNAVAILABLE: "DB_ERROR",
+    };
+
+    return {
+      ok: false,
+      error: errorMap[result.reason] || "UNKNOWN",
+      message: result.message,
+    };
   }
 
-  const roleLower = sessionResult.data.role.toLowerCase();
+  const roleLower = result.data.role.toLowerCase();
   const allowedRoles = mode === "write" ? WRITE_ROLES : READ_ROLES;
 
   if (!allowedRoles.includes(roleLower)) {
