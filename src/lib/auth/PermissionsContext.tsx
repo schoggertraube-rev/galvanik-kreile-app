@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { getMyPermissionsAction, getRoleAction } from "@/app/actions/auth.actions";
 import { createClient } from "@/lib/supabase/client";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
@@ -62,7 +62,7 @@ export function PermissionsProvider({
   );
   const [loading, setLoading] = useState(true);
 
-  const refreshPermissions = async () => {
+  const refreshPermissions = useCallback(async () => {
     try {
       const [newRole, permData] = await Promise.all([
         getRoleAction(),
@@ -100,7 +100,7 @@ export function PermissionsProvider({
     } finally {
       setLoading(false);
     }
-  };
+  }, [initialAuthState]);
 
   useEffect(() => {
     let isMounted = true;
@@ -115,7 +115,7 @@ export function PermissionsProvider({
     
     // Listen to Supabase auth state changes
     const supabase = createClient();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, _session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
         refreshPermissions();
       }
@@ -126,7 +126,7 @@ export function PermissionsProvider({
       window.removeEventListener("storage", handleStorage);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [refreshPermissions]);
 
   const hasPermission = (key: string) => {
     return permissions.includes(key);
