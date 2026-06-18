@@ -22,6 +22,7 @@ interface PermissionsContextType {
   hasPermission: (key: string) => boolean;
   refreshPermissions: () => Promise<void>;
   status: "authenticated" | "unauthenticated" | "error";
+  error: string | null;
 }
 
 const PermissionsContext = createContext<PermissionsContextType>({
@@ -33,6 +34,7 @@ const PermissionsContext = createContext<PermissionsContextType>({
   hasPermission: () => false,
   refreshPermissions: async () => {},
   status: "unauthenticated",
+  error: null,
 });
 
 export const usePermissions = () => useContext(PermissionsContext);
@@ -45,14 +47,17 @@ export function PermissionsProvider({
   initialAuthState: AuthBootstrapState;
 }) {
   const [status, setStatus] = useState<"authenticated" | "unauthenticated" | "error">(initialAuthState.status);
+  const [error, setError] = useState<string | null>(
+    initialAuthState.status === "error" ? initialAuthState.message : null
+  );
   const [role, setRole] = useState<string | null>(
     initialAuthState.status === "authenticated" ? initialAuthState.session.role : null
   );
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [name, setName] = useState<string>(
+  const [name] = useState<string>(
     initialAuthState.status === "authenticated" ? initialAuthState.session.displayName : ""
   );
-  const [initials, setInitials] = useState<string>(
+  const [initials] = useState<string>(
     initialAuthState.status === "authenticated" ? deriveInitials(initialAuthState.session.displayName) : ""
   );
   const [loading, setLoading] = useState(true);
@@ -63,19 +68,35 @@ export function PermissionsProvider({
         getRoleAction(),
         getMyPermissionsAction()
       ]);
-      setRole(newRole);
-      setPermissions(permData.permissions);
-      
-      const newName = permData.name;
-      if (newName && newName !== "User" && newName !== "Unknown") {
-        setName(newName);
-        setInitials(deriveInitials(newName));
-        setStatus("authenticated");
-      } else if (!newRole) {
-        setStatus("unauthenticated");
+
+      if (initialAuthState.status === "authenticated") {
+        const sessionRoleNorm = initialAuthState.session.role.trim().toLowerCase();
+        const newRoleNorm = newRole ? newRole.trim().toLowerCase() : "";
+
+        if (sessionRoleNorm === newRoleNorm) {
+          setRole(initialAuthState.session.role);
+          setPermissions(permData.permissions);
+          setStatus("authenticated");
+          setError(null);
+        } else {
+          setStatus("error");
+          setError("AUTH_ERROR: Rollenwiderspruch");
+        }
+      } else {
+        if (newRole) {
+          setRole(newRole);
+          setPermissions(permData.permissions);
+          setStatus("authenticated");
+          setError(null);
+        } else {
+          setStatus("unauthenticated");
+          setError(null);
+        }
       }
     } catch (err) {
       console.error("Failed to load permissions", err);
+      setStatus("error");
+      setError("AUTH_ERROR: Abfrage fehlgeschlagen");
     } finally {
       setLoading(false);
     }
@@ -112,7 +133,7 @@ export function PermissionsProvider({
   };
 
   return (
-    <PermissionsContext.Provider value={{ role, permissions, name, initials, loading, hasPermission, refreshPermissions, status }}>
+    <PermissionsContext.Provider value={{ role, permissions, name, initials, loading, hasPermission, refreshPermissions, status, error }}>
       {children}
     </PermissionsContext.Provider>
   );
