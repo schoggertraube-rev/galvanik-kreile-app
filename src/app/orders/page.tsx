@@ -4,7 +4,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 
 import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -44,6 +44,7 @@ const safe = (value: unknown) => String(value ?? "").toLowerCase();
 function OrdersPageInner() {
   usePageView();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { openShortcut } = useAppShortcut();
   const stationFilter = searchParams.get("station");
   const [searchTerm, setSearchTerm] = useState("");
@@ -72,12 +73,20 @@ function OrdersPageInner() {
     const loadData = async () => {
       try {
         const dbOrdersResult = await getOrdersDb();
+        if (dbOrdersResult && !dbOrdersResult.ok && dbOrdersResult.error === "UNAUTHORIZED") {
+          router.push("/start?reason=session_expired");
+          return;
+        }
         if (isMounted && dbOrdersResult.ok) {
           setOrders(dbOrdersResult.data as any);
       console.log("[ORDERS_CLIENT]", (dbOrdersResult.data as any).map((o:any)=>({id:o.id, number:o.orderNumber, source:o.source})) );
         }
         
         const dbCustomersResult = await getCustomersDb();
+        if (dbCustomersResult && !dbCustomersResult.ok && dbCustomersResult.error === "UNAUTHORIZED") {
+          router.push("/start?reason=session_expired");
+          return;
+        }
         if (isMounted && dbCustomersResult.ok) {
           setCustomersList(dbCustomersResult.data as any);
         }
@@ -100,7 +109,7 @@ function OrdersPageInner() {
       window.removeEventListener('kreile-sync-orders', handleSync);
       window.removeEventListener('kreile-sync-focus', handleSync);
     };
-  }, []);
+  }, [router]);
 
   // Search tracking — fires 800 ms after the user stops typing
   useEffect(() => {

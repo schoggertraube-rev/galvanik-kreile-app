@@ -14,11 +14,14 @@ import { ParkedCallProvider } from "@/contexts/ParkedCallContext";
 import { FloatingParkedCall } from "@/components/telefonnotiz/FloatingParkedCall";
 import { OrderOverlay } from "@/components/orders/OrderOverlay";
 import { CustomerOverlay } from "@/components/customers/CustomerOverlay";
+import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
+import { SessionWarningBanner } from "./SessionWarningBanner";
 
 export function KreileAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isSessionExpired, setIsSessionExpired] = useState(false);
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
@@ -32,6 +35,20 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
       setIsDemoMode(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (pathname !== "/start" && pathname !== "/login") {
+      getAuthorizationSnapshotAction().then(res => {
+        if (!res.ok) {
+          setIsSessionExpired(true);
+        } else {
+          setIsSessionExpired(false);
+        }
+      }).catch(() => {
+        setIsSessionExpired(true);
+      });
+    }
+  }, [pathname]);
 
   const isStartScreen = pathname === "/start" || pathname === "/login";
 
@@ -59,6 +76,8 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
           style={{ height: "100dvh" }}          // dvh für korrekte mobile Viewport-Höhe
         >
           <PwaRegister />
+
+          <SessionWarningBanner show={isSessionExpired} />
 
           {/* Demo/Offline Banner */}
           {isDemoMode && (
