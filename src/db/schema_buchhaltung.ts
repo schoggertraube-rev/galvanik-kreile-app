@@ -112,6 +112,7 @@ export const ausgangsrechnung = pgTable("ausgangsrechnung", {
   agingStatus: text("aging_status"),
   isDemo: boolean("is_demo").default(false),
   erstelltAm: timestamp("erstellt_am").defaultNow().notNull(),
+  tenantId: text("tenant_id").notNull().default("galvanik-kreile"),
 });
 
 export const ausgangsrechnungPosition = pgTable("ausgangsrechnung_position", {
