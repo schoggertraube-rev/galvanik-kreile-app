@@ -6,7 +6,8 @@ export const VALID_ORDER_SOURCES = [
   "capture",
   "integration-test",
   "seed",
-  "demo"
+  "demo",
+  "scan"
 ] as const;
 
 export type OrderSource = typeof VALID_ORDER_SOURCES[number];

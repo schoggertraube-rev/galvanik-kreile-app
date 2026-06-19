@@ -26,6 +26,7 @@ export const appUsers = pgTable("app_users", {
 // 2. Customers
 export const customers = pgTable("customers", {
   id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   customerNumber: varchar("customer_number", { length: 50 }),
   name: text("name").notNull(),
   type: varchar("type", { length: 50 }).notNull(), // business, privat, institution
