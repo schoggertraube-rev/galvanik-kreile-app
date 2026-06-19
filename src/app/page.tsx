@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useAppShortcut, ShortcutType } from "@/components/ui/AppShortcutContext";
 import { useSync } from "@/lib/offline/SyncContext";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 /* ── Home-specific CSS variables ──────────────────────────── */
 const homeStyles = `
@@ -228,6 +229,8 @@ export default function HomeDashboard() {
     }
   };
 
+  const { name } = usePermissions();
+
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: homeStyles }} />
@@ -239,7 +242,7 @@ export default function HomeDashboard() {
           style={{ animation: 'hm-floatIn .5s ease both' }}
         >
           <h1 className="font-serif text-[31px] font-bold tracking-tight">
-            {greeting}, Aktueller Nutzer.{' '}
+            {greeting}, {name || 'Nutzer'}.{' '}
             <span className="font-sans text-[15px] font-medium text-text-muted tracking-normal block md:inline mt-1 md:mt-0">
               Dein Tag im Überblick — Gehirn aus, Checkliste an.
             </span>

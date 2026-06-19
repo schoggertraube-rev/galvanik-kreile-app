@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
 
 interface RightNavItemProps {
   label: string;
@@ -28,7 +27,7 @@ export function RightNavItem({
     <Link
       href={href}
       className={cn(
-        "group relative flex items-center transition-all duration-300 rounded-xl cursor-pointer shadow-sm hover:shadow-md",
+        "group relative flex items-center transition-all duration-300 motion-reduce:transition-none rounded-xl cursor-pointer shadow-sm hover:shadow-md",
         isExpanded ? "w-full justify-start px-3" : "justify-center",
         // Heights:
         "h-[56px]",
@@ -61,19 +60,18 @@ export function RightNavItem({
       )}
 
       <div className="relative h-12 w-12 shrink-0">
-        <div className={cn("absolute inset-1 flex items-center justify-center transition-transform", isActive && "scale-110")}>
+        <div className={cn("absolute inset-1 flex items-center justify-center transition-transform motion-reduce:transition-none", isActive && "scale-110")}>
           {icon}
         </div>
       </div>
 
       {isExpanded && (
-        <motion.span 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="text-[14px] font-bold ml-3 leading-tight whitespace-nowrap overflow-hidden"
+        <span
+          className="text-[14px] font-bold ml-3 leading-tight whitespace-nowrap overflow-hidden transition-opacity duration-150 motion-reduce:transition-none"
+          style={{ opacity: isExpanded ? 1 : 0 }}
         >
           {label}
-        </motion.span>
+        </span>
       )}
       
       {/* Fallback for active item text if not expanded but is active and should show text?

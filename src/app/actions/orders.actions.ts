@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { orders, items, customers, events } from "@/db/schema";
-import { eq, like, desc, and, sql } from "drizzle-orm";
+import { eq, like, desc, and, sql, notInArray, notIlike } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { unstable_noStore as noStore } from "next/cache";
@@ -22,6 +22,34 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
   } catch (error: any) {
     console.error("[DB_ERROR_DETAIL]", error);
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Laden der Aufträge", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
+  }
+}
+
+/** Leichtgewichtige Variante nur für Header-Badge — führt nur COUNT(*) aus. */
+export async function getOrderCountDb(): Promise<ActionResult<{ count: number }>> {
+  noStore();
+  const auth = await checkAppAuth();
+  if (!auth.ok) return auth;
+
+  try {
+    const result = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.tenantId, "galvanik-kreile"),
+          notInArray(
+            sql`coalesce(${orders.source}, 'manual')`,
+            ["seed", "test", "demo", "integration-test"]
+          ),
+          notIlike(sql`coalesce(${orders.orderNumber}, '')`, "A-SEED-%"),
+          notIlike(sql`coalesce(${orders.orderNumber}, '')`, "%TEST%")
+        )
+      );
+    return { ok: true, data: { count: result[0]?.count ?? 0 } };
+  } catch (error: any) {
+    console.error("[ORDER_COUNT_ERROR]", error?.message, error?.details);
+    return { ok: false, error: "DB_ERROR", message: "Fehler beim Zählen der Aufträge", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
   }
 }
 

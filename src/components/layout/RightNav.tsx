@@ -1,13 +1,13 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { RightNavItem } from "./RightNavItem";
-import { Home, PackageCheck, Archive, Users, Settings, BarChart3, Menu } from "lucide-react";
+import { Home, PackageCheck, Archive, Users, Settings, BarChart3 } from "lucide-react";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import Link from "next/link";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
-import { motion, AnimatePresence } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 function SubMenuLink({ label, href, isAvailable, expanded }: { label: string, href: string, isAvailable: boolean, expanded: boolean }) {
   const pathname = usePathname();
@@ -44,19 +44,16 @@ export function RightNav() {
   const isActive = (path: string) =>
     path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
 
-  // Dynamically set CSS variable for content area
-  useEffect(() => {
-    document.documentElement.style.setProperty('--rail-width', isHovered ? '200px' : '72px');
-  }, [isHovered]);
+  const showKundenSub = isHovered && (expandedGroup === "kunden" || isActive("/orders") || isActive("/customers") || isActive("/quotes"));
 
   return (
-    <motion.aside
-      initial={false}
-      animate={{ width: isHovered ? 200 : 72 }}
-      transition={{ type: "spring", stiffness: 400, damping: 25 }}
+    <aside
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
-      className="bg-transparent flex flex-col items-center py-4 gap-2 h-full overflow-y-auto overflow-x-hidden scrollbar-hide relative"
+      style={{
+        width: isHovered ? 200 : 72,
+      }}
+      className="absolute left-0 top-0 h-full bg-bg-app border-r border-[#d8d0c4] flex flex-col items-center py-4 gap-2 overflow-y-auto overflow-x-hidden scrollbar-hide z-40 transition-[width] duration-200 ease-in-out motion-reduce:transition-none shadow-md"
     >
       <div className="flex flex-col items-center w-full px-2 mt-2">
         <RightNavItem label="Home" href="/" icon={<Home className="w-5 h-5" strokeWidth={2} />} isActive={isActive("/")} isExpanded={isHovered} onClick={() => trackUiEvent("nav_click", { target: "/" })} />
@@ -74,13 +71,17 @@ export function RightNav() {
 
       <div className="flex flex-col items-center w-full px-2 mt-2">
         <RightNavItem label="Kunden/Aufträge" href="/orders" icon={<Users className="w-5 h-5" strokeWidth={2} />} isActive={isActive("/orders") || isActive("/customers") || isActive("/quotes")} isExpanded={isHovered} onClick={() => setExpandedGroup(expandedGroup === "kunden" ? null : "kunden")} />
-        {isHovered && (expandedGroup === "kunden" || isActive("/orders") || isActive("/customers") || isActive("/quotes")) && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="flex flex-col w-full mt-1 space-y-1">
-            <SubMenuLink label="Kunden" href="/customers" isAvailable={true} expanded={isHovered} />
-            <SubMenuLink label="Aufträge" href="/orders" isAvailable={true} expanded={isHovered} />
-            <SubMenuLink label="Anfragen" href="/quotes" isAvailable={true} expanded={isHovered} />
-          </motion.div>
-        )}
+        {/* Sub-menu without height animation */}
+        <div
+          className={cn(
+            "flex flex-col w-full mt-1 space-y-1 transition-opacity duration-150 motion-reduce:transition-none",
+            showKundenSub ? "opacity-100 visible h-auto" : "opacity-0 invisible h-0 overflow-hidden"
+          )}
+        >
+          <SubMenuLink label="Kunden" href="/customers" isAvailable={true} expanded={isHovered} />
+          <SubMenuLink label="Aufträge" href="/orders" isAvailable={true} expanded={isHovered} />
+          <SubMenuLink label="Anfragen" href="/quotes" isAvailable={true} expanded={isHovered} />
+        </div>
       </div>
 
       <div className="flex flex-col items-center w-full px-2 mt-2">
@@ -100,7 +101,6 @@ export function RightNav() {
           <RightNavItem label="Verwaltung" href="/settings" icon={<Settings className="w-5 h-5" strokeWidth={2} />} isActive={isActive("/settings") || isActive("/admin/") || isActive("/kvp")} isExpanded={isHovered} onClick={() => trackUiEvent("nav_click", { target: "/settings" })} />
         </div>
       )}
-
-    </motion.aside>
+    </aside>
   );
 }

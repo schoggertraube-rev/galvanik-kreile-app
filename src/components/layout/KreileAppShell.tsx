@@ -5,7 +5,6 @@ import { KreileHeader } from "./KreileHeader";
 import { RightNav } from "./RightNav";
 import { MobileNav } from "./MobileNav";
 import { MobileBottomNav } from "./MobileBottomNav";
-import { TabletTopFlowNav } from "./TabletTopFlowNav";
 import { PwaRegister } from "./PwaRegister";
 import { useEffect, useState } from "react";
 import { getSystemStats } from "@/app/actions/systemStats";
@@ -29,6 +28,7 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
         }
       }).catch(() => setIsDemoMode(true));
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsDemoMode(false);
     }
   }, []);
@@ -78,7 +78,7 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
           <div className="flex flex-1 min-h-0">   {/* min-h-0 verhindert Flex-Overflow */}
 
             {/* Linke Navigation (Desktop Sidebar, sichtbar ab lg) */}
-            <div className="hidden lg:flex shrink-0">
+            <div className="hidden lg:flex shrink-0 w-[72px] relative z-30">
               {/* Desktop (≥1024px): RightNav permanent sichtbar */}
               <RightNav />
             </div>

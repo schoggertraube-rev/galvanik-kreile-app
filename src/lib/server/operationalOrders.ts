@@ -1,10 +1,27 @@
-import { unstable_noStore as noStore } from "next/cache";
 import { db } from "@/db";
 import { orders, customers, items } from "@/db/schema";
-import { eq, desc, and, notInArray, notIlike, sql } from "drizzle-orm";
+import { eq, desc, and, notInArray, notIlike, sql, inArray } from "drizzle-orm";
+
+// Short-lived in-memory cache (5 seconds) — prevents parallel duplicate DB calls
+// during a single page render without blocking real-time updates.
+let _ordersCache: { data: Awaited<ReturnType<typeof _fetchAndMap>>; ts: number } | null = null;
+const CACHE_TTL_MS = 5_000;
+
+export function invalidateOperationalOrdersCache() {
+  _ordersCache = null;
+}
 
 export async function getOperationalOrders() {
-  noStore();
+  const now = Date.now();
+  if (_ordersCache && now - _ordersCache.ts < CACHE_TTL_MS) {
+    return _ordersCache.data;
+  }
+  const data = await _fetchAndMap();
+  _ordersCache = { data, ts: now };
+  return data;
+}
+
+async function _fetchAndMap() {
   if (!db) throw new Error("Database not available");
 
   const results = await db
@@ -36,13 +53,15 @@ export async function getOperationalOrders() {
       )
     )
     .orderBy(desc(orders.createdAt));
-  console.log("[ORDERS_SERVER]", results.map(o => ({ id: o.id, number: o.orderNumber, source: (o as any).source })) );
 
-  // Get parts separately
-  const allParts = await db
-    .select()
-    .from(items)
-    .where(eq(items.tenantId, "galvanik-kreile"));
+  // Only load items for the fetched orders (avoids full-table scan)
+  const orderIds = results.map((o) => o.id);
+  const allParts = orderIds.length > 0
+    ? await db
+        .select()
+        .from(items)
+        .where(and(eq(items.tenantId, "galvanik-kreile"), inArray(items.orderId, orderIds)))
+    : [];
 
   return results.map((o) => {
     const orderParts = allParts.filter((p) => p.orderId === o.id);

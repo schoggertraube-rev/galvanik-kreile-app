@@ -6,7 +6,7 @@ import { Search, Camera, Bell, Calendar, Menu, Plus } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { useState, useEffect, useRef } from "react";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
+import { getOrderCountDb } from "@/app/actions/orders.actions";
 import { logout } from "@/app/actions/auth";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
@@ -83,8 +83,8 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   useEffect(() => {
     const updateState = async () => {
       setIsOffline(OfflineManager.isOffline());
-      const orders = await ordersRepository.getAll();
-      setOrderCount(orders?.length ?? 0);
+      const countResult = await getOrderCountDb();
+      setOrderCount(countResult.ok ? countResult.data.count : 0);
       try {
         const settings = await getCompanySettings();
         if (settings.logoUrl) setLogoUrl(settings.logoUrl);
@@ -99,8 +99,10 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     return () => events.forEach(e => window.removeEventListener(e, updateState));
   }, []);
 
+  const isAnyDropdownOpen = userDropdownOpen || notificationsOpen;
+
   return (
-    <header className="h-[72px] shrink-0 bg-transparent flex items-center px-4 md:px-6 gap-4 z-[100] relative">
+    <header className={`h-[72px] shrink-0 bg-transparent flex items-center px-4 md:px-6 gap-4 relative transition-all duration-300 ${isAnyDropdownOpen ? "z-[200]" : "z-[100]"}`}>
       {/* Hamburger Menu Mobile & Tablet (< 1024px) */}
       <button
         className="flex lg:hidden p-3 -ml-2 text-navy-900 hover:bg-neutral-gray-100 rounded-full min-w-[48px] min-h-[48px] items-center justify-center shrink-0"
