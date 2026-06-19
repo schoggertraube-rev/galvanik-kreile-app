@@ -3,10 +3,12 @@
 import React, { Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Package, FlaskConical, Truck, ArrowRight } from 'lucide-react';
+import { Package, FlaskConical, Truck, ArrowRight, Eraser, Layers } from 'lucide-react';
 
 const STATIONS = [
-  { name: 'Wareneingang', path: '/warendurchlauf/neu', icon: Package },
+  { name: 'Wareneingang', path: '/station/wareneingang', icon: Package },
+  { name: 'Entmetall.', path: '/station/entmetallisierung', icon: Eraser },
+  { name: 'Schleiferei', path: '/station/schleiferei', icon: Layers },
   { name: 'Galvanik', path: '/station/beschichtung', icon: FlaskConical },
   { name: 'Warenausgang', path: '/station/warenausgang', icon: Truck },
 ];

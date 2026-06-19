@@ -26,6 +26,7 @@ export function RightNavItem({
   return (
     <Link
       href={href}
+      aria-label={label}
       className={cn(
         "group relative flex items-center transition-all duration-300 motion-reduce:transition-none rounded-xl cursor-pointer shadow-sm hover:shadow-md",
         isExpanded ? "w-full justify-start px-3" : "justify-center",
