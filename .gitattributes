@@ -1,0 +1,28 @@
+# Normalize line endings to LF in the repository
+* text=auto eol=lf
+
+# Force LF for specific text file types
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.css text eol=lf
+*.sql text eol=lf
+*.toml text eol=lf
+*.html text eol=lf
+*.svg text eol=lf
+
+# Binary files — no conversion
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.zip binary
+*.pdf binary
