@@ -39,6 +39,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
     await db.insert(appUsers).values([
       {
         id: "123e4567-e89b-12d3-a456-426614174000",
+        tenantId: "galvanik-kreile",
         email: "schoggertraube@gmail.com",
         fullName: "Master Admin",
         role: "developer",
@@ -46,6 +47,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
       },
       {
         id: "223e4567-e89b-12d3-a456-426614174001",
+        tenantId: "galvanik-kreile",
         email: "admin@kreile.de",
         fullName: "Max Kreile",
         role: "admin",
@@ -54,6 +56,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
       },
       {
         id: "323e4567-e89b-12d3-a456-426614174002",
+        tenantId: "galvanik-kreile",
         email: "werkstatt@kreile.de",
         fullName: "Christian Dieter",
         role: "werkstatt",
@@ -62,6 +65,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
       },
       {
         id: "423e4567-e89b-12d3-a456-426614174003",
+        tenantId: "galvanik-kreile",
         email: "buero@kreile.de",
         fullName: "Reiner Schmitt",
         role: "buero",
@@ -124,6 +128,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
         recommendedAction: o.recommendedAction,
         intakeDate,
         dueDate,
+        source: 'seed',
       });
     }
 

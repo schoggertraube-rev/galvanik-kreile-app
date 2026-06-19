@@ -4,6 +4,7 @@ import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, useRef } from "react";
 import { getOrdersDb } from "@/app/actions/orders.actions";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository"; // Will keep this if no actions exist
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Order = any;
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
@@ -12,16 +13,22 @@ import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 import {
   UserPlus, FilePlus, Camera, AlertTriangle,
-  CheckCircle, Circle, Clock, AlertOctagon, Send, Activity, Info, Phone, RefreshCw, Sparkles, BarChart3
+  CheckCircle, Activity, Info, Phone, RefreshCw, Sparkles, BarChart3
 } from "lucide-react";
 import { useAppShortcut, ShortcutType } from "@/components/ui/AppShortcutContext";
 import { useSync } from "@/lib/offline/SyncContext";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 /* ── Home-specific CSS variables ──────────────────────────── */
 const homeStyles = `
-  @keyframes hm-gradShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
   @keyframes hm-floatIn { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes hm-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(46,158,107,.5); } 50% { box-shadow: 0 0 0 5px rgba(46,158,107,0); } }
+  @keyframes crit-pulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); }
+    50% { transform: scale(1.05); box-shadow: 0 0 0 6px rgba(220, 38, 38, 0); }
+  }
+  .crit-pulse-active {
+    animation: crit-pulse 2s ease-in-out 3;
+  }
   @media (prefers-reduced-motion: reduce) { .hm-animate { animation: none !important; transition: none !important; } }
 `;
 
@@ -60,12 +67,6 @@ function useAnimatedCount(target: number, running: boolean) {
   return val;
 }
 
-// Quick card data with gradients matching HTML reference
-
-// QUICK_CARDS will be dynamic inside the component now
-const QUICK_CARDS_TEMPLATE = [];
-
-
 const IconComponents: Record<string, React.ComponentType<{ className?: string }>> = {
   phone: Phone, userplus: UserPlus, fileplus: FilePlus, camera: Camera, alert: AlertTriangle, sparkles: Sparkles,
 };
@@ -94,7 +95,10 @@ export default function HomeDashboard() {
   const [feedback, setFeedback] = useState("");
   const [feedbackSent, setFeedbackSent] = useState(false);
 
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -199,16 +203,14 @@ export default function HomeDashboard() {
   const doneTodos = todos.filter(t => t.done);
 
   // Animated counts
-  const totalCount = useAnimatedCount(orders.length > 0 ? orders.length : 84, mounted);
-  const critCount = useAnimatedCount(orders.filter(o => o.risk === 'red').length || 3, mounted);
+  const totalCount = useAnimatedCount(orders.length, mounted);
+  const critCount = useAnimatedCount(orders.filter(o => o.risk === 'red').length, mounted);
 
   // Get day info
   const now = new Date();
-  const dayNames = ['So.', 'Mo.', 'Di.', 'Mi.', 'Do.', 'Fr.', 'Sa.'];
-  const dayStr = `${dayNames[now.getDay()]}, ${now.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })}.`;
   const greeting = now.getHours() < 12 ? 'Guten Morgen' : now.getHours() < 17 ? 'Guten Tag' : 'Guten Abend';
 
-  const handleQuickClick = (card: any) => {
+  const handleQuickClick = (card: Record<string, unknown>) => {
     if (card.id === 'kritisch') {
       setShowCriticalOrders(true);
       return;
@@ -224,9 +226,11 @@ export default function HomeDashboard() {
     if (card.shortcut) {
       openShortcut(card.shortcut as ShortcutType);
     } else if (card.href) {
-      router.push(card.href);
+      router.push(card.href as string);
     }
   };
+
+  const { name } = usePermissions();
 
   return (
     <>
@@ -239,7 +243,7 @@ export default function HomeDashboard() {
           style={{ animation: 'hm-floatIn .5s ease both' }}
         >
           <h1 className="font-serif text-[31px] font-bold tracking-tight">
-            {greeting}, Aktueller Nutzer.{' '}
+            {greeting}, {name || 'Nutzer'}.{' '}
             <span className="font-sans text-[15px] font-medium text-text-muted tracking-normal block md:inline mt-1 md:mt-0">
               Dein Tag im Überblick — Gehirn aus, Checkliste an.
             </span>
@@ -392,64 +396,70 @@ export default function HomeDashboard() {
 
             {/* Tasks */}
             <div className="space-y-0">
-              {[...activeTodos, ...doneTodos].map(todo => (
-                <div
-                  key={todo.id}
-                  onClick={() => handleTaskClick(todo)}
-                  className={`flex items-start gap-3 py-3.5 cursor-pointer border-b last:border-b-0 ${
-                    todo.done ? 'opacity-60' : ''
-                  }`}
-                  style={{ borderColor: 'var(--neutral-gray-100)' }}
-                >
-                  <button
-                    className="mt-0.5 shrink-0 cursor-pointer"
-                    onClick={e => { e.stopPropagation(); toggleTodo(todo.id); }}
-                  >
-                    {todo.done ? (
-                      <div className="w-5 h-5 rounded-full bg-success-green flex items-center justify-center">
-                        <svg viewBox="0 0 24 24" className="w-3 h-3"><path d="M5 12l5 5 9-11" stroke="#fff" strokeWidth="3" fill="none" /></svg>
-                      </div>
-                    ) : (
-                      <div
-                        className="w-5 h-5 rounded-full border-2 hover:border-success-green transition-colors"
-                        style={{ borderColor: 'var(--neutral-gray-300)' }}
-                      />
-                    )}
-                  </button>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start gap-2">
-                      <h3 className={`text-[14.5px] font-bold ${todo.done ? 'line-through text-text-muted' : ''}`}>{todo.title}</h3>
-                      <div className="flex gap-2 shrink-0">
-                        {!todo.done && todo.urgency === "Hoch" && (
-                          <span className="text-[9.5px] font-extrabold tracking-wider text-error-red uppercase">HOCH</span>
-                        )}
-                        <span
-                          className="text-[9px] font-bold uppercase tracking-wider text-white px-2 py-0.5 rounded-full"
-                          style={{ background: todo.source === 'live' ? 'var(--navy-900)' : 'var(--accent-orange)' }}
-                        >
-                          {todo.source === 'live' ? 'LIVE' : 'DEMO'}
-                        </span>
-                      </div>
-                    </div>
-                    <p className="text-[12px] text-text-muted mt-0.5">{todo.reason}</p>
-                    {!todo.done && (
-                      <div className="flex items-center gap-3 mt-2 flex-wrap">
-                        <span className="text-[11px] font-bold bg-bg-app-soft px-2 py-0.5 rounded-md">{todo.area}</span>
-                        <span className="text-[11.5px] text-accent-orange font-bold flex items-center gap-1">
-                          <Activity className="w-3 h-3" /> Nächste Aktion: {todo.action}
-                        </span>
-                        <button
-                          className="text-[12px] font-bold text-brand ml-auto hover:underline"
-                          onClick={e => { e.stopPropagation(); handleTaskClick(todo); }}
-                          style={{ color: 'var(--brand, #C2185B)' }}
-                        >
-                          Öffnen
-                        </button>
-                      </div>
-                    )}
-                  </div>
+              {activeTodos.length === 0 && doneTodos.length === 0 ? (
+                <div className="p-12 text-center text-text-muted space-y-2">
+                  <p className="font-bold text-navy-900">Noch keine Aufträge erfasst</p>
                 </div>
-              ))}
+              ) : (
+                [...activeTodos, ...doneTodos].map(todo => (
+                  <div
+                    key={todo.id}
+                    onClick={() => handleTaskClick(todo)}
+                    className={`flex items-start gap-3 py-3.5 cursor-pointer border-b last:border-b-0 ${
+                      todo.done ? 'opacity-60' : ''
+                    }`}
+                    style={{ borderColor: 'var(--neutral-gray-100)' }}
+                  >
+                    <button
+                      className="mt-0.5 shrink-0 cursor-pointer"
+                      onClick={e => { e.stopPropagation(); toggleTodo(todo.id); }}
+                    >
+                      {todo.done ? (
+                        <div className="w-5 h-5 rounded-full bg-success-green flex items-center justify-center">
+                          <svg viewBox="0 0 24 24" className="w-3 h-3"><path d="M5 12l5 5 9-11" stroke="#fff" strokeWidth="3" fill="none" /></svg>
+                        </div>
+                      ) : (
+                        <div
+                          className="w-5 h-5 rounded-full border-2 hover:border-success-green transition-colors"
+                          style={{ borderColor: 'var(--neutral-gray-300)' }}
+                        />
+                      )}
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-start gap-2">
+                        <h3 className={`text-[14.5px] font-bold ${todo.done ? 'line-through text-text-muted' : ''}`}>{todo.title}</h3>
+                        <div className="flex gap-2 shrink-0">
+                          {!todo.done && todo.urgency === "Hoch" && (
+                            <span className="text-[9.5px] font-extrabold tracking-wider text-error-red uppercase">HOCH</span>
+                          )}
+                          <span
+                            className="text-[9px] font-bold uppercase tracking-wider text-white px-2 py-0.5 rounded-full"
+                            style={{ background: todo.source === 'live' ? 'var(--navy-900)' : 'var(--accent-orange)' }}
+                          >
+                            {todo.source === 'live' ? 'LIVE' : 'DEMO'}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-[12px] text-text-muted mt-0.5">{todo.reason}</p>
+                      {!todo.done && (
+                        <div className="flex items-center gap-3 mt-2 flex-wrap">
+                          <span className="text-[11px] font-bold bg-bg-app-soft px-2 py-0.5 rounded-md">{todo.area}</span>
+                          <span className="text-[11.5px] text-accent-orange font-bold flex items-center gap-1">
+                            <Activity className="w-3 h-3" /> Nächste Aktion: {todo.action}
+                          </span>
+                          <button
+                            className="text-[12px] font-bold text-brand ml-auto hover:underline"
+                            onClick={e => { e.stopPropagation(); handleTaskClick(todo); }}
+                            style={{ color: 'var(--brand, #C2185B)' }}
+                          >
+                            Öffnen
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </section>
 
@@ -478,15 +488,15 @@ export default function HomeDashboard() {
               <div className="space-y-1.5 border-t pt-2" style={{ borderColor: 'var(--neutral-gray-100)' }}>
                 <div className="flex justify-between text-[13px]">
                   <span className="text-text-muted">In Galvanik</span>
-                  <b>{orders.filter(o => o.station === 'beschichtung').length || 22}</b>
+                  <b>{orders.filter(o => o.station === 'beschichtung').length}</b>
                 </div>
                 <div className="flex justify-between text-[13px]">
                   <span className="text-text-muted">Warenausgang</span>
-                  <b>{orders.filter(o => o.station === 'warenausgang').length || 14}</b>
+                  <b>{orders.filter(o => o.station === 'warenausgang').length}</b>
                 </div>
                 <div className="flex justify-between text-[13px]">
                   <span className="text-text-muted">Warten auf Freigabe</span>
-                  <b>5</b>
+                  <b>{orders.filter(o => o.risk === 'blocked').length}</b>
                 </div>
               </div>
               <div className="mt-3">
@@ -497,100 +507,6 @@ export default function HomeDashboard() {
                   <div className="h-full" style={{ width: '14%', background: 'var(--neutral-gray-300)' }} />
                 </div>
               </div>
-            </div>
-
-            {/* Stressphasen */}
-            <div
-              className="bg-white border border-neutral-gray-200 rounded-[22px] p-5"
-              style={{ boxShadow: '0 1px 2px rgba(40,33,22,.04), 0 8px 24px rgba(40,33,22,.06)' }}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-serif text-[17px] font-bold">Stressphasen</h3>
-                <span className="text-[9.5px] font-bold uppercase tracking-wider text-text-muted bg-bg-app-soft px-2 py-1 rounded-full">Demo</span>
-              </div>
-              <p className="text-[12px] text-text-muted mb-3 leading-relaxed">Wann häufen sich heute typischerweise Ereignisse?</p>
-
-              <div className="space-y-0">
-                <div className="flex items-center gap-3 py-2.5">
-                  <div
-                    className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center shrink-0"
-                    style={{ background: 'var(--bg-app-soft)' }}
-                  >
-                    <Clock className="w-[15px] h-[15px] text-text-muted" />
-                  </div>
-                  <span className="text-[13px] font-bold flex-1">08:00 – 10:00</span>
-                  <span
-                    className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full"
-                    style={{ color: 'var(--accent-orange)', background: 'var(--accent-orange-soft)' }}
-                  >
-                    Hoher Auftragseingang
-                  </span>
-                </div>
-                <div
-                  className="flex items-center gap-3 py-2.5 border-t"
-                  style={{ borderColor: 'var(--neutral-gray-100)' }}
-                >
-                  <div
-                    className="w-[30px] h-[30px] rounded-[9px] flex items-center justify-center shrink-0"
-                    style={{ background: 'var(--bg-app-soft)' }}
-                  >
-                    <Clock className="w-[15px] h-[15px] text-text-muted" />
-                  </div>
-                  <span className="text-[13px] font-bold flex-1">14:00 – 16:00</span>
-                  <span
-                    className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full"
-                    style={{ color: '#0E8C8C', background: '#E1F1F1' }}
-                  >
-                    Versand / Abholungen
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* ── URLAUB / KALENDER-HINWEIS ──────────────── */}
-            <div
-              className="bg-white border border-neutral-gray-200 rounded-[22px] p-5"
-              style={{ boxShadow: '0 1px 2px rgba(40,33,22,.04), 0 8px 24px rgba(40,33,22,.06)' }}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-serif text-[17px] font-bold">Demnächst Urlaub</h3>
-                <span className="text-[9.5px] font-bold uppercase tracking-wider text-text-muted bg-bg-app-soft px-2 py-1 rounded-full">Kalender</span>
-              </div>
-              <ul className="space-y-0 mb-3">
-                <li
-                  className="flex items-center justify-between py-2.5 border-b"
-                  style={{ borderColor: 'var(--neutral-gray-100)' }}
-                >
-                  <div>
-                    <p className="text-[13px] font-bold">M. Müller (Admin)</p>
-                    <p className="text-[11px] text-text-muted">12.08. - 26.08. (KW 33-34)</p>
-                  </div>
-                  <span
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                    style={{ color: 'var(--accent-orange)', background: 'var(--accent-orange-soft)' }}
-                  >
-                    In 2 Wochen
-                  </span>
-                </li>
-                <li className="flex items-center justify-between py-2.5">
-                  <div>
-                    <p className="text-[13px] font-bold">S. Schmidt (Büro)</p>
-                    <p className="text-[11px] text-text-muted">05.09. - 12.09. (KW 36)</p>
-                  </div>
-                  <span
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                    style={{ color: 'var(--text-muted)', background: 'var(--bg-app-soft)' }}
-                  >
-                    In 5 Wochen
-                  </span>
-                </li>
-              </ul>
-              <button
-                onClick={() => setActiveOverlay({title: "Kalender-Integration", desc: "Geplant: Google Kalender Kompatibilität. Import/Export von Terminen & Urlauben wird später nachgereicht.", targetLink: ""})}
-                className="w-full bg-bg-app-soft text-navy-900 font-bold text-[12px] py-2 rounded-xl hover:bg-neutral-gray-200 transition-colors flex items-center justify-center gap-2"
-              >
-                <Clock className="w-[14px] h-[14px]" /> Kalenderverwaltung öffnen
-              </button>
             </div>
 
           </aside>
@@ -659,14 +575,14 @@ export default function HomeDashboard() {
               </div>
             ) : (
               orders.filter(o => o.risk === 'red' || o.risk === 'orange' || o.risk === 'yellow').map(o => (
-                <div key={o.id} className={`p-4 rounded-xl border flex items-start gap-4 transition-all hover:bg-neutral-gray-50 ${o.risk === 'red' ? 'bg-red-50/50 border-red-200' : 'bg-gold-50/50 border-gold-200'}`}>
+                <div key={o.id} className={`p-4 rounded-xl border flex items-start gap-4 transition-all hover:bg-neutral-gray-50 ${o.risk === 'red' ? 'bg-red-50/50 border-red-200 crit-pulse-active' : 'bg-gold-50/50 border-gold-200'}`}>
                   <div className={`p-2 rounded-lg shrink-0 mt-1 ${o.risk === 'red' ? 'bg-red-100 text-red-600' : 'bg-gold-200 text-gold-700'}`}>
                     <AlertTriangle className="w-5 h-5" />
                   </div>
                   <div className="flex-1">
                     <div className="flex justify-between items-start">
                       <button onClick={() => { openOrder(o.id); setShowCriticalOrders(false); }} className="font-bold text-navy-900 text-base hover:underline text-left">
-                        {(o as any).title || o.task || "Unbekannter Auftrag"}
+                        {(o as Record<string, unknown>).title || o.task || "Unbekannter Auftrag"}
                       </button>
                       <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${o.risk === 'red' ? 'bg-red-100 text-red-700' : 'bg-gold-200 text-gold-800'}`}>
                         {o.risk === 'red' ? 'Kritisch' : 'Warnung'}

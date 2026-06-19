@@ -6,7 +6,7 @@ import { Search, Camera, Bell, Calendar, Menu, Plus } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { useState, useEffect, useRef } from "react";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
+import { getOrderCountDb } from "@/app/actions/orders.actions";
 import { logout } from "@/app/actions/auth";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
@@ -16,12 +16,14 @@ import { useTestpilot } from "@/components/testpilot/TestpilotProvider";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
+import { useRouter } from "next/navigation";
 
 interface KreileHeaderProps {
   onMenuToggle: () => void;
 }
 
 export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
+  const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
   const [orderCount, setOrderCount] = useState(0);
@@ -29,7 +31,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
 
-  const { initials } = usePermissions();
+  const { initials, status, name } = usePermissions();
   const { status: realtimeStatus } = useRealtimeStatus();
   const { isRecording } = useTestpilot();
   const { isOnline, outboxItems, syncNow } = useSync();
@@ -37,17 +39,8 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
   // User Dropdown State
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
-  const [storedInitials, setStoredInitials] = useState<string>("?");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  useEffect(() => {
-    // Defer the local storage read to avoid hydration mismatch and synchronous setState warnings
-    const timer = setTimeout(() => {
-      setStoredInitials(localStorage.getItem("kreile_user_initials") ?? "?");
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const userInitials = initials && initials !== "?" ? initials : storedInitials;
   const userDropdownRef = useRef<HTMLDivElement>(null);
 
   // Click outside to close user dropdown
@@ -66,11 +59,18 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   }, [userDropdownOpen, notificationsOpen]);
 
   const handleLogout = async () => {
+    if (isLoggingOut) return; // Doppel-Aufruf verhindern
+    setIsLoggingOut(true);
+    setUserDropdownOpen(false);
+    // Entferne nicht-autoritative UI-Cachewerte (localStorage)
     localStorage.removeItem("kreile_user_role");
     localStorage.removeItem("kreile_user_initials");
+    // Dev-Bypass-Cookie löschen: StartScreenClient.tsx schreibt ihn,
+    // proxy.ts und roles.ts lesen ihn – konsistente Bereinigung erforderlich.
+    // Sicherheitsauftrag: vollständige Migration auf kreile_app_session ist geplant.
     document.cookie = "bypass-auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    setUserDropdownOpen(false);
-    await logout(); // Calls server action to destroy supabase session
+    await logout();
+    router.replace("/start");
   };
 
   const today = new Date();
@@ -83,8 +83,8 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   useEffect(() => {
     const updateState = async () => {
       setIsOffline(OfflineManager.isOffline());
-      const orders = await ordersRepository.getAll();
-      setOrderCount(orders?.length ?? 0);
+      const countResult = await getOrderCountDb();
+      setOrderCount(countResult.ok ? countResult.data.count : 0);
       try {
         const settings = await getCompanySettings();
         if (settings.logoUrl) setLogoUrl(settings.logoUrl);
@@ -99,8 +99,10 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     return () => events.forEach(e => window.removeEventListener(e, updateState));
   }, []);
 
+  const isAnyDropdownOpen = userDropdownOpen || notificationsOpen;
+
   return (
-    <header className="h-[72px] shrink-0 bg-transparent flex items-center px-4 md:px-6 gap-4 z-[100] relative">
+    <header className={`h-[72px] shrink-0 bg-transparent flex items-center px-4 md:px-6 gap-4 relative transition-all duration-300 ${isAnyDropdownOpen ? "z-[200]" : "z-[100]"}`}>
       {/* Hamburger Menu Mobile & Tablet (< 1024px) */}
       <button
         className="flex lg:hidden p-3 -ml-2 text-navy-900 hover:bg-neutral-gray-100 rounded-full min-w-[48px] min-h-[48px] items-center justify-center shrink-0"
@@ -278,20 +280,21 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         </div>
 
         {/* Profilbild rund (Kreis 48px) */}
-        <div className="relative" ref={userDropdownRef}>
-          <button
-            onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-            className="w-10 h-10 rounded-full bg-navy-700/90 backdrop-blur-sm border border-navy-500 hover:bg-navy-900 transition-all duration-300 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-sm cursor-pointer"
-          >
-            {userInitials}
-          </button>
+        {status === "authenticated" && initials && (
+          <div className="relative" ref={userDropdownRef}>
+            <button
+              onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+              className="w-10 h-10 rounded-full bg-navy-700/90 backdrop-blur-sm border border-navy-500 hover:bg-navy-900 transition-all duration-300 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-sm cursor-pointer"
+            >
+              {initials}
+            </button>
 
-          {userDropdownOpen && (
-            <div className="absolute right-0 top-14 mt-2 w-48 bg-white border-2 border-neutral-gray-100 rounded-2xl shadow-xl z-50 p-2 animate-in slide-in-from-top-2 fade-in duration-200">
-              <div className="px-3 py-2 border-b border-neutral-gray-100 mb-1">
-                <p className="text-xs font-bold text-navy-900">Angemeldet als</p>
-                <p className="text-[10px] text-text-muted">{userInitials}</p>
-              </div>
+            {userDropdownOpen && (
+              <div className="absolute right-0 top-14 mt-2 w-48 bg-white border-2 border-neutral-gray-100 rounded-2xl shadow-xl z-50 p-2 animate-in slide-in-from-top-2 fade-in duration-200">
+                <div className="px-3 py-2 border-b border-neutral-gray-100 mb-1">
+                  <p className="text-xs font-bold text-navy-900">Angemeldet als</p>
+                  <p className="text-[10px] text-text-muted">{name || initials}</p>
+                </div>
               <Link
                 href="/settings"
                 onClick={() => setUserDropdownOpen(false)}
@@ -302,13 +305,15 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
               {/* Settings and other tabs are handled within /settings */}
               <button
                 onClick={handleLogout}
-                className="w-full text-left px-3 py-2 text-sm font-bold text-danger-red hover:bg-danger-red/10 rounded-xl transition-colors cursor-pointer"
+                disabled={isLoggingOut}
+                className="w-full text-left px-3 py-2 text-sm font-bold text-danger-red hover:bg-danger-red/10 rounded-xl transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Abmelden
+                {isLoggingOut ? "Abmelden..." : "Abmelden"}
               </button>
             </div>
           )}
         </div>
+        )}
 
       </div>
 

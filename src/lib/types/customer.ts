@@ -141,6 +141,8 @@ export type Customer = {
 
   city?: string;
   zipCode?: string;
+  street?: string;
+  country?: string;
   address?: string;
   email?: string;
   phone?: string;
@@ -189,3 +191,15 @@ export type Customer = {
   createdAt?: string;
   updatedAt?: string;
 };
+
+export function isCompleteShippingAddress(customer?: Customer | null): boolean {
+  if (!customer) return false;
+  
+  const hasStreet = Boolean(customer.street && customer.street.trim().length > 0);
+  const hasHouseNumber = Boolean(customer.street && /\d/.test(customer.street));
+  const hasZipCode = Boolean(customer.zipCode && customer.zipCode.trim().length >= 4);
+  const hasCity = Boolean(customer.city && customer.city.trim().length > 0);
+  const hasCountry = Boolean(customer.country && customer.country.trim().length > 0);
+
+  return hasStreet && hasHouseNumber && hasZipCode && hasCity && hasCountry;
+}

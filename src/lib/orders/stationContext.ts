@@ -1,7 +1,7 @@
 // Station → Kontext-Variante Mapping
 // Kein Mock, nur Logik
 
-export type StationVariant = 'erfassung' | 'versand' | 'wareneingang_readonly';
+export type StationVariant = 'erfassung' | 'versand' | 'wareneingang_readonly' | 'wareneingang_active';
 
 export const STATION_ORDER = ['wareneingang', 'entmetallisierung', 'schleiferei', 'galvanik', 'warenausgang'] as const;
 export const STATION_LABELS: Record<string, string> = {
@@ -28,8 +28,11 @@ export function getStationVariant(
   isCompleted: boolean
 ): StationVariant {
   if (station === 'warenausgang') return 'versand';
-  if (station === 'wareneingang' && (stationIndex < currentStationIndex || isCompleted)) {
-    return 'wareneingang_readonly';
+  if (station === 'wareneingang') {
+    if (stationIndex < currentStationIndex || isCompleted) {
+      return 'wareneingang_readonly';
+    }
+    return 'wareneingang_active';
   }
   return 'erfassung';
 }

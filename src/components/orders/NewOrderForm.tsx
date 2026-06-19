@@ -59,6 +59,7 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
         title,
         task,
         station: "wareneingang",
+        source: "customer",
         attachmentUrl: finalAttachmentUrl || undefined,
         parts: [
           {

@@ -1,9 +1,10 @@
 "use client";
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
+import { trackUiEvent } from "@/lib/tracking/tracking";
 
 import { useState, useEffect, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,22 +26,17 @@ import {
 } from "lucide-react";
 // Mock data removed
 import { getStationConfig, getAllStations } from "@/constants/stations";
-import { evaluateOrderPriority } from "@/lib/priority";
 import { getOrdersDb } from "@/app/actions/orders.actions";
 import { getCustomersDb } from "@/app/actions/customers.actions";
 import type { Customer } from "@/lib/types/customer";
 import type { OrderResponse } from "@/app/actions/orders.actions";
 
 type Order = any; // Fallback since Order was from repo
-import { getUrgency, Urgency } from "@/lib/orders/getUrgency";
-import { OrderEditModal } from "@/components/orders/OrderEditModal";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { SearchToolbar } from "@/components/ui/SearchToolbar";
-import { DetailOverlay } from "@/components/ui/DetailOverlay";
-import { trackUiEvent } from "@/lib/tracking/tracking";
 import { usePageView } from "@/hooks/usePageView";
 import { OrderWideCard, type UrgencyType } from "@/components/orders/OrderWideCard";
 import { useAppShortcut } from "@/components/ui/AppShortcutContext";
+import { useOrderModal } from "@/components/orders/OrderModalProvider";
+import { getUrgency } from "@/lib/orders/getUrgency";
 
 const safe = (value: unknown) => String(value ?? "").toLowerCase();
 
@@ -48,6 +44,7 @@ const safe = (value: unknown) => String(value ?? "").toLowerCase();
 function OrdersPageInner() {
   usePageView();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const { openShortcut } = useAppShortcut();
   const stationFilter = searchParams.get("station");
   const [searchTerm, setSearchTerm] = useState("");
@@ -64,21 +61,11 @@ function OrdersPageInner() {
     }
   }
 
-  // Initialize orders state empty
   const [orders, setOrders] = useState<Order[]>([]);
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [prevOrderParam, setPrevOrderParam] = useState<string | null>(null);
 
-  const orderParam = searchParams.get("order") || searchParams.get("id");
-  if (orderParam !== prevOrderParam) {
-    setPrevOrderParam(orderParam);
-    if (orderParam) {
-      setSelectedOrderId(orderParam);
-    }
-  }
   const [customersList, setCustomersList] = useState<Customer[]>([]);
-  const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
-  const [isEditingOrder, setIsEditingOrder] = useState(false);
+  
+  const { openOrder } = useOrderModal();
 
   // Load from Repositories on mount
   useEffect(() => {
@@ -86,11 +73,20 @@ function OrdersPageInner() {
     const loadData = async () => {
       try {
         const dbOrdersResult = await getOrdersDb();
+        if (dbOrdersResult && !dbOrdersResult.ok && dbOrdersResult.error === "UNAUTHORIZED") {
+          router.push("/start?reason=session_expired");
+          return;
+        }
         if (isMounted && dbOrdersResult.ok) {
           setOrders(dbOrdersResult.data as any);
+      console.log("[ORDERS_CLIENT]", (dbOrdersResult.data as any).map((o:any)=>({id:o.id, number:o.orderNumber, source:o.source})) );
         }
         
         const dbCustomersResult = await getCustomersDb();
+        if (dbCustomersResult && !dbCustomersResult.ok && dbCustomersResult.error === "UNAUTHORIZED") {
+          router.push("/start?reason=session_expired");
+          return;
+        }
         if (isMounted && dbCustomersResult.ok) {
           setCustomersList(dbCustomersResult.data as any);
         }
@@ -113,7 +109,7 @@ function OrdersPageInner() {
       window.removeEventListener('kreile-sync-orders', handleSync);
       window.removeEventListener('kreile-sync-focus', handleSync);
     };
-  }, []);
+  }, [router]);
 
   // Search tracking — fires 800 ms after the user stops typing
   useEffect(() => {
@@ -124,115 +120,7 @@ function OrdersPageInner() {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  const handleStatusChange = (orderId: string, newRisk: "green" | "yellow" | "orange" | "red" | "blocked") => {
-    const updated = orders.map(o => {
-      if (o.id === orderId) {
-        let statusText = "IM PLAN";
-        let dueLabel = o.dueLabel;
-        let dueValue = o.dueValue;
-        if (newRisk === "red") {
-          statusText = "KRITISCH – ÜBERFÄLLIG";
-          dueLabel = "Überfällig seit";
-          dueValue = "3 Std.";
-        } else if (newRisk === "orange") {
-          statusText = "GEFÄHRDET";
-          dueLabel = "Fällig";
-          dueValue = "Morgen";
-        } else if (newRisk === "yellow") {
-          statusText = "LEICHT KRITISCH";
-        } else if (newRisk === "blocked") {
-          statusText = "WARTET AUF FREIGABE";
-          dueLabel = "Wartet auf";
-          dueValue = "Freigabe";
-        }
-
-        return { ...o, risk: newRisk, statusText, dueLabel, dueValue };
-      }
-      return o;
-    });
-
-    setOrders(updated);
-    try {
-      const orderToUpdate = updated.find(o => o.id === orderId);
-      if (orderToUpdate) {
-        import("@/app/actions/orders.actions").then(({ updateOrderDb }) => {
-          updateOrderDb(orderId, { risk: orderToUpdate.risk, statusText: orderToUpdate.statusText } as any);
-        });
-      }
-    } catch (e) {
-      console.error("Fehler beim Speichern des Status", e);
-    }
-  };
-
-  const handleStationUpdate = (orderId: string, newStation: string) => {
-    const updated = orders.map(o => {
-      if (o.id === orderId) {
-        // Also update all parts' station to the new station, so they display in /items immediately
-        const updatedParts = o.parts.map((p: any) => ({ ...p, station: newStation }));
-        return { ...o, station: newStation, currentStationId: newStation, parts: updatedParts };
-      }
-      return o;
-    });
-    setOrders(updated);
-    try {
-      import("@/app/actions/orders.actions").then(({ updateOrderDb }) => {
-        updateOrderDb(orderId, { currentStationId: newStation } as any);
-      });
-    } catch (e) {
-      console.error("Fehler beim Speichern der Station", e);
-    }
-  };
-
-  const handleRecommendedActionClick = (order: Order) => {
-    const updated = orders.map(o => {
-      if (o.id === order.id) {
-        return {
-          ...o,
-          risk: "green" as const,
-          statusText: "Im Plan (Gegenmaßnahme eingeleitet)",
-          delayReason: undefined,
-          recommendedAction: undefined,
-          dueLabel: "Fällig in",
-          dueValue: "10 Tagen"
-        };
-      }
-      return o;
-    });
-    setOrders(updated);
-    try {
-      import("@/app/actions/orders.actions").then(({ updateOrderDb }) => {
-        updateOrderDb(order.id, { risk: "green" } as any);
-      });
-    } catch (e) {
-      console.error("Fehler beim Speichern der Maßnahme", e);
-    }
-    setActionSuccessMessage(`Gegenmaßnahme für ${order.orderNumber} eingeleitet: "${order.recommendedAction}" wurde erfolgreich umgesetzt.`);
-    // Auto-close after 6 seconds
-    setTimeout(() => {
-      setActionSuccessMessage(null);
-    }, 6000);
-  };
-
-  const handleSaveOrder = async (changes: Partial<Order>) => {
-    if (!selectedOrderId) return;
-    try {
-      const { updateOrderDb } = await import("@/app/actions/orders.actions");
-      const res = await updateOrderDb(selectedOrderId, changes as any);
-      if (res.ok) {
-        setOrders(prev => prev.map(o => o.id === selectedOrderId ? { ...o, ...changes } : o));
-      }
-    } catch (e: unknown) {
-      console.error("Fehler beim Speichern der Auftragsdaten", e);
-      throw e;
-    }
-  };
-
-  // Find currently selected order
-  const selectedOrder = orders.find(o => o.id === selectedOrderId) || null;
-
-  if (selectedOrderId && !selectedOrder && process.env.NODE_ENV === "development") {
-    console.warn("Selected order not found", { selectedOrderId, availableIds: orders.map(o => o.id) });
-  }
+  // Wait... we don't need selected order locally anymore!
 
   // Filter orders by search term, status filter AND station filter
   const filteredOrders = orders.filter(o => {
@@ -445,7 +333,7 @@ function OrdersPageInner() {
                 key={order.id}
                 id={order.id}
                 orderNumber={order.orderNumber}
-                customerName={order.customerName || "Unbekannter Kunde"}
+                customerName={order.customerName || "Kunde nicht hinterlegt"}
                 article={order.task || ""}
                 surface={surfaceLabel}
                 surfaceKey={surfaceKey}
@@ -454,8 +342,8 @@ function OrdersPageInner() {
                 dueValue={order.dueValue || "14 T"}
                 dueLabel={order.dueLabel || "Fällig in"}
                 onClick={() => {
-                  setSelectedOrderId(order.id);
                   trackUiEvent("detail_open", { target: "order", id: order.id, orderNumber: order.orderNumber });
+                  openOrder(order.id);
                 }}
               />
             );
@@ -469,230 +357,7 @@ function OrdersPageInner() {
         </div>
       )}
 
-      {/* Detail Overlay */}
-      <DetailOverlay
-        open={!!selectedOrderId && !!selectedOrder}
-        onClose={() => setSelectedOrderId(null)}
-        title={selectedOrder ? `Auftrag ${selectedOrder.orderNumber}` : undefined}
-        subtitle={selectedOrder?.customerName}
-      >
-      {selectedOrder && (
-          <div className="space-y-5 relative">
-            <button
-              onClick={() => setIsEditingOrder(true)}
-              className="absolute right-0 -top-10 text-navy-900/70 hover:text-navy-900 transition-colors bg-white/80 p-2 rounded-full"
-              title="Auftrag bearbeiten"
-            >
-              <Edit2 className="h-5 w-5" />
-            </button>
-            <div className="flex items-center gap-2">
-              <Badge className="bg-navy-700 text-white border-0 text-[8px] font-bold uppercase tracking-wider py-0.5">
-                Station: {getStationConfig(selectedOrder.station).name.toUpperCase()}
-              </Badge>
-            </div>
-            <h3 className="font-black text-xl leading-tight text-navy-900">{selectedOrder.task}</h3>
-            <p className="text-sm text-text-muted font-medium">Kunde: {selectedOrder.customerName || "Unbekannter Kunde"}</p>
-
-            {actionSuccessMessage && (
-              <div className="bg-success-green-soft border border-success-green p-3.5 rounded-xl text-success-green text-xs font-semibold flex items-start gap-2.5 relative">
-                <CheckCircle2 className="h-4.5 w-4.5 text-success-green shrink-0 mt-0.5" />
-                <div className="pr-6 leading-relaxed">
-                  <span className="font-extrabold uppercase text-[9px] tracking-wide text-success-green block">Systemmeldung</span>
-                  {actionSuccessMessage}
-                </div>
-                <button 
-                  onClick={() => setActionSuccessMessage(null)} 
-                  className="absolute right-2 top-2 text-text-muted hover:text-slate-650 text-xs"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-            
-            {/* Dates & Urgency */}
-            <div className="grid grid-cols-2 gap-3 bg-bg-app-soft p-3 rounded-lg border border-neutral-gray-100 text-xs">
-              <div>
-                <span className="text-text-muted block font-semibold text-[10px] uppercase">Eingang</span>
-                <span className="font-bold text-navy-900">{selectedOrder.intakeDate || "Kein Datum"}</span>
-              </div>
-              <div>
-                <span className="text-text-muted block font-semibold text-[10px] uppercase">Liefertermin</span>
-                <span className="font-bold text-navy-900">{selectedOrder.dueDate || "Nicht gesetzt"}</span>
-              </div>
-            </div>
-
-            {/* Parts / Werkstücke */}
-            {selectedOrder.parts && selectedOrder.parts.length > 0 && (
-              <div className="space-y-2">
-                <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block font-sans">Zu bearbeitende Teile</span>
-                <div className="bg-white border border-neutral-gray-100 rounded-lg overflow-hidden divide-y divide-neutral-gray-100 shadow-sm mb-6">
-                  {selectedOrder.parts.map((p: any, i: number) => {
-                    const part = p as Record<string, any>;
-                    return (
-                    <div key={i} className="p-3 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-3">
-                        <span className="bg-navy-900 text-white font-mono text-[10px] px-2 py-0.5 rounded font-bold">
-                          {part.quantity}x
-                        </span>
-                        <span className="font-bold text-navy-900">{part.name || "Unbekanntes Teil"}</span>
-                      </div>
-                      {part.surfaceRequested && (
-                        <span className="text-[10px] font-mono bg-bg-app-soft text-text-muted px-2 py-1 rounded">
-                          {part.surfaceRequested}
-                        </span>
-                      )}
-                    </div>
-                  )})}
-                </div>
-              </div>
-            )}
-
-            {/* Delay alerts */}
-            {selectedOrder.delayReason && (
-              <div className="bg-gold-100 border border-accent-orange text-accent-orange p-3.5 rounded-lg flex items-start gap-2.5 text-xs">
-                <AlertTriangle className="h-4.5 w-4.5 text-accent-orange shrink-0 mt-0.5" />
-                <div>
-                   <span className="font-extrabold uppercase text-[9px] tracking-wider text-accent-orange">Störungsursache</span>
-                  <p className="mt-0.5 font-medium leading-relaxed">{selectedOrder.delayReason}</p>
-                </div>
-              </div>
-            )}
-
-            {/* Actions Simulation Bar */}
-            <div className="space-y-3 border-t pt-4">
-              <div className="space-y-2">
-                <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block font-sans">Risiko-Status ändern</span>
-                <div className="flex gap-1 flex-wrap">
-                  {(
-                    [
-                      { risk: "green", label: "Plan", color: "bg-success-green-soft0 hover:bg-success-green" },
-                      { risk: "yellow", label: "Achtung", color: "bg-yellow-400 hover:bg-gold-1000" },
-                      { risk: "orange", label: "Gefahr", color: "bg-gold-1000 hover:bg-orange-600" },
-                      { risk: "red", label: "Kritisch", color: "bg-accent-orange-soft0 hover:bg-danger-red" },
-                      { risk: "blocked", label: "Pause", color: "bg-bg-app-soft0 hover:bg-gold-1000" }
-                    ] as { risk: "green" | "yellow" | "orange" | "red" | "blocked"; label: string; color: string }[]
-                  ).map(btn => (
-                    <button
-                      key={btn.risk}
-                      onClick={() => handleStatusChange(selectedOrder.id, btn.risk)}
-                      className={`flex-1 min-w-[60px] py-2.5 rounded text-xs text-center text-white font-bold transition-all border ${
-                        selectedOrder.risk === btn.risk ? "ring-2 ring-navy-900 border-white font-black scale-105" : "opacity-80 hover:opacity-100"
-                      } ${btn.color}`}
-                    >
-                      {btn.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="space-y-2 border-t pt-3">
-                <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block font-sans">Arbeitsstation ändern</span>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-                  {getAllStations().map(station => {
-                    const labelMap: Record<string, string> = {
-                      wareneingang: "1. WE",
-                      entmetallisierung: "2. Entmet.",
-                      schleiferei: "3. Schleif.",
-                      beschichtung: "4. Galv.",
-                      warenausgang: "5. WA"
-                    };
-                    const label = labelMap[station.key] || station.name;
-                    return (
-                      <button
-                        key={station.key}
-                        type="button"
-                        onClick={() => handleStationUpdate(selectedOrder.id, station.key)}
-                        className={`py-2 rounded text-xs text-center font-bold transition-all border ${
-                          selectedOrder.station === station.key 
-                            ? "bg-navy-900 border-navy-900 text-white font-black ring-1 ring-navy-900" 
-                            : "bg-bg-app border-neutral-gray-100 text-text-muted hover:bg-gold-100"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Associated parts */}
-            <div className="space-y-3 border-t pt-4">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Zugeordnete Werkstücke ({(selectedOrder.parts || []).length})</span>
-              </div>
-
-              <div className="space-y-2">
-                {(selectedOrder.parts || []).map((p: any, index: number) => {
-                  const part = p as any;
-                  return (
-                  <div key={part.id || String(index)} className="p-3 bg-bg-app-soft border rounded-lg flex flex-col gap-1 text-xs hover:border-gold-600 transition-colors">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-bold text-navy-900">{part.name}</span>
-                      <span className="font-mono text-[9px] bg-neutral-gray-100 text-text-muted px-1 rounded">{part.id}</span>
-                    </div>
-                    <p className="text-[10px] text-text-muted">
-                      Ziel: <span className="font-semibold text-navy-900">{part.finish}</span> | Mat: {part.material}
-                    </p>
-                    <div className="flex items-center gap-1.5 text-[9px] text-navy-900 font-bold mt-1">
-                      <MapPin className="h-3 w-3 text-accent-orange" /> {part.location}
-                      <span className="text-text-muted">•</span>
-                      <Package className="h-3 w-3 text-slate-450" /> Soll: {part.hours}
-                    </div>
-                  </div>
-                )})}
-              </div>
-            </div>
-
-            {/* Touch actions with robust Phone Fallback Logic */}
-            <div className="flex flex-col gap-3 pt-6 border-t pb-4">
-              {(() => {
-                const phoneDetails = getCustomerPhoneDetails(selectedOrder.customerName || "", selectedOrder.customerId);
-                if (phoneDetails.hasPhone) {
-                  return (
-                    <a 
-                      href={`tel:${phoneDetails.phone}`}
-                      className="w-full h-12 bg-white hover:bg-bg-app-soft text-navy-900 font-bold border-2 border-neutral-gray-300 rounded-xl flex items-center justify-center gap-2 text-sm shadow-sm transition-all"
-                    >
-                      <PhoneCall className="h-5 w-5 text-success-green shrink-0" />
-                      <span>Kunde anrufen ({phoneDetails.phone})</span>
-                    </a>
-                  );
-                } else {
-                  return (
-                    <Link 
-                      href="/customers"
-                      className="w-full h-12 bg-white hover:bg-bg-app-soft text-text-muted hover:text-navy-900 font-semibold border-2 border-dashed border-neutral-gray-300 hover:border-gold-600 rounded-xl flex items-center justify-center gap-2 text-sm transition-all text-center"
-                    >
-                      <AlertTriangle className="h-5 w-5 text-gold-600 shrink-0" />
-                      <span>Telefonnummer in Kundenkartei prüfen</span>
-                    </Link>
-                  );
-                }
-              })()}
-              
-              {selectedOrder.recommendedAction && (
-                <Button 
-                  onClick={() => handleRecommendedActionClick(selectedOrder)}
-                  className="w-full h-12 bg-navy-900 hover:bg-navy-900/90 text-white font-extrabold text-sm rounded-xl flex items-center justify-center gap-2 shadow"
-                >
-                  <Zap className="h-5 w-5 text-accent-orange shrink-0" />
-                  <span>{selectedOrder.recommendedAction}</span>
-                </Button>
-              )}
-            </div>
-          </div>
-      )}
-      </DetailOverlay>
-
-      {isEditingOrder && selectedOrder && (
-        <OrderEditModal
-          order={selectedOrder as unknown as Order}
-          customers={customersList as unknown as Customer[]}
-          onClose={() => setIsEditingOrder(false)}
-          onSave={handleSaveOrder}
-        />
-      )}
+      {/* Detail Overlay removed and centralized */}
     </div>
   );
 }

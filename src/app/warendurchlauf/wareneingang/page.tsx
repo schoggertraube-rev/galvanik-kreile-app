@@ -11,7 +11,10 @@ import { useState, Suspense, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
-import { ordersRepository, Order } from "@/lib/repositories/ordersRepository";
+import { OrderCompactCard } from "@/components/orders/OrderCompactCard";
+import { OrderEditModal } from "@/components/orders/OrderEditModal";
+import { getUrgency, Urgency } from "@/lib/orders/getUrgency";
+import { useOverlayStore } from "@/lib/overlayStore";
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    Warendurchlauf Leitstand — v4 Layout
@@ -21,23 +24,29 @@ function WarendurchlaufLeitstandContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { openErfassung } = useErfassung();
+  const { openOrder } = useOverlayStore();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [stationOrders, setStationOrders] = useState<any[]>([]);
   const [todos, setTodos] = useState<{ id: number; title: string; subtitle: string; tags: string[]; action: string; priority?: string; live?: boolean; targetHref?: string; done: boolean }[]>([]);
+  const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<any>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const dbOrders = await ordersRepository.getAll();
-        if (dbOrders) {
-          const typedOrders = dbOrders as Order[];
+        const { getWarendurchlaufKPIs, getStationOrders } = await import("@/app/warendurchlauf/actions");
+        
+        // 1. Load KPIs and checklist separately
+        const resKPI = await getWarendurchlaufKPIs();
+        if (resKPI.ok && resKPI.data) {
+          const typedOrders = resKPI.data.orders;
           setOrders(typedOrders);
 
           // Build dynamic checklist
           const newTodos = [];
-          const kritisch = typedOrders.filter(o => o.risk === 'red' || o.risk === 'orange');
+          const kritisch = typedOrders.filter((o: any) => o.risk === 'red' || o.risk === 'orange');
           if (kritisch.length > 0) {
              newTodos.push({
                 id: 1, title: `Kritische Aufträge (${kritisch.length})`, subtitle: "Aufträge mit hohem Risiko",
@@ -45,7 +54,7 @@ function WarendurchlaufLeitstandContent() {
                 live: true, done: false
              });
           }
-          const auslieferungen = typedOrders.filter(o => o.station === 'warenausgang');
+          const auslieferungen = typedOrders.filter((o: any) => o.currentStationId === 'warenausgang' || o.station === 'warenausgang');
           if (auslieferungen.length > 0) {
              newTodos.push({
                 id: 2, title: `Auslieferungen klären (${auslieferungen.length})`, subtitle: "Aufträge im Warenausgang",
@@ -54,6 +63,12 @@ function WarendurchlaufLeitstandContent() {
              });
           }
           setTodos(newTodos);
+        }
+
+        // 2. Load dedicated station orders
+        const resList = await getStationOrders("wareneingang");
+        if (resList.ok && resList.data) {
+          setStationOrders(resList.data);
         }
       } catch (err) {}
     };
@@ -237,7 +252,76 @@ function WarendurchlaufLeitstandContent() {
             {/* Demo-Badge removed */}
           </div>
         </div>
+
+        {/* â”€â”€ ARBEITSLISTE WARENEINGANG â”€â”€ */}
+        <div className="mt-12" style={{ animation: "fadeUp .5s .2s ease both" }}>
+          <div className="text-[15px] font-bold text-[#5e5850] mb-4 flex items-center gap-2">
+            Aktuelle Aufträge im Wareneingang
+            <span className="flex-1 h-px bg-[#d8d0c4]" />
+            <span className="text-xs bg-[#f4f0e8] px-2 py-1 rounded text-[#9e9689]">{stationOrders.length}</span>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {stationOrders.length > 0 ? (
+              stationOrders.map((order) => {
+                const u = getUrgency(order.dueDate);
+                let urgencyType: "ok" | "soon" | "crit" | "wait" = "ok";
+                if (order.risk === "red") urgencyType = "crit";
+                else if (order.risk === "orange" || u === "gefaehrdet") urgencyType = "soon";
+                else if (order.risk === "blocked") urgencyType = "wait";
+
+                const textForSurface = (order.task + " " + (order.parts?.map((p: any) => p.surfaceRequested || p.finish).join(" ") || "")).toLowerCase();
+                let surfaceKey: "chrom" | "nickel" | "gold" | "kupfer" | "zink" | "offen" = "offen";
+                if (textForSurface.includes("chrom")) surfaceKey = "chrom";
+                else if (textForSurface.includes("nickel")) surfaceKey = "nickel";
+                else if (textForSurface.includes("gold")) surfaceKey = "gold";
+                else if (textForSurface.includes("kupfer")) surfaceKey = "kupfer";
+                else if (textForSurface.includes("zink")) surfaceKey = "zink";
+
+                let surfaceLabel = surfaceKey !== "offen" ? surfaceKey.charAt(0).toUpperCase() + surfaceKey.slice(1) : "Oberfläche offen";
+                if (surfaceKey === "chrom") surfaceLabel = "Vernickeln → Chrom";
+                if (surfaceKey === "zink") surfaceLabel = "Verzinken";
+
+                return (
+                  <OrderCompactCard
+                    key={order.id}
+                    id={order.id}
+                    orderNumber={order.orderNumber}
+                    customerName={order.customerName || "Kunde nicht hinterlegt"}
+                    article={order.itemDescription || "Artikel nicht hinterlegt"}
+                    surface={order.surfaceRequested || "Oberfläche nicht hinterlegt"}
+                    urgency={urgencyType}
+                    dueValue={order.dueValue || "14 T"}
+                    dueLabel={order.dueLabel || "Fällig in"}
+                    badgeText={order.statusText || "Wartend"}
+                    onClick={() => openOrder(order.id)}
+                  />
+                );
+              })
+            ) : (
+              <div className="p-8 text-center border-2 border-dashed border-[#d8d0c4] rounded-[14px] text-[#9e9689]">
+                Aktuell keine Aufträge in dieser Station.
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      {selectedOrderForEdit && (
+        <OrderEditModal
+          order={selectedOrderForEdit}
+          customers={[]} // Can be extended to load customers if needed
+          onClose={() => setSelectedOrderForEdit(null)}
+          onSave={async (changes) => {
+            // Placeholder: Call server action to update order
+            const { updateOrderDb } = await import("@/app/actions/orders.actions");
+            await updateOrderDb(selectedOrderForEdit.id, changes);
+            setSelectedOrderForEdit(null);
+            // Trigger reload
+            window.dispatchEvent(new CustomEvent("kreile-orders-updated"));
+          }}
+        />
+      )}
 
 
 

@@ -1,0 +1,238 @@
+[
+  {
+    "path": "00_COWORK_STARTPROMPT.md",
+    "bytes": 4689
+  },
+  {
+    "path": "10_BETRIEBSANLEITUNG_FUER_DEN_AUFTRAGGEBER.md",
+    "bytes": 1381
+  },
+  {
+    "path": "11_SOFORT_EINSATZPLAN.md",
+    "bytes": 1730
+  },
+  {
+    "path": "README_START_HERE.md",
+    "bytes": 2080
+  },
+  {
+    "path": "claude_code/.claude/agents/build-engineer.md",
+    "bytes": 469
+  },
+  {
+    "path": "claude_code/.claude/agents/business-automation-analyst.md",
+    "bytes": 432
+  },
+  {
+    "path": "claude_code/.claude/agents/chief-conductor.md",
+    "bytes": 838
+  },
+  {
+    "path": "claude_code/.claude/agents/connector-scout.md",
+    "bytes": 481
+  },
+  {
+    "path": "claude_code/.claude/agents/data-contract-auditor.md",
+    "bytes": 475
+  },
+  {
+    "path": "claude_code/.claude/agents/performance-reliability-engineer.md",
+    "bytes": 448
+  },
+  {
+    "path": "claude_code/.claude/agents/platform-architect.md",
+    "bytes": 433
+  },
+  {
+    "path": "claude_code/.claude/agents/project-director.md",
+    "bytes": 470
+  },
+  {
+    "path": "claude_code/.claude/agents/qa-test-verifier.md",
+    "bytes": 377
+  },
+  {
+    "path": "claude_code/.claude/agents/red-team-reviewer.md",
+    "bytes": 423
+  },
+  {
+    "path": "claude_code/.claude/agents/release-manager.md",
+    "bytes": 423
+  },
+  {
+    "path": "claude_code/.claude/agents/repository-cartographer.md",
+    "bytes": 413
+  },
+  {
+    "path": "claude_code/.claude/agents/requirements-archaeologist.md",
+    "bytes": 484
+  },
+  {
+    "path": "claude_code/.claude/agents/security-reviewer.md",
+    "bytes": 416
+  },
+  {
+    "path": "claude_code/.claude/agents/specialist-recruiter.md",
+    "bytes": 435
+  },
+  {
+    "path": "claude_code/.claude/agents/ux-workflow-auditor.md",
+    "bytes": 452
+  },
+  {
+    "path": "claude_code/.claude/hooks/README.md",
+    "bytes": 518
+  },
+  {
+    "path": "claude_code/.claude/hooks/guard-destructive.mjs",
+    "bytes": 1391
+  },
+  {
+    "path": "claude_code/.claude/settings.json",
+    "bytes": 2453
+  },
+  {
+    "path": "claude_code/.claude/skills/analyze-work-package/SKILL.md",
+    "bytes": 422
+  },
+  {
+    "path": "claude_code/.claude/skills/build-work-package/SKILL.md",
+    "bytes": 386
+  },
+  {
+    "path": "claude_code/.claude/skills/hire-specialist/SKILL.md",
+    "bytes": 397
+  },
+  {
+    "path": "claude_code/.claude/skills/orchestrate-project/SKILL.md",
+    "bytes": 486
+  },
+  {
+    "path": "claude_code/.claude/skills/release-gate/SKILL.md",
+    "bytes": 314
+  },
+  {
+    "path": "claude_code/.claude/skills/verify-work-package/SKILL.md",
+    "bytes": 369
+  },
+  {
+    "path": "claude_code/CLAUDE.md",
+    "bytes": 1299
+  },
+  {
+    "path": "governance/01_BEFEHLSKETTE_UND_GOVERNANCE.md",
+    "bytes": 2823
+  },
+  {
+    "path": "governance/02_SPEZIALISTEN_UND_EINSTELLUNGSPROTOKOLL.md",
+    "bytes": 2471
+  },
+  {
+    "path": "governance/03_ANALYSE_BAU_ABNAHME_PIPELINE.md",
+    "bytes": 1928
+  },
+  {
+    "path": "governance/04_FEHLER_KORREKTUR_ESKALATION.md",
+    "bytes": 993
+  },
+  {
+    "path": "governance/05_CONNECTOR_UND_TOOL_GOVERNANCE.md",
+    "bytes": 1348
+  },
+  {
+    "path": "governance/06_BUILD_PACKAGE_PROTOCOL.md",
+    "bytes": 829
+  },
+  {
+    "path": "handoffs/ANALYSIS_HANDOFF.md",
+    "bytes": 200
+  },
+  {
+    "path": "handoffs/ARCHITECTURE_HANDOFF.md",
+    "bytes": 184
+  },
+  {
+    "path": "handoffs/BUILD_HANDOFF.md",
+    "bytes": 221
+  },
+  {
+    "path": "handoffs/RELEASE_HANDOFF.md",
+    "bytes": 183
+  },
+  {
+    "path": "handoffs/REVIEW_HANDOFF.md",
+    "bytes": 188
+  },
+  {
+    "path": "registers/AGENT_ROSTER.md",
+    "bytes": 145
+  },
+  {
+    "path": "registers/BUILD_BACKLOG.md",
+    "bytes": 164
+  },
+  {
+    "path": "registers/CHANGELOG.md",
+    "bytes": 145
+  },
+  {
+    "path": "registers/CONNECTOR_REGISTER.md",
+    "bytes": 197
+  },
+  {
+    "path": "registers/CONTRACT_REGISTER.md",
+    "bytes": 192
+  },
+  {
+    "path": "registers/DECISION_LOG.md",
+    "bytes": 168
+  },
+  {
+    "path": "registers/DEPENDENCY_GRAPH.md",
+    "bytes": 269
+  },
+  {
+    "path": "registers/EVIDENCE_LEDGER.md",
+    "bytes": 161
+  },
+  {
+    "path": "registers/FINDINGS_REGISTER.md",
+    "bytes": 199
+  },
+  {
+    "path": "registers/IDEA_REGISTER.md",
+    "bytes": 290
+  },
+  {
+    "path": "registers/REQUIREMENTS_REGISTER.md",
+    "bytes": 172
+  },
+  {
+    "path": "registers/RISK_REGISTER.md",
+    "bytes": 159
+  },
+  {
+    "path": "registers/SOURCE_REGISTER.md",
+    "bytes": 164
+  },
+  {
+    "path": "registers/TEST_MATRIX.md",
+    "bytes": 182
+  },
+  {
+    "path": "templates/AGENT_OUTPUT_CONTRACT.md",
+    "bytes": 411
+  },
+  {
+    "path": "templates/BOARD_DECISION_TEMPLATE.md",
+    "bytes": 315
+  },
+  {
+    "path": "templates/SPECIALIST_REQUEST_TEMPLATE.md",
+    "bytes": 257
+  },
+  {
+    "path": "templates/WORK_PACKAGE_TEMPLATE.md",
+    "bytes": 829
+  }
+]

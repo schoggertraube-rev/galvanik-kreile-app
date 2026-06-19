@@ -20,10 +20,10 @@ export function ManualWizard() {
   const [showFreetext, setShowFreetext] = useState(false);
   const [freetext, setFreetext] = useState("");
   const [showBehavior, setShowBehavior] = useState(!!options?.prefill?.behaviorNote);
-  const [behaviorNote, setBehaviorNote] = useState(options?.prefill?.behaviorNote?.text || "");
+  const [behaviorNote, setBehaviorNote] = useState((options?.prefill?.behaviorNote as string) || "");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [successResult, setSuccessResult] = useState<{ isQuote?: boolean; orderNumber?: string } | null>(null);
+  const [successResult, setSuccessResult] = useState<{ isQuote?: boolean; orderNumber?: string; id?: string } | null>(null);
   const { openErfassung } = useErfassung();
 
   useEffect(() => {
@@ -31,11 +31,35 @@ export function ManualWizard() {
     setIsDirty(dirty);
   }, [customer, items, freetext, behaviorNote, setIsDirty]);
 
+  useEffect(() => {
+    if (options?.customerId && !customer) {
+      // Fetch customer data if only ID was provided
+      fetch(`/api/erfassung/customer-search`) // this might not work perfectly, better to use the server action directly?
+        // Actually, we can just use getCustomerByIdDb directly from an action
+        import("@/app/actions/customers.actions").then(({ getCustomerByIdDb }) => {
+          getCustomerByIdDb(options.customerId as string).then(res => {
+            if (res.ok && res.data) {
+              setCustomer(res.data);
+            }
+          });
+        });
+    }
+  }, [options?.customerId, customer]);
+
   const handleSave = async () => {
     // Basic validation
     if (!customer?.id) return alert("Bitte wähle einen Kunden aus.");
     if (items.length === 0) return alert("Bitte füge mindestens ein Teil hinzu.");
     if (!dateInfo.dueDate) return alert("Bitte gib einen Liefertermin an.");
+    
+    if (dateInfo.dueDate) {
+      const selectedDate = new Date(dateInfo.dueDate as string);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (selectedDate < today) {
+        return alert("Der Termin darf nicht in der Vergangenheit liegen.");
+      }
+    }
 
     setIsSubmitting(true);
     try {
@@ -60,7 +84,7 @@ export function ManualWizard() {
         return;
       }
 
-      setSuccessResult(result.order as { isQuote?: boolean; orderNumber?: string });
+      setSuccessResult(result.order as { isQuote?: boolean; orderNumber?: string; id?: string });
     } catch (e: unknown) {
       if (e instanceof Error) {
         alert("Fehler beim Speichern: " + e.message);
@@ -82,6 +106,15 @@ export function ManualWizard() {
   };
 
   if (successResult) {
+    const handleOpenOrder = () => {
+      closeErfassung();
+      if (successResult.id) {
+        import("@/lib/overlayStore").then((mod) => {
+          mod.useOverlayStore.getState().openOrder(successResult.id as string);
+        });
+      }
+    };
+
     return (
       <div className="flex flex-col h-full bg-[#fcfaf6] rounded-2xl overflow-hidden relative justify-center items-center p-8 text-center">
         <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-6">
@@ -93,6 +126,12 @@ export function ManualWizard() {
         </p>
         
         <div className="flex flex-col gap-3 w-full max-w-sm">
+          <button
+            onClick={handleOpenOrder}
+            className="w-full px-6 py-3 font-bold text-white bg-[#1a1c23] border border-transparent rounded-lg hover:bg-black transition-all"
+          >
+            Auftrag öffnen
+          </button>
           <button
             onClick={closeErfassung}
             className="w-full px-6 py-3 font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-all"

@@ -6,11 +6,11 @@ import * as marketingSchema from './schema_marketing';
 
 const schema = { ...baseSchema, ...buchhaltungSchema, ...marketingSchema };
 
-const connectionString = process.env.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error("DATABASE_URL is missing. Please check your .env.local.");
+if (!process.env.DATABASE_URL) {
+  throw new Error("DATABASE_URL is required");
 }
+
+const connectionString = process.env.DATABASE_URL;
 
 // Fix for Next.js HMR connection pool exhaustion
 const globalForDb = globalThis as unknown as {

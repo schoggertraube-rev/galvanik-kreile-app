@@ -1,7 +1,7 @@
 'use server'
 
 import { db } from '@/db'
-import { appUsers, featureFlags, importJobs, importJobRows } from '@/db/schema'
+import { appUsers, featureFlags } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 import { createClient } from '@supabase/supabase-js'
 import { requireAdminOrDeveloper } from '@/lib/auth/permissions'
@@ -54,6 +54,7 @@ export async function createUser(data: { email: string, fullName: string, role: 
   try {
     await db.insert(appUsers).values({
       id: userId,
+      tenantId: "galvanik-kreile",
       email: data.email,
       fullName: data.fullName,
       role: data.role,

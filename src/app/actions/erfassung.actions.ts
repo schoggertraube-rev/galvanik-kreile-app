@@ -336,10 +336,11 @@ export async function uebernehmeVorlage(input: {
 
 import { db } from "@/db";
 import { customers, orders, items, events, calendarEvents } from "@/db/schema";
-import { eq, like } from "drizzle-orm";
+import { eq, like, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth } from "@/lib/server/authHelper";
 import { revalidatePath } from "next/cache";
+import { VALID_ORDER_SOURCES } from "@/lib/validation/orderSchema";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function createCustomerFromErfassung(input: Record<string, any>) {
@@ -358,7 +359,9 @@ export async function createCustomerFromErfassung(input: Record<string, any>) {
 
   // Validate required fields per spec
   const validationErrors: string[] = [];
-  if (!input.contactName && !input.company) validationErrors.push("Name oder Firma ist erforderlich");
+  // Accept 'name' as an alias for 'contactName' to support different payload shapes
+  const contactName = input.contactName || input.name;
+  if (!contactName && !input.company) validationErrors.push("Name oder Firma ist erforderlich");
   if (!input.source) validationErrors.push("Quelle (source) ist erforderlich");
   if (validationErrors.length) {
     return { ok: false, error: validationErrors.join(", ") };
@@ -374,11 +377,11 @@ export async function createCustomerFromErfassung(input: Record<string, any>) {
     // Generate robust customer number
     const year = new Date().getFullYear();
     const prefix = "K";
-    const pattern = `${prefix}-${year}-%`;
-    const existingCustomers = await db
-      .select({ customerNumber: customers.customerNumber })
-      .from(customers)
-      .where(like(customers.customerNumber, pattern));
+    // const pattern = `${prefix}-${year}-%`; // unused pattern removed
+    const result = await db.execute(sql`SELECT id, customer_number, source FROM customers WHERE source = ${input.source}`);
+    // rows are typed as any – map to expected shape
+    const allCustomers = (result as any).rows as Array<{id:string;customerNumber:string;source:string}>;
+    const existingCustomers = allCustomers.filter(c => c.customerNumber?.startsWith(`${prefix}-${year}-`));
 
     let maxNum = 0;
     for (const ec of existingCustomers) {
@@ -397,9 +400,9 @@ export async function createCustomerFromErfassung(input: Record<string, any>) {
     const newCustomer = {
       id: customerId,
       customerNumber,
-      name: input.contactName || input.company || "Unbenannter Kunde",
+      name: contactName || input.company || "Unbenannter Kunde",
       companyName: input.company || null,
-      contactPerson: input.contactName || null,
+      contactPerson: contactName || null,
       email: input.email || null,
       phone: input.phone || null,
       street: input.street || null,
@@ -447,7 +450,13 @@ export async function createOrderFromErfassung(input: Record<string, any>) {
   const validationErrors: string[] = [];
   if (!input.customerId) validationErrors.push("Kunden-ID ist erforderlich");
   if (!input.title) validationErrors.push("Titel ist erforderlich");
-  if (!input.source) validationErrors.push("Quelle (source) ist erforderlich");
+  
+  if (!input.source) {
+    validationErrors.push("Quelle (source) ist erforderlich");
+  } else if (!VALID_ORDER_SOURCES.includes(input.source)) {
+    validationErrors.push("Ungültiger Source-Wert: " + input.source);
+  }
+
   if (validationErrors.length) {
     return { ok: false, error: validationErrors.join(", ") };
   }
@@ -526,6 +535,7 @@ export async function createOrderFromErfassung(input: Record<string, any>) {
         name: p.name || "Unbekanntes Teil",
         quantity: parseInt(p.quantity) || 1,
         currentStationId: "wareneingang",
+        surfaceRequested: p.surfaceRequested || p.surface || p.finish || p.verfahren || null,
       }));
       await db.insert(items).values(newItems);
     }

@@ -2,7 +2,7 @@
 
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, use } from "react";
-import { notFound } from "next/navigation";
+import { notFound, useRouter } from "next/navigation";
 import Link from "next/link";
 import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,6 +23,7 @@ type Order = any; // Fallback since it was from repo
 export default function StationPage({ params }: { params: Promise<{ slug: string }> }) {
   usePageView();
   const { slug } = use(params);
+  const router = useRouter();
 
   if (!VALID_SLUGS.includes(slug)) {
     notFound();
@@ -35,6 +36,10 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
     const loadData = async () => {
       try {
         const dbOrdersRes = await getOrdersDb();
+        if (dbOrdersRes && !dbOrdersRes.ok && dbOrdersRes.error === "UNAUTHORIZED") {
+          router.push("/start?reason=session_expired");
+          return;
+        }
         if (dbOrdersRes.ok && dbOrdersRes.data && dbOrdersRes.data.length > 0) {
           setOrders(dbOrdersRes.data as any);
         }
@@ -43,7 +48,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
       }
     };
     loadData();
-  }, []);
+  }, [router]);
 
   const filteredOrders = orders.filter(o => (o.currentStationId || o.station) === slug);
   const selectedOrder = orders.find(o => o.id === selectedOrderId) || null;

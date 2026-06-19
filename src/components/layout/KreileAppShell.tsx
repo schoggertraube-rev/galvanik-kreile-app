@@ -5,7 +5,6 @@ import { KreileHeader } from "./KreileHeader";
 import { RightNav } from "./RightNav";
 import { MobileNav } from "./MobileNav";
 import { MobileBottomNav } from "./MobileBottomNav";
-import { TabletTopFlowNav } from "./TabletTopFlowNav";
 import { PwaRegister } from "./PwaRegister";
 import { useEffect, useState } from "react";
 import { getSystemStats } from "@/app/actions/systemStats";
@@ -15,11 +14,14 @@ import { ParkedCallProvider } from "@/contexts/ParkedCallContext";
 import { FloatingParkedCall } from "@/components/telefonnotiz/FloatingParkedCall";
 import { OrderOverlay } from "@/components/orders/OrderOverlay";
 import { CustomerOverlay } from "@/components/customers/CustomerOverlay";
+import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
+import { SessionWarningBanner } from "./SessionWarningBanner";
 
 export function KreileAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isSessionExpired, setIsSessionExpired] = useState(false);
 
   useEffect(() => {
     if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
@@ -29,9 +31,24 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
         }
       }).catch(() => setIsDemoMode(true));
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsDemoMode(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (pathname !== "/start" && pathname !== "/login") {
+      getAuthorizationSnapshotAction().then(res => {
+        if (!res.ok) {
+          setIsSessionExpired(true);
+        } else {
+          setIsSessionExpired(false);
+        }
+      }).catch(() => {
+        setIsSessionExpired(true);
+      });
+    }
+  }, [pathname]);
 
   const isStartScreen = pathname === "/start" || pathname === "/login";
 
@@ -60,6 +77,8 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
         >
           <PwaRegister />
 
+          <SessionWarningBanner show={isSessionExpired} />
+
           {/* Demo/Offline Banner */}
           {isDemoMode && (
             <div className="bg-accent-orange text-white px-4 py-1.5 text-xs font-bold flex items-center justify-center gap-2 z-50">
@@ -78,7 +97,7 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
           <div className="flex flex-1 min-h-0">   {/* min-h-0 verhindert Flex-Overflow */}
 
             {/* Linke Navigation (Desktop Sidebar, sichtbar ab lg) */}
-            <div className="hidden lg:flex shrink-0">
+            <div className="hidden lg:flex shrink-0 w-[72px] relative z-30">
               {/* Desktop (≥1024px): RightNav permanent sichtbar */}
               <RightNav />
             </div>

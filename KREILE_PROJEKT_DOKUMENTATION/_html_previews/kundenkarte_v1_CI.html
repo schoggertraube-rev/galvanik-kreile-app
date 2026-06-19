@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>Kreile Kundenkarte · CI-Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<style>
+  :root {
+    --ci-bg: #F1E9DC; --ci-surface: #FBF6ED; --ci-surface-soft: #EFE6D6;
+    --ci-ink: #1A1F2E; --ci-ink-2: #5D5A4F; --ci-ink-3: #8E8775;
+    --ci-border: #E5DDC9; --ci-accent: #C2185B;
+    --ci-success: #4F8F58; --ci-warn: #D89A2C; --ci-danger: #B0413E;
+    --ci-success-soft: #D9E8D3; --ci-warn-soft: #F4E1B6; --ci-danger-soft: #EBC9C2;
+    --ci-radius-card: 18px; --ci-radius-button: 12px;
+    --ci-shadow: 0 1px 2px rgba(20,15,5,0.04), 0 12px 32px rgba(20,15,5,0.08);
+    --ci-font-serif: "Fraunces", Georgia, serif;
+    --ci-font-sans: "Inter", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--ci-bg); font-family: var(--ci-font-sans); color: var(--ci-ink); min-height: 100vh; }
+
+  .backdrop { position: fixed; inset: 0; background: rgba(26,31,46,0.42); backdrop-filter: blur(8px); z-index: 10; }
+  .modal-wrap { position: relative; z-index: 20; display: flex; justify-content: center; padding: 32px 16px; }
+  .modal { width: 100%; max-width: 1080px; background: var(--ci-surface); border-radius: var(--ci-radius-card); box-shadow: var(--ci-shadow); border: 1px solid var(--ci-border); overflow: hidden; }
+
+  .gradient-stripe { height: 4px; background: linear-gradient(115deg, #7A3FB0, #C2185B 38%, #F2643C 72%, #F6A93B); }
+  .modal-head { padding: 24px 28px 18px; border-bottom: 1px solid var(--ci-border); display: flex; justify-content: space-between; gap: 16px; }
+  .head-left { flex: 1; }
+  .customer-name { font-family: var(--ci-font-serif); font-size: 34px; font-weight: 400; color: var(--ci-ink); }
+  .customer-company { font-family: var(--ci-font-serif); font-size: 18px; color: var(--ci-ink-2); margin-top: 4px; }
+  .head-meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+  .pill-success { background: var(--ci-success-soft); color: #2D5132; }
+  .pill-accent { background: var(--ci-accent); color: #fff; }
+  .pill-neutral { background: var(--ci-surface-soft); color: var(--ci-ink-2); }
+  .close-btn { background: transparent; border: 1px solid var(--ci-border); width: 40px; height: 40px; border-radius: 999px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--ci-ink-2); }
+  .close-btn:hover { background: var(--ci-surface-soft); }
+
+  .modal-body { display: grid; grid-template-columns: 1.6fr 1fr; }
+  @media (max-width: 900px) { .modal-body { grid-template-columns: 1fr; } }
+  .col-left { padding: 22px 24px 28px; border-right: 1px solid var(--ci-border); }
+  .col-right { padding: 22px 24px 28px; background: var(--ci-bg); }
+
+  .section { margin-bottom: 22px; }
+  .section:last-child { margin-bottom: 0; }
+  .section-label { font-size: 10px; color: var(--ci-ink-3); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 10px; font-weight: 500; }
+
+  /* KPI ROW */
+  .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .kpi-card { background: var(--ci-surface); border: 1px solid var(--ci-border); border-radius: 10px; padding: 10px; }
+  .kpi-label { font-size: 9px; color: var(--ci-ink-3); letter-spacing: 0.5px; text-transform: uppercase; }
+  .kpi-val { font-family: var(--ci-font-serif); font-size: 18px; color: var(--ci-ink); margin-top: 2px; }
+  .kpi-val.green { color: var(--ci-success); }
+  .kpi-val.warn { color: var(--ci-warn); }
+
+  /* STAMMDATEN */
+  .stamm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stamm-item { background: var(--ci-surface); border: 1px solid var(--ci-border); border-radius: 10px; padding: 10px 12px; }
+  .stamm-label { font-size: 9px; color: var(--ci-ink-3); letter-spacing: 0.5px; text-transform: uppercase; }
+  .stamm-val { font-size: 14px; color: var(--ci-ink); margin-top: 2px; font-weight: 500; }
+  .stamm-val a { color: var(--ci-accent); text-decoration: none; }
+
+  /* AUFTRÄGE */
+  .order-card { background: var(--ci-surface); border: 1px solid var(--ci-border); border-radius: 12px; padding: 10px 14px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: transform 0.12s; }
+  .order-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(20,15,5,0.06); }
+  .order-left { display: flex; align-items: center; gap: 10px; }
+  .order-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-green { background: var(--ci-success); }
+  .dot-yellow { background: var(--ci-warn); }
+  .dot-red { background: var(--ci-danger); }
+  .order-num { font-family: var(--ci-font-serif); font-size: 14px; color: var(--ci-ink); }
+  .order-title { font-size: 13px; color: var(--ci-ink-2); }
+  .order-right { text-align: right; }
+  .order-station { font-size: 11px; color: var(--ci-ink-3); }
+  .order-due { font-size: 11px; }
+  .due-ok { color: var(--ci-success); }
+  .due-warn { color: var(--ci-warn); }
+  .due-late { color: var(--ci-danger); }
+
+  /* ZAHLUNGEN */
+  .pay-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--ci-border); }
+  .pay-row:last-child { border-bottom: none; }
+  .pay-label { font-size: 13px; color: var(--ci-ink); }
+  .pay-sub { font-size: 11px; color: var(--ci-ink-3); }
+  .pay-amount { font-family: var(--ci-font-serif); font-size: 15px; color: var(--ci-ink); }
+  .pay-status { font-size: 10px; padding: 2px 8px; border-radius: 999px; }
+  .pay-paid { background: var(--ci-success-soft); color: #2D5132; }
+  .pay-open { background: var(--ci-warn-soft); color: #6B4A0D; }
+
+  /* KOMMUNIKATION */
+  .comm-item { display: grid; grid-template-columns: 28px 1fr; gap: 10px; padding: 8px 0; position: relative; }
+  .comm-item:not(:last-child)::after { content: ""; position: absolute; left: 13px; top: 30px; bottom: -4px; width: 1px; background: var(--ci-border); }
+  .comm-dot { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; z-index: 2; flex-shrink: 0; }
+  .comm-dot.email { background: var(--ci-success-soft); color: var(--ci-success); }
+  .comm-dot.phone { background: var(--ci-warn-soft); color: var(--ci-warn); }
+  .comm-dot.note { background: var(--ci-surface-soft); color: var(--ci-ink-2); }
+  .comm-time { font-size: 10px; color: var(--ci-ink-3); }
+  .comm-title { font-size: 13px; color: var(--ci-ink); }
+  .comm-sub { font-size: 11px; color: var(--ci-ink-3); }
+
+  /* QUICK ACTIONS */
+  .qa-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .qa { background: var(--ci-surface); border: 1px solid var(--ci-border); padding: 12px 8px; border-radius: var(--ci-radius-button); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 5px; color: var(--ci-ink); transition: background 0.12s; font-family: var(--ci-font-sans); }
+  .qa:hover { background: var(--ci-surface-soft); }
+  .qa.primary { background: var(--ci-ink); color: var(--ci-surface); border-color: var(--ci-ink); }
+  .qa.primary:hover { background: #2A3045; }
+  .qa i { font-size: 18px; }
+  .qa-label { font-size: 11px; }
+
+  .modal-foot { padding: 16px 28px; background: var(--ci-bg); border-top: 1px solid var(--ci-border); display: flex; justify-content: flex-end; gap: 8px; }
+  .btn { padding: 10px 18px; border-radius: var(--ci-radius-button); font-family: var(--ci-font-sans); font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--ci-border); background: var(--ci-surface); color: var(--ci-ink); }
+  .btn:hover { background: var(--ci-surface-soft); }
+  .btn-primary { background: var(--ci-ink); color: var(--ci-surface); border-color: var(--ci-ink); display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary:hover { background: #2A3045; }
+</style>
+</head>
+<body>
+
+<div class="backdrop"></div>
+
+<div class="modal-wrap">
+  <div class="modal">
+    <div class="gradient-stripe"></div>
+
+    <!-- HEADER -->
+    <div class="modal-head">
+      <div class="head-left">
+        <div class="customer-name">Max Mustermann</div>
+        <div class="customer-company">Oldtimer-Werkstatt Mustermann GmbH</div>
+        <div class="head-meta">
+          <span class="pill pill-success"><i class="ti ti-star"></i> A-Kunde</span>
+          <span class="pill pill-accent"><i class="ti ti-bolt"></i> 3 aktive Aufträge</span>
+          <span class="pill pill-neutral"><i class="ti ti-calendar"></i> Kunde seit März 2024</span>
+          <span class="pill pill-neutral"><i class="ti ti-map-pin"></i> 60325 Frankfurt</span>
+        </div>
+      </div>
+      <button class="close-btn" aria-label="Schließen"><i class="ti ti-x" style="font-size:16px;"></i></button>
+    </div>
+
+    <!-- BODY -->
+    <div class="modal-body">
+
+      <!-- LINKE SPALTE -->
+      <div class="col-left">
+
+        <!-- KUNDEN-KPIs -->
+        <div class="section">
+          <div class="section-label">Kennzahlen</div>
+          <div class="kpi-row">
+            <div class="kpi-card">
+              <div class="kpi-label">Umsatz LTV</div>
+              <div class="kpi-val">12.450 €</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Gewinn LTV</div>
+              <div class="kpi-val green">4.730 €</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Offene Posten</div>
+              <div class="kpi-val warn">890 €</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Pünktlichkeit</div>
+              <div class="kpi-val green">92 %</div>
+            </div>
+            <div class="kpi-card">
+              <div class="kpi-label">Reklamation</div>
+              <div class="kpi-val green">0 %</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- STAMMDATEN -->
+        <div class="section">
+          <div class="section-label">Stammdaten</div>
+          <div class="stamm-grid">
+            <div class="stamm-item">
+              <div class="stamm-label">E-Mail</div>
+              <div class="stamm-val"><a href="mailto:max@mustermann.de">max@mustermann.de</a></div>
+            </div>
+            <div class="stamm-item">
+              <div class="stamm-label">Telefon</div>
+              <div class="stamm-val"><a href="tel:+4969123456">069 / 123 456</a></div>
+            </div>
+            <div class="stamm-item">
+              <div class="stamm-label">Adresse</div>
+              <div class="stamm-val">Bockenheimer Landstr. 42, 60325 Frankfurt</div>
+            </div>
+            <div class="stamm-item">
+              <div class="stamm-label">Kundennummer</div>
+              <div class="stamm-val">K-2024-0017</div>
+            </div>
+            <div class="stamm-item">
+              <div class="stamm-label">Bevorzugte Lieferung</div>
+              <div class="stamm-val">Abholung</div>
+            </div>
+            <div class="stamm-item">
+              <div class="stamm-label">Zahlungsart</div>
+              <div class="stamm-val">Rechnung 14 Tage</div>
+            </div>
+            <div class="stamm-item">
+              <div class="stamm-label">Ø Zahlungsdauer</div>
+              <div class="stamm-val green">6 Tage</div>
+            </div>
+            <div class="stamm-item">
+              <div class="stamm-label">Letzte Aktivität</div>
+              <div class="stamm-val">heute · Status-Mail gesendet</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- AUFTRÄGE -->
+        <div class="section">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;">
+            <div class="section-label" style="margin:0;">Aufträge · 5 gesamt · 3 aktiv</div>
+            <span style="font-size:11px;color:var(--ci-ink-3);">neueste zuerst</span>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <div class="order-card">
+              <div class="order-left">
+                <div class="order-dot dot-yellow"></div>
+                <div>
+                  <div class="order-num">A-2026-0042</div>
+                  <div class="order-title">Stoßstange Opel Rekord C</div>
+                </div>
+              </div>
+              <div class="order-right">
+                <div class="order-station">Schleiferei</div>
+                <div class="order-due due-warn">in 12 Tagen</div>
+              </div>
+            </div>
+            <div class="order-card">
+              <div class="order-left">
+                <div class="order-dot dot-green"></div>
+                <div>
+                  <div class="order-num">A-2026-0017</div>
+                  <div class="order-title">Stoßstange Mercedes W108</div>
+                </div>
+              </div>
+              <div class="order-right">
+                <div class="order-station">Galvanik</div>
+                <div class="order-due due-ok">in 22 Tagen</div>
+              </div>
+            </div>
+            <div class="order-card">
+              <div class="order-left">
+                <div class="order-dot dot-red"></div>
+                <div>
+                  <div class="order-num">A-2025-0188</div>
+                  <div class="order-title">Motorradteile BMW R75</div>
+                </div>
+              </div>
+              <div class="order-right">
+                <div class="order-station">Warenausgang</div>
+                <div class="order-due due-late">überfällig 3 T</div>
+              </div>
+            </div>
+            <div class="order-card" style="opacity:0.6;">
+              <div class="order-left">
+                <div class="order-dot" style="background:var(--ci-ink-3);"></div>
+                <div>
+                  <div class="order-num">A-2025-0122</div>
+                  <div class="order-title">Türgriffe Porsche 356</div>
+                </div>
+              </div>
+              <div class="order-right">
+                <div class="order-station" style="color:var(--ci-success);">✓ abgeschlossen</div>
+                <div class="order-due" style="color:var(--ci-ink-3);">Feb 2025</div>
+              </div>
+            </div>
+            <div class="order-card" style="opacity:0.6;">
+              <div class="order-left">
+                <div class="order-dot" style="background:var(--ci-ink-3);"></div>
+                <div>
+                  <div class="order-num">A-2024-0089</div>
+                  <div class="order-title">Kühlergrill Mercedes W111</div>
+                </div>
+              </div>
+              <div class="order-right">
+                <div class="order-station" style="color:var(--ci-success);">✓ abgeschlossen</div>
+                <div class="order-due" style="color:var(--ci-ink-3);">Okt 2024</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ZAHLUNGEN -->
+        <div class="section">
+          <div class="section-label">Zahlungen · letzte 5</div>
+          <div style="background:var(--ci-surface);border:1px solid var(--ci-border);border-radius:12px;padding:10px 14px;">
+            <div class="pay-row">
+              <div>
+                <div class="pay-label">RE-2026-0031 · Stoßstange Opel</div>
+                <div class="pay-sub">Mollie · Visa *4242 · 15.06.2026</div>
+              </div>
+              <div style="text-align:right;">
+                <div class="pay-amount">890,00 €</div>
+                <span class="pay-status pay-open">offen</span>
+              </div>
+            </div>
+            <div class="pay-row">
+              <div>
+                <div class="pay-label">RE-2025-0188 · Motorradteile BMW</div>
+                <div class="pay-sub">SEPA · 22.01.2026</div>
+              </div>
+              <div style="text-align:right;">
+                <div class="pay-amount">1.240,00 €</div>
+                <span class="pay-status pay-paid">bezahlt</span>
+              </div>
+            </div>
+            <div class="pay-row">
+              <div>
+                <div class="pay-label">RE-2025-0122 · Türgriffe Porsche</div>
+                <div class="pay-sub">Bar · 18.02.2025</div>
+              </div>
+              <div style="text-align:right;">
+                <div class="pay-amount">420,00 €</div>
+                <span class="pay-status pay-paid">bezahlt</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RECHTE SPALTE -->
+      <div class="col-right">
+
+        <!-- SCHNELLAKTIONEN -->
+        <div class="section">
+          <div class="section-label">Schnellaktionen</div>
+          <div class="qa-grid">
+            <button class="qa primary"><i class="ti ti-mail-forward"></i><span class="qa-label">E-Mail</span></button>
+            <button class="qa"><i class="ti ti-phone"></i><span class="qa-label">Anrufen</span></button>
+            <button class="qa"><i class="ti ti-file-plus"></i><span class="qa-label">Neuer Auftrag</span></button>
+            <button class="qa"><i class="ti ti-receipt"></i><span class="qa-label">Rechnung</span></button>
+            <button class="qa"><i class="ti ti-credit-card"></i><span class="qa-label">Zahlung</span></button>
+            <button class="qa"><i class="ti ti-alert-triangle"></i><span class="qa-label">Reklamation</span></button>
+            <button class="qa"><i class="ti ti-edit"></i><span class="qa-label">Bearbeiten</span></button>
+            <button class="qa"><i class="ti ti-tag"></i><span class="qa-label">Tags</span></button>
+          </div>
+        </div>
+
+        <!-- KOMMUNIKATIONSHISTORIE -->
+        <div class="section">
+          <div class="section-label">Kommunikation · letzte Einträge</div>
+          <div style="display:flex;flex-direction:column;gap:2px;">
+            <div class="comm-item">
+              <div class="comm-dot email"><i class="ti ti-mail" style="font-size:14px;"></i></div>
+              <div>
+                <div class="comm-time">heute · 08:14</div>
+                <div class="comm-title">Status-Mail „In Bearbeitung" gesendet</div>
+                <div class="comm-sub">Betr.: A-2026-0042 Stoßstange</div>
+              </div>
+            </div>
+            <div class="comm-item">
+              <div class="comm-dot phone"><i class="ti ti-phone" style="font-size:14px;"></i></div>
+              <div>
+                <div class="comm-time">09.06. · 14:30</div>
+                <div class="comm-title">Anruf: Frage nach Liefertermin</div>
+                <div class="comm-sub">„Braucht Stoßstange bis Oldtimer-Treffen Anfang August"</div>
+              </div>
+            </div>
+            <div class="comm-item">
+              <div class="comm-dot email"><i class="ti ti-mail" style="font-size:14px;"></i></div>
+              <div>
+                <div class="comm-time">21.05. · 09:30</div>
+                <div class="comm-title">KV angenommen per Mail</div>
+                <div class="comm-sub">890 € brutto · Freigabe erteilt</div>
+              </div>
+            </div>
+            <div class="comm-item">
+              <div class="comm-dot note"><i class="ti ti-note" style="font-size:14px;"></i></div>
+              <div>
+                <div class="comm-time">18.05. · 15:00</div>
+                <div class="comm-title">Wareneingang: 4 Teile geprüft</div>
+                <div class="comm-sub">Lötstelle an Horn rechts notiert</div>
+              </div>
+            </div>
+            <div class="comm-item">
+              <div class="comm-dot phone"><i class="ti ti-phone" style="font-size:14px;"></i></div>
+              <div>
+                <div class="comm-time">15.05. · 10:00</div>
+                <div class="comm-title">Erstanfrage telefonisch</div>
+                <div class="comm-sub">Stoßstange Opel Rekord C, Express gewünscht</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- NOTIZEN / TAGS -->
+        <div class="section">
+          <div class="section-label">Interne Notizen</div>
+          <div style="background:var(--ci-surface);border:1px solid var(--ci-border);border-radius:12px;padding:12px 14px;">
+            <div style="font-size:13px;color:var(--ci-ink);">Sehr zuverlässiger Kunde, zahlt immer pünktlich. Sammler mit großer Garage, hat noch weitere Projekte angekündigt (Borgward Isabella, VW Käfer Cabrio). Bevorzugt telefonischen Kontakt.</div>
+            <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+              <span style="background:var(--ci-surface-soft);padding:3px 10px;border-radius:999px;font-size:11px;color:var(--ci-ink-2);">Stammkunde</span>
+              <span style="background:var(--ci-surface-soft);padding:3px 10px;border-radius:999px;font-size:11px;color:var(--ci-ink-2);">Oldtimer-Sammler</span>
+              <span style="background:var(--ci-surface-soft);padding:3px 10px;border-radius:999px;font-size:11px;color:var(--ci-ink-2);">Express-fähig</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="modal-foot">
+      <button class="btn">Schließen</button>
+      <button class="btn-primary btn"><i class="ti ti-send" style="font-size:14px;"></i> Nachricht senden</button>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

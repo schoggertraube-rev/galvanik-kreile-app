@@ -83,7 +83,10 @@ async function main() {
         mandanten_nr TEXT,
         wj_beginn DATE,
         aktiv BOOLEAN DEFAULT true,
-        erstellt_am TIMESTAMP NOT NULL DEFAULT NOW()
+        erstellt_am TIMESTAMP NOT NULL DEFAULT NOW(),
+        app_lizenz_monat NUMERIC(10, 2) DEFAULT '149.00',
+        app_einrichtung_einmalig NUMERIC(10, 2) DEFAULT '0.00',
+        app_startdatum DATE DEFAULT NOW()
       );
     `;
 

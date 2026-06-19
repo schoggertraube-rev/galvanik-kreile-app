@@ -23,10 +23,13 @@ import { getCustomersDb } from "@/app/actions/customers.actions";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import { useCustomerOverlay } from "@/components/customers/useCustomerOverlay";
 
+import { useRouter } from "next/navigation";
+
 const safe = (value: unknown) => String(value ?? "").toLowerCase();
 
 export default function CustomersPage() {
   usePageView();
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
@@ -41,6 +44,10 @@ export default function CustomersPage() {
     const loadCustomers = async () => {
       try {
         const res = await getCustomersDb();
+        if (res && !res.ok && res.error === "UNAUTHORIZED") {
+          router.push("/start?reason=session_expired");
+          return;
+        }
         if (isMounted && res.ok) {
           setCustomers(res.data);
         }
@@ -64,7 +71,7 @@ export default function CustomersPage() {
       window.removeEventListener('kreile-sync-customers', handleSync);
       window.removeEventListener('kreile-sync-focus', handleSync);
     };
-  }, []);
+  }, [router]);
 
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
 

@@ -45,3 +45,9 @@ next-env.d.ts
 # playwright
 /playwright-report/
 /test-results/
+
+# Governance: autonome Steuerungsdateien (kein Produktcode, nicht nach Vercel)
+# KREILE_CLAUDE_COWORK_MASCHINERIE/ bleibt committed (bereits in b248ed4)
+# Untracked Steuerungs-ZIP und Runtime-Ordner ausschließen
+Agentur für App und Web/KREILE_COWORK_AUTONOME_IDEA_TO_LIVE_STEUERUNG/
+Agentur für App und Web/KREILE_COWORK_AUTONOME_IDEA_TO_LIVE_STEUERUNG.zip

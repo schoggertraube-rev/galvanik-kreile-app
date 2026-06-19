@@ -2,9 +2,10 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { beleg, kategorie, lieferant } from '@/db/schema_buchhaltung';
 import { KlippaProvider } from '@/lib/ocr/KlippaProvider';
-import { ManualProvider } from '@/lib/ocr/ManualProvider';
+import { GeminiProvider } from '@/lib/ocr/GeminiProvider';
 import { verteilBeleg } from '@/lib/ocr/Verteilung';
-import { eq, ilike } from 'drizzle-orm';
+import { ilike } from 'drizzle-orm';
+import { readAppSession } from '@/lib/server/appSession';
 
 export async function POST(req: Request) {
   try {
@@ -15,12 +16,13 @@ export async function POST(req: Request) {
     }
 
     // Determine Provider
-    const hasKey = !!process.env.KLIPPA_API_KEY;
-    const provider = hasKey ? new KlippaProvider() : new ManualProvider();
+    const hasKlippa = !!process.env.KLIPPA_API_KEY;
+    const provider = hasKlippa ? new KlippaProvider() : new GeminiProvider();
     
     // Wir können bei Supabase den Public URL abfragen, falls es public ist
     // Da wir hier nur Pfade speichern, simulieren wir die Extraktion
-    const imageUrl = `https://YOUR_SUPABASE_URL/storage/v1/object/public/belege/${storagePath}`;
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const imageUrl = `${supabaseUrl}/storage/v1/object/public/belege/${storagePath}`;
     
     // OCR Durchführen (F-BELEG-03)
     const ergebnis = await provider.extractBeleg(imageUrl);
@@ -75,6 +77,24 @@ export async function POST(req: Request) {
     // Status bestimmen
     const status = ergebnis.confidence >= 0.85 ? 'erfasst' : 'pruefen';
 
+    let erstelltVon: string;
+    const sessionRes = await readAppSession();
+    if (sessionRes.ok) {
+      erstelltVon = sessionRes.session.userId;
+    } else {
+      if (process.env.NODE_ENV !== "production") {
+        const { appUsers } = await import("@/db/schema");
+        const users = await db.select().from(appUsers).limit(1);
+        if (users.length > 0) {
+          erstelltVon = users[0].id;
+        } else {
+          erstelltVon = "00000000-0000-0000-0000-000000000000";
+        }
+      } else {
+        return NextResponse.json({ error: "Sitzung abgelaufen oder nicht angemeldet" }, { status: 401 });
+      }
+    }
+
     // Datensatz in `beleg` anlegen
     const [newBeleg] = await db.insert(beleg).values({
       originalDatei: storagePath,
@@ -92,17 +112,18 @@ export async function POST(req: Request) {
       ocrConfidence: String(ergebnis.confidence),
       ocrRohtext: ergebnis.rohtext,
       ocrPositionen: ergebnis.positionen,
-      ocrProvider: hasKey ? 'klippa' : 'manuell',
+      ocrProvider: hasKlippa ? 'klippa' : 'gemini',
       status,
-      erstelltVon: '00000000-0000-0000-0000-000000000000' // mock user id
+      erstelltVon
     }).returning();
 
     // Verteilung starten (F-BELEG-05)
     await verteilBeleg(newBeleg.id, ergebnis, kategorieName);
 
     return NextResponse.json({ ok: true, belegId: newBeleg.id, status });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("OCR API Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : "Unbekannter Fehler";
+    return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }

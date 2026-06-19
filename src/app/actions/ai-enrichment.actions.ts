@@ -41,9 +41,9 @@ Freitext: "${text}"
     const data = JSON.parse(cleanedJson);
 
     return { ok: true, data };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to extract data:", error);
-    return { ok: false, error: "Fehler bei der KI-Auswertung: " + error.message };
+    return { ok: false, error: "Fehler bei der KI-Auswertung: " + (error instanceof Error ? error.message : "Unknown error") };
   }
 }
 
@@ -70,12 +70,13 @@ Ort/Stadt: "${city}"
 
 Antworte AUSSCHLIESSLICH als gültiges JSON im folgenden Format:
 {
-  "street": "Straße und Hausnummer, falls gefunden, sonst null",
-  "zipCode": "PLZ falls gefunden, sonst null",
-  "city": "Stadt falls gefunden, sonst null",
   "website": "Website falls gefunden, sonst null",
   "phone": "Öffentliche Telefonnummer falls gefunden, sonst null",
   "email": "Öffentliche Email falls gefunden, sonst null",
+  "street": "Straße und Hausnummer falls gefunden, sonst null",
+  "zipCode": "PLZ (korrekt für das Land) falls gefunden oder ableitbar, sonst null",
+  "city": "Stadt falls gefunden oder ableitbar, sonst null",
+  "country": "Länderkürzel (DE, AT, CH) falls gefunden, sonst null",
   "confidence": "hoch" | "mittel" | "niedrig"
 }
 `;
@@ -87,8 +88,8 @@ Antworte AUSSCHLIESSLICH als gültiges JSON im folgenden Format:
     const data = JSON.parse(cleanedJson);
 
     return { ok: true, data };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to enrich data:", error);
-    return { ok: false, error: "Fehler bei der KI-Recherche: " + error.message };
+    return { ok: false, error: "Fehler bei der KI-Recherche: " + (error instanceof Error ? error.message : "Unknown error") };
   }
 }

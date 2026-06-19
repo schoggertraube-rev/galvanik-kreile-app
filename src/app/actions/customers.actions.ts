@@ -8,6 +8,7 @@ import { InferSelectModel } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { Customer } from "@/lib/types/customer";
 import { unstable_noStore as noStore } from "next/cache";
+import { resolveAuthorization } from "@/lib/server/authorization";
 
 type DbCustomer = InferSelectModel<typeof customers>;
 
@@ -30,9 +31,11 @@ function mapDbCustomer(c: DbCustomer): Customer {
     tags: (c.tags as string[]) || [],
     creditRating: c.creditRating || undefined,
     imageUrls: (c.imageUrls as string[]) || [],
-    address: c.address || undefined,
+    address: c.address || c.street || undefined, // fallback for legacy
+    street: c.street || undefined,
     city: c.city || undefined,
     zipCode: c.zipCode || undefined,
+    country: c.country || undefined,
     createdAt: c.createdAt ? c.createdAt.toISOString() : new Date().toISOString(),
     updatedAt: c.updatedAt ? c.updatedAt.toISOString() : new Date().toISOString(),
   };
@@ -66,12 +69,17 @@ export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
+  const authRes = await resolveAuthorization();
+  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  const tenantId = authRes.data.tenantId;
+
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
     const dbCustomers = await db.select().from(customers).where(
       and(
-        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo')`,
+        eq(customers.tenantId, tenantId),
+        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     ).orderBy(customers.createdAt);
@@ -88,10 +96,20 @@ export async function getCustomerByIdDb(id: string): Promise<ActionResult<Custom
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
+  const authRes = await resolveAuthorization();
+  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  const tenantId = authRes.data.tenantId;
+
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
-    const dbCustomers = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
+    const dbCustomers = await db.select().from(customers).where(
+      and(
+        eq(customers.id, id),
+        eq(customers.tenantId, tenantId),
+        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`
+      )
+    ).limit(1);
     if (dbCustomers.length === 0) return { ok: true, data: null };
     
     return { ok: true, data: mapDbCustomer(dbCustomers[0]) };
@@ -104,6 +122,10 @@ export async function getCustomerByIdDb(id: string): Promise<ActionResult<Custom
 export async function createCustomerDb(data: Record<string, unknown>): Promise<ActionResult<Customer>> {
   const auth = await checkAppAuth("write");
   if (!auth.ok) return auth;
+
+  const authRes = await resolveAuthorization();
+  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
@@ -120,27 +142,33 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
   try {
     const newId = (typeof data.id === 'string' ? data.id : undefined) || createId();
     
+    const nameStr = validData.company || [validData.firstName, validData.lastName].filter(Boolean).join(" ");
+    const streetCombined = validData.street + " " + validData.houseNumber;
+
     const rawCustomerDb = {
       id: newId,
+      tenantId: tenantId,
       customerNumber: `K-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      name: validData.name,
-      companyName: validData.companyName || null,
-      type: validData.type || "business",
-      address: validData.address || null,
+      name: nameStr,
+      companyName: validData.company || null,
+      type: "business",
+      address: streetCombined,
+      street: streetCombined,
       city: validData.city || null,
-      zipCode: validData.zipCode || null,
+      zipCode: validData.postalCode || null,
+      country: validData.country || null,
       imageUrls: validData.imageUrls || [],
-      contactPerson: (data as Record<string, unknown>).contactPerson as string,
+      contactPerson: [validData.firstName, validData.lastName].filter(Boolean).join(" ") || null,
       email: validData.email,
       phone: validData.phone,
-      paymentProfile: (data as Record<string, unknown>).paymentProfile || null,
-      approvalProfile: (data as Record<string, unknown>).approvalProfile || null,
-      expectationProfile: (data as Record<string, unknown>).expectationProfile || null,
-      technicalProfile: (data as Record<string, unknown>).technicalProfile || null,
-      trustLevel: (data as Record<string, unknown>).trustLevel as string || null,
-      internalWarning: (data as Record<string, unknown>).internalWarning as string || null,
-      tags: (data as Record<string, unknown>).tags || null,
-      creditRating: (data as Record<string, unknown>).creditRating as string || null,
+      paymentProfile: null,
+      approvalProfile: null,
+      expectationProfile: null,
+      technicalProfile: null,
+      trustLevel: null,
+      internalWarning: null,
+      tags: null,
+      creditRating: null,
       notes: validData.notes || null,
     };
     
@@ -149,7 +177,12 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await db.insert(customers).values(newCustomerDb as any);
     
-    const dbCustomers = await db.select().from(customers).where(eq(customers.id, newId)).limit(1);
+    const dbCustomers = await db.select().from(customers).where(
+      and(
+        eq(customers.id, newId),
+        eq(customers.tenantId, tenantId)
+      )
+    ).limit(1);
     if (dbCustomers.length === 0) throw new Error("Insert failed to return data");
     
     try { 
@@ -214,6 +247,10 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
+  const authRes = await resolveAuthorization();
+  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  const tenantId = authRes.data.tenantId;
+
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   if (!query || query.trim() === "") {
@@ -224,12 +261,13 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
     const searchPattern = `%${query.trim()}%`;
     const dbCustomers = await db.select().from(customers).where(
       and(
+        eq(customers.tenantId, tenantId),
         or(
           ilike(customers.name, searchPattern),
           ilike(customers.phone, searchPattern),
           ilike(customers.email, searchPattern)
         ),
-        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo')`,
+        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
         sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
       )
     );
@@ -243,6 +281,10 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
 
 export async function getTopKunden(limit = 5) {
   try {
+    const authRes = await resolveAuthorization();
+    if (!authRes.ok) return [];
+    const tenantId = authRes.data.tenantId;
+
     const { sql, desc } = await import("drizzle-orm");
     const { ausgangsrechnung } = await import("@/db/schema_buchhaltung");
     
@@ -253,6 +295,12 @@ export async function getTopKunden(limit = 5) {
     })
     .from(customers)
     .innerJoin(ausgangsrechnung, eq(customers.id, ausgangsrechnung.kundeId))
+    .where(
+      and(
+        eq(customers.tenantId, tenantId),
+        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`
+      )
+    )
     .groupBy(customers.id)
     .orderBy(desc(sql`sum(${ausgangsrechnung.netto})`))
     .limit(limit);

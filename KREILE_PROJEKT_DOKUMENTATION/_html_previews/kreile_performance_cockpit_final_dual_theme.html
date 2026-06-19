@@ -1,0 +1,402 @@
+
+<h2 class="sr-only">Kreile WerkstattCockpit — vollständige Performance-Analyse, umschaltbar zwischen Dark- und Hell-Theme, mit Metall-Marge, Forecast, Frühwarnungen, CLV und DATEV-Export</h2>
+<style>
+*{box-sizing:border-box;margin:0}
+.ck{--bg:#F0EBE0;--surf:#fff;--surf2:#F9F6F1;--navy:#1A2847;--ink:#1A2847;--ink2:#5B6472;--ink3:#9CA3AF;--bd:rgba(26,40,71,.09);--pos:#16A34A;--neg:#DC2626;--warn:#C2730A;--info:#2563EB;--cyan:#0E7490;--purple:#6D28D9;--glass:rgba(255,255,255,.55);--posbg:rgba(22,163,74,.1);--negbg:rgba(220,38,38,.09);--warnbg:rgba(194,115,10,.1);--infobg:rgba(37,99,235,.09);--purpbg:rgba(109,40,217,.08);font-family:var(--font-sans);background:var(--bg);border-radius:16px;padding:12px;color:var(--ink);transition:background .3s}
+.ck.dark{--bg:#0E1626;--surf:#1A2436;--surf2:#222E42;--navy:#222E42;--ink:#EEF2F8;--ink2:#9FB0C7;--ink3:#6B7A91;--bd:rgba(255,255,255,.09);--pos:#34D399;--neg:#F87171;--warn:#FBBF24;--info:#60A5FA;--cyan:#22D3EE;--purple:#A78BFA;--glass:rgba(255,255,255,.05);--posbg:rgba(52,211,153,.12);--negbg:rgba(248,113,113,.12);--warnbg:rgba(251,191,36,.12);--infobg:rgba(96,165,250,.12);--purpbg:rgba(167,139,250,.12)}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 10px;flex-wrap:wrap}
+.tabs{display:flex;gap:2px;background:var(--surf2);border-radius:9px;padding:3px}
+.tab{font-size:12px;padding:5px 11px;border-radius:7px;color:var(--ink2);cursor:pointer;transition:all .15s;border:none;background:none;font-family:inherit}
+.tab.on{background:var(--surf);color:var(--ink);font-weight:500;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.ck.dark .tab.on{background:#324056}
+.toolr{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.themesw{display:flex;background:var(--surf2);border-radius:8px;padding:3px;gap:2px}
+.tsw{font-size:11px;padding:5px 10px;border-radius:6px;border:none;background:none;color:var(--ink2);cursor:pointer;display:flex;align-items:center;gap:4px;font-family:inherit}
+.tsw.on{background:var(--navy);color:#fff;font-weight:500}
+.ck.dark .tsw.on{background:#3B4A63;color:#fff}
+.ytog{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--ink2);cursor:pointer;user-select:none}
+.tp{width:28px;height:16px;background:var(--bd);border-radius:8px;position:relative;transition:.2s;flex-shrink:0}
+.tp.on{background:var(--pos)}
+.tpd{width:12px;height:12px;background:#fff;border-radius:50%;position:absolute;top:2px;left:2px;transition:.2s}
+.tp.on .tpd{transform:translateX(12px)}
+.stamp{font-size:10px;color:var(--ink3)}
+.tt{margin:0 0 10px}
+.tt h1{font-size:18px;font-weight:500}
+.tt .sub{font-size:11px;color:var(--ink2);margin-top:1px}
+.tt .meta{font-size:11px;color:var(--ink3)}
+.glass{background:var(--glass);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:0.5px solid var(--bd);border-radius:13px;padding:10px 13px;margin:0 0 12px;display:flex;align-items:flex-start;gap:10px;cursor:pointer;transition:box-shadow .25s}
+.glass:hover{box-shadow:0 6px 24px rgba(0,0,0,.1)}
+.gtag{background:var(--purple);color:#fff;font-size:9px;font-weight:500;padding:3px 8px;border-radius:6px;white-space:nowrap;flex-shrink:0;margin-top:1px;letter-spacing:.3px}
+.ck.dark .gtag{color:#0E1626}
+.sec{font-size:10px;font-weight:500;color:var(--ink3);text-transform:uppercase;letter-spacing:.6px;margin:14px 0 8px;display:flex;align-items:center;gap:6px}
+.topgrid{display:grid;grid-template-columns:auto 1fr;gap:10px;margin:0 0 4px;align-items:start}
+.scbox{background:var(--navy);border-radius:14px;padding:13px 15px;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:108px}
+.scl{font-size:8px;font-weight:500;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:.5px}
+.rw{position:relative;width:78px;height:78px}
+.rp{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:19px;font-weight:500;color:#fff}
+.crit{background:rgba(248,113,113,.18);color:#FCA5A5;font-size:9px;font-weight:500;padding:3px 9px;border-radius:9px;text-align:center}
+.detb{font-size:10px;color:rgba(255,255,255,.4);cursor:pointer}
+.detb:hover{color:rgba(255,255,255,.75)}
+.k4{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.card{background:var(--surf);border-radius:13px;padding:11px 13px;cursor:pointer;transition:transform .22s,box-shadow .22s;border:0.5px solid var(--bd);position:relative;overflow:hidden}
+.card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(0,0,0,.12)}
+.cl{font-size:10px;font-weight:500;color:var(--ink3);margin:0 0 3px}
+.cv{font-size:20px;font-weight:500;line-height:1.15}
+.csub{font-size:11px;color:var(--ink2);margin:2px 0 0}
+.pos{color:var(--pos)}.neg{color:var(--neg)}.warn{color:var(--warn)}.info{color:var(--info)}.cy{color:var(--cyan)}.pu{color:var(--purple)}
+.accL{border-left:3px solid}
+.hero{background:linear-gradient(135deg,var(--navy),var(--navy));border:0.5px solid var(--bd);position:relative}
+.heroglow{position:absolute;inset:0;background:radial-gradient(circle at 80% 20%,rgba(251,191,36,.18),transparent 60%);pointer-events:none}
+.fin5{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:8px 0 0}
+.stst{display:grid;grid-template-columns:1fr;gap:6px}
+.strow{background:var(--surf);border:0.5px solid var(--bd);border-radius:11px;padding:9px 12px;cursor:pointer;transition:transform .2s,box-shadow .2s;display:grid;grid-template-columns:90px 1fr 42px;align-items:center;gap:10px}
+.strow:hover{transform:translateX(2px);box-shadow:0 4px 14px rgba(0,0,0,.08)}
+.stn{font-size:12px;font-weight:500}
+.stbar{height:7px;background:var(--bd);border-radius:4px;overflow:hidden}
+.stf{height:100%;border-radius:4px;width:0;transition:width 1.1s cubic-bezier(.4,0,.2,1)}
+.stpct{font-size:12px;font-weight:500;text-align:right}
+.chartcard{background:var(--surf);border:0.5px solid var(--bd);border-radius:13px;padding:13px;margin:0 0 10px}
+.chl{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px}
+.cht{font-size:13px;font-weight:500}
+.chbadge{font-size:9px;font-weight:500;background:var(--infobg);color:var(--info);padding:2px 8px;border-radius:10px}
+.leg{display:flex;gap:14px;font-size:10px;color:var(--ink2);margin:6px 0 0;flex-wrap:wrap}
+.leg span{display:flex;align-items:center;gap:4px}
+.dot{width:9px;height:3px;border-radius:2px}
+.alert{border-left:3px solid var(--neg);background:var(--negbg);border-radius:0 10px 10px 0;padding:9px 12px;margin:10px 0 0;font-size:12px;color:var(--ink);line-height:1.5}
+.metal{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.mcard{background:var(--surf);border:0.5px solid var(--bd);border-radius:12px;padding:11px 13px;cursor:pointer;transition:transform .2s,box-shadow .2s}
+.mcard:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.1)}
+.mhead{display:flex;align-items:center;justify-content:space-between;margin:0 0 6px}
+.mname{font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px}
+.mdot{width:9px;height:9px;border-radius:50%}
+.mmarge{font-size:18px;font-weight:500}
+.mrow{display:flex;justify-content:space-between;font-size:11px;margin:2px 0;color:var(--ink2)}
+.mrow b{color:var(--ink);font-weight:500}
+.col2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.panel{background:var(--surf);border:0.5px solid var(--bd);border-radius:13px;padding:13px}
+.pt{font-size:13px;font-weight:500;margin:0 0 8px}
+.rk{margin:6px 0}
+.rkrow{display:flex;justify-content:space-between;font-size:11px;margin:0 0 3px}
+.rkbar{height:5px;background:var(--bd);border-radius:3px;overflow:hidden}
+.rkf{height:100%;border-radius:3px}
+.cust{display:flex;justify-content:space-between;align-items:flex-start;padding:7px 0;border-bottom:0.5px solid var(--bd)}
+.cust:last-child{border:none}
+.custn{font-size:12px;font-weight:500}
+.custm{font-size:10px;color:var(--ink3);margin-top:1px}
+.custv{font-size:13px;font-weight:500;text-align:right;white-space:nowrap}
+.newt{font-size:8px;background:var(--warnbg);color:var(--warn);padding:2px 6px;border-radius:8px;margin-left:5px;vertical-align:middle}
+.week{background:var(--surf);border:0.5px solid var(--bd);border-radius:13px;padding:13px}
+.prog{height:8px;background:var(--bd);border-radius:4px;overflow:hidden;margin:6px 0}
+.progf{height:100%;background:var(--pos);border-radius:4px;width:0;transition:width 1.1s cubic-bezier(.4,0,.2,1)}
+.streak{display:flex;align-items:center;gap:8px;margin:9px 0 0}
+.stkb{background:var(--warnbg);color:var(--warn);font-weight:500;font-size:11px;padding:3px 9px;border-radius:11px;display:inline-flex;align-items:center;gap:4px}
+.wow{background:var(--surf);border:0.5px solid var(--bd);border-radius:13px;padding:13px;margin:0 0 10px}
+.wowh{font-size:13px;font-weight:500;margin:0 0 10px;display:flex;align-items:center;gap:7px}
+.wowb{font-size:8px;font-weight:500;background:var(--purpbg);color:var(--purple);padding:2px 7px;border-radius:9px;letter-spacing:.5px}
+.warn-card{border-radius:10px;padding:10px 12px;margin:0 0 7px;font-size:12px;line-height:1.5}
+.wc-i{background:var(--infobg)}
+.wc-r{background:var(--negbg)}
+.wc-a{background:var(--warnbg)}
+.wc-g{background:var(--posbg)}
+.wch{font-size:9px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;margin:0 0 4px;display:flex;align-items:center;gap:5px}
+.sim{background:var(--navy);border-radius:13px;padding:14px;margin:0 0 10px}
+.simh{font-size:13px;font-weight:500;color:#fff;margin:0 0 12px;display:flex;align-items:center;justify-content:space-between}
+.eb{background:rgba(255,255,255,.09);border:0.5px solid rgba(255,255,255,.15);border-radius:8px;padding:4px 11px;font-size:11px;color:rgba(255,255,255,.65);cursor:pointer;font-family:inherit}
+.eb:hover{background:rgba(255,255,255,.15);color:#fff}
+.slbl{font-size:11px;color:rgba(255,255,255,.5);display:flex;align-items:center;justify-content:space-between;margin:0 0 3px}
+.sval{font-size:13px;font-weight:500;color:#fff;min-width:60px;text-align:right}
+.lbtn{background:none;border:0.5px solid rgba(255,255,255,.15);border-radius:6px;padding:2px 9px;font-size:10px;color:rgba(255,255,255,.45);cursor:pointer;display:inline-flex;align-items:center;gap:4px;font-family:inherit}
+.lbtn:hover{background:rgba(255,255,255,.08);color:rgba(255,255,255,.75)}
+.lbtn.op{background:rgba(248,113,113,.16);border-color:rgba(248,113,113,.4);color:#FCA5A5}
+.slk input[type=range]{pointer-events:none;opacity:.4}
+.s3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0 0}
+.s3c{background:rgba(255,255,255,.07);border-radius:10px;padding:9px 11px}
+.s3l{font-size:9px;font-weight:500;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.5px;margin:0 0 2px}
+.s3v{font-size:16px;font-weight:500;color:#fff}
+.fcb{background:rgba(255,255,255,.06);border-radius:10px;padding:10px 13px;margin:8px 0 0;display:flex;align-items:center;justify-content:space-between}
+.tax{background:var(--surf);border:0.5px solid var(--bd);border-radius:13px;padding:13px;margin:0 0 10px}
+.tg{display:grid;grid-template-columns:repeat(2,1fr);gap:7px;margin:8px 0}
+.tb{display:flex;align-items:center;gap:9px;padding:9px 11px;border:0.5px solid var(--bd);border-radius:10px;cursor:pointer;transition:all .2s;font-size:12px;font-weight:500}
+.tb:hover{background:var(--surf2);transform:translateY(-1px)}
+.tb i{font-size:18px;color:var(--ink2)}
+.tb .ts{font-size:10px;color:var(--ink3);font-weight:400}
+.saveb{background:var(--posbg);border:0.5px solid var(--pos);border-radius:10px;padding:9px 12px;margin:7px 0 0;font-size:11px;color:var(--ink);display:flex;align-items:center;gap:8px}
+.aibox{background:var(--purpbg);border:0.5px solid var(--bd);border-radius:10px;padding:11px;margin:8px 0 0;font-size:12px;line-height:1.55}
+.aih{font-size:9px;font-weight:500;color:var(--purple);text-transform:uppercase;letter-spacing:.5px;margin:0 0 5px;display:flex;align-items:center;gap:5px}
+.mkt{background:var(--surf);border:0.5px solid var(--bd);border-radius:13px;padding:12px;display:flex;align-items:center;gap:11px}
+.mktic{width:38px;height:38px;border-radius:11px;background:var(--purpbg);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.fkp{display:none;background:var(--surf2);border-radius:11px;padding:11px 13px;margin:6px 0 10px;border:0.5px solid var(--bd)}
+.fkr{display:grid;grid-template-columns:1fr 78px 18px;gap:6px;align-items:center;font-size:12px;padding:3px 0}
+.detexp{display:none;background:var(--surf2);border-radius:10px;padding:10px 12px;margin:8px 0 0;font-size:11px}
+input[type=number]{border:0.5px solid var(--bd);border-radius:6px;padding:4px 6px;font-size:12px;text-align:right;background:var(--surf);color:var(--ink);font-family:inherit}
+</style>
+
+<div class="ck dark" id="ck">
+
+<div class="bar">
+  <div class="tabs">
+    <button class="tab" onclick="pt(this)">Woche</button>
+    <button class="tab on" onclick="pt(this)">Monat</button>
+    <button class="tab" onclick="pt(this)">Quartal</button>
+    <button class="tab" onclick="pt(this)">Jahr</button>
+    <button class="tab" onclick="pt(this)">Frei</button>
+  </div>
+  <div class="toolr">
+    <div class="ytog" onclick="this.querySelector('.tp').classList.toggle('on')"><div class="tp on"><div class="tpd"></div></div>Vorjahr</div>
+    <div class="themesw">
+      <button class="tsw on" id="tDark" onclick="setTheme('dark')"><i class="ti ti-moon" aria-hidden="true" style="font-size:12px"></i>Dark</button>
+      <button class="tsw" id="tLight" onclick="setTheme('light')"><i class="ti ti-sun" aria-hidden="true" style="font-size:12px"></i>Hell</button>
+    </div>
+  </div>
+</div>
+
+<div class="tt">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px">
+    <div><h1>Mai 2026 — Auswertung</h1><div class="sub">Vergleich zu Mai 2025 · Day-by-Day · Stand 09:14</div></div>
+    <div class="meta">22 Werktage · 5 MA · 5 Stationen</div>
+  </div>
+</div>
+
+<div class="glass">
+  <span class="gtag">KI-ANALYSE</span>
+  <div style="flex:1;font-size:12px;color:var(--ink);line-height:1.55">
+    <span style="font-weight:500">Lage Mai:</span> Umsatz +7,2% über Vorjahr, aber Termintreue auf 76% gefallen (−9 %-P) — Ursache: Schleiferei seit 3 Wochen Engpass. Deckungsbeitrag stabil. <span class="warn">Goldpreis +14% seit Badkauf → Metall-Marge auf Rekordniveau. Energiepreis Q2 +8% noch nicht eingepreist.</span>
+  </div>
+  <div style="font-size:11px;color:var(--ink3);cursor:pointer;white-space:nowrap">Details ›</div>
+</div>
+
+<div class="sec"><i class="ti ti-clock-bolt" aria-hidden="true" style="font-size:13px"></i> Durchsatz &amp; Geld</div>
+<div class="topgrid">
+  <div class="scbox">
+    <div class="scl">Gesamtbewertung</div>
+    <div class="rw">
+      <svg width="78" height="78" viewBox="0 0 78 78" style="transform:rotate(-90deg)" aria-hidden="true">
+        <defs><linearGradient id="rg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#06B6D4"/><stop offset="100%" stop-color="#A78BFA"/></linearGradient></defs>
+        <circle cx="39" cy="39" r="31" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="7"/>
+        <circle id="arc" cx="39" cy="39" r="31" fill="none" stroke="url(#rg)" stroke-width="7" stroke-linecap="round" stroke-dasharray="195" stroke-dashoffset="195"/>
+      </svg>
+      <div class="rp" id="rp">0%</div>
+    </div>
+    <div class="crit">Handlungsbedarf</div>
+    <div class="detb" onclick="tog('detail')">Details ↓</div>
+  </div>
+  <div class="k4">
+    <div class="card accL" style="border-left-color:var(--neg)">
+      <div class="cl">Termintreue?</div><div class="cv neg">76 %</div>
+      <div class="csub neg">▼ −9 %-P vs. Vj. (85%)</div>
+      <svg viewBox="0 0 60 14" width="60" height="14" style="margin-top:4px" aria-hidden="true"><polyline points="0,3 12,4 24,6 36,7 48,9 60,11" fill="none" stroke="var(--neg)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="card accL" style="border-left-color:var(--warn)">
+      <div class="cl">Ø Durchlaufzeit?</div><div class="cv warn">9,4 Tage</div>
+      <div class="csub warn">▼ +1,2 T vs. Vj. (8,2)</div>
+      <svg viewBox="0 0 60 14" width="60" height="14" style="margin-top:4px" aria-hidden="true"><polyline points="0,9 12,8 24,9 36,7 48,6 60,4" fill="none" stroke="var(--warn)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="card accL" style="border-left-color:var(--pos)">
+      <div class="cl">Umsatz netto?</div><div class="cv">42.380 €</div>
+      <div class="csub pos">▲ +7,2% vs. Vj. (39.520 €)</div>
+      <svg viewBox="0 0 60 14" width="60" height="14" style="margin-top:4px" aria-hidden="true"><polyline points="0,11 12,9 24,10 36,7 48,6 60,4" fill="none" stroke="var(--pos)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <div class="card accL" style="border-left-color:var(--info)">
+      <div class="cl">Deckungsbeitrag?</div><div class="cv">11.840 €</div>
+      <div class="csub">Marge 27,9% · DB II</div>
+      <svg viewBox="0 0 60 14" width="60" height="14" style="margin-top:4px" aria-hidden="true"><polyline points="0,10 12,9 24,8 36,8 48,7 60,6" fill="none" stroke="var(--info)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+  </div>
+</div>
+
+<div id="detail" class="detexp">
+  <div style="display:grid;grid-template-columns:1fr auto;gap:3px;color:var(--ink2)">
+    <span>Termintreue (25%)</span><b class="neg" style="font-weight:500">76% (+15 Pkt.)</b>
+    <span>Durchlaufzeit-Index (20%)</span><b class="warn" style="font-weight:500">71% (+14 Pkt.)</b>
+    <span>Kritische Aufträge (20%)</span><b class="neg" style="font-weight:500">40% (+8 Pkt.)</b>
+    <span>Fehlerquote QS (15%)</span><b class="pos" style="font-weight:500">93% (+14 Pkt.)</b>
+    <span>OCR &amp; Scan-Doku (10%)</span><b style="font-weight:500">92% (+9 Pkt.)</b>
+    <span>Stationen-Health (10%)</span><b style="font-weight:500">78% (+8 Pkt.)</b>
+  </div>
+</div>
+
+<div class="sec" style="margin-top:12px"><i class="ti ti-coin" aria-hidden="true" style="font-size:13px"></i> Metall-Marge (live) — Alleinstellung</div>
+<div class="card hero" style="margin:0 0 8px;cursor:pointer" onclick="tog('metalexp')">
+  <div class="heroglow"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;position:relative">
+    <div>
+      <div style="font-size:10px;font-weight:500;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.5px">Metall-Marge gesamt (Mai)</div>
+      <div style="font-size:26px;font-weight:500;color:#fff;margin-top:2px">+2.840 €</div>
+      <div style="font-size:11px;color:rgba(255,255,255,.6);margin-top:2px">Erlös zum Tagespreis − Einkaufsbasis der Bäder · <span style="color:#FBBF24">Stand 09:14</span></div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:11px;color:rgba(255,255,255,.5)">Gold-Tagespreis</div>
+      <div style="font-size:16px;font-weight:500;color:#FBBF24">68,40 €/g</div>
+      <div style="font-size:10px;color:#34D399">▲ +14% seit Badkauf</div>
+    </div>
+  </div>
+</div>
+<div class="metal">
+  <div class="mcard">
+    <div class="mhead"><div class="mname"><span class="mdot" style="background:#FBBF24"></span>Gold</div><div class="mmarge pos">+1.640 €</div></div>
+    <div class="mrow"><span>Abgeschieden</span><b>18,2 g</b></div>
+    <div class="mrow"><span>Einkaufsbasis</span><b>22,80 €/g</b></div>
+    <div class="mrow"><span>Tagespreis</span><b>68,40 €/g</b></div>
+    <div class="mrow"><span>Marge</span><b class="pos">+72%</b></div>
+  </div>
+  <div class="mcard">
+    <div class="mhead"><div class="mname"><span class="mdot" style="background:#94A3B8"></span>Silber</div><div class="mmarge pos">+310 €</div></div>
+    <div class="mrow"><span>Abgeschieden</span><b>142 g</b></div>
+    <div class="mrow"><span>Einkaufsbasis</span><b>0,62 €/g</b></div>
+    <div class="mrow"><span>Tagespreis</span><b>0,98 €/g</b></div>
+    <div class="mrow"><span>Marge</span><b class="pos">+58%</b></div>
+  </div>
+  <div class="mcard">
+    <div class="mhead"><div class="mname"><span class="mdot" style="background:#D97706"></span>Kupfer</div><div class="mmarge pos">+185 €</div></div>
+    <div class="mrow"><span>Abgeschieden</span><b>2,1 kg</b></div>
+    <div class="mrow"><span>Einkaufsbasis</span><b>7,90 €/kg</b></div>
+    <div class="mrow"><span>Tagespreis</span><b>8,78 €/kg</b></div>
+    <div class="mrow"><span>Marge</span><b class="pos">+11%</b></div>
+  </div>
+  <div class="mcard">
+    <div class="mhead"><div class="mname"><span class="mdot" style="background:#86EFAC"></span>Nickel</div><div class="mmarge pos">+705 €</div></div>
+    <div class="mrow"><span>Abgeschieden</span><b>4,6 kg</b></div>
+    <div class="mrow"><span>Einkaufsbasis</span><b>14,20 €/kg</b></div>
+    <div class="mrow"><span>Tagespreis</span><b>15,90 €/kg</b></div>
+    <div class="mrow"><span>Marge</span><b class="pos">+12%</b></div>
+  </div>
+</div>
+<div id="metalexp" class="detexp">
+  <b style="font-weight:500;color:var(--ink)">Rechenweg pro Teil:</b> Fläche [cm²] × Schichtdicke [µm] × Dichte = abgeschiedene Masse. Marge = Masse × (Tagespreis − Einkaufsbasis des Bades) × Stromausbeute, abzgl. Drag-out-Verlust. Tagespreise live via Metals-API, 1×/Tag aktualisiert. <span class="pu">Tipp: Goldpreis-Hoch — Auftrag A-2026-0042 (Vergoldung) jetzt abrechnen, nicht aufschieben.</span>
+</div>
+
+<div class="sec"><i class="ti ti-activity" aria-hidden="true" style="font-size:13px"></i> Stationen-Auslastung — Engpässe</div>
+<div class="stst">
+  <div class="strow"><div class="stn">Schleiferei</div><div class="stbar"><div class="stf" id="b1" style="background:var(--neg)"></div></div><div class="stpct neg">94%</div></div>
+  <div class="strow"><div class="stn">Politur</div><div class="stbar"><div class="stf" id="b2" style="background:var(--warn)"></div></div><div class="stpct warn">78%</div></div>
+  <div class="strow"><div class="stn">Galvanik</div><div class="stbar"><div class="stf" id="b3" style="background:var(--pos)"></div></div><div class="stpct pos">62%</div></div>
+  <div class="strow"><div class="stn">Vorbereitung</div><div class="stbar"><div class="stf" id="b4" style="background:var(--pos)"></div></div><div class="stpct pos">54%</div></div>
+  <div class="strow"><div class="stn">QK / Versand</div><div class="stbar"><div class="stf" id="b5" style="background:var(--pos)"></div></div><div class="stpct pos">41%</div></div>
+</div>
+
+<div class="chartcard" style="margin-top:10px">
+  <div class="chl"><div class="cht">Umsatzverlauf 12 Monate</div><div class="chbadge">MIT FORECAST</div></div>
+  <div style="position:relative;height:170px"><canvas id="rev" role="img" aria-label="Umsatzverlauf 12 Monate mit Vorjahresvergleich und 3-Monats-Forecast">Ist vs. Vorjahr vs. Forecast, Jun bis Aug nächstes Jahr.</canvas></div>
+  <div class="leg"><span><span class="dot" style="background:#3B82F6"></span>Ist</span><span><span class="dot" style="background:#94A3B8"></span>Vorjahr</span><span><span class="dot" style="background:#F59E0B"></span>Forecast 3 Monate</span></div>
+  <div class="alert"><b style="font-weight:500">Engpass-Verlust:</b> Schleiferei seit 3 Wochen Hauptengpass. Geschätzter Umsatzverlust Mai: <b style="font-weight:500">4.300 €</b> (3 Aufträge ≥2 Tage verspätet, 1 Auftrag verloren). Maßnahme: Stoßstangen Mo–Mi priorisieren.</div>
+</div>
+
+<div class="col2">
+  <div class="panel">
+    <div class="pt">Reklamationen — Mai</div>
+    <div style="display:flex;align-items:baseline;gap:8px;margin:0 0 8px"><span style="font-size:24px;font-weight:500">2</span><span style="font-size:11px;color:var(--ink2)">von 28 · 7,1%</span><span style="font-size:11px;margin-left:auto" class="neg">▲ +1 vs. Vj.</span></div>
+    <div class="rk"><div class="rkrow"><span>Oberflächenqualität</span><span>1</span></div><div class="rkbar"><div class="rkf" style="width:50%;background:var(--neg)"></div></div></div>
+    <div class="rk"><div class="rkrow"><span>Lieferverzug</span><span>1</span></div><div class="rkbar"><div class="rkf" style="width:50%;background:var(--warn)"></div></div></div>
+    <div class="rk"><div class="rkrow"><span>Kommunikation</span><span>0</span></div><div class="rkbar"><div class="rkf" style="width:0;background:var(--ink3)"></div></div></div>
+    <div class="rk"><div class="rkrow"><span>Transport</span><span>0</span></div><div class="rkbar"><div class="rkf" style="width:0;background:var(--ink3)"></div></div></div>
+  </div>
+  <div class="panel">
+    <div class="pt">Top-Kunden — Mai <span class="chbadge" style="background:var(--purpbg);color:var(--purple)">CLV-BASIERT</span></div>
+    <div class="cust"><div><div class="custn">Museum Lenzburg</div><div class="custm">3 Aufträge · Stammkunde · CLV 18.400 €</div></div><div class="custv">5.840 €</div></div>
+    <div class="cust"><div><div class="custn">Oldtimer Klassik Frankfurt</div><div class="custm">2 Aufträge · Privatsammler · CLV 12.200 €</div></div><div class="custv">3.920 €</div></div>
+    <div class="cust"><div><div class="custn">Schreinerei Hartmann</div><div class="custm">4 Aufträge · Gewerbe · CLV 9.800 €</div></div><div class="custv">2.610 €</div></div>
+    <div class="cust"><div><div class="custn">P. Steinmüller<span class="newt">NEU</span></div><div class="custm">1 Auftrag · Erstkunde</div></div><div class="custv">1.840 €</div></div>
+  </div>
+</div>
+
+<div class="sec" style="margin-top:12px"><i class="ti ti-target-arrow" aria-hidden="true" style="font-size:13px"></i> Wochenziel &amp; Trend</div>
+<div class="col2">
+  <div class="week">
+    <div style="display:flex;justify-content:space-between;font-size:12px"><span>Fertiggestellte Objekte</span><b style="font-weight:500">23 / 25</b></div>
+    <div class="prog"><div class="progf" id="pf"></div></div>
+    <div style="font-size:11px;color:var(--ink2)">Noch 2 Aufträge bis zum Wochenziel</div>
+    <div class="streak"><span class="stkb"><i class="ti ti-flame" aria-hidden="true" style="font-size:12px"></i>5 Wochen</span><span style="font-size:11px;color:var(--ink2)">Erfolgsserie über Ziel</span></div>
+  </div>
+  <div class="chartcard" style="margin:0;padding:13px">
+    <div class="cht" style="margin:0 0 6px">Ø Bearbeitungszeit je Teiletyp</div>
+    <div style="position:relative;height:120px"><canvas id="trend" role="img" aria-label="Bearbeitungszeit je Teiletyp über 3 Monate">Stoßstangen, Motorrad, Kleinteile.</canvas></div>
+  </div>
+</div>
+
+<div class="wow" style="margin-top:12px">
+  <div class="wowh"><i class="ti ti-crystal-ball" aria-hidden="true" style="font-size:15px"></i> Forecast &amp; Frühwarnungen <span class="wowb">WOW</span></div>
+  <div class="warn-card wc-i"><div class="wch info"><i class="ti ti-trending-up" aria-hidden="true" style="font-size:12px"></i> Umsatz-Prognose Jun–Aug</div>Erwartet: 38.200 € · 41.500 € · 36.800 € · Konfidenz 78%. Basis: 24-Monats-Saisonalität + Auftragsbestand. <span class="warn">Risiko: Juli −6% vs. Vj. — Oldtimer-Saison neigt sich, Reaktivierung jetzt einplanen.</span></div>
+  <div class="warn-card wc-r"><div class="wch neg"><i class="ti ti-alert-triangle" aria-hidden="true" style="font-size:12px"></i> Reklamations-Frühwarnung</div>Auftrag A-2026-0042 (Stoßstangen Opel Rekord) hat <b style="font-weight:500">84% Reklamationsrisiko</b>. 3 Mustertreffer: Schleiferei-Wartezeit 8 T, Privatkunde, Stoßstangen-Typ. Vorbeugung: Express-Schaltung + proaktive Kundenkommunikation heute.</div>
+  <div class="warn-card wc-a"><div class="wch warn"><i class="ti ti-flask" aria-hidden="true" style="font-size:12px"></i> Bad-Frühwarnung</div><b style="font-weight:500">Nickelbad 1</b> schlägt voraussichtlich in <b style="font-weight:500">4 Tagen</b> Alarm (pH +0,12/Tag, Konzentration −2,1 g/l/Woche). Letzte stabile Messung 22.05. Dosierung Mittwoch früh einplanen — vermeidet ungeplanten Stopp Donnerstag.</div>
+  <div class="warn-card wc-g"><div class="wch pos"><i class="ti ti-user-plus" aria-hidden="true" style="font-size:12px"></i> Reaktivierung — überfällige Stammkunden</div><b style="font-weight:500">6 Stammkunden</b> über Bestellrhythmus hinaus. Potenzial: <b style="font-weight:500">11.200 €</b>. Top 3: Schmidt GmbH (7 Mt., Ø 5), Restauration Becker (9 Mt., Ø 6), Antikladen Wagner (8 Mt., Ø 6).</div>
+</div>
+
+<div class="sim">
+  <div class="simh"><span>Finanzcontrolling &amp; Kalkulation</span><button class="eb"><i class="ti ti-download" aria-hidden="true" style="font-size:12px;vertical-align:-1px;margin-right:3px"></i>Lexware / DATEV</button></div>
+  <div style="margin:0 0 10px">
+    <div class="slbl"><span>Verrechnungssatz (Netto)</span><div style="display:flex;align-items:center;gap:8px"><span class="sval" id="rv">95 €/h</span><button class="lbtn" id="l1" onclick="tl('l1','w1')"><i class="ti ti-lock" aria-hidden="true" style="font-size:11px"></i> gesichert</button></div></div>
+    <div id="w1" class="slk"><input type="range" min="50" max="200" value="95" step="5" id="rate" oninput="us()" style="width:100%;accent-color:#22D3EE"></div>
+  </div>
+  <div style="margin:0 0 10px">
+    <div class="slbl"><span>Monatliche Fixkosten <span onclick="tog('fkp')" style="color:#FBBF24;cursor:pointer;font-size:10px">· bearbeiten</span></span><div style="display:flex;align-items:center;gap:8px"><span class="sval" id="fv">2.500 €</span><button class="lbtn" id="l2" onclick="tl('l2','w2')"><i class="ti ti-lock" aria-hidden="true" style="font-size:11px"></i> gesichert</button></div></div>
+    <div id="w2" class="slk"><input type="range" min="1000" max="10000" value="2500" step="100" id="fix" oninput="us()" style="width:100%;accent-color:#A78BFA"></div>
+  </div>
+  <div class="s3">
+    <div class="s3c"><div class="s3l">Umsatz</div><div class="s3v" id="sr">42.380 €</div></div>
+    <div class="s3c"><div class="s3l">Deckungsbeitrag</div><div class="s3v pos" id="sdb">11.840 €</div></div>
+    <div class="s3c"><div class="s3l">Gewinn</div><div class="s3v pos" id="sp">9.340 €</div></div>
+  </div>
+  <div class="fcb"><div><div style="font-size:9px;font-weight:500;color:rgba(255,255,255,.4);text-transform:uppercase;letter-spacing:.5px">Umsatz-Forecast Monatsende</div><div style="font-size:10px;color:rgba(255,255,255,.4);margin-top:2px">9 Aufträge im Fluss</div></div><div style="font-size:22px;font-weight:500;color:#22D3EE" id="sfc">44.900 €</div></div>
+</div>
+
+<div class="fkp" id="fkp">
+  <div style="font-size:12px;font-weight:500;margin:0 0 8px">Fixkosten zusammenstellen</div>
+  <div class="fkr"><span style="color:var(--ink2)">Miete / Grundkosten</span><input type="number" value="1200"><span style="color:var(--ink3);font-size:12px">€</span></div>
+  <div class="fkr"><span style="color:var(--ink2)">Energie &amp; Strom</span><input type="number" value="650"><span style="color:var(--ink3);font-size:12px">€</span></div>
+  <div class="fkr"><span style="color:var(--ink2)">Versicherungen</span><input type="number" value="380"><span style="color:var(--ink3);font-size:12px">€</span></div>
+  <div class="fkr"><span style="color:var(--ink2)">Sonstiges</span><input type="number" value="270"><span style="color:var(--ink3);font-size:12px">€</span></div>
+  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:9px"><button onclick="tog('fkp')" class="tab" style="border:0.5px solid var(--bd)">Abbrechen</button><button onclick="tog('fkp')" style="font-size:12px;padding:6px 14px;border:none;border-radius:8px;background:var(--navy);color:#fff;cursor:pointer;font-family:inherit">Speichern</button></div>
+</div>
+
+<div class="tax">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 3px"><div style="font-size:13px;font-weight:500"><i class="ti ti-building-bank" aria-hidden="true" style="font-size:14px;vertical-align:-2px;margin-right:4px"></i>Finanzzentrale &amp; Buchhaltung</div><div style="font-size:10px;color:var(--ink3)">Schritt zum Komplettsystem</div></div>
+  <div style="font-size:12px;color:var(--ink2);margin:0 0 6px">Direktexport für DATEV-Steuerberater, Behörden — oder Buchhaltung selbst übernehmen.</div>
+  <div class="tg">
+    <div class="tb"><i class="ti ti-file-spreadsheet" aria-hidden="true"></i><div>DATEV Buchungsstapel<div class="ts">EXTF-Format · Steuerberater</div></div></div>
+    <div class="tb"><i class="ti ti-file-excel" aria-hidden="true"></i><div>Lexware / Excel<div class="ts">Buchführungsexport</div></div></div>
+    <div class="tb"><i class="ti ti-report-analytics" aria-hidden="true"></i><div>BWA (monatlich)<div class="ts">Betriebsauswertung</div></div></div>
+    <div class="tb"><i class="ti ti-receipt-2" aria-hidden="true"></i><div>EÜR / UStVA<div class="ts">Jahres- &amp; Voranmeldung</div></div></div>
+  </div>
+  <div class="saveb"><i class="ti ti-pig-money" aria-hidden="true" style="font-size:18px;color:var(--pos)"></i><div><b style="font-weight:500">Kostenersparnis:</b> Laufende Buchung + BWA selbst → ca. <b style="font-weight:500">50–70%</b> der Steuerberater-Kosten gespart. Jahresabschluss bleibt beim Profi.</div></div>
+  <div class="aibox"><div class="aih"><i class="ti ti-sparkles" aria-hidden="true" style="font-size:13px"></i> KI-Steueranalyse</div>Deckungsbeitragsmarge 27,9% — bei eurem Energieaufwand solide. Verrechnungssatz 95→110 €/h ergäbe ceteris paribus <b style="font-weight:500">+8.400 € Jahresgewinn</b>. Energiekosten Q2 +8% noch nicht eingepreist. <span class="pu">Vollanalyse + Prompt-Export für Steuerberater ›</span></div>
+</div>
+
+<div class="mkt">
+  <div class="mktic"><i class="ti ti-brand-instagram" aria-hidden="true" style="font-size:20px;color:var(--purple)"></i></div>
+  <div style="flex:1">
+    <div style="font-size:12px;font-weight:500">Marketing-Timing <span class="chbadge" style="background:var(--purpbg);color:var(--purple)">KI-TIPP</span></div>
+    <div style="font-size:11px;color:var(--ink2);margin-top:2px">Heute 18:30 ist euer bestes Story-Fenster (höchste Reichweite Di/Do). Vorschlag: vergoldeter Leuchter aus Auftrag #38 — vorher/nachher.</div>
+  </div>
+  <i class="ti ti-chevron-right" aria-hidden="true" style="font-size:16px;color:var(--ink3)"></i>
+</div>
+
+</div>
+
+<script>
+function setTheme(t){
+  var c=document.getElementById('ck');
+  if(t==='dark'){c.classList.add('dark');document.getElementById('tDark').classList.add('on');document.getElementById('tLight').classList.remove('on');}
+  else{c.classList.remove('dark');document.getElementById('tLight').classList.add('on');document.getElementById('tDark').classList.remove('on');}
+}
+function pt(el){el.parentNode.querySelectorAll('.tab').forEach(function(t){t.classList.remove('on');});el.classList.add('on');}
+function tog(id){var e=document.getElementById(id);e.style.display=e.style.display==='block'?'none':'block';}
+function tl(b,w){var bt=document.getElementById(b),wr=document.getElementById(w),op=!bt.classList.contains('op');if(op){bt.classList.add('op');bt.innerHTML='<i class="ti ti-lock-open" style="font-size:11px"></i> entsperrt';wr.classList.remove('slk');}else{bt.classList.remove('op');bt.innerHTML='<i class="ti ti-lock" style="font-size:11px"></i> gesichert';wr.classList.add('slk');}}
+(function(){var a=document.getElementById('arc'),n=document.getElementById('rp'),T=195,t=Math.round(T*(1-0.64)),s=null;function an(ts){if(!s)s=ts;var p=Math.min((ts-s)/1500,1),e=1-Math.pow(1-p,3);a.setAttribute('stroke-dashoffset',Math.round(T-(T-t)*e));n.textContent=Math.round(64*e)+'%';if(p<1)requestAnimationFrame(an);}requestAnimationFrame(an);})();
+setTimeout(function(){[['b1',94],['b2',78],['b3',62],['b4',54],['b5',41]].forEach(function(x){document.getElementById(x[0]).style.width=x[1]+'%';});document.getElementById('pf').style.width='92%';},400);
+function fmt(n){return n.toLocaleString('de-DE',{maximumFractionDigits:0});}
+function us(){var r=+document.getElementById('rate').value,f=+document.getElementById('fix').value;document.getElementById('rv').textContent=fmt(r)+' €/h';document.getElementById('fv').textContent=fmt(f)+' €';var rev=Math.round(r*446.1),db=Math.round(rev*0.279),profit=db-f;document.getElementById('sr').textContent=fmt(rev)+' €';var d=document.getElementById('sdb');d.textContent=fmt(db)+' €';d.className='s3v '+(db>=0?'pos':'neg');var p=document.getElementById('sp');p.textContent=(profit>=0?'':'-')+fmt(Math.abs(profit))+' €';p.className='s3v '+(profit>=0?'pos':'neg');document.getElementById('sfc').textContent=fmt(Math.round(rev*1.06))+' €';}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+var gx={grid:{color:'rgba(148,163,184,.14)'},ticks:{font:{size:10},color:'#94A3B8'}};
+new Chart(document.getElementById('rev'),{type:'line',data:{labels:['Jun','Jul','Aug','Sep','Okt','Nov','Dez','Jan','Feb','Mrz','Apr','Mai','Jun*','Jul*','Aug*'],datasets:[
+{label:'Ist',data:[36,35,32,39,42,45,28,30,33,42,41,42,null,null,null],borderColor:'#3B82F6',backgroundColor:'#3B82F6',borderWidth:2,tension:.4,pointRadius:2.5},
+{label:'Vorjahr',data:[34,35,33,38,41,42,27,29,31,39,38,40,39,41,35],borderColor:'#94A3B8',backgroundColor:'#94A3B8',borderWidth:1.5,borderDash:[2,2],tension:.4,pointRadius:0},
+{label:'Forecast',data:[null,null,null,null,null,null,null,null,null,null,null,42,38,41,37],borderColor:'#F59E0B',backgroundColor:'#F59E0B',borderWidth:2,borderDash:[5,4],tension:.4,pointRadius:2.5}
+]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:gx,y:Object.assign({},gx,{ticks:Object.assign({},gx.ticks,{callback:function(v){return v+'k';}})})}}});
+new Chart(document.getElementById('trend'),{type:'bar',data:{labels:['Mrz','Apr','Mai'],datasets:[
+{label:'Stoßstangen',data:[8.2,8.8,9.4],backgroundColor:'#F05252',borderRadius:3,barPercentage:.7,categoryPercentage:.8},
+{label:'Motorrad',data:[5.2,5.0,4.8],backgroundColor:'#3B82F6',borderRadius:3,barPercentage:.7,categoryPercentage:.8},
+{label:'Kleinteile',data:[2.8,2.6,2.5],backgroundColor:'#22C55E',borderRadius:3,barPercentage:.7,categoryPercentage:.8}
+]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{size:10},color:'#94A3B8'}},y:Object.assign({},gx,{beginAtZero:true,ticks:Object.assign({},gx.ticks,{callback:function(v){return v+'d';}})})}}});
+</script>

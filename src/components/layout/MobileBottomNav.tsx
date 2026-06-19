@@ -25,12 +25,16 @@ export function MobileBottomNav({ className = "" }: { className?: string }) {
       <nav className={`bg-white border-t border-neutral-gray-100 flex items-center justify-around h-[64px] shrink-0 pb-(--safe-area-bottom) ${className}`}>
         
         <Link href="/" className={`flex flex-col items-center justify-center flex-1 h-full gap-1 ${isActive("/") ? "text-navy-900" : "text-text-muted"}`}>
-          <Home className="w-6 h-6" strokeWidth={isActive("/") ? 2 : 1.5} />
+          <div className="relative h-12 w-12 shrink-0 flex items-center justify-center">
+            <Home className="w-6 h-6" strokeWidth={isActive("/") ? 2 : 1.5} />
+          </div>
           <span className="text-[10px] font-bold">Heute</span>
         </Link>
         
         <Link href="/warendurchlauf" className={`flex flex-col items-center justify-center flex-1 h-full gap-1 ${isActive("/warendurchlauf") ? "text-navy-900" : "text-text-muted"}`}>
-          <PackageCheck className="w-6 h-6" strokeWidth={isActive("/warendurchlauf") ? 2 : 1.5} />
+          <div className="relative h-12 w-12 shrink-0 flex items-center justify-center">
+            <PackageCheck className="w-6 h-6" strokeWidth={isActive("/warendurchlauf") ? 2 : 1.5} />
+          </div>
           <span className="text-[10px] font-bold">Durchlauf</span>
         </Link>
 
@@ -42,7 +46,9 @@ export function MobileBottomNav({ className = "" }: { className?: string }) {
         </div>
 
         <Link href="/orders" className={`flex flex-col items-center justify-center flex-1 h-full gap-1 ${isActive("/orders") ? "text-navy-900" : "text-text-muted"}`}>
-          <ClipboardList className="w-6 h-6" strokeWidth={isActive("/orders") ? 2 : 1.5} />
+          <div className="relative h-12 w-12 shrink-0 flex items-center justify-center">
+            <ClipboardList className="w-6 h-6" strokeWidth={isActive("/orders") ? 2 : 1.5} />
+          </div>
           <span className="text-[10px] font-bold">Aufträge</span>
         </Link>
 
@@ -50,7 +56,9 @@ export function MobileBottomNav({ className = "" }: { className?: string }) {
           onClick={() => setMoreOpen(true)}
           className={`flex flex-col items-center justify-center flex-1 h-full gap-1 ${moreOpen ? "text-navy-900" : "text-text-muted"}`}
         >
-          <Menu className="w-6 h-6" strokeWidth={moreOpen ? 2 : 1.5} />
+          <div className="relative h-12 w-12 shrink-0 flex items-center justify-center">
+            <Menu className="w-6 h-6" strokeWidth={moreOpen ? 2 : 1.5} />
+          </div>
           <span className="text-[10px] font-bold">Mehr</span>
         </button>
       </nav>

@@ -76,7 +76,7 @@ export function StationStatusButton({
       className="h-24 w-full flex flex-col gap-2 rounded-2xl bg-navy-700 hover:bg-navy-700 text-white shadow-lg active:scale-95 transition-all"
     >
       <Play className="w-6 h-6" />
-      <span className="font-bold">Station starten</span>
+      <span className="font-bold">Bearbeitung starten</span>
     </Button>
   );
 }

@@ -1,5 +1,5 @@
-import { getCurrentRole } from "@/lib/auth/roles";
-import { getAppSession } from "@/lib/server/appSession";
+import { readAppSession, type AppSession, type SessionReadResult } from "@/lib/server/appSession";
+import { resolveAuthorization } from "@/lib/server/authorization";
 
 export type ActionResult<T> =
   | { ok: true; data: T }
@@ -35,47 +35,77 @@ const WRITE_ROLES = [
   "quality",
 ];
 
-export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<ActionResult<string>> {
+const SESSION_ERROR_MESSAGES: Record<
+  Exclude<SessionReadResult, { ok: true }>["reason"],
+  string
+> = {
+  NO_COOKIE: "AUTH_ERROR: Nicht angemeldet",
+  MALFORMED: "AUTH_ERROR: Ungültige Sitzung",
+  INVALID_SIGNATURE: "AUTH_ERROR: Ungültige Sitzung",
+  EXPIRED: "AUTH_ERROR: Sitzung abgelaufen",
+  INVALID_TENANT: "AUTH_ERROR: Ungültiger Mandant",
+};
+
+/**
+ * Kanonischer Session-Guard (datenbankfrei und unverändert).
+ */
+export async function checkAppSession(): Promise<ActionResult<AppSession>> {
   try {
-    let role: string | null = null;
-      try {
-        const session = await getAppSession();
-        if (session && session.tenantId === "galvanik-kreile") {
-          role = session.role;
-        } else if (session) {
-          // session exists but different tenant – treat as unauthorized
-          role = null;
-        } else {
-            role = await getCurrentRole();
-        }
-      } catch (e) {
-        // getAppSession throws when called outside a Next.js request (e.g., test script)
-        const allowDevScriptAuth =
-          process.env.NODE_ENV !== "production" &&
-          process.env.KREILE_ALLOW_DEV_SCRIPT_AUTH === "true";
+    const result = await readAppSession();
 
-        if (allowDevScriptAuth) {
-          role = "admin"; // bypass for local test scripts
-        } else {
-          console.error("Auth check failed outside request context:", e);
-          return { ok: false, error: "DB_ERROR", message: "Fehler bei der Überprüfung der Berechtigungen." };
-        }
-      }
-
-
-    if (!role) {
-      return { ok: false, error: "UNAUTHORIZED", message: "Nicht angemeldet." };
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: "UNAUTHORIZED",
+        message: SESSION_ERROR_MESSAGES[result.reason],
+      };
     }
-    const roleLower = role.toLowerCase();
 
-    const allowedRoles = mode === "write" ? WRITE_ROLES : READ_ROLES;
-
-    if (!allowedRoles.includes(roleLower)) {
-      return { ok: false, error: "FORBIDDEN", message: "Keine Berechtigung für diese Aktion." };
-    }
-    return { ok: true, data: roleLower };
+    return { ok: true, data: result.session };
   } catch (error) {
-    console.error("Auth check failed:", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler bei der Überprüfung der Berechtigungen." };
+    console.error("Session check failed:", error);
+    return {
+      ok: false,
+      error: "DB_ERROR",
+      message: "Fehler bei der Überprüfung der Berechtigungen.",
+    };
   }
+}
+
+/**
+ * Kompatibler Rollen-Guard auf Basis von resolveAuthorization().
+ */
+export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<ActionResult<string>> {
+  const result = await resolveAuthorization();
+
+  if (!result.ok) {
+    const errorMap: Record<string, "UNAUTHORIZED" | "DB_ERROR" | "UNKNOWN"> = {
+      NO_SESSION: "UNAUTHORIZED",
+      INVALID_SESSION: "UNAUTHORIZED",
+      USER_NOT_FOUND: "UNAUTHORIZED",
+      USER_INACTIVE: "UNAUTHORIZED",
+      ROLE_MISMATCH: "UNAUTHORIZED",
+      UNKNOWN_ROLE: "UNAUTHORIZED",
+      AUTHORIZATION_UNAVAILABLE: "DB_ERROR",
+    };
+
+    return {
+      ok: false,
+      error: errorMap[result.reason] || "UNKNOWN",
+      message: result.message,
+    };
+  }
+
+  const roleLower = result.data.role.toLowerCase();
+  const allowedRoles = mode === "write" ? WRITE_ROLES : READ_ROLES;
+
+  if (!allowedRoles.includes(roleLower)) {
+    return {
+      ok: false,
+      error: "FORBIDDEN",
+      message: "Keine Berechtigung für diese Aktion.",
+    };
+  }
+
+  return { ok: true, data: roleLower };
 }

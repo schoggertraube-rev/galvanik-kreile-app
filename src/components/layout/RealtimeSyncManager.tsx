@@ -82,12 +82,11 @@ export function RealtimeSyncProvider({ children }: { children: ReactNode }) {
             
             if (err) {
               const errorWithMetadata = err as Error & { details?: string; hint?: string };
-              console.error("[RealtimeSync] Channel error/closed:", {
-                message: err.message,
-                details: errorWithMetadata.details || "No details provided",
-                hint: errorWithMetadata.hint || "No hint provided",
-                error: err
-              });
+              console.error(
+                `[RealtimeSync] Channel error/closed: ${err.message || String(err)}\n` +
+                `Details: ${errorWithMetadata.details || "No details provided"}\n` +
+                `Hint: ${errorWithMetadata.hint || "No hint provided"}`
+              );
             } else if (subscribeStatus === 'CLOSED') {
               console.log("[RealtimeSync] Channel cleanly closed (typically due to backgrounding tab).");
             } else {

@@ -46,12 +46,14 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse
   }
 
+  const hasAppSession = request.cookies.has('kreile_app_session')
+
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
   if (
-    !user &&
+    !user && !hasAppSession &&
     !request.nextUrl.pathname.startsWith('/start') &&
     !request.nextUrl.pathname.startsWith('/auth')
   ) {
@@ -61,7 +63,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // Verhindere, dass eingeloggte Nutzer die Start-Seite (Login) erneut aufrufen
-  if (user && request.nextUrl.pathname.startsWith('/start')) {
+  if ((user || hasAppSession) && request.nextUrl.pathname.startsWith('/start')) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)

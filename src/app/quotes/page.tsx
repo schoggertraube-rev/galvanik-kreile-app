@@ -88,6 +88,7 @@ export default function QuotesPage() {
         station: "wareneingang" as const,
         status: "Neu" as const,
       })),
+      source: "manual",
     };
 
     // Save directly to Supabase via Repository
