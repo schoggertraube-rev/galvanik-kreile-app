@@ -10,8 +10,8 @@ Risikoklassen: R0 = kosmetisch · R1 = Qualität · R2 = funktional · R3 = P0 (
 
 | ID | Klasse | Titel | Status | Entdeckt | Mission |
 |----|--------|-------|--------|---------|---------|
-| DEF-001 | R3 | `convertScanToOrder` schreibt nichts in DB | CODE_GELIEFERT_TSC_OK | 2026-06-20 | G-2026-0001 |
-| DEF-002 | R2 | OCR-URL war Platzhalter, kein echtes Provider-Routing | CODE_GELIEFERT_TSC_OK | 2026-06-20 | G-2026-0001 |
+| DEF-001 | R3 | `convertScanToOrder` schreibt nichts in DB | CHIEF_VERIFIER_ACCEPT | 2026-06-20 | G-2026-0001 |
+| DEF-002 | R2 | OCR-URL war Platzhalter, kein echtes Provider-Routing | CHIEF_VERIFIER_ACCEPT | 2026-06-20 | G-2026-0001 |
 | DEF-003 | R2 | TS1127 Invalid Character (Null-Bytes) in ~30 Dateien | TEILBEHOBEN (jetzt 0 tsc-Fehler) | 2026-06-20 | — |
 | DEF-004 | R2 | Antigravity-Build lieferte truncierte Dateien | aufgespalten → DEF-005 / DEF-006 | 2026-06-20 | G-2026-0001 |
 | DEF-005 | R3 | Verwaister Duplikat-Block bricht `erfassung.actions.ts` (Parse-Fehler Z. 680) | BEHOBEN_VERIFIZIERT (8d3662e, tsc 0) | 2026-06-21 | G-2026-0001 |
@@ -104,6 +104,26 @@ Risikoklassen: R0 = kosmetisch · R1 = Qualität · R2 = funktional · R3 = P0 (
 **Wichtig:** Alle drei waren WIP-Stubs (`alert("… (WIP)")`) — also geplante, noch nicht implementierte Fähigkeiten, kein verlorener Live-Code. Trotzdem ist das eine sichtbare UI-/Scope-Änderung ohne Visual Pitch (Eskalationsschwelle laut PRODUCT_CONSTITUTION).
 
 **Status:** ALS_MISSION_ERFASST — Stakeholder-Entscheidung 2026-06-21: Option C (jetzt implementieren). Mission G-2026-0002 angelegt. DEF-006 schließt sich mit G-2026-0002 LIVE_VERIFIED. Toter Code (`handleAssignToOrder`, `handleOnlyCustomer`, `handleToAccounting`, `UserPlus`, `Link` Imports) bleibt bis G-2026-0002-Build bestehen.
+
+---
+
+| DEF-007 | R1 | `convertScanToOrder` ruft kein `revalidatePath` → Auftrag erscheint ggf. nicht ohne Reload in /warendurchlauf | OFFEN | 2026-06-21 | G-2026-0002 |
+
+---
+
+### DEF-007 — revalidatePath fehlt in convertScanToOrder
+
+**Symptom:** Nach erfolgreichem Scan→Order erscheint der neue Auftrag möglicherweise nicht ohne manuellen Reload in `/warendurchlauf` oder anderen Übersichtsseiten.
+
+**Ursache:** `convertScanToOrder` in `erfassung.actions.ts` führt nach Insert in `orders`, `customers`, `items` kein `revalidatePath` aus. `createOrderFromErfassung` (Z. 557) macht das korrekt.
+
+**Risikoklasse:** R1 — Qualitätsproblem, kein Datenverlust.
+
+**Fundstelle:** Chief Verifier Bericht FINDING-V2 (2026-06-21).
+
+**Fix:** In G-2026-0002 oder separatem Fix: `revalidatePath('/warendurchlauf')` und `revalidatePath('/orders')` nach dem Insert einfügen (wie in `createOrderFromErfassung`).
+
+**Status:** OFFEN → in G-2026-0002 einplanen.
 
 ---
 
