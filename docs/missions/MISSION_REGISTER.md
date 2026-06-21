@@ -10,7 +10,7 @@ Format: `G-YYYY-NNNN` · Typen: IDEA · MISSION · DEFECT · RELEASE
 
 | ID | Typ | Titel | Priorität | Status | Owner | Erstellt |
 |----|-----|-------|-----------|--------|-------|---------|
-| G-2026-0001 | MISSION | Scan → Order: DB-Persistenz + OCR-Provider-Routing | P0 / R3 | CORRECTION_REQUIRED | chief-conductor | 2026-06-20 |
+| G-2026-0001 | MISSION | Scan → Order: DB-Persistenz + OCR-Provider-Routing | P0 / R3 | VISUAL_PITCH_AUSSTEHEND | chief-conductor | 2026-06-20 |
 
 ---
 
@@ -114,3 +114,27 @@ Format: `G-YYYY-NNNN` · Typen: IDEA · MISSION · DEFECT · RELEASE
 **Nächster interner Schritt:** requirements-archaeologist prüft bestehende Datenfelder; ux-workflow-auditor analysiert Ist-Nutzerweg Michael am Telefon.
 
 **Status:** IDEA → Wartet auf USP+Twin-Abnahme für Übergang zu MISSION
+
+---
+
+### G-2026-IDEA-002 — Scan einem bestehenden Auftrag zuordnen
+
+**Herkunft:** WIP-Button „Bestehendem zuordnen" (`handleAssignToOrder`), in Commit `8d3662e` aus `ScanResult.tsx` entfernt (DEF-006). Hier gesichert, damit die Fähigkeit nicht verloren geht.
+**USP-Bezug:** USP #4 (vernetztes Unternehmensgedächtnis), USP #3 (hürdenlose Erfassung). Twins: Michael (Lieferschein zu laufendem Auftrag), Rolf.
+**Status:** IDEA (Stub war `alert(...WIP)`) — wartet auf Scope-Entscheidung zu DEF-006.
+
+---
+
+### G-2026-IDEA-003 — Beleg/Rechnung an Buchhaltung routen
+
+**Herkunft:** WIP-Button „Beleg" (`handleToAccounting`), in Commit `8d3662e` aus `ScanResult.tsx` entfernt (DEF-006).
+**USP-Bezug:** USP #8 (kontrollierte Kommunikation), OCR-Buchhaltungspfad (PRODUCT_CONSTITUTION: Klippa Wareneingang + Buchhaltung). Twins: Rolf (Buchhaltung), Michael.
+**Status:** IDEA (Stub war `alert(...WIP)`) — wartet auf Scope-Entscheidung zu DEF-006.
+
+---
+
+### G-2026-IDEA-004 — Nur Kundendatensatz aus Scan anlegen
+
+**Herkunft:** WIP-Button „Nur Kunde" (`handleOnlyCustomer`), in Commit `8d3662e` aus `ScanResult.tsx` entfernt (DEF-006).
+**USP-Bezug:** USP #4 (Datenkreislauf Kunde), USP #3. Twins: Michael (Neukunde am Telefon/Schalter).
+**Status:** IDEA (Stub war `alert(...WIP)`) — wartet auf Scope-Entscheidung zu DEF-006.
