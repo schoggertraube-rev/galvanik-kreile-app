@@ -11,6 +11,7 @@ Format: `G-YYYY-NNNN` · Typen: IDEA · MISSION · DEFECT · RELEASE
 | ID | Typ | Titel | Priorität | Status | Owner | Erstellt |
 |----|-----|-------|-----------|--------|-------|---------|
 | G-2026-0001 | MISSION | Scan → Order: DB-Persistenz + OCR-Provider-Routing | P0 / R3 | VISUAL_PITCH_AUSSTEHEND | chief-conductor | 2026-06-20 |
+| G-2026-0002 | MISSION | Scan-Aktionen: Zuordnen + Kunde + Beleg (DEF-006 Implementierung) | P1 / R2 | AWAITING_G-2026-0001 | chief-conductor | 2026-06-21 |
 
 ---
 
@@ -68,16 +69,52 @@ Format: `G-YYYY-NNNN` · Typen: IDEA · MISSION · DEFECT · RELEASE
 
 ---
 
-## Abgeschlossene Missionen
+---
 
-*(leer)*
+## Missionsdetails (Fortsetzung)
+
+### G-2026-0002 — Scan-Aktionen: Zuordnen + Kunde + Beleg
+
+**Herkunft:** Stakeholder-Entscheidung 2026-06-21 (Option C zu DEF-006): Alle 3 WIP-Stubs sollen als echte Funktionen implementiert werden.
+
+**Ziel:** `ScanResult.tsx` erhält 3 vollständig implementierte Aktions-Buttons:
+1. **Bestehendem Auftrag zuordnen** (`handleAssignToOrder`) — Scan-Upload wird mit vorhandenem Auftrag verknüpft (FK `scan_uploads.linked_order_id`)
+2. **Nur Kundendatensatz anlegen** (`handleOnlyCustomer`) — Scan erzeugt nur `customers`-Eintrag, kein Auftrag
+3. **Beleg an Buchhaltung routen** (`handleToAccounting`) — Scan wird als Beleg kategorisiert und in `/buchhaltung/belege` eingestellt
+
+**USP-Gate:** Datenkreislauf-Test ✅ · Entlastungs-Test ✅ · Übergabe-Test ✅
+
+**Betroffene Nutzerzwillinge:** Michael (primär — alle 3 Szenarien entstehen am Schalter), Rolf (Buchhaltungs-Routing)
+
+**Risikoklasse:** R2 (neue Datenpfade, bestehende Tabellen betroffen)
+
+**Abhängigkeit:** Wartet auf G-2026-0001 LIVE_VERIFIED (Scan-Grundpfad muss stabil sein)
+
+**Deliverables:**
+- `ScanResult.tsx` — 3 echte Button-Implementierungen (kein alert/WIP)
+- `erfassung.actions.ts` — `assignScanToOrder()`, `createCustomerFromScan()`, `routeScanToAccounting()`
+- Ggf. Migration für `scan_uploads.linked_customer_id` FK (steht bereits aus, 20260620000001)
+- RLS-Policies für neue Action-Pfade
+
+**Status: AWAITING_G-2026-0001 — Bau startet nach Abnahme G-2026-0001.**
 
 ---
 
-## Idea-Backlog
+## Stakeholder-Entscheidungen (protokolliert 2026-06-21)
 
-*(leer — neue Ideen werden hier als IDEA erfasst, bevor sie zur MISSION werden)*
+| # | Frage | Entscheidung | Wirkung |
+|---|---|---|---|
+| E-1 | DEF-006 Scan-Buttons | **C — Jetzt implementieren** | → Mission G-2026-0002 angelegt |
+| E-2 | Stationsmodell | **3 Stationen: Eingang / Produktion / Ausgang** | Gilt als Navigationsmodell; intern können Ereigniszonen feiner sein |
+| E-3 | „Option B" | **Nicht klärbar** — kein Originalkontext vorhanden | Offene Frage bleibt bestehen; kein Blocker für aktive Missionen |
+| E-4 | Privatplanung | **Nein — nur Firmendaten** | Scope: kein Privatfinanz-Modul in dieser App |
+| E-5 | Phase 0 | **Nein — erst G-2026-0001 abschließen** | Phase 0 (Bestandskartierung) startet nach G-2026-0001 LIVE_VERIFIED |
 
+---
+
+## Abgeschlossene Missionen
+
+*(leer)*
 
 ---
 

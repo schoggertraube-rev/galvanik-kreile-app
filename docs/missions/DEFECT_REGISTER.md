@@ -15,7 +15,7 @@ Risikoklassen: R0 = kosmetisch · R1 = Qualität · R2 = funktional · R3 = P0 (
 | DEF-003 | R2 | TS1127 Invalid Character (Null-Bytes) in ~30 Dateien | TEILBEHOBEN (jetzt 0 tsc-Fehler) | 2026-06-20 | — |
 | DEF-004 | R2 | Antigravity-Build lieferte truncierte Dateien | aufgespalten → DEF-005 / DEF-006 | 2026-06-20 | G-2026-0001 |
 | DEF-005 | R3 | Verwaister Duplikat-Block bricht `erfassung.actions.ts` (Parse-Fehler Z. 680) | BEHOBEN_VERIFIZIERT (8d3662e, tsc 0) | 2026-06-21 | G-2026-0001 |
-| DEF-006 | R2 | `ScanResult.tsx`: kompiliert wieder, aber 3 geplante Aktions-Buttons stillschweigend gelöscht | SCOPE-ENTSCHEIDUNG OFFEN | 2026-06-21 | G-2026-0001 |
+| DEF-006 | R2 | `ScanResult.tsx`: kompiliert wieder, aber 3 geplante Aktions-Buttons stillschweigend gelöscht | ALS_MISSION_ERFASST → G-2026-0002 | 2026-06-21 | G-2026-0001 |
 
 ---
 
@@ -103,7 +103,7 @@ Risikoklassen: R0 = kosmetisch · R1 = Qualität · R2 = funktional · R3 = P0 (
 
 **Wichtig:** Alle drei waren WIP-Stubs (`alert("… (WIP)")`) — also geplante, noch nicht implementierte Fähigkeiten, kein verlorener Live-Code. Trotzdem ist das eine sichtbare UI-/Scope-Änderung ohne Visual Pitch (Eskalationsschwelle laut PRODUCT_CONSTITUTION).
 
-**Status:** SCOPE-ENTSCHEIDUNG OFFEN — Stakeholder/UX muss entscheiden: (A) Buttons als sichtbare „Demnächst"-Aktionen wiederherstellen, (B) entfernt lassen + toten Code/Imports aufräumen + Fähigkeiten als Backlog-IDEAs sichern, oder (C) jetzt echt implementieren (Mission-Scope-Erweiterung). Fähigkeiten als IDEA-002/003/004 gesichert, damit nichts verloren geht.
+**Status:** ALS_MISSION_ERFASST — Stakeholder-Entscheidung 2026-06-21: Option C (jetzt implementieren). Mission G-2026-0002 angelegt. DEF-006 schließt sich mit G-2026-0002 LIVE_VERIFIED. Toter Code (`handleAssignToOrder`, `handleOnlyCustomer`, `handleToAccounting`, `UserPlus`, `Link` Imports) bleibt bis G-2026-0002-Build bestehen.
 
 ---
 
