@@ -2,6 +2,13 @@
 
 import { createClient } from '@/utils/supabase/server';
 import { getKostensatz, getEinkaufspreis } from '@/lib/erfassung/snapshot';
+import { db } from "@/db";
+import { customers, orders, items, events, calendarEvents, scanUploads } from "@/db/schema";
+import { eq, like, ilike, and, or, sql } from "drizzle-orm";
+import { createId } from "@paralleldrive/cuid2";
+import { checkAppAuth } from "@/lib/server/authHelper";
+import { revalidatePath } from "next/cache";
+import { VALID_ORDER_SOURCES } from "@/lib/validation/orderSchema";
 
 export async function startZeit(input: {
   auftrag_id: string;
@@ -334,14 +341,6 @@ export async function uebernehmeVorlage(input: {
   return { success: true, zeit_buchungen: zCount, verbrauch_buchungen: vCount, gesamt_kosten_eur: kostenGesamt };
 }
 
-import { db } from "@/db";
-import { customers, orders, items, events, calendarEvents } from "@/db/schema";
-import { eq, like, sql } from "drizzle-orm";
-import { createId } from "@paralleldrive/cuid2";
-import { checkAppAuth } from "@/lib/server/authHelper";
-import { revalidatePath } from "next/cache";
-import { VALID_ORDER_SOURCES } from "@/lib/validation/orderSchema";
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function createCustomerFromErfassung(input: Record<string, any>) {
   console.info("[CAPTURE_CUSTOMER_START]", {
@@ -380,6 +379,7 @@ export async function createCustomerFromErfassung(input: Record<string, any>) {
     // const pattern = `${prefix}-${year}-%`; // unused pattern removed
     const result = await db.execute(sql`SELECT id, customer_number, source FROM customers WHERE source = ${input.source}`);
     // rows are typed as any – map to expected shape
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const allCustomers = (result as any).rows as Array<{id:string;customerNumber:string;source:string}>;
     const existingCustomers = allCustomers.filter(c => c.customerNumber?.startsWith(`${prefix}-${year}-`));
 
@@ -570,7 +570,106 @@ export async function createOrderFromErfassung(input: Record<string, any>) {
       details: (err as Record<string, any>).details,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       hint: (err as Record<string, any>).hint,
-    });
+        });
     return { ok: false, error: (err as Error).message || "Failed to create order" };
+  }
+}
+
+export async function convertScanToOrder(scanId: string): Promise<{ orderId: string } | { error: string }> {
+  try {
+    const scanRows = await db.select().from(scanUploads).where(eq(scanUploads.id, scanId));
+    if (scanRows.length === 0) {
+      return { error: "Scan nicht gefunden" };
+    }
+    const scan = scanRows[0];
+
+    if (scan.status !== "processed" && scan.status !== "pruefen") {
+      return { error: "Scan nicht bereit" };
+    }
+
+    const tenantId = scan.tenantId;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const extracted = (scan.extractedData as any) || {};
+    const customerName = extracted.customerName || extracted.customer?.name;
+    const company = extracted.company || extracted.customer?.companyName;
+    const articleDescription = extracted.articleDescription || (extracted.items && extracted.items.length > 0 ? extracted.items[0].name : "");
+    const material = extracted.material || (extracted.items && extracted.items.length > 0 ? extracted.items[0].material : "");
+    const surface = extracted.surface || (extracted.items && extracted.items.length > 0 ? extracted.items[0].surfaceRequested : "");
+    const quantity = extracted.quantity || (extracted.items && extracted.items.length > 0 ? extracted.items[0].quantity : 1);
+
+    let customerId = "";
+
+    if (customerName || company) {
+      const conditions = [];
+      if (customerName) conditions.push(ilike(customers.name, `%${customerName}%`));
+      if (company) conditions.push(ilike(customers.companyName, `%${company}%`));
+
+      if (conditions.length > 0) {
+        const foundCustomers = await db.select()
+          .from(customers)
+          .where(and(eq(customers.tenantId, tenantId), or(...conditions)))
+          .limit(1);
+
+        if (foundCustomers.length > 0) {
+          customerId = foundCustomers[0].id;
+        }
+      }
+    }
+
+    if (!customerId) {
+      const newCustomerName = company || customerName || "Unbekannter Kunde (Scan)";
+      const [newCustomer] = await db.insert(customers).values({
+        id: createId(),
+        tenantId,
+        name: newCustomerName,
+        type: "business",
+        companyName: company || undefined,
+        source: "scan",
+        sourceRef: scanId
+      }).returning();
+      customerId = newCustomer.id;
+    }
+
+    const year = new Date().getFullYear();
+    const uniqueSuffix = Date.now().toString(36).toUpperCase();
+    const orderNumber = `WE-${year}-${uniqueSuffix}`;
+    const title = articleDescription || `Wareneingang ${new Date().toLocaleDateString('de-DE')}`;
+
+    const [newOrder] = await db.insert(orders).values({
+      id: createId(),
+      tenantId,
+      customerId,
+      orderNumber,
+      title,
+      currentStationId: "wareneingang",
+      status: "in_progress",
+      source: "scan",
+      sourceRef: scanId
+    }).returning();
+
+    if (articleDescription) {
+      await db.insert(items).values({
+        id: createId(),
+        tenantId,
+        orderId: newOrder.id,
+        customerId,
+        name: articleDescription,
+        quantity: Number(quantity) || 1,
+        material: String(material || ""),
+        surfaceRequested: String(surface || ""),
+        currentStationId: "wareneingang",
+      });
+    }
+
+    await db.update(scanUploads).set({
+      linkedOrderId: newOrder.id,
+      linkedCustomerId: customerId
+    }).where(eq(scanUploads.id, scanId));
+
+    return { orderId: newOrder.id };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (error: any) {
+    console.error("convertScanToOrder error:", error);
+    return { error: error.message || "Fehler beim Anlegen des Auftrags" };
   }
 }

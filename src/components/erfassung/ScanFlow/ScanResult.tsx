@@ -1,11 +1,37 @@
 "use client";
 
 import { useErfassung } from "../ErfassungProvider";
-import { FileText, UserPlus, PackagePlus, Link, ArrowRight, Building2, User } from "lucide-react";
+import { FileText, UserPlus, PackagePlus, Link, Building2 } from "lucide-react";
 import { AiBadge } from "../shared/AiBadge";
+import { convertScanToOrder } from "@/app/actions/erfassung.actions";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function ScanResult({ data }: { data: any }) {
   const { openErfassung, closeErfassung } = useErfassung();
+  const router = useRouter();
+  const [isCreating, setIsCreating] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleDirectCreate = async () => {
+    setIsCreating(true);
+    setErrorMsg(null);
+    try {
+      const res = await convertScanToOrder(data.id);
+      if ("error" in res) {
+        setErrorMsg(res.error);
+      } else if (res.orderId) {
+        closeErfassung();
+        router.push(`/orders/${res.orderId}`);
+      }
+    } catch (e: unknown) {
+      setErrorMsg("Ein unerwarteter Fehler ist aufgetreten.");
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   const handleNewOrder = () => {
     openErfassung({
@@ -88,6 +114,7 @@ export function ScanResult({ data }: { data: any }) {
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <div className="text-xs font-semibold text-gray-500 mb-2">ERFASSTE TEILE ({ext.items.length})</div>
                 <ul className="space-y-2">
+                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
                   {ext.items.map((item: any, i: number) => (
                     <li key={i} className="text-sm text-gray-700 flex justify-between">
                       <span>{item.quantity}x {item.name}</span>
@@ -108,50 +135,39 @@ export function ScanResult({ data }: { data: any }) {
         <div className="w-full lg:w-80 flex flex-col gap-3">
           <h4 className="text-sm font-semibold text-gray-900 mb-2">Was möchten Sie tun?</h4>
           
+          {errorMsg && (
+            <div className="p-3 bg-red-50 text-red-700 text-sm rounded-xl border border-red-200">
+              {errorMsg}
+            </div>
+          )}
+
+          <button 
+            onClick={handleDirectCreate}
+            disabled={isCreating}
+            className="group flex flex-col p-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-left relative overflow-hidden"
+          >
+            <div className="flex items-center gap-2 font-bold mb-1">
+              {isCreating ? <Loader2 className="w-5 h-5 animate-spin" /> : <PackagePlus className="w-5 h-5" />}
+              Auftrag anlegen
+            </div>
+            <p className="text-sm text-blue-100 pr-6">
+              Direkt einen neuen Auftrag aus diesen Daten erstellen.
+            </p>
+          </button>
+
           <button 
             onClick={handleNewOrder}
             className="group flex flex-col p-4 bg-white border-2 border-blue-600 rounded-xl hover:bg-blue-50 transition-colors text-left"
           >
             <div className="flex items-center gap-2 text-blue-700 font-bold mb-1">
               <PackagePlus className="w-5 h-5" />
-              Neuen Auftrag anlegen
+              Manuell erfassen
             </div>
-            <p className="text-sm text-blue-600/80 pr-6">
-              Erkannte Daten werden in das Auftrags-Formular übernommen.
+            <p className="text-sm text-blue-600">
+              Formular mit erkannten Daten vorausfüllen.
             </p>
           </button>
-
-          <button 
-            onClick={handleAssignToOrder}
-            className="group flex flex-col p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-colors text-left"
-          >
-            <div className="flex items-center gap-2 text-gray-900 font-medium mb-1">
-              <Link className="w-5 h-5 text-gray-500 group-hover:text-gray-700" />
-              Bestehendem zuordnen
-            </div>
-            <p className="text-sm text-gray-500">
-              Dokument an einen laufenden Auftrag hängen.
-            </p>
-          </button>
-
-          <div className="flex gap-3 mt-2">
-            <button 
-              onClick={handleOnlyCustomer}
-              className="flex-1 flex flex-col items-center justify-center p-3 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-            >
-              <UserPlus className="w-5 h-5 text-gray-500 mb-1" />
-              <span className="text-xs font-medium text-gray-700">Nur Kunde</span>
-            </button>
-            <button 
-              onClick={handleToAccounting}
-              className="flex-1 flex flex-col items-center justify-center p-3 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-            >
-              <FileText className="w-5 h-5 text-gray-500 mb-1" />
-              <span className="text-xs font-medium text-gray-700">Beleg</span>
-            </button>
-          </div>
         </div>
-
       </div>
     </div>
   );
