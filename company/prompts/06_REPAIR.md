@@ -1,0 +1,1 @@
+Die maschinellen Gates sind fehlgeschlagen. Behandle Fehler nicht als fremden Scope, wenn sie Build, Sicherheit, Datenintegrität oder Release blockieren. Reproduziere, finde Root Cause, repariere, teste erneut. Keine reine Dokumentation als Ersatz.

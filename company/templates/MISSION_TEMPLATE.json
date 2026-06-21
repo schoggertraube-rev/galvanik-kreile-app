@@ -1,0 +1,21 @@
+{
+  "id": "IDEA-YYYYMMDD-001",
+  "type": "product",
+  "status": "CAPTURED",
+  "originalInput": "",
+  "stakeholderFeedback": [],
+  "parentMissionId": null,
+  "createdAt": "",
+  "updatedAt": "",
+  "repairLoops": 0,
+  "blockers": [],
+  "scope": {
+    "allowedPaths": []
+  },
+  "artifacts": {},
+  "evidence": {},
+  "approvals": {
+    "targetDesign": false,
+    "preview": false
+  }
+}

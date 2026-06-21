@@ -1,0 +1,15 @@
+name: Product-Idee
+about: Stakeholder-Idee an die Produktfirma
+labels: ["company:idea"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idee, Wunsch oder Problem
+      description: Stichpunkte genügen. Screenshots oder Mocks können angehängt werden.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Optionaler Kontext

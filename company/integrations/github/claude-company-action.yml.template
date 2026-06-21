@@ -1,0 +1,27 @@
+# Nach Hinterlegung von ANTHROPIC_API_KEY als GitHub-Secret nach .github/workflows/ kopieren.
+name: Product Company Mission
+on:
+  issues:
+    types: [opened, labeled]
+jobs:
+  intake:
+    if: contains(github.event.issue.labels.*.name, 'company:idea')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Nimm die folgende Stakeholder-Idee als Product Company V3 auf und führe sie bis zum Zielentwurf-Gate aus.
+            Idee: ${{ github.event.issue.body }}
+            Verwende company/scripts/company-runner.mjs und die Projektregeln. Kommentiere IDEA-ID und Artefaktpfad im Issue.
+          claude_args: |
+            --model opus
+            --max-turns 40

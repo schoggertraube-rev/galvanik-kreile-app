@@ -1,0 +1,1 @@
+Setze die freigegebene Mission vertikal um. Arbeite innerhalb des freigegebenen Scopes. Vor Änderungen Git-Status und kollidierende WIP-Dateien prüfen. Keine fremde Arbeit löschen oder überschreiben. Fehlende Tabellen/Spalten/FKs an der Ursache lösen. Kein Mock, kein stiller Fallback. Aktualisiere Mission und Evidenz.

@@ -1,0 +1,58 @@
+{
+  "version": "3.0.0",
+  "project": {
+    "name": "Galvanik-Kreile WerkstattCockpit",
+    "tenant": "galvanik-kreile",
+    "stack": [
+      "Next.js App Router",
+      "TypeScript",
+      "Supabase",
+      "Drizzle",
+      "Recharts",
+      "Framer Motion",
+      "PWA"
+    ]
+  },
+  "models": {
+    "default": "opus",
+    "analysis": "opus",
+    "design": "opus",
+    "build": "sonnet",
+    "verifier": "opus"
+  },
+  "limits": {
+    "maxRepairLoops": 5,
+    "maxTurnsAnalysis": 12,
+    "maxTurnsBuild": 40,
+    "maxTurnsVerify": 16
+  },
+  "commands": {
+    "typecheck": "npx tsc --noEmit",
+    "lint": "npm run lint",
+    "test": "npm run test:unit",
+    "build": "npm run build",
+    "preview": "auto:vercel",
+    "production": "auto:vercel-prod"
+  },
+  "release": {
+    "requireStakeholderPreviewApproval": true,
+    "allowRemoteDbPush": false,
+    "requireSmokeHttp200": true
+  },
+  "scope": {
+    "defaultAllowedPaths": [
+      "src/**",
+      "supabase/**",
+      "public/**",
+      "tests/**",
+      "e2e/**",
+      "package.json",
+      "package-lock.json",
+      "next.config.*",
+      "tsconfig.json",
+      "company/missions/**",
+      "company/registers/**",
+      "docs/**"
+    ]
+  }
+}

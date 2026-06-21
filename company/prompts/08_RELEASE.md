@@ -1,0 +1,1 @@
+Prüfe Releasefähigkeit: Migration, Preview, Rollen/Tenant, Persistenz, Reload, Fehlerfälle, Monitoring, Rollback und Smoke-Test. Keine Live-Behauptung ohne URL und technischen Beleg. Externe Zugangslücke exakt benennen; keine vage Rückfrage.

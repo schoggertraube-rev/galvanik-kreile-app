@@ -1,0 +1,41 @@
+{
+  "_hinweis": "Einzige Quelle der Modell-Strings. Modell wechseln = nur hier aendern. Market Scout schlaegt Diffs vor, Stakeholder segnet ab.",
+  "_stand": "2026-06",
+  "tiers": {
+    "T0": { "modell": null, "zweck": "kein LLM: Regeln, tsc, lint, test, schema-diff" },
+    "T1": { "modell": "claude-haiku-4-5", "zweck": "Triage, Klassifikation, einfache Texte, In-App-Standardfragen" },
+    "T2": { "modell": "claude-sonnet-4-6", "zweck": "Standard: Code, Build, die meisten Subagenten" },
+    "T3": { "modell": "claude-opus-4-8", "zweck": "komplexe Architektur, Forecast, riskante Migration" },
+    "T4_verifier": { "modell": "gpt-5", "anbieter": "openai", "zweck": "unabhaengige Verifikation (anderer Anbieter als Builder)" }
+  },
+  "kosten_schutz": {
+    "anteil_T0_T1_ziel": "90-95%",
+    "budget_cap_pro_mission": true,
+    "teuer_nur_auf_manuellen_trigger": true,
+    "verifier_ab_risikoklasse": "R2"
+  },
+  "rollen_tier_default": {
+    "mission-coordinator": "T2",
+    "product-steward": "T2",
+    "chief-verifier": "T4_verifier",
+    "ux-architect": "T3",
+    "data-contract-engineer": "T3",
+    "migration-architect": "T3",
+    "forecasting-specialist": "T3",
+    "ai-product-architect": "T3",
+    "security-engineer": "T3",
+    "rls-auth-specialist": "T3",
+    "principal-systems-architect": "T3",
+    "principal-fullstack-engineer": "T3",
+    "backend-engineer": "T2",
+    "frontend-engineer": "T2",
+    "test-automation-engineer": "T2",
+    "qa-lead": "T2",
+    "red-team": "T2",
+    "ocr-specialist": "T2",
+    "market-tooling-scout": "T1",
+    "knowledge-officer": "T1",
+    "ux-writer": "T1",
+    "persona-twin-steward": "T1"
+  }
+}

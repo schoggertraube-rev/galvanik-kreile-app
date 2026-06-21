@@ -1,0 +1,1 @@
+Prüfe unabhängig. Der Builder-Bericht ist keine Evidenz. Verwende maschinelle Testartefakte, Git-Diff, Datenbank-/HTTP-/Reload-Belege und den freigegebenen Zielentwurf. Ergebnis exakt: `VERDICT: ACCEPT`, `VERDICT: CORRECT` oder `VERDICT: BLOCK`, danach konkrete Gründe.

@@ -1,0 +1,1 @@
+Konsolidiere die getrennten Fachberichte. Markiere Dissens. Entscheide nicht durch Mehrheitsbehauptung, sondern anhand USP, Nutzerwirkung, Datenintegrität, Sicherheit, Performance und Live-Fähigkeit. Erzeuge einen klaren Zielentwurf zur Stakeholder-Abnahme und danach ein vertikales Build-Paket. Keine technische Rückfrage an den Stakeholder.

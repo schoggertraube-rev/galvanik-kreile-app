@@ -1,0 +1,156 @@
+﻿ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE.zip"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/00_COWORK_STARTPROMPT.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/10_BETRIEBSANLEITUNG_FUER_DEN_AUFTRAGGEBER.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/11_SOFORT_EINSATZPLAN.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/MANIFEST.json"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/README_START_HERE.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/build-engineer.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/business-automation-analyst.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/chief-conductor.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/connector-scout.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/data-contract-auditor.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/performance-reliability-engineer.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/platform-architect.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/project-director.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/qa-test-verifier.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/red-team-reviewer.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/release-manager.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/repository-cartographer.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/requirements-archaeologist.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/security-reviewer.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/specialist-recruiter.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/ux-workflow-auditor.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/hooks/README.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/hooks/guard-destructive.mjs"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/settings.json"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/skills/analyze-work-package/SKILL.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/skills/build-work-package/SKILL.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/skills/hire-specialist/SKILL.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/skills/orchestrate-project/SKILL.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/skills/release-gate/SKILL.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/skills/verify-work-package/SKILL.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/CLAUDE.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/governance/01_BEFEHLSKETTE_UND_GOVERNANCE.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/governance/02_SPEZIALISTEN_UND_EINSTELLUNGSPROTOKOLL.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/governance/03_ANALYSE_BAU_ABNAHME_PIPELINE.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/governance/04_FEHLER_KORREKTUR_ESKALATION.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/governance/05_CONNECTOR_UND_TOOL_GOVERNANCE.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/governance/06_BUILD_PACKAGE_PROTOCOL.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/handoffs/ANALYSIS_HANDOFF.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/handoffs/ARCHITECTURE_HANDOFF.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/handoffs/BUILD_HANDOFF.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/handoffs/RELEASE_HANDOFF.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/handoffs/REVIEW_HANDOFF.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/AGENT_ROSTER.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/BUILD_BACKLOG.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/CHANGELOG.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/CONNECTOR_REGISTER.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/CONTRACT_REGISTER.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/DECISION_LOG.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/DEPENDENCY_GRAPH.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/EVIDENCE_LEDGER.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/FINDINGS_REGISTER.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/IDEA_REGISTER.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/REQUIREMENTS_REGISTER.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/RISK_REGISTER.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/SOURCE_REGISTER.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/registers/TEST_MATRIX.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/templates/AGENT_OUTPUT_CONTRACT.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/templates/BOARD_DECISION_TEMPLATE.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/templates/SPECIALIST_REQUEST_TEMPLATE.md"
+ D "Agentur f\303\274r App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/templates/WORK_PACKAGE_TEMPLATE.md"
+ M CLAUDE.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/00_COWORK_STARTPROMPT.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/10_BETRIEBSANLEITUNG_FUER_DEN_AUFTRAGGEBER.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/11_SOFORT_EINSATZPLAN.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/MANIFEST.json
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/README_START_HERE.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/build-engineer.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/business-automation-analyst.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/chief-conductor.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/connector-scout.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/data-contract-auditor.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/performance-reliability-engineer.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/platform-architect.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/project-director.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/qa-test-verifier.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/red-team-reviewer.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/release-manager.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/repository-cartographer.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/requirements-archaeologist.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/security-reviewer.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/specialist-recruiter.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/agents/ux-workflow-auditor.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/hooks/README.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/hooks/guard-destructive.mjs
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/settings.json
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/skills/analyze-work-package/SKILL.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/skills/build-work-package/SKILL.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/skills/hire-specialist/SKILL.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/skills/orchestrate-project/SKILL.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/skills/release-gate/SKILL.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/.claude/skills/verify-work-package/SKILL.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/claude_code/CLAUDE.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/governance/01_BEFEHLSKETTE_UND_GOVERNANCE.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/governance/02_SPEZIALISTEN_UND_EINSTELLUNGSPROTOKOLL.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/governance/03_ANALYSE_BAU_ABNAHME_PIPELINE.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/governance/04_FEHLER_KORREKTUR_ESKALATION.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/governance/05_CONNECTOR_UND_TOOL_GOVERNANCE.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/governance/06_BUILD_PACKAGE_PROTOCOL.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/handoffs/ANALYSIS_HANDOFF.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/handoffs/ARCHITECTURE_HANDOFF.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/handoffs/BUILD_HANDOFF.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/handoffs/RELEASE_HANDOFF.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/handoffs/REVIEW_HANDOFF.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/AGENT_ROSTER.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/BUILD_BACKLOG.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/CHANGELOG.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/CONNECTOR_REGISTER.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/CONTRACT_REGISTER.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/DECISION_LOG.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/DEPENDENCY_GRAPH.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/EVIDENCE_LEDGER.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/FINDINGS_REGISTER.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/IDEA_REGISTER.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/REQUIREMENTS_REGISTER.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/RISK_REGISTER.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/SOURCE_REGISTER.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/registers/TEST_MATRIX.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/templates/AGENT_OUTPUT_CONTRACT.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/templates/BOARD_DECISION_TEMPLATE.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/templates/SPECIALIST_REQUEST_TEMPLATE.md
+ D KREILE_CLAUDE_COWORK_MASCHINERIE/templates/WORK_PACKAGE_TEMPLATE.md
+ D _PROJEKTMANAGER/00001_SYSTEMPROMPT_STRENGER_OBERCHEF.md
+ D _PROJEKTMANAGER/00_PROJECT_CHARTER_KREILE.md
+ D _PROJEKTMANAGER/01_QUELLEN_UND_ANFORDERUNGSREGISTER.md
+ D _PROJEKTMANAGER/02_IST_ZUSTAND_UND_GAP_ANALYSE.md
+ D _PROJEKTMANAGER/03_ZIELARCHITEKTUR_MODULSTAMMBAUM.md
+ D _PROJEKTMANAGER/04_PRODUKT_UX_WORKFLOW_LEITFADEN.md
+ D _PROJEKTMANAGER/05_DATENMODELL_UND_END_TO_END_VERTRAEGE.md
+ D _PROJEKTMANAGER/06_AUTOMATISIERTE_UNTERNEHMENSFUEHRUNG.md
+ D _PROJEKTMANAGER/07_MASTER_UMSETZUNGSPLAN.md
+ D _PROJEKTMANAGER/08_ANTIGRAVITY_BAUPROMPTS.md
+ D _PROJEKTMANAGER/09_TEST_ABNAHME_GO_LIVE.md
+ D _PROJEKTMANAGER/10_UEBERGABE_BETRIEB_WEITERENTWICKLUNG.md
+ D _PROJEKTMANAGER/11_ENTSCHEIDUNGS_UND_AENDERUNGSLOG.md
+ D _PROJEKTMANAGER/PLATTFORM_NAMENSKONVENTION.md
+ D _PROJEKTMANAGER/files.zip
+ M src/app/actions/erfassung.actions.ts
+ M src/app/api/erfassung/scan-upload/route.ts
+ M src/components/erfassung/ScanFlow/ScanResult.tsx
+ M src/db/schema.ts
+ M src/lib/ocr/geminiOcr.ts
+?? .claude/agents/ocr-specialist.md
+?? .claude/agents/rls-auth-specialist.md
+?? PRODUKTFIRMA.zip
+?? PRODUKTFIRMA_EXTRACTED/
+?? PRODUKTFIRMA_LIVE_V3/
+?? PRODUKTFIRMA_LIVE_V3_1_WINDOWS_FIX.zip
+?? company/
+?? docs/missions/
+?? docs/product-company/
+?? docs/product/
+?? docs/user-twins/
+?? src/db/migrations/20260620000001_fk_scan_uploads.sql
+?? src/db/migrations/20260620000002_add_ocr_provider.sql
+?? src/lib/ocr/wareneingangOcr.ts

@@ -1,0 +1,38 @@
+{
+  "states": [
+    "CAPTURED",
+    "DISCOVERY",
+    "TARGET_DESIGN",
+    "FEASIBILITY",
+    "BOARD_DECISION",
+    "STAKEHOLDER_APPROVAL",
+    "READY_FOR_BUILD",
+    "BUILDING",
+    "VERIFYING",
+    "CORRECTION_REQUIRED",
+    "PREVIEW_DEPLOY",
+    "PREVIEW_APPROVAL",
+    "READY_FOR_RELEASE",
+    "PRODUCTION_DEPLOY",
+    "LIVE_VERIFY",
+    "LIVE_VERIFIED",
+    "EFFECT_CHECK",
+    "BLOCKED_EXTERNAL",
+    "BLOCKED_INTERNAL",
+    "REJECTED",
+    "BLOCKED_BY_CHILD",
+    "COMPLETED_INTERNAL"
+  ],
+  "stakeholderGates": [
+    "STAKEHOLDER_APPROVAL",
+    "PREVIEW_APPROVAL"
+  ],
+  "terminalOrSafeStop": [
+    "STAKEHOLDER_APPROVAL",
+    "PREVIEW_APPROVAL",
+    "BLOCKED_EXTERNAL",
+    "LIVE_VERIFIED",
+    "REJECTED"
+  ],
+  "rule": "Interne Blocker werden intern bearbeitet. Nur echte Zugangs-, Kosten-, Rechts- oder irreversible Produktionsentscheidungen werden als BLOCKED_EXTERNAL eskaliert."
+}

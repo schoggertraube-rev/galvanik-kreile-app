@@ -1,0 +1,1 @@
+Prüfe Zielentwurf und Projektzustand. Liefere den ausführbaren Vertrag: Datenquelle, Tabellen/Spalten/FKs, Views, Serverlogik, alle Konsumenten, UI-Zustände, Persistenz, Reload, Folgeprozess, Analytics, Rollen, Security, Performance, Migration, Rollback, Tests. Ein Veto braucht eine sichere Alternative.

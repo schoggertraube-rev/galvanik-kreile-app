@@ -1,0 +1,28 @@
+{
+  "_hinweis": "Startpunkt fuer Claude Code Hooks. Pfade ggf. an dein System anpassen. Erzwingt zwei Dinge: (1) destruktive Befehle werden blockiert, (2) 'fertig' ohne Beweis wird blockiert. In Antigravity 2.0.4 gibt es keine Hooks -> dort uebernimmt der PRUEFPHASE-Block am Prompt-Ende dieselbe Funktion.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/block-destruktiv.sh",
+            "_zweck": "Blockiert rm -rf, drop table/database, git push --force, git reset --hard, DB-Passwort inline"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/verlange-beweis.sh",
+            "_zweck": "Verlangt Beweis-Artefakte, bevor eine Mission als fertig gilt"
+          }
+        ]
+      }
+    ]
+  }
+}

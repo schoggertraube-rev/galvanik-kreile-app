@@ -1,0 +1,107 @@
+{
+  "generatedAt": "2026-06-21T08:40:40.100Z",
+  "root": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app",
+  "readyForMission": true,
+  "checks": [
+    {
+      "name": "package.json",
+      "ok": true,
+      "detail": "Projektroot"
+    },
+    {
+      "name": "CLAUDE import",
+      "ok": true,
+      "detail": "verbindliche Firmenanweisung"
+    },
+    {
+      "name": "company config",
+      "ok": true,
+      "detail": "Konfiguration"
+    },
+    {
+      "name": "agent:mission-director",
+      "ok": true,
+      "detail": "ausführbarer Projektagent"
+    },
+    {
+      "name": "agent:product-strategist",
+      "ok": true,
+      "detail": "ausführbarer Projektagent"
+    },
+    {
+      "name": "agent:user-researcher",
+      "ok": true,
+      "detail": "ausführbarer Projektagent"
+    },
+    {
+      "name": "agent:product-experience-architect",
+      "ok": true,
+      "detail": "ausführbarer Projektagent"
+    },
+    {
+      "name": "agent:data-architecture-lead",
+      "ok": true,
+      "detail": "ausführbarer Projektagent"
+    },
+    {
+      "name": "agent:security-performance-reviewer",
+      "ok": true,
+      "detail": "ausführbarer Projektagent"
+    },
+    {
+      "name": "agent:product-engineer",
+      "ok": true,
+      "detail": "ausführbarer Projektagent"
+    },
+    {
+      "name": "agent:qa-red-team",
+      "ok": true,
+      "detail": "ausführbarer Projektagent"
+    },
+    {
+      "name": "agent:release-operations",
+      "ok": true,
+      "detail": "ausführbarer Projektagent"
+    },
+    {
+      "name": "agent:independent-verifier",
+      "ok": true,
+      "detail": "ausführbarer Projektagent"
+    },
+    {
+      "name": "settings.json",
+      "ok": true,
+      "detail": "Hook-Konfiguration"
+    },
+    {
+      "name": "claude CLI",
+      "ok": true,
+      "detail": "Claude Code ausführbar"
+    },
+    {
+      "name": "git",
+      "ok": true,
+      "detail": "Versionskontrolle"
+    },
+    {
+      "name": "node>=18",
+      "ok": true,
+      "detail": "24.14.1"
+    },
+    {
+      "name": "vercel",
+      "ok": true,
+      "detail": "optional; erforderlich für automatisches Preview"
+    },
+    {
+      "name": "vercel linked",
+      "ok": true,
+      "detail": "optional; Projektverknüpfung"
+    },
+    {
+      "name": "supabase CLI",
+      "ok": false,
+      "detail": "optional; erforderlich für Remote-Migration"
+    }
+  ]
+}
