@@ -11,6 +11,26 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/company/scripts/company-guard-destructive.mjs\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/company/scripts/company-scope-guard.mjs\"",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "TaskCompleted": [
@@ -20,6 +40,15 @@
             "type": "agent",
             "prompt": "Du bist der Task-Completion-Prüfer des Kreile-Projekts. Prüfe anhand von $ARGUMENTS, Projektregistern, Git-Status und verfügbaren Belegen, ob die Aufgabe wirklich vollständig ist. Erlaube Abschluss nur, wenn Scope, Akzeptanzkriterien, erforderliche Tests, Evidenz und Handoff vorhanden sind. Eine Datei, ein grüner Build oder eine Behauptung genügt nicht. Antworte mit {\"ok\": true} oder {\"ok\": false, \"reason\": \"konkreter fehlender Nachweis\"}.",
             "timeout": 180
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/company/scripts/company-evidence-gate.mjs\"",
+            "timeout": 20
           }
         ]
       }
@@ -42,6 +71,15 @@
             "type": "agent",
             "prompt": "Du bist das finale Stop-Gate des Kreile-Projekts. Kontext: $ARGUMENTS\nPrüfe die aktuelle Nutzeraufgabe und den Arbeitsstand. Erlaube das Stoppen nur, wenn alle angeforderten Aufgaben erledigt oder ehrliche externe Blocker dokumentiert sind, keine offenen ausführbaren Fehler ignoriert werden, Register/Handoffs aktualisiert sind und keine unbelegte Fertigmeldung erfolgt. Prüfe bei Codeänderungen mindestens relevante Tests, Build-/Typ-/Lint-Nachweise, Git-Status und End-to-End-Evidenz. Wenn stop_hook_active bereits wahr ist, blockiere nur erneut, wenn eine konkrete, ausführbare Korrektur fehlt; verhindere Endlosschleifen. Antworte mit {\"ok\": true} oder {\"ok\": false, \"reason\": \"präzise nächste Arbeit\"}.",
             "timeout": 180
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/company/scripts/company-stop-gate.mjs\"",
+            "timeout": 20
           }
         ]
       }
