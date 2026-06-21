@@ -1,5 +1,9 @@
 {
   "agent": "chief-conductor",
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "ask": ["Bash(git commit*)"]
+  },
   "hooks": {
     "PreToolUse": [
       {

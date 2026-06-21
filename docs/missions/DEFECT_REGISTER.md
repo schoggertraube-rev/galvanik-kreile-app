@@ -12,10 +12,10 @@ Risikoklassen: R0 = kosmetisch · R1 = Qualität · R2 = funktional · R3 = P0 (
 |----|--------|-------|--------|---------|---------|
 | DEF-001 | R3 | `convertScanToOrder` schreibt nichts in DB | CODE_GELIEFERT_TSC_OK | 2026-06-20 | G-2026-0001 |
 | DEF-002 | R2 | OCR-URL war Platzhalter, kein echtes Provider-Routing | CODE_GELIEFERT_TSC_OK | 2026-06-20 | G-2026-0001 |
-| DEF-003 | R2 | TS1127 Invalid Character (Null-Bytes) in ~30 Dateien | TEILBEHOBEN (10 statt 6781) | 2026-06-20 | — |
-| DEF-004 | R2 | Antigravity-Build lieferte truncierte Dateien | REGRESSIERT → siehe DEF-006 | 2026-06-20 | G-2026-0001 |
-| DEF-005 | R3 | Verwaister Duplikat-Block bricht `erfassung.actions.ts` (Parse-Fehler Z. 680) | OFFEN | 2026-06-21 | G-2026-0001 |
-| DEF-006 | R2 | `ScanResult.tsx` JSX-Baum gebrochen (Z. 173–209), 3 Aktions-Buttons verwaist | OFFEN | 2026-06-21 | G-2026-0001 |
+| DEF-003 | R2 | TS1127 Invalid Character (Null-Bytes) in ~30 Dateien | TEILBEHOBEN (jetzt 0 tsc-Fehler) | 2026-06-20 | — |
+| DEF-004 | R2 | Antigravity-Build lieferte truncierte Dateien | aufgespalten → DEF-005 / DEF-006 | 2026-06-20 | G-2026-0001 |
+| DEF-005 | R3 | Verwaister Duplikat-Block bricht `erfassung.actions.ts` (Parse-Fehler Z. 680) | BEHOBEN_VERIFIZIERT (8d3662e, tsc 0) | 2026-06-21 | G-2026-0001 |
+| DEF-006 | R2 | `ScanResult.tsx`: kompiliert wieder, aber 3 geplante Aktions-Buttons stillschweigend gelöscht | SCOPE-ENTSCHEIDUNG OFFEN | 2026-06-21 | G-2026-0001 |
 
 ---
 
@@ -87,7 +87,7 @@ Risikoklassen: R0 = kosmetisch · R1 = Qualität · R2 = funktional · R3 = P0 (
 
 **Fix (eindeutig, mechanisch):** Zeilen 676–684 (verwaister Block) entfernen; Datei endet sauber nach Zeile 675.
 
-**Status:** OFFEN — Remediation an Build delegiert, danach unabhängige Abnahme.
+**Status:** BEHOBEN_VERIFIZIERT — Commit `8d3662e` (2026-06-21) entfernte den Duplikat-Block; `npx tsc --noEmit` zeigt 0 Fehler in der Datei (Chefdirigent unabhängig nachgeprüft). Schließt sich erst final mit der Mission-Gesamtabnahme.
 
 ---
 
@@ -99,7 +99,11 @@ Risikoklassen: R0 = kosmetisch · R1 = Qualität · R2 = funktional · R3 = P0 (
 
 **Befund Chefdirigent:** Alle drei Handler sind definiert (Z. 45–56). Die Buttons gehören determiniert in die Aktions-Spalte (Z. 135, `<div class="w-full lg:w-80 flex flex-col gap-3">`) nach dem „Manuell erfassen"-Button. Wiederherstellung ist eindeutig, betrifft aber UX-Oberfläche → Build + UX-Bewusstsein, nicht Alleingang des Chefdirigenten.
 
-**Status:** OFFEN — Remediation an Build delegiert, danach unabhängige Abnahme.
+**Verlauf:** Commit `8d3662e` (2026-06-21) hat den JSX-Parse-Fehler behoben, **indem der floating JSX-Block gelöscht wurde** — nicht durch Wiederherstellung. Folge: tsc/Compile grün (verifiziert), aber drei geplante Aktionen sind aus dem UI verschwunden. Die zugehörigen Handler (`handleAssignToOrder`, `handleOnlyCustomer`, `handleToAccounting`) und Icons (`UserPlus`, `Link`) sind jetzt toter Code (6 lint-Warnings, 0 Errors).
+
+**Wichtig:** Alle drei waren WIP-Stubs (`alert("… (WIP)")`) — also geplante, noch nicht implementierte Fähigkeiten, kein verlorener Live-Code. Trotzdem ist das eine sichtbare UI-/Scope-Änderung ohne Visual Pitch (Eskalationsschwelle laut PRODUCT_CONSTITUTION).
+
+**Status:** SCOPE-ENTSCHEIDUNG OFFEN — Stakeholder/UX muss entscheiden: (A) Buttons als sichtbare „Demnächst"-Aktionen wiederherstellen, (B) entfernt lassen + toten Code/Imports aufräumen + Fähigkeiten als Backlog-IDEAs sichern, oder (C) jetzt echt implementieren (Mission-Scope-Erweiterung). Fähigkeiten als IDEA-002/003/004 gesichert, damit nichts verloren geht.
 
 ---
 
