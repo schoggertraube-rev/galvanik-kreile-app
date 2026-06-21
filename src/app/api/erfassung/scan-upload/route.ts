@@ -3,7 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { db } from "@/db";
 import { scanUploads } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { extractDocumentData } from "@/lib/ocr/geminiOcr";
+import { extractWareneingang } from "@/lib/ocr/wareneingangOcr";
+import { createId } from "@paralleldrive/cuid2";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,9 +22,9 @@ export async function POST(request: Request) {
     }
 
     const fileExt = file.name.split('.').pop();
-    const fileName = `${tenantId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const fileName = `${tenantId}/${Date.now()}-${createId()}.${fileExt}`;
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from("scans")
       .upload(fileName, file, { contentType: file.type });
 
@@ -47,12 +48,17 @@ export async function POST(request: Request) {
     
     // Process synchronously to ensure it completes before Vercel freezes the function
     try {
-      const extraction = await extractDocumentData(base64Str);
+      const extraction = await extractWareneingang(base64Str, publicUrlData.publicUrl);
+      
+      const conf = extraction.confidence !== undefined ? extraction.confidence : 0.9;
+      const finalStatus = conf < 0.7 ? "pruefen" : "processed";
+
       await db.update(scanUploads).set({
-        status: "processed",
-        detectedType: "Lieferschein", // default
-        detectionConfidence: "0.9",
-        extractedData: extraction
+        status: finalStatus,
+        detectedType: extraction.detectedType ?? null,
+        detectionConfidence: conf.toString(),
+        extractedData: extraction,
+        ocrProvider: extraction.provider
       }).where(eq(scanUploads.id, newScan.id));
     } catch (e) {
       console.error("Local OCR extraction failed:", e);

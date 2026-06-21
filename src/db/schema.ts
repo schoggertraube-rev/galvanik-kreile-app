@@ -284,7 +284,9 @@ export const scanUploads = pgTable("scan_uploads", {
   linkedOrderId: text("linked_order_id"),
   linkedCustomerId: text("linked_customer_id"),
   linkedInvoiceId: text("linked_invoice_id"),
+  ocrProvider: text("ocr_provider"),
 });
+
 
 // 9. UI Events Tracking
 export const uiEventsTable = pgTable("ui_events", {

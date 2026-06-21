@@ -10,6 +10,8 @@ export interface OcrResult {
   quantity?: number;
   notes?: string;
   rawText: string;
+  detectedType?: string;
+  confidence?: number;
 }
 
 import { generateGeminiContentWithFallback } from "@/lib/ai/geminiClient";
@@ -76,6 +78,6 @@ export async function extractDocumentData(imageBase64: string): Promise<OcrResul
     };
   } catch (error) {
     console.error("Gemini OCR Request failed:", error);
-    return { rawText: "OCR fehlgeschlagen" };
+    return { rawText: "OCR fehlgeschlagen", confidence: 0 };
   }
 }
