@@ -1,7 +1,7 @@
 "use client";
 
 import { useErfassung } from "../ErfassungProvider";
-import { FileText, UserPlus, PackagePlus, Link, Building2 } from "lucide-react";
+import { FileText, PackagePlus, Building2 } from "lucide-react";
 import { AiBadge } from "../shared/AiBadge";
 import { convertScanToOrder } from "@/app/actions/erfassung.actions";
 import { useRouter } from "next/navigation";
@@ -26,7 +26,7 @@ export function ScanResult({ data }: { data: any }) {
         closeErfassung();
         router.push(`/orders/${res.orderId}`);
       }
-    } catch (e: unknown) {
+    } catch {
       setErrorMsg("Ein unerwarteter Fehler ist aufgetreten.");
     } finally {
       setIsCreating(false);
@@ -40,22 +40,6 @@ export function ScanResult({ data }: { data: any }) {
       source: "scan",
       sourceRef: data.id
     });
-  };
-
-  const handleOnlyCustomer = () => {
-    // Navigate to customer creation or open manual flow with only customer section
-    alert("Kunde anlegen Flow (WIP)");
-    closeErfassung();
-  };
-
-  const handleAssignToOrder = () => {
-    alert("Bestehendem Auftrag zuordnen (WIP)");
-    closeErfassung();
-  };
-
-  const handleToAccounting = () => {
-    alert("Als Beleg an Buchhaltung senden (WIP)");
-    closeErfassung();
   };
 
   const typeLabels: Record<string, string> = {
