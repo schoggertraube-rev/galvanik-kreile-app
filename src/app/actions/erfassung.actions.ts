@@ -666,6 +666,11 @@ export async function convertScanToOrder(scanId: string): Promise<{ orderId: str
       linkedCustomerId: customerId
     }).where(eq(scanUploads.id, scanId));
 
+    // Revalidate paths so new order/customer/data appears in UI immediately
+    revalidatePath('/warendurchlauf');
+    revalidatePath('/orders');
+    revalidatePath('/customers'); // New customer may be created, so invalidate customer views
+
     return { orderId: newOrder.id };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
