@@ -47,7 +47,9 @@ vi.mock("next/headers", () => ({
 }));
 
 async function importLogout() {
-  vi.resetModules();
+  // vi.resetModules() removed: caused non-deterministic mock teardown when
+  // running alongside other test files (timeout in 10b, double-call in 10c).
+  // Top-level vi.mock() + beforeEach vi.clearAllMocks() is sufficient.
   const mod = await import("@/app/actions/auth");
   return mod.logout;
 }
