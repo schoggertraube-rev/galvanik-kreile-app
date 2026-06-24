@@ -1,0 +1,24 @@
+{
+  "_comment": "QG-01 ESLint baseline — generated 2026-06-24. Do not edit manually. Run scripts/lint-ratchet.mjs --update to regenerate.",
+  "app": {
+    "scope": "src/**/*.ts, src/**/*.tsx",
+    "config": "eslint.config.mjs",
+    "files": 614,
+    "errors": 405,
+    "warnings": 372
+  },
+  "edge": {
+    "scope": "supabase/functions/**/*.ts",
+    "config": "eslint.edge.config.mjs",
+    "files": 13,
+    "errors": 0,
+    "warnings": 15
+  },
+  "scripts": {
+    "scope": "scripts/**/*.{js,mjs,cjs,ts}, *.js, migrate.mjs",
+    "config": "eslint.scripts.config.mjs",
+    "files": 16,
+    "errors": 3,
+    "warnings": 5
+  }
+}

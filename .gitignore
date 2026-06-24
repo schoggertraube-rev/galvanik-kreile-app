@@ -51,3 +51,6 @@ next-env.d.ts
 # Untracked Steuerungs-ZIP und Runtime-Ordner ausschließen
 Agentur für App und Web/KREILE_COWORK_AUTONOME_IDEA_TO_LIVE_STEUERUNG/
 Agentur für App und Web/KREILE_COWORK_AUTONOME_IDEA_TO_LIVE_STEUERUNG.zip
+
+# Claude Code: nur temporäre Agent-Worktrees (nicht .claude/ gesamt — braucht eigene Inventur)
+.claude/worktrees/
