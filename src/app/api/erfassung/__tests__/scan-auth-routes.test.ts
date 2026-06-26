@@ -1,0 +1,228 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  resolveAuthorization: vi.fn(),
+  createClient: vi.fn(),
+  storageFrom: vi.fn(),
+  storageUpload: vi.fn(),
+  storageGetPublicUrl: vi.fn(),
+  insert: vi.fn(),
+  insertValues: vi.fn(),
+  insertReturning: vi.fn(),
+  update: vi.fn(),
+  updateSet: vi.fn(),
+  updateWhere: vi.fn(),
+  select: vi.fn(),
+  selectFrom: vi.fn(),
+  selectWhere: vi.fn(),
+  selectLimit: vi.fn(),
+  extractDocumentData: vi.fn(),
+  eq: vi.fn((column, value) => ({ op: "eq", column, value })),
+  and: vi.fn((...conditions) => ({ op: "and", conditions })),
+}));
+
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization: mocks.resolveAuthorization,
+}));
+
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: mocks.createClient,
+}));
+
+vi.mock("@/db", () => ({
+  db: {
+    insert: mocks.insert,
+    update: mocks.update,
+    select: mocks.select,
+  },
+}));
+
+vi.mock("@/lib/ocr/geminiOcr", () => ({
+  extractDocumentData: mocks.extractDocumentData,
+}));
+
+vi.mock("drizzle-orm", () => ({
+  eq: mocks.eq,
+  and: mocks.and,
+}));
+
+let POST: (request: Request) => Promise<Response>;
+let GET: (
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) => Promise<Response>;
+
+const authorized = (tenantId = "session-tenant") => ({
+  ok: true as const,
+  data: {
+    userId: "user-1",
+    tenantId,
+    displayName: "Test User",
+    role: "admin",
+    permissions: [],
+  },
+});
+
+const unauthorized = {
+  ok: false as const,
+  reason: "NO_SESSION" as const,
+  message: "AUTH_ERROR: Nicht angemeldet",
+};
+
+function makeUploadRequest(file: File, tenantId?: string): Request {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (tenantId) formData.append("tenantId", tenantId);
+  return {
+    formData: vi.fn().mockResolvedValue(formData),
+  } as unknown as Request;
+}
+
+function makeFile() {
+  return new File(["scan-content"], "scan.pdf", { type: "application/pdf" });
+}
+
+describe("scan capture route auth", () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+
+    mocks.resolveAuthorization.mockResolvedValue(authorized());
+    mocks.createClient.mockReturnValue({
+      storage: {
+        from: mocks.storageFrom,
+      },
+    });
+    mocks.storageFrom.mockReturnValue({
+      upload: mocks.storageUpload,
+      getPublicUrl: mocks.storageGetPublicUrl,
+    });
+    mocks.storageUpload.mockResolvedValue({
+      data: { path: "session-tenant/file.pdf" },
+      error: null,
+    });
+    mocks.storageGetPublicUrl.mockReturnValue({
+      data: { publicUrl: "https://storage.example/session-tenant/file.pdf" },
+    });
+    mocks.insert.mockReturnValue({ values: mocks.insertValues });
+    mocks.insertValues.mockReturnValue({ returning: mocks.insertReturning });
+    mocks.insertReturning.mockResolvedValue([{ id: "scan-1" }]);
+    mocks.update.mockReturnValue({ set: mocks.updateSet });
+    mocks.updateSet.mockReturnValue({ where: mocks.updateWhere });
+    mocks.updateWhere.mockResolvedValue(undefined);
+    mocks.select.mockReturnValue({ from: mocks.selectFrom });
+    mocks.selectFrom.mockReturnValue({ where: mocks.selectWhere });
+    mocks.selectWhere.mockReturnValue({ limit: mocks.selectLimit });
+    mocks.selectLimit.mockResolvedValue([]);
+    mocks.extractDocumentData.mockResolvedValue({ customerName: "Kreile" });
+
+    ({ POST } = await import("../scan-upload/route"));
+    ({ GET } = await import("../scan-status/[id]/route"));
+  });
+
+  it("rejects unauthenticated upload before FormData, storage or DB", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(unauthorized);
+    const formData = vi.fn();
+
+    const response = await POST({ formData } as unknown as Request);
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Sitzung abgelaufen oder nicht angemeldet",
+    });
+    expect(formData).not.toHaveBeenCalled();
+    expect(mocks.storageUpload).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("ignores a forged client tenant during upload", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(authorized("session-tenant"));
+
+    await POST(makeUploadRequest(makeFile(), "forged-tenant"));
+
+    expect(mocks.storageUpload).toHaveBeenCalledTimes(1);
+    expect(mocks.storageUpload.mock.calls[0][0]).toMatch(/^session-tenant\//);
+    expect(mocks.storageUpload.mock.calls[0][0]).not.toContain("forged-tenant");
+    expect(mocks.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "session-tenant" }),
+    );
+  });
+
+  it("uses only the session tenant for a successful upload", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(authorized("tenant-a"));
+
+    const response = await POST(makeUploadRequest(makeFile()));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ id: "scan-1" });
+    expect(mocks.insertValues).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: "tenant-a" }),
+    );
+    expect(mocks.storageUpload.mock.calls[0][0]).toMatch(/^tenant-a\//);
+  });
+
+  it("adds the authorized tenant to scan update filters", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(authorized("tenant-filter"));
+
+    await POST(makeUploadRequest(makeFile()));
+
+    expect(mocks.updateWhere).toHaveBeenCalledWith({
+      op: "and",
+      conditions: expect.arrayContaining([
+        expect.objectContaining({ op: "eq", value: "scan-1" }),
+        expect.objectContaining({ op: "eq", value: "tenant-filter" }),
+      ]),
+    });
+  });
+
+  it("rejects unauthenticated status requests before DB access", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(unauthorized);
+
+    const response = await GET(new Request("http://localhost/status"), {
+      params: Promise.resolve({ id: "scan-1" }),
+    });
+
+    expect(response.status).toBe(401);
+    expect(mocks.select).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 for a tenant-foreign scan id", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(authorized("tenant-a"));
+    mocks.selectLimit.mockResolvedValue([]);
+
+    const response = await GET(new Request("http://localhost/status"), {
+      params: Promise.resolve({ id: "foreign-scan" }),
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: "Not found" });
+    expect(mocks.selectWhere).toHaveBeenCalledWith({
+      op: "and",
+      conditions: expect.arrayContaining([
+        expect.objectContaining({ op: "eq", value: "foreign-scan" }),
+        expect.objectContaining({ op: "eq", value: "tenant-a" }),
+      ]),
+    });
+  });
+
+  it("returns the record for an own-tenant scan id", async () => {
+    const scan = { id: "scan-1", tenantId: "tenant-a", status: "processed" };
+    mocks.resolveAuthorization.mockResolvedValue(authorized("tenant-a"));
+    mocks.selectLimit.mockResolvedValue([scan]);
+
+    const response = await GET(new Request("http://localhost/status"), {
+      params: Promise.resolve({ id: "scan-1" }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual(scan);
+    expect(mocks.selectWhere).toHaveBeenCalledWith({
+      op: "and",
+      conditions: expect.arrayContaining([
+        expect.objectContaining({ op: "eq", value: "scan-1" }),
+        expect.objectContaining({ op: "eq", value: "tenant-a" }),
+      ]),
+    });
+  });
+});

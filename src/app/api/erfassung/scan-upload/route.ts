@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { db } from "@/db";
 import { scanUploads } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { extractDocumentData } from "@/lib/ocr/geminiOcr";
+import { resolveAuthorization } from "@/lib/server/authorization";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,9 +13,14 @@ const supabase = createClient(
 
 export async function POST(request: Request) {
   try {
+    const auth = await resolveAuthorization();
+    if (!auth.ok) {
+      return NextResponse.json({ error: "Sitzung abgelaufen oder nicht angemeldet" }, { status: 401 });
+    }
+
+    const tenantId = auth.data.tenantId;
     const formData = await request.formData();
     const file = formData.get("file") as File;
-    const tenantId = formData.get("tenantId") as string || "galvanik-kreile";
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
@@ -53,10 +59,10 @@ export async function POST(request: Request) {
         detectedType: "Lieferschein", // default
         detectionConfidence: "0.9",
         extractedData: extraction
-      }).where(eq(scanUploads.id, newScan.id));
+      }).where(and(eq(scanUploads.id, newScan.id), eq(scanUploads.tenantId, tenantId)));
     } catch (e) {
       console.error("Local OCR extraction failed:", e);
-      await db.update(scanUploads).set({ status: "error" }).where(eq(scanUploads.id, newScan.id));
+      await db.update(scanUploads).set({ status: "error" }).where(and(eq(scanUploads.id, newScan.id), eq(scanUploads.tenantId, tenantId)));
     }
 
     return NextResponse.json({ id: newScan.id });
