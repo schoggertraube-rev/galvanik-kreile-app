@@ -1,15 +1,20 @@
-import { StartScreenClient, StartUser } from "@/components/start/StartScreenClient";
+import { StartScreenClient } from "@/components/start/StartScreenClient";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
-import { eq, ne } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { toStartUserDto, type StartUserDto } from "@/lib/auth/userDtos";
 
 export const dynamic = "force-dynamic";
 
 export default async function StartPage() {
-  let users: StartUser[] = [];
+  let users: StartUserDto[] = [];
   
   try {
-    const dbUsers = await db.select()
+    const dbUsers = await db.select({
+      id: appUsers.id,
+      fullName: appUsers.fullName,
+      role: appUsers.role,
+    })
       .from(appUsers)
       .where(eq(appUsers.active, true));
 
@@ -17,37 +22,16 @@ export default async function StartPage() {
     // We only want normal roles like admin, werkstatt, buero, etc.
     const eligibleUsers = dbUsers.filter(u => u.role !== "developer");
 
-    users = eligibleUsers.map(u => {
-      // Create initials (max 2 chars)
-      const parts = u.fullName.trim().split(" ");
-      let initials = "";
-      if (parts.length >= 2) {
-        initials = (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-      } else if (u.fullName.length > 0) {
-        initials = u.fullName.substring(0, 2).toUpperCase();
-      } else {
-        initials = "?";
-      }
-
-      return {
-        id: u.id,
-        fullName: u.fullName,
-        role: u.role,
-        pinHash: u.pinHash || "1234",
-        initials,
-      };
-    });
+    users = eligibleUsers.map(toStartUserDto);
   } catch (err) {
     console.error("Failed to fetch start users:", err);
     // Fallback if DB is completely unreachable
     users = [
-      {
+      toStartUserDto({
         id: "1",
         fullName: "Fallback Admin",
-        initials: "FA",
         role: "admin",
-        pinHash: "1234",
-      }
+      }),
     ];
   }
 

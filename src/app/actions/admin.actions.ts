@@ -5,6 +5,7 @@ import { appUsers, featureFlags } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 import { createClient } from '@supabase/supabase-js'
 import { requireAdminOrDeveloper } from '@/lib/auth/permissions'
+import { toAdminUserDto } from '@/lib/auth/userDtos'
 
 // Admin client using Service Role Key (MUST ONLY BE USED IN SERVER ACTIONS)
 const getAdminSupabase = () => {
@@ -28,7 +29,7 @@ const getAdminSupabase = () => {
 export async function getUsers() {
   await requireAdminOrDeveloper();
   const users = await db.select().from(appUsers)
-  return users
+  return users.map(toAdminUserDto)
 }
 
 export async function createUser(data: { email: string, fullName: string, role: string, location?: string, language?: string, pinHash?: string }) {
