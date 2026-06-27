@@ -99,13 +99,27 @@ Dieser Ablauf ist der erste verkaufsrelevante End-to-End-Meilenstein.
 1. Auftragstimeline und Kundenakte.
 2. Kommunikation und Telefonnotiz.
 3. Buchhaltung, Rechnungen, Zahlungen und Export.
-4. Kontroll-Cockpit, Liquiditaet und Investitionsplanung.
-5. Such-Gehirn und KI-Entscheidungen mit Quellen und Konfidenz.
-6. Marketing-Attribution und Kundenreaktivierung.
-7. Lager, Baeder, Energie, Qualitaet, Reklamationen und KVP.
-8. Backup/Restore, Performance/Jank und Go-live-Haertung.
+4. `LEDGER-CORE-PREP-001`, sobald die Buchhaltungsstruktur ausreichend stabil ist.
+5. `LEDGER-CORE-EXTRACT-001` erst nach produktiver Stabilitaet und belegter End-to-End-Nutzung.
+6. Weitere Kandidaten wie Capture, Suche, Timeline, Offline-Outbox und Analyse werden erst anhand realer stabiler Vertraege katalogisiert.
+7. Kontroll-Cockpit, Liquiditaet und Investitionsplanung.
+8. Such-Gehirn und KI-Entscheidungen mit Quellen und Konfidenz.
+9. Marketing-Attribution und Kundenreaktivierung.
+10. Lager, Baeder, Energie, Qualitaet, Reklamationen und KVP.
+11. Backup/Restore, Performance/Jank und Go-live-Haertung.
 
 Keiner dieser Punkte ist gestrichen. Status, Abhaengigkeiten und Verschiebungsgruende stehen in `NON_LOSS_REGISTER.md`.
+
+## Modularitaet und Wiederverwendung
+
+- Kreile bleibt Referenzprodukt und wird zuerst stabil und verkaufsfaehig.
+- Neue oder geaenderte Module werden fortlaufend ueber stabile Vertraege, Provider-/Port-Schnittstellen, Typen, Props und zentrale Konfiguration entkoppelt.
+- Kreile-spezifische Begriffe, Rollen, Tenant-Werte, Tabellen und UI-Texte bleiben ausserhalb wiederverwendbarer Kerne.
+- Waehrend Auth-, Offline- und Capture-P0-Arbeit erfolgt keine vorschnelle Paketextraktion.
+- Erstes Zielmodul ist `ledger-core`.
+- `LEDGER-CORE-PREP-001` bleibt reine Analyse: Inventar, Cross-Imports, Direktzugriffe, gemeinsame Typen und spaetere Modulgrenze; keine Verschiebungen, Importaenderungen oder Extraktion.
+- `LEDGER-CORE-EXTRACT-001` folgt erst nach stabiler Kreile-Buchhaltung und belegter End-to-End-Nutzung; Kreile bleibt Referenzkonsument, weitere Apps nutzen Adapter.
+- Verbindliche Detailregeln stehen in `docs/project/MODULARITY_STRATEGY.md`.
 
 ## Nutzer-Twins
 
