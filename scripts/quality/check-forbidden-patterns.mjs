@@ -155,4 +155,3 @@ if (violations.length > 0) {
 }
 
 console.log(`Forbidden pattern gate passed for ${files.length} changed file(s).`);
-

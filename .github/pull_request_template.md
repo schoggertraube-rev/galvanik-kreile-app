@@ -13,4 +13,3 @@
 - `npm run build`
 - `git diff --check`
 - forbidden pattern gate
-

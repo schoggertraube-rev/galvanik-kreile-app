@@ -95,4 +95,3 @@ jobs:
 
       - name: Forbidden pattern gate
         run: node scripts/quality/check-forbidden-patterns.mjs --base "${{ steps.diff.outputs.base }}" --head "${{ steps.diff.outputs.head }}"
-
