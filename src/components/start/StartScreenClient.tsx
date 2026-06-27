@@ -141,13 +141,6 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
             }
           }
 
-          // UI state in localStorage (not auth relevant)
-          try {
-            localStorage.setItem("kreile_user_role", res.role || user.role);
-            localStorage.setItem("kreile_user_initials", user.initials);
-          } catch (e) {
-            console.warn("localStorage is blocked, skipping user info storage", e);
-          }
 
           // Redirect to home
           window.location.href = "/";
@@ -314,6 +307,7 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
 
       {/* Skyline Logo wordmark block */}
       <div className="flex flex-col items-center mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 fill-mode-both">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/assets/logo/kreile-wordmark-skyline.svg"
           alt="Kreile Wortmarke Skyline"
@@ -388,30 +382,7 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
           Administrator / E-Mail Login
         </button>
 
-        {/* Robust Tablet Test Login */}
-        <button
-          onClick={() => {
-            try {
-              alert("Button wurde geklickt!"); // DEBUG
-              localStorage.setItem("kreile_user_role", "werkstatt");
-              localStorage.setItem("kreile_user_initials", "CD");
-              const isHttps = window.location.protocol === "https:";
 
-              // WARNING: Demo Cookies (bypass-auth, kreile_role) are no longer used for secure auth.
-              // They are still set here for the tablet test login fallback, but checkAppAuth will reject them in production.
-              document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-              document.cookie = `kreile_role=werkstatt; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-
-              window.location.href = "/";
-            } catch (err: unknown) {
-              alert("Fehler beim Login: " + (err as Error).message);
-            }
-          }}
-          className="mt-4 px-6 py-2 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-900 text-sm font-bold rounded-full transition-colors cursor-pointer flex items-center gap-2"
-        >
-          <span className="w-2 h-2 rounded-full bg-accent-orange animate-pulse"></span>
-          Tablet Test-Login (Werkstatt)
-        </button>
       </div>
 
       {selectedUser && (

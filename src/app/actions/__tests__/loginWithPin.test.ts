@@ -61,12 +61,23 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn(),
 }));
 
+// Supabase-Server-Mock: signOut() bei PIN-Login muss möglich sein
+const mockSignOut = vi.fn().mockResolvedValue({});
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: vi.fn().mockResolvedValue({
+    auth: {
+      signOut: mockSignOut,
+    },
+  }),
+}));
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSetAppSession.mockResolvedValue(undefined);
+    mockSignOut.mockResolvedValue({});
   });
 
   it("8a – gültiger PIN mit vollständigem fullName → AppSession wird mit displayName gesetzt", async () => {

@@ -1,9 +1,7 @@
 "use client";
 
-import { X } from "lucide-react";
 import { login } from "@/app/actions/auth";
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 
 export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
   const [isPending, startTransition] = useTransition();
@@ -13,14 +11,17 @@ export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     startTransition(async () => {
-      // Direct call to the server action
+      setErrorMsg("");
       try {
-        await login(formData);
+        const result = await login(formData);
+        if (result.ok) {
+          window.location.replace(result.targetPath);
+        } else {
+          setErrorMsg(result.message);
+        }
       } catch (err) {
-        // If redirect happens it throws an error in nextjs, which is normal
-        // but if it doesn't redirect, maybe we can catch a standard error?
-        // Actually, the server action does `redirect('/start?message=...')` on error.
-        // So we will just handle it. 
+        console.error("Login error:", err);
+        setErrorMsg("Systemfehler: Bitte versuchen Sie es erneut.");
       }
     });
   };

@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { appUsers } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { setAppSession, SESSION_TTL_MS } from "@/lib/server/appSession";
+import { createClient } from "@/lib/supabase/server";
 
 export async function getAuthorizationSnapshotAction(): Promise<AuthorizationResult> {
   return await resolveAuthorization();
@@ -66,6 +67,16 @@ export async function loginWithPin(
         ok: false,
         message: "Kein Anzeigename für diesen Benutzer konfiguriert. Bitte Administrator kontaktieren.",
       };
+    }
+
+    // Bestehende Supabase E-Mail-Session abmelden, bevor die App-Session gesetzt wird.
+    // Fehlschlag gilt als Login-Fehler: inkonsistente Sitzung verhindert.
+    try {
+      const supabase = await createClient();
+      await supabase.auth.signOut();
+    } catch (signOutError) {
+      console.error("loginWithPin: supabase.auth.signOut() failed, aborting login:", signOutError);
+      return { ok: false, message: "Systemfehler: Bestehende Sitzung konnte nicht beendet werden." };
     }
 
     const now = Date.now();

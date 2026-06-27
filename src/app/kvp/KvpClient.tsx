@@ -7,6 +7,7 @@ import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { OfflineSyncBadge } from "@/components/offline/OfflineSyncBadge";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 interface KvpItem {
   id: string;
@@ -83,7 +84,8 @@ export function KvpClient() {
   usePageView();
 
   const [items, setItems] = useState<KvpItem[]>(DEMO_ITEMS);
-  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
+  const { role: permRole } = usePermissions();
+  const isAdminOrDev = permRole === "admin" || permRole === "developer";
   const [activeItem, setActiveItem] = useState<KvpItem | null>(null);
 
   // Form State
@@ -93,15 +95,13 @@ export function KvpClient() {
   const [newProblem, setNewProblem] = useState("");
 
   useEffect(() => {
-    const role = localStorage.getItem("kreile_user_role");
-    if (role === "admin" || role === "developer") setIsAdminOrDev(true);
-
     const saved = localStorage.getItem("kreile_kvp_items");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setItems([...parsed, ...DEMO_ITEMS]);
-      } catch(e) {
+      } catch {
         setItems(DEMO_ITEMS);
       }
     }
@@ -252,7 +252,7 @@ export function KvpClient() {
             <ul className="space-y-3 mb-6">
               <li className="flex justify-between items-center border-b border-neutral-gray-100 pb-2">
                 <span className="text-sm font-medium text-navy-900">Häufigste Suche ohne Treffer</span>
-                <span className="text-xs font-bold text-error-red">"Urlaub"</span>
+                <span className="text-xs font-bold text-error-red">&quot;Urlaub&quot;</span>
               </li>
               <li className="flex justify-between items-center border-b border-neutral-gray-100 pb-2">
                 <span className="text-sm font-medium text-navy-900">Rollenblockaden (Woche)</span>

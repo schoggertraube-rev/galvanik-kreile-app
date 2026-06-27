@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import { createClient } from "@/lib/supabase/client";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
@@ -39,6 +39,14 @@ const PermissionsContext = createContext<PermissionsContextType>({
 
 export const usePermissions = () => useContext(PermissionsContext);
 
+/**
+ * Kanonischer Identity-Provider.
+ *
+ * Vertrag: Eine erfolgreiche Session liefert gemeinsam:
+ * userId, tenantId, role, displayName, initials, permissions, active.
+ * Dieser Snapshot wird atomar übernommen.
+ * Bei ungültiger Session wird alles vollständig geleert.
+ */
 export function PermissionsProvider({ 
   children,
   initialAuthState
@@ -50,38 +58,59 @@ export function PermissionsProvider({
   const [error, setError] = useState<string | null>(
     initialAuthState.status === "error" ? initialAuthState.message : null
   );
-  const [role] = useState<string | null>(
+  const [role, setRole] = useState<string | null>(
     initialAuthState.status === "authenticated" ? initialAuthState.session.role : null
   );
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [name] = useState<string>(
+  const [name, setName] = useState<string>(
     initialAuthState.status === "authenticated" ? initialAuthState.session.displayName : ""
   );
-  const [initials] = useState<string>(
+  const [initials, setInitials] = useState<string>(
     initialAuthState.status === "authenticated" ? deriveInitials(initialAuthState.session.displayName) : ""
   );
   const [loading, setLoading] = useState(true);
 
+  // Guard gegen Refresh-Races bei schnellem Benutzerwechsel
+  const refreshSeqRef = useRef(0);
+
   const refreshPermissions = useCallback(async () => {
+    const seq = ++refreshSeqRef.current;
     try {
       const result = await getAuthorizationSnapshotAction();
 
+      // Veraltete Antwort verwerfen
+      if (seq !== refreshSeqRef.current) return;
+
       if (result.ok) {
+        // Atomarer Snapshot: alle Identitätsfelder gemeinsam setzen
+        setRole(result.data.role);
+        setName(result.data.displayName);
+        setInitials(deriveInitials(result.data.displayName));
         setPermissions([...result.data.permissions]);
         setStatus("authenticated");
         setError(null);
       } else {
+        // Ungültige Session: alles leeren
+        setRole(null);
+        setName("");
+        setInitials("");
+        setPermissions([]);
         setStatus("error");
         setError(result.message);
-        setPermissions([]);
       }
     } catch (err) {
+      if (seq !== refreshSeqRef.current) return;
       console.error("Failed to load permissions", err);
+      setRole(null);
+      setName("");
+      setInitials("");
+      setPermissions([]);
       setStatus("error");
       setError("AUTH_ERROR: Berechtigungen nicht verfügbar");
-      setPermissions([]);
     } finally {
-      setLoading(false);
+      if (seq === refreshSeqRef.current) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -91,20 +120,18 @@ export function PermissionsProvider({
       await refreshPermissions();
     };
     init();
-    
-    const handleStorage = () => { if(isMounted) refreshPermissions(); };
-    window.addEventListener("storage", handleStorage);
-    
+
+    // Supabase-Auth-Zustandswechsel reagieren auf echte Session-Ereignisse.
+    // Kein künstlicher StorageEvent als Production-Trigger.
     const supabase = createClient();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+      if ((event === 'SIGNED_IN' || event === 'SIGNED_OUT') && isMounted) {
         refreshPermissions();
       }
     });
 
     return () => {
       isMounted = false;
-      window.removeEventListener("storage", handleStorage);
       subscription.unsubscribe();
     };
   }, [refreshPermissions]);

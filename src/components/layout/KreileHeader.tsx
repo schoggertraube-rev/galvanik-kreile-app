@@ -6,9 +6,7 @@ import { Search, Camera, Bell, Calendar, Menu, Plus } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { useState, useEffect, useRef } from "react";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { getOrderCountDb } from "@/app/actions/orders.actions";
 import { logout } from "@/app/actions/auth";
-import { trackUiEvent } from "@/lib/tracking/tracking";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { getCompanySettings } from "@/app/actions/company.actions";
@@ -25,8 +23,6 @@ interface KreileHeaderProps {
 export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [isOffline, setIsOffline] = useState(false);
-  const [orderCount, setOrderCount] = useState(0);
   const [logoUrl, setLogoUrl] = useState("/assets/logo/kreile-wordmark-skyline.svg");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
@@ -62,13 +58,6 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     if (isLoggingOut) return; // Doppel-Aufruf verhindern
     setIsLoggingOut(true);
     setUserDropdownOpen(false);
-    // Entferne nicht-autoritative UI-Cachewerte (localStorage)
-    localStorage.removeItem("kreile_user_role");
-    localStorage.removeItem("kreile_user_initials");
-    // Dev-Bypass-Cookie löschen: StartScreenClient.tsx schreibt ihn,
-    // proxy.ts und roles.ts lesen ihn – konsistente Bereinigung erforderlich.
-    // Sicherheitsauftrag: vollständige Migration auf kreile_app_session ist geplant.
-    document.cookie = "bypass-auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     await logout();
     router.replace("/start");
   };
@@ -82,9 +71,6 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
   useEffect(() => {
     const updateState = async () => {
-      setIsOffline(OfflineManager.isOffline());
-      const countResult = await getOrderCountDb();
-      setOrderCount(countResult.ok ? countResult.data.count : 0);
       try {
         const settings = await getCompanySettings();
         if (settings.logoUrl) setLogoUrl(settings.logoUrl);
