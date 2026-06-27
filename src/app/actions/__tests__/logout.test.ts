@@ -62,7 +62,7 @@ describe("logout() – Cookie-Bereinigung (A-10)", () => {
     const result = await logout();
 
     expect(result).toEqual({ ok: true, remoteSignOut: "success" });
-    expect(mockSignOut).toHaveBeenCalledOnce();
+    expect(mockSignOut).toHaveBeenCalledWith({ scope: "local" });
     expect(mockClearAppSession).toHaveBeenCalledOnce();
   });
 
@@ -71,7 +71,7 @@ describe("logout() – Cookie-Bereinigung (A-10)", () => {
     const result = await logout();
 
     expect(result).toEqual({ ok: true, remoteSignOut: "failed" });
-    expect(mockSignOut).toHaveBeenCalledOnce();
+    expect(mockSignOut).toHaveBeenCalledWith({ scope: "local" });
     // DIE KRITISCHE PRÜFUNG: clearAppSession trotz Supabase-Fehler
     expect(mockClearAppSession).toHaveBeenCalledOnce();
   });

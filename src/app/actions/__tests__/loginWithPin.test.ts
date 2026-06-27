@@ -205,5 +205,6 @@ describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
     const signOutCallOrder = mockSignOut.mock.invocationCallOrder[0];
     const setSessionCallOrder = mockSetAppSession.mock.invocationCallOrder[0];
     expect(signOutCallOrder).toBeLessThan(setSessionCallOrder);
+    expect(mockSignOut).toHaveBeenCalledWith({ scope: "local" });
   });
 });

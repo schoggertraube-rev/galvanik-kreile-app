@@ -73,7 +73,7 @@ export async function loginWithPin(
     // Fehlschlag gilt als Login-Fehler: inkonsistente Sitzung verhindert.
     try {
       const supabase = await createClient();
-      const { error } = await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut({ scope: "local" });
       if (error) {
         console.error("loginWithPin: supabase.auth.signOut() returned error:", error);
         return { ok: false, message: "Systemfehler: Bestehende Sitzung konnte nicht beendet werden." };
