@@ -2,7 +2,6 @@
 
 import { AlertTriangle, LogIn } from "lucide-react";
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { logout } from "@/app/actions/auth";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 
@@ -11,7 +10,6 @@ interface SessionWarningBannerProps {
 }
 
 export function SessionWarningBanner({ show }: SessionWarningBannerProps) {
-  const router = useRouter();
   const { isOpen, closeErfassung } = useErfassung();
   const reloginInFlight = useRef(false);
   const [pending, setPending] = useState(false);
@@ -33,7 +31,7 @@ export function SessionWarningBanner({ show }: SessionWarningBannerProps) {
     } catch {
       // Auch bei einer gestörten Logout-Action zur öffentlichen Anmeldung wechseln.
     } finally {
-      router.replace("/start");
+      window.location.replace("/start");
     }
   };
 

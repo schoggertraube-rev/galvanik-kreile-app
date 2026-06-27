@@ -144,5 +144,66 @@ describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
 
     expect(result.ok).toBe(false);
     expect(mockSetAppSession).not.toHaveBeenCalled();
+    expect(mockSignOut).not.toHaveBeenCalled();
+  });
+
+  it("8d – signOut wirft Exception → nicht-ok, keine Session erstellt", async () => {
+    mockDbSelect.mockResolvedValue([{
+      id: "user-err1",
+      tenantId: "galvanik-kreile",
+      pinHash: "1234",
+      active: true,
+      role: "werkstatt",
+      fullName: "Max",
+    }]);
+
+    mockSignOut.mockRejectedValueOnce(new Error("network error"));
+
+    const { loginWithPin } = await import("@/app/actions/auth.actions");
+    const result = await loginWithPin("user-err1", "1234");
+
+    expect(result.ok).toBe(false);
+    expect(mockSetAppSession).not.toHaveBeenCalled();
+  });
+
+  it("8e – signOut gibt error-Objekt zurück → nicht-ok, keine Session erstellt", async () => {
+    mockDbSelect.mockResolvedValue([{
+      id: "user-err2",
+      tenantId: "galvanik-kreile",
+      pinHash: "1234",
+      active: true,
+      role: "werkstatt",
+      fullName: "Max",
+    }]);
+
+    mockSignOut.mockResolvedValueOnce({ error: { message: "signOut failed" } });
+
+    const { loginWithPin } = await import("@/app/actions/auth.actions");
+    const result = await loginWithPin("user-err2", "1234");
+
+    expect(result.ok).toBe(false);
+    expect(mockSetAppSession).not.toHaveBeenCalled();
+  });
+
+  it("8f – Reihenfolge: signOut() komplett erfolgreich, erst danach setAppSession()", async () => {
+    mockDbSelect.mockResolvedValue([{
+      id: "user-seq",
+      tenantId: "galvanik-kreile",
+      pinHash: "1234",
+      active: true,
+      role: "werkstatt",
+      fullName: "Max",
+    }]);
+
+    mockSignOut.mockResolvedValueOnce({ error: null });
+
+    // We can verify order by checking invocation order, but vitest mock order checking is easier:
+    // Just ensuring both are called.
+    const { loginWithPin } = await import("@/app/actions/auth.actions");
+    await loginWithPin("user-seq", "1234");
+
+    const signOutCallOrder = mockSignOut.mock.invocationCallOrder[0];
+    const setSessionCallOrder = mockSetAppSession.mock.invocationCallOrder[0];
+    expect(signOutCallOrder).toBeLessThan(setSessionCallOrder);
   });
 });

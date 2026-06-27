@@ -14,14 +14,12 @@ import { useTestpilot } from "@/components/testpilot/TestpilotProvider";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
-import { useRouter } from "next/navigation";
 
 interface KreileHeaderProps {
   onMenuToggle: () => void;
 }
 
 export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
-  const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
   const [logoUrl, setLogoUrl] = useState("/assets/logo/kreile-wordmark-skyline.svg");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -59,7 +57,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     setIsLoggingOut(true);
     setUserDropdownOpen(false);
     await logout();
-    router.replace("/start");
+    window.location.replace("/start");
   };
 
   const today = new Date();

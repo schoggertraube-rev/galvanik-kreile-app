@@ -9,9 +9,8 @@ const mocks = vi.hoisted(() => ({
   providerState: { isOpen: false },
 }));
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: mocks.replace }),
-}));
+// ─── Mocks ──────────────────────────────────────────────────────────────────
+
 
 vi.mock("@/app/actions/auth", () => ({
   logout: (...args: unknown[]) => mocks.logout(...args),
@@ -24,10 +23,17 @@ vi.mock("@/components/erfassung/ErfassungProvider", () => ({
   }),
 }));
 
+const originalLocation = window.location;
+
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.providerState.isOpen = false;
   mocks.logout.mockResolvedValue({ ok: true, remoteSignOut: "success" });
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  delete (window as any).location;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  window.location = { ...originalLocation, replace: mocks.replace } as any;
 });
 
 describe("SessionWarningBanner (LIVE-AUTH-001)", () => {

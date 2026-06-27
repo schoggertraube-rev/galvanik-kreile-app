@@ -14,6 +14,9 @@ export function deriveInitials(displayName: string): string {
 }
 
 interface PermissionsContextType {
+  userId: string | null;
+  tenantId: string | null;
+  active: boolean;
   role: string | null;
   permissions: string[];
   name: string;
@@ -26,6 +29,9 @@ interface PermissionsContextType {
 }
 
 const PermissionsContext = createContext<PermissionsContextType>({
+  userId: null,
+  tenantId: null,
+  active: false,
   role: null,
   permissions: [],
   name: "",
@@ -47,6 +53,19 @@ export const usePermissions = () => useContext(PermissionsContext);
  * Dieser Snapshot wird atomar übernommen.
  * Bei ungültiger Session wird alles vollständig geleert.
  */
+type AuthState = {
+  userId: string | null;
+  tenantId: string | null;
+  role: string | null;
+  displayName: string;
+  initials: string;
+  permissions: string[];
+  active: boolean;
+  status: "authenticated" | "unauthenticated" | "error";
+  error: string | null;
+  loading: boolean;
+};
+
 export function PermissionsProvider({ 
   children,
   initialAuthState
@@ -54,21 +73,21 @@ export function PermissionsProvider({
   children: React.ReactNode;
   initialAuthState: AuthBootstrapState;
 }) {
-  const [status, setStatus] = useState<"authenticated" | "unauthenticated" | "error">(initialAuthState.status);
-  const [error, setError] = useState<string | null>(
-    initialAuthState.status === "error" ? initialAuthState.message : null
-  );
-  const [role, setRole] = useState<string | null>(
-    initialAuthState.status === "authenticated" ? initialAuthState.session.role : null
-  );
-  const [permissions, setPermissions] = useState<string[]>([]);
-  const [name, setName] = useState<string>(
-    initialAuthState.status === "authenticated" ? initialAuthState.session.displayName : ""
-  );
-  const [initials, setInitials] = useState<string>(
-    initialAuthState.status === "authenticated" ? deriveInitials(initialAuthState.session.displayName) : ""
-  );
-  const [loading, setLoading] = useState(true);
+  const [authState, setAuthState] = useState<AuthState>(() => {
+    const isAuth = initialAuthState.status === "authenticated";
+    return {
+      userId: isAuth ? initialAuthState.session.userId : null,
+      tenantId: isAuth ? initialAuthState.session.tenantId : null,
+      role: isAuth ? initialAuthState.session.role : null,
+      displayName: isAuth ? initialAuthState.session.displayName : "",
+      initials: isAuth ? deriveInitials(initialAuthState.session.displayName) : "",
+      permissions: [],
+      active: isAuth ? true : false,
+      status: initialAuthState.status,
+      error: initialAuthState.status === "error" ? initialAuthState.message : null,
+      loading: true,
+    };
+  });
 
   // Guard gegen Refresh-Races bei schnellem Benutzerwechsel
   const refreshSeqRef = useRef(0);
@@ -83,34 +102,48 @@ export function PermissionsProvider({
 
       if (result.ok) {
         // Atomarer Snapshot: alle Identitätsfelder gemeinsam setzen
-        setRole(result.data.role);
-        setName(result.data.displayName);
-        setInitials(deriveInitials(result.data.displayName));
-        setPermissions([...result.data.permissions]);
-        setStatus("authenticated");
-        setError(null);
+        setAuthState({
+          userId: result.data.userId,
+          tenantId: result.data.tenantId,
+          role: result.data.role,
+          displayName: result.data.displayName,
+          initials: deriveInitials(result.data.displayName),
+          permissions: [...result.data.permissions],
+          active: result.data.active,
+          status: "authenticated",
+          error: null,
+          loading: false,
+        });
       } else {
         // Ungültige Session: alles leeren
-        setRole(null);
-        setName("");
-        setInitials("");
-        setPermissions([]);
-        setStatus("error");
-        setError(result.message);
+        setAuthState({
+          userId: null,
+          tenantId: null,
+          role: null,
+          displayName: "",
+          initials: "",
+          permissions: [],
+          active: false,
+          status: "error",
+          error: result.message,
+          loading: false,
+        });
       }
     } catch (err) {
       if (seq !== refreshSeqRef.current) return;
       console.error("Failed to load permissions", err);
-      setRole(null);
-      setName("");
-      setInitials("");
-      setPermissions([]);
-      setStatus("error");
-      setError("AUTH_ERROR: Berechtigungen nicht verfügbar");
-    } finally {
-      if (seq === refreshSeqRef.current) {
-        setLoading(false);
-      }
+      setAuthState({
+        userId: null,
+        tenantId: null,
+        role: null,
+        displayName: "",
+        initials: "",
+        permissions: [],
+        active: false,
+        status: "error",
+        error: "AUTH_ERROR: Berechtigungen nicht verfügbar",
+        loading: false,
+      });
     }
   }, []);
 
@@ -137,11 +170,26 @@ export function PermissionsProvider({
   }, [refreshPermissions]);
 
   const hasPermission = (key: string) => {
-    return permissions.includes(key);
+    return authState.permissions.includes(key);
+  };
+
+  const contextValue: PermissionsContextType = {
+    userId: authState.userId,
+    tenantId: authState.tenantId,
+    active: authState.active,
+    role: authState.role,
+    permissions: authState.permissions,
+    name: authState.displayName,
+    initials: authState.initials,
+    loading: authState.loading,
+    hasPermission,
+    refreshPermissions,
+    status: authState.status,
+    error: authState.error,
   };
 
   return (
-    <PermissionsContext.Provider value={{ role, permissions, name, initials, loading, hasPermission, refreshPermissions, status, error }}>
+    <PermissionsContext.Provider value={contextValue}>
       {children}
     </PermissionsContext.Provider>
   );
