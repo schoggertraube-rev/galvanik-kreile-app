@@ -32,7 +32,7 @@
 - KPI-Berechnungen gehoeren in SQL-Views.
 - Keine Mockdaten, erfundenen Zahlen oder `Math.random` im Produktionspfad.
 - Keine Client-`tenantId`-Autorisierung.
-- Kein `FOR ALL TO public USING (true)`.
+- Keine pauschale Public-RLS-Policy mit `FOR ALL` und `USING true`.
 - Keine Secrets oder PIN-Felder im Client-Payload.
 - Keine Navigation ohne ausdruecklichen Auftrag aendern.
 - Datenkette immer: Datenquelle -> View/Vertrag -> Query/Action -> Komponente -> Loading/Empty/Error/Data.
