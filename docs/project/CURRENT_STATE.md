@@ -8,10 +8,9 @@ Stand: 2026-06-27
 - Vercel Production Branch: `main`.
 - Branch Protection: aktiv.
 - Required Check: `quality`.
-- Aktueller verifizierter `main`-SHA: `797e89dfd87642984a0f36dd570734d6869b36d2`.
-- Aktuelles Production-Deployment: `dpl_CCfuwNKgWz1Z5rTGBjG17nepoXWA`.
-- Production-Status: `READY`, Target `production`, Commit `797e89dfd87642984a0f36dd570734d6869b36d2`.
+- Letzte verifizierte App-Code-Basis: `797e89dfd87642984a0f36dd570734d6869b36d2` (`LIVE-AUTH-001`).
 - PR 1 und PR 2: geschlossen, Branches als Quellenarchiv erhalten.
+- Dokumentations-PRs aendern nicht automatisch den fachlichen App-Code-Stand; Git-/Vercel-SHAs sind vor jeder Mutation live zu verifizieren.
 
 ## Abgeschlossen oder ausgerollt
 
