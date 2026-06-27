@@ -16,6 +16,7 @@
 - Erfassung muss Arbeit abnehmen: Kamera, Sprache, Datei und Scan mit wenigen klaren Handlungen.
 - Die App verbindet Kunde, Auftrag, Teil, Ereignis, Kommunikation, Dokument, Rechnung, Zahlung und Ergebnis in einem nachvollziehbaren Datenkreislauf.
 - KI strukturiert, analysiert und empfiehlt, ersetzt aber weder Datenbank noch belegte Wahrheit.
+- Der Kern bleibt forkbar: bestaetigte Module muessen spaeter ohne Kreile-spezifische Interna in andere Apps uebertragbar sein.
 
 ## Dokumentenautoritaet
 
@@ -66,6 +67,9 @@ Vor jeder Mission aus aktuellem `origin/main` lesen:
 - Supabase-Fehler immer mit `message`, `details` und `hint` loggen, wenn diese Felder verfuegbar sind.
 - Originale werden vor OCR und fachlicher Zuordnung dauerhaft gesichert.
 - Kamera, Datei-Upload, Dokument-OCR und Teile-/Zustandsfoto sind getrennte Fachzwecke auf einer gemeinsamen Capture-Basis.
+- Modulgrenzen muessen ueber explizite Ports/Provider, Typen und Props verlaufen; keine Tiefimporte in fremde Modul-Interna.
+- Kreile-spezifische Begriffe, Tenant-Werte, Rollen, Tabellen und UI-Texte duerfen nicht in wiederverwendbare Kerne eingebrannt werden.
+- Jetzt wird nichts vorschnell extrahiert: zuerst stabilisieren, waehrenddessen Schnittkanten dokumentieren; spaeter genau einmal kontrolliert herausloesen.
 
 ## Abschluss
 
