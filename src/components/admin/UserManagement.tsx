@@ -5,24 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Shield, Mail, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Users, Plus, Shield, Mail, XCircle, Loader2 } from "lucide-react";
 import { getUsers, createUser, toggleUserStatus, updateUserRole, updateUserPin } from "@/app/actions/admin.actions";
-
-type AppUser = {
-  id: string;
-  email: string;
-  fullName: string;
-  role: string;
-  active: boolean;
-  location: string | null;
-  language: string | null;
-  pinHash: string | null;
-};
+import type { AdminUserDto } from "@/lib/auth/userDtos";
 
 export function UserManagement() {
-  const [users, setUsers] = useState<AppUser[]>([]);
+  const [users, setUsers] = useState<AdminUserDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pinDrafts, setPinDrafts] = useState<Record<string, string>>({});
 
   // Create User State
   const [showCreate, setShowCreate] = useState(false);
@@ -36,7 +27,7 @@ export function UserManagement() {
     try {
       setLoading(true);
       const data = await getUsers();
-      setUsers(data as AppUser[]);
+      setUsers(data as AdminUserDto[]);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -45,7 +36,9 @@ export function UserManagement() {
   };
 
   useEffect(() => {
-    fetchUsers();
+    void (async () => {
+      await fetchUsers();
+    })();
   }, []);
 
   const handleCreateUser = async () => {
@@ -199,11 +192,16 @@ export function UserManagement() {
                   <span className="text-[10px] text-text-muted font-bold">PIN:</span>
                   <Input 
                     type="password"
-                    defaultValue={user.pinHash || "1234"} 
+                    value={pinDrafts[user.id] ?? ""}
                     maxLength={4}
+                    placeholder="Neu"
                     className="w-12 h-6 text-xs text-center p-0 bg-transparent border-none focus-visible:ring-0"
+                    onChange={(e) => {
+                      const nextValue = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      setPinDrafts((current) => ({ ...current, [user.id]: nextValue }));
+                    }}
                     onBlur={(e) => {
-                      if (e.target.value !== user.pinHash && e.target.value.length === 4) {
+                      if (e.target.value.length === 4) {
                         handlePinChange(user.id, e.target.value);
                       }
                     }}

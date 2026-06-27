@@ -1,22 +1,14 @@
 "use client";
 
 import { usePageView } from "@/hooks/usePageView";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { Delete, Clock, Wrench, Calculator, Sun, CloudRain, Cloud, ShieldAlert } from "lucide-react";
+import { useState, useEffect, useEffectEvent } from "react";
+import { Delete, Clock, Wrench, Calculator, Sun } from "lucide-react";
 import { getGreeting } from "@/lib/greeting";
 import { EmailLoginDialog } from "@/components/start/EmailLoginDialog";
 import { useSearchParams } from "next/navigation";
 import { getTodayTopPriority, getFeierabendEvents, notifyAdminPinReset } from "@/app/actions/start.actions";
 import { loginWithPin } from "@/app/actions/auth.actions";
-
-export type StartUser = {
-  id: string;
-  initials: string;
-  role: string;
-  pinHash: string;
-  fullName: string;
-};
+import type { StartUserDto } from "@/lib/auth/userDtos";
 
 // Asynchronous weather card fetching directly from Open-Meteo
 function WeatherCard() {
@@ -66,7 +58,7 @@ function WeatherCard() {
           setWeatherText(condition);
           setLoading(false);
         }, 600);
-      } catch (err) {
+      } catch {
         setTimeout(() => {
           setWeatherText("Heute mal kein Wetter — aber bestimmt was zu tun. 💪");
           setLoading(false);
@@ -119,11 +111,10 @@ function WeatherCard() {
 import { initializeDemoIfNeeded } from "@/app/actions/demoSetup";
 
 // PIN Dialog Component
-function PinDialog({ user, onClose }: { user: StartUser; onClose: () => void }) {
+function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void }) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
   const [isInitializing, setIsInitializing] = useState(false);
-  const router = useRouter();
 
   const handleInput = async (num: string) => {
     if (pin.length >= 4) return;
@@ -174,10 +165,14 @@ function PinDialog({ user, onClose }: { user: StartUser; onClose: () => void }) 
     }
   };
 
+  const handleKeypadInput = useEffectEvent((num: string) => {
+    void handleInput(num);
+  });
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key >= "0" && e.key <= "9") {
-        handleInput(e.key);
+        handleKeypadInput(e.key);
       } else if (e.key === "Backspace") {
         setPin(p => p.slice(0, -1));
       } else if (e.key === "Escape") {
@@ -186,7 +181,7 @@ function PinDialog({ user, onClose }: { user: StartUser; onClose: () => void }) 
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pin, user.pinHash, onClose]);
+  }, [onClose]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 backdrop-blur-sm">
@@ -240,7 +235,9 @@ function PinDialog({ user, onClose }: { user: StartUser; onClose: () => void }) 
           {[1,2,3,4,5,6,7,8,9].map(n => (
             <button
               key={n}
-              onClick={() => handleInput(String(n))}
+              onClick={() => {
+                void handleInput(String(n));
+              }}
               className="h-14 rounded-2xl bg-bg-app-soft hover:bg-neutral-gray-100 text-2xl font-bold text-navy-900 transition-all active:scale-95 cursor-pointer"
             >
               {n}
@@ -248,7 +245,9 @@ function PinDialog({ user, onClose }: { user: StartUser; onClose: () => void }) 
           ))}
           <div />
           <button
-            onClick={() => handleInput("0")}
+            onClick={() => {
+              void handleInput("0");
+            }}
             className="h-14 rounded-2xl bg-bg-app-soft hover:bg-neutral-gray-100 text-2xl font-bold text-navy-900 transition-all active:scale-95 cursor-pointer"
           >
             0
@@ -267,8 +266,8 @@ function PinDialog({ user, onClose }: { user: StartUser; onClose: () => void }) 
 
 import { Suspense } from "react";
 
-function StartScreenContent({ users }: { users: StartUser[] }) {
-  const [selectedUser, setSelectedUser] = useState<StartUser | null>(null);
+function StartScreenContent({ users }: { users: StartUserDto[] }) {
+  const [selectedUser, setSelectedUser] = useState<StartUserDto | null>(null);
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [greetingInfo, setGreetingInfo] = useState({ text: "Guten Morgen, Meister!", emoji: "👋" });
   const [priorityTask, setPriorityTask] = useState<string | null>(null);
@@ -426,7 +425,7 @@ function StartScreenContent({ users }: { users: StartUser[] }) {
   );
 }
 
-export function StartScreenClient({ users }: { users: StartUser[] }) {
+export function StartScreenClient({ users }: { users: StartUserDto[] }) {
   usePageView();
   return (
     <Suspense fallback={
