@@ -25,7 +25,7 @@ Primaerer Kundennutzen:
 
 ### Phase 0 – Plan- und Dokumentwahrheit
 
-1. `PLAN-SYNC-001`
+1. `PLAN-SYNC-001` - abgeschlossen mit PR 7
    - `AGENTS.md`, Masterplan und Current State aktualisieren.
    - Dokumentenautoritaet festlegen.
    - Non-Loss-Register anlegen.

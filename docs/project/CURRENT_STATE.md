@@ -16,6 +16,7 @@ Stand: 2026-06-27
 
 - Control Plane mit PR-, CI-, Preview- und Branch-Schutz ist aktiv.
 - P0-PIN-Payload-Leak: live behoben; `pinHash` und PIN-Werte werden nicht an den Client ausgeliefert.
+- `PLAN-SYNC-001`: Dokumentenautoritaet, Non-Loss-Register, Modularitaetsstrategie und aktuelle Roadmap mit PR 7 kanonisiert.
 - `LIVE-AUTH-001`: per PR 6 gemerged und auf Production ausgerollt.
   - Overlay wird bei Re-Login geschlossen.
   - kanonischer Logout wird verwendet.
@@ -56,11 +57,12 @@ Stand: 2026-06-27
 
 ## Naechste Schritte
 
-1. `PLAN-SYNC-001` mergen: Dokumentenautoritaet, aktuelle Reihenfolge und Non-Loss-Register.
-2. `AUTH-IDENTITY-002` als naechste Code-Mission.
-3. Danach `OFFLINE-SHELL-001` und `OFFLINE-48H-001`.
-4. Danach `SEC-PIN-002`.
-5. Anschliessend Capture-/OCR-/Wareneingangsfolge gemaess `MASTERPLAN.md`.
+1. `PLAN-SYNC-001`: mit Merge von PR 7 abgeschlossen.
+2. `AUTH-IDENTITY-002`: naechste aktive Code-Mission.
+3. Danach `OFFLINE-SHELL-001`.
+4. Danach `OFFLINE-48H-001`.
+5. Danach `SEC-PIN-002`.
+6. Anschliessend Capture-/OCR-/Wareneingangsfolge gemaess `MASTERPLAN.md`.
 
 ## Nicht erlaubt
 
