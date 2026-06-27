@@ -1,0 +1,98 @@
+name: Quality
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: dummy-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: dummy-service-role-key
+      SUPABASE_URL: https://example.supabase.co
+      DATABASE_URL: postgres://user:pass@127.0.0.1:5432/db
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Determine Node version
+        id: node-version
+        shell: bash
+        run: |
+          set -euo pipefail
+          node_version="$(node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); process.stdout.write(pkg.engines?.node ?? '')")"
+          if [ -z "$node_version" ]; then
+            node_version="24"
+          fi
+          echo "version=$node_version" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.node-version.outputs.version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Resolve diff range
+        id: diff
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+            head="${{ github.event.pull_request.head.sha }}"
+          else
+            base="${{ github.event.before }}"
+            head="${{ github.sha }}"
+          fi
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            base="$(git rev-list --max-parents=0 "$head")"
+          fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "head=$head" >> "$GITHUB_OUTPUT"
+
+      - name: TypeScript
+        run: npx tsc --noEmit --incremental false
+
+      - name: Unit tests
+        run: npm run test:unit
+
+      - name: Build
+        run: npm run build
+
+      - name: ESLint on changed TS and TSX files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(git diff --name-only --diff-filter=ACMR "${{ steps.diff.outputs.base }}" "${{ steps.diff.outputs.head }}" -- '*.ts' '*.tsx')
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No changed TS/TSX files to lint."
+            exit 0
+          fi
+          npx eslint "${files[@]}"
+
+      - name: Repository lint debt metric
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Whitespace and merge marker check
+        run: git diff --check "${{ steps.diff.outputs.base }}" "${{ steps.diff.outputs.head }}"
+
+      - name: Forbidden pattern gate
+        run: node scripts/quality/check-forbidden-patterns.mjs --base "${{ steps.diff.outputs.base }}" --head "${{ steps.diff.outputs.head }}"
+
