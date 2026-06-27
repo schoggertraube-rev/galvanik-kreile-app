@@ -1,13 +1,44 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+# Galvanik-Kreile WerkstattCockpit
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+## Projekt
 
-<!-- BEGIN:supabase-agent-rules -->
-# Supabase RLS & Error Handling
+- Arbeite ausschliesslich fuer das Galvanik-Kreile WerkstattCockpit.
+- Der feste Tenant ist `galvanik-kreile`.
+- Stack: Next.js App Router, TypeScript, Supabase, Drizzle, Recharts, Framer Motion und PWA.
+- `main` ist die einzige Lieferwahrheit.
+- Vor Next.js-Codeaenderungen die relevante Dokumentation unter `node_modules/next/dist/docs/` lesen.
 
-1. **Tabellen nie ohne RLS-Policy anlegen**: Jede neue Tabelle via SQL MUSS im selben Migration-Skript RLS-Policies bekommen (z.B. `FOR ALL TO public USING (true)` für Prototyping), sonst blockiert Supabase jeden Insert/Select stumm.
-2. **Immer detailliertes Error-Logging**: Niemals nur `console.error(error)` verwenden, da Supabase Fehler im Browser als leere Objekte `{}` angezeigt werden können. IMMER `error.message`, `error.details` und `error.hint` mit loggen.
-3. **Kein stummes Scheitern**: Bei Supabase-Operationen darauf achten, dass fehlgeschlagene DB-Aufrufe (z.B. RLS Violations) nicht einfach stumm in der Konsole verpuffen.
-<!-- END:supabase-agent-rules -->
+## Arbeitsmodell
+
+- Jede Mission nutzt immer einen isolierten Worktree.
+- Pro Mission gibt es genau einen Writer und genau einen unabhaengigen Reviewer.
+- Der Writer trifft gewoehnliche technische Entscheidungen selbststaendig im freigegebenen Scope.
+- Es gibt hoechstens zwei automatische Reparaturschleifen.
+- Rueckfragen sind nur bei echtem externem Blocker oder Produktentscheidung erlaubt.
+
+## Ohne Freigabe verboten
+
+- Merge nach `main`.
+- Production-Promotion oder Production-Deploy.
+- Remote-Supabase-Migration.
+- RLS- oder Policy-Aenderung.
+- Daten- oder Dateiloeschung.
+- Aktivierung kostenpflichtiger Dienste.
+
+## Architekturregeln
+
+- Stabile Vertraege laufen ueber SQL-Views, TypeScript-Typen und Komponenten-Props.
+- Jede fachliche Wahrheit hat genau eine Single Source of Truth.
+- KPI-Berechnungen gehoeren in SQL-Views.
+- Keine Mockdaten, erfundenen Zahlen oder `Math.random` im Produktionspfad.
+- Keine Client-`tenantId`-Autorisierung.
+- Kein `FOR ALL TO public USING (true)`.
+- Keine Secrets oder PIN-Felder im Client-Payload.
+- Keine Navigation ohne ausdruecklichen Auftrag aendern.
+- Datenkette immer: Datenquelle -> View/Vertrag -> Query/Action -> Komponente -> Loading/Empty/Error/Data.
+- Supabase-Fehler immer mit `message`, `details` und `hint` loggen, wenn diese Felder verfuegbar sind.
+
+## Abschluss
+
+- Erlaubte Abschlussstatus: `PASS`, `FAIL_INTERNAL`, `BLOCKED_EXTERNAL_PERMISSION`, `BLOCKED_PRODUCT_DECISION`.
+- Kein Abschluss ohne Draft-PR, Checks, Vercel Preview und nummerierte Nachweise.
