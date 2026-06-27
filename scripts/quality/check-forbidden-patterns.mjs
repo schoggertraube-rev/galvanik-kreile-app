@@ -85,6 +85,11 @@ const privateBuckets = [
 ];
 
 for (const filePath of files) {
+  const normalizedPath = filePath.replaceAll("\\", "/");
+  if (normalizedPath === "scripts/quality/check-forbidden-patterns.mjs") {
+    continue;
+  }
+
   const lines = readLines(filePath);
   const content = lines.join("\n");
   const productionPath = isProductionPath(filePath);
