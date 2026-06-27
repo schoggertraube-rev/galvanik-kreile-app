@@ -41,6 +41,17 @@ Dieses Register schützt bestätigte Produktziele, verschobene Missionen und ver
 | `AI-PHOTO-001` | Optionale Teile-/Zustandsanalyse mit Quellen, Konfidenz und Review. | `DEFERRED_WITH_REASON` | Erst nach belastbarer Original-, Storage- und Zuordnungsbasis. |
 | `APP-PHOTO-002` | Wiederholungs- und Nacharbeitsfotos ohne Duplikat-/Verlustpfad. | `READY_AFTER_DEPENDENCY` | `APP-0001D-B`. |
 
+## Modularität und Wiederverwendung
+
+| ID | Ziel | Status | Abhängigkeit / Nachweis |
+|---|---|---|---|
+| `MODULAR-CORE-001` | Neue Module fortlaufend über Ports/Provider, Typen, Props und Konfiguration entkoppeln. | `ACTIVE` | Gilt als Architekturregel für jede neue Mission. |
+| `LEDGER-CORE-PREP-001` | Buchhaltungs-/OCR-Inventar, Schnittkanten, Direktzugriffe, gemeinsame Typen und spätere Paketgrenze dokumentieren. | `READY_AFTER_DEPENDENCY` | Nach den aktuellen P0-Themen und sobald die Buchhaltungsstruktur ausreichend stabil ist; keine Extraktion. |
+| `LEDGER-CORE-EXTRACT-001` | Stabilen Buchhaltungskern einmal kontrolliert herauslösen und über Adapter in Kreile und weiteren Apps nutzen. | `DEFERRED_WITH_REASON` | Erst nach produktiver Kreile-Buchhaltung und belegter End-to-End-Nutzung. |
+| `SHARED-MODULE-CATALOG-001` | Weitere wiederverwendbare Kandidaten wie Capture, Suche, Timeline, Offline-Outbox und Analyse anhand realer Verträge katalogisieren. | `PROTECTED_BACKLOG` | Keine vorschnelle Generalisierung. |
+
+Verbindliche Details stehen in `docs/project/MODULARITY_STRATEGY.md`.
+
 ## Geschützte Produktroadmap
 
 | Bereich | Geschütztes Ziel | Status |
