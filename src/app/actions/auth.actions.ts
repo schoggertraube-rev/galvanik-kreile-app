@@ -1,10 +1,11 @@
 "use server";
 
-import { resolveAuthorization, type AuthorizationResult } from "@/lib/server/authorization";
+import { canUsePinLoginRole, isAppRole } from "@/lib/auth/authorizationContract";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
-import { eq, and } from "drizzle-orm";
 import { setAppSession, SESSION_TTL_MS } from "@/lib/server/appSession";
+import { resolveAuthorization, type AuthorizationResult } from "@/lib/server/authorization";
+import { and, eq } from "drizzle-orm";
 
 export async function getAuthorizationSnapshotAction(): Promise<AuthorizationResult> {
   return await resolveAuthorization();
@@ -38,12 +39,14 @@ export async function getMyPermissionsAction() {
 
 /**
  * PIN-Login.
- * Setzt eine vollständige kanonische AppSession.
+ * Setzt eine vollstaendige kanonische AppSession.
  */
 export async function loginWithPin(
   userId: string,
   pin: string,
 ): Promise<{ ok: true; role: string } | { ok: false; message: string }> {
+  const invalidLoginMessage = "Ung\u00fcltige PIN oder inaktiver Benutzer.";
+
   try {
     const [user] = await db
       .select()
@@ -51,12 +54,16 @@ export async function loginWithPin(
       .where(
         and(
           eq(appUsers.id, userId),
-          eq(appUsers.tenantId, "galvanik-kreile")
-        )
+          eq(appUsers.tenantId, "galvanik-kreile"),
+        ),
       );
 
     if (!user || user.pinHash !== pin || !user.active) {
-      return { ok: false, message: "Ungültige PIN oder inaktiver Benutzer." };
+      return { ok: false, message: invalidLoginMessage };
+    }
+
+    if (!isAppRole(user.role) || !canUsePinLoginRole(user.role)) {
+      return { ok: false, message: invalidLoginMessage };
     }
 
     const displayName = user.fullName?.trim();
@@ -64,7 +71,7 @@ export async function loginWithPin(
       console.error("loginWithPin: user.fullName is empty for userId:", userId);
       return {
         ok: false,
-        message: "Kein Anzeigename für diesen Benutzer konfiguriert. Bitte Administrator kontaktieren.",
+        message: "Kein Anzeigename f\u00fcr diesen Benutzer konfiguriert. Bitte Administrator kontaktieren.",
       };
     }
 

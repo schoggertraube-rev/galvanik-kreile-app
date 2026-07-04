@@ -82,6 +82,15 @@ export const ROLE_PERMISSIONS: Record<AppRole, readonly PermissionKey[]> = {
   ],
 };
 
+const PIN_LOGIN_ROLES: Record<AppRole, boolean> = {
+  developer: false,
+  admin: true,
+  meister: true,
+  buero: true,
+  werkstatt: true,
+  readonly: true,
+};
+
 export function isAppRole(value: unknown): value is AppRole {
   if (typeof value !== "string") return false;
   return value in ROLE_PERMISSIONS;
@@ -93,4 +102,8 @@ export function getRoleLabel(role: AppRole): string {
 
 export function getPermissionsForRole(role: AppRole): readonly PermissionKey[] {
   return ROLE_PERMISSIONS[role] || [];
+}
+
+export function canUsePinLoginRole(role: AppRole): boolean {
+  return PIN_LOGIN_ROLES[role];
 }
