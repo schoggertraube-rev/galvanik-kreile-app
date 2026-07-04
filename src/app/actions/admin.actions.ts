@@ -27,7 +27,17 @@ const getAdminSupabase = () => {
 
 export async function getUsers() {
   await requireAdminOrDeveloper();
-  const users = await db.select().from(appUsers)
+  const users = await db
+    .select({
+      id: appUsers.id,
+      email: appUsers.email,
+      fullName: appUsers.fullName,
+      role: appUsers.role,
+      active: appUsers.active,
+      location: appUsers.location,
+      language: appUsers.language,
+    })
+    .from(appUsers)
   return users
 }
 

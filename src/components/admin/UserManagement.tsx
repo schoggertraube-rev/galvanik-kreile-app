@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Shield, Mail, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { Users, Plus, Shield, Mail, XCircle, Loader2 } from "lucide-react";
 import { getUsers, createUser, toggleUserStatus, updateUserRole, updateUserPin } from "@/app/actions/admin.actions";
 
 type AppUser = {
@@ -16,7 +16,6 @@ type AppUser = {
   active: boolean;
   location: string | null;
   language: string | null;
-  pinHash: string | null;
 };
 
 export function UserManagement() {
@@ -31,6 +30,7 @@ export function UserManagement() {
   const [newPin, setNewPin] = useState("1234");
   const [newRole, setNewRole] = useState("werkstatt");
   const [isCreating, setIsCreating] = useState(false);
+  const [pinDrafts, setPinDrafts] = useState<Record<string, string>>({});
 
   const fetchUsers = async () => {
     try {
@@ -45,7 +45,18 @@ export function UserManagement() {
   };
 
   useEffect(() => {
-    fetchUsers();
+    const loadInitialUsers = async () => {
+      try {
+        const data = await getUsers();
+        setUsers(data as AppUser[]);
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void loadInitialUsers();
   }, []);
 
   const handleCreateUser = async () => {
@@ -88,6 +99,7 @@ export function UserManagement() {
     if (newPin.length !== 4) return;
     try {
       await updateUserPin(id, newPin);
+      setPinDrafts((current) => ({ ...current, [id]: "" }));
       await fetchUsers();
       alert("PIN erfolgreich geändert!");
     } catch (err) {
@@ -199,11 +211,14 @@ export function UserManagement() {
                   <span className="text-[10px] text-text-muted font-bold">PIN:</span>
                   <Input 
                     type="password"
-                    defaultValue={user.pinHash || "1234"} 
+                    value={pinDrafts[user.id] ?? ""}
                     maxLength={4}
                     className="w-12 h-6 text-xs text-center p-0 bg-transparent border-none focus-visible:ring-0"
+                    onChange={(e) => {
+                      setPinDrafts((current) => ({ ...current, [user.id]: e.target.value }));
+                    }}
                     onBlur={(e) => {
-                      if (e.target.value !== user.pinHash && e.target.value.length === 4) {
+                      if (e.target.value.length === 4) {
                         handlePinChange(user.id, e.target.value);
                       }
                     }}
