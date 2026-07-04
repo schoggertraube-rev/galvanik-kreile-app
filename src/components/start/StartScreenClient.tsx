@@ -14,7 +14,6 @@ export type StartUser = {
   id: string;
   initials: string;
   role: string;
-  pinHash: string;
   fullName: string;
 };
 
@@ -186,7 +185,7 @@ function PinDialog({ user, onClose }: { user: StartUser; onClose: () => void }) 
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [pin, user.pinHash, onClose]);
+  }, [pin, onClose]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 backdrop-blur-sm">

@@ -32,7 +32,6 @@ export default async function StartPage() {
         id: u.id,
         fullName: u.fullName,
         role: u.role,
-        pinHash: u.pinHash || "1234",
         initials,
       };
     });
@@ -45,7 +44,6 @@ export default async function StartPage() {
         fullName: "Fallback Admin",
         initials: "FA",
         role: "admin",
-        pinHash: "1234",
       }
     ];
   }
