@@ -55,6 +55,7 @@ let GET: (
 let freetextPOST: (request: Request) => Promise<Response>;
 let notesExtractPOST: (request: Request) => Promise<Response>;
 let inquiryExtractPOST: (request: Request) => Promise<Response>;
+let customerEnrichPOST: (request: Request) => Promise<Response>;
 
 const authorized = (tenantId = "session-tenant") => ({
   ok: true as const,
@@ -517,6 +518,110 @@ describe("inquiry extract route auth", () => {
     } as unknown as Request);
 
     expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error: "Verarbeitung fehlgeschlagen",
+    });
+  });
+});
+
+describe("customer enrich route auth", () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", mocks.fetch);
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://supabase.example";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
+
+    mocks.resolveAuthorization.mockResolvedValue(authorized());
+    mocks.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ enriched: "ok" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    ({ POST: customerEnrichPOST } = await import("../customer-enrich/route"));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects unauthenticated customer enrichment before JSON parsing", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(unauthorized);
+    const json = vi.fn();
+
+    const response = await customerEnrichPOST({ json } as unknown as Request);
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Sitzung abgelaufen oder nicht angemeldet",
+    });
+    expect(json).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid customer enrichment payloads before forwarding", async () => {
+    const response = await customerEnrichPOST({
+      json: vi.fn().mockResolvedValue({ company: "Kreile", city: "Fulda", extra: true }),
+    } as unknown as Request);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Ungültige Anfrage",
+    });
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("forwards only validated fields plus the session tenant", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(authorized("tenant-enrich"));
+
+    const response = await customerEnrichPOST({
+      json: vi.fn().mockResolvedValue({
+        company: "  Kreile GmbH  ",
+        city: "  Fulda  ",
+      }),
+    } as unknown as Request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ enriched: "ok" });
+    expect(mocks.fetch).toHaveBeenCalledWith(
+      "https://supabase.example/functions/v1/customer-enrich",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer service-role-key",
+        },
+        body: JSON.stringify({
+          company: "Kreile GmbH",
+          city: "Fulda",
+          tenantId: "tenant-enrich",
+        }),
+      },
+    );
+  });
+
+  it("preserves the edge status while hiding edge failure details", async () => {
+    mocks.fetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: "debug details",
+          stack: "stack trace",
+          provider: "internal provider",
+        }),
+        {
+          status: 503,
+          headers: { "Content-Type": "application/json" },
+        },
+      ),
+    );
+
+    const response = await customerEnrichPOST({
+      json: vi.fn().mockResolvedValue({ company: "Kreile GmbH", city: "Fulda" }),
+    } as unknown as Request);
+
+    expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
       error: "Verarbeitung fehlgeschlagen",
     });
