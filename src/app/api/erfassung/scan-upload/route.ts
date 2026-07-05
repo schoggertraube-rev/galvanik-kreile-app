@@ -6,10 +6,18 @@ import { and, eq } from "drizzle-orm";
 import { extractDocumentData } from "@/lib/ocr/geminiOcr";
 import { resolveAuthorization } from "@/lib/server/authorization";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+let supabaseClient: ReturnType<typeof createClient> | null = null;
+
+function getSupabaseClient() {
+  if (!supabaseClient) {
+    supabaseClient = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+  }
+
+  return supabaseClient;
+}
 
 export async function POST(request: Request) {
   try {
@@ -20,16 +28,18 @@ export async function POST(request: Request) {
 
     const tenantId = auth.data.tenantId;
     const formData = await request.formData();
-    const file = formData.get("file") as File;
+    const fileEntry = formData.get("file");
 
-    if (!file) {
+    if (!(fileEntry instanceof File)) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
+    const file = fileEntry;
+    const supabase = getSupabaseClient();
     const fileExt = file.name.split('.').pop();
     const fileName = `${tenantId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from("scans")
       .upload(fileName, file, { contentType: file.type });
 

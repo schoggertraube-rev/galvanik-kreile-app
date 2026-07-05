@@ -122,6 +122,8 @@ describe("scan capture route auth", () => {
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://supabase.example";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
 
     mocks.resolveAuthorization.mockResolvedValue(authorized());
     mocks.createClient.mockReturnValue({
@@ -156,6 +158,11 @@ describe("scan capture route auth", () => {
     ({ GET } = await import("../scan-status/[id]/route"));
   });
 
+  afterEach(() => {
+    delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+  });
+
   it("rejects unauthenticated upload before FormData, storage or DB", async () => {
     mocks.resolveAuthorization.mockResolvedValue(unauthorized);
     const formData = vi.fn();
@@ -167,6 +174,22 @@ describe("scan capture route auth", () => {
       error: "Sitzung abgelaufen oder nicht angemeldet",
     });
     expect(formData).not.toHaveBeenCalled();
+    expect(mocks.createClient).not.toHaveBeenCalled();
+    expect(mocks.storageUpload).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects uploads without a file before storage or service-role setup", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(authorized("tenant-a"));
+
+    const response = await POST({
+      formData: vi.fn().mockResolvedValue(new FormData()),
+    } as unknown as Request);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "No file provided" });
+    expect(mocks.createClient).not.toHaveBeenCalled();
     expect(mocks.storageUpload).not.toHaveBeenCalled();
     expect(mocks.insert).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
@@ -192,6 +215,7 @@ describe("scan capture route auth", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ id: "scan-1" });
+    expect(mocks.createClient).toHaveBeenCalledTimes(1);
     expect(mocks.insertValues).toHaveBeenCalledWith(
       expect.objectContaining({ tenantId: "tenant-a" }),
     );
