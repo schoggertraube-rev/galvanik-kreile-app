@@ -9,7 +9,7 @@
  * 10c. Supabase-Logout wirft → remoteSignOut: "failed", Cookie trotzdem gelöscht
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 const mockSignOut = vi.fn();
@@ -46,17 +46,15 @@ vi.mock("next/headers", () => ({
   }),
 }));
 
-async function importLogout() {
-  // vi.resetModules() removed: caused non-deterministic mock teardown when
-  // running alongside other test files (timeout in 10b, double-call in 10c).
-  // Top-level vi.mock() + beforeEach vi.clearAllMocks() is sufficient.
-  const mod = await import("@/app/actions/auth");
-  return mod.logout;
-}
+let logout: typeof import("@/app/actions/auth").logout;
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe("logout() – Cookie-Bereinigung (A-10)", () => {
+  beforeAll(async () => {
+    ({ logout } = await import("@/app/actions/auth"));
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockClearAppSession.mockResolvedValue(undefined);
@@ -64,7 +62,6 @@ describe("logout() – Cookie-Bereinigung (A-10)", () => {
 
   it("10b – erfolgreicher Supabase-Logout → ok: true, remoteSignOut: 'success'", async () => {
     mockSignOut.mockResolvedValueOnce({ error: null });
-    const logout = await importLogout();
     const result = await logout();
 
     expect(result).toEqual({ ok: true, remoteSignOut: "success" });
@@ -74,7 +71,6 @@ describe("logout() – Cookie-Bereinigung (A-10)", () => {
 
   it("10c – Supabase-Logout wirft → ok: true, remoteSignOut: 'failed', Cookie trotzdem gelöscht", async () => {
     mockSignOut.mockRejectedValueOnce(new Error("Supabase network failure"));
-    const logout = await importLogout();
     const result = await logout();
 
     expect(result).toEqual({ ok: true, remoteSignOut: "failed" });
@@ -85,7 +81,6 @@ describe("logout() – Cookie-Bereinigung (A-10)", () => {
 
   it("10a – Supabase gibt Error-Objekt zurück → Cookie trotzdem gelöscht", async () => {
     mockSignOut.mockResolvedValueOnce({ error: { message: "JWT expired" } });
-    const logout = await importLogout();
     const result = await logout();
 
     expect(result.ok).toBe(true);
