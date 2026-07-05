@@ -87,6 +87,37 @@ function makeFile() {
   return new File(["scan-content"], "scan.pdf", { type: "application/pdf" });
 }
 
+function makeItemUploadRequest(
+  file: File | null,
+  fields: {
+    tenantId?: string;
+    itemId?: string;
+    userId?: string;
+    role?: string;
+  } = {},
+): Request {
+  const formData = new FormData();
+  if (file) {
+    formData.append("file", file);
+  }
+  if (fields.tenantId) {
+    formData.append("tenantId", fields.tenantId);
+  }
+  if (fields.itemId) {
+    formData.append("itemId", fields.itemId);
+  }
+  if (fields.userId) {
+    formData.append("userId", fields.userId);
+  }
+  if (fields.role) {
+    formData.append("role", fields.role);
+  }
+
+  return {
+    formData: vi.fn().mockResolvedValue(formData),
+  } as unknown as Request;
+}
+
 describe("scan capture route auth", () => {
   beforeEach(async () => {
     vi.resetModules();
@@ -231,6 +262,140 @@ describe("scan capture route auth", () => {
     });
   });
 
+});
+
+describe("item photo upload route auth", () => {
+  let itemPhotoPOST: (request: Request) => Promise<Response>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", mocks.fetch);
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://supabase.example";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
+
+    mocks.resolveAuthorization.mockResolvedValue(authorized());
+    mocks.createClient.mockReturnValue({
+      storage: {
+        from: mocks.storageFrom,
+      },
+    });
+    mocks.storageFrom.mockReturnValue({
+      upload: mocks.storageUpload,
+      getPublicUrl: mocks.storageGetPublicUrl,
+    });
+    mocks.storageUpload.mockResolvedValue({
+      data: { path: "session-tenant/file.pdf" },
+      error: null,
+    });
+    mocks.storageGetPublicUrl.mockReturnValue({
+      data: { publicUrl: "https://storage.example/session-tenant/item-123/file.pdf" },
+    });
+    mocks.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ material: "steel" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    ({ POST: itemPhotoPOST } = await import("../item-photo-upload/route"));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects unauthenticated uploads before FormData, storage or service-role setup", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(unauthorized);
+    const formData = vi.fn();
+
+    const response = await itemPhotoPOST({ formData } as unknown as Request);
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Sitzung abgelaufen oder nicht angemeldet",
+    });
+    expect(formData).not.toHaveBeenCalled();
+    expect(mocks.createClient).not.toHaveBeenCalled();
+    expect(mocks.storageUpload).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid uploads before storage or service-role use", async () => {
+    const response = await itemPhotoPOST(
+      makeItemUploadRequest(null, {
+        tenantId: "forged-tenant",
+        userId: "attacker",
+        role: "admin",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "No file provided" });
+    expect(mocks.createClient).not.toHaveBeenCalled();
+    expect(mocks.storageUpload).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("uses the session tenant and ignores forged client tenant fields", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(authorized("session-tenant"));
+
+    const response = await itemPhotoPOST(
+      makeItemUploadRequest(makeFile(), {
+        tenantId: "forged-tenant",
+        itemId: "item-123",
+        userId: "attacker",
+        role: "admin",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      url: "https://storage.example/session-tenant/item-123/file.pdf",
+      analysis: { material: "steel" },
+    });
+    expect(mocks.storageUpload).toHaveBeenCalledTimes(1);
+    expect(mocks.storageUpload.mock.calls[0][0]).toMatch(/^session-tenant\/item-123\//);
+    expect(mocks.storageUpload.mock.calls[0][0]).not.toContain("forged-tenant");
+    expect(mocks.fetch).toHaveBeenCalledWith(
+      "https://supabase.example/functions/v1/item-photo-analyze",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer service-role-key",
+        },
+        body: JSON.stringify({
+          file_url: "https://storage.example/session-tenant/item-123/file.pdf",
+          mime_type: "application/pdf",
+        }),
+      },
+    );
+  });
+
+  it("returns a generic error when storage rejects the upload", async () => {
+    mocks.storageUpload.mockResolvedValue({
+      data: null,
+      error: {
+        message: "bucket missing",
+        details: "raw storage details",
+        hint: "check bucket",
+      },
+    });
+
+    const response = await itemPhotoPOST(
+      makeItemUploadRequest(makeFile(), {
+        tenantId: "session-tenant",
+        itemId: "item-123",
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: "Failed to upload item photo",
+    });
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
 });
 
 describe("freetext extract route auth", () => {

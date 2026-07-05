@@ -1,31 +1,68 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { resolveAuthorization } from "@/lib/server/authorization";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function createSupabaseClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    console.error("Item photo upload proxy misconfigured:", {
+      hasSupabaseUrl: Boolean(supabaseUrl),
+      hasServiceRoleKey: Boolean(serviceRoleKey),
+    });
+    return null;
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey);
+}
 
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData();
-    const file = formData.get("file") as File;
-    const tenantId = formData.get("tenantId") as string || "galvanik-kreile";
-    const itemId = formData.get("itemId") as string || `temp_${Date.now()}`;
+    const auth = await resolveAuthorization();
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: "Sitzung abgelaufen oder nicht angemeldet" },
+        { status: 401 },
+      );
+    }
 
-    if (!file) {
+    const formData = await request.formData();
+    const fileValue = formData.get("file");
+    if (!(fileValue instanceof File)) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    const fileExt = file.name.split('.').pop();
+    const supabase = createSupabaseClient();
+    if (!supabase) {
+      return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    }
+
+    const tenantId = auth.data.tenantId;
+    const itemIdValue = formData.get("itemId");
+    const itemId =
+      typeof itemIdValue === "string" && itemIdValue.length > 0
+        ? itemIdValue
+        : `temp_${Date.now()}`;
+    const file = fileValue;
+    const fileExt = file.name.split(".").pop() || "bin";
     const fileName = `${tenantId}/${itemId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from("item-photos")
       .upload(fileName, file, { contentType: file.type });
 
     if (uploadError) {
-      console.error("Storage upload error:", uploadError);
+      const storageError = uploadError as {
+        message: string;
+        details?: string;
+        hint?: string;
+      };
+      console.error("Storage upload error:", {
+        message: storageError.message,
+        details: storageError.details,
+        hint: storageError.hint,
+      });
       return NextResponse.json({ error: "Failed to upload item photo" }, { status: 500 });
     }
 
@@ -50,7 +87,10 @@ export async function POST(request: Request) {
     if (analysisRes.ok) {
       analysis = await analysisRes.json();
     } else {
-      console.error("Edge function analysis failed:", await analysisRes.text());
+      console.error("Edge function analysis failed:", {
+        status: analysisRes.status,
+        statusText: analysisRes.statusText,
+      });
     }
 
     return NextResponse.json({ 
