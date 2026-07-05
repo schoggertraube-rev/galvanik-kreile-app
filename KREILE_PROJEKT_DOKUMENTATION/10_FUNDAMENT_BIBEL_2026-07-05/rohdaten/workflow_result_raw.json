@@ -1,0 +1,1207 @@
+{
+  "summary": "Vollaudit des WerkstattCockpit-Fundaments: 7 Fachprüfer + QA-Gates, danach REDTEAM-Verifikation jedes Kernbefunds",
+  "agentCount": 28,
+  "logs": [
+    "[audit:ux] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[audit:kartierung] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[audit:archaeologie] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[audit:plattform] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[audit:security] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "Fachaudit fertig: 31 Befunde aus 2/7 Prüfern; Gates: Umgebung (node/HEAD/git status)=0, TypeScript (tsc --noEmit)=0, Unit-Tests (test:unit)=0, Lint-Ratchet (lint:ratchet)=0, Build (npm run build)=0",
+    "[redteam:DATE-01] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:DATE-02] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:DATE-04] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:DATE-05] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:DATE-07] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:DATE-03] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:DATE-11] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:PERF-01] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:PERF-03] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:PERF-02] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:PERF-05] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:PERF-04] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:PERF-07] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:PERF-06] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:PERF-08] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:PERF-09] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:PERF-10] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:PERF-11] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:batch1] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "[redteam:batch2] failed: You've hit your session limit · resets 8:10am (Europe/Berlin)",
+    "REDTEAM fertig: 0 bestätigt, 0 widerlegt, 31 abgestuft/unsicher von 31"
+  ],
+  "result": {
+    "gates": {
+      "gates": [
+        {
+          "name": "Umgebung (node/HEAD/git status)",
+          "command": "node --version && git rev-parse HEAD && git status --short | wc -l",
+          "exit_code": 0,
+          "result": "node v24.14.1; HEAD 204f3f105824ea098f2d71f72489dc1bd0de85e3; 3 geaenderte/untracked Eintraege (.agents/, control_plane/)"
+        },
+        {
+          "name": "TypeScript (tsc --noEmit)",
+          "command": "npx tsc --noEmit",
+          "exit_code": 0,
+          "result": "0 Fehler, 0 Ausgabezeilen"
+        },
+        {
+          "name": "Unit-Tests (test:unit)",
+          "command": "npm run test:unit (vitest run --exclude **/*.integration.test.ts)",
+          "exit_code": 0,
+          "result": "13 Test-Files bestanden, 75/75 Tests bestanden, 0 fehlgeschlagen, 0 uebersprungen; Dauer 19.90s. Hinweis: Integration-Tests sind per --exclude ausgeschlossen, also NICHT gelaufen."
+        },
+        {
+          "name": "Lint-Ratchet (lint:ratchet)",
+          "command": "npm run lint:ratchet",
+          "exit_code": 0,
+          "result": "Ratchet passed, keine Regression. ABER Baseline-Schuld toleriert: app errors=404/405 warnings=370/372 (files=617); edge 0/0; scripts errors=3/3 warnings=5/5. Gruen = keine Regression, nicht sauber."
+        },
+        {
+          "name": "Build (npm run build)",
+          "command": "npm run build",
+          "exit_code": 0,
+          "result": "Compiled successfully in 68s; 77/77 static pages generiert; Route-Tabelle mit ca. 100 Eintraegen. Nicht-fataler Prerender-Log: 'Dynamic server usage: Route /performance couldnt be rendered statically because it used cookies' in getAnalyseOverview (1x). Exit trotzdem 0."
+        }
+      ],
+      "notes": "STRIKT READ-ONLY eingehalten: keine Datei geaendert, nichts committed. Alle 5 Gates mit Exit 0 gruen. VETO-Hinweis: Ein gruener Build ist KEIN End-to-End-Beweis. Diese Mission deckte nur statische/Kompilier-/Unit-Gates ab. NICHT geprueft und weiterhin offen laut TRUTH: Originalnummern/Original-Persistenz nach Refresh/Crash, echter Foto-zu-DB-Laufzeitnachweis, Tenant/RLS/Storage E2E, Mock-Erkennung im Produktionspfad, Integration-Tests (per --exclude uebersprungen). Zwei nicht-offensichtliche Befunde: (1) lint:ratchet toleriert grosse Baseline-Schuld (404 Fehler/370 Warnungen im app-Scope) - gruen bedeutet nur 'keine Regression'. (2) /performance loest zur Build-Zeit Dynamic-server-usage (cookies) in getAnalyseOverview aus, nicht fatal aber laufzeitrelevant. Kein MISSION_VERDICT: PASS gerechtfertigt fuer 'Fundament funktioniert' - nur die 5 Gates sind gruen. Belege: /tmp/tsc.log, /tmp/unit.log, /tmp/lint.log, /tmp/build.log (session-temporaer)."
+    },
+    "finderSummaries": [
+      {
+        "key": "datenvertraege",
+        "summary": "Das Datenfundament ist strukturell gebrochen, was die gemeldete fehlende Vernetzung erklärt. Drei CRITICAL-Risse: (1) Die Tenant-RLS ist faktisch tot, weil app.tenant_id nirgends per set_config gesetzt wird und kein FORCE RLS existiert; der Drizzle-Owner-Zugang umgeht RLS ohnehin und filtert Tenant nur hartcodiert in TypeScript. (2) Zentrale Objekte fehlen in den Migrationen: orders.current_station_id und die gesamte events-Tabelle werden von keiner Migration angelegt, existieren nur remote durch nicht-versionierte DDL — die Historie ist nicht reproduzierbar (belegt durch zwei reconcile-Commits). (3) Die KPI-Views lesen orders.current_station, der operative Schreibpfad schreibt current_station_id — die Kette Auftrag->Station->KPI reisst. Dazu kommen doppelte Datenwahrheiten (Drizzle-Server- vs Supabase-anon-Pfad plus isSupabase/Mock-Schalter in 9 Repositories), strukturell unmögliche Vor-Auftrags-Events (events.order_id NOT NULL), lückenhafte tenant_id/FK-Abdeckung auf Kerntabellen und Demo-Daten, die per Namensliste aus der Produktions-DB gelöscht wurden. Die SQL-Views selbst und die Transaktionslogik sind hingegen solide und wiederverwendbar.",
+        "reuse_note": "Wiederverwendbar: Die SQL-Views (v_auftrag_db, v_economics, v_analyse_*, v_kunde_clv, v_aging, v_monatsergebnis) sind fachlich solide gebaut und setzen Regel 13 grösstenteils korrekt um — sie sind ein gutes Fundament, sobald die Spaltendivergenz current_station/current_station_id behoben ist. Das Drizzle-Schema ist als Typ-/Objekt-Inventar brauchbar. Die Transaktionslogik in operationalOrders.ts (advisory lock, atomare tx für Order+Items+Event) ist sauber und wiederverwendbar. NICHT wiederverwendbar ohne Sanierung: die Migrationshistorie (nicht reproduzierbar, events/current_station_id fehlen), die RLS-Schicht (tote app.tenant_id), die doppelten Datenpfade + isSupabase/Mock-Schalter in 9 Repositories, und der Demo-Cleanup-per-Name-Ansatz."
+      },
+      {
+        "key": "performance",
+        "summary": "Das Audit bestätigt die Nutzermeldung ('vieles war Mock, Vernetzung funktioniert nicht') mit harten Belegen. Die schwersten Probleme sind Zuverlässigkeits- und Sicherheitslücken, keine reinen Geschwindigkeitsprobleme: eine völlig ungesicherte Foto-Upload-Route mit Service-Role-Key und client-gesteuertem Tenant, base64-Bilder dauerhaft im localStorage (direkter Vertragsbruch), öffentliche Storage-URLs für Kundendokumente, vier konkurrierende Offline-Systeme (davon eins reiner RAM-Mock, eins toter Code) und ein Event-Log das Ereignisse still verwirft. Performance-seitig dominieren Client-Fetch-Wasserfälle (Kundenkarte lädt 7+ Tabs einzeln), unbounded/hardcoded-Tenant-Queries mit prozessweitem Cache ohne Tenant-Key und Fachaggregation in React statt SQL. Externe Aufrufe (Gemini/OCR) haben kein Timeout und blockieren teils synchron; der Cron ist ungeschützt und meldet Fake-Versand. Der positive Kern (getOperationalOrders ohne N+1, zentraler Gemini-Client mit Fallback, IndexedDB-Outbox) ist als Fundament brauchbar, muss aber um Session-Tenant, Timeouts und Konsolidierung ergänzt werden. Zusätzlich verfälscht ein 647-Dateien-Klon in .agents/ die tsc/eslint-Gates.",
+        "reuse_note": "Wiederverwendbar: getOperationalOrders ist im Kern solide gebaut (Join + Batch-Item-Load, kein N+1) und der zentrale geminiClient mit Modell-Fallback ist ein gutes Fundament — beide brauchen nur Tenant-aus-Session, Cache-Keying und Timeouts. Die OfflineOutbox.ts (IndexedDB) ist als kanonische Outbox brauchbar. NICHT wiederverwendbar: useOfflineManager (Fake), idbSync (Math.random-ULID, toter Code), ocrService.simulateScan/processImageWithAI (Mock), das base64-in-localStorage-Muster in OrderActionGrid, die getPublicUrl-Storage-Pfade, die ungesicherte item-photo-upload-Route und der .agents/-Klon. Die vorhandene Agent-Memory (Offline-Fragmentierung, Orders-Datenpfad) ist korrekt und wurde erweitert."
+      }
+    ],
+    "findings": [
+      {
+        "id": "DATE-01",
+        "source": "datenvertraege",
+        "title": "Tenant-Isolation ist faktisch tot: app.tenant_id wird nirgends gesetzt",
+        "severity": "CRITICAL",
+        "truth": "K",
+        "area": "RLS / Tenant / Security",
+        "evidence": "grep 'set_config' src -> exit 1 (kein Treffer); grep 'app.tenant_id' src/*.ts -> kein set_config, nur .eq('tenant_id',...)-Client-Filter. RLS-Policies aber überall als USING (tenant_id = current_setting('app.tenant_id', true)) definiert (0012_harden_rls.sql:16, 20260619200037:7, 0008_ui_events.sql:19). Kein FORCE ROW LEVEL SECURITY in irgendeiner Migration (grep leer). Drizzle verbindet via postgres-js/DATABASE_URL (src/db/index.ts:20) als Owner -> RLS-Bypass. Operativer Tenant-Filter nur hartcodiert in TS: operationalOrders.ts:46 eq(orders.tenantId,'galvanik-kreile').",
+        "impact": "Kernregel 16 (Session/Rolle/Tenant/RLS Ende-zu-Ende) ist formal erfüllt, real wirkungslos. current_setting('app.tenant_id', true) liefert immer NULL -> tenant_id=NULL ist immer false. Entweder blockiert RLS still (leere Ergebnisse über den anon-Client-Pfad) oder wird durch verbliebene USING(true)-Policies umgangen. Mandantenfähigkeit als Fundament nicht belastbar.",
+        "fix": "App-Rolle (nicht Owner) einführen, FORCE ROW LEVEL SECURITY auf allen tenant-Tabellen, app.tenant_id per set_config innerhalb JEDER DB-Transaktion setzen (SET LOCAL im selben tx wie die Query, vgl. Slice-Regel SET LOCAL). E2E-Laufzeitbeweis: Cross-Tenant-SELECT muss 0 Zeilen liefern.",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "DATE-02",
+        "source": "datenvertraege",
+        "title": "orders.current_station_id existiert in keiner Migration — operativer Schreibpfad hängt an Geister-Spalte",
+        "severity": "CRITICAL",
+        "truth": "K",
+        "area": "Schema-Drift",
+        "evidence": "grep 'orders ADD COLUMN|ALTER TABLE orders' + current_station_id -> leer (nie per Migration angelegt). operationalOrders.ts:37/83/220/247 liest+schreibt orders.currentStationId. Migrationen legen nur an: orders.current_station (0003_fix_orders_station_and_rls.sql:4) und orders.station (20260621000000_phase2_migrations.sql:9). items.current_station_id existiert (0009_items.sql:8). KPI-Views lesen current_station: v_auftrag_db (20260614000001:13), v_economics (20260623000006:11 COALESCE(current_station,station)), views_cockpit (20260616000001:47).",
+        "impact": "Die operative Stationszuordnung (current_station_id) und die KPI-Views (current_station) lesen verschiedene Spalten -> die Kette Auftrag->Station->KPI reisst. Entweder existiert current_station_id nur remote via nicht-versioniertem db push (Migrationshistorie nicht reproduzierbar) oder gar nicht (dann bricht der operative Pfad zur Laufzeit). Verzögerungskosten/DB pro Station sehen die operativen Karten nicht.",
+        "fix": "Remote-Schema von orders per Introspektion gegen Migrationen abgleichen. Eine kanonische Stationsspalte festlegen (current_station_id), Migration nachziehen, alle Views + operationalOrders auf denselben Spaltennamen vereinheitlichen. Danach Reproduzierbarkeit: frische DB aus Migrationen bauen und diffen.",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "DATE-03",
+        "source": "datenvertraege",
+        "title": "Tabelle events wird in keiner Migration erzeugt (nur ALTER/POLICY) — Original heisst status_events",
+        "severity": "CRITICAL",
+        "truth": "K",
+        "area": "Ereignismodell / Schema-Drift",
+        "evidence": "grep 'CREATE TABLE.*events' migrations -> nur status_events (0001_app_schema.sql:84), ui_events, warning_event, order_cost_events, calendar_events. events selbst: nur ALTER (0004:20, 202606051200:8-9, 20260621000000:8) + POLICY (0012:28, 20260619200037:7). 0012_harden_rls.sql:22 Kommentar: 'schema.ts uses events, earlier migrations used status_events. We apply this ... (assuming the table was renamed or is events).' — unbewiesene Annahme. Drizzle-Schema, operationalOrders.ts:195, orderPhoto.actions.ts:33 schreiben in events.",
+        "impact": "Die zentrale Ereignistabelle existiert nur remote durch nicht-versionierte DDL (Rename status_events->events oder db push). Migrationshistorie ist nicht selbsttragend/remote-inkonsistent. Ein 'reconcile migration history'-Commit (4134ee5, 02906c4) bestätigt manuelle Ledger-Reparaturen. Neuaufbau der DB aus Migrationen scheitert oder ergibt anderes Schema.",
+        "fix": "Explizite, idempotente CREATE-TABLE-events- (oder RENAME-)Migration mit vollständiger Spaltenliste + FK + RLS nachziehen. Drizzle-Migrations-Ledger mit tatsächlichem Remote-Zustand reconcilen und danach eingefroren halten (kein db push in Prod).",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "DATE-04",
+        "source": "datenvertraege",
+        "title": "Vor-Auftrags-Ereignisse strukturell unmöglich: events.order_id ist NOT NULL mit FK/CASCADE",
+        "severity": "HIGH",
+        "truth": "K",
+        "area": "Ereignismodell / Slice-1-Kern",
+        "evidence": "schema.ts:159 events.orderId text NOT NULL references(orders.id, onDelete cascade). scan-upload-Route (src/app/api/erfassung/scan-upload/route.ts:43) und uploadOrderPhotoRecord (orderPhoto.actions.ts:22) schreiben scan_uploads; nur orderPhoto erzeugt ein PHOTO_ADDED-Event (Zeile 33) — und nur weil dort schon eine orderId existiert. scan_uploads selbst erzeugt KEIN Event.",
+        "impact": "Der Slice-1-Kernfluss 'Foto/Beleg VOR Auftrag' kann kein fachliches Ereignis erzeugen, da jedes Event zwingend eine order_id braucht. Vor-Auftrags-Ereignisse (TRUTH-Kernproblem, PHASE0-Fund 4) sind im bestehenden Modell nicht abbildbar. Beim Löschen eines Auftrags werden zudem alle Events CASCADE-gelöscht -> Audit-Verlust.",
+        "fix": "Vor-Auftrags-Events über scan_uploads-bezogenes Ereignismodell (nullable order_id ODER separater scan_event-Typ mit scan_upload_id-FK) einführen. events.order_id nullable machen oder polymorphen Bezug (subject_type/subject_id) definieren. CASCADE für Audit-Events auf RESTRICT/SET NULL prüfen.",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "DATE-05",
+        "source": "datenvertraege",
+        "title": "Zwei parallele Datenpfade + Mock-Schalter auf denselben Tabellen (doppelte Wahrheit)",
+        "severity": "HIGH",
+        "truth": "K",
+        "area": "Datenpfade / Vertrag",
+        "evidence": "Server-Pfad Drizzle db in ~48 Dateien (grep from @/db). Client-Pfad Supabase createClient in ~27 Dateien. 9 Repositories mit isSupabase = NEXT_PUBLIC_DATA_PROVIDER==='supabase' + Mock-Fallback (ordersRepository, itemsRepository, inquiriesRepository, eventsRepository, inventoryRepository, complaintsRepository, kvpRepository, priceAgreementsRepository, bathMeasurementsRepository). src/lib/mockData.ts vorhanden. inquiriesRepository.ts:36 liest via anon-Client ohne tenant-Filter.",
+        "impact": "Verstoss gegen Kernregel 1 (genau ein kanonischer Vertrag) und Regel 17 (kein Mock/Fallback im Produktionspfad). Screens können je nach Pfad/Provider unterschiedliche Mengen zeigen. Der anon-Client-Lesepfad verlässt sich auf die tote RLS -> liefert je nach Policy-Rest leere oder ungefilterte Daten. Das ist die vom Nutzer gemeldete 'Vernetzung funktioniert nicht / vieles war Mock'-Ursache.",
+        "fix": "Einen kanonischen serverseitigen Datenzugriffs-Vertrag festlegen (Drizzle-Server-Actions mit tenant-Kontext). isSupabase/Mock-Verzweigungen aus dem Produktionspfad entfernen. anon-Client nur für explizit öffentliche, RLS-abgesicherte Reads.",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "DATE-07",
+        "source": "datenvertraege",
+        "title": "tenant_id-Abdeckung lückenhaft auf Kerntabellen (Drizzle vs Migration inkonsistent)",
+        "severity": "HIGH",
+        "truth": "K",
+        "area": "Tenant / Schema",
+        "evidence": "0012_harden_rls.sql:92-95 listet explizit Tabellen OHNE tenant_id: customers, baths, bath_measurements, inventory_items, stock_movements, app_users, feature_flags, import_jobs, audit_log, price_agreements. customers.tenant_id erst spät ergänzt (20260619200027) — aber rls_phase1 (20260619200037) setzt KEINE customers-tenant-Policy (nur events, communications, arbeitszeit_buchung, konto). app_users.tenant_id erst 20260627000000. Buchhaltungstabellen (ausgangsrechnung, beleg, zahlung, kostenposten) haben teils tenant_id im Drizzle-Schema aber ausgangsrechnung_position wurde bei RLS-Phase1 explizit übersprungen ('Missing tenant_id column, reported to Siglinder').",
+        "impact": "Kerntabellen Kunde/Teile/Bäder/Lager/Preis sind tenant-los oder ohne wirksame tenant-Policy. Bei künftiger Mandantenfähigkeit vermischen sich Daten. price_agreements, bath_measurements, stock_movements ohne tenant_id.",
+        "fix": "Vollständige tenant_id-Nachrüstung auf allen Kerntabellen + konsistente RLS-Policy je Tabelle. Inventurliste 'Tabelle hat tenant_id?' vs 'Tabelle hat tenant-RLS?' als Vertragscheck führen und Lücken schliessen bevor zweiter Tenant zugelassen wird.",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "DATE-11",
+        "source": "datenvertraege",
+        "title": "Migrationshistorie nicht selbsttragend / remote-reconciled (nicht reproduzierbar)",
+        "severity": "HIGH",
+        "truth": "I",
+        "area": "Migrationskonsistenz",
+        "evidence": "Zwei reconcile-Commits: 4134ee5 'chore(db): reconcile local migration history', 02906c4 'fix(db): reconcile migration ledger'. events-Tabelle ohne CREATE (nur remote). orders.current_station_id ohne Migration. drop_legacy_open_policies.sql-Kommentar: 'Remote angewendet via Supabase MCP (apply_migration)'. Drizzle _journal.json hat nur 1 Eintrag trotz 80+ SQL-Files.",
+        "impact": "Eine frische DB aus supabase/migrations ergibt NICHT das Remote-Schema (fehlende Tabellen/Spalten, uuid-vs-text-Reste). Das Fundament ist nicht deterministisch reproduzierbar — jeder Neuaufbau/zweite Umgebung driftet. Erklärt die 'wochenlange Fundamentarbeit ohne Vernetzung'.",
+        "fix": "Remote-Schema per pg_dump/Introspektion als Baseline exportieren, eine konsolidierte idempotente Baseline-Migration erzeugen, Drizzle-Ledger neu aufsetzen. Danach ausschliesslich versionierte Migrationen, kein db push / kein ad-hoc MCP-apply.",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-01",
+        "source": "performance",
+        "title": "Ungesicherte Foto-Upload-Route mit client-gesteuertem Tenant und Service-Role-Key",
+        "severity": "CRITICAL",
+        "truth": "K",
+        "area": "Fehlerresilienz/Sicherheit/Storage",
+        "evidence": "src/app/api/erfassung/item-photo-upload/route.ts: kein resolveAuthorization/Auth-Check; Zeile 13 `const tenantId = formData.get(\"tenantId\") as string || \"galvanik-kreile\"` (Tenant kommt aus Client-FormData); Zeilen 4-7 nutzen SUPABASE_SERVICE_ROLE_KEY. Kontrast: die parallele Route scan-upload/route.ts:16 prüft `resolveAuthorization()` korrekt.",
+        "impact": "Jeder unauthentifizierte Aufrufer kann Dateien mit dem Service-Role-Key in beliebige Tenant-Ordner hochladen und die kostenpflichtige Edge-Function/Gemini-Analyse auslösen (DoS + Cross-Tenant-Injection). Direkter Bruch von Slice-Regel 16 und V1-Korrektur 8/9.",
+        "fix": "resolveAuthorization() am Anfang erzwingen; tenantId ausschließlich serverseitig aus auth.data.tenantId setzen, den FormData-Wert ignorieren; Rate-Limit/Größenprüfung ergänzen.",
+        "files": [
+          "src/app/api/erfassung/item-photo-upload/route.ts"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-02",
+        "source": "performance",
+        "title": "base64-Bild dauerhaft im localStorage gespeichert (expliziter Vertragsbruch)",
+        "severity": "CRITICAL",
+        "truth": "K",
+        "area": "Offline/Storage",
+        "evidence": "src/components/orders/OrderActionGrid.tsx:61 `localStorage.setItem(`kreile_photo_${orderId}_${Date.now()}`, base64)` speichert das gerenderte JPEG als base64 dauerhaft im localStorage.",
+        "impact": "Verstößt direkt gegen Kernregel 3 des Slice-Vertrags ('Keine dauerhafte Bildspeicherung als Base64 in localStorage'). localStorage-Quota (~5MB) wird schnell gesprengt → QuotaExceededError, danach schlagen ALLE localStorage-Schreibvorgänge (Drafts, Events, Theme) still fehl. Bilder sind nie im echten Storage → Datenverlust und keine Vernetzung.",
+        "fix": "Foto über eine authentifizierte Upload-Route in Supabase Storage (signierte URL) hochladen; bei Offline in die IndexedDB-Outbox (Blob, nicht base64) legen und via Outbox synchronisieren.",
+        "files": [
+          "src/components/orders/OrderActionGrid.tsx"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-03",
+        "source": "performance",
+        "title": "Öffentliche Storage-URLs (getPublicUrl) für Kundendokumente und Belegfotos",
+        "severity": "CRITICAL",
+        "truth": "K",
+        "area": "Storage/DSGVO",
+        "evidence": "getPublicUrl in src/app/api/erfassung/scan-upload/route.ts:41, src/app/api/erfassung/item-photo-upload/route.ts:32, src/lib/services/photoService.ts:29. Nur src/app/buchhaltung/actions.ts:68 nutzt createSignedUrl(originalDatei, 3600).",
+        "impact": "Lieferscheine, Teilefotos und Intake-Fotos (personenbezogene/geschäftliche Daten) erhalten dauerhaft rate- und errät-bare öffentliche URLs ohne Ablauf. DSGVO-Verstoß und Bruch von V1-Korrektur 9 ('Storage-Download mit serverseitiger Rollen- und Tenantprüfung'). getPublicUrl setzt zudem einen public Bucket voraus.",
+        "fix": "Buckets privat schalten; überall createSignedUrl mit kurzer Gültigkeit + serverseitige Rollen-/Tenantprüfung verwenden; die in scanUploads/DB gespeicherten publicUrl-Felder auf Storage-Pfade umstellen.",
+        "files": [
+          "src/app/api/erfassung/scan-upload/route.ts",
+          "src/app/api/erfassung/item-photo-upload/route.ts",
+          "src/lib/services/photoService.ts"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-04",
+        "source": "performance",
+        "title": "Vier parallele Offline/Outbox-Systeme, teils reiner Mock — keine echte Offline-Persistenz",
+        "severity": "CRITICAL",
+        "truth": "K",
+        "area": "Offline/Outbox",
+        "evidence": "src/hooks/useOfflineManager.ts:16-20 hält die Outbox nur in useState mit Kommentar 'In a real implementation this would write to IndexedDB or localStorage'. Zusätzlich existieren src/lib/offline/OfflineOutbox.ts (IndexedDB KreileOfflineOutboxDB), src/lib/offline/idbSync.ts (IndexedDB kreile_sync_db, Math.random-ULID, localStorage-Fallback) und laut Vorbefund OfflineManager/IndexedDBHelper (kreile_offline_db). Keiner ist der eine kanonische Pfad.",
+        "impact": "useOfflineManager verliert alle Aktionen bei Refresh/Crash (nur RAM). idbSync ist toter Code. Es gibt keine belastbare, konsolidierte Offline-Wahrheit → 'Vernetzung funktioniert nicht'. Bricht Slice-Regeln 1/4/6/17.",
+        "fix": "Auf genau eine Outbox (IndexedDB, Blob-basiert, idempotente Sync-Keys) konsolidieren; useOfflineManager und idbSync entfernen; Konsumenten migrieren.",
+        "files": [
+          "src/hooks/useOfflineManager.ts",
+          "src/lib/offline/idbSync.ts",
+          "src/lib/offline/OfflineOutbox.ts"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-05",
+        "source": "performance",
+        "title": "Original geht bei Refresh/Crash während Capture im RAM verloren",
+        "severity": "HIGH",
+        "truth": "K",
+        "area": "Offline/Capture",
+        "evidence": "src/components/intake/CameraCapture.tsx:60-90: handleCapture erzeugt base64 nur lokal (`canvas.toDataURL`), ruft direkt `await processImage(imageData)` und reicht das Bild nur als Callback-Argument `onScanComplete(scan, imageData)` weiter. Keine Persistenz vor OCR.",
+        "impact": "Genau das bekannte Kernproblem ('mindestens ein CameraCapture-Pfad verliert das Original bei Refresh/Crash'). Bricht Slice-Regel 2 (Original vor OCR sichern) und 5 (48h-Vorhaltung).",
+        "fix": "Original sofort nach Capture als Blob in die Outbox-IndexedDB schreiben (mit Hash/ID), erst danach OCR anstoßen; UI aus dem persistierten Original wiederherstellen.",
+        "files": [
+          "src/components/intake/CameraCapture.tsx"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-06",
+        "source": "performance",
+        "title": "eventsRepository verwirft Events still und meldet Fake-Erfolg",
+        "severity": "HIGH",
+        "truth": "K",
+        "area": "Fehlerresilienz/Audit-Log",
+        "evidence": "src/lib/repositories/eventsRepository.ts:103-106 überspringt DB-Insert wenn orderId fehlt und gibt trotzdem ein Erfolgsobjekt zurück; Zeile 124-131 fängt DB-Fehler und gibt `{ ...event, id, timestamp }` als Erfolg zurück (kein Rethrow). CameraCapture.tsx:81/86 ruft addEvent OHNE orderId ('OCR_SCAN_STARTED'/'OCR_SCAN_COMPLETED') → diese Events werden IMMER verworfen.",
+        "impact": "Das betriebliche Ereignis-/Audit-Log (CLAUDE.md: 'Jede betriebliche Kernaktion wird als Event protokolliert') hat Lücken ohne Fehlermeldung. Verstößt gegen AGENTS.md ('kein stummes Scheitern').",
+        "fix": "Bei fehlender orderId Pre-Order-Event-Modell nutzen statt verwerfen; DB-Fehler nicht als Erfolg maskieren, sondern in die Outbox schreiben oder werfen; error.message/details/hint loggen.",
+        "files": [
+          "src/lib/repositories/eventsRepository.ts",
+          "src/components/intake/CameraCapture.tsx"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-07",
+        "source": "performance",
+        "title": "Prozessweiter Orders-Cache ohne Tenant-Key + hardcoded Tenant",
+        "severity": "HIGH",
+        "truth": "K",
+        "area": "Datenzugriff/Multi-Tenant",
+        "evidence": "src/lib/server/operationalOrders.ts:6-22 `_ordersCache` ist ein Modul-Level-Cache ohne Tenant im Key; Zeile 46 `eq(orders.tenantId, \"galvanik-kreile\")` hart verdrahtet, ebenso in createOperationalOrderService (169), moveOperationalOrderToStationService, startProcessingStationService. customerCard.actions.ts:33-37 lädt openOrders ohne tenantId-Filter.",
+        "impact": "Als 'Fundament für spätere Module' unbrauchbar mandantenfähig: ein globaler Cache würde in Multi-Tenant Daten mischen; Tenant-Hardcode blockiert weitere Mandanten. Widerspricht CLAUDE.md-Mandantenfähigkeit und Slice-Regel 16.",
+        "fix": "tenantId aus Session (resolveAuthorization) ziehen; Cache-Key um tenantId erweitern oder request-scoped cachen; alle Tenant-Filter aus der Session speisen.",
+        "files": [
+          "src/lib/server/operationalOrders.ts",
+          "src/features/customers/customer-card/customerCard.actions.ts"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-08",
+        "source": "performance",
+        "title": "Client-Fetch-Wasserfälle: Kundenkarte lädt 7+ Tabs je einzeln im useEffect",
+        "severity": "HIGH",
+        "truth": "K",
+        "area": "Datenzugriff/Client-Rendering",
+        "evidence": "Sieben Tab-Komponenten (CustomerOrdersTab, CustomerPricesTab, CustomerInvoicesTab, CustomerComplaintsTab, CustomerCommunicationTab, CustomerItemsProfileTab, CustomerHistorySimilarTab) rufen je eine eigene Server-Action in useEffect ab, z.B. CustomerOrdersTab.tsx:14-23 `getCustomerOrders(customerId).then(...)`. Jede Action macht einen eigenen checkAppAuth + DB-Roundtrip.",
+        "impact": "Pro Kundenansicht mehrere sequenzielle Client-Roundtrips (Auth+DB je Tab) statt eines Server-Renders → spürbarer Jank/Ladezeit. Alle Aggregationen (z.B. dueDate-Berechnung) laufen im Client bei jedem Re-Render.",
+        "fix": "Kundenkarte serverseitig rendern und Daten gebündelt (ein oder wenige parallele Server-Calls) laden; Tabs aus bereits geladenen Props speisen; teure Ableitungen memoisieren oder in SQL-Views.",
+        "files": [
+          "src/components/customers/tabs/CustomerOrdersTab.tsx",
+          "src/features/customers/customer-card/customerCard.actions.ts"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-09",
+        "source": "performance",
+        "title": "Gemini/OCR-Aufrufe ohne Timeout; synchrone Blockierung im Request",
+        "severity": "HIGH",
+        "truth": "K",
+        "area": "Externe Ausfälle",
+        "evidence": "src/lib/ai/geminiClient.ts:41-82 und src/lib/ocr/geminiOcr.ts:47-80 haben nur try/catch, keinen AbortController/Deadline. scan-upload/route.ts:54-56 ruft extractDocumentData synchron innerhalb des POST ('Process synchronously ... before Vercel freezes'). ScanUpload.tsx:40-51 pollt danach fix 20×1,5s gegen einen bereits fertigen Datensatz.",
+        "impact": "Hängt Gemini, blockiert die Request bis zum Plattform-Timeout; die Client-Polling-Schleife wartet zusätzlich bis zu 30s obwohl der Server bereits synchron fertig ist (redundanter Wasserfall). Kein sauberes Timeout-Feedback.",
+        "fix": "AbortController mit festem Timeout um alle Gemini-Aufrufe; Verarbeitung asynchron über Queue/Edge-Function mit status='analyzing' und echtem Polling ODER synchron ohne nachgelagertes Polling — nicht beides.",
+        "files": [
+          "src/lib/ai/geminiClient.ts",
+          "src/lib/ocr/geminiOcr.ts",
+          "src/app/api/erfassung/scan-upload/route.ts",
+          "src/components/erfassung/ScanFlow/ScanUpload.tsx"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-10",
+        "source": "performance",
+        "title": "Cron-Route ohne Auth-Guard; Mail-Versand ist Mock, setzt aber Status 'gesendet'",
+        "severity": "HIGH",
+        "truth": "K",
+        "area": "Externe Ausfälle/Cron",
+        "evidence": "src/app/api/cron/send-feedback/route.ts:8 Kommentar 'Verifying token for cron is good practice, but skipping for demo' — kein Token-/Header-Check. Zeile 22-23 'Mock: Send Email' nur console.log, danach Zeile 26-29 update status='gesendet'. Kein LIMIT auf dem SELECT (Zeile 13-17).",
+        "impact": "Jeder kann den Cron beliebig oft auslösen; Feedback-Mails werden als 'gesendet' markiert obwohl nie versendet → falsche Datenwahrheit. Bei vielen fälligen Mails unbounded Schleife mit N Einzel-Updates (N+1-Writes).",
+        "fix": "CRON_SECRET/Authorization-Header prüfen; echten Mailversand implementieren und Status nur bei Erfolg setzen; SELECT mit LIMIT + Batch-Update.",
+        "files": [
+          "src/app/api/cron/send-feedback/route.ts"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-11",
+        "source": "performance",
+        "title": ".agents/-Klon (647 TS/TSX-Dateien) liegt im Root-tsconfig-Include",
+        "severity": "HIGH",
+        "truth": "K",
+        "area": "Bundle/Build",
+        "evidence": "tsconfig.json:25-33 include `**/*.ts`/`**/*.tsx`, exclude nur node_modules und supabase. `find .agents -name '*.ts*' | wc -l` = 647. .agents/p0-hotfix-no-pin-payload enthält eine vollständige Repo-Kopie inkl. eigener Server Actions/Routen/Schemas; die dortige tsconfig.json ändert den Parent-Scan nicht. eslint.config.mjs globalIgnores listet scratch/** aber NICHT .agents/**.",
+        "impact": "`npx tsc --noEmit` (P1-Gate) und `eslint .`/`lint:full` prüfen 647 Klon-Dateien mit → langsamerer/instabiler Typecheck, doppelte Fehlerquellen, Risiko dass verworfener Auth-Clone-Code Gate-Ergebnisse verfälscht (der Nutzer nannte den Clone als 'beschädigt verworfen').",
+        "fix": ".agents/ (und recovered_getAnalysisProps.txt-Artefakte) aus tsconfig exclude und eslint globalIgnores nehmen oder außerhalb des Repos verschieben.",
+        "files": [
+          "tsconfig.json",
+          "eslint.config.mjs",
+          ".agents/p0-hotfix-no-pin-payload"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Prüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "DATE-06",
+        "source": "datenvertraege",
+        "title": "Vertragsregel 13 teilweise verletzt: KPI-Aggregation in cockpit/actions.ts statt vollständig in View",
+        "severity": "MEDIUM",
+        "truth": "K",
+        "area": "KPI / Fachlogik in TS",
+        "evidence": "cockpit/actions.ts:50-58 aggregiert umsatzNachStation in TypeScript (Summe dauer_minuten/60*kostensatz je kostenstelle_kuerzel) statt über View. Zeilen 30-40: dbMarge und Liquiditäts-Ampel (>0.5 kritisch, >0.2 Warnung) werden in TS berechnet. Positiv: v_monatsergebnis, v_aging, v_kunde_clv, v_auftrag_db, v_economics existieren und werden konsumiert (analyse.actions.ts, customerCard.actions.ts).",
+        "impact": "Fachwerte/Schwellen liegen teils unkontrolliert in React/TS (Regel 13). Doppelte Wahrheit-Risiko: Stationsumsatz aus TS-Schleife kann von v_auftrag_db/v_economics abweichen. Schwellen (0.2/0.5) sind unkalibrierte Magic Numbers.",
+        "fix": "umsatzNachStation und Liquiditäts-/Margen-Ampel in eine SQL-View (z.B. v_cockpit_kpi) verlagern. Schwellen als konfigurierbare kpi_cost_assumptions/Parameter statt Hardcode.",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Batchprüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "DATE-08",
+        "source": "datenvertraege",
+        "title": "Offene Foreign Keys laut PENDING_FK_NOTES nie geschlossen",
+        "severity": "MEDIUM",
+        "truth": "K",
+        "area": "Foreign Keys",
+        "evidence": "PENDING_FK_NOTES.md listet 3 offene FKs: kostenstelle.capacity_center_id, periode.geschlossen_von, forecast_version.erstellt_von — 'Siglinder ergänzt FK-Constraints in eigener Migration'. Drizzle-Schema bestätigt fehlende references: schema_buchhaltung.ts:225 capacityCenterId uuid ohne .references(); periode.geschlossenVon (Z.257) uuid ohne FK; forecastVersion.erstelltVon (Z.268) uuid ohne FK. Keine spätere Migration mit diesen FK-Namen gefunden.",
+        "impact": "Verwaiste Referenzen möglich (capacity_center_id, geschlossen_von, erstellt_von zeigen ins Leere). Perioden-/Forecast-Verantwortliche und Kapazitätszentren sind nicht referenziell abgesichert.",
+        "fix": "Zieltabellen finalisieren (capacity_center/employee bzw. app_users) und FK-Constraints per Migration setzen. Vorher orphan-Check ausführen.",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Batchprüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "DATE-09",
+        "source": "datenvertraege",
+        "title": "Weitere fehlende FKs auf Kerntabellen (stock_movements, calendar_events, phone_notes, scan_uploads-Historie)",
+        "severity": "MEDIUM",
+        "truth": "K",
+        "area": "Foreign Keys",
+        "evidence": "Drizzle schema.ts: stockMovements.inventoryItemId (Z.219) und .orderId (Z.223) OHNE .references() — obwohl 0001_app_schema.sql:195-197 dafür FKs definierte (uuid-Welt, nach text-Umstellung nicht nachgezogen). calendarEvents.orderId/customerId (Z.123-124) ohne FK. events.itemId (Z.160) ohne FK. complaints.itemId/stationId (Z.178,180) ohne FK. scan_uploads.linked_invoice_id ohne FK (nur linked_order_id/linked_customer_id via 20260621103338).",
+        "impact": "Vernetzung Teil<->Bewegung, Auftrag<->Kalender, Event<->Teil ist nur per Konvention, nicht referenziell erzwungen. Verwaiste stock_movements/calendar_events bei Löschungen. Materialkosten-View (v_auftrag_db) joint stock_movements.order_id ohne FK-Garantie.",
+        "fix": "FK-Constraints nachziehen: stock_movements.inventory_item_id->inventory_items, .order_id->orders; calendar_events.order_id/customer_id; events.item_id->items; complaints.item_id/station_id. Vorher orphan-Report.",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Batchprüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "DATE-10",
+        "source": "datenvertraege",
+        "title": "Demo-Daten-Cleanup per DELETE-by-Name in Migration — Demo-Inhalt lief in Produktion",
+        "severity": "MEDIUM",
+        "truth": "K",
+        "area": "Seed / Demo-Daten",
+        "evidence": "20260625000000_cleanup_demo_data.sql löscht Kunden per Name ('Max Mustermann','Museum Lenzburg', ... 10 Namen), Aufträge A-2026-0030..0042 und id LIKE 'ord_%', phone_notes customer_id LIKE 'inst_%'/'cust_%', inquiries id LIKE 'inq_%'. Das beweist, dass diese Demo-Daten vorher in derselben DB existierten. 20260622000003_seed_analyse.sql ist leer (Seed nach scripts/seed-analyse.ts verschoben — gut). isDemo-Flags in ausgangsrechnung/zahlung/kostenposten (schema_buchhaltung.ts:113,135,149).",
+        "impact": "Produktions- und Demo-Daten teilten sich eine DB; Cleanup per Namensliste ist fragil (verfehlt umbenannte/zusätzliche Demo-Sätze). is_demo-Filter in Views (v_auftrag_db WHERE is_demo=false) zeigt, dass Demo-Umsätze weiter koexistieren und aktiv herausgefiltert werden müssen.",
+        "fix": "Demo-Daten über konsistentes source='demo'/is_demo-Flag statt Namensliste kennzeichnen und trennen. Prod-DB verifizieren, dass keine Demo-Reste (LIKE 'ord_%', is_demo=true) mehr existieren. Seeds nur in dedizierte Nicht-Prod-Umgebung.",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Batchprüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "DATE-12",
+        "source": "datenvertraege",
+        "title": "Kettenglied Rechnung<->Auftrag<->Kunde nur teilweise per FK verankert",
+        "severity": "MEDIUM",
+        "truth": "K",
+        "area": "Twin-Kette Kunde->...->Rechnung->Zahlung",
+        "evidence": "ausgangsrechnung.kundeId (schema_buchhaltung.ts:92) text OHNE .references(customers); .orderId (Z.93) text OHNE FK. zahlung.ausgangsrechnungId/belegId haben FK (Z.128-129) — dieses Glied hält. beleg.zugeordneterOrderId (Z.63) text ohne FK. payments.orderId hat FK set null (schema.ts:554). v_auftrag_db/v_economics joinen ausgangsrechnung.order_id ohne referenzielle Garantie.",
+        "impact": "Die Kette Kunde->Auftrag->Rechnung->Zahlung ist am Übergang Rechnung->Auftrag und Rechnung->Kunde nur per Konvention verbunden. DB/Marge-Views können Rechnungen mit ungültiger/fehlender order_id einbeziehen. Zahlung->Rechnung hält, Rechnung->Auftrag reisst.",
+        "fix": "FK ausgangsrechnung.order_id->orders (SET NULL) und ausgangsrechnung.kunde_id->customers setzen; beleg.zugeordneter_order_id->orders. Orphan-Rechnungen vor FK bereinigen. v_periodenabschluss_status zählt bereits rechnungen_ohne_auftrag — als Datenqualitäts-Gate nutzen.",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Batchprüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "DATE-13",
+        "source": "datenvertraege",
+        "title": "Math.random im Produktionspfad (Datei-Namensgebung Upload)",
+        "severity": "LOW",
+        "truth": "K",
+        "area": "Regel 17 / Produktionspfad",
+        "evidence": "src/app/api/erfassung/scan-upload/route.ts:30 fileName = `${tenantId}/${Date.now()}-${Math.random().toString(36).substring(7)}...`. Auch item-photo-upload/route.ts, customers.actions.ts, marketing/feedbackMailService.ts, offline/idbSync.ts, tracking/tracking.ts nutzen Math.random.",
+        "impact": "Kernregel 17 verbietet Math.random im Produktionspfad. Bei Datei-Namen ist Kollisionsrisiko gering, aber die Idempotenz/Hash-Anforderung des Capture-Vertrags (Original-Hash) wird durch zufällige Namen statt inhaltsbasierten Hash nicht erfüllt.",
+        "fix": "Upload-Dateinamen aus Inhalts-Hash (sha256 des Originals) ableiten statt Math.random — erfüllt zugleich Idempotenz + Original-Nachweis des Slice-1-Vertrags. Math.random aus Produktionspfaden entfernen.",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Batchprüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "DATE-14",
+        "source": "datenvertraege",
+        "title": "scan_uploads ohne tenant-RLS-Nachweis und mit Service-Role-Bypass",
+        "severity": "MEDIUM",
+        "truth": "K",
+        "area": "RLS / Storage / Capture",
+        "evidence": "scan-upload/route.ts:2,9-11 nutzt createClient mit SUPABASE_SERVICE_ROLE_KEY -> umgeht RLS vollständig. scan_uploads hat tenant_id (schema.ts:275) und RLS ist enabled (in RLS-Liste enthalten), aber Insert läuft über Service-Role. uploaded_by referenziert app_users (Z.278). Kein serverseitiger Rollen-/Tenant-Check der Storage-Downloads belegt (PHASE0-Fund 9, V1-Korrektur 9).",
+        "impact": "Der Kern-Capture-Pfad (Slice 1) schreibt mit Service-Role und umgeht die Tenant/RLS-Kontrolle. Storage-Download-Autorisierung nicht nachgewiesen. Kombiniert mit toter app.tenant_id-RLS ist die Tenant-Trennung für scan_uploads faktisch nur der hartcodierte tenantId-Wert aus dem Auth-Kontext.",
+        "fix": "Service-Role nur für Storage-Signing, DB-Insert über tenant-gebundene Rolle mit gesetztem app.tenant_id. Storage-Download über serverseitige Route mit Rollen- + Tenant-Prüfung (V1-Korrektur 9). RLS-Wirksamkeit für scan_uploads per Laufzeittest belegen.",
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Batchprüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-12",
+        "source": "performance",
+        "title": "Doppelte Chart-Libs und zwei Gemini-SDKs im Bundle",
+        "severity": "MEDIUM",
+        "truth": "K",
+        "area": "Bundle/Abhängigkeiten",
+        "evidence": "package.json führt recharts (^3.8.1) UND chart.js (^4.5.1)+react-chartjs-2 (^5.3.1). In src/: recharts=8 Nutzer, react-chartjs-2=1 Nutzer (AnalysisChart.tsx). Zwei Gemini-SDKs: @google/genai (neu, 4 Nutzer) und @google/generative-ai (alt, nur src/app/actions/ai-enrichment.actions.ts).",
+        "impact": "Zwei vollständige Charting-Engines und zwei KI-SDKs vergrößern das Bundle unnötig; die alte-SDK-Nutzung umgeht zudem den zentralen Client (kein Timeout/Modell-Fallback → inkonsistente Resilienz).",
+        "fix": "Auf eine Chart-Lib standardisieren (recharts dominiert); AnalysisChart migrieren, chart.js+react-chartjs-2 entfernen. ai-enrichment.actions.ts auf den zentralen geminiClient (@google/genai) umstellen, @google/generative-ai entfernen.",
+        "files": [
+          "package.json",
+          "src/components/ui/AnalysisChart.tsx",
+          "src/app/actions/ai-enrichment.actions.ts"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Batchprüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-13",
+        "source": "performance",
+        "title": "idbSync nutzt Math.random als ULID und löscht/behält Mutationen inkonsistent",
+        "severity": "MEDIUM",
+        "truth": "K",
+        "area": "Offline/Idempotenz",
+        "evidence": "src/lib/offline/idbSync.ts:23-26 `generateUlid()` = Date.now().toString(36)+Math.random(); Zeile 80-84 localStorage-Fallback ohne Größenlimit; catch-Blöcke in markFailed/remove sind leer ('// ignore').",
+        "impact": "Nicht-monotone, kollidierbare IDs verletzen die Idempotenz-Anforderung (Slice-Regel 6, Verbot von Math.random im Produktionspfad, Regel 17). Stille catch-Blöcke maskieren Sync-Fehler. Aktuell zwar toter Code, aber als Vorlage gefährlich.",
+        "fix": "Datei entfernen oder durch echte ULID/monotone ID + hartes Fehler-Logging ersetzen; localStorage-Fallback für Queues streichen.",
+        "files": [
+          "src/lib/offline/idbSync.ts"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Batchprüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-14",
+        "source": "performance",
+        "title": "Fachaggregation im Client statt SQL (Buchhaltung/Finanzen)",
+        "severity": "MEDIUM",
+        "truth": "K",
+        "area": "Fachlogik in React",
+        "evidence": "src/app/buchhaltung/BuchhaltungCockpitClient.tsx:50-52 `gesamtAusgaben = kategorien.reduce(...)`, `variableKostenSumme = gesamtAusgaben - fixkostenSumme` im Client; Datenbeschaffung in useEffect (Zeile 36-48). Weitere reduce/sum-Aggregationen in 13 *Client.tsx-Dateien (grep-Treffer).",
+        "impact": "Widerspricht Slice-Regel 13 ('Fachberechnungen und KPIs liegen in SQL-Views, nicht in React'). Bei größeren Datenmengen unnötige Client-Last und Re-Renders; Zahlen nicht serverseitig autoritativ.",
+        "fix": "Summen/KPIs in SQL-Views berechnen und fertig ausliefern; Client nur rendern. useEffect-Fetch durch Server-Rendering ersetzen wo möglich.",
+        "files": [
+          "src/app/buchhaltung/BuchhaltungCockpitClient.tsx"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Batchprüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-15",
+        "source": "performance",
+        "title": "Mock-Typen und Simulations-Services im aktiven Komponentenpfad",
+        "severity": "MEDIUM",
+        "truth": "K",
+        "area": "Datenzugriff/Mock im Produktionspfad",
+        "evidence": "src/components/entities/CustomerFocusView.tsx:4/9 importiert `MockCustomer` aus @/lib/mockData als Prop-Typ. src/lib/services/ocrService.ts:17-33 `simulateScan` mit setTimeout(1800)+Hardcode-Daten; ocr.actions.ts:16-19 `processImageWithAI` ruft diesen Mock (als deprecated markiert, aber exportiert/erreichbar). photoService.ts:6-11 hat einen Mock-Fallback der base64 zurückgibt.",
+        "impact": "Bricht Slice-Regel 17 ('Kein Mock, Math.random, Demo- oder stiller Fallback im Produktionspfad'). Mock-Typen verschleiern das echte Datenmodell und erschweren die Vernetzung.",
+        "fix": "MockCustomer durch echten Customer-DB-Typ ersetzen; deprecated Mock-Exporte (simulateScan/processImageWithAI) entfernen; photoService-Fallback auf Outbox statt base64.",
+        "files": [
+          "src/components/entities/CustomerFocusView.tsx",
+          "src/lib/services/ocrService.ts",
+          "src/app/actions/ocr.actions.ts",
+          "src/lib/services/photoService.ts"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Batchprüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-16",
+        "source": "performance",
+        "title": "ocr-process-Route legt bei OCR-Match ungefragt neue Kategorien/Lieferanten an (Write im Lesepfad)",
+        "severity": "MEDIUM",
+        "truth": "K",
+        "area": "Datenintegrität/Idempotenz",
+        "evidence": "src/app/api/ocr-process/route.ts:50-56 legt Kategorie an falls nicht gefunden; 67-75 legt Lieferant per unscharfem ilike-Match ('%name%') sonst neu an; Zeilen 46/61 nutzen ilike ohne LIMIT. Dev-Fallback 85-92 nimmt bei fehlender Session einfach den ersten User `db.select().from(appUsers).limit(1)`.",
+        "impact": "Unscharfes Matching + Auto-Create erzeugt Dubletten von Lieferanten/Kategorien; nicht idempotent bei Retry (bricht Slice-Regel 6). Der Dev-User-Fallback kann Belege einem falschen Ersteller zuordnen.",
+        "fix": "Matching deterministisch (normalisierter Schlüssel, unique constraint, upsert); Auto-Create nur mit eindeutigem Schlüssel; Dev-Fallback entfernen und immer echte Session erzwingen.",
+        "files": [
+          "src/app/api/ocr-process/route.ts"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Batchprüfer ausgefallen — nicht verifiziert"
+        }
+      },
+      {
+        "id": "PERF-17",
+        "source": "performance",
+        "title": "Draft-Autosave und weitere Zustände scheitern still bei localStorage-Quota",
+        "severity": "LOW",
+        "truth": "K",
+        "area": "Fehlerresilienz",
+        "evidence": "src/hooks/useAutosaveDraft.ts:28-31 `try { localStorage.setItem(DRAFT_KEY, text) } catch { /* ignore */ }`. Analog eventsRepository.ts:141-143 (Mock-Pfad) und ParkedCallContext, warningStore etc. schreiben unbewacht in localStorage.",
+        "impact": "Sobald localStorage durch base64-Fotos (siehe CRITICAL-Fund) voll ist, verschwinden Telefonnotiz-Drafts und andere Zustände ohne jede Rückmeldung an den Nutzer.",
+        "fix": "Quota-Fehler abfangen und dem Nutzer signalisieren; Foto-base64 aus localStorage entfernen (Root Cause); kritische Drafts in IndexedDB.",
+        "files": [
+          "src/hooks/useAutosaveDraft.ts",
+          "src/lib/repositories/eventsRepository.ts"
+        ],
+        "redteam": {
+          "verdict": "UNCERTAIN",
+          "reason": "REDTEAM-Batchprüfer ausgefallen — nicht verifiziert"
+        }
+      }
+    ],
+    "stats": {
+      "total": 31,
+      "verified": 31,
+      "confirmed": 0,
+      "refuted": 0
+    }
+  },
+  "workflowProgress": [
+    {
+      "type": "workflow_phase",
+      "index": 1,
+      "title": "Fachaudit"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 2,
+      "title": "REDTEAM"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 1,
+      "label": "gates:qa",
+      "phaseIndex": 1,
+      "phaseTitle": "Fachaudit",
+      "agentId": "aa024a2e74e986b76",
+      "model": "claude-fable-5",
+      "state": "done",
+      "startedAt": 1783214050074,
+      "lastProgressAt": 1783214050074,
+      "cached": true,
+      "resultPreview": "{\"gates\":[{\"name\":\"Umgebung (node/HEAD/git status)\",\"command\":\"node --version && git rev-parse HEAD && git status --short | wc -l\",\"exit_code\":0,\"result\":\"node v24.14.1; HEAD 204f3f105824ea098f2d71f72489dc1bd0de85e3; 3 geaenderte/untracked Eintraege (.agents/, control_plane/)\"},{\"name\":\"TypeScript (tsc --noEmit)\",\"command\":\"npx tsc --noEmit\",\"exit_code\":0,\"result\":\"0 Fehler, 0 Ausgabezeilen\"},{\"na…",
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 2,
+      "label": "audit:kartierung",
+      "phaseIndex": 1,
+      "phaseTitle": "Fachaudit",
+      "agentId": "a9b3afa2469167f11",
+      "agentType": "repository-cartographer",
+      "model": "claude-sonnet-5",
+      "state": "error",
+      "startedAt": 1783214050182,
+      "queuedAt": 1783214050108,
+      "attempt": 1,
+      "lastToolName": "Bash",
+      "lastToolSummary": "sleep 4; cat \"C:\\Users\\Traube\\AppData\\Local\\Temp\\claude\\C--…",
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214648747,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 62712,
+      "toolCalls": 37,
+      "durationMs": 598564
+    },
+    {
+      "type": "workflow_agent",
+      "index": 3,
+      "label": "audit:datenvertraege",
+      "phaseIndex": 1,
+      "phaseTitle": "Fachaudit",
+      "agentId": "a4c25dbf563e95fb4",
+      "agentType": "data-contract-auditor",
+      "model": "claude-opus-4-8",
+      "state": "done",
+      "startedAt": 1783214050186,
+      "queuedAt": 1783214050108,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "Wiederverwendbar: Die SQL-Views (v_auftrag_db, v_economics,…",
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214545628,
+      "tokens": 110705,
+      "toolCalls": 48,
+      "durationMs": 495441,
+      "resultPreview": "{\"findings\":[{\"title\":\"Tenant-Isolation ist faktisch tot: app.tenant_id wird nirgends gesetzt\",\"severity\":\"CRITICAL\",\"truth\":\"K\",\"area\":\"RLS / Tenant / Security\",\"evidence\":\"grep 'set_config' src -> exit 1 (kein Treffer); grep 'app.tenant_id' src/*.ts -> kein set_config, nur .eq('tenant_id',...)-Client-Filter. RLS-Policies aber überall als USING (tenant_id = current_setting('app.tenant_id', true))…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 4,
+      "label": "audit:security",
+      "phaseIndex": 1,
+      "phaseTitle": "Fachaudit",
+      "agentId": "a2af5343c2ec65d76",
+      "agentType": "security-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214050189,
+      "queuedAt": 1783214050109,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "Der IST-Zustand am HEAD (204f3f1) zeigt ein Fundament mit s…",
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214753293,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 105884,
+      "toolCalls": 61,
+      "durationMs": 703104
+    },
+    {
+      "type": "workflow_agent",
+      "index": 5,
+      "label": "audit:performance",
+      "phaseIndex": 1,
+      "phaseTitle": "Fachaudit",
+      "agentId": "a879b7a988caf0fb3",
+      "agentType": "performance-reliability-engineer",
+      "model": "claude-opus-4-8",
+      "state": "done",
+      "startedAt": 1783214050191,
+      "queuedAt": 1783214050109,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "Wiederverwendbar: getOperationalOrders ist im Kern solide g…",
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214517860,
+      "tokens": 105857,
+      "toolCalls": 59,
+      "durationMs": 467669,
+      "resultPreview": "{\"findings\":[{\"title\":\"Ungesicherte Foto-Upload-Route mit client-gesteuertem Tenant und Service-Role-Key\",\"severity\":\"CRITICAL\",\"truth\":\"K\",\"area\":\"Fehlerresilienz/Sicherheit/Storage\",\"evidence\":\"src/app/api/erfassung/item-photo-upload/route.ts: kein resolveAuthorization/Auth-Check; Zeile 13 `const tenantId = formData.get(\\\"tenantId\\\") as string || \\\"galvanik-kreile\\\"` (Tenant kommt aus Client-For…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 6,
+      "label": "audit:ux",
+      "phaseIndex": 1,
+      "phaseTitle": "Fachaudit",
+      "agentId": "a56bf9294697e3ab1",
+      "agentType": "ux-workflow-auditor",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214050193,
+      "queuedAt": 1783214050110,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "Die App wirkt optisch fortgeschritten, aber die von den Twi…",
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214642454,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 172915,
+      "toolCalls": 68,
+      "durationMs": 592260
+    },
+    {
+      "type": "workflow_agent",
+      "index": 7,
+      "label": "audit:plattform",
+      "phaseIndex": 1,
+      "phaseTitle": "Fachaudit",
+      "agentId": "af376658bd4263c32",
+      "agentType": "platform-architect",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214050196,
+      "queuedAt": 1783214050111,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "Das Fundament hat einen ordentlichen Ansatz zur Schichtung …",
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214675933,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 94782,
+      "toolCalls": 49,
+      "durationMs": 625737
+    },
+    {
+      "type": "workflow_agent",
+      "index": 8,
+      "label": "audit:archaeologie",
+      "phaseIndex": 1,
+      "phaseTitle": "Fachaudit",
+      "agentId": "a5a8d640cd6e9ae07",
+      "agentType": "requirements-archaeologist",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214517865,
+      "queuedAt": 1783214050111,
+      "attempt": 1,
+      "lastToolName": "Read",
+      "lastToolSummary": "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02…",
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214650256,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 169355,
+      "toolCalls": 21,
+      "durationMs": 132390
+    },
+    {
+      "type": "workflow_agent",
+      "index": 9,
+      "label": "redteam:DATE-01",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a42a848f2638216ef",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214753371,
+      "queuedAt": 1783214753313,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214753874,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 502
+    },
+    {
+      "type": "workflow_agent",
+      "index": 10,
+      "label": "redteam:DATE-02",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a88282d9b76a34d00",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214753376,
+      "queuedAt": 1783214753313,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214753918,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 542
+    },
+    {
+      "type": "workflow_agent",
+      "index": 11,
+      "label": "redteam:DATE-03",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a993f7ab1018d94be",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214753380,
+      "queuedAt": 1783214753314,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754090,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 710
+    },
+    {
+      "type": "workflow_agent",
+      "index": 12,
+      "label": "redteam:DATE-04",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a4c0003f71699b640",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214753383,
+      "queuedAt": 1783214753314,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754002,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 618
+    },
+    {
+      "type": "workflow_agent",
+      "index": 13,
+      "label": "redteam:DATE-05",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a16778c1b6c00349d",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214753386,
+      "queuedAt": 1783214753314,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754026,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 640
+    },
+    {
+      "type": "workflow_agent",
+      "index": 14,
+      "label": "redteam:DATE-07",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a3c7af4b3073dabf0",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214753388,
+      "queuedAt": 1783214753315,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754056,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 668
+    },
+    {
+      "type": "workflow_agent",
+      "index": 15,
+      "label": "redteam:DATE-11",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a70bb0f780d0955f8",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214753879,
+      "queuedAt": 1783214753315,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754309,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 430
+    },
+    {
+      "type": "workflow_agent",
+      "index": 16,
+      "label": "redteam:PERF-01",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "af13a56dda447b621",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214753920,
+      "queuedAt": 1783214753315,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754336,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 416
+    },
+    {
+      "type": "workflow_agent",
+      "index": 17,
+      "label": "redteam:PERF-02",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "ac3cf1e42b3f203b5",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214754005,
+      "queuedAt": 1783214753315,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754439,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 434
+    },
+    {
+      "type": "workflow_agent",
+      "index": 18,
+      "label": "redteam:PERF-03",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a8f1b7eeead2cec13",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214754034,
+      "queuedAt": 1783214753316,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754420,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 386
+    },
+    {
+      "type": "workflow_agent",
+      "index": 19,
+      "label": "redteam:PERF-04",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a058a529b66d517e9",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214754060,
+      "queuedAt": 1783214753316,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754614,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 554
+    },
+    {
+      "type": "workflow_agent",
+      "index": 20,
+      "label": "redteam:PERF-05",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "ae9bc4520b051c9d0",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214754092,
+      "queuedAt": 1783214753316,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754539,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 447
+    },
+    {
+      "type": "workflow_agent",
+      "index": 21,
+      "label": "redteam:PERF-06",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a1504c9f4b41023f5",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214754313,
+      "queuedAt": 1783214753316,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754739,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 426
+    },
+    {
+      "type": "workflow_agent",
+      "index": 22,
+      "label": "redteam:PERF-07",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a4913be3bdcb09658",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214754338,
+      "queuedAt": 1783214753317,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754728,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 390
+    },
+    {
+      "type": "workflow_agent",
+      "index": 23,
+      "label": "redteam:PERF-08",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a4f7ab2554772a276",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214754422,
+      "queuedAt": 1783214753317,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754888,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 465
+    },
+    {
+      "type": "workflow_agent",
+      "index": 24,
+      "label": "redteam:PERF-09",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a3cdc9e4d57218af8",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214754461,
+      "queuedAt": 1783214753317,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214754891,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 428
+    },
+    {
+      "type": "workflow_agent",
+      "index": 25,
+      "label": "redteam:PERF-10",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a90dfeba3c7f0bf4e",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214754542,
+      "queuedAt": 1783214753318,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214755027,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 484
+    },
+    {
+      "type": "workflow_agent",
+      "index": 26,
+      "label": "redteam:PERF-11",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a0fa1327eee53c999",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214754616,
+      "queuedAt": 1783214753318,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214755056,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 440
+    },
+    {
+      "type": "workflow_agent",
+      "index": 27,
+      "label": "redteam:batch1",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a2f332683efdc3dc9",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214755123,
+      "queuedAt": 1783214755076,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214755924,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 801
+    },
+    {
+      "type": "workflow_agent",
+      "index": 28,
+      "label": "redteam:batch2",
+      "phaseIndex": 2,
+      "phaseTitle": "REDTEAM",
+      "agentId": "a4a565c1023468c49",
+      "agentType": "red-team-reviewer",
+      "model": "claude-opus-4-8",
+      "state": "error",
+      "startedAt": 1783214755126,
+      "queuedAt": 1783214755076,
+      "attempt": 1,
+      "promptPreview": "Projekt: Galvanik-Kreile WerkstattCockpit. Repo: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app (dein Arbeitsverzeichnis).\nSTRIKT READ-ONLY: Du darfst KEINE Datei ändern, nichts löschen, keine Migration ausführen, nichts committen. Nur Read/Glob/Grep/Bash-Lesebefehle.\nTRUTH-Disziplin: K = direkt belegt (Datei+Zeile oder Befehlsausgabe zitieren), I = begründete Schlussfolgerung, H …",
+      "lastProgressAt": 1783214755927,
+      "error": "You've hit your session limit · resets 8:10am (Europe/Berlin)",
+      "tokens": 0,
+      "toolCalls": 0,
+      "durationMs": 801
+    }
+  ],
+  "totalTokens": 822210,
+  "totalToolCalls": 343
+}

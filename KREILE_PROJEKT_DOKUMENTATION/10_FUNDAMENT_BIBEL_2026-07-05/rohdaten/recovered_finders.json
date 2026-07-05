@@ -1,0 +1,544 @@
+{
+ "datenvertraege": {
+  "findings": [
+   {
+    "title": "Tenant-Isolation ist faktisch tot: app.tenant_id wird nirgends gesetzt",
+    "severity": "CRITICAL",
+    "truth": "K",
+    "area": "RLS / Tenant / Security",
+    "evidence": "grep 'set_config' src -> exit 1 (kein Treffer); grep 'app.tenant_id' src/*.ts -> kein set_config, nur .eq('tenant_id',...)-Client-Filter. RLS-Policies aber überall als USING (tenant_id = current_setting('app.tenant_id', true)) definiert (0012_harden_rls.sql:16, 20260619200037:7, 0008_ui_events.sql:19). Kein FORCE ROW LEVEL SECURITY in irgendeiner Migration (grep leer). Drizzle verbindet via postgres-js/DATABASE_URL (src/db/index.ts:20) als Owner -> RLS-Bypass. Operativer Tenant-Filter nur hartcodiert in TS: operationalOrders.ts:46 eq(orders.tenantId,'galvanik-kreile').",
+    "impact": "Kernregel 16 (Session/Rolle/Tenant/RLS Ende-zu-Ende) ist formal erfüllt, real wirkungslos. current_setting('app.tenant_id', true) liefert immer NULL -> tenant_id=NULL ist immer false. Entweder blockiert RLS still (leere Ergebnisse über den anon-Client-Pfad) oder wird durch verbliebene USING(true)-Policies umgangen. Mandantenfähigkeit als Fundament nicht belastbar.",
+    "fix": "App-Rolle (nicht Owner) einführen, FORCE ROW LEVEL SECURITY auf allen tenant-Tabellen, app.tenant_id per set_config innerhalb JEDER DB-Transaktion setzen (SET LOCAL im selben tx wie die Query, vgl. Slice-Regel SET LOCAL). E2E-Laufzeitbeweis: Cross-Tenant-SELECT muss 0 Zeilen liefern."
+   },
+   {
+    "title": "orders.current_station_id existiert in keiner Migration — operativer Schreibpfad hängt an Geister-Spalte",
+    "severity": "CRITICAL",
+    "truth": "K",
+    "area": "Schema-Drift",
+    "evidence": "grep 'orders ADD COLUMN|ALTER TABLE orders' + current_station_id -> leer (nie per Migration angelegt). operationalOrders.ts:37/83/220/247 liest+schreibt orders.currentStationId. Migrationen legen nur an: orders.current_station (0003_fix_orders_station_and_rls.sql:4) und orders.station (20260621000000_phase2_migrations.sql:9). items.current_station_id existiert (0009_items.sql:8). KPI-Views lesen current_station: v_auftrag_db (20260614000001:13), v_economics (20260623000006:11 COALESCE(current_station,station)), views_cockpit (20260616000001:47).",
+    "impact": "Die operative Stationszuordnung (current_station_id) und die KPI-Views (current_station) lesen verschiedene Spalten -> die Kette Auftrag->Station->KPI reisst. Entweder existiert current_station_id nur remote via nicht-versioniertem db push (Migrationshistorie nicht reproduzierbar) oder gar nicht (dann bricht der operative Pfad zur Laufzeit). Verzögerungskosten/DB pro Station sehen die operativen Karten nicht.",
+    "fix": "Remote-Schema von orders per Introspektion gegen Migrationen abgleichen. Eine kanonische Stationsspalte festlegen (current_station_id), Migration nachziehen, alle Views + operationalOrders auf denselben Spaltennamen vereinheitlichen. Danach Reproduzierbarkeit: frische DB aus Migrationen bauen und diffen."
+   },
+   {
+    "title": "Tabelle events wird in keiner Migration erzeugt (nur ALTER/POLICY) — Original heisst status_events",
+    "severity": "CRITICAL",
+    "truth": "K",
+    "area": "Ereignismodell / Schema-Drift",
+    "evidence": "grep 'CREATE TABLE.*events' migrations -> nur status_events (0001_app_schema.sql:84), ui_events, warning_event, order_cost_events, calendar_events. events selbst: nur ALTER (0004:20, 202606051200:8-9, 20260621000000:8) + POLICY (0012:28, 20260619200037:7). 0012_harden_rls.sql:22 Kommentar: 'schema.ts uses events, earlier migrations used status_events. We apply this ... (assuming the table was renamed or is events).' — unbewiesene Annahme. Drizzle-Schema, operationalOrders.ts:195, orderPhoto.actions.ts:33 schreiben in events.",
+    "impact": "Die zentrale Ereignistabelle existiert nur remote durch nicht-versionierte DDL (Rename status_events->events oder db push). Migrationshistorie ist nicht selbsttragend/remote-inkonsistent. Ein 'reconcile migration history'-Commit (4134ee5, 02906c4) bestätigt manuelle Ledger-Reparaturen. Neuaufbau der DB aus Migrationen scheitert oder ergibt anderes Schema.",
+    "fix": "Explizite, idempotente CREATE-TABLE-events- (oder RENAME-)Migration mit vollständiger Spaltenliste + FK + RLS nachziehen. Drizzle-Migrations-Ledger mit tatsächlichem Remote-Zustand reconcilen und danach eingefroren halten (kein db push in Prod)."
+   },
+   {
+    "title": "Vor-Auftrags-Ereignisse strukturell unmöglich: events.order_id ist NOT NULL mit FK/CASCADE",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "Ereignismodell / Slice-1-Kern",
+    "evidence": "schema.ts:159 events.orderId text NOT NULL references(orders.id, onDelete cascade). scan-upload-Route (src/app/api/erfassung/scan-upload/route.ts:43) und uploadOrderPhotoRecord (orderPhoto.actions.ts:22) schreiben scan_uploads; nur orderPhoto erzeugt ein PHOTO_ADDED-Event (Zeile 33) — und nur weil dort schon eine orderId existiert. scan_uploads selbst erzeugt KEIN Event.",
+    "impact": "Der Slice-1-Kernfluss 'Foto/Beleg VOR Auftrag' kann kein fachliches Ereignis erzeugen, da jedes Event zwingend eine order_id braucht. Vor-Auftrags-Ereignisse (TRUTH-Kernproblem, PHASE0-Fund 4) sind im bestehenden Modell nicht abbildbar. Beim Löschen eines Auftrags werden zudem alle Events CASCADE-gelöscht -> Audit-Verlust.",
+    "fix": "Vor-Auftrags-Events über scan_uploads-bezogenes Ereignismodell (nullable order_id ODER separater scan_event-Typ mit scan_upload_id-FK) einführen. events.order_id nullable machen oder polymorphen Bezug (subject_type/subject_id) definieren. CASCADE für Audit-Events auf RESTRICT/SET NULL prüfen."
+   },
+   {
+    "title": "Zwei parallele Datenpfade + Mock-Schalter auf denselben Tabellen (doppelte Wahrheit)",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "Datenpfade / Vertrag",
+    "evidence": "Server-Pfad Drizzle db in ~48 Dateien (grep from @/db). Client-Pfad Supabase createClient in ~27 Dateien. 9 Repositories mit isSupabase = NEXT_PUBLIC_DATA_PROVIDER==='supabase' + Mock-Fallback (ordersRepository, itemsRepository, inquiriesRepository, eventsRepository, inventoryRepository, complaintsRepository, kvpRepository, priceAgreementsRepository, bathMeasurementsRepository). src/lib/mockData.ts vorhanden. inquiriesRepository.ts:36 liest via anon-Client ohne tenant-Filter.",
+    "impact": "Verstoss gegen Kernregel 1 (genau ein kanonischer Vertrag) und Regel 17 (kein Mock/Fallback im Produktionspfad). Screens können je nach Pfad/Provider unterschiedliche Mengen zeigen. Der anon-Client-Lesepfad verlässt sich auf die tote RLS -> liefert je nach Policy-Rest leere oder ungefilterte Daten. Das ist die vom Nutzer gemeldete 'Vernetzung funktioniert nicht / vieles war Mock'-Ursache.",
+    "fix": "Einen kanonischen serverseitigen Datenzugriffs-Vertrag festlegen (Drizzle-Server-Actions mit tenant-Kontext). isSupabase/Mock-Verzweigungen aus dem Produktionspfad entfernen. anon-Client nur für explizit öffentliche, RLS-abgesicherte Reads."
+   },
+   {
+    "title": "Vertragsregel 13 teilweise verletzt: KPI-Aggregation in cockpit/actions.ts statt vollständig in View",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "KPI / Fachlogik in TS",
+    "evidence": "cockpit/actions.ts:50-58 aggregiert umsatzNachStation in TypeScript (Summe dauer_minuten/60*kostensatz je kostenstelle_kuerzel) statt über View. Zeilen 30-40: dbMarge und Liquiditäts-Ampel (>0.5 kritisch, >0.2 Warnung) werden in TS berechnet. Positiv: v_monatsergebnis, v_aging, v_kunde_clv, v_auftrag_db, v_economics existieren und werden konsumiert (analyse.actions.ts, customerCard.actions.ts).",
+    "impact": "Fachwerte/Schwellen liegen teils unkontrolliert in React/TS (Regel 13). Doppelte Wahrheit-Risiko: Stationsumsatz aus TS-Schleife kann von v_auftrag_db/v_economics abweichen. Schwellen (0.2/0.5) sind unkalibrierte Magic Numbers.",
+    "fix": "umsatzNachStation und Liquiditäts-/Margen-Ampel in eine SQL-View (z.B. v_cockpit_kpi) verlagern. Schwellen als konfigurierbare kpi_cost_assumptions/Parameter statt Hardcode."
+   },
+   {
+    "title": "tenant_id-Abdeckung lückenhaft auf Kerntabellen (Drizzle vs Migration inkonsistent)",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "Tenant / Schema",
+    "evidence": "0012_harden_rls.sql:92-95 listet explizit Tabellen OHNE tenant_id: customers, baths, bath_measurements, inventory_items, stock_movements, app_users, feature_flags, import_jobs, audit_log, price_agreements. customers.tenant_id erst spät ergänzt (20260619200027) — aber rls_phase1 (20260619200037) setzt KEINE customers-tenant-Policy (nur events, communications, arbeitszeit_buchung, konto). app_users.tenant_id erst 20260627000000. Buchhaltungstabellen (ausgangsrechnung, beleg, zahlung, kostenposten) haben teils tenant_id im Drizzle-Schema aber ausgangsrechnung_position wurde bei RLS-Phase1 explizit übersprungen ('Missing tenant_id column, reported to Siglinder').",
+    "impact": "Kerntabellen Kunde/Teile/Bäder/Lager/Preis sind tenant-los oder ohne wirksame tenant-Policy. Bei künftiger Mandantenfähigkeit vermischen sich Daten. price_agreements, bath_measurements, stock_movements ohne tenant_id.",
+    "fix": "Vollständige tenant_id-Nachrüstung auf allen Kerntabellen + konsistente RLS-Policy je Tabelle. Inventurliste 'Tabelle hat tenant_id?' vs 'Tabelle hat tenant-RLS?' als Vertragscheck führen und Lücken schliessen bevor zweiter Tenant zugelassen wird."
+   },
+   {
+    "title": "Offene Foreign Keys laut PENDING_FK_NOTES nie geschlossen",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "Foreign Keys",
+    "evidence": "PENDING_FK_NOTES.md listet 3 offene FKs: kostenstelle.capacity_center_id, periode.geschlossen_von, forecast_version.erstellt_von — 'Siglinder ergänzt FK-Constraints in eigener Migration'. Drizzle-Schema bestätigt fehlende references: schema_buchhaltung.ts:225 capacityCenterId uuid ohne .references(); periode.geschlossenVon (Z.257) uuid ohne FK; forecastVersion.erstelltVon (Z.268) uuid ohne FK. Keine spätere Migration mit diesen FK-Namen gefunden.",
+    "impact": "Verwaiste Referenzen möglich (capacity_center_id, geschlossen_von, erstellt_von zeigen ins Leere). Perioden-/Forecast-Verantwortliche und Kapazitätszentren sind nicht referenziell abgesichert.",
+    "fix": "Zieltabellen finalisieren (capacity_center/employee bzw. app_users) und FK-Constraints per Migration setzen. Vorher orphan-Check ausführen."
+   },
+   {
+    "title": "Weitere fehlende FKs auf Kerntabellen (stock_movements, calendar_events, phone_notes, scan_uploads-Historie)",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "Foreign Keys",
+    "evidence": "Drizzle schema.ts: stockMovements.inventoryItemId (Z.219) und .orderId (Z.223) OHNE .references() — obwohl 0001_app_schema.sql:195-197 dafür FKs definierte (uuid-Welt, nach text-Umstellung nicht nachgezogen). calendarEvents.orderId/customerId (Z.123-124) ohne FK. events.itemId (Z.160) ohne FK. complaints.itemId/stationId (Z.178,180) ohne FK. scan_uploads.linked_invoice_id ohne FK (nur linked_order_id/linked_customer_id via 20260621103338).",
+    "impact": "Vernetzung Teil<->Bewegung, Auftrag<->Kalender, Event<->Teil ist nur per Konvention, nicht referenziell erzwungen. Verwaiste stock_movements/calendar_events bei Löschungen. Materialkosten-View (v_auftrag_db) joint stock_movements.order_id ohne FK-Garantie.",
+    "fix": "FK-Constraints nachziehen: stock_movements.inventory_item_id->inventory_items, .order_id->orders; calendar_events.order_id/customer_id; events.item_id->items; complaints.item_id/station_id. Vorher orphan-Report."
+   },
+   {
+    "title": "Demo-Daten-Cleanup per DELETE-by-Name in Migration — Demo-Inhalt lief in Produktion",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "Seed / Demo-Daten",
+    "evidence": "20260625000000_cleanup_demo_data.sql löscht Kunden per Name ('Max Mustermann','Museum Lenzburg', ... 10 Namen), Aufträge A-2026-0030..0042 und id LIKE 'ord_%', phone_notes customer_id LIKE 'inst_%'/'cust_%', inquiries id LIKE 'inq_%'. Das beweist, dass diese Demo-Daten vorher in derselben DB existierten. 20260622000003_seed_analyse.sql ist leer (Seed nach scripts/seed-analyse.ts verschoben — gut). isDemo-Flags in ausgangsrechnung/zahlung/kostenposten (schema_buchhaltung.ts:113,135,149).",
+    "impact": "Produktions- und Demo-Daten teilten sich eine DB; Cleanup per Namensliste ist fragil (verfehlt umbenannte/zusätzliche Demo-Sätze). is_demo-Filter in Views (v_auftrag_db WHERE is_demo=false) zeigt, dass Demo-Umsätze weiter koexistieren und aktiv herausgefiltert werden müssen.",
+    "fix": "Demo-Daten über konsistentes source='demo'/is_demo-Flag statt Namensliste kennzeichnen und trennen. Prod-DB verifizieren, dass keine Demo-Reste (LIKE 'ord_%', is_demo=true) mehr existieren. Seeds nur in dedizierte Nicht-Prod-Umgebung."
+   },
+   {
+    "title": "Migrationshistorie nicht selbsttragend / remote-reconciled (nicht reproduzierbar)",
+    "severity": "HIGH",
+    "truth": "I",
+    "area": "Migrationskonsistenz",
+    "evidence": "Zwei reconcile-Commits: 4134ee5 'chore(db): reconcile local migration history', 02906c4 'fix(db): reconcile migration ledger'. events-Tabelle ohne CREATE (nur remote). orders.current_station_id ohne Migration. drop_legacy_open_policies.sql-Kommentar: 'Remote angewendet via Supabase MCP (apply_migration)'. Drizzle _journal.json hat nur 1 Eintrag trotz 80+ SQL-Files.",
+    "impact": "Eine frische DB aus supabase/migrations ergibt NICHT das Remote-Schema (fehlende Tabellen/Spalten, uuid-vs-text-Reste). Das Fundament ist nicht deterministisch reproduzierbar — jeder Neuaufbau/zweite Umgebung driftet. Erklärt die 'wochenlange Fundamentarbeit ohne Vernetzung'.",
+    "fix": "Remote-Schema per pg_dump/Introspektion als Baseline exportieren, eine konsolidierte idempotente Baseline-Migration erzeugen, Drizzle-Ledger neu aufsetzen. Danach ausschliesslich versionierte Migrationen, kein db push / kein ad-hoc MCP-apply."
+   },
+   {
+    "title": "Kettenglied Rechnung<->Auftrag<->Kunde nur teilweise per FK verankert",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "Twin-Kette Kunde->...->Rechnung->Zahlung",
+    "evidence": "ausgangsrechnung.kundeId (schema_buchhaltung.ts:92) text OHNE .references(customers); .orderId (Z.93) text OHNE FK. zahlung.ausgangsrechnungId/belegId haben FK (Z.128-129) — dieses Glied hält. beleg.zugeordneterOrderId (Z.63) text ohne FK. payments.orderId hat FK set null (schema.ts:554). v_auftrag_db/v_economics joinen ausgangsrechnung.order_id ohne referenzielle Garantie.",
+    "impact": "Die Kette Kunde->Auftrag->Rechnung->Zahlung ist am Übergang Rechnung->Auftrag und Rechnung->Kunde nur per Konvention verbunden. DB/Marge-Views können Rechnungen mit ungültiger/fehlender order_id einbeziehen. Zahlung->Rechnung hält, Rechnung->Auftrag reisst.",
+    "fix": "FK ausgangsrechnung.order_id->orders (SET NULL) und ausgangsrechnung.kunde_id->customers setzen; beleg.zugeordneter_order_id->orders. Orphan-Rechnungen vor FK bereinigen. v_periodenabschluss_status zählt bereits rechnungen_ohne_auftrag — als Datenqualitäts-Gate nutzen."
+   },
+   {
+    "title": "Math.random im Produktionspfad (Datei-Namensgebung Upload)",
+    "severity": "LOW",
+    "truth": "K",
+    "area": "Regel 17 / Produktionspfad",
+    "evidence": "src/app/api/erfassung/scan-upload/route.ts:30 fileName = `${tenantId}/${Date.now()}-${Math.random().toString(36).substring(7)}...`. Auch item-photo-upload/route.ts, customers.actions.ts, marketing/feedbackMailService.ts, offline/idbSync.ts, tracking/tracking.ts nutzen Math.random.",
+    "impact": "Kernregel 17 verbietet Math.random im Produktionspfad. Bei Datei-Namen ist Kollisionsrisiko gering, aber die Idempotenz/Hash-Anforderung des Capture-Vertrags (Original-Hash) wird durch zufällige Namen statt inhaltsbasierten Hash nicht erfüllt.",
+    "fix": "Upload-Dateinamen aus Inhalts-Hash (sha256 des Originals) ableiten statt Math.random — erfüllt zugleich Idempotenz + Original-Nachweis des Slice-1-Vertrags. Math.random aus Produktionspfaden entfernen."
+   },
+   {
+    "title": "scan_uploads ohne tenant-RLS-Nachweis und mit Service-Role-Bypass",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "RLS / Storage / Capture",
+    "evidence": "scan-upload/route.ts:2,9-11 nutzt createClient mit SUPABASE_SERVICE_ROLE_KEY -> umgeht RLS vollständig. scan_uploads hat tenant_id (schema.ts:275) und RLS ist enabled (in RLS-Liste enthalten), aber Insert läuft über Service-Role. uploaded_by referenziert app_users (Z.278). Kein serverseitiger Rollen-/Tenant-Check der Storage-Downloads belegt (PHASE0-Fund 9, V1-Korrektur 9).",
+    "impact": "Der Kern-Capture-Pfad (Slice 1) schreibt mit Service-Role und umgeht die Tenant/RLS-Kontrolle. Storage-Download-Autorisierung nicht nachgewiesen. Kombiniert mit toter app.tenant_id-RLS ist die Tenant-Trennung für scan_uploads faktisch nur der hartcodierte tenantId-Wert aus dem Auth-Kontext.",
+    "fix": "Service-Role nur für Storage-Signing, DB-Insert über tenant-gebundene Rolle mit gesetztem app.tenant_id. Storage-Download über serverseitige Route mit Rollen- + Tenant-Prüfung (V1-Korrektur 9). RLS-Wirksamkeit für scan_uploads per Laufzeittest belegen."
+   }
+  ],
+  "reuse_note": "Wiederverwendbar: Die SQL-Views (v_auftrag_db, v_economics, v_analyse_*, v_kunde_clv, v_aging, v_monatsergebnis) sind fachlich solide gebaut und setzen Regel 13 grösstenteils korrekt um — sie sind ein gutes Fundament, sobald die Spaltendivergenz current_station/current_station_id behoben ist. Das Drizzle-Schema ist als Typ-/Objekt-Inventar brauchbar. Die Transaktionslogik in operationalOrders.ts (advisory lock, atomare tx für Order+Items+Event) ist sauber und wiederverwendbar. NICHT wiederverwendbar ohne Sanierung: die Migrationshistorie (nicht reproduzierbar, events/current_station_id fehlen), die RLS-Schicht (tote app.tenant_id), die doppelten Datenpfade + isSupabase/Mock-Schalter in 9 Repositories, und der Demo-Cleanup-per-Name-Ansatz.",
+  "summary": "Das Datenfundament ist strukturell gebrochen, was die gemeldete fehlende Vernetzung erklärt. Drei CRITICAL-Risse: (1) Die Tenant-RLS ist faktisch tot, weil app.tenant_id nirgends per set_config gesetzt wird und kein FORCE RLS existiert; der Drizzle-Owner-Zugang umgeht RLS ohnehin und filtert Tenant nur hartcodiert in TypeScript. (2) Zentrale Objekte fehlen in den Migrationen: orders.current_station_id und die gesamte events-Tabelle werden von keiner Migration angelegt, existieren nur remote durch nicht-versionierte DDL — die Historie ist nicht reproduzierbar (belegt durch zwei reconcile-Commits). (3) Die KPI-Views lesen orders.current_station, der operative Schreibpfad schreibt current_station_id — die Kette Auftrag->Station->KPI reisst. Dazu kommen doppelte Datenwahrheiten (Drizzle-Server- vs Supabase-anon-Pfad plus isSupabase/Mock-Schalter in 9 Repositories), strukturell unmögliche Vor-Auftrags-Events (events.order_id NOT NULL), lückenhafte tenant_id/FK-Abdeckung auf Kerntabellen und Demo-Daten, die per Namensliste aus der Produktions-DB gelöscht wurden. Die SQL-Views selbst und die Transaktionslogik sind hingegen solide und wiederverwendbar."
+ },
+ "performance": {
+  "findings": [
+   {
+    "title": "Ungesicherte Foto-Upload-Route mit client-gesteuertem Tenant und Service-Role-Key",
+    "severity": "CRITICAL",
+    "truth": "K",
+    "area": "Fehlerresilienz/Sicherheit/Storage",
+    "evidence": "src/app/api/erfassung/item-photo-upload/route.ts: kein resolveAuthorization/Auth-Check; Zeile 13 `const tenantId = formData.get(\"tenantId\") as string || \"galvanik-kreile\"` (Tenant kommt aus Client-FormData); Zeilen 4-7 nutzen SUPABASE_SERVICE_ROLE_KEY. Kontrast: die parallele Route scan-upload/route.ts:16 prüft `resolveAuthorization()` korrekt.",
+    "impact": "Jeder unauthentifizierte Aufrufer kann Dateien mit dem Service-Role-Key in beliebige Tenant-Ordner hochladen und die kostenpflichtige Edge-Function/Gemini-Analyse auslösen (DoS + Cross-Tenant-Injection). Direkter Bruch von Slice-Regel 16 und V1-Korrektur 8/9.",
+    "fix": "resolveAuthorization() am Anfang erzwingen; tenantId ausschließlich serverseitig aus auth.data.tenantId setzen, den FormData-Wert ignorieren; Rate-Limit/Größenprüfung ergänzen.",
+    "files": [
+     "src/app/api/erfassung/item-photo-upload/route.ts"
+    ]
+   },
+   {
+    "title": "base64-Bild dauerhaft im localStorage gespeichert (expliziter Vertragsbruch)",
+    "severity": "CRITICAL",
+    "truth": "K",
+    "area": "Offline/Storage",
+    "evidence": "src/components/orders/OrderActionGrid.tsx:61 `localStorage.setItem(`kreile_photo_${orderId}_${Date.now()}`, base64)` speichert das gerenderte JPEG als base64 dauerhaft im localStorage.",
+    "impact": "Verstößt direkt gegen Kernregel 3 des Slice-Vertrags ('Keine dauerhafte Bildspeicherung als Base64 in localStorage'). localStorage-Quota (~5MB) wird schnell gesprengt → QuotaExceededError, danach schlagen ALLE localStorage-Schreibvorgänge (Drafts, Events, Theme) still fehl. Bilder sind nie im echten Storage → Datenverlust und keine Vernetzung.",
+    "fix": "Foto über eine authentifizierte Upload-Route in Supabase Storage (signierte URL) hochladen; bei Offline in die IndexedDB-Outbox (Blob, nicht base64) legen und via Outbox synchronisieren.",
+    "files": [
+     "src/components/orders/OrderActionGrid.tsx"
+    ]
+   },
+   {
+    "title": "Öffentliche Storage-URLs (getPublicUrl) für Kundendokumente und Belegfotos",
+    "severity": "CRITICAL",
+    "truth": "K",
+    "area": "Storage/DSGVO",
+    "evidence": "getPublicUrl in src/app/api/erfassung/scan-upload/route.ts:41, src/app/api/erfassung/item-photo-upload/route.ts:32, src/lib/services/photoService.ts:29. Nur src/app/buchhaltung/actions.ts:68 nutzt createSignedUrl(originalDatei, 3600).",
+    "impact": "Lieferscheine, Teilefotos und Intake-Fotos (personenbezogene/geschäftliche Daten) erhalten dauerhaft rate- und errät-bare öffentliche URLs ohne Ablauf. DSGVO-Verstoß und Bruch von V1-Korrektur 9 ('Storage-Download mit serverseitiger Rollen- und Tenantprüfung'). getPublicUrl setzt zudem einen public Bucket voraus.",
+    "fix": "Buckets privat schalten; überall createSignedUrl mit kurzer Gültigkeit + serverseitige Rollen-/Tenantprüfung verwenden; die in scanUploads/DB gespeicherten publicUrl-Felder auf Storage-Pfade umstellen.",
+    "files": [
+     "src/app/api/erfassung/scan-upload/route.ts",
+     "src/app/api/erfassung/item-photo-upload/route.ts",
+     "src/lib/services/photoService.ts"
+    ]
+   },
+   {
+    "title": "Vier parallele Offline/Outbox-Systeme, teils reiner Mock — keine echte Offline-Persistenz",
+    "severity": "CRITICAL",
+    "truth": "K",
+    "area": "Offline/Outbox",
+    "evidence": "src/hooks/useOfflineManager.ts:16-20 hält die Outbox nur in useState mit Kommentar 'In a real implementation this would write to IndexedDB or localStorage'. Zusätzlich existieren src/lib/offline/OfflineOutbox.ts (IndexedDB KreileOfflineOutboxDB), src/lib/offline/idbSync.ts (IndexedDB kreile_sync_db, Math.random-ULID, localStorage-Fallback) und laut Vorbefund OfflineManager/IndexedDBHelper (kreile_offline_db). Keiner ist der eine kanonische Pfad.",
+    "impact": "useOfflineManager verliert alle Aktionen bei Refresh/Crash (nur RAM). idbSync ist toter Code. Es gibt keine belastbare, konsolidierte Offline-Wahrheit → 'Vernetzung funktioniert nicht'. Bricht Slice-Regeln 1/4/6/17.",
+    "fix": "Auf genau eine Outbox (IndexedDB, Blob-basiert, idempotente Sync-Keys) konsolidieren; useOfflineManager und idbSync entfernen; Konsumenten migrieren.",
+    "files": [
+     "src/hooks/useOfflineManager.ts",
+     "src/lib/offline/idbSync.ts",
+     "src/lib/offline/OfflineOutbox.ts"
+    ]
+   },
+   {
+    "title": "Original geht bei Refresh/Crash während Capture im RAM verloren",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "Offline/Capture",
+    "evidence": "src/components/intake/CameraCapture.tsx:60-90: handleCapture erzeugt base64 nur lokal (`canvas.toDataURL`), ruft direkt `await processImage(imageData)` und reicht das Bild nur als Callback-Argument `onScanComplete(scan, imageData)` weiter. Keine Persistenz vor OCR.",
+    "impact": "Genau das bekannte Kernproblem ('mindestens ein CameraCapture-Pfad verliert das Original bei Refresh/Crash'). Bricht Slice-Regel 2 (Original vor OCR sichern) und 5 (48h-Vorhaltung).",
+    "fix": "Original sofort nach Capture als Blob in die Outbox-IndexedDB schreiben (mit Hash/ID), erst danach OCR anstoßen; UI aus dem persistierten Original wiederherstellen.",
+    "files": [
+     "src/components/intake/CameraCapture.tsx"
+    ]
+   },
+   {
+    "title": "eventsRepository verwirft Events still und meldet Fake-Erfolg",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "Fehlerresilienz/Audit-Log",
+    "evidence": "src/lib/repositories/eventsRepository.ts:103-106 überspringt DB-Insert wenn orderId fehlt und gibt trotzdem ein Erfolgsobjekt zurück; Zeile 124-131 fängt DB-Fehler und gibt `{ ...event, id, timestamp }` als Erfolg zurück (kein Rethrow). CameraCapture.tsx:81/86 ruft addEvent OHNE orderId ('OCR_SCAN_STARTED'/'OCR_SCAN_COMPLETED') → diese Events werden IMMER verworfen.",
+    "impact": "Das betriebliche Ereignis-/Audit-Log (CLAUDE.md: 'Jede betriebliche Kernaktion wird als Event protokolliert') hat Lücken ohne Fehlermeldung. Verstößt gegen AGENTS.md ('kein stummes Scheitern').",
+    "fix": "Bei fehlender orderId Pre-Order-Event-Modell nutzen statt verwerfen; DB-Fehler nicht als Erfolg maskieren, sondern in die Outbox schreiben oder werfen; error.message/details/hint loggen.",
+    "files": [
+     "src/lib/repositories/eventsRepository.ts",
+     "src/components/intake/CameraCapture.tsx"
+    ]
+   },
+   {
+    "title": "Prozessweiter Orders-Cache ohne Tenant-Key + hardcoded Tenant",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "Datenzugriff/Multi-Tenant",
+    "evidence": "src/lib/server/operationalOrders.ts:6-22 `_ordersCache` ist ein Modul-Level-Cache ohne Tenant im Key; Zeile 46 `eq(orders.tenantId, \"galvanik-kreile\")` hart verdrahtet, ebenso in createOperationalOrderService (169), moveOperationalOrderToStationService, startProcessingStationService. customerCard.actions.ts:33-37 lädt openOrders ohne tenantId-Filter.",
+    "impact": "Als 'Fundament für spätere Module' unbrauchbar mandantenfähig: ein globaler Cache würde in Multi-Tenant Daten mischen; Tenant-Hardcode blockiert weitere Mandanten. Widerspricht CLAUDE.md-Mandantenfähigkeit und Slice-Regel 16.",
+    "fix": "tenantId aus Session (resolveAuthorization) ziehen; Cache-Key um tenantId erweitern oder request-scoped cachen; alle Tenant-Filter aus der Session speisen.",
+    "files": [
+     "src/lib/server/operationalOrders.ts",
+     "src/features/customers/customer-card/customerCard.actions.ts"
+    ]
+   },
+   {
+    "title": "Client-Fetch-Wasserfälle: Kundenkarte lädt 7+ Tabs je einzeln im useEffect",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "Datenzugriff/Client-Rendering",
+    "evidence": "Sieben Tab-Komponenten (CustomerOrdersTab, CustomerPricesTab, CustomerInvoicesTab, CustomerComplaintsTab, CustomerCommunicationTab, CustomerItemsProfileTab, CustomerHistorySimilarTab) rufen je eine eigene Server-Action in useEffect ab, z.B. CustomerOrdersTab.tsx:14-23 `getCustomerOrders(customerId).then(...)`. Jede Action macht einen eigenen checkAppAuth + DB-Roundtrip.",
+    "impact": "Pro Kundenansicht mehrere sequenzielle Client-Roundtrips (Auth+DB je Tab) statt eines Server-Renders → spürbarer Jank/Ladezeit. Alle Aggregationen (z.B. dueDate-Berechnung) laufen im Client bei jedem Re-Render.",
+    "fix": "Kundenkarte serverseitig rendern und Daten gebündelt (ein oder wenige parallele Server-Calls) laden; Tabs aus bereits geladenen Props speisen; teure Ableitungen memoisieren oder in SQL-Views.",
+    "files": [
+     "src/components/customers/tabs/CustomerOrdersTab.tsx",
+     "src/features/customers/customer-card/customerCard.actions.ts"
+    ]
+   },
+   {
+    "title": "Gemini/OCR-Aufrufe ohne Timeout; synchrone Blockierung im Request",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "Externe Ausfälle",
+    "evidence": "src/lib/ai/geminiClient.ts:41-82 und src/lib/ocr/geminiOcr.ts:47-80 haben nur try/catch, keinen AbortController/Deadline. scan-upload/route.ts:54-56 ruft extractDocumentData synchron innerhalb des POST ('Process synchronously ... before Vercel freezes'). ScanUpload.tsx:40-51 pollt danach fix 20×1,5s gegen einen bereits fertigen Datensatz.",
+    "impact": "Hängt Gemini, blockiert die Request bis zum Plattform-Timeout; die Client-Polling-Schleife wartet zusätzlich bis zu 30s obwohl der Server bereits synchron fertig ist (redundanter Wasserfall). Kein sauberes Timeout-Feedback.",
+    "fix": "AbortController mit festem Timeout um alle Gemini-Aufrufe; Verarbeitung asynchron über Queue/Edge-Function mit status='analyzing' und echtem Polling ODER synchron ohne nachgelagertes Polling — nicht beides.",
+    "files": [
+     "src/lib/ai/geminiClient.ts",
+     "src/lib/ocr/geminiOcr.ts",
+     "src/app/api/erfassung/scan-upload/route.ts",
+     "src/components/erfassung/ScanFlow/ScanUpload.tsx"
+    ]
+   },
+   {
+    "title": "Cron-Route ohne Auth-Guard; Mail-Versand ist Mock, setzt aber Status 'gesendet'",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "Externe Ausfälle/Cron",
+    "evidence": "src/app/api/cron/send-feedback/route.ts:8 Kommentar 'Verifying token for cron is good practice, but skipping for demo' — kein Token-/Header-Check. Zeile 22-23 'Mock: Send Email' nur console.log, danach Zeile 26-29 update status='gesendet'. Kein LIMIT auf dem SELECT (Zeile 13-17).",
+    "impact": "Jeder kann den Cron beliebig oft auslösen; Feedback-Mails werden als 'gesendet' markiert obwohl nie versendet → falsche Datenwahrheit. Bei vielen fälligen Mails unbounded Schleife mit N Einzel-Updates (N+1-Writes).",
+    "fix": "CRON_SECRET/Authorization-Header prüfen; echten Mailversand implementieren und Status nur bei Erfolg setzen; SELECT mit LIMIT + Batch-Update.",
+    "files": [
+     "src/app/api/cron/send-feedback/route.ts"
+    ]
+   },
+   {
+    "title": ".agents/-Klon (647 TS/TSX-Dateien) liegt im Root-tsconfig-Include",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "Bundle/Build",
+    "evidence": "tsconfig.json:25-33 include `**/*.ts`/`**/*.tsx`, exclude nur node_modules und supabase. `find .agents -name '*.ts*' | wc -l` = 647. .agents/p0-hotfix-no-pin-payload enthält eine vollständige Repo-Kopie inkl. eigener Server Actions/Routen/Schemas; die dortige tsconfig.json ändert den Parent-Scan nicht. eslint.config.mjs globalIgnores listet scratch/** aber NICHT .agents/**.",
+    "impact": "`npx tsc --noEmit` (P1-Gate) und `eslint .`/`lint:full` prüfen 647 Klon-Dateien mit → langsamerer/instabiler Typecheck, doppelte Fehlerquellen, Risiko dass verworfener Auth-Clone-Code Gate-Ergebnisse verfälscht (der Nutzer nannte den Clone als 'beschädigt verworfen').",
+    "fix": ".agents/ (und recovered_getAnalysisProps.txt-Artefakte) aus tsconfig exclude und eslint globalIgnores nehmen oder außerhalb des Repos verschieben.",
+    "files": [
+     "tsconfig.json",
+     "eslint.config.mjs",
+     ".agents/p0-hotfix-no-pin-payload"
+    ]
+   },
+   {
+    "title": "Doppelte Chart-Libs und zwei Gemini-SDKs im Bundle",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "Bundle/Abhängigkeiten",
+    "evidence": "package.json führt recharts (^3.8.1) UND chart.js (^4.5.1)+react-chartjs-2 (^5.3.1). In src/: recharts=8 Nutzer, react-chartjs-2=1 Nutzer (AnalysisChart.tsx). Zwei Gemini-SDKs: @google/genai (neu, 4 Nutzer) und @google/generative-ai (alt, nur src/app/actions/ai-enrichment.actions.ts).",
+    "impact": "Zwei vollständige Charting-Engines und zwei KI-SDKs vergrößern das Bundle unnötig; die alte-SDK-Nutzung umgeht zudem den zentralen Client (kein Timeout/Modell-Fallback → inkonsistente Resilienz).",
+    "fix": "Auf eine Chart-Lib standardisieren (recharts dominiert); AnalysisChart migrieren, chart.js+react-chartjs-2 entfernen. ai-enrichment.actions.ts auf den zentralen geminiClient (@google/genai) umstellen, @google/generative-ai entfernen.",
+    "files": [
+     "package.json",
+     "src/components/ui/AnalysisChart.tsx",
+     "src/app/actions/ai-enrichment.actions.ts"
+    ]
+   },
+   {
+    "title": "idbSync nutzt Math.random als ULID und löscht/behält Mutationen inkonsistent",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "Offline/Idempotenz",
+    "evidence": "src/lib/offline/idbSync.ts:23-26 `generateUlid()` = Date.now().toString(36)+Math.random(); Zeile 80-84 localStorage-Fallback ohne Größenlimit; catch-Blöcke in markFailed/remove sind leer ('// ignore').",
+    "impact": "Nicht-monotone, kollidierbare IDs verletzen die Idempotenz-Anforderung (Slice-Regel 6, Verbot von Math.random im Produktionspfad, Regel 17). Stille catch-Blöcke maskieren Sync-Fehler. Aktuell zwar toter Code, aber als Vorlage gefährlich.",
+    "fix": "Datei entfernen oder durch echte ULID/monotone ID + hartes Fehler-Logging ersetzen; localStorage-Fallback für Queues streichen.",
+    "files": [
+     "src/lib/offline/idbSync.ts"
+    ]
+   },
+   {
+    "title": "Fachaggregation im Client statt SQL (Buchhaltung/Finanzen)",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "Fachlogik in React",
+    "evidence": "src/app/buchhaltung/BuchhaltungCockpitClient.tsx:50-52 `gesamtAusgaben = kategorien.reduce(...)`, `variableKostenSumme = gesamtAusgaben - fixkostenSumme` im Client; Datenbeschaffung in useEffect (Zeile 36-48). Weitere reduce/sum-Aggregationen in 13 *Client.tsx-Dateien (grep-Treffer).",
+    "impact": "Widerspricht Slice-Regel 13 ('Fachberechnungen und KPIs liegen in SQL-Views, nicht in React'). Bei größeren Datenmengen unnötige Client-Last und Re-Renders; Zahlen nicht serverseitig autoritativ.",
+    "fix": "Summen/KPIs in SQL-Views berechnen und fertig ausliefern; Client nur rendern. useEffect-Fetch durch Server-Rendering ersetzen wo möglich.",
+    "files": [
+     "src/app/buchhaltung/BuchhaltungCockpitClient.tsx"
+    ]
+   },
+   {
+    "title": "Mock-Typen und Simulations-Services im aktiven Komponentenpfad",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "Datenzugriff/Mock im Produktionspfad",
+    "evidence": "src/components/entities/CustomerFocusView.tsx:4/9 importiert `MockCustomer` aus @/lib/mockData als Prop-Typ. src/lib/services/ocrService.ts:17-33 `simulateScan` mit setTimeout(1800)+Hardcode-Daten; ocr.actions.ts:16-19 `processImageWithAI` ruft diesen Mock (als deprecated markiert, aber exportiert/erreichbar). photoService.ts:6-11 hat einen Mock-Fallback der base64 zurückgibt.",
+    "impact": "Bricht Slice-Regel 17 ('Kein Mock, Math.random, Demo- oder stiller Fallback im Produktionspfad'). Mock-Typen verschleiern das echte Datenmodell und erschweren die Vernetzung.",
+    "fix": "MockCustomer durch echten Customer-DB-Typ ersetzen; deprecated Mock-Exporte (simulateScan/processImageWithAI) entfernen; photoService-Fallback auf Outbox statt base64.",
+    "files": [
+     "src/components/entities/CustomerFocusView.tsx",
+     "src/lib/services/ocrService.ts",
+     "src/app/actions/ocr.actions.ts",
+     "src/lib/services/photoService.ts"
+    ]
+   },
+   {
+    "title": "ocr-process-Route legt bei OCR-Match ungefragt neue Kategorien/Lieferanten an (Write im Lesepfad)",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "Datenintegrität/Idempotenz",
+    "evidence": "src/app/api/ocr-process/route.ts:50-56 legt Kategorie an falls nicht gefunden; 67-75 legt Lieferant per unscharfem ilike-Match ('%name%') sonst neu an; Zeilen 46/61 nutzen ilike ohne LIMIT. Dev-Fallback 85-92 nimmt bei fehlender Session einfach den ersten User `db.select().from(appUsers).limit(1)`.",
+    "impact": "Unscharfes Matching + Auto-Create erzeugt Dubletten von Lieferanten/Kategorien; nicht idempotent bei Retry (bricht Slice-Regel 6). Der Dev-User-Fallback kann Belege einem falschen Ersteller zuordnen.",
+    "fix": "Matching deterministisch (normalisierter Schlüssel, unique constraint, upsert); Auto-Create nur mit eindeutigem Schlüssel; Dev-Fallback entfernen und immer echte Session erzwingen.",
+    "files": [
+     "src/app/api/ocr-process/route.ts"
+    ]
+   },
+   {
+    "title": "Draft-Autosave und weitere Zustände scheitern still bei localStorage-Quota",
+    "severity": "LOW",
+    "truth": "K",
+    "area": "Fehlerresilienz",
+    "evidence": "src/hooks/useAutosaveDraft.ts:28-31 `try { localStorage.setItem(DRAFT_KEY, text) } catch { /* ignore */ }`. Analog eventsRepository.ts:141-143 (Mock-Pfad) und ParkedCallContext, warningStore etc. schreiben unbewacht in localStorage.",
+    "impact": "Sobald localStorage durch base64-Fotos (siehe CRITICAL-Fund) voll ist, verschwinden Telefonnotiz-Drafts und andere Zustände ohne jede Rückmeldung an den Nutzer.",
+    "fix": "Quota-Fehler abfangen und dem Nutzer signalisieren; Foto-base64 aus localStorage entfernen (Root Cause); kritische Drafts in IndexedDB.",
+    "files": [
+     "src/hooks/useAutosaveDraft.ts",
+     "src/lib/repositories/eventsRepository.ts"
+    ]
+   }
+  ],
+  "reuse_note": "Wiederverwendbar: getOperationalOrders ist im Kern solide gebaut (Join + Batch-Item-Load, kein N+1) und der zentrale geminiClient mit Modell-Fallback ist ein gutes Fundament — beide brauchen nur Tenant-aus-Session, Cache-Keying und Timeouts. Die OfflineOutbox.ts (IndexedDB) ist als kanonische Outbox brauchbar. NICHT wiederverwendbar: useOfflineManager (Fake), idbSync (Math.random-ULID, toter Code), ocrService.simulateScan/processImageWithAI (Mock), das base64-in-localStorage-Muster in OrderActionGrid, die getPublicUrl-Storage-Pfade, die ungesicherte item-photo-upload-Route und der .agents/-Klon. Die vorhandene Agent-Memory (Offline-Fragmentierung, Orders-Datenpfad) ist korrekt und wurde erweitert.",
+  "summary": "Das Audit bestätigt die Nutzermeldung ('vieles war Mock, Vernetzung funktioniert nicht') mit harten Belegen. Die schwersten Probleme sind Zuverlässigkeits- und Sicherheitslücken, keine reinen Geschwindigkeitsprobleme: eine völlig ungesicherte Foto-Upload-Route mit Service-Role-Key und client-gesteuertem Tenant, base64-Bilder dauerhaft im localStorage (direkter Vertragsbruch), öffentliche Storage-URLs für Kundendokumente, vier konkurrierende Offline-Systeme (davon eins reiner RAM-Mock, eins toter Code) und ein Event-Log das Ereignisse still verwirft. Performance-seitig dominieren Client-Fetch-Wasserfälle (Kundenkarte lädt 7+ Tabs einzeln), unbounded/hardcoded-Tenant-Queries mit prozessweitem Cache ohne Tenant-Key und Fachaggregation in React statt SQL. Externe Aufrufe (Gemini/OCR) haben kein Timeout und blockieren teils synchron; der Cron ist ungeschützt und meldet Fake-Versand. Der positive Kern (getOperationalOrders ohne N+1, zentraler Gemini-Client mit Fallback, IndexedDB-Outbox) ist als Fundament brauchbar, muss aber um Session-Tenant, Timeouts und Konsolidierung ergänzt werden. Zusätzlich verfälscht ein 647-Dateien-Klon in .agents/ die tsc/eslint-Gates."
+ },
+ "security": {
+  "findings": [
+   {
+    "title": "Kein serverseitiger Auth-Proxy aktiv — 15 von 18 API-Routen komplett ungeschützt",
+    "severity": "CRITICAL",
+    "truth": "K",
+    "area": "Middleware / API-Auth",
+    "evidence": "git ls-files findet KEINE aktive middleware.ts/js (nur src/middleware.backup.ts.disabled + src/proxy.ts). src/proxy.ts wird von nichts importiert (grep leer) und sein Matcher schließt '/api' ohnehin aus (Zeile 77: '/((?!api|...).*)'). Route-Scan über alle 18 src/app/api/**/route.ts: nur scan-upload.ts (Z.16 resolveAuthorization), scan-status/[id]/route.ts (Z.9) und ocr-process/route.ts (Z.81, weich) prüfen Auth. Die übrigen 15 (users, today/*, email/send, payments/mollie/create, morning-message, cron/send-feedback, customer-search, customer-enrich, freetext/inquiry/notes-extract, item-photo-upload) rufen keinerlei checkAppAuth/resolveAuthorization/readAppSession auf.",
+    "impact": "Es existiert KEINE zweite Verteidigungslinie. Jede ungeschützte Route ist für unauthentifizierte Anfragen erreichbar. Der gesamte Zugriffsschutz hängt daran, dass jede einzelne Route/Action selbst prüft — was 15 Routen nicht tun.",
+    "fix": "Aktive src/middleware.ts wiederherstellen und den Matcher so ändern, dass /api mit erfasst wird (Ausnahme nur für explizite public-Routen wie Login/Webhook). Zusätzlich in jeder API-Route am Anfang resolveAuthorization()/checkAppAuth() aufrufen (defense in depth). middleware.backup.ts.disabled darf nicht der Dauerzustand sein.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\proxy.ts",
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\middleware.backup.ts.disabled"
+    ]
+   },
+   {
+    "title": "customer-search liefert echte Kundendaten ohne Auth und ohne Tenant-Filter",
+    "severity": "CRITICAL",
+    "truth": "K",
+    "area": "API / Datenabfluss",
+    "evidence": "src/app/api/erfassung/customer-search/route.ts Z.6-40: GET liest ?q= und führt direkt eine DB-Query auf 'customers' (id, name, companyName, customerNumber, city, ordersCount) aus. Keine Auth-Prüfung, kein eq(customers.tenantId, ...)-Filter im WHERE (Z.26-35 filtert nur name/source/'Capture%').",
+    "impact": "Jeder Anonyme kann durch Raten von 2+-Zeichen-Präfixen die komplette Kundenkartei (Namen, Firmen, Kundennummern, Orte, Auftragszahl) exfiltrieren. DSGVO-relevanter Datenabfluss personenbezogener Daten.",
+    "fix": "Am Anfang der Route resolveAuthorization() aufrufen und bei !ok 401 zurückgeben; WHERE um and(eq(customers.tenantId, auth.data.tenantId), ...) ergänzen.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\app\\api\\erfassung\\customer-search\\route.ts"
+    ]
+   },
+   {
+    "title": "item-photo-upload: Service-Role-Key ohne Auth, Tenant aus Client-Input, öffentliche URL",
+    "severity": "CRITICAL",
+    "truth": "K",
+    "area": "API / Storage / Service-Role",
+    "evidence": "src/app/api/erfassung/item-photo-upload/route.ts Z.4-6: createClient mit SUPABASE_SERVICE_ROLE_KEY (umgeht RLS). Z.9 POST ohne jede Auth-Prüfung. Z.13: tenantId = formData.get('tenantId') || 'galvanik-kreile' — Tenant kommt ungeprüft vom Client (Spoofing). Z.23-25 upload in Bucket 'item-photos'. Z.32 getPublicUrl -> URL wird an Client zurückgegeben. Z.41 gibt Service-Role-Key als Bearer an Edge Function weiter.",
+    "impact": "Jeder Anonyme kann Dateien in beliebige tenant-Ordner hochladen, öffentliche URLs erhalten und die kostenpflichtige item-photo-analyze-Edge-Function (Gemini) auf Betreiberkosten auslösen. Speicher-/Kosten-/Integritätsmissbrauch.",
+    "fix": "resolveAuthorization() erzwingen; tenantId ausschließlich aus auth.data.tenantId ableiten, nie aus FormData; getPublicUrl durch signierte, zeitlich begrenzte URL (createSignedUrl) ersetzen; Bucket privat halten.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\app\\api\\erfassung\\item-photo-upload\\route.ts"
+    ]
+   },
+   {
+    "title": "Offene Service-Role-Proxies für KI-Extraktion (freetext/inquiry/notes/customer-enrich)",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "API / Service-Role / Kostenmissbrauch",
+    "evidence": "src/app/api/erfassung/{freetext-extract,inquiry-extract,notes-extract,customer-enrich}/route.ts jeweils Z.7-13: POST ohne Auth leitet Body an /functions/v1/... weiter und setzt 'Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}' (belegt via grep, je Z.11). Keine checkAppAuth/resolveAuthorization.",
+    "impact": "Unauthentifizierte Dritte können die KI-Extraktions-Edge-Functions unbegrenzt mit Service-Role-Rechten auslösen — Kostenmissbrauch (Gemini) und potenzieller Zugriff auf serverseitige Verarbeitung.",
+    "fix": "In jeder dieser Routen zuerst resolveAuthorization() erzwingen. Rate-Limiting erwägen.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\app\\api\\erfassung\\freetext-extract\\route.ts",
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\app\\api\\erfassung\\inquiry-extract\\route.ts",
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\app\\api\\erfassung\\notes-extract\\route.ts",
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\app\\api\\erfassung\\customer-enrich\\route.ts"
+    ]
+   },
+   {
+    "title": "Offene Proxies email/send und payments/mollie/create ohne Auth",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "API / Missbrauch",
+    "evidence": "src/app/api/email/send/route.ts Z.5-16: POST leitet beliebigen Body an ${SUPABASE_URL}/functions/v1/email-send weiter, keine Auth. src/app/api/payments/mollie/create/route.ts Z.5-16: analog an /functions/v1/mollie-create-payment, keine Auth.",
+    "impact": "email/send = potenzielles Open-Relay (Versand beliebiger Mails über die Edge Function). payments/mollie/create = unautorisiertes Anlegen von Zahlungen. Missbrauch und Reputations-/Kostenrisiko.",
+    "fix": "Auth erzwingen; für email/send zusätzlich Empfänger/Template serverseitig gegen erlaubte Werte validieren. Für Mollie: nur autorisierte Rollen und Bindung an existierende Aufträge.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\app\\api\\email\\send\\route.ts",
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\app\\api\\payments\\mollie\\create\\route.ts"
+    ]
+   },
+   {
+    "title": "PIN wird als Klartext gespeichert und verglichen (Spalte pin_hash trügt)",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "Auth / Credential-Speicherung",
+    "evidence": "src/db/schema.ts Z.16 pinHash: text('pin_hash'). src/db/seed.ts Z.54/63/72 pinHash: '1234' (Klartext). src/app/actions/auth.actions.ts Z.61: 'user.pinHash !== pin' — Klartextvergleich. UserManagement.tsx Z.67 createUser({... pinHash: newPin}) und Z.101 updateUserPin(id, newPin) schreiben Klartext. grep nach bcrypt/argon2/scrypt/pbkdf2 über gesamten src: 0 Treffer.",
+    "impact": "Bei DB-Kompromittierung/Backup-Leak liegen alle 4-stelligen PINs im Klartext vor. Zusätzlich nicht-konstantzeitlicher Vergleich (kleiner Timing-Aspekt). Spaltenname 'pin_hash' suggeriert fälschlich Hashing.",
+    "fix": "PIN mit bcrypt/argon2 hashen (mit Salt), beim Login bcrypt.compare / timingSafeEqual verwenden. Seed und UserManagement auf gehashte Speicherung umstellen. Bestehende Klartext-PINs migrieren/neu setzen.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\app\\actions\\auth.actions.ts",
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\db\\seed.ts",
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\components\\admin\\UserManagement.tsx"
+    ]
+   },
+   {
+    "title": "App verbindet als postgres-Superuser (BYPASSRLS) — RLS-Policies für App-Pfad wirkungslos",
+    "severity": "HIGH",
+    "truth": "K",
+    "area": "RLS / Tenant-Isolation",
+    "evidence": "src/db/index.ts Z.19: postgres(connectionString) mit DATABASE_URL. .env.local Z.6: postgresql://postgres.syhaigjhsbpjmtnggqka:Kreiledata2026@...pooler...:5432/postgres — Verbindung als postgres-Owner/Superuser. grep über src nach set_config/SET LOCAL/app.tenant_id: 0 relevante Treffer (nur ein unrelated Kommentar). D.h. current_setting('app.tenant_id') bleibt leer.",
+    "impact": "Alle Drizzle-Queries, Server Actions und API-Routen laufen mit RLS-Bypass. Die zahlreichen tenant_isolation-Policies (0012_harden_rls u.a., abhängig von current_setting('app.tenant_id')) greifen für den App-Pfad NICHT. Tenant-Isolation existiert nur als manuelle eq(tenantId)-Filter im TS-Code. Aktuell 1 Tenant, daher kein aktiver Cross-Tenant-Leak, aber keine DB-erzwungene Grenze — genau 'Isolation nur auf dem Papier'.",
+    "fix": "App über einen dedizierten Nicht-Superuser-Rollennutzer (ohne BYPASSRLS) verbinden ODER pro Transaktion SET LOCAL app.tenant_id im selben garantierten Transaktionsblock setzen (Contract-Regel 7). Solange Superuser genutzt wird, MÜSSEN alle Queries expliziten tenantId-Filter tragen — als Pflicht-Review-Kriterium jeder Slice-Mission.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\db\\index.ts",
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\supabase\\migrations\\0012_harden_rls.sql"
+    ]
+   },
+   {
+    "title": "Liegender Client-Auth-Bypass in toter PinDialog.tsx (hardcoded PIN 1234)",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "Auth / toter Code",
+    "evidence": "src/components/start/PinDialog.tsx Z.24-31: bei Eingabe newPin==='1234' direkt router.push('/') — kein Serverabruf, reiner Client-Bypass. grep nach Importen von 'start/PinDialog' / from '...PinDialog': 0 Treffer (toter Code). Der AKTIVE Flow ist die interne PinDialog-Funktion in StartScreenClient.tsx Z.121/137, die serverseitig loginWithPin aufruft — korrekt.",
+    "impact": "Aktuell nicht erreichbar (nicht importiert), aber ein Copy-Paste/Reaktivierung würde einen vollständigen clientseitigen Auth-Bypass einführen. Zeugt vom 'beschädigten Auth-Clone-Versuch'.",
+    "fix": "Datei src/components/start/PinDialog.tsx löschen (toter Bypass-Klon). Sicherstellen, dass nur der serverseitige Flow existiert.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\components\\start\\PinDialog.tsx"
+    ]
+   },
+   {
+    "title": "ocr-process: weiche Auth (Fallback auf ersten DB-User außerhalb Produktion), kein Tenant-Filter",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "API / Auth",
+    "evidence": "src/app/api/ocr-process/route.ts Z.81-96: readAppSession(); wenn nicht ok UND NODE_ENV!=='production' wird der erste appUsers-Datensatz genommen (Z.86-89) und der Beleg trotzdem angelegt. Z.25 baut imageUrl als '.../storage/v1/object/public/belege/...' (öffentlicher Pfad). Beleg-Insert (Z.99-118) ohne tenantId-Bindung.",
+    "impact": "In Nicht-Prod-Umgebungen (inkl. Preview-Deployments) können Belege ohne gültige Session angelegt werden, zugeordnet einem beliebigen User. Belege werden über öffentlichen Storage-Pfad referenziert.",
+    "fix": "Auch außerhalb Produktion bei fehlender Session 401 zurückgeben (keinen Ersatz-User). tenantId aus Session ableiten und in beleg schreiben/filtern. Belege aus privatem Bucket per signierter URL laden.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\app\\api\\ocr-process\\route.ts"
+    ]
+   },
+   {
+    "title": "Storage-Buckets privat angelegt, aber Code nutzt getPublicUrl — kein tenant-geprüfter Download",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "Storage",
+    "evidence": "supabase/migrations/20260611114327_create_storage_buckets.sql Z.1-2: buckets 'scans' und 'item-photos' mit public=false. Aber scan-upload/route.ts Z.41 und item-photo-upload/route.ts Z.32 rufen getPublicUrl() und geben die URL zurück; ocr-process Z.25 referenziert public/belege/. Grep über alle Migrationen nach storage.objects/Storage-Policies: 0 Treffer (nur Bucket-Anlage, keine Policies). Bucket 'belege' fehlt in den Migrationen völlig.",
+    "impact": "Funktionale Diskrepanz: entweder wurden Buckets später manuell public gestellt (dann sind Fotos/Belege öffentlich abrufbar = Datenabfluss), oder die public-URLs sind tot (dann Datenabruf kaputt = Teil des 'Vernetzung funktioniert nicht'-Problems). Es gibt keinen serverseitigen, rollen-/tenant-geprüften Download-Endpunkt.",
+    "fix": "Buckets privat lassen, createSignedUrl (kurzlebig) statt getPublicUrl verwenden. Storage-RLS-Policies pro Bucket mit tenant-Ordnerprüfung ergänzen. Download ausschließlich über authentifizierten Server-Endpunkt mit Rollen-/Tenantprüfung. Fehlenden 'belege'-Bucket als Migration nachziehen.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\supabase\\migrations\\20260611114327_create_storage_buckets.sql",
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\app\\api\\erfassung\\scan-upload\\route.ts"
+    ]
+   },
+   {
+    "title": "cron/send-feedback: ungeschützter Endpunkt mit Schreibzugriff, Versand ist Mock",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "API / Datenintegrität",
+    "evidence": "src/app/api/cron/send-feedback/route.ts Z.8 Kommentar 'Verifying token for cron... skipping for demo'. GET ohne Auth. Z.22-23: 'Mock: Send Email' (console.log statt Versand). Z.26-28: db.update setzt feedbackMail.status auf 'gesendet'.",
+    "impact": "Jeder Anonyme kann den Cron auslösen und den Mail-Status auf 'gesendet' setzen, ohne dass Mails rausgehen — Datensätze werden fälschlich als versendet markiert (Datenintegrität) und Feedback-Mails gehen real nie raus.",
+    "fix": "Cron-Secret (CRON_SECRET Header / Vercel-Cron-Signatur) prüfen und bei Fehlschlag 401. Mock-Versand durch echten Versand ersetzen, bevor Status auf 'gesendet' gesetzt wird.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\app\\api\\cron\\send-feedback\\route.ts"
+    ]
+   },
+   {
+    "title": "Mehrere .env-Dateien mit Live-Prod-Secrets liegen unverschlüsselt im Arbeitsverzeichnis",
+    "severity": "MEDIUM",
+    "truth": "K",
+    "area": "Secrets",
+    "evidence": ".env.local enthält im Klartext: SUPABASE_SERVICE_ROLE_KEY, DATABASE_URL mit Passwort 'Kreiledata2026', GEMINI_API_KEY, KLIPPA_API_KEY, NEXT_PUBLIC_GOOGLE_PLACES_API_KEY, APP_SESSION_SECRET. Zusätzlich .env, .env.admin, .env.admin.prod, .env.vercel.production auf Disk (ls). .gitignore Z.34 '.env*' schließt sie aus; git ls-files + git log --all zeigen: KEINE .env je committet; git grep nach den Secret-Werten: 0 Treffer in getrackten Dateien. .env.admin.prod enthält lokal ebenfalls SERVICE_ROLE_KEY + GEMINI.",
+    "impact": "Positiv: keine Secrets im Git. Risiko liegt lokal: Prod-Service-Role-Key + DB-Passwort liegen mehrfach im Klartext im Projektordner (Backup-/Sync-/Malware-Exfiltrationsrisiko). Service-Role-Key + Superuser-DB-Passwort sind Vollzugriff auf die Datenbank.",
+    "fix": "Zahl der .env-Varianten reduzieren; Prod-Secrets nur im Vercel-Secret-Store halten, nicht als .env.*.prod auf der Entwickler-Disk. Angesichts der Klartext-Streuung: SERVICE_ROLE_KEY, DB-Passwort und APP_SESSION_SECRET rotieren, sobald das Fundament stabil ist.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\.env.local"
+    ]
+   },
+   {
+    "title": "getUsers ohne Tenant-Filter (aktuell nur 1 Tenant)",
+    "severity": "LOW",
+    "truth": "K",
+    "area": "Admin / Tenant",
+    "evidence": "src/app/actions/admin.actions.ts Z.28-41: getUsers() ruft requireAdminOrDeveloper() (guard vorhanden), selektiert dann alle appUsers ohne where(eq(appUsers.tenantId, ...)).",
+    "impact": "Bei künftiger Mandantenfähigkeit würde ein Admin eines Tenants alle User aller Tenants sehen. Aktuell nur 1 Tenant, daher kein aktiver Leak.",
+    "fix": "where(eq(appUsers.tenantId, <sessionTenant>)) ergänzen, sobald Multi-Tenant relevant wird — konsistent zur Contract-Regel 16.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\app\\actions\\admin.actions.ts"
+    ]
+   },
+   {
+    "title": "bypass-auth-Cookie im Proxy erlaubt Auth-Umgehung (nur falls Proxy reaktiviert)",
+    "severity": "LOW",
+    "truth": "K",
+    "area": "Middleware / Auth",
+    "evidence": "src/proxy.ts Z.44-47: if cookies.get('bypass-auth')==='true' return supabaseResponse (überspringt gesamte Session-/Redirect-Prüfung). Kommentar nennt 'local development / E2E'. proxy.ts ist aktuell nicht aktiv (kein Import), daher nicht scharf.",
+    "impact": "Falls proxy.ts wieder als Middleware verdrahtet wird, genügt ein manuell gesetztes Cookie 'bypass-auth=true', um die Seiten-Auth zu umgehen. Der Bypass wirkt ohnehin nur auf Seiten, nicht auf API (Matcher schließt api aus).",
+    "fix": "Bypass an eine strikte Umgebungsbedingung koppeln (nur wenn NODE_ENV!=='production' UND ein serverseitiges E2E-Secret matcht), niemals allein cookie-gesteuert. Vor Live-Gang entfernen.",
+    "files": [
+     "C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\02_app\\src\\proxy.ts"
+    ]
+   }
+  ],
+  "summary": "Die Auth-Bausteine selbst sind sauber: HMAC-signierte App-Session (appSession.ts), eine korrekte serverseitige Guard-Kette (resolveAuthorization/checkAppAuth) und die zuletzt gefixten Punkte stimmen — der PIN-Hash ist nicht mehr im Client-Payload (StartUser enthält nur id/fullName/role/initials) und der aktive PIN-Flow läuft serverseitig über loginWithPin. Der Guard wird jedoch NICHT zentral erzwungen: Es gibt keine aktive middleware.ts (nur eine .disabled-Datei und ein von nichts importiertes proxy.ts, das /api ohnehin ausschließt), sodass 15 von 18 API-Routen unauthentifiziert erreichbar sind — darunter customer-search (echte Kundendaten ohne Auth und ohne Tenant-Filter), item-photo-upload (Service-Role, Tenant aus Client-Input) und offene Service-Role-/Zahlungs-/Mail-Proxies. Die PIN wird trotz Spaltenname pin_hash im Klartext gespeichert und verglichen (kein bcrypt/argon irgendwo). Die Tenant-Isolation ist nur auf dem Papier: Die App verbindet als postgres-Superuser (BYPASSRLS) und setzt nirgends app.tenant_id, weshalb die RLS-Policies für den App-Pfad wirkungslos sind und Isolation allein an manuellen tenantId-Filtern hängt. Secrets sind nicht im Git (git grep leer, nie committet), liegen aber mehrfach im Klartext lokal; alle sensiblen Keys werden serverseitig genutzt. VETO gegen jeden Live-/Slice-Freigabe-Schritt, bis mindestens die vier CRITICAL/HIGH-Blocker (offene API-Routen, customer-search-Leak, item-photo-upload, Klartext-PIN) und die RLS-Superuser-Frage adressiert sind.</summary>\n<reuse_note\">Wiederverwendbar und solide: src/lib/server/appSession.ts (Session-Signatur/Verifikation), src/lib/server/authorization.ts + authHelper.ts + roles.ts + permissions.ts (Guard-Kette) und src/lib/auth/authorizationContract.ts (Rollen/Permissions) sind gut strukturiert — darauf lässt sich aufbauen. admin.actions.ts nutzt die Guards konsequent. NICHT wiederverwendbar / zu ersetzen: die 15 ungeschützten API-Routen (brauchen alle einen Guard), src/components/start/PinDialog.tsx (toter Client-Bypass, löschen), die Klartext-PIN-Speicherung (seed.ts/UserManagement/loginWithPin), die getPublicUrl-Storage-Logik und das Superuser-DB-Connection-Modell ohne SET LOCAL/dedizierten RLS-User. Die RLS-Migrationen existieren, sind aber am App-Pfad wirkungslos, solange als Superuser verbunden wird."
+ }
+}
