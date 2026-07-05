@@ -53,6 +53,7 @@ let GET: (
   context: { params: Promise<{ id: string }> },
 ) => Promise<Response>;
 let freetextPOST: (request: Request) => Promise<Response>;
+let notesExtractPOST: (request: Request) => Promise<Response>;
 
 const authorized = (tenantId = "session-tenant") => ({
   ok: true as const,
@@ -314,6 +315,99 @@ describe("freetext extract route auth", () => {
 
     const response = await freetextPOST({
       json: vi.fn().mockResolvedValue({ text: "Valider Text" }),
+    } as unknown as Request);
+
+    expect(response.status).toBe(422);
+    await expect(response.json()).resolves.toEqual({
+      error: "Verarbeitung fehlgeschlagen",
+    });
+  });
+});
+
+describe("notes extract route auth", () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    vi.stubGlobal("fetch", mocks.fetch);
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://supabase.example";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
+
+    mocks.resolveAuthorization.mockResolvedValue(authorized());
+    mocks.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ extracted: "ok" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    ({ POST: notesExtractPOST } = await import("../notes-extract/route"));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects unauthenticated notes extraction before JSON parsing", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(unauthorized);
+    const json = vi.fn();
+
+    const response = await notesExtractPOST({ json } as unknown as Request);
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Sitzung abgelaufen oder nicht angemeldet",
+    });
+    expect(json).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid notes payloads before forwarding", async () => {
+    const response = await notesExtractPOST({
+      json: vi.fn().mockResolvedValue({ notes: " x ", extra: true }),
+    } as unknown as Request);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Ungültige Anfrage",
+    });
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it("forwards only trimmed notes plus the session tenant", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(authorized("tenant-notes"));
+
+    const response = await notesExtractPOST({
+      json: vi.fn().mockResolvedValue({ notes: "  Wichtige Notiz  " }),
+    } as unknown as Request);
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ extracted: "ok" });
+    expect(mocks.fetch).toHaveBeenCalledWith(
+      "https://supabase.example/functions/v1/notes-extract",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer service-role-key",
+        },
+        body: JSON.stringify({
+          notes: "Wichtige Notiz",
+          tenantId: "tenant-notes",
+        }),
+      },
+    );
+  });
+
+  it("preserves the edge status while hiding edge failure details", async () => {
+    mocks.fetch.mockResolvedValue(
+      new Response(JSON.stringify({ error: "debug details" }), {
+        status: 422,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const response = await notesExtractPOST({
+      json: vi.fn().mockResolvedValue({ notes: "Valide Notiz" }),
     } as unknown as Request);
 
     expect(response.status).toBe(422);
