@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Users, Plus, Shield, Mail, XCircle, Loader2 } from "lucide-react";
 import { getUsers, createUser, toggleUserStatus, updateUserRole, updateUserPin } from "@/app/actions/admin.actions";
+import { canUsePinLoginRole, isAppRole } from "@/lib/auth/authorizationContract";
 
 type AppUser = {
   id: string;
@@ -18,6 +19,8 @@ type AppUser = {
   language: string | null;
 };
 
+const roleSupportsPin = (role: string) => isAppRole(role) && canUsePinLoginRole(role);
+
 export function UserManagement() {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -27,10 +30,11 @@ export function UserManagement() {
   const [showCreate, setShowCreate] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [newName, setNewName] = useState("");
-  const [newPin, setNewPin] = useState("1234");
+  const [newPin, setNewPin] = useState("");
   const [newRole, setNewRole] = useState("werkstatt");
   const [isCreating, setIsCreating] = useState(false);
   const [pinDrafts, setPinDrafts] = useState<Record<string, string>>({});
+  const newRoleSupportsPin = roleSupportsPin(newRole);
 
   const fetchUsers = async () => {
     try {
@@ -64,11 +68,16 @@ export function UserManagement() {
     setIsCreating(true);
     setError(null);
     try {
-      await createUser({ email: newEmail, fullName: newName, role: newRole, pinHash: newPin });
+      await createUser({
+        email: newEmail,
+        fullName: newName,
+        role: newRole,
+        ...(newRoleSupportsPin ? { pinHash: newPin } : {}),
+      });
       setShowCreate(false);
       setNewEmail("");
       setNewName("");
-      setNewPin("1234");
+      setNewPin("");
       await fetchUsers();
     } catch (err) {
       setError(String(err));
@@ -149,7 +158,13 @@ export function UserManagement() {
                 <select 
                   className="flex h-10 w-full rounded-md border border-neutral-gray-200 bg-white px-3 py-2 text-sm text-navy-900 outline-none focus:border-navy-900"
                   value={newRole}
-                  onChange={e => setNewRole(e.target.value)}
+                  onChange={e => {
+                    const nextRole = e.target.value;
+                    setNewRole(nextRole);
+                    if (!roleSupportsPin(nextRole)) {
+                      setNewPin("");
+                    }
+                  }}
                 >
                   <option value="developer">Developer (Voller Zugriff)</option>
                   <option value="admin">Admin (Alle Daten)</option>
@@ -161,10 +176,16 @@ export function UserManagement() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-navy-700">Tablet-PIN (4 Ziffern)</label>
-                <Input value={newPin} onChange={e => setNewPin(e.target.value)} maxLength={4} placeholder="1234" />
+                <Input
+                  value={newPin}
+                  onChange={e => setNewPin(e.target.value)}
+                  maxLength={4}
+                  placeholder={newRoleSupportsPin ? "4-stellige PIN" : "Nicht erforderlich"}
+                  disabled={!newRoleSupportsPin}
+                />
               </div>
             </div>
-            <Button onClick={handleCreateUser} disabled={isCreating || !newEmail || !newName || newPin.length !== 4} className="w-full md:w-auto">
+            <Button onClick={handleCreateUser} disabled={isCreating || !newEmail || !newName || (newRoleSupportsPin && newPin.length !== 4)} className="w-full md:w-auto">
               {isCreating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
               Benutzer anlegen
             </Button>
@@ -207,24 +228,26 @@ export function UserManagement() {
                   </select>
                 </div>
                 
-                <div className="flex items-center gap-1 border border-neutral-gray-200 rounded-lg bg-white px-2 py-1">
-                  <span className="text-[10px] text-text-muted font-bold">PIN:</span>
-                  <Input 
-                    type="password"
-                    value={pinDrafts[user.id] ?? ""}
-                    maxLength={4}
-                    className="w-12 h-6 text-xs text-center p-0 bg-transparent border-none focus-visible:ring-0"
-                    onChange={(e) => {
-                      setPinDrafts((current) => ({ ...current, [user.id]: e.target.value }));
-                    }}
-                    onBlur={(e) => {
-                      if (e.target.value.length === 4) {
-                        handlePinChange(user.id, e.target.value);
-                      }
-                    }}
-                    disabled={!user.active}
-                  />
-                </div>
+                {roleSupportsPin(user.role) && (
+                  <div className="flex items-center gap-1 border border-neutral-gray-200 rounded-lg bg-white px-2 py-1">
+                    <span className="text-[10px] text-text-muted font-bold">PIN:</span>
+                    <Input 
+                      type="password"
+                      value={pinDrafts[user.id] ?? ""}
+                      maxLength={4}
+                      className="w-12 h-6 text-xs text-center p-0 bg-transparent border-none focus-visible:ring-0"
+                      onChange={(e) => {
+                        setPinDrafts((current) => ({ ...current, [user.id]: e.target.value }));
+                      }}
+                      onBlur={(e) => {
+                        if (e.target.value.length === 4) {
+                          handlePinChange(user.id, e.target.value);
+                        }
+                      }}
+                      disabled={!user.active}
+                    />
+                  </div>
+                )}
                 
                 <Button 
                   variant={user.active ? "outline" : "default"} 

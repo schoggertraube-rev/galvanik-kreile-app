@@ -5,6 +5,7 @@ import { appUsers, featureFlags } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 import { createClient } from '@supabase/supabase-js'
 import { requireAdminOrDeveloper } from '@/lib/auth/permissions'
+import { canUsePinLoginRole, isAppRole } from '@/lib/auth/authorizationContract'
 
 // Admin client using Service Role Key (MUST ONLY BE USED IN SERVER ACTIONS)
 const getAdminSupabase = () => {
@@ -44,6 +45,16 @@ export async function getUsers() {
 export async function createUser(data: { email: string, fullName: string, role: string, location?: string, language?: string, pinHash?: string }) {
   await requireAdminOrDeveloper();
   const supabase = getAdminSupabase()
+  if (!isAppRole(data.role)) {
+    throw new Error('Ungültige Rolle.');
+  }
+
+  const canUsePinLogin = canUsePinLoginRole(data.role);
+  if (canUsePinLogin && data.pinHash?.length !== 4) {
+    throw new Error('PIN muss exakt 4 Zeichen haben.');
+  }
+
+  const pinHash = canUsePinLogin ? data.pinHash : null;
   
   // 1. Create user in Supabase Auth
   // We use admin.createUser which also skips email confirmation if desired.
@@ -70,7 +81,7 @@ export async function createUser(data: { email: string, fullName: string, role: 
       role: data.role,
       location: data.location || null,
       language: data.language || 'de',
-      pinHash: data.pinHash || '1234',
+      pinHash,
       active: true,
     })
     return { success: true, userId }
@@ -83,12 +94,41 @@ export async function createUser(data: { email: string, fullName: string, role: 
 
 export async function updateUserRole(userId: string, newRole: string) {
   await requireAdminOrDeveloper();
-  await db.update(appUsers).set({ role: newRole }).where(eq(appUsers.id, userId))
+  if (!isAppRole(newRole)) {
+    throw new Error('Ungültige Rolle.');
+  }
+
+  await db
+    .update(appUsers)
+    .set({
+      role: newRole,
+      pinHash: canUsePinLoginRole(newRole) ? undefined : null,
+    })
+    .where(eq(appUsers.id, userId))
   return { success: true }
 }
 
 export async function updateUserPin(userId: string, newPin: string) {
   await requireAdminOrDeveloper();
+  if (newPin.length !== 4) {
+    throw new Error('PIN muss exakt 4 Zeichen haben.');
+  }
+
+  const [targetUser] = await db
+    .select({
+      role: appUsers.role,
+    })
+    .from(appUsers)
+    .where(eq(appUsers.id, userId))
+
+  if (!targetUser) {
+    throw new Error('Benutzer nicht gefunden.');
+  }
+
+  if (!isAppRole(targetUser.role) || !canUsePinLoginRole(targetUser.role)) {
+    throw new Error('Für diese Rolle ist keine PIN erlaubt.');
+  }
+
   await db.update(appUsers).set({ pinHash: newPin }).where(eq(appUsers.id, userId))
   return { success: true }
 }
