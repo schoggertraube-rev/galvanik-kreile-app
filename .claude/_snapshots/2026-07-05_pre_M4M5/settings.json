@@ -1,36 +1,9 @@
 {
   "agent": "chief-conductor",
-  "permissions": {
-    "deny": [
-      "mcp__53f3d868-21b4-47af-bf7e-526e36004e7e",
-      "mcp__53f3d868-21b4-47af-bf7e-526e36004e7e__apply_migration",
-      "mcp__53f3d868-21b4-47af-bf7e-526e36004e7e__execute_sql",
-      "mcp__53f3d868-21b4-47af-bf7e-526e36004e7e__deploy_edge_function",
-      "mcp__53f3d868-21b4-47af-bf7e-526e36004e7e__create_branch",
-      "mcp__53f3d868-21b4-47af-bf7e-526e36004e7e__delete_branch",
-      "mcp__53f3d868-21b4-47af-bf7e-526e36004e7e__merge_branch",
-      "mcp__53f3d868-21b4-47af-bf7e-526e36004e7e__rebase_branch",
-      "mcp__53f3d868-21b4-47af-bf7e-526e36004e7e__reset_branch",
-      "mcp__53f3d868-21b4-47af-bf7e-526e36004e7e__create_project",
-      "mcp__53f3d868-21b4-47af-bf7e-526e36004e7e__pause_project",
-      "mcp__53f3d868-21b4-47af-bf7e-526e36004e7e__restore_project",
-      "mcp__5a0f89bc-0951-446f-b7f2-9d1b2cfd4ac2__deploy_to_vercel",
-      "Bash(git push)",
-      "Bash(git push:*)",
-      "PowerShell(git push)",
-      "PowerShell(git push:*)",
-      "Read(.env*)",
-      "Read(./.env*)",
-      "Edit(.env*)",
-      "Edit(./.env*)",
-      "Write(.env*)",
-      "Write(./.env*)"
-    ]
-  },
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "*",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
