@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { resolveAuthorization } from "@/lib/server/authorization";
 
@@ -46,7 +47,7 @@ export async function POST(request: Request) {
         : `temp_${Date.now()}`;
     const file = fileValue;
     const fileExt = file.name.split(".").pop() || "bin";
-    const fileName = `${tenantId}/${itemId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const fileName = `${tenantId}/${itemId}/${randomUUID()}.${fileExt}`;
 
     const { error: uploadError } = await supabase.storage
       .from("item-photos")

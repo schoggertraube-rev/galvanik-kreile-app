@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   resolveAuthorization: vi.fn(),
   createClient: vi.fn(),
+  randomUUID: vi.fn(),
   fetch: vi.fn(),
   storageFrom: vi.fn(),
   storageUpload: vi.fn(),
@@ -15,16 +16,34 @@ const mocks = vi.hoisted(() => ({
   updateWhere: vi.fn(),
   select: vi.fn(),
   selectFrom: vi.fn(),
+  selectLeftJoin: vi.fn(),
   selectWhere: vi.fn(),
+  selectGroupBy: vi.fn(),
   selectLimit: vi.fn(),
   extractDocumentData: vi.fn(),
   eq: vi.fn((column, value) => ({ op: "eq", column, value })),
   and: vi.fn((...conditions) => ({ op: "and", conditions })),
+  or: vi.fn((...conditions) => ({ op: "or", conditions })),
+  ilike: vi.fn((column, value) => ({ op: "ilike", column, value })),
+  sql: vi.fn((strings, ...values) => ({
+    op: "sql",
+    strings: Array.from(strings),
+    values,
+  })),
 }));
 
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: mocks.resolveAuthorization,
 }));
+
+vi.mock("node:crypto", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:crypto")>();
+  return {
+    ...actual,
+    default: actual,
+    randomUUID: mocks.randomUUID,
+  };
+});
 
 vi.mock("@supabase/supabase-js", () => ({
   createClient: mocks.createClient,
@@ -45,6 +64,9 @@ vi.mock("@/lib/ocr/geminiOcr", () => ({
 vi.mock("drizzle-orm", () => ({
   eq: mocks.eq,
   and: mocks.and,
+  or: mocks.or,
+  ilike: mocks.ilike,
+  sql: mocks.sql,
 }));
 
 let POST: (request: Request) => Promise<Response>;
@@ -52,6 +74,7 @@ let GET: (
   request: Request,
   context: { params: Promise<{ id: string }> },
 ) => Promise<Response>;
+let customerSearchGET: (request: Request) => Promise<Response>;
 let freetextPOST: (request: Request) => Promise<Response>;
 let notesExtractPOST: (request: Request) => Promise<Response>;
 let inquiryExtractPOST: (request: Request) => Promise<Response>;
@@ -126,6 +149,7 @@ describe("scan capture route auth", () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
 
     mocks.resolveAuthorization.mockResolvedValue(authorized());
+    mocks.randomUUID.mockReturnValue("uuid-1234");
     mocks.createClient.mockReturnValue({
       storage: {
         from: mocks.storageFrom,
@@ -149,8 +173,16 @@ describe("scan capture route auth", () => {
     mocks.updateSet.mockReturnValue({ where: mocks.updateWhere });
     mocks.updateWhere.mockResolvedValue(undefined);
     mocks.select.mockReturnValue({ from: mocks.selectFrom });
-    mocks.selectFrom.mockReturnValue({ where: mocks.selectWhere });
-    mocks.selectWhere.mockReturnValue({ limit: mocks.selectLimit });
+    mocks.selectFrom.mockReturnValue({
+      where: mocks.selectWhere,
+      leftJoin: mocks.selectLeftJoin,
+    });
+    mocks.selectLeftJoin.mockReturnValue({ where: mocks.selectWhere });
+    mocks.selectWhere.mockReturnValue({
+      limit: mocks.selectLimit,
+      groupBy: mocks.selectGroupBy,
+    });
+    mocks.selectGroupBy.mockReturnValue({ limit: mocks.selectLimit });
     mocks.selectLimit.mockResolvedValue([]);
     mocks.extractDocumentData.mockResolvedValue({ customerName: "Kreile" });
 
@@ -312,6 +344,7 @@ describe("item photo upload route auth", () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
 
     mocks.resolveAuthorization.mockResolvedValue(authorized());
+    mocks.randomUUID.mockReturnValue("item-photo-uuid");
     mocks.createClient.mockReturnValue({
       storage: {
         from: mocks.storageFrom,
@@ -410,6 +443,23 @@ describe("item photo upload route auth", () => {
     );
   });
 
+  it("uses randomUUID for the filename and never calls Math.random", async () => {
+    const mathRandomSpy = vi.spyOn(Math, "random");
+
+    const response = await itemPhotoPOST(
+      makeItemUploadRequest(makeFile(), {
+        itemId: "item-123",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(mathRandomSpy).not.toHaveBeenCalled();
+    expect(mocks.storageUpload).toHaveBeenCalledTimes(1);
+    expect(mocks.storageUpload.mock.calls[0][0]).toMatch(
+      /^session-tenant\/item-123\/[0-9a-f-]{36}\.pdf$/i,
+    );
+  });
+
   it("returns a generic error when storage rejects the upload", async () => {
     mocks.storageUpload.mockResolvedValue({
       data: null,
@@ -432,6 +482,110 @@ describe("item photo upload route auth", () => {
       error: "Failed to upload item photo",
     });
     expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("customer search route auth", () => {
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+
+    mocks.resolveAuthorization.mockResolvedValue(authorized());
+    mocks.select.mockReturnValue({ from: mocks.selectFrom });
+    mocks.selectFrom.mockReturnValue({
+      where: mocks.selectWhere,
+      leftJoin: mocks.selectLeftJoin,
+    });
+    mocks.selectLeftJoin.mockReturnValue({ where: mocks.selectWhere });
+    mocks.selectWhere.mockReturnValue({
+      limit: mocks.selectLimit,
+      groupBy: mocks.selectGroupBy,
+    });
+    mocks.selectGroupBy.mockReturnValue({ limit: mocks.selectLimit });
+    mocks.selectLimit.mockResolvedValue([]);
+
+    ({ GET: customerSearchGET } = await import("../customer-search/route"));
+  });
+
+  it("returns 401 for unauthenticated search and skips the DB query", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(unauthorized);
+
+    const response = await customerSearchGET(
+      new Request("http://localhost/api/erfassung/customer-search?q=kre"),
+    );
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Sitzung abgelaufen oder nicht angemeldet",
+    });
+    expect(mocks.select).not.toHaveBeenCalled();
+  });
+
+  it("uses only the authorized tenant and ignores forged client tenant params", async () => {
+    mocks.resolveAuthorization.mockResolvedValue(authorized("tenant-search"));
+    mocks.selectLimit.mockResolvedValue([
+      {
+        id: "customer-1",
+        name: "Kreile",
+        companyName: "Kreile GmbH",
+        customerNumber: "K-100",
+        city: "Fulda",
+        ordersCount: 2,
+      },
+    ]);
+
+    const response = await customerSearchGET(
+      new Request(
+        "http://localhost/api/erfassung/customer-search?q=Kre&tenantId=forged-tenant",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual([
+      {
+        id: "customer-1",
+        name: "Kreile",
+        companyName: "Kreile GmbH",
+        customerNumber: "K-100",
+        city: "Fulda",
+        ordersCount: 2,
+      },
+    ]);
+    expect(mocks.selectWhere).toHaveBeenCalledWith({
+      op: "and",
+      conditions: expect.arrayContaining([
+        expect.objectContaining({ op: "eq", value: "tenant-search" }),
+        expect.objectContaining({ op: "or" }),
+      ]),
+    });
+    expect(mocks.selectLeftJoin).toHaveBeenCalledWith(
+      expect.anything(),
+      {
+        op: "and",
+        conditions: expect.arrayContaining([
+          expect.objectContaining({ op: "eq", value: "tenant-search" }),
+        ]),
+      },
+    );
+  });
+
+  it("hides database error details from the client", async () => {
+    mocks.selectLimit.mockRejectedValueOnce({
+      message: "db exploded",
+      details: "raw provider detail",
+      hint: "do not leak",
+    });
+
+    const response = await customerSearchGET(
+      new Request("http://localhost/api/erfassung/customer-search?q=Kre"),
+    );
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toEqual({ error: "Internal Server Error" });
+    expect(JSON.stringify(body)).not.toContain("db exploded");
+    expect(JSON.stringify(body)).not.toContain("raw provider detail");
+    expect(JSON.stringify(body)).not.toContain("do not leak");
   });
 });
 
