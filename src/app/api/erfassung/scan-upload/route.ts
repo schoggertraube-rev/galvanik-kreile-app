@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { db } from "@/db";
 import { scanUploads } from "@/db/schema";
@@ -6,18 +7,15 @@ import { and, eq } from "drizzle-orm";
 import { extractDocumentData } from "@/lib/ocr/geminiOcr";
 import { resolveAuthorization } from "@/lib/server/authorization";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 export async function POST(request: Request) {
   try {
+    // 1. Auth vor request.formData()
     const auth = await resolveAuthorization();
     if (!auth.ok) {
       return NextResponse.json({ error: "Sitzung abgelaufen oder nicht angemeldet" }, { status: 401 });
     }
 
+    // Tenant ausschließlich aus der Session — client-seitige Felder werden ignoriert
     const tenantId = auth.data.tenantId;
     const formData = await request.formData();
     const file = formData.get("file") as File;
@@ -26,15 +24,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${tenantId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    // 2. Service-Role-Client erst nach Auth und gültiger Datei
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${tenantId}/${randomUUID()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
       .from("scans")
       .upload(fileName, file, { contentType: file.type });
 
     if (uploadError) {
-      console.error("Storage upload error:", uploadError);
+      // Storage-/Provider-Rohfehler nicht an Client leaken
+      console.error("Storage upload error:", uploadError.message, uploadError.statusCode, uploadError.status);
       return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });
     }
 

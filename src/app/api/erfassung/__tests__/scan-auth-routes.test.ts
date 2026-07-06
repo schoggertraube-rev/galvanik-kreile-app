@@ -122,6 +122,8 @@ describe("scan capture route auth", () => {
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
+    process.env.NEXT_PUBLIC_SUPABASE_URL = "https://supabase.example";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "service-role-key";
 
     mocks.resolveAuthorization.mockResolvedValue(authorized());
     mocks.createClient.mockReturnValue({
@@ -167,9 +169,44 @@ describe("scan capture route auth", () => {
       error: "Sitzung abgelaufen oder nicht angemeldet",
     });
     expect(formData).not.toHaveBeenCalled();
+    expect(mocks.createClient).not.toHaveBeenCalled();
     expect(mocks.storageUpload).not.toHaveBeenCalled();
     expect(mocks.insert).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("rejects missing file before storage or service-role client setup", async () => {
+    const formData = new FormData(); // kein file-Feld
+    const response = await POST({
+      formData: vi.fn().mockResolvedValue(formData),
+    } as unknown as Request);
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "No file provided" });
+    expect(mocks.createClient).not.toHaveBeenCalled();
+    expect(mocks.storageUpload).not.toHaveBeenCalled();
+    expect(mocks.insert).not.toHaveBeenCalled();
+  });
+
+  it("returns generic error when storage rejects the upload", async () => {
+    mocks.storageUpload.mockResolvedValue({
+      data: null,
+      error: {
+        message: "bucket missing",
+        details: "raw storage details",
+        hint: "check bucket config",
+      },
+    });
+
+    const response = await POST(makeUploadRequest(makeFile()));
+
+    expect(response.status).toBe(500);
+    const body = await response.json();
+    expect(body).toEqual({ error: "Failed to upload file" });
+    // Rohe Storage-Details dürfen nicht in der Client-Antwort erscheinen
+    expect(JSON.stringify(body)).not.toContain("bucket missing");
+    expect(JSON.stringify(body)).not.toContain("raw storage details");
+    expect(mocks.insert).not.toHaveBeenCalled();
   });
 
   it("ignores a forged client tenant during upload", async () => {
