@@ -50,14 +50,14 @@ export function PermissionsProvider({
   const [error, setError] = useState<string | null>(
     initialAuthState.status === "error" ? initialAuthState.message : null
   );
-  const [role] = useState<string | null>(
+  const [role, setRole] = useState<string | null>(
     initialAuthState.status === "authenticated" ? initialAuthState.session.role : null
   );
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [name] = useState<string>(
+  const [name, setName] = useState<string>(
     initialAuthState.status === "authenticated" ? initialAuthState.session.displayName : ""
   );
-  const [initials] = useState<string>(
+  const [initials, setInitials] = useState<string>(
     initialAuthState.status === "authenticated" ? deriveInitials(initialAuthState.session.displayName) : ""
   );
   const [loading, setLoading] = useState(true);
@@ -68,18 +68,27 @@ export function PermissionsProvider({
 
       if (result.ok) {
         setPermissions([...result.data.permissions]);
+        setRole(result.data.role);
+        setName(result.data.displayName);
+        setInitials(deriveInitials(result.data.displayName));
         setStatus("authenticated");
         setError(null);
       } else {
         setStatus("error");
         setError(result.message);
         setPermissions([]);
+        setRole(null);
+        setName("");
+        setInitials("");
       }
     } catch (err) {
       console.error("Failed to load permissions", err);
       setStatus("error");
       setError("AUTH_ERROR: Berechtigungen nicht verfügbar");
       setPermissions([]);
+      setRole(null);
+      setName("");
+      setInitials("");
     } finally {
       setLoading(false);
     }

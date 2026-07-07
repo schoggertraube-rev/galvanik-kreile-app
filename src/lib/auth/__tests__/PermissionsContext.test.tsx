@@ -107,8 +107,9 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       );
     });
 
-    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
-    expect(screen.getByTestId("initials").textContent).toBe("CD");
+    // Now the context MUST update name and initials based on snapshot!
+    expect(screen.getByTestId("name").textContent).toBe("Anderer Benutzer");
+    expect(screen.getByTestId("initials").textContent).toBe("AB");
     expect(screen.getByTestId("role").textContent).toBe("buero");
     expect(screen.getByTestId("status").textContent).toBe("authenticated");
   });
@@ -181,9 +182,9 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
 
     expect(getAuthorizationSnapshotAction).toHaveBeenCalledTimes(1);
 
-    expect(screen.getByTestId("role").textContent).toBe("buero");
-    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
-    expect(screen.getByTestId("initials").textContent).toBe("CD");
+    expect(screen.getByTestId("role").textContent).toBe("");
+    expect(screen.getByTestId("name").textContent).toBe("");
+    expect(screen.getByTestId("initials").textContent).toBe("");
     expect(screen.getByTestId("permissions").textContent).toBe(""); // Discarded
     expect(screen.getByTestId("status").textContent).toBe("error");
     expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Sitzung veraltet");
@@ -212,9 +213,9 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       );
     });
 
-    expect(screen.getByTestId("role").textContent).toBe("buero");
-    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
-    expect(screen.getByTestId("initials").textContent).toBe("CD");
+    expect(screen.getByTestId("role").textContent).toBe("");
+    expect(screen.getByTestId("name").textContent).toBe("");
+    expect(screen.getByTestId("initials").textContent).toBe("");
     expect(screen.getByTestId("status").textContent).toBe("error");
     expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Berechtigungen nicht verfügbar");
   });
