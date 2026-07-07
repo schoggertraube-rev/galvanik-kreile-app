@@ -1,2 +1,8 @@
 #!/usr/bin/env sh
+
+powershell -ExecutionPolicy Bypass -File scripts/git-gates/kreile-git-gate.ps1 commit
+if [ $? -ne 0 ]; then
+  exit 1
+fi
+
 npm run verify:precommit
