@@ -1,44 +1,26 @@
 "use client";
 
-import { useErfassung } from "../ErfassungProvider";
-import { FileText, PackagePlus, Building2 } from "lucide-react";
+import { FileText, PackagePlus } from "lucide-react";
 import { AiBadge } from "../shared/AiBadge";
-import { convertScanToOrder } from "@/app/actions/erfassung.actions";
-import { useRouter } from "next/navigation";
+import { Eingangskarte } from "./Eingangskarte";
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function ScanResult({ data }: { data: any }) {
-  const { openErfassung, closeErfassung } = useErfassung();
-  const router = useRouter();
-  const [isCreating, setIsCreating] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [localData, setLocalData] = useState(data);
 
-  const handleDirectCreate = async () => {
-    setIsCreating(true);
-    setErrorMsg(null);
-    try {
-      const res = await convertScanToOrder(data.id);
-      if ("error" in res) {
-        setErrorMsg(res.error);
-      } else if (res.orderId) {
-        closeErfassung();
-        router.push(`/orders/${res.orderId}`);
-      }
-    } catch {
-      setErrorMsg("Ein unerwarteter Fehler ist aufgetreten.");
-    } finally {
-      setIsCreating(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleSaveReview = async (scanId: string, updatedData: any) => {
+    const { saveScanReview } = await import("@/app/actions/review.actions");
+    const result = await saveScanReview(scanId, updatedData);
+    if (result.error) {
+      throw new Error(result.error);
     }
-  };
-
-  const handleNewOrder = () => {
-    openErfassung({
-      mode: "order",
-      prefill: data.extracted,
-      source: "scan",
-      sourceRef: data.id
+    // Update local state to reflect review completion
+    setLocalData({
+      ...localData,
+      extractedData: updatedData,
+      reviewRequired: false,
     });
   };
 
@@ -52,9 +34,9 @@ export function ScanResult({ data }: { data: any }) {
     unbekannt: "Dokument"
   };
 
-  const detectedType = data.detectedType || "unbekannt";
-  const confidence = data.detectionConfidence ? Math.round(data.detectionConfidence * 100) : 0;
-  const ext = data.extractedData || {};
+  const detectedType = localData.detectedType || "unbekannt";
+  const confidence = localData.detectionConfidence ? Math.round(localData.detectionConfidence * 100) : 0;
+  const isReviewRequired = localData.reviewRequired !== false;
 
   return (
     <div className="p-8">
@@ -79,76 +61,44 @@ export function ScanResult({ data }: { data: any }) {
             </div>
           </div>
 
-          <div className="bg-gray-50 rounded-xl p-5 border border-gray-100 space-y-4">
-            <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Erkannte Daten</h4>
-            
-            {ext.customer && (
-              <div className="space-y-2">
-                <div className="flex items-start gap-2 text-sm">
-                  <Building2 className="w-4 h-4 text-gray-400 mt-0.5" />
-                  <span className="text-gray-700">{ext.customer.companyName || ext.customer.name || "Kein Name erkannt"}</span>
-                </div>
-                {ext.customer.address && (
-                  <div className="text-sm text-gray-600 pl-6">{ext.customer.address}</div>
-                )}
-              </div>
-            )}
-
-            {ext.items && ext.items.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="text-xs font-semibold text-gray-500 mb-2">ERFASSTE TEILE ({ext.items.length})</div>
-                <ul className="space-y-2">
-                  {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                  {ext.items.map((item: any, i: number) => (
-                    <li key={i} className="text-sm text-gray-700 flex justify-between">
-                      <span>{item.quantity}x {item.name}</span>
-                      <span className="text-gray-500">{item.material}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            
-            {!ext.customer && (!ext.items || ext.items.length === 0) && (
-              <p className="text-sm text-gray-500 italic">Keine strukturierten Daten extrahiert.</p>
-            )}
+          <div className="mt-6">
+            <Eingangskarte 
+              scanId={localData.id}
+              extractedData={localData.extractedData}
+              fieldConfidence={localData.fieldConfidence || {}}
+              reviewRequired={isReviewRequired}
+              onSave={handleSaveReview}
+            />
           </div>
         </div>
 
         {/* Right: Actions */}
         <div className="w-full lg:w-80 flex flex-col gap-3">
-          <h4 className="text-sm font-semibold text-gray-900 mb-2">Was möchten Sie tun?</h4>
+          <h4 className="text-sm font-semibold text-gray-900 mb-2">Folgeschritte (erst nach Review)</h4>
           
-          {errorMsg && (
-            <div className="p-3 bg-red-50 text-red-700 text-sm rounded-xl border border-red-200">
-              {errorMsg}
-            </div>
-          )}
-
           <button 
-            onClick={handleDirectCreate}
-            disabled={isCreating}
-            className="group flex flex-col p-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors text-left relative overflow-hidden"
+            disabled={true}
+            className="group flex flex-col p-4 rounded-xl transition-colors text-left relative overflow-hidden bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200"
           >
             <div className="flex items-center gap-2 font-bold mb-1">
-              {isCreating ? <Loader2 className="w-5 h-5 animate-spin" /> : <PackagePlus className="w-5 h-5" />}
-              Auftrag anlegen
+              <PackagePlus className="w-5 h-5" />
+              Auftrag anlegen (B3)
             </div>
-            <p className="text-sm text-blue-100 pr-6">
-              Direkt einen neuen Auftrag aus diesen Daten erstellen.
+            <p className="text-sm pr-6 text-gray-400">
+              Automatische Anlage ist im aktuellen V0.3-Scope deaktiviert.
             </p>
           </button>
 
           <button 
-            onClick={handleNewOrder}
-            className="group flex flex-col p-4 bg-white border-2 border-blue-600 rounded-xl hover:bg-blue-50 transition-colors text-left"
+            disabled={true}
+            className="group flex flex-col p-4 rounded-xl transition-colors text-left bg-gray-50 border border-gray-200 text-gray-400 cursor-not-allowed"
           >
-            <div className="flex items-center gap-2 text-blue-700 font-bold mb-1">
+            <div className="flex items-center gap-2 font-bold mb-1 text-gray-400">
               <PackagePlus className="w-5 h-5" />
-              Manuell erfassen
+              Manuell erfassen (B3)
             </div>
-            <p className="text-sm text-blue-600">
-              Formular mit erkannten Daten vorausfüllen.
+            <p className="text-sm text-gray-400">
+              Conversion in B2 noch nicht freigeschaltet.
             </p>
           </button>
         </div>
