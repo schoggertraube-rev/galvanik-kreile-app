@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric, bigint, uniqueIndex } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
 // Helper for CUID primary keys
@@ -156,7 +156,7 @@ export const items = pgTable("items", {
 export const events = pgTable("events", {
   id: cuidPrimaryKey("id"),
   tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
-  orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  orderId: text("order_id").$type<string | undefined>().references(() => orders.id, { onDelete: "cascade" }),
   itemId: text("item_id"),
   eventType: varchar("event_type", { length: 100 }).notNull(),
   description: text("description"),
@@ -281,10 +281,27 @@ export const scanUploads = pgTable("scan_uploads", {
   detectionConfidence: numeric("detection_confidence", { precision: 3, scale: 2 }),
   extractedData: jsonb("extracted_data"),
   status: text("status").notNull().default("new"),
-  linkedOrderId: text("linked_order_id"),
-  linkedCustomerId: text("linked_customer_id"),
+  linkedOrderId: text("linked_order_id").references(() => orders.id, { onDelete: "set null" }),
+  linkedCustomerId: text("linked_customer_id").references(() => customers.id, { onDelete: "set null" }),
   linkedInvoiceId: text("linked_invoice_id"),
-});
+  ocrProvider: text("ocr_provider"),
+  originalHash: text("original_hash"),
+  originalStoragePath: text("original_storage_path"),
+  originalSizeBytes: bigint("original_size_bytes", { mode: "number" }),
+  originalSecuredAt: timestamp("original_secured_at", { withTimezone: true }),
+  clientIdempotencyKey: text("client_idempotency_key"),
+  fieldConfidence: jsonb("field_confidence").$type<Record<string, unknown>>().default({}),
+  reviewRequired: boolean("review_required").notNull().default(false),
+  reviewedBy: uuid("reviewed_by").references(() => appUsers.id),
+  reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+  conversionOrderId: text("conversion_order_id").references(() => orders.id, { onDelete: "set null" }),
+  conversionEventId: text("conversion_event_id"),
+}, (table) => ({
+  tenantClientIdempotencyKeyUnique: uniqueIndex("scan_uploads_tenant_client_idempotency_key_uidx").on(
+    table.tenantId,
+    table.clientIdempotencyKey,
+  ),
+}));
 
 // 9. UI Events Tracking
 export const uiEventsTable = pgTable("ui_events", {

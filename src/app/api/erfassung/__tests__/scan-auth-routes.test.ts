@@ -97,10 +97,19 @@ const unauthorized = {
   message: "AUTH_ERROR: Nicht angemeldet",
 };
 
-function makeUploadRequest(file: File, tenantId?: string): Request {
+function makeUploadRequest(
+  file: File,
+  fields: {
+    tenantId?: string;
+    userId?: string;
+    role?: string;
+  } = {},
+): Request {
   const formData = new FormData();
   formData.append("file", file);
-  if (tenantId) formData.append("tenantId", tenantId);
+  if (fields.tenantId) formData.append("tenantId", fields.tenantId);
+  if (fields.userId) formData.append("userId", fields.userId);
+  if (fields.role) formData.append("role", fields.role);
   return {
     formData: vi.fn().mockResolvedValue(formData),
   } as unknown as Request;
@@ -218,6 +227,7 @@ describe("scan capture route auth", () => {
     expect(mocks.createClient).not.toHaveBeenCalled();
     expect(mocks.storageUpload).not.toHaveBeenCalled();
     expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 
   it("returns generic error when storage rejects the upload", async () => {
@@ -238,19 +248,31 @@ describe("scan capture route auth", () => {
     // Rohe Storage-Details dürfen nicht in der Client-Antwort erscheinen
     expect(JSON.stringify(body)).not.toContain("bucket missing");
     expect(JSON.stringify(body)).not.toContain("raw storage details");
-    expect(mocks.insert).not.toHaveBeenCalled();
+    expect(mocks.insert).toHaveBeenCalledTimes(1);
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 
-  it("ignores a forged client tenant during upload", async () => {
+  it("ignores forged client tenant, user and role fields during upload", async () => {
     mocks.resolveAuthorization.mockResolvedValue(authorized("session-tenant"));
 
-    await POST(makeUploadRequest(makeFile(), "forged-tenant"));
+    await POST(
+      makeUploadRequest(makeFile(), {
+        tenantId: "forged-tenant",
+        userId: "attacker-user",
+        role: "developer",
+      }),
+    );
 
     expect(mocks.storageUpload).toHaveBeenCalledTimes(1);
-    expect(mocks.storageUpload.mock.calls[0][0]).toMatch(/^session-tenant\//);
+    expect(mocks.storageUpload.mock.calls[0][0]).toMatch(/^session-tenant\/[^/]+\/original\.pdf$/);
     expect(mocks.storageUpload.mock.calls[0][0]).not.toContain("forged-tenant");
     expect(mocks.insertValues).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: "session-tenant" }),
+      expect.objectContaining({
+        tenantId: "session-tenant",
+        uploadedBy: "user-1",
+        status: "uploading",
+        fileUrl: expect.stringMatching(/^session-tenant\/[^/]+\/original\.pdf$/),
+      }),
     );
   });
 
@@ -262,9 +284,23 @@ describe("scan capture route auth", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ id: "scan-1" });
     expect(mocks.insertValues).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: "tenant-a" }),
+      expect.objectContaining({
+        tenantId: "tenant-a",
+        fileUrl: expect.stringMatching(/^tenant-a\/[^/]+\/original\.pdf$/),
+      }),
     );
-    expect(mocks.storageUpload.mock.calls[0][0]).toMatch(/^tenant-a\//);
+    expect(mocks.storageUpload.mock.calls[0][0]).toMatch(/^tenant-a\/[^/]+\/original\.pdf$/);
+    expect(mocks.storageGetPublicUrl).not.toHaveBeenCalled();
+  });
+
+  it("uses randomUUID for scan ids and never calls Math.random", async () => {
+    const mathRandomSpy = vi.spyOn(Math, "random");
+
+    const response = await POST(makeUploadRequest(makeFile()));
+
+    expect(response.status).toBe(200);
+    expect(mathRandomSpy).not.toHaveBeenCalled();
+    expect(mocks.storageUpload.mock.calls[0][0]).toMatch(/^session-tenant\/[^/]+\/original\.pdf$/);
   });
 
   it("adds the authorized tenant to scan update filters", async () => {
@@ -279,6 +315,22 @@ describe("scan capture route auth", () => {
         expect.objectContaining({ op: "eq", value: "tenant-filter" }),
       ]),
     });
+  });
+
+  it("stores the canonical storage path and secured metadata instead of a public URL", async () => {
+    await POST(makeUploadRequest(makeFile()));
+
+    expect(mocks.storageGetPublicUrl).not.toHaveBeenCalled();
+    expect(mocks.updateSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: "processed",
+        fileUrl: expect.stringMatching(/^session-tenant\/[^/]+\/original\.pdf$/),
+        originalStoragePath: expect.stringMatching(/^session-tenant\/[^/]+\/original\.pdf$/),
+        originalHash: expect.any(String),
+        originalSizeBytes: 12,
+        ocrProvider: "gemini",
+      }),
+    );
   });
 
   it("rejects unauthenticated status requests before DB access", async () => {

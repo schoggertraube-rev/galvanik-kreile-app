@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { db } from "@/db";
 import { scanUploads } from "@/db/schema";
@@ -7,68 +7,86 @@ import { and, eq } from "drizzle-orm";
 import { extractDocumentData } from "@/lib/ocr/geminiOcr";
 import { resolveAuthorization } from "@/lib/server/authorization";
 
+function createServiceRoleStorageClient() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("SCAN_UPLOAD_STORAGE_MISCONFIGURED");
+  }
+
+  return createClient(supabaseUrl, serviceRoleKey);
+}
+
 export async function POST(request: Request) {
   try {
-    // 1. Auth vor request.formData()
+    // Auth is the only tenant source. Client payload fields are ignored.
     const auth = await resolveAuthorization();
     if (!auth.ok) {
       return NextResponse.json({ error: "Sitzung abgelaufen oder nicht angemeldet" }, { status: 401 });
     }
 
-    // Tenant ausschließlich aus der Session — client-seitige Felder werden ignoriert
     const tenantId = auth.data.tenantId;
+    const userId = auth.data.userId;
     const formData = await request.formData();
-    const file = formData.get("file") as File;
+    const file = formData.get("file");
 
-    if (!file) {
+    if (!(file instanceof File)) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    // 2. Service-Role-Client erst nach Auth und gültiger Datei
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    const scanId = randomUUID();
+    const fileExt = file.name.split(".").pop() ?? "bin";
+    const storagePath = `${tenantId}/${scanId}/original.${fileExt}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const originalHash = createHash("sha256").update(buffer).digest("hex");
 
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${tenantId}/${randomUUID()}.${fileExt}`;
+    const [newScan] = await db.insert(scanUploads).values({
+      id: scanId,
+      tenantId,
+      fileUrl: storagePath,
+      fileType: file.type,
+      uploadedBy: userId,
+      status: "uploading",
+    }).returning();
 
+    // Explicit privileged upload path. The app-layer auth/tenant check above is mandatory.
+    const supabase = createServiceRoleStorageClient();
     const { error: uploadError } = await supabase.storage
       .from("scans")
-      .upload(fileName, file, { contentType: file.type });
+      .upload(storagePath, file, { contentType: file.type });
 
     if (uploadError) {
-      // Storage-/Provider-Rohfehler nicht an Client leaken
       console.error("Storage upload error:", uploadError.message, uploadError.statusCode, uploadError.status);
       return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });
     }
 
-    const { data: publicUrlData } = supabase.storage.from("scans").getPublicUrl(fileName);
-
-    const [newScan] = await db.insert(scanUploads).values({
-      tenantId,
-      fileUrl: publicUrlData.publicUrl,
+    let scanUpdate: Partial<typeof scanUploads.$inferInsert> = {
+      status: "secured",
+      fileUrl: storagePath,
       fileType: file.type,
-      status: "analyzing"
-    }).returning();
+      originalHash,
+      originalStoragePath: storagePath,
+      originalSizeBytes: file.size,
+      originalSecuredAt: new Date(),
+    };
 
-    // Convert file to Base64 for Gemini
-    const buffer = await file.arrayBuffer();
-    const base64Str = Buffer.from(buffer).toString('base64');
-    
-    // Process synchronously to ensure it completes before Vercel freezes the function
     try {
-      const extraction = await extractDocumentData(base64Str);
-      await db.update(scanUploads).set({
+      const extraction = await extractDocumentData(buffer.toString("base64"));
+      scanUpdate = {
+        ...scanUpdate,
         status: "processed",
-        detectedType: "Lieferschein", // default
-        detectionConfidence: "0.9",
-        extractedData: extraction
-      }).where(and(eq(scanUploads.id, newScan.id), eq(scanUploads.tenantId, tenantId)));
-    } catch (e) {
-      console.error("Local OCR extraction failed:", e);
-      await db.update(scanUploads).set({ status: "error" }).where(and(eq(scanUploads.id, newScan.id), eq(scanUploads.tenantId, tenantId)));
+        extractedData: extraction,
+        ocrProvider: "gemini",
+      };
+    } catch (error) {
+      console.error("Local OCR extraction failed:", error);
     }
+
+    await db
+      .update(scanUploads)
+      .set(scanUpdate)
+      .where(and(eq(scanUploads.id, newScan.id), eq(scanUploads.tenantId, tenantId)));
 
     return NextResponse.json({ id: newScan.id });
   } catch (error) {

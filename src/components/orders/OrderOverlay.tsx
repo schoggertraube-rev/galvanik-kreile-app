@@ -14,6 +14,32 @@ import { AppOverlayPortal } from "@/components/ui/AppOverlayPortal";
 import { uploadOrderPhotoRecord } from "@/features/orders/orderPhoto.actions";
 import { createClient } from "@/lib/supabase/client";
 
+type OverlayOrderItem = {
+  id?: string;
+  photo?: string | null;
+  name?: string | null;
+  quantity?: number | string | null;
+  material?: string | null;
+  surfaceRequested?: string | null;
+  price?: number | string | null;
+};
+
+type OverlayPriceLine = {
+  unitTotalEur?: number | string | null;
+};
+
+type OverlayOrderEvent = {
+  id?: string;
+  status?: string | null;
+  createdAt?: string | Date | null;
+  description?: string | null;
+  eventType?: string | null;
+  notes?: string | null;
+};
+
+const getErrorMessage = (error: unknown): string =>
+  error instanceof Error ? error.message : "Unbekannter Fehler";
+
 export function OrderOverlay() {
   const stack = useOverlayStore(state => state.stack);
   const orderStack = useOverlayStore((state) => state.orderStack);
@@ -333,8 +359,8 @@ export function OrderOverlay() {
                         <span className="text-[var(--ci-ink-3)] text-sm">Noch keine Daten erfasst</span>
                       </div>
                     ) : (
-                      orderData.items.map((item: any, idx: number) => (
-                        <div key={item.id || idx} className="ci-item-card cursor-pointer hover:border-[var(--ci-ink-3)] transition-colors" onClick={() => setEditingItemId(item.id)}>
+                      orderData.items.map((item: OverlayOrderItem, idx: number) => (
+                        <div key={item.id || idx} className="ci-item-card cursor-pointer hover:border-[var(--ci-ink-3)] transition-colors" onClick={() => setEditingItemId(item.id ?? null)}>
                           <div className={`ci-item-photo ${item.photo ? 'has-photo' : ''}`}>
                             {item.photo ? <Camera className="w-5 h-5"/> : <CameraOff className="w-5 h-5"/>}
                           </div>
@@ -364,7 +390,7 @@ export function OrderOverlay() {
                     <div className="ci-item-sum">
                       <span className="ci-item-sum-label">Summe netto</span>
                       <span className="ci-item-sum-val">
-                        {(orderData.priceLines || []).reduce((sum: number, line: any) => sum + Number(line.unitTotalEur || 0), 0).toFixed(2)} €
+                        {(orderData.priceLines || []).reduce((sum: number, line: OverlayPriceLine) => sum + Number(line.unitTotalEur || 0), 0).toFixed(2)} €
                       </span>
                     </div>
                   </div>
@@ -434,20 +460,18 @@ export function OrderOverlay() {
                               .upload(fileName, file);
 
                             if (uploadError) throw new Error(uploadError.message);
-                            
-                            const { data: publicUrlData } = supabase.storage.from("scans").getPublicUrl(fileName);
 
                             const dbRes = await uploadOrderPhotoRecord({
                               orderId: currentOrderId,
-                              fileUrl: publicUrlData.publicUrl,
+                              fileUrl: fileName,
                               fileType: file.type
                             });
 
                             if (!dbRes.success) throw new Error(dbRes.error);
                             
-                          } catch (err: any) {
+                          } catch (err: unknown) {
                             console.error("Foto-Upload fehlgeschlagen:", err);
-                            setUploadError("Fehler beim Upload.");
+                            setUploadError(getErrorMessage(err));
                           } finally {
                             setIsUploadingPhoto(false);
                             if (e.target) e.target.value = '';
@@ -474,13 +498,13 @@ export function OrderOverlay() {
                   <div className="ci-section-label">Auftragshistorie</div>
                   <div className="ci-history">
                     {orderData.events && orderData.events.length > 0 ? (
-                      orderData.events.map((evt: any, i: number) => (
+                      orderData.events.map((evt: OverlayOrderEvent, i: number) => (
                         <div key={evt.id || i} className="ci-h-item">
                           <div className={`ci-h-dot ${evt.status === 'success' ? 'done' : 'info'}`}>
                             {evt.status === 'success' ? <Check className="w-3.5 h-3.5"/> : <Info className="w-3.5 h-3.5"/>}
                           </div>
                           <div>
-                            <div className="ci-h-time">{new Date(evt.createdAt).toLocaleString()}</div>
+                            <div className="ci-h-time">{evt.createdAt ? new Date(evt.createdAt).toLocaleString() : ""}</div>
                             <div className="ci-h-title">{evt.description || evt.eventType}</div>
                             {evt.notes && <div className="ci-h-sub">{evt.notes}</div>}
                           </div>

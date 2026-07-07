@@ -6,6 +6,51 @@ import { eq, desc } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { TimelineEntry } from "@/lib/repositories/timelineRepository";
 
+const normalizeOptionalId = (value: string | null | undefined): string | undefined => value ?? undefined;
+
+const isPayloadRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null;
+
+const getPayloadString = (payload: Record<string, unknown>, key: string): string | undefined => {
+  const value = payload[key];
+  return typeof value === "string" ? value : undefined;
+};
+
+const getPayloadNumberText = (payload: Record<string, unknown>, key: string): string | undefined => {
+  const value = payload[key];
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+
+  return undefined;
+};
+
+const getTimelineSubtitleFromPayload = (payload: unknown): string | undefined => {
+  if (!isPayloadRecord(payload)) {
+    return undefined;
+  }
+
+  const subtitleParts: string[] = [];
+  const stationId = getPayloadString(payload, "stationId");
+  const notes = getPayloadString(payload, "notes");
+  const material = getPayloadString(payload, "material");
+  const amount = getPayloadNumberText(payload, "amount");
+
+  if (stationId) {
+    subtitleParts.push(`Station: ${stationId}`);
+  }
+
+  if (notes) {
+    subtitleParts.push(`Notiz: ${notes}`);
+  }
+
+  if (material) {
+    subtitleParts.push(amount ? `(${material}: ${amount})` : `(${material})`);
+  }
+
+  return subtitleParts.length > 0 ? subtitleParts.join(" ") : undefined;
+};
+
 export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[]>> {
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
@@ -82,7 +127,7 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
       entries.push({
         id: e.id,
         customerId: e.customerId || "unknown",
-        orderId: e.orderId,
+        orderId: normalizeOptionalId(e.orderId),
         type: "status",
         title: eventTitleMap[e.eventType] || `Status: ${e.eventType}`,
         timestamp: e.createdAt.toISOString(),
@@ -171,7 +216,7 @@ export async function getTimelineForCustomerDb(customerId: string): Promise<Acti
       entries.push({
         id: e.id,
         customerId: customerId,
-        orderId: e.orderId,
+        orderId: normalizeOptionalId(e.orderId),
         type: "status",
         title: title,
         timestamp: e.createdAt.toISOString(),
@@ -253,21 +298,13 @@ export async function getTimelineForOrderDb(orderId: string): Promise<ActionResu
       if (e.eventType.includes("COMPLETED") || e.eventType.includes("PASSED")) severity = "good";
       if (e.eventType.includes("FAILED")) severity = "critical";
       
-      let subtitle = "";
-      const metadata = e.payload as any;
-      if (metadata) {
-        if (metadata.stationId) subtitle += `Station: ${metadata.stationId} `;
-        if (metadata.notes) subtitle += `Notiz: ${metadata.notes} `;
-        if (metadata.material) subtitle += `(${metadata.material}: ${metadata.amount}) `;
-      }
-
       return {
         id: e.id,
         customerId: e.customerId || "unknown",
-        orderId: e.orderId,
+        orderId: normalizeOptionalId(e.orderId),
         type: "status" as const,
         title,
-        subtitle: subtitle.trim() || undefined,
+        subtitle: getTimelineSubtitleFromPayload(e.payload),
         timestamp: e.createdAt.toISOString(),
         severity
       };
