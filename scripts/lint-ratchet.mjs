@@ -146,6 +146,13 @@ function sortedObj(obj) {
   return Object.fromEntries(Object.entries(obj).sort(([a], [b]) => a.localeCompare(b)));
 }
 
+function logScopeProgress(status, scopeName, durationMs, exitCode) {
+  const parts = [`LINT_RATCHET_SCOPE_${status}`, scopeName];
+  if (typeof durationMs === 'number') parts.push(`durationMs=${durationMs}`);
+  if (typeof exitCode === 'number') parts.push(`exit=${exitCode}`);
+  process.stderr.write(parts.join(' ') + '\n');
+}
+
 // ── Comparison ───────────────────────────────────────────────────────────────
 
 /**
@@ -252,7 +259,10 @@ function compareScope(bScope, current, configHash, versions, bMeta) {
 // ── ESLint runner ─────────────────────────────────────────────────────────────
 
 function runESLintScope(scope) {
+  const startedAt = Date.now();
+  logScopeProgress('START', scope.name);
   let stdout = '';
+  let exitCode = 0;
   try {
     stdout = execSync(scope.cmd, {
       cwd:      ROOT,
@@ -261,9 +271,12 @@ function runESLintScope(scope) {
       stdio:    ['pipe', 'pipe', 'pipe'],
     });
   } catch (e) {
+    exitCode = typeof e.status === 'number' ? e.status : 1;
     // ESLint exits 1 when errors are found — that's expected
     stdout = (typeof e.stdout === 'string') ? e.stdout : '';
     if (!stdout) {
+      const durationMs = Date.now() - startedAt;
+      logScopeProgress('FAIL', scope.name, durationMs, exitCode);
       return { error: String(e.stderr || e.message || 'no output').slice(0, 400) };
     }
   }
@@ -272,8 +285,13 @@ function runESLintScope(scope) {
   writeFileSync(outFile, stdout, 'utf8');
 
   try {
-    return { results: JSON.parse(stdout), outFile };
+    const parsed = JSON.parse(stdout);
+    const durationMs = Date.now() - startedAt;
+    logScopeProgress('DONE', scope.name, durationMs, exitCode);
+    return { results: parsed, outFile };
   } catch {
+    const durationMs = Date.now() - startedAt;
+    logScopeProgress('FAIL', scope.name, durationMs, exitCode);
     return { error: `Could not parse JSON. Output starts: ${stdout.slice(0, 200)}` };
   }
 }
