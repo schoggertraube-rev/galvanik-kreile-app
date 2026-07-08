@@ -22,7 +22,7 @@
     "test:unit": "vitest run --exclude \"**/*.integration.test.ts\"",
     "test:integration": "vitest run src/test/verify.integration.test.ts",
     "test:e2e": "playwright test",
-    "verify:precommit": "npx tsc --noEmit && npm run lint:staged && npm run test:unit",
+    "verify:precommit": "node scripts/check-mojibake.mjs && npx tsc --noEmit && npm run lint:staged && npm run test:unit",
     "db:seed": "tsx src/db/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",

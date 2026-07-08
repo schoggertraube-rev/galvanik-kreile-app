@@ -46,6 +46,7 @@ export function StudioView({
   storyIdeen: StoryIdee[];
   wirkungMini: WirkungMini[];
   onStoryClick: (s: StoryIdee) => void;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   onEntryClick: (tab: any) => void;
   isVisible: boolean;
 }) {
@@ -60,7 +61,7 @@ export function StudioView({
             </div>
             <div className="mk-pv-name">
               galvanik_kreile
-              <small>Frankfurt Â· jetzt</small>
+              <small>Frankfurt · jetzt</small>
             </div>
           </div>
           <div className="mk-pv-img">
@@ -94,7 +95,7 @@ export function StudioView({
         </div>
 
         <div className="mk-ctrl">
-          <span className="mk-badge mk-animated">âœ¦ Gelernt Â· beste Aktion heute</span>
+          <span className="mk-badge mk-animated">✦ Gelernt · beste Aktion heute</span>
           <h2 className="font-serif">{aktion.titel}</h2>
           <div className="why">{aktion.begruendung}</div>
           <div className="mk-meta">
@@ -188,7 +189,7 @@ export function StudioView({
             <div className="mk-entry-icon">
               <svg viewBox="0 0 24 24"><path d="M3 3v18h18M7 14l3-3 3 2 5-6" /></svg>
             </div>
-            <div><h3>Reichweite</h3><p>Post â†’ Anfrage â†’ Umsatz</p></div>
+            <div><h3>Reichweite</h3><p>Post → Anfrage → Umsatz</p></div>
           </div>
           <div className="mk-entry" onClick={() => onEntryClick("Kunden")}>
             <div className="mk-entry-icon">

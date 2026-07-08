@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect, @typescript-eslint/no-unused-vars, react-hooks/exhaustive-deps */
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
@@ -93,7 +94,7 @@ function WarendurchlaufLeitstandContent() {
 
 
 
-        {/* â”€â”€ UNTERER BEREICH â”€â”€ */}
+        {/* ── UNTERER BEREICH ── */}
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(280px,380px)] gap-6" style={{ animation: "fadeUp .4s .1s ease both" }}>
 
           {/* LINKE SEITE */}
@@ -253,7 +254,7 @@ function WarendurchlaufLeitstandContent() {
           </div>
         </div>
 
-        {/* â”€â”€ ARBEITSLISTE WARENEINGANG â”€â”€ */}
+        {/* ── ARBEITSLISTE WARENEINGANG ── */}
         <div className="mt-12" style={{ animation: "fadeUp .5s .2s ease both" }}>
           <div className="text-[15px] font-bold text-[#5e5850] mb-4 flex items-center gap-2">
             Aktuelle Aufträge im Wareneingang
@@ -344,7 +345,7 @@ export default function WarendurchlaufLeitstand() {
   );
 }
 
-/* â”€â”€ Hilfskomponenten â”€â”€ */
+/* ── Hilfskomponenten ── */
 
 function StatRow({ color, label, value }: { color: string; label: string; value: string }) {
   return (

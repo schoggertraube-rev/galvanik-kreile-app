@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { orders, customers, items } from "@/db/schema";
 import { eq, desc, and, notInArray, notIlike, sql, inArray } from "drizzle-orm";
+import { isProductionOrderVisible } from "@/lib/server/orderVisibility";
 
 // Short-lived in-memory cache (5 seconds) — prevents parallel duplicate DB calls
 // during a single page render without blocking real-time updates.
@@ -38,6 +39,9 @@ async function _fetchAndMap() {
       intakeDate: orders.intakeDate,
       dueDate: orders.dueDate,
       createdAt: orders.createdAt,
+      // Visibility contract fields
+      tenantId: orders.tenantId,
+      source: orders.source,
     })
     .from(orders)
     .leftJoin(customers, eq(customers.id, orders.customerId))
@@ -54,8 +58,21 @@ async function _fetchAndMap() {
     )
     .orderBy(desc(orders.createdAt));
 
+  // Server-side visibility contract — same rules as DB WHERE clause but
+  // also covers title/task text fields that cannot be cheaply expressed in SQL.
+  const visible = results.filter((o) =>
+    isProductionOrderVisible({
+      tenantId: o.tenantId,
+      source: o.source,
+      orderNumber: o.orderNumber,
+      title: o.title,
+      task: o.task,
+      customerId: o.customerId,
+    })
+  );
+
   // Only load items for the fetched orders (avoids full-table scan)
-  const orderIds = results.map((o) => o.id);
+  const orderIds = visible.map((o) => o.id);
   const allParts = orderIds.length > 0
     ? await db
         .select()
@@ -63,7 +80,7 @@ async function _fetchAndMap() {
         .where(and(eq(items.tenantId, "galvanik-kreile"), inArray(items.orderId, orderIds)))
     : [];
 
-  return results.map((o) => {
+  return visible.map((o) => {
     const orderParts = allParts.filter((p) => p.orderId === o.id);
     const intakeDate = o.intakeDate ? new Date(o.intakeDate).toISOString() : (o.createdAt ? new Date(o.createdAt).toISOString() : new Date().toISOString());
     const dueDate = o.dueDate ? new Date(o.dueDate).toISOString() : new Date(new Date(intakeDate).getTime() + 10 * 24 * 60 * 60 * 1000).toISOString();
@@ -76,6 +93,7 @@ async function _fetchAndMap() {
       title: o.title,
       task: o.task,
       itemDescription: o.task || (orderParts.length > 0 ? orderParts[0].name : null),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       surfaceRequested: orderParts.length > 0 ? (orderParts[0] as any).surfaceRequested || (orderParts[0] as any).finish || null : null,
       station: o.currentStationId || "wareneingang",
       status: o.status,
@@ -187,6 +205,7 @@ export async function createOperationalOrderService(data: Record<string, unknown
         name: p.name,
         quantity: typeof p.quantity === "number" ? p.quantity : parseInt(p.quantity as string) || 1,
         currentStationId: stationId,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         surfaceRequested: (p as any).surfaceRequested || (p as any).surface || (p as any).finish || (p as any).verfahren || null,
       }));
       await tx.insert(items).values(newItems);

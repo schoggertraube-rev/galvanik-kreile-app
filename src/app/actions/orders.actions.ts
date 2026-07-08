@@ -2,11 +2,12 @@
 
 import { db } from "@/db";
 import { orders, items, customers, events } from "@/db/schema";
-import { eq, like, desc, and, sql, notInArray, notIlike, ilike } from "drizzle-orm";
+import { eq, like, desc, and, sql, ilike } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { unstable_noStore as noStore } from "next/cache";
+import { isProductionOrderVisible } from "@/lib/server/orderVisibility";
 
 // DTO Typen (zur Vereinfachung)
 export type OrderResponse = Record<string, unknown>;
@@ -26,28 +27,40 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
   }
 }
 
-/** Leichtgewichtige Variante nur für Header-Badge — führt nur COUNT(*) aus. */
+/** Leichtgewichtige Variante nur für Header-Badge — nutzt denselben Sichtbarkeitsvertrag wie operationalOrders. */
 export async function getOrderCountDb(): Promise<ActionResult<{ count: number }>> {
   noStore();
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
   try {
-    const result = await db
-      .select({ count: sql<number>`count(*)::int` })
+    // Fetch only the fields needed by the visibility predicate so we stay lightweight.
+    // A pure COUNT(*) in SQL cannot replicate the title/task keyword checks, so we
+    // count in JS using the same isProductionOrderVisible predicate.
+    const rows = await db
+      .select({
+        tenantId: orders.tenantId,
+        source: orders.source,
+        orderNumber: orders.orderNumber,
+        title: orders.title,
+        task: orders.task,
+        customerId: orders.customerId,
+      })
       .from(orders)
-      .where(
-        and(
-          eq(orders.tenantId, "galvanik-kreile"),
-          notInArray(
-            sql`coalesce(${orders.source}, 'manual')`,
-            ["seed", "test", "demo", "integration-test"]
-          ),
-          notIlike(sql`coalesce(${orders.orderNumber}, '')`, "A-SEED-%"),
-          notIlike(sql`coalesce(${orders.orderNumber}, '')`, "%TEST%")
-        )
-      );
-    return { ok: true, data: { count: result[0]?.count ?? 0 } };
+      .where(eq(orders.tenantId, "galvanik-kreile"));
+
+    const count = rows.filter((r) =>
+      isProductionOrderVisible({
+        tenantId: r.tenantId,
+        source: r.source,
+        orderNumber: r.orderNumber,
+        title: r.title,
+        task: r.task,
+        customerId: r.customerId,
+      })
+    ).length;
+
+    return { ok: true, data: { count } };
   } catch (error: unknown) {
     console.error("[ORDER_COUNT_ERROR]", error instanceof Error ? error.message : String(error));
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Zählen der Aufträge", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
