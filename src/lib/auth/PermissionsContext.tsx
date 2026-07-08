@@ -1,6 +1,7 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import { createClient } from "@/lib/supabase/client";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
@@ -61,6 +62,7 @@ export function PermissionsProvider({
     initialAuthState.status === "authenticated" ? deriveInitials(initialAuthState.session.displayName) : ""
   );
   const [loading, setLoading] = useState(true);
+  const pathname = usePathname();
 
   const refreshPermissions = useCallback(async () => {
     try {
@@ -117,6 +119,15 @@ export function PermissionsProvider({
       subscription.unsubscribe();
     };
   }, [refreshPermissions]);
+
+  const isFirstMount = useRef(true);
+  useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
+      return;
+    }
+    refreshPermissions();
+  }, [pathname, refreshPermissions]);
 
   const hasPermission = (key: string) => {
     return permissions.includes(key);

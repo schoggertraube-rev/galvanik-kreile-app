@@ -2,11 +2,17 @@ process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
 
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, act } from "@testing-library/react";
+import type { RenderResult } from "@testing-library/react";
 import React from "react";
 import { PermissionsProvider, usePermissions, deriveInitials } from "../PermissionsContext";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import type { AuthorizationResult } from "@/lib/server/authorization";
+
+let mockPathname = "/";
+vi.mock("next/navigation", () => ({
+  usePathname: () => mockPathname,
+}));
 
 // Mock Supabase client to avoid real network
 vi.mock("@/lib/supabase/client", () => ({
@@ -275,5 +281,138 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
     expect(screen.getByTestId("name").textContent).toBe("Peter Pan");
     expect(screen.getByTestId("initials").textContent).toBe("PP");
     expect(screen.getByTestId("role").textContent).toBe("admin");
+  });
+
+  it("T-06: Pathname change triggers refreshPermissions and updates identity", async () => {
+    mockPathname = "/start";
+    
+    const initialState: AuthBootstrapState = {
+      status: "authenticated",
+      session: {
+        userId: "1",
+        tenantId: "t1",
+        role: "buero",
+        displayName: "Christian Dieter",
+        issuedAt: 0,
+        expiresAt: 0,
+      }
+    };
+
+    // First call happens on mount
+    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValueOnce({
+      ok: true,
+      data: {
+        userId: "1",
+        tenantId: "t1",
+        role: "buero",
+        displayName: "Christian Dieter",
+        permissions: ["perm_view_leitstand"],
+        active: true,
+      }
+    } as AuthorizationResult);
+
+    let rerenderFn: RenderResult["rerender"];
+    await act(async () => {
+      const res = render(
+        <PermissionsProvider initialAuthState={initialState}>
+          <TestComponent />
+        </PermissionsProvider>
+      );
+      rerenderFn = res.rerender;
+    });
+
+    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
+
+    // Simulate pathname change
+    mockPathname = "/settings";
+    
+    // Setup the next snapshot
+    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValueOnce({
+      ok: true,
+      data: {
+        userId: "2",
+        tenantId: "t1",
+        role: "admin",
+        displayName: "Max Admin",
+        permissions: ["perm_sys_toggles"],
+        active: true,
+      }
+    } as AuthorizationResult);
+
+    await act(async () => {
+      rerenderFn(
+        <PermissionsProvider initialAuthState={initialState}>
+          <TestComponent />
+        </PermissionsProvider>
+      );
+    });
+
+    expect(screen.getByTestId("name").textContent).toBe("Max Admin");
+    expect(screen.getByTestId("initials").textContent).toBe("MA");
+    expect(screen.getByTestId("role").textContent).toBe("admin");
+  });
+
+  it("T-07: Error or Guest case on pathname change clears stale identity", async () => {
+    mockPathname = "/start";
+    
+    const initialState: AuthBootstrapState = {
+      status: "authenticated",
+      session: {
+        userId: "1",
+        tenantId: "t1",
+        role: "buero",
+        displayName: "Christian Dieter",
+        issuedAt: 0,
+        expiresAt: 0,
+      }
+    };
+
+    // First call happens on mount
+    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValueOnce({
+      ok: true,
+      data: {
+        userId: "1",
+        tenantId: "t1",
+        role: "buero",
+        displayName: "Christian Dieter",
+        permissions: ["perm_view_leitstand"],
+        active: true,
+      }
+    } as AuthorizationResult);
+
+    let rerenderFn: RenderResult["rerender"];
+    await act(async () => {
+      const res = render(
+        <PermissionsProvider initialAuthState={initialState}>
+          <TestComponent />
+        </PermissionsProvider>
+      );
+      rerenderFn = res.rerender;
+    });
+
+    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
+
+    // Simulate pathname change with a logout/guest state (NO_SESSION)
+    mockPathname = "/login";
+    
+    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValueOnce({
+      ok: false,
+      reason: "NO_SESSION",
+      message: "AUTH_ERROR: Nicht angemeldet",
+    });
+
+    await act(async () => {
+      rerenderFn(
+        <PermissionsProvider initialAuthState={initialState}>
+          <TestComponent />
+        </PermissionsProvider>
+      );
+    });
+
+    // Identity should be cleared
+    expect(screen.getByTestId("name").textContent).toBe("");
+    expect(screen.getByTestId("initials").textContent).toBe("");
+    expect(screen.getByTestId("role").textContent).toBe("");
+    expect(screen.getByTestId("status").textContent).toBe("error");
   });
 });
