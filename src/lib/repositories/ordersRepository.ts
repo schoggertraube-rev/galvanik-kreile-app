@@ -34,9 +34,9 @@ export const ordersRepository = {
   async getAll(): Promise<Order[]> {
     if (isSupabase) {
       const supabase = createClient();
-      const { data: dbOrders, error: ordersError } = await supabase.from('orders').select('*').order('created_at', { ascending: false });
+      const { data: dbOrders, error: ordersError } = await supabase.from('v_production_orders').select('*').order('created_at', { ascending: false });
       if (ordersError) {
-        console.error("Supabase ordersRepository.getAll (orders) error:", ordersError);
+        console.error("Supabase ordersRepository.getAll (v_production_orders) error:", ordersError);
         return [];
       }
       
@@ -80,8 +80,8 @@ export const ordersRepository = {
           customerName,
           title: o.title,
           task: o.task || o.title || "Unbenanntes Projekt",
-          station: o.current_station || "wareneingang",
-          currentStationId: o.current_station || "wareneingang",
+          station: o.current_station || o.current_station_id || o.station || "wareneingang",
+          currentStationId: o.current_station_id || o.current_station || o.station || "wareneingang",
           status: o.status,
           risk: o.risk || "green",
           statusText: o.status_text,
@@ -92,7 +92,7 @@ export const ordersRepository = {
             name: item.name,
             quantity: item.quantity,
             surfaceRequested: item.surface_requested || "",
-            station: o.current_station || "wareneingang"
+            station: o.current_station || o.current_station_id || o.station || "wareneingang"
           })),
           intakeDate,
           dueDate,
