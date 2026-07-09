@@ -1,7 +1,6 @@
 import { db } from "@/db";
-import { orders, customers, items } from "@/db/schema";
-import { eq, desc, and, notInArray, notIlike, sql, inArray } from "drizzle-orm";
-import { isProductionOrderVisible } from "@/lib/server/orderVisibility";
+import { orders, customers, items, vProductionOrders } from "@/db/schema";
+import { eq, desc, and, inArray, sql } from "drizzle-orm";
 
 // Short-lived in-memory cache (5 seconds) — prevents parallel duplicate DB calls
 // during a single page render without blocking real-time updates.
@@ -27,49 +26,26 @@ async function _fetchAndMap() {
 
   const results = await db
     .select({
-      id: orders.id,
-      orderNumber: orders.orderNumber,
-      customerId: orders.customerId,
+      id: vProductionOrders.id,
+      orderNumber: vProductionOrders.orderNumber,
+      customerId: vProductionOrders.customerId,
       customerName: customers.name,
-      title: orders.title,
-      task: orders.task,
-      status: orders.status,
-      risk: orders.priorityComputed,
-      currentStationId: orders.currentStationId,
-      intakeDate: orders.intakeDate,
-      dueDate: orders.dueDate,
-      createdAt: orders.createdAt,
-      // Visibility contract fields
-      tenantId: orders.tenantId,
-      source: orders.source,
+      title: vProductionOrders.title,
+      task: vProductionOrders.task,
+      status: vProductionOrders.status,
+      risk: vProductionOrders.priorityComputed,
+      currentStationId: vProductionOrders.currentStationId,
+      intakeDate: vProductionOrders.intakeDate,
+      dueDate: vProductionOrders.dueDate,
+      createdAt: vProductionOrders.createdAt,
+      tenantId: vProductionOrders.tenantId,
+      source: vProductionOrders.source,
     })
-    .from(orders)
-    .leftJoin(customers, eq(customers.id, orders.customerId))
-    .where(
-      and(
-        eq(orders.tenantId, "galvanik-kreile"),
-        notInArray(
-          sql`coalesce(${orders.source}, 'manual')`,
-          ["seed", "test", "demo", "integration-test"]
-        ),
-        notIlike(sql`coalesce(${orders.orderNumber}, '')`, "A-SEED-%"),
-        notIlike(sql`coalesce(${orders.orderNumber}, '')`, "%TEST%")
-      )
-    )
-    .orderBy(desc(orders.createdAt));
+    .from(vProductionOrders)
+    .leftJoin(customers, eq(customers.id, vProductionOrders.customerId))
+    .orderBy(desc(vProductionOrders.createdAt));
 
-  // Server-side visibility contract — same rules as DB WHERE clause but
-  // also covers title/task text fields that cannot be cheaply expressed in SQL.
-  const visible = results.filter((o) =>
-    isProductionOrderVisible({
-      tenantId: o.tenantId,
-      source: o.source,
-      orderNumber: o.orderNumber,
-      title: o.title,
-      task: o.task,
-      customerId: o.customerId,
-    })
-  );
+  const visible = results;
 
   // Only load items for the fetched orders (avoids full-table scan)
   const orderIds = visible.map((o) => o.id);

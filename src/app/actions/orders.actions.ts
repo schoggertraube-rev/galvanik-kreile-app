@@ -7,7 +7,6 @@ import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { unstable_noStore as noStore } from "next/cache";
-import { isProductionOrderVisible } from "@/lib/server/orderVisibility";
 
 // DTO Typen (zur Vereinfachung)
 export type OrderResponse = Record<string, unknown>;
@@ -34,33 +33,13 @@ export async function getOrderCountDb(): Promise<ActionResult<{ count: number }>
   if (!auth.ok) return auth;
 
   try {
-    // Fetch only the fields needed by the visibility predicate so we stay lightweight.
-    // A pure COUNT(*) in SQL cannot replicate the title/task keyword checks, so we
-    // count in JS using the same isProductionOrderVisible predicate.
+    const { count } = await import("drizzle-orm");
+    const { vProductionOrders } = await import("@/db/schema");
     const rows = await db
-      .select({
-        tenantId: orders.tenantId,
-        source: orders.source,
-        orderNumber: orders.orderNumber,
-        title: orders.title,
-        task: orders.task,
-        customerId: orders.customerId,
-      })
-      .from(orders)
-      .where(eq(orders.tenantId, "galvanik-kreile"));
+      .select({ value: count() })
+      .from(vProductionOrders);
 
-    const count = rows.filter((r) =>
-      isProductionOrderVisible({
-        tenantId: r.tenantId,
-        source: r.source,
-        orderNumber: r.orderNumber,
-        title: r.title,
-        task: r.task,
-        customerId: r.customerId,
-      })
-    ).length;
-
-    return { ok: true, data: { count } };
+    return { ok: true, data: { count: rows[0].value } };
   } catch (error: unknown) {
     console.error("[ORDER_COUNT_ERROR]", error instanceof Error ? error.message : String(error));
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Zählen der Aufträge", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
@@ -234,11 +213,11 @@ export async function updateOrderDb(id: string, changes: {
 
 export async function getRiskOrders(limit = 3) {
   try {
-    const { sql, desc } = await import("drizzle-orm");
+    const { desc } = await import("drizzle-orm");
     const riskOrders = await db.select({
       id: orders.orderNumber,
       kunde: customers.name,
-      tage: sql<number>`-2` // Mock risk days for now to keep the UI the same
+      dueDate: orders.dueDate
     })
     .from(orders)
     .leftJoin(customers, eq(orders.customerId, customers.id))
@@ -246,11 +225,18 @@ export async function getRiskOrders(limit = 3) {
     .orderBy(desc(orders.createdAt))
     .limit(limit);
 
-    return riskOrders.map((o, i) => ({
-      id: o.id || `A-2026-00${89 + i}`,
-      kunde: o.kunde || "Unbekannter Kunde",
-      tage: -2 + i
-    }));
+    return riskOrders.map((o) => {
+      let tage = 0;
+      if (o.dueDate) {
+        const diffMs = new Date(o.dueDate).getTime() - Date.now();
+        tage = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+      }
+      return {
+        id: o.id || "",
+        kunde: o.kunde || "Unbekannter Kunde",
+        tage
+      };
+    });
   } catch (error) {
     console.error("Failed to get risk orders:", error);
     return [];

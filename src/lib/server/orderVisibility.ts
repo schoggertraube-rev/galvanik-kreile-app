@@ -1,4 +1,7 @@
 /**
+ * LEGACY/TEST HELPER
+ * Nicht kanonisch für Runtime; kanonisch ist v_production_orders.
+ *
  * Production Order Visibility Contract
  *
  * Central predicate that determines whether a DB row is a legitimate
@@ -7,7 +10,7 @@
  * Rules (all must pass):
  *  1. tenantId must be "galvanik-kreile"
  *  2. source must NOT be: seed | test | demo | integration-test | e2e
- *  3. source must be one of: manual, scan, customer (source null is NOT visible)
+ *  3. source=NULL is visible if other rules pass.
  *  4. orderNumber must be present and must NOT match A-SEED-* or *TEST* (case-insensitive)
  *  5. customerId must be present
  *  6. title or task must be present
@@ -85,13 +88,10 @@ export function isProductionOrderVisible(
   if (input.tenantId !== "galvanik-kreile") return false;
 
   // 2. Source guards
-  if (input.source == null) return false; // source null is NOT visible.
-  
-  const lowerSource = input.source.toLowerCase();
-  if (BLOCKED_SOURCES.has(lowerSource)) return false;
-
-  const VALID_SOURCES = new Set(["manual", "scan", "customer"]);
-  if (!VALID_SOURCES.has(lowerSource)) return false;
+  if (input.source != null) {
+    const lowerSource = input.source.toLowerCase();
+    if (BLOCKED_SOURCES.has(lowerSource)) return false;
+  }
 
   // 3. customerId must be present
   if (!input.customerId || input.customerId.trim() === "") return false;
@@ -110,22 +110,6 @@ export function isProductionOrderVisible(
   // 6. title/task must not be gibberish or obvious test text
   if (isGibberishOrTestText(title) || isGibberishOrTestText(task)) return false;
 
-  // 7. kühlergrill 300sl, kronleuchter, Stoßstange rekord c conditional check
-  const lowerTitle = title.toLowerCase();
-  const lowerTask = task.toLowerCase();
-  const conditionalItems = [
-    "kühlergrill 300sl",
-    "kronleuchter",
-    "stoßstange rekord c"
-  ];
-  const containsConditional = (text: string) => {
-    return conditionalItems.some((item) => text.includes(item));
-  };
-  if (containsConditional(lowerTitle) || containsConditional(lowerTask)) {
-    if (!input.customerId || !input.source) {
-      return false;
-    }
-  }
 
   // 8. Text-field keyword scan (orderNumber, title, task)
   const fieldsToScan = [orderNum, title, task];

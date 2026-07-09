@@ -115,6 +115,43 @@ export const orders = pgTable("orders", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const vProductionOrders = pgTable("v_production_orders", {
+  id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
+  orderNumber: text("order_number").notNull(),
+  customerId: text("customer_id").notNull(),
+  title: text("title").notNull(),
+  task: text("task"),
+  station: varchar("station", { length: 100 }).notNull().default("wareneingang"),
+  currentStationId: varchar("current_station_id", { length: 100 }),
+  status: varchar("status", { length: 50 }).notNull().default("in_progress"),
+  risk: varchar("risk", { length: 50 }).default("green"),
+  priorityComputed: varchar("priority_computed", { length: 50 }).default("green"),
+  inquiryId: text("inquiry_id"),
+  parts: jsonb("parts").$type<Record<string, unknown>[]>(),
+  statusText: text("status_text"),
+  delayReason: text("delay_reason"),
+  recommendedAction: text("recommended_action"),
+  kostenstellePrimaerId: uuid("kostenstelle_primaer_id"),
+  dbGeplant: numeric("db_geplant", { precision: 12, scale: 2 }),
+  dbIst: numeric("db_ist", { precision: 12, scale: 2 }),
+  dbLetzteBerechnung: timestamp("db_letzte_berechnung", { withTimezone: true }),
+  intakeDate: timestamp("intake_date").defaultNow(),
+  priority: text("priority").default("normal"),
+  dueDate: timestamp("due_date"),
+  promisedDueDate: timestamp("promised_due_date", { withTimezone: true }),
+  completedDate: timestamp("completed_date", { withTimezone: true }),
+  attachmentUrl: text("attachment_url"),
+  source: text("source"),
+  sourceRef: text("source_ref"),
+  freetextOriginal: text("freetext_original"),
+  isQuote: boolean("is_quote").default(false),
+  quoteStatus: text("quote_status"),
+  quoteConvertedOrderId: text("quote_converted_order_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+
 // 4.5 Calendar Events
 export const calendarEvents = pgTable("calendar_events", {
   id: cuidPrimaryKey("id"),
