@@ -41,8 +41,11 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // Allow bypassing Supabase auth in local development / E2E testing via a cookie
-  if (request.cookies.get('bypass-auth')?.value === 'true') {
+  // Dev-only; Preview/Production ignorieren diesen Cookie.
+  if (
+    process.env.NODE_ENV === 'development' &&
+    request.cookies.get('bypass-auth')?.value === 'true'
+  ) {
     return supabaseResponse
   }
 
