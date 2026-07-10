@@ -2,24 +2,31 @@
 
 import { login } from "@/app/actions/auth";
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { writeLocalUserSession } from "@/lib/auth/localUserSession";
 
 export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [errorMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setErrorMsg("");
     const formData = new FormData(e.currentTarget);
     startTransition(async () => {
-      // Direct call to the server action
       try {
-        await login(formData);
-      } catch (err) {
-        const error = err as Error & { digest?: string };
-        if (error?.digest?.startsWith('NEXT_REDIRECT')) {
-          throw err;
+        const result = await login(formData);
+        if (result.ok === false) {
+          setErrorMsg(result.message);
+        } else {
+          writeLocalUserSession({ role: result.role, initials: result.initials });
+          router.push(result.redirectTo);
+          router.refresh();
         }
+      } catch (err) {
         console.error("Login Error:", err);
+        setErrorMsg("Login konnte nicht geprüft werden. Bitte erneut versuchen.");
       }
     });
   };
