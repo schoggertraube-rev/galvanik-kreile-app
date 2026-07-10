@@ -1,7 +1,6 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { clearAppSession, setAppSession, SESSION_TTL_MS } from '@/lib/server/appSession'
 import { resolveLoginIdentityByEmail } from '@/lib/server/authorization'
@@ -12,8 +11,13 @@ export type LogoutResult = {
   remoteSignOut: "success" | "failed";
 };
 
+// ─── Login-Ergebnistyp ────────────────────────────────────────────────────────
+export type LoginResult =
+  | { ok: true; redirectTo: string; role: string; initials: string; displayName: string }
+  | { ok: false; message: string };
+
 // ─── Email-Login ──────────────────────────────────────────────────────────────
-export async function login(formData: FormData) {
+export async function login(formData: FormData): Promise<LoginResult> {
   const supabase = await createClient()
 
   const data = {
@@ -24,14 +28,14 @@ export async function login(formData: FormData) {
   const { error } = await supabase.auth.signInWithPassword(data)
 
   if (error) {
-    redirect('/start?message=E-Mail oder Passwort falsch')
+    return { ok: false, message: "E-Mail oder Passwort falsch" }
   }
 
   // Supabase E-Mail-Identität erfolgreich
   const { data: { user } } = await supabase.auth.getUser()
   if (!user || !user.email) {
     await supabase.auth.signOut()
-    redirect('/start?message=Systemfehler: Benutzerprofil nicht abrufbar.')
+    return { ok: false, message: "Systemfehler: Benutzerprofil nicht abrufbar." }
   }
 
   // tenantgebundenen app_users-Datensatz laden
@@ -39,12 +43,12 @@ export async function login(formData: FormData) {
   if (!identityResult.ok) {
     await supabase.auth.signOut()
     if (identityResult.message.includes("deaktiviert")) {
-      redirect('/start?message=AUTH_ERROR: Benutzer deaktiviert')
+      return { ok: false, message: "AUTH_ERROR: Benutzer deaktiviert" }
     }
     if (identityResult.message.includes("gefunden")) {
-      redirect('/start?message=AUTH_ERROR: Benutzer nicht gefunden')
+      return { ok: false, message: "AUTH_ERROR: Benutzer nicht gefunden" }
     }
-    redirect('/start?message=Systemfehler: Benutzerprofil nicht abrufbar.')
+    return { ok: false, message: "Systemfehler: Benutzerprofil nicht abrufbar." }
   }
 
   const dbUser = identityResult.data
@@ -52,13 +56,13 @@ export async function login(formData: FormData) {
   // Rolle prüfen (admin/developer only)
   if (dbUser.role !== 'admin' && dbUser.role !== 'developer') {
     await supabase.auth.signOut()
-    redirect('/start?message=Dieser Login ist Administratoren vorbehalten. Bitte nutzen Sie den PIN-Login.')
+    return { ok: false, message: "Dieser Login ist Administratoren vorbehalten. Bitte nutzen Sie den PIN-Login." }
   }
 
   const displayName = dbUser.fullName?.trim()
   if (!displayName) {
     await supabase.auth.signOut()
-    redirect('/start?message=Kein Anzeigename für diesen Benutzer konfiguriert. Bitte Administrator kontaktieren.')
+    return { ok: false, message: "Kein Anzeigename für diesen Benutzer konfiguriert. Bitte Administrator kontaktieren." }
   }
 
   // Kanonische App-Session setzen
@@ -72,12 +76,26 @@ export async function login(formData: FormData) {
     expiresAt: now + SESSION_TTL_MS,
   });
 
+  // Initialenregel berechnen
+  const trimmed = displayName.trim();
+  const parts = trimmed.split(/\s+/);
+  let initials = "?";
+  if (parts.length >= 2) {
+    const first = parts[0].charAt(0).toUpperCase();
+    const last = parts[parts.length - 1].charAt(0).toUpperCase();
+    initials = `${first}${last}`;
+  } else if (parts.length === 1 && parts[0].length > 0) {
+    initials = parts[0].slice(0, 2).toUpperCase();
+  }
+
   revalidatePath('/', 'layout')
 
-  if (dbUser.role === 'developer') {
-    redirect('/settings')
-  } else {
-    redirect('/')
+  return {
+    ok: true,
+    redirectTo: dbUser.role === 'developer' ? '/settings' : '/',
+    role: dbUser.role,
+    initials,
+    displayName
   }
 }
 

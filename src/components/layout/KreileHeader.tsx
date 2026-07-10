@@ -16,6 +16,7 @@ import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 import { useRouter } from "next/navigation";
+import { readLocalUserSession, clearLocalUserSession, LOCAL_USER_SESSION_EVENT } from "@/lib/auth/localUserSession";
 
 interface KreileHeaderProps {
   onMenuToggle: () => void;
@@ -42,6 +43,22 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
   const userDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [localUserSession, setLocalUserSession] = useState<ReturnType<typeof readLocalUserSession>>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const updateLocalSession = () => {
+      setLocalUserSession(readLocalUserSession());
+    };
+    updateLocalSession();
+    window.addEventListener(LOCAL_USER_SESSION_EVENT, updateLocalSession);
+    window.addEventListener("storage", updateLocalSession);
+    return () => {
+      window.removeEventListener(LOCAL_USER_SESSION_EVENT, updateLocalSession);
+      window.removeEventListener("storage", updateLocalSession);
+    };
+  }, []);
+
   // Click outside to close user dropdown
   useEffect(() => {
     if (!userDropdownOpen && !notificationsOpen) return;
@@ -62,8 +79,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     setIsLoggingOut(true);
     setUserDropdownOpen(false);
     // Entferne nicht-autoritative UI-Cachewerte (localStorage)
-    localStorage.removeItem("kreile_user_role");
-    localStorage.removeItem("kreile_user_initials");
+    clearLocalUserSession();
     // Dev-Bypass-Cookie löschen: StartScreenClient.tsx schreibt ihn,
     // proxy.ts und roles.ts lesen ihn – konsistente Bereinigung erforderlich.
     // Sicherheitsauftrag: vollständige Migration auf kreile_app_session ist geplant.
@@ -280,40 +296,43 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         </div>
 
         {/* Profilbild rund (Kreis 48px) */}
-        {status === "authenticated" && initials && (
-          <div className="relative" ref={userDropdownRef}>
-            <button
-              onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-              className="w-10 h-10 rounded-full bg-navy-700/90 backdrop-blur-sm border border-navy-500 hover:bg-navy-900 transition-all duration-300 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-sm cursor-pointer"
-            >
-              {initials}
-            </button>
-
-            {userDropdownOpen && (
-              <div className="absolute right-0 top-14 mt-2 w-48 bg-white border-2 border-neutral-gray-100 rounded-2xl shadow-xl z-50 p-2 animate-in slide-in-from-top-2 fade-in duration-200">
-                <div className="px-3 py-2 border-b border-neutral-gray-100 mb-1">
-                  <p className="text-xs font-bold text-navy-900">Angemeldet als</p>
-                  <p className="text-[10px] text-text-muted">{name || initials}</p>
-                </div>
-              <Link
-                href="/settings"
-                onClick={() => setUserDropdownOpen(false)}
-                className="block w-full text-left px-3 py-2 text-sm font-bold text-navy-900 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer mb-1"
-              >
-                Einstellungen
-              </Link>
-              {/* Settings and other tabs are handled within /settings */}
+        {((status === "authenticated" && initials) || localUserSession !== null) && (() => {
+          const displayInitials = localUserSession?.initials || initials || "?";
+          return (
+            <div className="relative" ref={userDropdownRef}>
               <button
-                onClick={handleLogout}
-                disabled={isLoggingOut}
-                className="w-full text-left px-3 py-2 text-sm font-bold text-danger-red hover:bg-danger-red/10 rounded-xl transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                className="w-10 h-10 rounded-full bg-navy-700/90 backdrop-blur-sm border border-navy-500 hover:bg-navy-900 transition-all duration-300 text-white flex items-center justify-center text-sm font-black shrink-0 shadow-sm cursor-pointer"
               >
-                {isLoggingOut ? "Abmelden..." : "Abmelden"}
+                {displayInitials}
               </button>
+
+              {userDropdownOpen && (
+                <div className="absolute right-0 top-14 mt-2 w-48 bg-white border-2 border-neutral-gray-100 rounded-2xl shadow-xl z-50 p-2 animate-in slide-in-from-top-2 fade-in duration-200">
+                  <div className="px-3 py-2 border-b border-neutral-gray-100 mb-1">
+                    <p className="text-xs font-bold text-navy-900">Angemeldet als</p>
+                    <p className="text-[10px] text-text-muted">{name || displayInitials}</p>
+                  </div>
+                  <Link
+                    href="/settings"
+                    onClick={() => setUserDropdownOpen(false)}
+                    className="block w-full text-left px-3 py-2 text-sm font-bold text-navy-900 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer mb-1"
+                  >
+                    Einstellungen
+                  </Link>
+                  {/* Settings and other tabs are handled within /settings */}
+                  <button
+                    onClick={handleLogout}
+                    disabled={isLoggingOut}
+                    className="w-full text-left px-3 py-2 text-sm font-bold text-danger-red hover:bg-danger-red/10 rounded-xl transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isLoggingOut ? "Abmelden..." : "Abmelden"}
+                  </button>
+                </div>
+              )}
             </div>
-          )}
-        </div>
-        )}
+          );
+        })()}
 
       </div>
 
