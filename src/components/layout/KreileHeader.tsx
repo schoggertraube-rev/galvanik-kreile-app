@@ -16,7 +16,6 @@ import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 import { useRouter } from "next/navigation";
-import { readLocalUserSession, clearLocalUserSession, LOCAL_USER_SESSION_EVENT } from "@/lib/auth/localUserSession";
 
 interface KreileHeaderProps {
   onMenuToggle: () => void;
@@ -43,22 +42,6 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
   const userDropdownRef = useRef<HTMLDivElement>(null);
 
-  const [localUserSession, setLocalUserSession] = useState<ReturnType<typeof readLocalUserSession>>(null);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const updateLocalSession = () => {
-      setLocalUserSession(readLocalUserSession());
-    };
-    updateLocalSession();
-    window.addEventListener(LOCAL_USER_SESSION_EVENT, updateLocalSession);
-    window.addEventListener("storage", updateLocalSession);
-    return () => {
-      window.removeEventListener(LOCAL_USER_SESSION_EVENT, updateLocalSession);
-      window.removeEventListener("storage", updateLocalSession);
-    };
-  }, []);
-
   // Click outside to close user dropdown
   useEffect(() => {
     if (!userDropdownOpen && !notificationsOpen) return;
@@ -78,12 +61,6 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     if (isLoggingOut) return; // Doppel-Aufruf verhindern
     setIsLoggingOut(true);
     setUserDropdownOpen(false);
-    // Entferne nicht-autoritative UI-Cachewerte (localStorage)
-    clearLocalUserSession();
-    // Dev-Bypass-Cookie löschen: StartScreenClient.tsx schreibt ihn,
-    // proxy.ts und roles.ts lesen ihn – konsistente Bereinigung erforderlich.
-    // Sicherheitsauftrag: vollständige Migration auf kreile_app_session ist geplant.
-    document.cookie = "bypass-auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     await logout();
     router.refresh();
     router.replace("/start");
@@ -296,8 +273,8 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         </div>
 
         {/* Profilbild rund (Kreis 48px) */}
-        {((status === "authenticated" && initials) || localUserSession !== null) && (() => {
-          const displayInitials = localUserSession?.initials || initials || "?";
+        {status === "authenticated" && initials && (() => {
+          const displayInitials = initials || "?";
           return (
             <div className="relative" ref={userDropdownRef}>
               <button

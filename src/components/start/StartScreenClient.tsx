@@ -149,16 +149,8 @@ function PinDialog({ user, onClose }: { user: StartUser; onClose: () => void }) 
             }
           }
 
-          // UI state in localStorage (not auth relevant)
-          try {
-            localStorage.setItem("kreile_user_role", res.role || user.role);
-            localStorage.setItem("kreile_user_initials", user.initials);
-          } catch (e) {
-            console.warn("localStorage is blocked, skipping user info storage", e);
-          }
-
-          // Redirect to home
-          window.location.href = "/";
+          // Rolle/Initialen kommen aus der signierten Server-Session (kein localStorage).
+          router.replace("/");
         } else {
           setError(true);
           setTimeout(() => setPin(""), 600);

@@ -35,12 +35,11 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
       ok: true,
       session: {
-        userId: "user-1",
-        tenantId: "galvanik-kreile",
+        uid: "user-1",
         role: "admin",
-        displayName: "Max Kreile",
-        issuedAt: 0,
-        expiresAt: Date.now() + 10000,
+        tenant: "galvanik-kreile",
+        initials: "MK",
+        exp: Date.now() + 10000,
       },
     });
 
@@ -94,12 +93,11 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
       ok: true,
       session: {
-        userId: "user-1",
-        tenantId: "galvanik-kreile",
+        uid: "user-1",
         role: "admin",
-        displayName: "Max Kreile",
-        issuedAt: 0,
-        expiresAt: Date.now() + 10000,
+        tenant: "galvanik-kreile",
+        initials: "MK",
+        exp: Date.now() + 10000,
       },
     });
 
@@ -117,12 +115,11 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
       ok: true,
       session: {
-        userId: "user-1",
-        tenantId: "galvanik-kreile",
+        uid: "user-1",
         role: "admin",
-        displayName: "Max Kreile",
-        issuedAt: 0,
-        expiresAt: Date.now() + 10000,
+        tenant: "galvanik-kreile",
+        initials: "MK",
+        exp: Date.now() + 10000,
       },
     });
 
@@ -147,12 +144,11 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
       ok: true,
       session: {
-        userId: "user-1",
-        tenantId: "galvanik-kreile",
+        uid: "user-1",
         role: "buero",
-        displayName: "Max Kreile",
-        issuedAt: 0,
-        expiresAt: Date.now() + 10000,
+        tenant: "galvanik-kreile",
+        initials: "MK",
+        exp: Date.now() + 10000,
       },
     });
 
@@ -177,12 +173,11 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
       ok: true,
       session: {
-        userId: "user-1",
-        tenantId: "galvanik-kreile",
+        uid: "user-1",
         role: "invalid-role",
-        displayName: "Max Kreile",
-        issuedAt: 0,
-        expiresAt: Date.now() + 10000,
+        tenant: "galvanik-kreile",
+        initials: "MK",
+        exp: Date.now() + 10000,
       },
     });
 
@@ -207,12 +202,11 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
       ok: true,
       session: {
-        userId: "user-1",
-        tenantId: "galvanik-kreile",
+        uid: "user-1",
         role: "admin",
-        displayName: "Max Kreile",
-        issuedAt: 0,
-        expiresAt: Date.now() + 10000,
+        tenant: "galvanik-kreile",
+        initials: "MK",
+        exp: Date.now() + 10000,
       },
     });
 
@@ -230,12 +224,11 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
       ok: true,
       session: {
-        userId: "user-1",
-        tenantId: "galvanik-kreile",
+        uid: "user-1",
         role: "werkstatt",
-        displayName: "Max Kreile",
-        issuedAt: 0,
-        expiresAt: Date.now() + 10000,
+        tenant: "galvanik-kreile",
+        initials: "MK",
+        exp: Date.now() + 10000,
       },
     });
 
@@ -265,12 +258,11 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     const spy = vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
       ok: true,
       session: {
-        userId: "u1",
-        tenantId: "galvanik-kreile",
+        uid: "u1",
         role: "admin",
-        displayName: "Admin User",
-        issuedAt: 0,
-        expiresAt: Date.now() + 10000,
+        tenant: "galvanik-kreile",
+        initials: "MK",
+        exp: Date.now() + 10000,
       },
     });
 
@@ -287,12 +279,11 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
       ok: true,
       session: {
-        userId: "user-1",
-        tenantId: "galvanik-kreile",
+        uid: "user-1",
         role: "admin",
-        displayName: "Max Kreile",
-        issuedAt: 0,
-        expiresAt: Date.now() + 10000,
+        tenant: "galvanik-kreile",
+        initials: "MK",
+        exp: Date.now() + 10000,
       },
     });
 

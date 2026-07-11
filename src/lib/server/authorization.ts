@@ -94,7 +94,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
     };
   }
 
-  const { userId, tenantId: sessionTenantId, role: sessionRole } = sessionResult.session;
+  const { uid: userId, tenant: sessionTenantId, role: sessionRole } = sessionResult.session;
 
   if (sessionTenantId !== "galvanik-kreile") {
     return {

@@ -3,7 +3,6 @@
 import { login } from "@/app/actions/auth";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { writeLocalUserSession } from "@/lib/auth/localUserSession";
 
 export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
   const router = useRouter();
@@ -20,8 +19,8 @@ export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
         if (result.ok === false) {
           setErrorMsg(result.message);
         } else {
-          writeLocalUserSession({ role: result.role, initials: result.initials });
-          router.push(result.redirectTo);
+          // Rolle/Initialen kommen aus der signierten Server-Session (kein localStorage).
+          router.replace(result.redirectTo);
           router.refresh();
         }
       } catch (err) {

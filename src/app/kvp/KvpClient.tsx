@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Lightbulb, PlusCircle, Target, Activity, AlertOctagon, CheckCircle2, ListFilter, PlayCircle, BarChart3, Info, Lock } from "lucide-react";
 import { usePageView } from "@/hooks/usePageView";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { OfflineSyncBadge } from "@/components/offline/OfflineSyncBadge";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 interface KvpItem {
   id: string;
@@ -82,8 +83,19 @@ const DEMO_ITEMS: KvpItem[] = [
 export function KvpClient() {
   usePageView();
 
-  const [items, setItems] = useState<KvpItem[]>(DEMO_ITEMS);
-  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
+  const { role } = usePermissions();
+  const isAdminOrDev = role === "admin" || role === "developer";
+  const [items, setItems] = useState<KvpItem[]>(() => {
+    if (typeof window === "undefined") return DEMO_ITEMS;
+    const saved = localStorage.getItem("kreile_kvp_items");
+    if (!saved) return DEMO_ITEMS;
+    try {
+      const parsed = JSON.parse(saved);
+      return [...parsed, ...DEMO_ITEMS];
+    } catch {
+      return DEMO_ITEMS;
+    }
+  });
   const [activeItem, setActiveItem] = useState<KvpItem | null>(null);
 
   // Form State
@@ -91,21 +103,6 @@ export function KvpClient() {
   const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
   const [newBenefit, setNewBenefit] = useState(BENEFITS[0]);
   const [newProblem, setNewProblem] = useState("");
-
-  useEffect(() => {
-    const role = localStorage.getItem("kreile_user_role");
-    if (role === "admin" || role === "developer") setIsAdminOrDev(true);
-
-    const saved = localStorage.getItem("kreile_kvp_items");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setItems([...parsed, ...DEMO_ITEMS]);
-      } catch(e) {
-        setItems(DEMO_ITEMS);
-      }
-    }
-  }, []);
 
   const handleSave = () => {
     if (!newTitle.trim()) return;
@@ -252,7 +249,7 @@ export function KvpClient() {
             <ul className="space-y-3 mb-6">
               <li className="flex justify-between items-center border-b border-neutral-gray-100 pb-2">
                 <span className="text-sm font-medium text-navy-900">Häufigste Suche ohne Treffer</span>
-                <span className="text-xs font-bold text-error-red">"Urlaub"</span>
+                <span className="text-xs font-bold text-error-red">&quot;Urlaub&quot;</span>
               </li>
               <li className="flex justify-between items-center border-b border-neutral-gray-100 pb-2">
                 <span className="text-sm font-medium text-navy-900">Rollenblockaden (Woche)</span>

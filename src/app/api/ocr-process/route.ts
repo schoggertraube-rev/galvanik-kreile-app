@@ -80,7 +80,7 @@ export async function POST(req: Request) {
     let erstelltVon: string;
     const sessionRes = await readAppSession();
     if (sessionRes.ok) {
-      erstelltVon = sessionRes.session.userId;
+      erstelltVon = sessionRes.session.uid;
     } else {
       if (process.env.NODE_ENV !== "production") {
         const { appUsers } = await import("@/db/schema");

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
-import { clearAppSession, setAppSession, SESSION_TTL_MS } from '@/lib/server/appSession'
+import { clearAppSession, setAppSession, SESSION_TTL_MS, deriveSessionInitials } from '@/lib/server/appSession'
 import { resolveLoginIdentityByEmail } from '@/lib/server/authorization'
 
 // ─── Logout-Ergebnistyp ───────────────────────────────────────────────────────
@@ -65,28 +65,17 @@ export async function login(formData: FormData): Promise<LoginResult> {
     return { ok: false, message: "Kein Anzeigename für diesen Benutzer konfiguriert. Bitte Administrator kontaktieren." }
   }
 
-  // Kanonische App-Session setzen
-  const now = Date.now();
-  await setAppSession({
-    userId: dbUser.id,
-    tenantId: dbUser.tenantId,
-    role: dbUser.role,
-    displayName: displayName,
-    issuedAt: now,
-    expiresAt: now + SESSION_TTL_MS,
-  });
+  // Initialen aus dem kanonischen Ableiter (identisch in Session und Rueckgabe)
+  const initials = deriveSessionInitials(displayName);
 
-  // Initialenregel berechnen
-  const trimmed = displayName.trim();
-  const parts = trimmed.split(/\s+/);
-  let initials = "?";
-  if (parts.length >= 2) {
-    const first = parts[0].charAt(0).toUpperCase();
-    const last = parts[parts.length - 1].charAt(0).toUpperCase();
-    initials = `${first}${last}`;
-  } else if (parts.length === 1 && parts[0].length > 0) {
-    initials = parts[0].slice(0, 2).toUpperCase();
-  }
+  // Kanonische App-Session setzen
+  await setAppSession({
+    uid: dbUser.id,
+    role: dbUser.role,
+    tenant: dbUser.tenantId,
+    initials,
+    exp: Date.now() + SESSION_TTL_MS,
+  });
 
   revalidatePath('/', 'layout')
 

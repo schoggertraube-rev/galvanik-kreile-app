@@ -13,7 +13,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const TEST_SECRET = "test-secret-loginwithpin-unit-tests";
-process.env.APP_SESSION_SECRET = TEST_SECRET;
+process.env.KREILE_SESSION_SECRET = TEST_SECRET;
 
 const mockSetAppSession = vi.fn();
 const mockCookieSet = vi.fn();
@@ -21,8 +21,12 @@ const mockCookieSet = vi.fn();
 vi.mock("@/lib/server/appSession", () => ({
   setAppSession: mockSetAppSession,
   clearAppSession: vi.fn(),
-  getAppSession: vi.fn().mockResolvedValue(null),
   readAppSession: vi.fn().mockResolvedValue({ ok: false, reason: "NO_COOKIE" }),
+  deriveSessionInitials: (name: string) => {
+    const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    return parts[0] ? parts[0].slice(0, 2).toUpperCase() : "?";
+  },
   SESSION_TTL_MS: 12 * 60 * 60 * 1000,
   COOKIE_NAME: "kreile_app_session",
 }));
@@ -65,7 +69,7 @@ describe("loginWithPin() - AppSession-Erstellung (A-08)", () => {
     mockSetAppSession.mockResolvedValue(undefined);
   });
 
-  it("8a - gueltiger PIN mit vollstaendigem fullName -> AppSession wird mit displayName gesetzt", async () => {
+  it("8a - gueltiger PIN mit vollstaendigem fullName -> AppSession wird mit Initialen gesetzt", async () => {
     mockDbSelect.mockResolvedValue([{
       id: "user-abc",
       tenantId: "galvanik-kreile",
@@ -83,13 +87,11 @@ describe("loginWithPin() - AppSession-Erstellung (A-08)", () => {
 
     expect(mockSetAppSession).toHaveBeenCalledOnce();
     const sessionArg = mockSetAppSession.mock.calls[0][0];
-    expect(sessionArg.userId).toBe("user-abc");
-    expect(sessionArg.displayName).toBe("Max Mustermann");
+    expect(sessionArg.uid).toBe("user-abc");
+    expect(sessionArg.initials).toBe("MM");
     expect(sessionArg.role).toBe("werkstatt");
-    expect(sessionArg.tenantId).toBe("galvanik-kreile");
-    expect(sessionArg.displayName).not.toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
-    );
+    expect(sessionArg.tenant).toBe("galvanik-kreile");
+    expect(typeof sessionArg.exp).toBe("number");
   });
 
   it("8b - fullName leer -> Fehler statt UUID-Fallback", async () => {

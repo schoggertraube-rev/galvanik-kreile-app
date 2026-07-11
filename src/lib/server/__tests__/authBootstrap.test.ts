@@ -9,12 +9,11 @@ describe("getAuthBootstrapState()", () => {
 
   it("1. authentifizierter Bootstrap liefert dieselbe AppSession", async () => {
     const mockSession = {
-      userId: "user-1",
-      tenantId: "tenant-1",
+      uid: "user-1",
+      tenant: "galvanik-kreile",
       role: "admin",
-      displayName: "Hans Meister",
-      issuedAt: 1000,
-      expiresAt: 2000,
+      initials: "HM",
+      exp: Date.now() + 60_000,
     };
 
     vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({

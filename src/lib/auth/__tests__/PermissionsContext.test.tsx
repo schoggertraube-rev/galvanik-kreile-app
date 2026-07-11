@@ -19,16 +19,30 @@ vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     auth: {
       onAuthStateChange: () => ({
-        data: { subscription: { unsubscribe: vi.fn() } }
-      })
-    }
-  })
+        data: { subscription: { unsubscribe: vi.fn() } },
+      }),
+    },
+  }),
 }));
 
 // Mock Server Actions to avoid real requests
 vi.mock("@/app/actions/auth.actions", () => ({
   getAuthorizationSnapshotAction: vi.fn(),
 }));
+
+// Snapshot-Session (signierter Cookie-Inhalt): { uid, role, tenant, initials, exp }
+function makeAuthState(overrides?: Partial<{ role: string; initials: string }>): AuthBootstrapState {
+  return {
+    status: "authenticated",
+    session: {
+      uid: "1",
+      role: overrides?.role ?? "buero",
+      tenant: "galvanik-kreile",
+      initials: overrides?.initials ?? "CD",
+      exp: Date.now() + 60_000,
+    },
+  };
+}
 
 describe("deriveInitials()", () => {
   it("5. Initialen werden stabil aus displayName erzeugt", () => {
@@ -45,8 +59,7 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
-    
-    // Default mock response for the single action call
+
     vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
       ok: true,
       data: {
@@ -56,7 +69,7 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
         role: "buero",
         permissions: ["perm_view_leitstand"],
         active: true,
-      }
+      },
     } as AuthorizationResult);
   });
 
@@ -66,7 +79,6 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
 
   const TestComponent = () => {
     const { status, initials, name, role, permissions, error } = usePermissions();
-
     return (
       <div>
         <span data-testid="status">{status}</span>
@@ -79,30 +91,19 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
     );
   };
 
-  it("T-01: Sessionidentität bleibt stabil", async () => {
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Christian Dieter",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
+  it("T-01: Refresh aktualisiert Name/Initialen aus dem DB-Snapshot", async () => {
+    const initialState = makeAuthState();
 
-    // Client action returns different name, but context must NOT update name or initials
     vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
       ok: true,
       data: {
         userId: "1",
-        tenantId: "t1",
+        tenantId: "galvanik-kreile",
         role: "buero",
         displayName: "Anderer Benutzer",
         permissions: ["perm_view_leitstand"],
         active: true,
-      }
+      },
     } as AuthorizationResult);
 
     await act(async () => {
@@ -113,7 +114,6 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       );
     });
 
-    // Now the context MUST update name and initials based on snapshot!
     expect(screen.getByTestId("name").textContent).toBe("Anderer Benutzer");
     expect(screen.getByTestId("initials").textContent).toBe("AB");
     expect(screen.getByTestId("role").textContent).toBe("buero");
@@ -121,28 +121,18 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
   });
 
   it("T-02: Passende Rolle", async () => {
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Christian Dieter",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
+    const initialState = makeAuthState();
 
     vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
       ok: true,
       data: {
         userId: "1",
-        tenantId: "t1",
+        tenantId: "galvanik-kreile",
         role: "buero",
         displayName: "Christian Dieter",
         permissions: ["perm_view_leitstand"],
         active: true,
-      }
+      },
     } as AuthorizationResult);
 
     await act(async () => {
@@ -158,20 +148,9 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
     expect(screen.getByTestId("permissions").textContent).toBe("perm_view_leitstand");
   });
 
-  it("T-03: Rollenwiderspruch", async () => {
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Christian Dieter",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
+  it("T-03: Rollenwiderspruch -> error, Identität verworfen", async () => {
+    const initialState = makeAuthState();
 
-    // DB role differs (e.g. resolveAuthorization returns ROLE_MISMATCH error)
     vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
       ok: false,
       reason: "ROLE_MISMATCH",
@@ -187,27 +166,16 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
     });
 
     expect(getAuthorizationSnapshotAction).toHaveBeenCalledTimes(1);
-
     expect(screen.getByTestId("role").textContent).toBe("");
     expect(screen.getByTestId("name").textContent).toBe("");
     expect(screen.getByTestId("initials").textContent).toBe("");
-    expect(screen.getByTestId("permissions").textContent).toBe(""); // Discarded
+    expect(screen.getByTestId("permissions").textContent).toBe("");
     expect(screen.getByTestId("status").textContent).toBe("error");
     expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Sitzung veraltet");
   });
 
-  it("T-04: Permission-Fehler", async () => {
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Christian Dieter",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
+  it("T-04: Permission-Fehler (Netzwerk)", async () => {
+    const initialState = makeAuthState();
 
     vi.mocked(getAuthorizationSnapshotAction).mockRejectedValue(new Error("Network Failure"));
 
@@ -226,21 +194,11 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
     expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Berechtigungen nicht verfügbar");
   });
 
-  it("T-05: Kein Local Storage", async () => {
+  it("T-05: Kein Local Storage für Rolle/Initialen/User", async () => {
     const spyGet = vi.spyOn(Storage.prototype, "getItem");
     const spySet = vi.spyOn(Storage.prototype, "setItem");
 
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Christian Dieter",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
+    const initialState = makeAuthState();
 
     await act(async () => {
       render(
@@ -250,65 +208,44 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       );
     });
 
-    spyGet.mock.calls.forEach(call => {
+    spyGet.mock.calls.forEach((call) => {
       expect(call[0]).not.toMatch(/role|initial|user/);
     });
-    spySet.mock.calls.forEach(call => {
+    spySet.mock.calls.forEach((call) => {
       expect(call[0]).not.toMatch(/role|initial|user/);
     });
   });
 
-  it("4. Provider übernimmt initialAuthState ohne nachträgliches Local-Storage-Überschreiben", () => {
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "admin",
-        displayName: "Peter Pan",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
+  it("4. Snapshot-Seeding: Rolle und Initialen sofort ohne Flackern", () => {
+    const initialState = makeAuthState({ role: "admin", initials: "PP" });
 
+    // Synchroner Render (ohne act): der Refresh ist noch nicht aufgeloest.
     render(
       <PermissionsProvider initialAuthState={initialState}>
         <TestComponent />
       </PermissionsProvider>
     );
 
+    // Rolle, Initialen und Status kommen synchron aus dem Session-Snapshot.
     expect(screen.getByTestId("status").textContent).toBe("authenticated");
-    expect(screen.getByTestId("name").textContent).toBe("Peter Pan");
     expect(screen.getByTestId("initials").textContent).toBe("PP");
     expect(screen.getByTestId("role").textContent).toBe("admin");
   });
 
-  it("T-06: Pathname change triggers refreshPermissions and updates identity", async () => {
+  it("T-06: Pathname-Wechsel triggert refresh und aktualisiert Identität", async () => {
     mockPathname = "/start";
-    
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Christian Dieter",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
+    const initialState = makeAuthState();
 
-    // First call happens on mount
     vi.mocked(getAuthorizationSnapshotAction).mockResolvedValueOnce({
       ok: true,
       data: {
         userId: "1",
-        tenantId: "t1",
+        tenantId: "galvanik-kreile",
         role: "buero",
         displayName: "Christian Dieter",
         permissions: ["perm_view_leitstand"],
         active: true,
-      }
+      },
     } as AuthorizationResult);
 
     let rerenderFn: RenderResult["rerender"];
@@ -323,20 +260,17 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
 
     expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
 
-    // Simulate pathname change
     mockPathname = "/settings";
-    
-    // Setup the next snapshot
     vi.mocked(getAuthorizationSnapshotAction).mockResolvedValueOnce({
       ok: true,
       data: {
         userId: "2",
-        tenantId: "t1",
+        tenantId: "galvanik-kreile",
         role: "admin",
         displayName: "Max Admin",
         permissions: ["perm_sys_toggles"],
         active: true,
-      }
+      },
     } as AuthorizationResult);
 
     await act(async () => {
@@ -352,32 +286,20 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
     expect(screen.getByTestId("role").textContent).toBe("admin");
   });
 
-  it("T-07: Error or Guest case on pathname change clears stale identity", async () => {
+  it("T-07: Guest-Fall (NO_SESSION) bei Pathname-Wechsel verwirft Identität", async () => {
     mockPathname = "/start";
-    
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Christian Dieter",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
+    const initialState = makeAuthState();
 
-    // First call happens on mount
     vi.mocked(getAuthorizationSnapshotAction).mockResolvedValueOnce({
       ok: true,
       data: {
         userId: "1",
-        tenantId: "t1",
+        tenantId: "galvanik-kreile",
         role: "buero",
         displayName: "Christian Dieter",
         permissions: ["perm_view_leitstand"],
         active: true,
-      }
+      },
     } as AuthorizationResult);
 
     let rerenderFn: RenderResult["rerender"];
@@ -392,9 +314,7 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
 
     expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
 
-    // Simulate pathname change with a logout/guest state (NO_SESSION)
     mockPathname = "/login";
-    
     vi.mocked(getAuthorizationSnapshotAction).mockResolvedValueOnce({
       ok: false,
       reason: "NO_SESSION",
@@ -409,10 +329,10 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       );
     });
 
-    // Identity should be cleared
+    // Identität geleert, Status unauthenticated (kein Fehler bei NO_SESSION).
     expect(screen.getByTestId("name").textContent).toBe("");
     expect(screen.getByTestId("initials").textContent).toBe("");
     expect(screen.getByTestId("role").textContent).toBe("");
-    expect(screen.getByTestId("status").textContent).toBe("error");
+    expect(screen.getByTestId("status").textContent).toBe("unauthenticated");
   });
 });

@@ -47,21 +47,22 @@ export function PermissionsProvider({
   children: React.ReactNode;
   initialAuthState: AuthBootstrapState;
 }) {
+  // Snapshot-Seeding: Rolle und Initialen kommen synchron aus der signierten
+  // Server-Session (initialAuthState). Kein localStorage, kein Flackern.
+  const initialAuthed = initialAuthState.status === "authenticated";
   const [status, setStatus] = useState<"authenticated" | "unauthenticated" | "error">(initialAuthState.status);
   const [error, setError] = useState<string | null>(
     initialAuthState.status === "error" ? initialAuthState.message : null
   );
   const [role, setRole] = useState<string | null>(
-    initialAuthState.status === "authenticated" ? initialAuthState.session.role : null
+    initialAuthed ? initialAuthState.session.role : null
   );
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [name, setName] = useState<string>(
-    initialAuthState.status === "authenticated" ? initialAuthState.session.displayName : ""
-  );
+  const [name, setName] = useState<string>("");
   const [initials, setInitials] = useState<string>(
-    initialAuthState.status === "authenticated" ? deriveInitials(initialAuthState.session.displayName) : ""
+    initialAuthed ? initialAuthState.session.initials : ""
   );
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialAuthed);
   const pathname = usePathname();
 
   const refreshPermissions = useCallback(async () => {
@@ -75,6 +76,13 @@ export function PermissionsProvider({
         setInitials(deriveInitials(result.data.displayName));
         setStatus("authenticated");
         setError(null);
+      } else if (result.reason === "NO_SESSION") {
+        setStatus("unauthenticated");
+        setError(null);
+        setPermissions([]);
+        setRole(null);
+        setName("");
+        setInitials("");
       } else {
         setStatus("error");
         setError(result.message);
@@ -97,15 +105,11 @@ export function PermissionsProvider({
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
-    const init = async () => {
-      await refreshPermissions();
-    };
-    init();
-    
-    const handleStorage = () => { if(isMounted) refreshPermissions(); };
-    window.addEventListener("storage", handleStorage);
-    
+    // Mount-Verifikation gegen die DB (Permissions/Name). refreshPermissions ist
+    // async und ruft setState erst nach `await` auf – kein synchroner Render-Cascade.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    refreshPermissions();
+
     const supabase = createClient();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
@@ -114,8 +118,6 @@ export function PermissionsProvider({
     });
 
     return () => {
-      isMounted = false;
-      window.removeEventListener("storage", handleStorage);
       subscription.unsubscribe();
     };
   }, [refreshPermissions]);

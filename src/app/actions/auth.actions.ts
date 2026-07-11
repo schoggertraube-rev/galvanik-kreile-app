@@ -3,7 +3,7 @@
 import { canUsePinLoginRole, isAppRole } from "@/lib/auth/authorizationContract";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
-import { setAppSession, SESSION_TTL_MS } from "@/lib/server/appSession";
+import { setAppSession, SESSION_TTL_MS, deriveSessionInitials } from "@/lib/server/appSession";
 import { resolveAuthorization, type AuthorizationResult } from "@/lib/server/authorization";
 import { and, eq } from "drizzle-orm";
 
@@ -75,14 +75,12 @@ export async function loginWithPin(
       };
     }
 
-    const now = Date.now();
     await setAppSession({
-      userId: user.id,
-      tenantId: user.tenantId,
+      uid: user.id,
       role: user.role,
-      displayName,
-      issuedAt: now,
-      expiresAt: now + SESSION_TTL_MS,
+      tenant: user.tenantId,
+      initials: deriveSessionInitials(displayName),
+      exp: Date.now() + SESSION_TTL_MS,
     });
 
     return { ok: true, role: user.role };

@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { COOKIE_NAME, getSessionSecret, verifyAppSessionToken } from '@/lib/server/appSessionToken'
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -49,7 +50,18 @@ export async function proxy(request: NextRequest) {
     return supabaseResponse
   }
 
-  const hasAppSession = request.cookies.has('kreile_app_session')
+  // Signatur + Ablauf verifizieren (nicht bloss Cookie-Praesenz).
+  // Fehlt das Secret (z. B. Preview vor Konfiguration), gilt: keine gueltige Session.
+  let hasAppSession = false
+  const appSessionToken = request.cookies.get(COOKIE_NAME)?.value
+  if (appSessionToken) {
+    try {
+      const sessionResult = await verifyAppSessionToken(appSessionToken, getSessionSecret())
+      hasAppSession = sessionResult.ok
+    } catch {
+      hasAppSession = false
+    }
+  }
 
   const {
     data: { user },
