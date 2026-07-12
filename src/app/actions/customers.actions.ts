@@ -114,46 +114,71 @@ export async function getCustomersPageCustomers(): Promise<ActionResult<Customer
 
   const tenantId = authRes.data.tenantId;
   const contractFlagEnabled = await isServerFeatureEnabled("KREILE_CONTRACT_CUSTOMERS");
+  const shadowFlagEnabled = await isServerFeatureEnabled("KREILE_SHADOW_CUSTOMERS");
 
-  const [legacyResult, contractResult] = await Promise.allSettled([
-    getCustomersDbByTenant(tenantId),
-    listCustomersContract(),
-  ]);
-
-  const legacyCustomers = legacyResult.status === "fulfilled" ? legacyResult.value : null;
-  const contractCustomers = contractResult.status === "fulfilled" ? contractResult.value : null;
-
-  if (legacyCustomers && contractCustomers) {
-    logCustomerShadowDiff(legacyCustomers, contractCustomers);
-  } else if (legacyCustomers || contractCustomers) {
-    console.info("[customers.actions] shadow diff partial", {
-      onlyLegacyCount: legacyCustomers ? legacyCustomers.length : 0,
-      onlyContractCount: contractCustomers ? contractCustomers.length : 0,
-      sharedCount: 0,
+  const logCustomersError = (source: "legacy" | "contract", error: unknown) => {
+    console.error(`[customers.actions] ${source} load failed`, {
+      message: error instanceof Error ? error.message : "Unbekannter Fehler",
+      details: error instanceof Error ? error.stack : error,
     });
+  };
+
+  const runShadowDiff = async (primaryCustomers: Customer[], shadowSource: "legacy" | "contract") => {
+    if (!shadowFlagEnabled) return;
+
+    try {
+      const shadowCustomers =
+        shadowSource === "legacy"
+          ? await getCustomersDbByTenant(tenantId)
+          : await listCustomersContract();
+      logCustomerShadowDiff(
+        shadowSource === "legacy" ? shadowCustomers : primaryCustomers,
+        shadowSource === "legacy" ? primaryCustomers : shadowCustomers,
+      );
+    } catch (error) {
+      logCustomersError(shadowSource, error);
+    }
+  };
+
+  if (contractFlagEnabled) {
+    try {
+      const contractCustomers = await listCustomersContract();
+      await runShadowDiff(contractCustomers, "legacy");
+      return { ok: true, data: contractCustomers };
+    } catch (contractError) {
+      logCustomersError("contract", contractError);
+
+      try {
+        const legacyCustomers = await getCustomersDbByTenant(tenantId);
+        return { ok: true, data: legacyCustomers };
+      } catch (legacyError) {
+        logCustomersError("legacy", legacyError);
+        return {
+          ok: false,
+          error: "DB_ERROR",
+          message:
+            contractError instanceof Error
+              ? contractError.message
+              : legacyError instanceof Error
+                ? legacyError.message
+                : "Fehler beim Laden der Kunden",
+        };
+      }
+    }
   }
 
-  const selectedCustomers = contractFlagEnabled
-    ? contractCustomers ?? legacyCustomers
-    : legacyCustomers ?? contractCustomers;
-
-  if (!selectedCustomers) {
-    const errorMessage =
-      legacyResult.status === "rejected"
-        ? (legacyResult.reason instanceof Error ? legacyResult.reason.message : "Fehler beim Laden der Kunden")
-        : contractResult.status === "rejected"
-          ? (contractResult.reason instanceof Error ? contractResult.reason.message : "Fehler beim Laden der Kunden")
-          : "Fehler beim Laden der Kunden";
-
-    console.error("Failed to load customers for page:", {
-      legacyError: legacyResult.status === "rejected" ? legacyResult.reason : null,
-      contractError: contractResult.status === "rejected" ? contractResult.reason : null,
-    });
-
-    return { ok: false, error: "DB_ERROR", message: errorMessage };
+  try {
+    const legacyCustomers = await getCustomersDbByTenant(tenantId);
+    await runShadowDiff(legacyCustomers, "contract");
+    return { ok: true, data: legacyCustomers };
+  } catch (legacyError) {
+    logCustomersError("legacy", legacyError);
+    return {
+      ok: false,
+      error: "DB_ERROR",
+      message: legacyError instanceof Error ? legacyError.message : "Fehler beim Laden der Kunden",
+    };
   }
-
-  return { ok: true, data: selectedCustomers };
 }
 
 export async function getCustomerByIdDb(id: string): Promise<ActionResult<Customer | null>> {

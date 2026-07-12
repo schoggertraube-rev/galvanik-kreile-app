@@ -1,10 +1,14 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from "react";
-import { usePathname } from "next/navigation";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import { createClient } from "@/lib/supabase/client";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
+import {
+  getPermissionsForRole,
+  isAppRole,
+  type PermissionKey,
+} from "@/lib/auth/authorizationContract";
 
 export function deriveInitials(displayName: string): string {
   if (!displayName || displayName === "Unknown" || displayName === "User") return "";
@@ -40,37 +44,41 @@ const PermissionsContext = createContext<PermissionsContextType>({
 
 export const usePermissions = () => useContext(PermissionsContext);
 
-export function PermissionsProvider({ 
+export function PermissionsProvider({
   children,
-  initialAuthState
-}: { 
+  initialAuthState,
+}: {
   children: React.ReactNode;
   initialAuthState: AuthBootstrapState;
 }) {
-  // Snapshot-Seeding: Rolle und Initialen kommen synchron aus der signierten
-  // Server-Session (initialAuthState). Kein localStorage, kein Flackern.
   const initialAuthed = initialAuthState.status === "authenticated";
+  const initialRole = initialAuthed ? initialAuthState.session.role : null;
+  const initialPermissions: string[] =
+    initialAuthed && isAppRole(initialAuthState.session.role)
+      ? [...getPermissionsForRole(initialAuthState.session.role)]
+      : [];
+
   const [status, setStatus] = useState<"authenticated" | "unauthenticated" | "error">(initialAuthState.status);
   const [error, setError] = useState<string | null>(
     initialAuthState.status === "error" ? initialAuthState.message : null
   );
-  const [role, setRole] = useState<string | null>(
-    initialAuthed ? initialAuthState.session.role : null
+  const [role, setRole] = useState<string | null>(initialRole);
+  const [permissions, setPermissions] = useState<string[]>(initialPermissions);
+  const [name, setName] = useState<string>(
+    initialAuthed ? initialAuthState.session.displayName : ""
   );
-  const [permissions, setPermissions] = useState<string[]>([]);
-  const [name, setName] = useState<string>("");
   const [initials, setInitials] = useState<string>(
     initialAuthed ? initialAuthState.session.initials : ""
   );
-  const [loading, setLoading] = useState(initialAuthed);
-  const pathname = usePathname();
+  const [loading, setLoading] = useState(false);
 
   const refreshPermissions = useCallback(async () => {
+    setLoading(true);
     try {
       const result = await getAuthorizationSnapshotAction();
 
       if (result.ok) {
-        setPermissions([...result.data.permissions]);
+        setPermissions([...result.data.permissions] as PermissionKey[]);
         setRole(result.data.role);
         setName(result.data.displayName);
         setInitials(deriveInitials(result.data.displayName));
@@ -94,7 +102,7 @@ export function PermissionsProvider({
     } catch (err) {
       console.error("Failed to load permissions", err);
       setStatus("error");
-      setError("AUTH_ERROR: Berechtigungen nicht verfügbar");
+      setError("AUTH_ERROR: Berechtigungen nicht verfuegbar");
       setPermissions([]);
       setRole(null);
       setName("");
@@ -105,14 +113,9 @@ export function PermissionsProvider({
   }, []);
 
   useEffect(() => {
-    // Mount-Verifikation gegen die DB (Permissions/Name). refreshPermissions ist
-    // async und ruft setState erst nach `await` auf – kein synchroner Render-Cascade.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    refreshPermissions();
-
     const supabase = createClient();
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
         refreshPermissions();
       }
     });
@@ -121,15 +124,6 @@ export function PermissionsProvider({
       subscription.unsubscribe();
     };
   }, [refreshPermissions]);
-
-  const isFirstMount = useRef(true);
-  useEffect(() => {
-    if (isFirstMount.current) {
-      isFirstMount.current = false;
-      return;
-    }
-    refreshPermissions();
-  }, [pathname, refreshPermissions]);
 
   const hasPermission = (key: string) => {
     return permissions.includes(key);

@@ -1,33 +1,34 @@
-import { readAppSession, type AppSession } from "@/lib/server/appSession";
+import {
+  resolveAuthorization,
+  type AuthorizationSnapshot,
+} from "@/lib/server/authorization";
 
 export type AuthBootstrapState =
-  | { status: "authenticated"; session: AppSession }
+  | { status: "authenticated"; session: AuthorizationSnapshot }
   | { status: "unauthenticated" }
   | { status: "error"; message: string };
 
 /**
- * Serverseitiger Bootstrap für den kanonischen Benutzerzustand.
- * Liest ausschließlich die App-Session ohne Fallbacks auf Local Storage oder UI-Platzhalter ("?").
+ * Serverseitiger Bootstrap fuer den kanonischen Benutzerzustand.
+ * Loest die Autorisierung einmal serverseitig auf und seeded den Client-Context
+ * ohne Local-Storage-Fallbacks oder Navigation-Roundtrips.
  */
 export async function getAuthBootstrapState(): Promise<AuthBootstrapState> {
-  const result = await readAppSession();
+  const result = await resolveAuthorization();
 
   if (result.ok) {
     return {
       status: "authenticated",
-      session: result.session,
+      session: result.data,
     };
   }
 
-  // Bei NO_COOKIE gehen wir von unauthenticated aus.
-  if (result.reason === "NO_COOKIE") {
+  if (result.reason === "NO_SESSION") {
     return { status: "unauthenticated" };
   }
 
-  // Alle anderen Fehler (EXPIRED, MALFORMED, INVALID_SIGNATURE, INVALID_TENANT)
-  // sind echte Fehlerzustände, die der Client entsprechend verarbeiten kann.
   return {
     status: "error",
-    message: `Sitzungsfehler: ${result.reason}`,
+    message: result.message,
   };
 }

@@ -13,6 +13,7 @@ export type AuthorizationSnapshot = {
   userId: string;
   tenantId: string;
   displayName: string;
+  initials: string;
   role: AppRole;
   permissions: readonly PermissionKey[];
   active: true;
@@ -94,7 +95,12 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
     };
   }
 
-  const { uid: userId, tenant: sessionTenantId, role: sessionRole } = sessionResult.session;
+  const {
+    uid: userId,
+    tenant: sessionTenantId,
+    role: sessionRole,
+    initials,
+  } = sessionResult.session;
 
   if (sessionTenantId !== "galvanik-kreile") {
     return {
@@ -167,6 +173,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
       userId: dbUser.id,
       tenantId: dbUser.tenantId,
       displayName: dbUser.fullName,
+      initials,
       role: dbRole,
       permissions,
       active: true,

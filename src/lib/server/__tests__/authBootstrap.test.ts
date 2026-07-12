@@ -1,55 +1,71 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getAuthBootstrapState } from "../authBootstrap";
-import * as appSessionModule from "../appSession";
+
+const mocks = vi.hoisted(() => ({
+  resolveAuthorization: vi.fn(),
+}));
+
+vi.mock("../authorization", () => ({
+  resolveAuthorization: mocks.resolveAuthorization,
+}));
 
 describe("getAuthBootstrapState()", () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
-  it("1. authentifizierter Bootstrap liefert dieselbe AppSession", async () => {
-    const mockSession = {
-      uid: "user-1",
-      tenant: "galvanik-kreile",
-      role: "admin",
-      initials: "HM",
-      exp: Date.now() + 60_000,
+  it("returns the resolved authorization snapshot for authenticated users", async () => {
+    const mockSnapshot = {
+      userId: "user-1",
+      tenantId: "galvanik-kreile",
+      displayName: "Max Kreile",
+      initials: "MK",
+      role: "admin" as const,
+      permissions: ["perm_sys_diag"] as const,
+      active: true as const,
     };
 
-    vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
+    mocks.resolveAuthorization.mockResolvedValue({
       ok: true,
-      session: mockSession,
+      data: mockSnapshot,
     });
 
+    const { getAuthBootstrapState } = await import("../authBootstrap");
     const state = await getAuthBootstrapState();
+
     expect(state).toEqual({
       status: "authenticated",
-      session: mockSession,
+      session: mockSnapshot,
     });
   });
 
-  it("2. fehlendes Cookie liefert unauthenticated", async () => {
-    vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
+  it("maps NO_SESSION to unauthenticated", async () => {
+    mocks.resolveAuthorization.mockResolvedValue({
       ok: false,
-      reason: "NO_COOKIE",
+      reason: "NO_SESSION",
+      message: "AUTH_ERROR: Nicht angemeldet",
     });
 
+    const { getAuthBootstrapState } = await import("../authBootstrap");
     const state = await getAuthBootstrapState();
+
     expect(state).toEqual({
       status: "unauthenticated",
     });
   });
 
-  it("3. ungültige Session liefert definierten Fehler-Zustand gemäß Vertrag", async () => {
-    vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
+  it("keeps other authorization failures as error state", async () => {
+    mocks.resolveAuthorization.mockResolvedValue({
       ok: false,
-      reason: "INVALID_SIGNATURE",
+      reason: "INVALID_SESSION",
+      message: "AUTH_ERROR: Ungueltige Sitzung",
     });
 
+    const { getAuthBootstrapState } = await import("../authBootstrap");
     const state = await getAuthBootstrapState();
+
     expect(state).toEqual({
       status: "error",
-      message: "Sitzungsfehler: INVALID_SIGNATURE",
+      message: "AUTH_ERROR: Ungueltige Sitzung",
     });
   });
 });
