@@ -19,7 +19,7 @@ import { Customer } from "@/lib/types/customer";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchToolbar } from "@/components/ui/SearchToolbar";
 import { NewCustomerForm } from "@/components/customers/NewCustomerForm";
-import { getCustomersDb } from "@/app/actions/customers.actions";
+import { getCustomersPageCustomers } from "@/app/actions/customers.actions";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import { useCustomerOverlay } from "@/components/customers/useCustomerOverlay";
 
@@ -43,7 +43,7 @@ export default function CustomersPage() {
     
     const loadCustomers = async () => {
       try {
-        const res = await getCustomersDb();
+        const res = await getCustomersPageCustomers();
         if (res && !res.ok && res.error === "UNAUTHORIZED") {
           router.push("/start?reason=session_expired");
           return;
@@ -247,7 +247,7 @@ export default function CustomersPage() {
               onSave={async (id) => {
                 setShowAddModal(false);
                 setEditingCustomerId(null);
-                const res = await getCustomersDb();
+                const res = await getCustomersPageCustomers();
                 if (res.ok) {
                   setCustomers(res.data);
                   const newCust = res.data.find(c => c.id === id);

@@ -3,9 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   readAppSession: vi.fn(),
   withTenant: vi.fn(),
-  getCustomersDb: vi.fn(),
   execute: vi.fn(),
-  info: vi.fn(),
 }));
 
 vi.mock("@/lib/server/appSession", () => ({
@@ -14,10 +12,6 @@ vi.mock("@/lib/server/appSession", () => ({
 
 vi.mock("@/lib/server/db/withTenant", () => ({
   withTenant: mocks.withTenant,
-}));
-
-vi.mock("@/app/actions/customers.actions", () => ({
-  getCustomersDb: mocks.getCustomersDb,
 }));
 
 describe("customersContract.list", () => {
@@ -38,34 +32,57 @@ describe("customersContract.list", () => {
       return fn({ execute: mocks.execute });
     });
     mocks.execute.mockResolvedValue([
-      { id: "cust-1", name: "Kreile GmbH" },
-      { id: "cust-2", name: "Muster AG" },
+      {
+        id: "cust-2",
+        customerNumber: "K-200",
+        name: "Muster AG",
+        type: "business",
+        createdAt: new Date("2026-07-01T10:00:00.000Z"),
+        updatedAt: new Date("2026-07-01T10:00:00.000Z"),
+      },
+      {
+        id: "cust-1",
+        customerNumber: "K-100",
+        name: "Kreile GmbH",
+        type: "business",
+        createdAt: new Date("2026-07-02T10:00:00.000Z"),
+        updatedAt: new Date("2026-07-02T10:00:00.000Z"),
+      },
     ]);
-    mocks.getCustomersDb.mockResolvedValue({
-      ok: true,
-      data: [
-        { id: "cust-1" },
-        { id: "cust-3" },
-      ],
-    });
   });
 
-  it("liest die View ueber den Session-Mandanten und meldet nur die Shadow-Diff-Zusammenfassung", async () => {
-    const infoSpy = vi.spyOn(console, "info").mockImplementation(() => undefined);
-
+  it("liest die View ueber den Session-Mandanten und mappt Customer-Rows", async () => {
     const { list } = await import("../customersContract");
     const result = await list();
 
     expect(result).toEqual([
-      { id: "cust-1", name: "Kreile GmbH" },
-      { id: "cust-2", name: "Muster AG" },
+      expect.objectContaining({
+        id: "cust-1",
+        customerNumber: "K-100",
+        name: "Kreile GmbH",
+      }),
+      expect.objectContaining({
+        id: "cust-2",
+        customerNumber: "K-200",
+        name: "Muster AG",
+      }),
     ]);
     expect(mocks.withTenant).toHaveBeenCalledTimes(1);
     expect(mocks.execute).toHaveBeenCalledTimes(1);
-    expect(mocks.getCustomersDb).toHaveBeenCalledTimes(1);
-    expect(infoSpy).toHaveBeenCalledWith("[customersContract] shadow diff", {
-      newCount: 1,
-      missingCount: 1,
+  });
+
+  it("summarizes only-legacy, only-contract and shared records", async () => {
+    const { summarizeCustomerShadowDiff } = await import("../customersContract");
+
+    expect(
+      summarizeCustomerShadowDiff(
+        [{ id: "cust-1" }, { id: "cust-legacy" }],
+        [{ id: "cust-1" }, { id: "cust-contract" }],
+      ),
+    ).toEqual({
+      onlyLegacyCount: 1,
+      onlyContractCount: 1,
+      sharedCount: 1,
     });
   });
 });

@@ -6,9 +6,14 @@ import { eq, ilike, or, and, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { InferSelectModel } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
+import { resolveAuthorization } from "@/lib/server/authorization";
+import { isServerFeatureEnabled } from "@/lib/server/featureFlags";
+import {
+  list as listCustomersContract,
+  logCustomerShadowDiff,
+} from "@/lib/server/contracts/customersContract";
 import { Customer } from "@/lib/types/customer";
 import { unstable_noStore as noStore } from "next/cache";
-import { resolveAuthorization } from "@/lib/server/authorization";
 
 type DbCustomer = InferSelectModel<typeof customers>;
 
@@ -64,6 +69,22 @@ function sanitizeCustomerPayload(data: Record<string, unknown>, isUpdate = false
   return result;
 }
 
+async function getCustomersDbByTenant(tenantId: string): Promise<Customer[]> {
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const dbCustomers = await db.select().from(customers).where(
+    and(
+      eq(customers.tenantId, tenantId),
+      sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
+      sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
+    )
+  ).orderBy(customers.createdAt);
+
+  return dbCustomers.map(mapDbCustomer).reverse();
+}
+
 export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
   noStore();
   const auth = await checkAppAuth();
@@ -72,23 +93,67 @@ export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
   const tenantId = authRes.data.tenantId;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
-    const dbCustomers = await db.select().from(customers).where(
-      and(
-        eq(customers.tenantId, tenantId),
-        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
-        sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
-      )
-    ).orderBy(customers.createdAt);
-    const data = dbCustomers.map(mapDbCustomer).reverse(); // Order by createdAt desc
+    const data = await getCustomersDbByTenant(tenantId);
     return { ok: true, data };
   } catch (error) {
     console.error("Failed to get customers from DB:", error);
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Laden der Kunden", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
   }
+}
+
+export async function getCustomersPageCustomers(): Promise<ActionResult<Customer[]>> {
+  noStore();
+
+  const auth = await checkAppAuth();
+  if (!auth.ok) return auth;
+
+  const authRes = await resolveAuthorization();
+  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+
+  const tenantId = authRes.data.tenantId;
+  const contractFlagEnabled = await isServerFeatureEnabled("KREILE_CONTRACT_CUSTOMERS");
+
+  const [legacyResult, contractResult] = await Promise.allSettled([
+    getCustomersDbByTenant(tenantId),
+    listCustomersContract(),
+  ]);
+
+  const legacyCustomers = legacyResult.status === "fulfilled" ? legacyResult.value : null;
+  const contractCustomers = contractResult.status === "fulfilled" ? contractResult.value : null;
+
+  if (legacyCustomers && contractCustomers) {
+    logCustomerShadowDiff(legacyCustomers, contractCustomers);
+  } else if (legacyCustomers || contractCustomers) {
+    console.info("[customers.actions] shadow diff partial", {
+      onlyLegacyCount: legacyCustomers ? legacyCustomers.length : 0,
+      onlyContractCount: contractCustomers ? contractCustomers.length : 0,
+      sharedCount: 0,
+    });
+  }
+
+  const selectedCustomers = contractFlagEnabled
+    ? contractCustomers ?? legacyCustomers
+    : legacyCustomers ?? contractCustomers;
+
+  if (!selectedCustomers) {
+    const errorMessage =
+      legacyResult.status === "rejected"
+        ? (legacyResult.reason instanceof Error ? legacyResult.reason.message : "Fehler beim Laden der Kunden")
+        : contractResult.status === "rejected"
+          ? (contractResult.reason instanceof Error ? contractResult.reason.message : "Fehler beim Laden der Kunden")
+          : "Fehler beim Laden der Kunden";
+
+    console.error("Failed to load customers for page:", {
+      legacyError: legacyResult.status === "rejected" ? legacyResult.reason : null,
+      contractError: contractResult.status === "rejected" ? contractResult.reason : null,
+    });
+
+    return { ok: false, error: "DB_ERROR", message: errorMessage };
+  }
+
+  return { ok: true, data: selectedCustomers };
 }
 
 export async function getCustomerByIdDb(id: string): Promise<ActionResult<Customer | null>> {
