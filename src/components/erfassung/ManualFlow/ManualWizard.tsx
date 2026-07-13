@@ -100,7 +100,7 @@ export function ManualWizard() {
     openErfassung({
       mode: "customer",
       intent: "create_customer",
-      source: "order", // we came from order
+      source: "manual", // manually created orders use the manual source
       prefill: { company: searchName, items, order: dateInfo, rawText: freetext }
     });
   };
