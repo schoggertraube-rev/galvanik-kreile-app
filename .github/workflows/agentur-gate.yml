@@ -1,0 +1,42 @@
+name: agentur-gate
+
+on:
+  pull_request:
+    branches:
+      - main
+      - feature/capture-auth-tenant
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  agentur-gate:
+    name: agentur-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check mojibake
+        shell: bash
+        run: |
+          if [ -f scripts/check-mojibake.mjs ]; then
+            node scripts/check-mojibake.mjs
+          else
+            echo "mojibake script absent on this branch, skipping"
+          fi
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Run unit tests
+        run: npm run test:unit
