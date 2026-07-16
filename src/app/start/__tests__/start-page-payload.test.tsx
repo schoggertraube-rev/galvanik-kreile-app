@@ -29,6 +29,10 @@ vi.mock("drizzle-orm", () => ({
   eq: vi.fn(),
 }));
 
+vi.mock("@/lib/server/pinLoginSelector", () => ({
+  createPinLoginSelector: vi.fn().mockResolvedValue("opaque.signed-selector"),
+}));
+
 vi.mock("@/components/start/StartScreenClient", () => ({
   StartScreenClient: ({ users }: { users: StartUserDto[] }) => {
     capturedUsers.push(users);
@@ -69,9 +73,7 @@ describe("StartPage payload sanitization", () => {
 
     expect(capturedUsers[0]).toEqual([
       {
-        id: "user-1",
-        fullName: "Max Mustermann",
-        role: "werkstatt",
+        selector: "opaque.signed-selector",
         initials: "MM",
       },
     ]);
@@ -82,10 +84,16 @@ describe("StartPage payload sanitization", () => {
     expect(payload).not.toContain("password");
     expect(payload).not.toContain("authSecret");
     expect(payload).not.toContain("service-role-secret");
+    expect(payload).not.toContain("user-1");
+    expect(payload).not.toContain("werkstatt");
+    expect(payload).not.toContain("Max Mustermann");
 
     expect(html).not.toContain("pinHash");
     expect(html).not.toContain("1234");
     expect(html).not.toContain("9999");
     expect(html).not.toContain("service-role-secret");
+    expect(html).not.toContain("user-1");
+    expect(html).not.toContain("werkstatt");
+    expect(html).not.toContain("Max Mustermann");
   });
 });

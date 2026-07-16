@@ -7,41 +7,50 @@ import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { getSparzaehlerAnalysisAction } from "@/app/buchhaltung/analysis.actions";
 import { getL7Daten } from "@/app/buchhaltung/actions";
 
+type RoiData = {
+  invest: null;
+  returnVal: number;
+  roi: null;
+  payback: null;
+  ersparnisBetrag: number;
+  anzahlBelege: number;
+  periodLabel: string;
+};
+
+type L7Data = Awaited<ReturnType<typeof getL7Daten>>;
+
 export function RoiKachel() {
   const [open, setOpen] = useState(false);
-  const [data, setData] = useState<any>(null);
-  const [l7Data, setL7Data] = useState<any>(null);
+  const [data, setData] = useState<RoiData | null>(null);
+  const [l7Data, setL7Data] = useState<L7Data | null>(null);
 
   useEffect(() => {
-    if (!open && data) return;
-    if (open && !l7Data) getL7Daten({}).then(setL7Data);
+    if (!open || l7Data) return;
+    void getL7Daten({}).then(setL7Data);
+  }, [open, l7Data]);
+
+  useEffect(() => {
+    if (data) return;
     const fetchRoi = async () => {
       const now = new Date();
       const von = `${now.getFullYear()}-01-01`;
       const bis = `${now.getFullYear()}-12-31`;
       
       const spar = await getSparzaehlerAnalysisAction(von, bis);
-      const mkt = { neukundenUmsatz: 4500 }; // Mock marketing data
-      
-      const monateSeitStart = now.getMonth() + 1;
-      
-      const invest = (149 * monateSeitStart) + 0; // 149 EUR/Monat Lizenz, 0 EUR Einrichtung
-      const marketingUmsatz = mkt.neukundenUmsatz || 0;
-      const returnVal = spar.ersparnisBetrag + marketingUmsatz + 2000; // 2000EUR = vermiedene Fehlerkosten (Beispiel)
-      
-      const roi = invest > 0 ? ((returnVal - invest) / invest) * 100 : 0;
-      const payback = returnVal > 0 ? invest / (returnVal / monateSeitStart) : 0;
-      
       setData({
-        invest, returnVal, roi, payback,
+        invest: null,
+        returnVal: spar.ersparnisBetrag,
+        roi: null,
+        payback: null,
         ersparnisBetrag: spar.ersparnisBetrag,
-        marketingUmsatz
+        anzahlBelege: spar.anzahlGesamt,
+        periodLabel: String(now.getFullYear()),
       });
     };
-    fetchRoi();
-  }, [open]);
+    void fetchRoi();
+  }, [data]);
 
-  const kpi = data ? `${data.roi.toLocaleString("de-DE", { maximumFractionDigits: 1 })} %` : "...";
+  const kpi = data ? "nicht berechenbar" : "...";
 
   const props = !data ? { subtitle: "Daten werden live berechnet..." } : {
     icon: <Calculator className="w-6 h-6" />,
@@ -50,20 +59,20 @@ export function RoiKachel() {
     tabs: [{ id: "gesamt", label: "Investition & Return" }],
     
     hero: {
-      kicker: "RETURN ON INVESTMENT",
-      value: `${data.roi.toLocaleString("de-DE", { maximumFractionDigits: 1 })} %`,
-      changePill: { text: `Return: ${data.returnVal.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`, variant: "teal" as const },
-      meta: `Invest (YTD): ${data.invest.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`,
+      kicker: "ROI-DATENQUALITÄT",
+      value: "nicht berechenbar",
+      changePill: { text: `Nachgewiesene Zeitersparnis: ${data.returnVal.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`, variant: "teal" as const },
+      meta: "Für einen ROI fehlen gespeicherte Lizenz-, Einrichtungs- und Betriebskosten der App.",
     },
     
     crossKpis: [
-      { label: "Payback Period", value: `${data.payback.toLocaleString("de-DE", { maximumFractionDigits: 1 })} Monate`, info: "Dauer bis sich die Software amortisiert" },
       { label: "Ersparnis (Zeit)", value: `${data.ersparnisBetrag.toLocaleString("de-DE", { maximumFractionDigits: 0 })} €`, info: "Buchhaltungsautomatisierung" },
-      { label: "Marketing-Umsatz", value: `${data.marketingUmsatz.toLocaleString("de-DE", { maximumFractionDigits: 0 })} €`, info: "Zusatzumsatz aus E-Mails" }
+      { label: "Datenbasis", value: `${data.anzahlBelege} Belege`, info: "Nicht stornierte Belege im Zeitraum" },
+      { label: "Investitionsbasis", value: "fehlt", info: "Noch keine belastbar gespeicherten App-Kosten" }
     ],
     
     insight: {
-      body: "Der ROI liegt deutlich über dem Branchendurchschnitt von 150%. Die Software hat sich bereits im ersten Quartal amortisiert.<br/><br/><strong>Tipp:</strong> Weitere Belegautomatisierung (z.B. E-Mail-Import) könnte den Return noch weiter steigern."
+      body: "Ein ROI wird erst ausgewiesen, wenn App-Kosten und nachgewiesener Nutzen in derselben Periode vollständig vorliegen. Bis dahin zeigt die Kachel ausschließlich die aus echten OCR-Belegen und konfigurierten Zeitwerten berechnete Ersparnis."
     },
     
     linkedAreas: [
@@ -71,13 +80,13 @@ export function RoiKachel() {
       { label: "Marketing & Performance", href: "/marketing" },
       { label: "App-Einstellungen", href: "/einstellungen" }
     ],
-    l7Data: l7Data
+    l7Data: l7Data ?? undefined
   };
 
   return (
     <>
       <Tile
-        datenherkunft={{ belege: 0, rechnungen: 0, zeitbuchungen: 0, verbrauchsbuchungen: 0, periodeLabel: "06/2026", periodeStatus: "offen" }}
+        datenherkunft={{ belege: data?.anzahlBelege || 0, rechnungen: 0, zeitbuchungen: 0, verbrauchsbuchungen: 0, periodeLabel: data?.periodLabel || String(new Date().getFullYear()), periodeStatus: "offen" }}
         title="ROI & Kennzahlen"
         description="Return on Investment (ROI) der App-Nutzung."
         icon={<Calculator className="w-5 h-5 text-indigo-600" strokeWidth={1.8} />}

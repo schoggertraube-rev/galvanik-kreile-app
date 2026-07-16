@@ -1,5 +1,3 @@
-import { bathMeasurementsRepository } from "../repositories/bathMeasurementsRepository";
-
 export type BathMeasurement = {
   temperature?: number | null;
   ph?: number | null;
@@ -16,7 +14,7 @@ export type BathTargetValues = {
   concentrationMax?: number | null;
 };
 
-export type BathStatus = "critical" | "watch" | "stable";
+export type BathStatus = "critical" | "watch" | "stable" | "not_evaluated";
 
 /**
  * Berechnet den Status eines Bades gemäß der "worst-status-wins" Logik 
@@ -24,19 +22,47 @@ export type BathStatus = "critical" | "watch" | "stable";
  */
 export function computeBathStatus(m: BathMeasurement, t: BathTargetValues): BathStatus {
   const checks: BathStatus[] = [];
+  let evaluatedValues = 0;
+  let missingConfiguredValue = false;
 
-  if (t.temperatureMin != null && m.temperature != null && m.temperature < t.temperatureMin) checks.push("critical");
-  if (t.temperatureMax != null && m.temperature != null && m.temperature > t.temperatureMax) checks.push("critical");
-  if (t.phMin != null && m.ph != null && m.ph < t.phMin) checks.push("critical");
-  if (t.phMax != null && m.ph != null && m.ph > t.phMax) checks.push("critical");
+  if (t.temperatureMin != null || t.temperatureMax != null) {
+    if (m.temperature == null) {
+      missingConfiguredValue = true;
+    } else {
+      evaluatedValues += 1;
+      if (t.temperatureMin != null && m.temperature < t.temperatureMin) checks.push("critical");
+      if (t.temperatureMax != null && m.temperature > t.temperatureMax) checks.push("critical");
+    }
+  }
 
-  if (t.concentrationMin != null && m.concentration != null && m.concentration < t.concentrationMin) checks.push("watch");
-  if (t.concentrationMax != null && m.concentration != null && m.concentration > t.concentrationMax) checks.push("watch");
+  if (t.phMin != null || t.phMax != null) {
+    if (m.ph == null) {
+      missingConfiguredValue = true;
+    } else {
+      evaluatedValues += 1;
+      if (t.phMin != null && m.ph < t.phMin) checks.push("critical");
+      if (t.phMax != null && m.ph > t.phMax) checks.push("critical");
+    }
+  }
 
-  if (m.visualState === "contaminated") checks.push("critical");
-  if (m.visualState === "cloudy") checks.push("watch");
+  if (t.concentrationMin != null || t.concentrationMax != null) {
+    if (m.concentration == null) {
+      missingConfiguredValue = true;
+    } else {
+      evaluatedValues += 1;
+      if (t.concentrationMin != null && m.concentration < t.concentrationMin) checks.push("watch");
+      if (t.concentrationMax != null && m.concentration > t.concentrationMax) checks.push("watch");
+    }
+  }
+
+  if (m.visualState != null) {
+    evaluatedValues += 1;
+    if (m.visualState === "contaminated") checks.push("critical");
+    if (m.visualState === "cloudy") checks.push("watch");
+  }
 
   if (checks.includes("critical")) return "critical";
+  if (missingConfiguredValue || evaluatedValues === 0) return "not_evaluated";
   if (checks.includes("watch")) return "watch";
   return "stable";
 }
@@ -46,9 +72,10 @@ export function computeBathStatus(m: BathMeasurement, t: BathTargetValues): Bath
  * Wenn keine Messung vorliegt, wird standardmäßig "stable" zurückgegeben.
  */
 export async function computeCurrentBathStatus(bathId: string, t: BathTargetValues): Promise<BathStatus> {
+  const { bathMeasurementsRepository } = await import("../repositories/bathMeasurementsRepository");
   const latestMeasurement = await bathMeasurementsRepository.getLatest(bathId);
   if (!latestMeasurement) {
-    return "stable";
+    return "not_evaluated";
   }
   return computeBathStatus(latestMeasurement, t);
 }

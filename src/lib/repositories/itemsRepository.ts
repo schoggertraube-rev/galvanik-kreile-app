@@ -1,88 +1,38 @@
-import { createId } from "@paralleldrive/cuid2";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { IndexedDBHelper } from "@/lib/offline/IndexedDBHelper";
-import { getItemsDb, getItemsByOrderDb, createItemDb, updateItemDb, ItemResponse } from "@/app/actions/items.actions";
+import {
+  createItemDb,
+  getItemsByOrderDb,
+  getItemsDb,
+  updateItemDb,
+  type ItemResponse,
+} from "@/app/actions/items.actions";
 
-export type Item = {
-  id: string;
-  orderId: string;
-  name: string;
-  quantity: number;
-  material?: string;
-  surfaceRequested?: string;
-  photoIds?: string[];
-  photo?: string;
+export type Item = ItemResponse;
+
+function confirmed<T>(result: Awaited<ReturnType<typeof getItemsDb>> | { ok: true; data: T } | { ok: false; message: string }): T {
+  if (!result.ok) throw new Error(result.message);
+  return result.data as T;
 }
-
-const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
 export const itemsRepository = {
   async getAll(): Promise<Item[]> {
-    if (isSupabase) {
-      const result = await getItemsDb();
-      if (!result.ok) {
-        console.error("itemsRepository.getAll error:", result.message, result.details);
-        return [];
-      }
-      return result.data as Item[];
-    }
-
-    console.warn('Fallback hit in itemsRepository.getAll - returning empty');
-    return [];
+    return confirmed<Item[]>(await getItemsDb());
   },
 
   async getByOrderId(orderId: string): Promise<Item[]> {
-    if (isSupabase) {
-      const result = await getItemsByOrderDb(orderId);
-      if (!result.ok) {
-        console.error("itemsRepository.getByOrderId error:", result.message, result.details);
-        return [];
-      }
-      return result.data as Item[];
-    }
-
-    console.warn('Fallback hit in itemsRepository.getByOrderId - returning empty');
-    return [];
+    return confirmed<Item[]>(await getItemsByOrderDb(orderId));
   },
 
   async create(data: Omit<Item, "id"> & { id?: string }): Promise<Item> {
-    const id = data.id || createId();
-    
-    if (isSupabase) {
-      const result = await createItemDb({ ...data, id });
-      if (!result.ok) {
-        console.error("itemsRepository.create error:", result.message, result.details);
-        throw new Error(result.message || "Cannot create item");
-      }
-      return result.data as Item;
-    }
-
-    console.warn('Fallback hit in itemsRepository.create - returning empty mock item');
-    return { ...data, id };
+    return confirmed<Item>(await createItemDb(data));
   },
 
-  async update(id: string, changes: Partial<Item>): Promise<Item | null> {
-    if (isSupabase) {
-      const result = await updateItemDb(id, changes);
-      if (!result.ok) {
-        console.error("itemsRepository.update error:", result.message, result.details);
-        throw new Error(result.message || "Cannot update item");
-      }
-      // Return the updated item merged. Realistically we might need to fetch the whole item if we need all fields
-      // but returning what changed is sometimes enough, let's just fetch it by getAll and find for simplicity
-      const all = await this.getAll();
-      return all.find(i => i.id === id) || null;
-    }
-
-    console.warn('Fallback hit in itemsRepository.update - returning null');
-    return null;
+  async update(id: string, changes: Partial<Omit<Item, "id" | "orderId">>): Promise<Item> {
+    return confirmed<Item>(await updateItemDb(id, changes));
   },
 
-  async createMany(items: Omit<Item, "id">[]): Promise<Item[]> {
+  async createMany(newItems: Array<Omit<Item, "id">>): Promise<Item[]> {
     const results: Item[] = [];
-    for (const item of items) {
-      results.push(await this.create(item));
-    }
+    for (const item of newItems) results.push(await this.create(item));
     return results;
-  }
+  },
 };

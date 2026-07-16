@@ -1,4 +1,3 @@
-import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { getGlobalTimelineDb, getTimelineForCustomerDb, getTimelineForOrderDb } from "@/app/actions/timeline.actions";
 
 export type TimelineEntry = {
@@ -25,52 +24,24 @@ export type TimelineEntry = {
   relatedIds?: string[];
 };
 
+function unwrap<T>(result: { ok: true; data: T } | { ok: false; message: string; error?: string }): T {
+  if (!result.ok) throw new Error(`${result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN" ? "AUTH_ERROR" : "DATA_ERROR"}: ${result.message}`);
+  return result.data;
+}
+
 export const timelineRepository = {
   /**
    * Generiert einen aggregierten Zeitstrahl für einen Kunden aus Events, Aufträgen und Reklamationen
    */
   async getForCustomer(customerId: string): Promise<TimelineEntry[]> {
-    if (OfflineManager.isOffline()) return [];
-    try {
-      const result = await getTimelineForCustomerDb(customerId);
-      if (!result.ok) {
-        console.error("timelineRepository.getForCustomer error:", result.message);
-        return [];
-      }
-      return result.data as TimelineEntry[];
-    } catch (err) {
-      console.error("Error fetching customer timeline:", err);
-      return [];
-    }
+    return unwrap(await getTimelineForCustomerDb(customerId)) as TimelineEntry[];
   },
   
   async getForOrder(orderId: string): Promise<TimelineEntry[]> {
-    if (OfflineManager.isOffline()) return [];
-    try {
-      const result = await getTimelineForOrderDb(orderId);
-      if (!result.ok) {
-        console.error("timelineRepository.getForOrder error:", result.message);
-        return [];
-      }
-      return result.data as TimelineEntry[];
-    } catch (err) {
-      console.error("Error fetching order timeline:", err);
-      return [];
-    }
+    return unwrap(await getTimelineForOrderDb(orderId)) as TimelineEntry[];
   },
 
   async getGlobalTimeline(): Promise<TimelineEntry[]> {
-    if (OfflineManager.isOffline()) return [];
-    try {
-      const result = await getGlobalTimelineDb();
-      if (!result.ok) {
-        console.error("timelineRepository.getGlobalTimeline error:", result.message);
-        return [];
-      }
-      return result.data as TimelineEntry[];
-    } catch (err) {
-      console.error("Error fetching global timeline:", err);
-      return [];
-    }
+    return unwrap(await getGlobalTimelineDb()) as TimelineEntry[];
   }
 };

@@ -4,7 +4,6 @@ import { Input } from "@/components/ui/input";
 import { Plus, Minus, X, Search, Package, Check } from "lucide-react";
 import { inventoryRepository, InventoryItem } from "@/lib/repositories/inventoryRepository";
 import { eventsRepository } from "@/lib/repositories/eventsRepository";
-import { createStatusEvent } from "@/app/actions/status-events.actions";
 
 interface MaterialBooking {
   id: string;
@@ -13,7 +12,7 @@ interface MaterialBooking {
   unit: string;
 }
 
-export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orderId: string, customerId?: string, onClose: () => void }) {
+export function OrderMaterialTimeDrawer({ orderId, onClose }: { orderId: string, customerId?: string, onClose: () => void }) {
   const [minutes, setMinutes] = useState(45);
   const [allConsumables, setAllConsumables] = useState<InventoryItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -77,28 +76,23 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
           unit: mat.unit,
           orderId: orderId,
           reason: `Verbrauchsbuchung in Auftrag ${orderId}`,
-          createdBy: "meister@kreile.de"
         });
 
         // Add timeline status event for stock deduction
         await eventsRepository.addEvent({
           orderId: orderId,
-          customerId: customerId,
           eventType: "COSTS_BOOKED",
-          metadata: { description: `MATERIAL_CONSUMED: ${mat.qty}x ${mat.name}`, materialId: mat.id, quantity: mat.qty, unit: mat.unit }
+          metadata: { materialCount: 1, quantity: mat.qty }
         });
-        createStatusEvent({ orderId, eventType: "COSTS_BOOKED", notes: `MATERIAL_CONSUMED: ${mat.qty}x ${mat.name}` }).catch(e => console.warn(e));
       }
 
       // 2. Book time and add time logging timeline event
       if (minutes > 0) {
         await eventsRepository.addEvent({
           orderId: orderId,
-          customerId: customerId,
           eventType: "COSTS_BOOKED",
-          metadata: { description: `WORK_TIME_LOGGED: ${minutes} Minuten`, minutes }
+          metadata: { durationMinutes: minutes }
         });
-        createStatusEvent({ orderId, eventType: "COSTS_BOOKED", notes: `WORK_TIME_LOGGED: ${minutes} Minuten` }).catch(e => console.warn(e));
       }
 
       setSuccessMsg("Erfolgreich gebucht! Aktualisiere Cockpit...");

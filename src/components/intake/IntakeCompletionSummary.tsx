@@ -1,7 +1,6 @@
 "use client";
 import { useState } from "react";
 import { CheckCircle2, Factory, Printer } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { AppActionButton } from "@/components/ui/AppActionButton";
 import { intakeService } from "@/lib/services/intakeService";
 import { useRouter } from "next/navigation";
@@ -9,7 +8,7 @@ import { LabelPrintView } from "@/components/orders/LabelPrintView";
 import type { Order } from "@/lib/repositories/ordersRepository";
 
 export function IntakeCompletionSummary({ 
-  customerSelection, newCustomerDetails, items, onBack 
+  customerSelection, items, onBack
 }: { 
   customerSelection: { id: string | null, newName?: string }, newCustomerDetails?: Record<string, string>, items: Record<string, unknown>[], onBack?: () => void 
 }) {
@@ -18,17 +17,18 @@ export function IntakeCompletionSummary({
   const router = useRouter();
 
   const handleFinish = async () => {
+    const firstItemName = typeof items[0]?.name === "string" ? items[0].name.trim() : "";
+    if (!firstItemName) {
+      alert("Bitte mindestens ein Teil mit Bezeichnung erfassen.");
+      return;
+    }
     setSaving(true);
     try {
       const order = await intakeService.processIntake({
         customerId: customerSelection.id,
-        newCustomerName: customerSelection.newName,
-        newCustomerDetails,
-        orderTitle: `${String(items[0].name)} ${items.length > 1 ? `+ ${items.length - 1} weitere` : ''}`,
+        orderTitle: `${firstItemName}${items.length > 1 ? ` + ${items.length - 1} weitere` : ""}`,
         items: items as { name: string; quantity: number; surfaceRequested?: string }[]
       });
-      // Delay for UX transition
-      await new Promise(r => setTimeout(r, 800));
       setCreatedOrder(order);
       setSaving(false);
     } catch (e) {

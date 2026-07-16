@@ -1,5 +1,16 @@
 import { GoogleGenAI } from "@google/genai";
 
+type GenerateContentOptions = Parameters<GoogleGenAI["models"]["generateContent"]>[0];
+
+function providerErrorDetails(error: unknown): { status?: number; message: string } {
+  if (!error || typeof error !== "object") return { message: "Unknown provider error" };
+  const value = error as Record<string, unknown>;
+  return {
+    ...(typeof value.status === "number" ? { status: value.status } : {}),
+    message: typeof value.message === "string" ? value.message : "Unknown provider error",
+  };
+}
+
 export class GeminiQuotaError extends Error {
   constructor(message: string) {
     super(message);
@@ -31,8 +42,8 @@ export function getFallbackGeminiModel() {
 }
 
 export async function generateGeminiContentWithFallback(options: {
-  contents: any;
-  config?: any;
+  contents: GenerateContentOptions["contents"];
+  config?: GenerateContentOptions["config"];
 }) {
   const ai = getGeminiClient();
   const primaryModel = getPrimaryGeminiModel();
@@ -45,23 +56,21 @@ export async function generateGeminiContentWithFallback(options: {
       config: options.config,
     });
     return response;
-  } catch (error: any) {
+  } catch (error) {
+    const details = providerErrorDetails(error);
     const isOverloadedOrQuota = 
-      error?.status === 429 || 
-      error?.status === 503 || 
-      error?.message?.includes("Quota exceeded") || 
-      error?.message?.includes("RESOURCE_EXHAUSTED") ||
-      error?.message?.includes("high demand") ||
-      error?.message?.includes("UNAVAILABLE");
+      details.status === 429 ||
+      details.status === 503 ||
+      details.message.includes("Quota exceeded") ||
+      details.message.includes("RESOURCE_EXHAUSTED") ||
+      details.message.includes("high demand") ||
+      details.message.includes("UNAVAILABLE");
 
     if (isOverloadedOrQuota && primaryModel !== fallbackModel) {
-      console.warn(`[Gemini] Primary model ${primaryModel} failed (${error?.status || 'Overloaded'}). Falling back to ${fallbackModel}...`);
+      console.warn(`[Gemini] Primary model ${primaryModel} failed (${details.status || 'Overloaded'}). Falling back to ${fallbackModel}...`);
       
       // Remove Google Search tools in fallback to ensure it succeeds if Search was the issue
-      const fallbackConfig = { ...options.config };
-      if (fallbackConfig.tools) {
-        delete fallbackConfig.tools;
-      }
+      const fallbackConfig = options.config ? { ...options.config, tools: undefined } : undefined;
 
       try {
         const fallbackResponse = await ai.models.generateContent({
@@ -70,8 +79,8 @@ export async function generateGeminiContentWithFallback(options: {
           config: fallbackConfig,
         });
         return fallbackResponse;
-      } catch (fallbackError: any) {
-        console.error(`[Gemini] Fallback model ${fallbackModel} also failed:`, fallbackError.message);
+      } catch (fallbackError) {
+        console.error(`[Gemini] Fallback model ${fallbackModel} also failed:`, providerErrorDetails(fallbackError).message);
         throw new GeminiQuotaError("Gemini-Kontingent erreicht. Analyse aktuell nicht möglich.");
       }
     }
@@ -88,7 +97,13 @@ export async function generateGeminiContentWithFallback(options: {
  * @param requireWebSearch Whether the model is allowed to use Google Search Grounding.
  *                         This will only activate if ENABLE_GEMINI_GOOGLE_SEARCH=true
  */
-export async function generateAiResponse(prompt: string, requireWebSearch: boolean = false): Promise<string> {
+export type GeneratedAiResponse = {
+  text: string;
+  actualUnits: number | null;
+  providerStatus: string;
+};
+
+export async function generateAiResponse(prompt: string, requireWebSearch: boolean = false): Promise<GeneratedAiResponse> {
   const searchEnabledGlobally = process.env.ENABLE_GEMINI_GOOGLE_SEARCH === "true";
   const tools = (requireWebSearch && searchEnabledGlobally) ? [{ googleSearch: {} }] : undefined;
 
@@ -104,12 +119,22 @@ export async function generateAiResponse(prompt: string, requireWebSearch: boole
     const text = response.text;
     if (!text) throw new Error("No response from Gemini");
 
-    return text;
-  } catch (error: any) {
+    const responseMetadata = response as { usageMetadata?: { totalTokenCount?: unknown }; modelVersion?: unknown };
+    const totalTokenCount = Number(responseMetadata.usageMetadata?.totalTokenCount);
+    const modelVersion = typeof responseMetadata.modelVersion === "string" && responseMetadata.modelVersion.trim()
+      ? responseMetadata.modelVersion.trim().slice(0, 80)
+      : "gemini";
+    return {
+      text,
+      actualUnits: Number.isSafeInteger(totalTokenCount) && totalTokenCount >= 0 ? totalTokenCount : null,
+      providerStatus: modelVersion,
+    };
+  } catch (error) {
+    const details = providerErrorDetails(error);
     if (error instanceof GeminiQuotaError) {
       throw error;
     }
-    if (error?.status === 429 || error?.message?.includes("Quota exceeded")) {
+    if (details.status === 429 || details.message.includes("Quota exceeded")) {
       throw new GeminiQuotaError("Gemini-Kontingent erreicht. Analyse ohne Websuche oder später erneut versuchen.");
     }
     throw error;

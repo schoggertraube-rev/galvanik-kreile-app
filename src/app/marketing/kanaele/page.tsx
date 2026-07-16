@@ -3,30 +3,24 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
 import { useEffect, useState } from "react";
-import { getKanaele, updateKanalConfig } from "./actions";
+import { getKanaele } from "./actions";
 import { CheckCircle, XCircle, Settings, Mail, Camera, Globe, LayoutTemplate } from "lucide-react";
 
 export default function KanaelePage() {
-  const [kanaele, setKanaele] = useState<any[]>([]);
+  type MarketingChannel = Awaited<ReturnType<typeof getKanaele>>[number];
+  const [kanaele, setKanaele] = useState<MarketingChannel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     getKanaele().then(data => {
       setKanaele(data);
       setLoading(false);
-    }).catch(console.error);
+    }).catch(() => {
+      setError("Kanalstatus konnte nicht geladen werden.");
+      setLoading(false);
+    });
   }, []);
-
-  async function connectEmail(id: string) {
-    const key = prompt("Bitte API-Key für den E-Mail Provider (Brevo/Resend) eingeben:");
-    if (!key) return;
-    
-    // Test-Mail senden (mocked for now, real implementation later)
-    alert("Test-Mail wurde simuliert. API-Key wird gespeichert.");
-    await updateKanalConfig(id, true, { provider: 'resend', key_prefix: key.substring(0, 4) + '...' });
-    const data = await getKanaele();
-    setKanaele(data);
-  }
 
   function renderIcon(typ: string) {
     switch(typ) {
@@ -52,6 +46,8 @@ export default function KanaelePage() {
         <p className="text-slate-500">Verbinde KREILE mit deinen Plattformen, um Aktionen zu steuern.</p>
       </div>
 
+      {error && <div role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {kanaele.map((k) => (
           <div key={k.id} className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
@@ -61,7 +57,7 @@ export default function KanaelePage() {
                 <h3 className="font-semibold text-lg">{k.name}</h3>
               </div>
               <div className="flex items-center gap-2">
-                {k.verbunden ? (
+                {k.typ === 'instagram' && k.verbunden ? (
                   <span className="flex items-center gap-1 text-sm text-green-600 bg-green-50 px-2 py-1 rounded-full">
                     <CheckCircle size={14} /> Verbunden
                   </span>
@@ -81,36 +77,33 @@ export default function KanaelePage() {
             </p>
 
             <div className="pt-4 border-t border-slate-100">
-              {k.typ === 'email' && !k.verbunden && (
-                <button 
-                  onClick={() => connectEmail(k.id)}
-                  className="w-full py-2 bg-slate-900 text-white rounded-lg hover:bg-slate-800 text-sm font-medium"
-                >
-                  Provider konfigurieren
-                </button>
-              )}
-              {k.typ === 'email' && k.verbunden && (
-                <button 
-                  onClick={() => connectEmail(k.id)}
-                  className="w-full py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 text-sm font-medium"
-                >
-                  Einstellungen ändern
-                </button>
-              )}
-              {(k.typ === 'instagram' || k.typ === 'google') && (
+              {k.typ === 'email' && (
                 <button 
                   disabled
                   className="w-full py-2 bg-slate-100 text-slate-400 rounded-lg text-sm font-medium cursor-not-allowed"
                 >
-                  In Vorbereitung (Stufe 2)
+                  Serverkonfiguration erforderlich
+                </button>
+              )}
+              {k.typ === 'instagram' && (
+                <a
+                  href="/api/marketing/instagram/connect"
+                  className="block w-full py-2 text-center bg-slate-900 text-white rounded-lg hover:bg-slate-800 text-sm font-medium"
+                >
+                  {k.verbunden ? 'Instagram neu verknüpfen' : 'Instagram verknüpfen'}
+                </a>
+              )}
+              {k.typ === 'google' && (
+                <button disabled className="w-full py-2 bg-slate-100 text-slate-400 rounded-lg text-sm font-medium cursor-not-allowed">
+                  Nicht angebunden
                 </button>
               )}
               {k.typ === 'web' && (
                 <button 
                   disabled
-                  className="w-full py-2 bg-green-50 border border-green-200 text-green-700 rounded-lg text-sm font-medium"
+                  className="w-full py-2 bg-slate-100 border border-slate-200 text-slate-500 rounded-lg text-sm font-medium"
                 >
-                  Aktiv (Tracking läuft)
+                  Tracking noch nicht angebunden
                 </button>
               )}
             </div>

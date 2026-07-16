@@ -13,9 +13,41 @@ import {
   createBelegAction,
   freigebenBelegAction,
   stornoBelegAction,
-  exportBelegeAction
+  generateDatevExportAction,
+  generateLexwareExportAction,
+  getCockpitMetricsAction,
+  getSteuerprofilAction,
+  listKostenpostenAction,
+  listOffenePostenAction,
+  listRechnungenAction,
 } from '@/app/buchhaltung/actions'
-import { getSparzaehlerAnalysisAction } from '@/app/buchhaltung/analysis.actions'
+import {
+  getBwaAnalysisAction,
+  getKraftstoffAnalysisAction,
+  getSparzaehlerAnalysisAction,
+} from '@/app/buchhaltung/analysis.actions'
+import { createStoredZip } from '../storedZip'
+
+function costStatus(giltAb?: string, giltBis?: string): string {
+  const today = new Date().toISOString().substring(0, 10)
+  if (giltAb && giltAb > today) return 'zukuenftig'
+  if (giltBis && giltBis < today) return 'beendet'
+  return 'aktiv'
+}
+
+function fuelType(value: string): 'diesel' | 'super' | 'superplus' | 'adblue' | 'unbekannt' {
+  const normalized = value.trim().toLowerCase()
+  if (normalized.includes('adblue')) return 'adblue'
+  if (normalized.includes('diesel')) return 'diesel'
+  if (normalized.includes('superplus') || normalized.includes('super plus')) return 'superplus'
+  if (normalized.includes('super') || normalized.includes('benzin')) return 'super'
+  return 'unbekannt'
+}
+
+function bookingCount(csv: string, headerLines: number): number {
+  const lines = csv.split(/\r?\n/).filter((line) => line.trim().length > 0)
+  return Math.max(0, lines.length - headerLines)
+}
 
 export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
   // ── Belege (Supabase) ─────────────────────────────────────────────────────
@@ -30,8 +62,6 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
 
   async createBelegFromUpload(file: BelegFile): Promise<Beleg> {
     const formData = new FormData();
-    formData.append('filename', file.filename);
-    formData.append('mimeType', file.mimeType);
     
     let blobData: BlobPart;
     if (typeof file.data === 'string') {
@@ -40,7 +70,7 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
       blobData = file.data;
     }
     const blob = new Blob([blobData], { type: file.mimeType });
-    formData.append('file', blob);
+    formData.append('file', blob, file.filename);
 
     return await createBelegAction(formData);
   }
@@ -56,95 +86,166 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
   // ── Auswertung & Co (Live from Actions) ────────────────────────────────────────
 
   async getAusgabenNachKategorie(zeitraum: Zeitraum): Promise<KategorieSumme[]> {
-    return [];
+    const metrics = await getCockpitMetricsAction(zeitraum.von, zeitraum.bis)
+    const umsatz = metrics.bwa.einnahmen
+    return metrics.kategorien.map((entry) => ({
+      ...entry,
+      anteilAmUmsatz: umsatz > 0 ? (entry.summe / umsatz) * 100 : undefined,
+    }))
   }
 
   async getKraftstoffAuswertung(zeitraum: Zeitraum): Promise<KraftstoffReport> {
-    return { gesamtkosten: 0, gesamtLiter: 0, durchschnittPreisProLiter: 0, anzahlTankungen: 0, nachSorte: [], nachOrt: [], nachMonat: [] };
-  }
-
-  async getBwa(zeitraum: Zeitraum): Promise<Bwa> {
-    return { zeitraum, umsatzerloese: 0, materialaufwand: 0, fremdleistungen: 0, deckungsbeitrag: 0, fixkosten: 0, betriebsergebnis: 0, positionen: [] };
-  }
-
-  async getFixkosten(): Promise<CostItem[]> {
-    return [];
-  }
-
-  async getVariableKosten(): Promise<CostItem[]> {
-    return [];
-  }
-
-  async listOffenePosten(): Promise<Ausgangsrechnung[]> {
-    return [];
-  }
-
-  async listRechnungen(filter?: RechnungFilter): Promise<Ausgangsrechnung[]> {
-    return [];
-  }
-
-  async berechneUstva(zeitraum: Zeitraum): Promise<UstvaWerte> {
-    try {
-      const { getCockpitMetricsAction } = await import('@/app/buchhaltung/actions');
-      const metrics = await getCockpitMetricsAction(zeitraum.von, zeitraum.bis);
-      return metrics.ustva;
-    } catch (err) {
-      return { zeitraumVon: zeitraum.von, zeitraumBis: zeitraum.bis, umsatz19: 0, ust19: 0, umsatz7: 0, ust7: 0, umsatz0: 0, vorsteuer: 0, zahllast: 0, status: 'entwurf' };
+    const data = await getKraftstoffAnalysisAction(zeitraum.von, zeitraum.bis)
+    const byType = new Map<ReturnType<typeof fuelType>, { liter: number; kosten: number }>()
+    for (const entry of data.nachSorte) {
+      const type = fuelType(entry.sorte)
+      const current = byType.get(type) || { liter: 0, kosten: 0 }
+      current.liter += entry.liter
+      current.kosten += entry.kosten
+      byType.set(type, current)
+    }
+    return {
+      gesamtkosten: data.gesamtKosten,
+      gesamtLiter: data.gesamtLiter,
+      durchschnittPreisProLiter: data.avgPreis,
+      anzahlTankungen: data.tankungenCount,
+      nachSorte: [...byType.entries()].map(([sorte, values]) => ({ sorte, ...values })),
+      nachOrt: data.nachOrt,
+      nachMonat: data.nachMonat,
     }
   }
 
+  async getBwa(zeitraum: Zeitraum): Promise<Bwa> {
+    const data = await getBwaAnalysisAction(zeitraum.von, zeitraum.bis)
+    const positionen: Bwa['positionen'] = [
+      { bezeichnung: 'Umsatzerloese', betrag: data.einnahmen, typ: 'einnahme' },
+      { bezeichnung: 'Materialaufwand', betrag: data.material, typ: 'ausgabe_variabel' },
+      { bezeichnung: 'Fremdleistungen', betrag: data.fremdleistungen, typ: 'ausgabe_variabel' },
+      { bezeichnung: 'Sonstige variable Betriebskosten', betrag: data.betrieb + data.variableKosten, typ: 'ausgabe_variabel' },
+      { bezeichnung: 'Personalkosten', betrag: data.personal, typ: 'ausgabe_fix' },
+      { bezeichnung: 'Fixkosten', betrag: data.fixkosten, typ: 'ausgabe_fix' },
+    ].filter((entry) => entry.betrag !== 0) as Bwa['positionen']
+    return {
+      zeitraum,
+      umsatzerloese: data.einnahmen,
+      materialaufwand: data.material,
+      fremdleistungen: data.fremdleistungen,
+      deckungsbeitrag: data.deckungsbeitrag,
+      fixkosten: data.fixkosten + data.personal,
+      betriebsergebnis: data.betriebsergebnis,
+      positionen,
+    }
+  }
+
+  async getFixkosten(): Promise<CostItem[]> {
+    const costs = await listKostenpostenAction({ art: 'fix' })
+    return costs.map((cost) => ({
+      id: cost.id,
+      name: cost.bezeichnung,
+      amount: cost.betrag,
+      interval: cost.intervall,
+      category: 'fix',
+      status: costStatus(cost.giltAb, cost.giltBis),
+    }))
+  }
+
+  async getVariableKosten(): Promise<CostItem[]> {
+    const costs = await listKostenpostenAction({ art: 'variabel' })
+    return costs.map((cost) => ({
+      id: cost.id,
+      name: cost.bezeichnung,
+      amount: cost.betrag,
+      interval: cost.intervall,
+      category: 'variabel',
+      status: costStatus(cost.giltAb, cost.giltBis),
+    }))
+  }
+
+  async listOffenePosten(): Promise<Ausgangsrechnung[]> {
+    return listOffenePostenAction()
+  }
+
+  async listRechnungen(filter?: RechnungFilter): Promise<Ausgangsrechnung[]> {
+    return listRechnungenAction(filter)
+  }
+
+  async berechneUstva(zeitraum: Zeitraum): Promise<UstvaWerte> {
+    const metrics = await getCockpitMetricsAction(zeitraum.von, zeitraum.bis)
+    return metrics.ustva
+  }
+
   async getSteuerprofil(): Promise<Steuerprofil> {
-    return { id: '1', bezeichnung: 'GmbH', standardUstSatz: 19, reduziertUstSatz: 7, kleinunternehmer: false, voranmeldungRhythmus: 'monatlich', sachkontenrahmen: 'SKR03' };
+    return getSteuerprofilAction()
   }
 
   async exportDatev(zeitraum: Zeitraum): Promise<ExportDatei> {
-    const res = await exportBelegeAction('DATEV');
+    const csv = await generateDatevExportAction(zeitraum.von, zeitraum.bis)
     return {
       typ: 'datev',
       dateiname: `EXTF_Buchungsstapel_${zeitraum.von.substring(0, 7)}.csv`,
-      inhalt: new Blob([res.csv], { type: 'text/csv' }),
+      inhalt: new Blob([csv], { type: 'text/csv;charset=utf-8' }),
       mimeType: 'text/csv',
-      anzahlBuchungen: res.rows.length,
+      anzahlBuchungen: bookingCount(csv, 2),
       zeitraum
     };
   }
 
   async exportLexware(zeitraum: Zeitraum): Promise<ExportDatei> {
-    const res = await exportBelegeAction('Lexware');
+    const csv = await generateLexwareExportAction(zeitraum.von, zeitraum.bis)
     return {
       typ: 'lexware',
       dateiname: `Lexware_Export_${zeitraum.von.substring(0, 7)}.csv`,
-      inhalt: new Blob([res.csv], { type: 'text/csv' }),
+      inhalt: new Blob([csv], { type: 'text/csv;charset=utf-8' }),
       mimeType: 'text/csv',
-      anzahlBuchungen: res.rows.length,
+      anzahlBuchungen: bookingCount(csv, 1),
       zeitraum
     };
   }
 
   async exportSteuerberaterPaket(zeitraum: Zeitraum): Promise<ExportDatei> {
-    throw new Error("Nicht implementiert");
+    const [datev, lexware] = await Promise.all([
+      generateDatevExportAction(zeitraum.von, zeitraum.bis),
+      generateLexwareExportAction(zeitraum.von, zeitraum.bis),
+    ])
+    const period = `${zeitraum.von}_${zeitraum.bis}`
+    const datevName = `EXTF_Buchungsstapel_${period}.csv`
+    const lexwareName = `Lexware_Export_${period}.csv`
+    const manifest = JSON.stringify({
+      schemaVersion: 1,
+      zeitraum,
+      files: [
+        { name: datevName, format: 'DATEV-EXTF', bookings: bookingCount(datev, 2) },
+        { name: lexwareName, format: 'Lexware-CSV', bookings: bookingCount(lexware, 1) },
+      ],
+      receiptsIncluded: false,
+      note: 'Belegdateien sind in diesem Export nicht enthalten.',
+    }, null, 2)
+    const archive = createStoredZip([
+      { name: datevName, content: datev },
+      { name: lexwareName, content: lexware },
+      { name: 'manifest.json', content: manifest },
+    ])
+    const archiveCopy = new Uint8Array(archive.byteLength)
+    archiveCopy.set(archive)
+    return {
+      typ: 'steuerberater_zip',
+      dateiname: `Steuerberater_Paket_${period}.zip`,
+      inhalt: new Blob([archiveCopy.buffer], { type: 'application/zip' }),
+      mimeType: 'application/zip',
+      anzahlBuchungen: bookingCount(datev, 2),
+      zeitraum,
+    }
   }
 
   async getErsparnis(jahr: number): Promise<Ersparnis> {
-    try {
-      const data = await getSparzaehlerAnalysisAction(`${jahr}-01-01`, `${jahr}-12-31`);
-      return {
-        jahr,
-        betrag: data.ersparnisBetrag,
-        anzahlAutoBelege: data.anzahlAutoBelege,
-        minutenProBeleg: 4,
-        beraterStundensatz: 120,
-        prozentAutomatisch: data.prozentAutomatisch
-      };
-    } catch (err) {
-      return {
-        jahr,
-        betrag: 0,
-        anzahlAutoBelege: 0,
-        minutenProBeleg: 4,
-        beraterStundensatz: 120,
-        prozentAutomatisch: 0
-      };
+    const data = await getSparzaehlerAnalysisAction(`${jahr}-01-01`, `${jahr}-12-31`)
+    return {
+      jahr,
+      betrag: data.ersparnisBetrag,
+      anzahlAutoBelege: data.anzahlAutoBelege,
+      minutenProBeleg: data.minutenProBeleg,
+      beraterStundensatz: data.stundensatz,
+      prozentAutomatisch: data.prozentAutomatisch
     }
   }
 }

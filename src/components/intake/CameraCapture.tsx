@@ -4,7 +4,7 @@ import { Camera, ArrowLeft, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { processImage } from "@/app/actions/ocr.actions";
 import { OcrResult } from "@/lib/ocr/geminiOcr";
-import { eventsRepository } from "@/lib/repositories/eventsRepository";
+import { trackUiEvent } from "@/lib/tracking/tracking";
 
 export function CameraCapture({
   onScanComplete,
@@ -78,15 +78,20 @@ export function CameraCapture({
     }
     
     setScanning(true);
-    await eventsRepository.addEvent({ eventType: "OCR_SCAN_STARTED" });
-    
-    // Call the server action with the captured image
-    const scan = await processImage(imageData);
-    
-    await eventsRepository.addEvent({ eventType: "OCR_SCAN_COMPLETED" });
-    setScanning(false);
-    stopCamera();
-    onScanComplete(scan, imageData);
+    const startedAt = performance.now();
+    trackUiEvent("workflow_started", { target: "ocr" });
+    try {
+      const scan = await processImage(imageData);
+      trackUiEvent("workflow_completed", { target: "ocr", outcome: "success", durationMs: Math.round(performance.now() - startedAt) });
+      stopCamera();
+      onScanComplete(scan, imageData);
+    } catch {
+      trackUiEvent("error", { target: "ocr", outcome: "failure", durationMs: Math.round(performance.now() - startedAt) });
+      setError("Die OCR-Analyse konnte nicht bestätigt werden.");
+      videoRef.current?.play().catch(() => undefined);
+    } finally {
+      setScanning(false);
+    }
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -94,16 +99,23 @@ export function CameraCapture({
     if (!file) return;
     
     setScanning(true);
-    await eventsRepository.addEvent({ eventType: "OCR_SCAN_STARTED" });
+    const startedAt = performance.now();
+    trackUiEvent("workflow_started", { target: "ocr" });
     
     const reader = new FileReader();
     reader.onload = async (event) => {
       const base64 = event.target?.result as string;
-      const scan = await processImage(base64);
-      await eventsRepository.addEvent({ eventType: "OCR_SCAN_COMPLETED" });
-      setScanning(false);
-      stopCamera();
-      onScanComplete(scan, base64);
+      try {
+        const scan = await processImage(base64);
+        trackUiEvent("workflow_completed", { target: "ocr", outcome: "success", durationMs: Math.round(performance.now() - startedAt) });
+        stopCamera();
+        onScanComplete(scan, base64);
+      } catch {
+        trackUiEvent("error", { target: "ocr", outcome: "failure", durationMs: Math.round(performance.now() - startedAt) });
+        setError("Die OCR-Analyse konnte nicht bestätigt werden.");
+      } finally {
+        setScanning(false);
+      }
     };
     reader.readAsDataURL(file);
   };

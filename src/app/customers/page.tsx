@@ -88,7 +88,7 @@ export default function CustomersPage() {
 
   const selectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
-    trackUiEvent("detail_open", { target: "customer", id: customer.id, name: customer.name });
+    trackUiEvent("detail_open", { target: "customer" });
     openCustomer(customer.id);
   };
 

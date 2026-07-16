@@ -94,7 +94,7 @@ export default function GalvanikPage() {
       const order = inProgressOrders.find(o => o.id === orderId);
       if (order) {
         setInProgressOrders(prev => prev.filter(o => o.id !== orderId));
-        await ordersRepository.updateOrder(orderId, { station: "warenausgang", status: "ready" });
+        await ordersRepository.updateOrder(orderId, { currentStationId: "warenausgang", status: "ready" });
       }
     }
   };
@@ -263,4 +263,3 @@ export default function GalvanikPage() {
     </div>
   );
 }
-

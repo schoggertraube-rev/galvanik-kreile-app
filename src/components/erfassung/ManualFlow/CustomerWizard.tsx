@@ -117,7 +117,7 @@ export function CustomerWizard() {
     setInlineMessage(null);
     try {
       const res = await extractCustomerDataFromFreetext(freetext);
-      if (res.ok && res.data) {
+      if (res.ok) {
         const d = res.data;
         const filled: string[] = [];
         if (d.type) { setCustomerType(d.type); filled.push("customerType"); }
@@ -158,18 +158,28 @@ export function CustomerWizard() {
   };
 
   const handleEnrichWeb = async () => {
-    if (!company && !city) {
-      setInlineMessage({ type: 'error', text: "Mindestens Firma oder Stadt muss angegeben werden." });
+    if (!company) {
+      setInlineMessage({ type: 'error', text: "Für eine eindeutige Recherche ist ein Firmenname erforderlich." });
       return;
     }
     setIsEnriching(true);
     setInlineMessage(null);
     try {
       const res = await enrichCustomerData(company, city);
-      if (res.ok && res.data) {
+      if (res.ok) {
         const d = res.data;
         const filled: string[] = [];
-        if (d.website && !notes.includes(d.website)) { setNotes(prev => prev ? prev + "\nWeb: " + d.website : "Web: " + d.website); filled.push("notes"); }
+        const sourceNote = d.groundingSources
+          .map((source) => `${source.title || 'Quelle'}: ${source.url}`)
+          .join("\n");
+        if (d.website || sourceNote) {
+          setNotes((previous) => [
+            previous,
+            d.website && !previous.includes(d.website) ? `Web: ${d.website}` : '',
+            sourceNote ? `Recherchequellen:\n${sourceNote}` : '',
+          ].filter(Boolean).join("\n"));
+          filled.push("notes");
+        }
         if (d.phone && !phone) { setPhone(d.phone); filled.push("phone"); }
         if (d.email && !email) { setEmail(d.email); filled.push("email"); }
         if (d.street && !street) { 
@@ -187,7 +197,10 @@ export function CustomerWizard() {
         if (d.country) { setCountry(d.country); filled.push("country"); }
         
         setAutofilledFields(filled);
-        setInlineMessage({ type: 'success', text: "Daten per Web/Gemini ergänzt! (Confidence: " + d.confidence + ")" });
+        setInlineMessage({
+          type: 'success',
+          text: `Daten aus ${d.groundingSources.length} Webquelle(n) ergänzt; KI-Konfidenz ${Math.round(d.confidence * 100)} %. Bitte prüfen.`,
+        });
         setTimeout(() => {
           setAutofilledFields([]);
           setInlineMessage(null);
@@ -283,11 +296,11 @@ export function CustomerWizard() {
             </button>
             <button 
               onClick={handleEnrichWeb}
-              disabled={isEnriching || (!company && !city)}
+              disabled={isEnriching || !company}
               className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 disabled:opacity-50 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-semibold transition-colors"
             >
               {isEnriching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-              Per Web/Gemini ergänzen
+              Mit Webquellen ergänzen
             </button>
           </div>
           {inlineMessage && (

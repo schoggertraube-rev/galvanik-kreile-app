@@ -1,38 +1,44 @@
 "use server";
 
-import { db } from "@/db";
-import { baeder, badMesswerte } from "@/db/schema";
-import { checkAppAuth } from "@/lib/server/authHelper";
-import { eq } from "drizzle-orm";
+import { getBathMeasurementsDb, getBathsDb } from "@/app/actions/baths.actions";
+
+export type BaederOverviewItem = {
+  id: string;
+  name: string;
+  status: string;
+  lastMeasuredAt: string | null;
+  messwerte: Array<{
+    id: string;
+    measuredAt: string | null;
+    statusAfterMeasurement: string;
+  }>;
+};
 
 export async function getBaederListAction() {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
+  const bathsResult = await getBathsDb();
+  if (!bathsResult.ok) return bathsResult;
+  const measurementsResult = await getBathMeasurementsDb();
+  if (!measurementsResult.ok) return measurementsResult;
 
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-
-  try {
-    const baederRecords = await db.select().from(baeder).orderBy(baeder.name);
-    const messwerteRecords = await db.select().from(badMesswerte);
-
-    const enriched = baederRecords.map(b => {
-      const bMesswerte = messwerteRecords.filter(m => m.badId === b.id).sort((x, y) => {
-        const t1 = y.measuredAt ? new Date(y.measuredAt).getTime() : 0;
-        const t2 = x.measuredAt ? new Date(x.measuredAt).getTime() : 0;
-        return t1 - t2;
-      });
-      return {
-        ...b,
-        messwerte: bMesswerte
-      };
+  const measurementsByBath = new Map<string, BaederOverviewItem["messwerte"]>();
+  for (const measurement of measurementsResult.data) {
+    const current = measurementsByBath.get(measurement.badId) || [];
+    current.push({
+      id: measurement.id,
+      measuredAt: measurement.measuredAt?.toISOString() || null,
+      statusAfterMeasurement: measurement.statusAfterMeasurement,
     });
-
-    return {
-      ok: true,
-      data: enriched
-    };
-  } catch (error) {
-    console.error("Error in getBaederListAction:", error);
-    return { ok: false, error: "QUERY_ERROR", message: String(error) };
+    measurementsByBath.set(measurement.badId, current);
   }
+
+  return {
+    ok: true as const,
+    data: bathsResult.data.map((bath): BaederOverviewItem => ({
+      id: bath.id,
+      name: bath.name,
+      status: bath.status,
+      lastMeasuredAt: bath.letzteWartung?.toISOString() || null,
+      messwerte: measurementsByBath.get(bath.id) || [],
+    })),
+  };
 }

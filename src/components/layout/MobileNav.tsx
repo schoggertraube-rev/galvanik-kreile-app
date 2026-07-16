@@ -137,7 +137,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
           {renderNavItem({ label: "Home", href: "/", icon: Home })}
           
           {["inhaber", "admin", "developer"].includes(role?.toLowerCase() || "") && (
-            renderNavItem({ label: "Cockpit", href: "/cockpit", icon: BarChart3 })
+            renderNavItem({ label: "Performance", href: "/performance", icon: BarChart3 })
           )}
           
           {renderNavItem({ label: "Warendurchlauf", href: "/warendurchlauf", icon: PackageCheck })}

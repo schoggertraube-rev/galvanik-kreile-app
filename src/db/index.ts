@@ -3,8 +3,10 @@ import postgres from 'postgres';
 import * as baseSchema from './schema';
 import * as buchhaltungSchema from './schema_buchhaltung';
 import * as marketingSchema from './schema_marketing';
+import * as erfassungSchema from './schema_erfassung';
+import * as operatorSchema from './schema_operator';
 
-const schema = { ...baseSchema, ...buchhaltungSchema, ...marketingSchema };
+const schema = { ...baseSchema, ...buchhaltungSchema, ...marketingSchema, ...erfassungSchema, ...operatorSchema };
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL is required");

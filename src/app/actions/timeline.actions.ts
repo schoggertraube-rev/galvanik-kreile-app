@@ -2,13 +2,14 @@
 
 import { db } from "@/db";
 import { events, orders, customers, complaints } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
-import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
+import { and, eq, desc } from "drizzle-orm";
+import { ActionResult } from "@/lib/server/authHelper";
+import { resolveAuthorization } from "@/lib/server/authorization";
 import { TimelineEntry } from "@/lib/repositories/timelineRepository";
 
 export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[]>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return { ok: false, error: "UNAUTHORIZED", message: auth.message };
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
@@ -22,7 +23,7 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
       title: orders.title,
       orderNumber: orders.orderNumber,
       createdAt: orders.createdAt
-    }).from(orders).where(eq(orders.tenantId, "galvanik-kreile")).orderBy(desc(orders.createdAt)).limit(20);
+    }).from(orders).where(eq(orders.tenantId, auth.data.tenantId)).orderBy(desc(orders.createdAt)).limit(20);
     
     dbOrders.forEach(o => {
       entries.push({
@@ -46,7 +47,10 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
       createdAt: events.createdAt
     }).from(events)
       .leftJoin(orders, eq(events.orderId, orders.id))
-      .where(eq(events.tenantId, "galvanik-kreile"))
+      .where(and(
+        eq(events.tenantId, auth.data.tenantId),
+        eq(orders.tenantId, auth.data.tenantId),
+      ))
       .orderBy(desc(events.createdAt))
       .limit(20);
       
@@ -95,7 +99,9 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
       id: customers.id,
       name: customers.name,
       createdAt: customers.createdAt
-    }).from(customers).orderBy(desc(customers.createdAt)).limit(10);
+    }).from(customers)
+      .where(eq(customers.tenantId, auth.data.tenantId))
+      .orderBy(desc(customers.createdAt)).limit(10);
     
     dbCustomers.forEach(c => {
       entries.push({
@@ -118,13 +124,18 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
 }
 
 export async function getTimelineForCustomerDb(customerId: string): Promise<ActionResult<TimelineEntry[]>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return { ok: false, error: "UNAUTHORIZED", message: auth.message };
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
     const entries: TimelineEntry[] = [];
+    const [ownedCustomer] = await db.select({ id: customers.id }).from(customers).where(and(
+      eq(customers.id, customerId),
+      eq(customers.tenantId, auth.data.tenantId),
+    )).limit(1);
+    if (!ownedCustomer) return { ok: false, error: "EMPTY_RESULT", message: "Kunde nicht gefunden" };
     
     const dbEvents = await db.select({
       id: events.id,
@@ -133,7 +144,11 @@ export async function getTimelineForCustomerDb(customerId: string): Promise<Acti
       createdAt: events.createdAt
     }).from(events)
       .leftJoin(orders, eq(events.orderId, orders.id))
-      .where(eq(orders.customerId, customerId));
+      .where(and(
+        eq(orders.customerId, customerId),
+        eq(orders.tenantId, auth.data.tenantId),
+        eq(events.tenantId, auth.data.tenantId),
+      ));
       
     dbEvents.forEach(e => {
       let severity: TimelineEntry["severity"] = "neutral";
@@ -180,7 +195,10 @@ export async function getTimelineForCustomerDb(customerId: string): Promise<Acti
     });
 
     // 2. Reklamationen
-    const dbComplaints = await db.select().from(complaints).where(eq(complaints.customerId, customerId));
+    const dbComplaints = await db.select().from(complaints).where(and(
+      eq(complaints.customerId, customerId),
+      eq(complaints.tenantId, auth.data.tenantId),
+    ));
     dbComplaints.forEach(c => {
       entries.push({
         id: c.id,
@@ -203,8 +221,8 @@ export async function getTimelineForCustomerDb(customerId: string): Promise<Acti
 }
 
 export async function getTimelineForOrderDb(orderId: string): Promise<ActionResult<TimelineEntry[]>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return { ok: false, error: "UNAUTHORIZED", message: auth.message };
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
@@ -218,7 +236,11 @@ export async function getTimelineForOrderDb(orderId: string): Promise<ActionResu
       payload: events.payload
     }).from(events)
       .leftJoin(orders, eq(events.orderId, orders.id))
-      .where(eq(events.orderId, orderId));
+      .where(and(
+        eq(events.orderId, orderId),
+        eq(events.tenantId, auth.data.tenantId),
+        eq(orders.tenantId, auth.data.tenantId),
+      ));
       
     const entries = dbEvents.map(e => {
       let severity: TimelineEntry["severity"] = "neutral";
@@ -254,11 +276,17 @@ export async function getTimelineForOrderDb(orderId: string): Promise<ActionResu
       if (e.eventType.includes("FAILED")) severity = "critical";
       
       let subtitle = "";
-      const metadata = e.payload as any;
+      const metadata = e.payload;
       if (metadata) {
-        if (metadata.stationId) subtitle += `Station: ${metadata.stationId} `;
-        if (metadata.notes) subtitle += `Notiz: ${metadata.notes} `;
-        if (metadata.material) subtitle += `(${metadata.material}: ${metadata.amount}) `;
+        const stationId = typeof metadata.stationId === "string" ? metadata.stationId : "";
+        const notes = typeof metadata.notes === "string" ? metadata.notes : "";
+        const material = typeof metadata.material === "string" ? metadata.material : "";
+        const amount = typeof metadata.amount === "string" || typeof metadata.amount === "number"
+          ? String(metadata.amount)
+          : "";
+        if (stationId) subtitle += `Station: ${stationId} `;
+        if (notes) subtitle += `Notiz: ${notes} `;
+        if (material) subtitle += `(${material}${amount ? `: ${amount}` : ""}) `;
       }
 
       return {

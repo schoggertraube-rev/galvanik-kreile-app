@@ -6,24 +6,25 @@ import { getSegmentById, updateSegment, deleteSegment } from "../actions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Save, Trash2, AlertTriangle } from "lucide-react";
-import { useState, useEffect } from "react";
+import { use, useState, useEffect } from "react";
 
-export default function SegmentDetailPage({ params }: { params: { id: string } }) {
+export default function SegmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [segment, setSegment] = useState<any>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    getSegmentById(params.id).then(setSegment).catch(console.error);
-  }, [params.id]);
+    getSegmentById(id).then(setSegment).catch(console.error);
+  }, [id]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     const formData = new FormData(e.currentTarget);
     try {
-      await updateSegment(params.id, formData);
+      await updateSegment(id, formData);
       router.push("/marketing/segmente");
     } catch (err: any) {
       console.error(err);
@@ -36,7 +37,7 @@ export default function SegmentDetailPage({ params }: { params: { id: string } }
     if (!confirm("Segment wirklich löschen?")) return;
     setLoading(true);
     try {
-      await deleteSegment(params.id);
+      await deleteSegment(id);
       router.push("/marketing/segmente");
     } catch (err: any) {
       console.error(err);

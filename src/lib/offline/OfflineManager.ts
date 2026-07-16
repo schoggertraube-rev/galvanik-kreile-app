@@ -1,5 +1,6 @@
 import { IndexedDBHelper, OfflineAction } from "./IndexedDBHelper";
-import type { Order } from "@/lib/repositories/ordersRepository";
+import type { OrderCreateInput } from "@/lib/repositories/ordersRepository";
+import type { OrderUpdateInput } from "@/lib/orders/orderMutationContract";
 import type { StockMovement } from "@/lib/repositories/inventoryRepository";
 
 export const OfflineManager = {
@@ -69,31 +70,8 @@ export const OfflineManager = {
       return;
     }
 
-    const now = new Date();
-    const queue = [];
-    let expiredCount = 0;
-
-    for (const item of rawQueue) {
-      if (item.expiresAt && new Date(item.expiresAt) < now) {
-        expiredCount++;
-        console.warn(`[OfflineManager] Item ${item.id} expired and was removed from outbox.`);
-        await IndexedDBHelper.removeFromQueue(item.id);
-      } else {
-        queue.push(item);
-      }
-    }
-
-    if (expiredCount > 0 && typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("kreile-sync-expired", { detail: { count: expiredCount } }));
-      window.dispatchEvent(new Event("kreile-sync-queue-updated"));
-      window.dispatchEvent(new Event("storage"));
-    }
-
-    if (queue.length === 0) {
-      return;
-    }
-
-    console.log(`🔄 Syncing offline queue... Found ${queue.length} valid actions (${expiredCount} expired).`);
+    const queue = rawQueue;
+    console.log(`🔄 Syncing offline queue... Found ${queue.length} actions.`);
 
     // Dynamic imports of repositories to prevent circular import loops at bundle time
     const { ordersRepository } = await import("@/lib/repositories/ordersRepository");
@@ -106,12 +84,12 @@ export const OfflineManager = {
         
         switch (item.actionType) {
           case "ORDER_CREATE": {
-            await ordersRepository.create(item.payload as Omit<Order, "id" | "orderNumber" | "status" | "risk">);
+            await ordersRepository.create(item.payload as OrderCreateInput);
             break;
           }
           
           case "ORDER_STATUS_UPDATE": {
-            const payload = item.payload as { id?: string; orderNumber?: string; changes?: Partial<Order> };
+            const payload = item.payload as { id?: string; orderNumber?: string; changes?: OrderUpdateInput };
             await ordersRepository.updateOrder(payload.id || payload.orderNumber || "", payload.changes || {});
             break;
           }
@@ -135,7 +113,7 @@ export const OfflineManager = {
           }
           
           case "TIME_BOOKING": {
-            await eventsRepository.addEvent(item.payload as import('../repositories/eventsRepository').StatusEvent);
+            await eventsRepository.addEvent(item.payload as import('../repositories/eventsRepository').NewStatusEvent);
             break;
           }
           
@@ -158,11 +136,10 @@ export const OfflineManager = {
           }
           case "APP_KVP_CREATE":
           case "BUSINESS_KVP_CREATE": {
-            // Mock backend sync for now
-            console.log("Mocking backend sync for KVP:", item.payload);
-            await new Promise(resolve => setTimeout(resolve, 300));
-            break;
+            throw new Error("OFFLINE_ACTION_NOT_CONNECTED");
           }
+          default:
+            throw new Error("OFFLINE_ACTION_UNKNOWN");
         }
         
         // Remove item from queue on success
@@ -171,9 +148,8 @@ export const OfflineManager = {
         
       } catch (err) {
         console.error(`Failed to sync queued item ${item.id}:`, err);
-        // In a live system, we would handle retry limits or mark as error.
-        // For our offline-first LWW prototype, we continue to prevent queue blockage.
-        await IndexedDBHelper.removeFromQueue(item.id);
+        // Keep unconfirmed actions durably queued. Deletion is reserved for an
+        // explicit positive receipt from the real backend branch above.
       }
     }
 
@@ -184,7 +160,7 @@ export const OfflineManager = {
       window.dispatchEvent(new Event("storage")); // force layout state sync
     }
 
-    console.log("✅ Offline sync queue completed successfully.");
+    console.log("Offline sync pass completed; unconfirmed actions remain queued.");
   }
 };
 

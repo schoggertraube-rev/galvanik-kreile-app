@@ -2,11 +2,10 @@
 
 import { usePageView } from "@/hooks/usePageView";
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Mail, CheckCircle, Archive, ChevronRight, Flame, Package, Droplets, Clock } from "lucide-react";
+import { Mail, CheckCircle, Archive, ChevronRight, Flame, Package, Droplets, Clock } from "lucide-react";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { inquiriesRepository, QuoteRequest } from "@/lib/repositories/inquiriesRepository";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -30,15 +29,22 @@ export default function QuotesPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pricing, setPricing] = useState<Record<string, QuoteRequest["pricing"]>>({});
   const [showEmail, setShowEmail] = useState(false);
+  const [dataError, setDataError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadRequests = async () => {
-      const data = await inquiriesRepository.getAll();
-      setRequests(data);
-      if (data.length > 0 && !selectedId) {
-        setSelectedId(data[0].id);
+      try {
+        const data = await inquiriesRepository.getAll();
+        setRequests(data);
+        if (data.length > 0 && !selectedId) {
+          setSelectedId(data[0].id);
+        }
+        setPricing(Object.fromEntries(data.map(r => [r.id, { ...r.pricing }])));
+        setDataError(null);
+      } catch (error) {
+        console.error(error);
+        setDataError("Anfragen konnten nicht geladen werden.");
       }
-      setPricing(Object.fromEntries(data.map(r => [r.id, { ...r.pricing }])));
     };
     loadRequests();
 
@@ -53,53 +59,58 @@ export default function QuotesPage() {
 
   const handlePriceChange = async (field: keyof QuoteRequest["pricing"], value: number) => {
     if (!selectedId) return;
+    const previousPricing = pricing[selectedId];
     const newPricing = { ...pricing[selectedId], [field]: value };
     setPricing(prev => ({ ...prev, [selectedId]: newPricing }));
-    await inquiriesRepository.updatePricing(selectedId, newPricing);
+    try {
+      await inquiriesRepository.updatePricing(selectedId, newPricing);
+      setDataError(null);
+    } catch (error) {
+      console.error(error);
+      setPricing(prev => ({ ...prev, [selectedId]: previousPricing }));
+      setDataError("Preiskalkulation konnte nicht gespeichert werden.");
+    }
   };
 
   const handleStatusChange = async (id: string, status: QuoteRequest["status"]) => {
-    setRequests(prev => prev.map(r => r.id === id ? { ...r, status } : r));
-    await inquiriesRepository.updateStatus(id, status);
+    const updated = await inquiriesRepository.updateStatus(id, status);
+    if (!updated) throw new Error("Anfrage wurde nicht gefunden.");
+    setRequests(prev => prev.map(r => r.id === id ? updated : r));
+    setDataError(null);
   };
 
-  const handleTakeAsOrder = (req: QuoteRequest) => {
+  const handleTakeAsOrder = async (req: QuoteRequest) => {
     const newOrder = {
-      id: `order-from-${req.id}-${Date.now()}`,
-      orderNumber: `A-2026-QUOTE-${req.id.toUpperCase()}`,
       task: req.subject,
-      customerName: req.customerName,
       customerId: req.customerId,
-      intakeDate: new Date().toLocaleDateString("de-CH"),
       dueDate: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
-      dueLabel: "Fällig in",
-      dueValue: "14 Tagen",
-      station: "wareneingang" as const,
-      currentStationId: "wareneingang",
-      risk: "green" as const,
-      statusText: "IM PLAN",
       parts: Array.from({ length: req.partCount }, (_, i) => ({
-        id: `${req.id}-part-${i + 1}`,
         name: `${req.subject} – Teil ${i + 1}`,
+        quantity: 1,
         material: req.material,
-        finish: "Zu bestimmen",
-        location: "Wareneingang",
-        hours: "0.0h",
-        station: "wareneingang" as const,
-        status: "Neu" as const,
       })),
-      source: "manual",
+      source: "manual" as const,
     };
 
-    // Save directly to Supabase via Repository
+    let created;
     try {
-      ordersRepository.create({ ...newOrder, title: newOrder.task } as Parameters<typeof ordersRepository.create>[0]);
+      created = await ordersRepository.create({
+        ...newOrder,
+        title: newOrder.task,
+      });
     } catch (e) {
       console.error("Fehler beim Erstellen des Auftrags aus dem Angebot", e);
+      setDataError("Der Auftrag konnte nicht angelegt werden. Es wurde keine erfolgreiche Übernahme verbucht.");
+      return;
     }
-    
-    handleStatusChange(req.id, "angeboten");
-    alert(`✓ Auftrag "${req.subject}" wurde im Wareneingang angelegt!`);
+
+    try {
+      await handleStatusChange(req.id, "angenommen");
+      alert(`Auftrag ${created.orderNumber} wurde im Wareneingang angelegt.`);
+    } catch (e) {
+      console.error("Auftrag erstellt, Anfrage-Status konnte nicht aktualisiert werden", e);
+      setDataError(`Auftrag ${created.orderNumber} wurde angelegt, aber der Anfrage-Status konnte nicht aktualisiert werden.`);
+    }
   };
 
   const generateEmail = (req: QuoteRequest, p: QuoteRequest["pricing"]) => {
@@ -151,6 +162,8 @@ kreile-galvanik.ch`;
           href: "/quotes/new",
         }}
       />
+
+      {dataError && <p className="rounded-xl border border-danger-red bg-accent-orange-soft p-3 text-sm font-bold text-danger-red">{dataError}</p>}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
         {/* Left: Anfragenliste */}
@@ -288,7 +301,7 @@ kreile-galvanik.ch`;
                 className="font-bold rounded-xl border-success-green text-success-green hover:bg-success-green-soft"
               >
                 <Mail className="h-4 w-4 mr-2" />
-                Angebot gesendet
+                Als angeboten markieren (manuell)
               </Button>
               <Button
                 variant="ghost"

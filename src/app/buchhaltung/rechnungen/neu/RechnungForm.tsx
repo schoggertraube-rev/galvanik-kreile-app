@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Save, Send } from "lucide-react";
+import { Plus, Trash2, Save } from "lucide-react";
 import { createRechnungAction } from "@/app/buchhaltung/actions";
 import { AusgangsrechnungPosition } from "@/lib/buchhaltung/types";
 
@@ -11,7 +11,7 @@ export function RechnungForm() {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
 
-  const [nummer, setNummer] = useState("RE-2026-001");
+  const [nummer, setNummer] = useState("");
   const [kundeId, setKundeId] = useState("");
   const [datum, setDatum] = useState(new Date().toISOString().substring(0, 10));
   
@@ -21,8 +21,6 @@ export function RechnungForm() {
 
   const [ustSatz, setUstSatz] = useState(19);
   const [bemerkung, setBemerkung] = useState("");
-  const [leadId, setLeadId] = useState("");
-  const [isDemo, setIsDemo] = useState(false);
 
   const [positionen, setPositionen] = useState<AusgangsrechnungPosition[]>([
     { beschreibung: "", menge: 1, einzelpreisNetto: 0 }
@@ -42,7 +40,7 @@ export function RechnungForm() {
     }
   };
 
-  const handleChangePosition = (index: number, field: keyof AusgangsrechnungPosition, value: any) => {
+  const handleChangePosition = (index: number, field: "beschreibung" | "menge" | "einzelpreisNetto", value: string | number) => {
     const newPos = [...positionen];
     newPos[index] = { ...newPos[index], [field]: value };
     setPositionen(newPos);
@@ -82,13 +80,11 @@ export function RechnungForm() {
         fd.append("faelligAm", faelligAm);
         fd.append("ustSatz", ustSatz.toString());
         if (bemerkung) fd.append("bemerkung", bemerkung);
-        if (leadId) fd.append("leadId", leadId);
-        fd.append("isDemo", isDemo.toString());
 
         await createRechnungAction(fd, positionen);
         router.push("/buchhaltung/rechnungen");
-      } catch (err: any) {
-        setError(err.message || "Fehler beim Speichern der Rechnung.");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Fehler beim Speichern der Rechnung.");
       }
     });
   };
@@ -118,7 +114,7 @@ export function RechnungForm() {
             type="text"
             value={kundeId}
             onChange={e => setKundeId(e.target.value)}
-            placeholder="z.B. KUNDEN-ID-123"
+            placeholder="Interne bestehende Kunden-ID"
             className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-navy-900"
             required
           />
@@ -155,16 +151,7 @@ export function RechnungForm() {
             <option value={0}>0 %</option>
           </select>
         </div>
-        <div>
-          <label className="block text-xs font-bold text-neutral-500 mb-2">Lead-Quelle (optional)</label>
-          <input
-            type="text"
-            value={leadId}
-            onChange={e => setLeadId(e.target.value)}
-            placeholder="Lead-ID"
-            className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-navy-900"
-          />
-        </div>
+        <p className="self-end text-xs text-neutral-500">Die Kunden-ID wird serverseitig gegen den aktiven Mandanten geprüft.</p>
       </div>
 
       <div className="mb-8">
@@ -259,16 +246,6 @@ export function RechnungForm() {
       </div>
 
       <div className="flex items-center gap-4 border-t border-neutral-100 pt-6">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={isDemo}
-            onChange={e => setIsDemo(e.target.checked)}
-            className="w-4 h-4 text-navy-900 border-neutral-300 rounded focus:ring-navy-900"
-          />
-          <span className="text-xs font-semibold text-neutral-500">Demo-Eintrag</span>
-        </label>
-        
         <div className="flex-1" />
         
         <button

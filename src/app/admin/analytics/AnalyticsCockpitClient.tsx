@@ -1,230 +1,246 @@
 "use client";
 
-import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
-import React, { useState } from 'react';
-import { PageHeader } from "@/components/ui/PageHeader";
-import { DetailOverlay } from "@/components/ui/DetailOverlay";
-import { EventsBarChart, ActivityLineChart } from "./AnalyticsCharts";
-import { 
-  BarChart2, AlertCircle, Lightbulb, Smartphone, 
-  MousePointerClick, UserX, SearchX, Activity, ArrowRight,
-  TrendingUp, Users, MonitorSmartphone, MousePointer2
+import { useState } from "react";
+import {
+  Activity,
+  AlertCircle,
+  ArrowRight,
+  Lightbulb,
+  MonitorSmartphone,
+  MousePointer2,
+  ShieldCheck,
+  Smartphone,
+  TrendingUp,
+  Users,
 } from "lucide-react";
+import type {
+  AnalyticsSuggestion,
+  DeveloperCockpitData,
+  DeviceUsage,
+  FrictionSignal,
+} from "@/app/actions/developerAnalytics.actions";
+import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
+import { DetailOverlay } from "@/components/ui/DetailOverlay";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { ActivityLineChart, EventsBarChart } from "./AnalyticsCharts";
 
-import type { DeveloperCockpitData, AnalyticsSuggestion, FrictionSignal, DeviceUsage } from "@/app/actions/developerAnalytics.actions";
+function formatLastActive(value: string | null): string {
+  if (!value) return "Keine Daten";
+  return new Intl.DateTimeFormat("de-DE", {
+    dateStyle: "short",
+    timeStyle: "medium",
+  }).format(new Date(value));
+}
+
+function AvailabilityNotice({ children }: { children: string }) {
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-medium text-amber-900">
+      {children}
+    </div>
+  );
+}
 
 export function AnalyticsCockpitClient({ data }: { data: DeveloperCockpitData }) {
   const [activeSuggestion, setActiveSuggestion] = useState<AnalyticsSuggestion | null>(null);
   const [activeFriction, setActiveFriction] = useState<FrictionSignal | null>(null);
-
-  const { overview, frictionAnalysis, suggestions, devices } = data;
+  const { operatorControl, overview, frictionAnalysis, suggestions, devices } = data;
+  const eventCount = overview.activityData.reduce((total, day) => total + day.events, 0);
 
   return (
-    <div className="space-y-8 pb-12 font-sans antialiased text-navy-900 w-full max-w-7xl mx-auto">
+    <div className="mx-auto w-full max-w-7xl space-y-8 pb-12 font-sans text-navy-900 antialiased">
       <PageHeader
-        title="Developer Analytics 2.0"
-        subtitle="Entwickler-Cockpit: UI-Verbesserungen abgeleitet aus echter App-Nutzung."
+        title="Developer Analytics"
+        subtitle="Datensparsame, persistierte Nutzungsereignisse der letzten sieben Tage. Nicht instrumentierte Auswertungen werden ausdrücklich gekennzeichnet."
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white border border-neutral-gray-200 rounded-2xl p-5 shadow-sm">
-          <div className="flex justify-between items-start mb-2">
-            <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider">Aktivität (7 Tage)</h3>
-            <Activity className="w-5 h-5 text-navy-900" />
+      <section className="rounded-2xl border border-neutral-gray-200 bg-white p-5 shadow-sm" aria-labelledby="operator-control-status">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-5 w-5" />
+              <h2 id="operator-control-status" className="font-serif text-lg font-bold">Betreiberkanal</h2>
+            </div>
+            <p className="mt-2 text-sm text-text-muted">
+              {operatorControl.availability === "available"
+                ? "Signatur und Wirksamkeitsfenster sind verifiziert."
+                : "Kein wirksamer verifizierter Betreiberstatus; eine Sperre wird nicht angewendet."}
+            </p>
+            {operatorControl.notice ? <p className="mt-2 text-sm font-medium">{operatorControl.notice}</p> : null}
           </div>
-          <span className="text-3xl font-black text-navy-900">
-            {overview.activityData.reduce((acc: number, val: {events: number}) => acc + val.events, 0)}
-          </span>
-          <p className="text-xs text-text-muted mt-1 font-medium">Events aufgezeichnet</p>
+          <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+            <div><dt className="text-text-muted">Verfügbarkeit</dt><dd className="font-bold">{operatorControl.availability}</dd></div>
+            <div><dt className="text-text-muted">Plan</dt><dd className="font-bold">{operatorControl.plan}</dd></div>
+            <div><dt className="text-text-muted">Modus</dt><dd className="font-bold">{operatorControl.mode}</dd></div>
+            <div><dt className="text-text-muted">Version</dt><dd className="font-bold">{operatorControl.policyVersion ?? "—"}</dd></div>
+          </dl>
         </div>
-        
-        <div className="bg-white border border-neutral-gray-200 rounded-2xl p-5 shadow-sm">
-          <div className="flex justify-between items-start mb-2">
-            <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider">Aktive Nutzer</h3>
-            <Users className="w-5 h-5 text-navy-900" />
+      </section>
+
+      {overview.availability === "unavailable" && (
+        <AvailabilityNotice>Nutzungsdaten konnten nicht geladen werden. Es werden keine Ersatz- oder Demodaten angezeigt.</AvailabilityNotice>
+      )}
+      {overview.availability === "empty" && (
+        <AvailabilityNotice>Für diesen Mandanten liegen in den letzten sieben Tagen noch keine gespeicherten Nutzungsereignisse vor.</AvailabilityNotice>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <div className="rounded-2xl border border-neutral-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-2 flex items-start justify-between">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-text-muted">Ereignisse (7 Tage)</h3>
+            <Activity className="h-5 w-5" />
           </div>
-          <span className="text-3xl font-black text-navy-900">{overview.activeUsers}</span>
-          <p className="text-xs text-text-muted mt-1 font-medium">Rollen: {overview.activeRoles.join(", ")}</p>
+          <span className="text-3xl font-black">{eventCount}</span>
+          <p className="mt-1 text-xs font-medium text-text-muted">dauerhaft bestätigt</p>
         </div>
 
-        <div className="bg-white border border-neutral-gray-200 rounded-2xl p-5 shadow-sm">
-          <div className="flex justify-between items-start mb-2">
-            <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider">Meistgenutzt</h3>
-            <TrendingUp className="w-5 h-5 text-navy-900" />
+        <div className="rounded-2xl border border-neutral-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-2 flex items-start justify-between">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-text-muted">Aktive Pseudonyme</h3>
+            <Users className="h-5 w-5" />
           </div>
-          <span className="text-xl font-bold text-navy-900 truncate block">
-            {overview.topEvents[0]?.name?.split(":")[1]?.trim() || "N/A"}
-          </span>
-          <p className="text-xs text-text-muted mt-1 font-medium">Top Route / Aktion</p>
+          <span className="text-3xl font-black">{overview.activeUsers}</span>
+          <p className="mt-1 text-xs font-medium text-text-muted">
+            Rollen: {overview.activeRoles.length > 0 ? overview.activeRoles.join(", ") : "keine"}
+          </p>
         </div>
 
-        <div className="bg-white border border-neutral-gray-200 rounded-2xl p-5 shadow-sm">
-          <div className="flex justify-between items-start mb-2">
-            <h3 className="text-sm font-bold text-text-muted uppercase tracking-wider">Letztes Event</h3>
-            <MousePointer2 className="w-5 h-5 text-navy-900" />
+        <div className="rounded-2xl border border-neutral-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-2 flex items-start justify-between">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-text-muted">Meistgenutzt</h3>
+            <TrendingUp className="h-5 w-5" />
           </div>
-          <span className="text-lg font-bold text-navy-900">{overview.lastActive}</span>
-          <p className="text-xs text-text-muted mt-1 font-medium">Uhrzeit</p>
+          <span className="block truncate text-xl font-bold">{overview.topEvents[0]?.name || "Keine Daten"}</span>
+          <p className="mt-1 text-xs font-medium text-text-muted">Route oder Aktion</p>
+        </div>
+
+        <div className="rounded-2xl border border-neutral-gray-200 bg-white p-5 shadow-sm">
+          <div className="mb-2 flex items-start justify-between">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-text-muted">Letztes Ereignis</h3>
+            <MousePointer2 className="h-5 w-5" />
+          </div>
+          <span className="text-base font-bold">{formatLastActive(overview.lastActive)}</span>
+          <p className="mt-1 text-xs font-medium text-text-muted">Serverbestätigte Zeit</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        
-        {/* A) Automatische Verbesserungsvorschläge */}
-        <section className="bg-white border border-neutral-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
-          <div className="bg-navy-900 p-4 flex items-center justify-between">
-            <div className="flex items-center gap-2 text-white">
-              <Lightbulb className="w-5 h-5 text-kreile-yellow" />
-              <h2 className="font-bold font-serif text-lg">UI-Verbesserungsvorschläge</h2>
-            </div>
-            <span className="bg-white/20 text-white text-xs px-2 py-1 rounded font-bold">Aus Daten abgeleitet</span>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <section className="flex flex-col overflow-hidden rounded-2xl border border-neutral-gray-200 bg-white shadow-sm">
+          <div className="flex items-center gap-2 bg-navy-900 p-4 text-white">
+            <Lightbulb className="h-5 w-5 text-kreile-yellow" />
+            <h2 className="font-serif text-lg font-bold">Verbesserungsvorschläge</h2>
           </div>
-          <div className="p-0 flex-1 bg-bg-app-soft">
-            <ul className="divide-y divide-neutral-gray-200">
-              {suggestions.map((sugg: AnalyticsSuggestion) => (
-                <li key={sugg.id}>
-                  <button 
-                    onClick={() => setActiveSuggestion(sugg)}
-                    className="w-full text-left p-4 hover:bg-white transition-colors flex items-start gap-3 group"
+          <div className="flex-1 bg-bg-app-soft">
+            {suggestions.length === 0 ? (
+              <p className="p-5 text-sm text-text-muted">
+                Automatische Empfehlungen sind noch nicht instrumentiert. Aus Nutzungszahlen werden keine unbelegten Vorschläge erzeugt.
+              </p>
+            ) : (
+              <ul className="divide-y divide-neutral-gray-200">
+                {suggestions.map((suggestion) => (
+                  <li key={suggestion.id}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSuggestion(suggestion)}
+                      className="group flex w-full items-start gap-3 p-4 text-left transition-colors hover:bg-white"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-sm font-bold">{suggestion.recommendation}</h4>
+                        <p className="mt-1 truncate text-xs text-text-muted">Beobachtung: {suggestion.signal}</p>
+                      </div>
+                      <ArrowRight className="h-4 w-4 shrink-0 text-neutral-gray-400" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+
+        <section className="flex flex-col overflow-hidden rounded-2xl border border-neutral-gray-200 bg-white shadow-sm">
+          <div className="flex items-center gap-2 border-b border-error-red/20 bg-error-red/10 p-4 text-error-red">
+            <AlertCircle className="h-5 w-5" />
+            <h2 className="font-serif text-lg font-bold">Friktionsanalyse</h2>
+          </div>
+          <div className="flex-1 p-4">
+            {frictionAnalysis.length === 0 ? (
+              <p className="text-sm text-text-muted">
+                Abbruchgründe und Sequenzen sind noch nicht instrumentiert. Ein fehlendes Signal wird nicht als reibungsloser Ablauf ausgegeben.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {frictionAnalysis.map((signal) => (
+                  <button
+                    key={signal.id}
+                    type="button"
+                    onClick={() => setActiveFriction(signal)}
+                    className="rounded-xl border border-neutral-gray-200 bg-bg-app-soft p-4 text-left transition hover:border-error-red/30"
                   >
-                    <div className={`mt-1 shrink-0 w-3 h-3 rounded-full ${sugg.priority === 'hoch' ? 'bg-error-red' : sugg.priority === 'mittel' ? 'bg-accent-orange' : 'bg-neutral-gray-400'}`} />
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-bold text-navy-900 text-sm group-hover:text-kreile-yellow transition-colors">{sugg.recommendation}</h4>
-                      <p className="text-xs text-text-muted mt-1 truncate">Beobachtung: {sugg.signal}</p>
-                    </div>
-                    <ArrowRight className="w-4 h-4 text-neutral-gray-400 group-hover:text-navy-900 shrink-0" />
+                    <h4 className="mb-2 text-sm font-bold">{signal.title}</h4>
+                    <p className="text-xs text-text-muted">{signal.detail}</p>
                   </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+            <EventsBarChart data={overview.topEvents} />
+            <ActivityLineChart data={overview.activityData} />
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-neutral-gray-200 bg-white shadow-sm lg:col-span-1">
+          <div className="flex items-center gap-2 border-b border-neutral-gray-100 p-4">
+            <Smartphone className="h-5 w-5" />
+            <h3 className="font-serif text-lg font-bold">Geräteklassen</h3>
+          </div>
+          <div className="p-6 text-center">
+            <div className="mb-4 flex justify-center">
+              <MonitorSmartphone className="h-16 w-16 text-neutral-gray-300" />
+            </div>
+            <p className="mb-4 text-xs text-text-muted">{devices.message}</p>
+            <ul className="space-y-3">
+              {devices.stats.map((device: DeviceUsage) => (
+                <li key={device.name} className="flex items-center justify-between">
+                  <span className="text-sm font-bold">{device.name}</span>
+                  <span className="rounded-md bg-bg-app-soft px-2 py-1 text-sm text-text-muted">{device.value}% der Events</span>
                 </li>
               ))}
             </ul>
           </div>
-        </section>
-
-        {/* B) Friktionsanalyse */}
-        <section className="bg-white border border-neutral-gray-200 rounded-2xl shadow-sm overflow-hidden flex flex-col">
-          <div className="bg-error-red/10 p-4 flex items-center justify-between border-b border-error-red/20">
-            <div className="flex items-center gap-2 text-error-red">
-              <AlertCircle className="w-5 h-5" />
-              <h2 className="font-bold font-serif text-lg">Friktionsanalyse</h2>
-            </div>
-            <span className="bg-error-red text-white text-xs px-2 py-1 rounded font-bold">Demo-Auswertung</span>
-          </div>
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
-            {frictionAnalysis.map((f: FrictionSignal) => (
-              <div key={f.id} onClick={() => setActiveFriction(f)} className="bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-200 hover:border-error-red/30 hover:shadow-sm transition-all cursor-pointer">
-                <div className="flex items-center gap-2 mb-2">
-                  {f.title.includes("Abbrüche") ? <UserX className="w-4 h-4 text-error-red" /> : 
-                   f.title.includes("Suchen") ? <SearchX className="w-4 h-4 text-accent-orange" /> : 
-                   <MousePointerClick className="w-4 h-4 text-text-muted" />}
-                  <h4 className="font-bold text-sm text-navy-900">{f.title}</h4>
-                </div>
-                <p className="text-xs text-text-muted">{f.detail}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* C) Vorhandene Charts (Übersicht) */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-             <EventsBarChart data={overview.topEvents} />
-             <ActivityLineChart data={overview.activityData} />
-          </div>
-        </div>
-
-        {/* D) Geräte/Sessions */}
-        <div className="lg:col-span-1">
-          <div className="bg-white border border-neutral-gray-200 rounded-2xl shadow-sm overflow-hidden h-full">
-             <div className="p-4 border-b border-neutral-gray-100 flex items-center gap-2">
-               <Smartphone className="w-5 h-5 text-navy-900" />
-               <h3 className="font-bold font-serif text-lg text-navy-900">Geräte & Viewports</h3>
-             </div>
-             <div className="p-6 text-center">
-               {!devices.connected && (
-                 <div className="bg-warning-yellow/10 text-warning-yellow-dark text-sm p-4 rounded-xl border border-warning-yellow/30 mb-6 font-medium">
-                   {devices.message}
-                 </div>
-               )}
-               <div className="flex justify-center mb-4">
-                 <MonitorSmartphone className="w-16 h-16 text-neutral-gray-300" />
-               </div>
-               <ul className="space-y-3">
-                 {devices.stats.map((d: DeviceUsage) => (
-                   <li key={d.name} className="flex items-center justify-between">
-                     <span className="text-sm font-bold text-navy-900">{d.name}</span>
-                     <span className="text-sm bg-bg-app-soft px-2 py-1 rounded-md text-text-muted">{d.value}%</span>
-                   </li>
-                 ))}
-               </ul>
-             </div>
-          </div>
-        </div>
-
-      </div>
-
-      {/* Drilldown: Suggestion DetailOverlay */}
-      <DetailOverlay open={!!activeSuggestion} onClose={() => setActiveSuggestion(null)} title="Verbesserungsvorschlag" subtitle={activeSuggestion?.page}>
+      <DetailOverlay
+        open={Boolean(activeSuggestion)}
+        onClose={() => setActiveSuggestion(null)}
+        title="Verbesserungsvorschlag"
+        subtitle={activeSuggestion?.page}
+      >
         {activeSuggestion && (
-          <div className="space-y-6 text-navy-900">
-            <div className={`p-4 rounded-xl border flex gap-3 ${activeSuggestion.priority === 'hoch' ? 'bg-error-red/10 border-error-red/20' : activeSuggestion.priority === 'mittel' ? 'bg-accent-orange/10 border-accent-orange/20' : 'bg-neutral-gray-100 border-neutral-gray-200'}`}>
-              <Lightbulb className={`w-5 h-5 shrink-0 mt-0.5 ${activeSuggestion.priority === 'hoch' ? 'text-error-red' : activeSuggestion.priority === 'mittel' ? 'text-accent-orange' : 'text-text-muted'}`} />
-              <div>
-                <h4 className="font-bold">Maßnahme: {activeSuggestion.recommendation}</h4>
-                <p className="text-sm mt-1 opacity-80 font-medium">Priorität: {activeSuggestion.priority.toUpperCase()} | Status: {activeSuggestion.status.toUpperCase()}</p>
-              </div>
-            </div>
-            
-            <div>
-              <h4 className="font-bold mb-2 border-b border-neutral-gray-200 pb-2">Datengrundlage (Beobachtetes Signal)</h4>
-              <p className="text-sm text-text-muted bg-bg-app-soft p-3 rounded-lg border border-neutral-gray-100 font-mono">
-                {activeSuggestion.signal}
-              </p>
-            </div>
-            
-            <div>
-              <h4 className="font-bold mb-2">Begründung für Änderung</h4>
-              <p className="text-sm text-text-muted">{activeSuggestion.reason}</p>
-            </div>
-            
-            <div className="pt-4 border-t border-neutral-gray-200 flex justify-end">
-               <button onClick={() => setActiveSuggestion(null)} className="bg-navy-900 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-navy-800 transition-colors">
-                 Verstanden
-               </button>
-            </div>
+          <div className="space-y-4 text-sm">
+            <h4 className="font-bold">{activeSuggestion.recommendation}</h4>
+            <p className="text-text-muted">Beobachtetes Signal: {activeSuggestion.signal}</p>
+            <p className="text-text-muted">{activeSuggestion.reason}</p>
           </div>
         )}
       </DetailOverlay>
 
-      {/* Drilldown: Friction DetailOverlay */}
-      <DetailOverlay open={!!activeFriction} onClose={() => setActiveFriction(null)} title="Friktions-Ereignis" subtitle={activeFriction?.page}>
+      <DetailOverlay
+        open={Boolean(activeFriction)}
+        onClose={() => setActiveFriction(null)}
+        title="Friktionssignal"
+        subtitle={activeFriction?.page}
+      >
         {activeFriction && (
-          <div className="space-y-6 text-navy-900">
-            <div className="p-4 rounded-xl border bg-error-red/10 border-error-red/20 flex gap-3">
-              <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-error-red" />
-              <div>
-                <h4 className="font-bold text-error-red">{activeFriction.title}</h4>
-                <p className="text-sm text-error-red/80 mt-1">{activeFriction.detail}</p>
-              </div>
-            </div>
-            
-            <div>
-              <h4 className="font-bold mb-2 border-b border-neutral-gray-200 pb-2">Rohdaten / Sequenz (Demo)</h4>
-              <div className="text-xs text-text-muted font-mono bg-bg-app-soft p-3 rounded-lg border border-neutral-gray-100 space-y-2">
-                <div>[10:45:01] page_view: {activeFriction.page}</div>
-                <div>[10:45:15] click: input_field</div>
-                <div>[10:45:40] abort_action: cancel_button_clicked</div>
-              </div>
-            </div>
-            
-            <div className="pt-4 border-t border-neutral-gray-200 flex justify-end">
-               <button onClick={() => setActiveFriction(null)} className="bg-navy-900 text-white px-5 py-2.5 rounded-xl font-bold hover:bg-navy-800 transition-colors">
-                 Zurück zur Übersicht
-               </button>
-            </div>
+          <div className="space-y-3 text-sm">
+            <h4 className="font-bold text-error-red">{activeFriction.title}</h4>
+            <p className="text-text-muted">{activeFriction.detail}</p>
+            <p className="text-xs text-text-muted">Es werden ausschließlich gespeicherte, strukturierte Messwerte angezeigt.</p>
           </div>
         )}
       </DetailOverlay>

@@ -1,98 +1,66 @@
-const CACHE_NAME = 'kreile-pwa-cache-v2';
-const OFFLINE_URL = '/';
-
+const CACHE_NAME = 'kreile-static-v3';
+const LEGACY_API_DB = 'kreile-offline-db';
 const STATIC_ASSETS = [
-  '/',
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
-  );
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
   self.skipWaiting();
 });
 
+function deleteLegacyApiDatabase() {
+  return new Promise((resolve) => {
+    const request = indexedDB.deleteDatabase(LEGACY_API_DB);
+    request.onsuccess = () => resolve();
+    request.onerror = () => resolve();
+    request.onblocked = () => resolve();
+  });
+}
+
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((name) => {
-          if (name !== CACHE_NAME) return caches.delete(name);
-        })
-      );
-    })
-  );
+  event.waitUntil(Promise.all([
+    caches.keys().then((names) => Promise.all(
+      names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name))
+    )),
+    deleteLegacyApiDatabase()
+  ]));
   self.clients.claim();
 });
 
-const DB_NAME = 'kreile-offline-db';
-const STORE_NAME = 'api-cache';
-
-function getDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = (e) => {
-      e.target.result.createObjectStore(STORE_NAME);
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function saveToDB(url, data) {
-  const db = await getDB();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
-  tx.objectStore(STORE_NAME).put({ data, timestamp: Date.now() }, url);
-  return tx.complete;
-}
-
-async function getFromDB(url) {
-  const db = await getDB();
-  return new Promise((resolve) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const request = tx.objectStore(STORE_NAME).get(url);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => resolve(null);
-  });
+function isSensitiveRequest(request, url) {
+  return request.method !== 'GET' ||
+    url.pathname.startsWith('/api/') ||
+    url.pathname.startsWith('/auth/') ||
+    url.pathname.startsWith('/supabase/') ||
+    url.hostname.endsWith('.supabase.co');
 }
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
+  const request = event.request;
+  const url = new URL(request.url);
 
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/supabase/')) {
-    event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          const cloned = response.clone();
-          cloned.json().then((data) => saveToDB(url.href, data)).catch(() => {});
-          return response;
-        })
-        .catch(async () => {
-          const cached = await getFromDB(url.href);
-          if (cached && Date.now() - cached.timestamp < 48 * 60 * 60 * 1000) {
-            return new Response(JSON.stringify(cached.data), {
-              headers: { 'Content-Type': 'application/json', 'X-Offline-Fallback': 'true' }
-            });
-          }
-          return new Response(JSON.stringify({ error: 'Offline', offline: true }), {
-            status: 503,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        })
-    );
+  if (isSensitiveRequest(request, url) || request.mode === 'navigate') {
+    event.respondWith(fetch(request));
     return;
   }
 
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match(OFFLINE_URL))
-    );
-  } else {
-    event.respondWith(
-      caches.match(event.request).then((cached) => cached || fetch(event.request))
-    );
+  const cacheableStatic = url.origin === self.location.origin &&
+    (STATIC_ASSETS.includes(url.pathname) || url.pathname.startsWith('/_next/static/'));
+  if (!cacheableStatic) {
+    event.respondWith(fetch(request));
+    return;
   }
+
+  event.respondWith(caches.match(request).then(async (cached) => {
+    if (cached) return cached;
+    const response = await fetch(request);
+    if (response.ok && response.type === 'basic') {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+    }
+    return response;
+  }));
 });

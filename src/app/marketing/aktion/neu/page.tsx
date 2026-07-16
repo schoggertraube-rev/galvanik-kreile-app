@@ -36,10 +36,6 @@ export default function NeueAktionPage() {
     }
   }
 
-  function handleAiGenerate() {
-    setInhalt("✨ KI-Entwurf: Entdecken Sie unsere neuesten Restaurierungen! Perfekt für Oldtimer-Liebhaber. Kontaktieren Sie uns noch heute für ein unverbindliches Angebot.");
-  }
-
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <div className="flex items-center gap-4 mb-8">
@@ -108,10 +104,11 @@ export default function NeueAktionPage() {
               <label className="block text-sm font-medium text-slate-700">Inhalt (Text / HTML)</label>
               <button 
                 type="button" 
-                onClick={handleAiGenerate}
-                className="text-sm flex items-center gap-1 text-purple-600 hover:text-purple-800"
+                disabled
+                title="Für diesen Editor ist noch kein metered KI-Entwurf angebunden."
+                className="text-sm flex items-center gap-1 text-slate-400 cursor-not-allowed"
               >
-                <Wand2 size={16} /> KI-Text generieren
+                <Wand2 size={16} /> KI-Entwurf nicht angebunden
               </button>
             </div>
             <textarea 

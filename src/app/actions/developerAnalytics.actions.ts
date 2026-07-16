@@ -1,128 +1,200 @@
-"use server";
+'use server'
 
-import { requireAdminOrDeveloper } from "@/lib/auth/permissions";
-import { getRealAnalyticsStats } from "./tracking.actions";
+import { and, desc, eq, gte, sql } from 'drizzle-orm'
+import { db } from '@/db'
+import { appUsageEvents } from '@/db/schema'
+import { resolveAuthorization } from '@/lib/server/authorization'
+import type { OperatorControlStatus } from '@/lib/server/operatorControl'
 
 export interface FrictionSignal {
-  id: string;
-  title: string;
-  detail: string;
-  page: string;
+  id: string
+  title: string
+  detail: string
+  page: string
 }
 
 export interface AnalyticsSuggestion {
-  id: string;
-  priority: string;
-  page: string;
-  signal: string;
-  recommendation: string;
-  reason: string;
-  status: string;
+  id: string
+  priority: string
+  page: string
+  signal: string
+  recommendation: string
+  reason: string
+  status: string
 }
 
-export interface DeviceUsage {
-  name: string;
-  value: number;
-}
+export interface DeviceUsage { name: string; value: number }
+export type AnalyticsAvailability = 'available' | 'empty' | 'unavailable' | 'not_instrumented'
 
 export interface DevicesOverview {
-  connected: boolean;
-  message: string;
-  stats: DeviceUsage[];
+  connected: boolean
+  availability: AnalyticsAvailability
+  message: string
+  stats: DeviceUsage[]
 }
 
 export interface AnalyticsOverview {
-  activeUsers: number;
-  activeRoles: string[];
-  lastActive: string;
-  topEvents: { name: string; value: number }[];
-  activityData: { date: string; events: number }[];
-  recentEvents?: { id: string; time: string; type: string; user: string; role: string; detail: string }[];
+  availability: AnalyticsAvailability
+  activeUsers: number
+  activeRoles: string[]
+  lastActive: string | null
+  topEvents: { name: string; value: number }[]
+  activityData: { date: string; events: number }[]
+  recentEvents: { id: string; time: string; type: string; role: string; detail: string }[]
 }
 
 export interface DeveloperCockpitData {
-  overview: AnalyticsOverview;
-  frictionAnalysis: FrictionSignal[];
-  suggestions: AnalyticsSuggestion[];
-  devices: DevicesOverview;
+  operatorControl: {
+    availability: OperatorControlStatus['availability']
+    plan: OperatorControlStatus['plan']
+    mode: OperatorControlStatus['mode']
+    reason: OperatorControlStatus['reason']
+    notice: string | null
+    effectiveAt: string | null
+    expiresAt: string | null
+    policyVersion: number | null
+    enforced: boolean
+    accessRestricted: boolean
+  }
+  overview: AnalyticsOverview
+  frictionAnalysis: FrictionSignal[]
+  frictionAvailability: AnalyticsAvailability
+  suggestions: AnalyticsSuggestion[]
+  suggestionAvailability: AnalyticsAvailability
+  devices: DevicesOverview
+}
+
+function operatorControlOverview(status?: OperatorControlStatus): DeveloperCockpitData['operatorControl'] {
+  return status ? {
+    availability: status.availability,
+    plan: status.plan,
+    mode: status.mode,
+    reason: status.reason,
+    notice: status.notice,
+    effectiveAt: status.effectiveAt,
+    expiresAt: status.expiresAt,
+    policyVersion: status.policyVersion,
+    enforced: status.enforced,
+    accessRestricted: status.accessRestricted,
+  } : {
+    availability: 'unavailable',
+    plan: 'pro',
+    mode: 'active',
+    reason: null,
+    notice: null,
+    effectiveAt: null,
+    expiresAt: null,
+    policyVersion: null,
+    enforced: false,
+    accessRestricted: false,
+  }
+}
+
+function unavailableData(status?: OperatorControlStatus): DeveloperCockpitData {
+  return {
+    operatorControl: operatorControlOverview(status),
+    overview: { availability: 'unavailable', activeUsers: 0, activeRoles: [], lastActive: null, topEvents: [], activityData: [], recentEvents: [] },
+    frictionAnalysis: [],
+    frictionAvailability: 'not_instrumented',
+    suggestions: [],
+    suggestionAvailability: 'not_instrumented',
+    devices: { connected: false, availability: 'unavailable', message: 'Nutzungsdaten sind derzeit nicht verfügbar.', stats: [] },
+  }
 }
 
 export async function getDeveloperCockpitStats(): Promise<DeveloperCockpitData> {
-  await requireAdminOrDeveloper();
-  
-  // Basic stats from existing tracking
-  const basicStats = await getRealAnalyticsStats();
-  
-  // Friction Analysis (Mock / Fallback since ui_events lacks deep tracking currently)
-  const frictionAnalysis: FrictionSignal[] = [
-    { id: "f1", title: "Häufige Abbrüche", detail: "Kunden-Neuanlage wird in 30% der Fälle abgebrochen.", page: "/customers/new" },
-    { id: "f2", title: "Rechte-Blockaden", detail: "15 Klicks auf gesperrte Funktionen (z.B. Performance) von Mitarbeitern ohne Rechte.", page: "/kontrolle" },
-    { id: "f3", title: "Verwirrende Pfade", detail: "Nutzer wechseln sehr oft zwischen /orders und /items hin und her.", page: "Workflow: Material prüfen" },
-    { id: "f4", title: "Leere Suchen", detail: "Häufige Suche nach 'Rechnung' liefert 0 Treffer (Feature fehlt).", page: "/orders" }
-  ];
+  const authorization = await resolveAuthorization()
+  if (!authorization.ok || authorization.data.tenantId !== 'galvanik-kreile' || !authorization.data.permissions.includes('perm_sys_diag')) {
+    throw new Error('AUTH_ERROR: Forbidden')
+  }
 
-  // Automatic Suggestions
-  const suggestions: AnalyticsSuggestion[] = [
-    { 
-      id: "s1", priority: "hoch", page: "/customers/new", signal: "30% Abbruchquote im Formular", 
-      recommendation: "Workflow-Schritt zusammenlegen: Pflichtfelder reduzieren", 
-      reason: "Nutzer springen bei der detaillierten Adress-Eingabe ab. Adresse erst später abfragen.", 
-      status: "offen" 
-    },
-    { 
-      id: "s2", priority: "mittel", page: "/kontrolle", signal: "Klicks auf gesperrtes Feature", 
-      recommendation: "Kachel für normale Mitarbeiter komplett ausblenden oder klarer sperren", 
-      reason: "Verhindert Frustration bei fehlenden Rechten und spart Klicks.", 
-      status: "prüfen" 
-    },
-    { 
-      id: "s3", priority: "niedrig", page: "/orders", signal: "Langes Scrollen / viele Mausklicks", 
-      recommendation: "Shortcut ergänzen (z.B. Strg+F für Suche fokussieren)", 
-      reason: "Power-User suchen oft manuell in langen Listen statt die App-Suche zu nutzen.", 
-      status: "später" 
-    },
-    {
-      id: "s4", priority: "hoch", page: "/quotes", signal: "Hohe Klickrate auf 'Details'", 
-      recommendation: "Funktion früher anzeigen: Wichtige Eckdaten direkt in Liste",
-      reason: "Erspart Nutzern bei 80% der Vorgänge den Klick in die Detailansicht.", 
-      status: "offen"
+  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1_000)
+  const operatorControl = operatorControlOverview(authorization.data.operatorControl)
+  const activityDate = sql<string>`to_char(${appUsageEvents.occurredAt} at time zone 'Europe/Berlin', 'YYYY-MM-DD')`
+  try {
+    const [topRows, activityRows, summaryRows, roleRows, deviceRows, recentRows] = await Promise.all([
+      db.select({
+        eventType: appUsageEvents.eventType,
+        route: appUsageEvents.route,
+        target: appUsageEvents.target,
+        count: sql<number>`count(*)::int`,
+      }).from(appUsageEvents).where(and(
+        eq(appUsageEvents.tenantId, authorization.data.tenantId),
+        gte(appUsageEvents.occurredAt, since)
+      )).groupBy(appUsageEvents.eventType, appUsageEvents.route, appUsageEvents.target)
+        .orderBy(desc(sql`count(*)`)).limit(10),
+      db.select({
+        date: activityDate,
+        events: sql<number>`count(*)::int`,
+      }).from(appUsageEvents).where(and(
+        eq(appUsageEvents.tenantId, authorization.data.tenantId),
+        gte(appUsageEvents.occurredAt, since)
+      )).groupBy(activityDate).orderBy(activityDate),
+      db.select({
+        activeUsers: sql<number>`count(distinct ${appUsageEvents.actorPseudonym})::int`,
+        eventCount: sql<number>`count(*)::int`,
+        lastActive: sql<Date | null>`max(${appUsageEvents.occurredAt})`,
+      }).from(appUsageEvents).where(and(
+        eq(appUsageEvents.tenantId, authorization.data.tenantId),
+        gte(appUsageEvents.occurredAt, since)
+      )),
+      db.select({ role: appUsageEvents.actorRole }).from(appUsageEvents).where(and(
+        eq(appUsageEvents.tenantId, authorization.data.tenantId),
+        gte(appUsageEvents.occurredAt, since)
+      )).groupBy(appUsageEvents.actorRole).orderBy(appUsageEvents.actorRole),
+      db.select({ name: appUsageEvents.deviceClass, count: sql<number>`count(*)::int` }).from(appUsageEvents).where(and(
+        eq(appUsageEvents.tenantId, authorization.data.tenantId),
+        gte(appUsageEvents.occurredAt, since)
+      )).groupBy(appUsageEvents.deviceClass).orderBy(desc(sql`count(*)`)),
+      db.select({
+        id: appUsageEvents.id,
+        occurredAt: appUsageEvents.occurredAt,
+        type: appUsageEvents.eventType,
+        role: appUsageEvents.actorRole,
+        route: appUsageEvents.route,
+        target: appUsageEvents.target,
+      }).from(appUsageEvents).where(and(
+        eq(appUsageEvents.tenantId, authorization.data.tenantId),
+        gte(appUsageEvents.occurredAt, since)
+      )).orderBy(desc(appUsageEvents.occurredAt)).limit(20),
+    ])
+
+    const summary = summaryRows[0]
+    const eventCount = Number(summary?.eventCount || 0)
+    const availability: AnalyticsAvailability = eventCount > 0 ? 'available' : 'empty'
+    const deviceTotal = deviceRows.reduce((total, row) => total + Number(row.count), 0)
+    return {
+      operatorControl,
+      overview: {
+        availability,
+        activeUsers: Number(summary?.activeUsers || 0),
+        activeRoles: roleRows.map((row) => row.role),
+        lastActive: summary?.lastActive ? new Date(summary.lastActive).toISOString() : null,
+        topEvents: topRows.map((row) => ({
+          name: `${row.eventType} : ${row.target || row.route}`,
+          value: Number(row.count),
+        })),
+        activityData: activityRows.map((row) => ({ date: row.date, events: Number(row.events) })),
+        recentEvents: recentRows.map((row) => ({
+          id: row.id,
+          time: new Date(row.occurredAt).toISOString(),
+          type: row.type,
+          role: row.role,
+          detail: row.target || row.route,
+        })),
+      },
+      frictionAnalysis: [],
+      frictionAvailability: 'not_instrumented',
+      suggestions: [],
+      suggestionAvailability: 'not_instrumented',
+      devices: {
+        connected: eventCount > 0,
+        availability,
+        message: eventCount > 0 ? 'Anteile beziehen sich auf gespeicherte Ereignisse, nicht auf eindeutig erkannte Geräte.' : 'Noch keine gespeicherten Nutzungsereignisse.',
+        stats: deviceRows.map((row) => ({ name: row.name, value: deviceTotal > 0 ? Math.round(Number(row.count) / deviceTotal * 100) : 0 })),
+      },
     }
-  ];
-
-  // Devices & Sessions (Prep / Fallback)
-  const devices: DevicesOverview = {
-    connected: false,
-    message: "Gerätezugang noch nicht vollständig angebunden. Aktuell keine Client-Fingerprints in ui_events.",
-    stats: [
-      { name: "Desktop (Windows)", value: 70 },
-      { name: "Tablet (iPad)", value: 25 },
-      { name: "Mobile", value: 5 }
-    ]
-  };
-
-  return {
-    overview: {
-      ...basicStats,
-      topEvents: basicStats.topEvents?.length > 0 ? basicStats.topEvents : [
-        { name: "page_view : /orders", value: 142 },
-        { name: "click : print_label", value: 87 },
-        { name: "page_view : /baeder", value: 56 }
-      ],
-      activityData: basicStats.activityData?.length > 0 ? basicStats.activityData : [
-        { date: "2026-05-26", events: 120 },
-        { date: "2026-05-27", events: 180 },
-        { date: "2026-05-28", events: 210 },
-        { date: "2026-05-29", events: 150 },
-        { date: "2026-05-30", events: 45 },
-        { date: "2026-05-31", events: 20 },
-        { date: "2026-06-01", events: 250 }
-      ],
-      activeUsers: 8,
-      activeRoles: ["inhaber", "mitarbeiter", "werkstatt"],
-      lastActive: basicStats.lastActive !== "Nie" ? basicStats.lastActive : new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute:'2-digit' })
-    } as AnalyticsOverview,
-    frictionAnalysis,
-    suggestions,
-    devices
-  };
+  } catch {
+    return unavailableData(authorization.data.operatorControl)
+  }
 }

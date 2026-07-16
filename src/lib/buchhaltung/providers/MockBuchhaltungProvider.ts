@@ -49,17 +49,17 @@ const DEMO_RECHNUNGEN: Ausgangsrechnung[] = [
   {
     id: "ar-001", nummer: "R-2026-041", kundeId: "cust-1", kundeName: "Metallbau Müller",
     datum: "2026-05-01", faelligAm: "2026-05-15", brutto: 2450, netto: 2058.82,
-    ustSatz: 19, ustBetrag: 391.18, status: "ueberfaellig", mahnstufe: 1,
+    ustSatz: 19, ustBetrag: 391.18, bezahltBetrag: 0, offenerBetrag: 2450, status: "ueberfaellig", mahnstufe: 1,
   },
   {
     id: "ar-002", nummer: "R-2026-042", kundeId: "cust-2", kundeName: "AutoTech GmbH",
     datum: "2026-05-05", faelligAm: "2026-05-19", brutto: 1800, netto: 1512.61,
-    ustSatz: 19, ustBetrag: 287.39, status: "offen", mahnstufe: 0,
+    ustSatz: 19, ustBetrag: 287.39, bezahltBetrag: 0, offenerBetrag: 1800, status: "offen", mahnstufe: 0,
   },
   {
     id: "ar-003", nummer: "R-2026-043", kundeId: "cust-3", kundeName: "Schlosserei Weber",
     datum: "2026-05-10", faelligAm: "2026-05-24", brutto: 3200, netto: 2689.08,
-    ustSatz: 19, ustBetrag: 510.92, bezahltAm: "2026-05-22", status: "bezahlt", mahnstufe: 0,
+    ustSatz: 19, ustBetrag: 510.92, bezahltAm: "2026-05-22", bezahltBetrag: 3200, offenerBetrag: 0, status: "bezahlt", mahnstufe: 0,
   },
 ];
 

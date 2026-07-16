@@ -4,9 +4,12 @@ import { getAnalyseOverview } from '@/features/analyse/analyse.actions';
 
 export default async function PerformanceCockpitPage() {
   const result = await getAnalyseOverview("Monat");
-  const perfData = result.data || [];
 
   return (
-    <PerformanceCockpitClient overviews={perfData} />
+    <PerformanceCockpitClient
+      initialOverviews={result.data}
+      initialError={result.error?.message}
+      initialLoadedAt={new Date().toISOString()}
+    />
   );
 }

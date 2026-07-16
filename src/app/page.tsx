@@ -18,6 +18,7 @@ import {
 import { useAppShortcut, ShortcutType } from "@/components/ui/AppShortcutContext";
 import { useSync } from "@/lib/offline/SyncContext";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
+import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 /* ── Home-specific CSS variables ──────────────────────────── */
 const homeStyles = `
@@ -91,9 +92,6 @@ export default function HomeDashboard() {
 
   // Todo List State (Enriched Task Model)
   const [todos, setTodos] = useState<ChecklistTask[]>([]);
-
-  const [feedback, setFeedback] = useState("");
-  const [feedbackSent, setFeedbackSent] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -192,13 +190,6 @@ export default function HomeDashboard() {
     return "Warendurchlauf kurz prüfen und Engpässe vermeiden";
   })();
 
-  const handleFeedback = () => {
-    if (!feedback.trim()) return;
-    setFeedbackSent(true);
-    setFeedback("");
-    setTimeout(() => setFeedbackSent(false), 3000);
-  };
-
   const activeTodos = todos.filter(t => !t.done);
   const doneTodos = todos.filter(t => t.done);
 
@@ -250,10 +241,10 @@ export default function HomeDashboard() {
           </h1>
           
           <Link 
-            href="/cockpit"
+            href="/performance"
             className="flex items-center gap-2 text-sm font-bold text-navy-700 bg-white hover:bg-navy-50 px-4 py-2.5 rounded-xl transition-colors border border-neutral-gray-200 shadow-sm shrink-0"
           >
-            <BarChart3 className="w-4 h-4 text-accent-orange" /> Cockpit öffnen
+            <BarChart3 className="w-4 h-4 text-accent-orange" /> Performance öffnen
           </Link>
         </div>
 
@@ -513,28 +504,8 @@ export default function HomeDashboard() {
         </div>
 
         {/* ── FEEDBACK SECTION ────────────────────────── */}
-        <section
-          className="bg-bg-app-soft border border-neutral-gray-200 rounded-[22px] p-6 text-center max-w-2xl mx-auto mt-8"
-          style={{ animation: 'hm-floatIn .5s ease .18s both' }}
-        >
-          <h3 className="text-lg font-bold font-serif mb-2">Was fehlt auf dieser Seite?</h3>
-          <p className="text-xs text-text-muted mb-4">Feedback-Speicherung wird später angebunden (Demo-Modus).</p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={feedback}
-              onChange={e => setFeedback(e.target.value)}
-              placeholder="Z.B. Ich brauche einen Knopf für..."
-              className="flex-1 rounded-xl border border-neutral-gray-300 px-4 py-3 text-sm focus:outline-none focus:border-navy-900 focus:ring-1 focus:ring-navy-900"
-              onKeyDown={e => e.key === 'Enter' && handleFeedback()}
-            />
-            <button
-              onClick={handleFeedback}
-              className="bg-navy-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-navy-800 transition-colors shrink-0 cursor-pointer"
-            >
-              {feedbackSent ? "Gemerkt!" : "Merken"}
-            </button>
-          </div>
+        <section className="mx-auto mt-8 max-w-2xl" style={{ animation: 'hm-floatIn .5s ease .18s both' }}>
+          <FeedbackFooter pageTitle="Startseite" route="/" variant="full" />
           <div className="mt-4 pt-4 border-t border-neutral-gray-200 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/kvp" className="text-sm font-bold text-text-muted hover:text-navy-900 hover:underline">App verbessern (Developer KVP)</Link>
             <span className="hidden sm:inline text-neutral-gray-300">•</span>
@@ -604,4 +575,3 @@ export default function HomeDashboard() {
     </>
   );
 }
-

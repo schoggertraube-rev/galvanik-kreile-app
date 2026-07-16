@@ -10,7 +10,7 @@ import { DeliveryNoteDocument } from "@/lib/pdf/DeliveryNote";
 import { DocumentProps } from "@react-pdf/renderer";
 import { Order } from "@/lib/repositories/ordersRepository";
 import { Customer } from "@/lib/repositories/customersRepository";
-import { companySettingsRepository } from "@/lib/repositories/companySettingsRepository";
+import { getCompanySettings } from "@/app/actions/company.actions";
 
 async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
   return new Promise((resolve, reject) => {
@@ -43,7 +43,8 @@ export async function generateOrderLabel(orderIds: string | string[]) {
     pdfData.push({ order: o, customerName: cName, qrCodeBase64: qr });
   }
 
-  const settings = await companySettingsRepository.getSettings();
+  const settings = await getCompanySettings();
+  if (!settings.configured) throw new Error("Firmendaten sind noch nicht konfiguriert.");
 
   const pdfStream = await renderToStream(
     React.createElement(OrderLabelDocument, { data: pdfData, settings }) as unknown as React.ReactElement<DocumentProps>
@@ -68,11 +69,8 @@ export async function generateDeliveryNote(orderIds: string | string[]) {
 
   if (!customer) throw new Error("Kunde zum Auftrag nicht gefunden.");
 
-  // Mock logo base64 (usually read from public folder)
-  // const logoPath = path.join(process.cwd(), "public", "logo.png");
-  // const logoBase64 = fs.existsSync(logoPath) ? `data:image/png;base64,${fs.readFileSync(logoPath).toString('base64')}` : undefined;
-  
-  const settings = await companySettingsRepository.getSettings();
+  const settings = await getCompanySettings();
+  if (!settings.configured) throw new Error("Firmendaten sind noch nicht konfiguriert.");
 
   const pdfStream = await renderToStream(
     React.createElement(DeliveryNoteDocument, { orders: targetOrders, customer: customer, settings }) as unknown as React.ReactElement<DocumentProps>

@@ -49,13 +49,15 @@ export default function NewQuotePage() {
       quelleTyp,
     });
     
-    if (res?.success) {
+    if (res.ok) {
       router.push("/quotes");
-    } else if (res?.errors) {
-      setErrors(res.errors);
-      // Navigate back to the step with errors
-      if (res.errors.customerName) setStep("customer");
-      else if (res.errors.subject || res.errors.partCount) setStep("details");
+    } else {
+      const details = res.details && typeof res.details === "object" && !Array.isArray(res.details)
+        ? res.details as Record<string, string[]>
+        : { form: [res.message] };
+      setErrors(details);
+      if (details.customerName) setStep("customer");
+      else if (details.subject || details.partCount) setStep("details");
     }
   };
 
@@ -75,6 +77,7 @@ export default function NewQuotePage() {
       </div>
 
       <div className="max-w-3xl mx-auto px-4 md:px-8 space-y-8">
+        {errors.form && <p className="rounded-xl border border-danger-red bg-accent-orange-soft p-3 text-sm font-bold text-danger-red">{errors.form[0]}</p>}
         
         {/* Progress Bar */}
         <div className="flex justify-between items-center relative">
@@ -319,4 +322,3 @@ export default function NewQuotePage() {
     </div>
   );
 }
-

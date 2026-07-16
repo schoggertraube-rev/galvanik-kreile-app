@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Home, PackageCheck, ClipboardList, Users, ShieldCheck, Factory, Archive, BarChart3 } from "lucide-react";
+import { Home, PackageCheck, ClipboardList, Users, ShieldCheck, Factory, BarChart3 } from "lucide-react";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 export function TabletTopFlowNav({ className = "" }: { className?: string }) {
@@ -16,7 +16,7 @@ export function TabletTopFlowNav({ className = "" }: { className?: string }) {
     <nav className={`bg-white border-b border-neutral-gray-100 px-4 py-2 flex items-center gap-2 overflow-x-auto scrollbar-hide ${className}`}>
       <FlowTab href="/" icon={<Home className="w-5 h-5" />} label="Home" active={isActive("/")} />
       {["inhaber", "admin", "developer"].includes(role?.toLowerCase() || "") && (
-        <FlowTab href="/cockpit" icon={<BarChart3 className="w-5 h-5" />} label="Cockpit" active={isActive("/cockpit")} />
+        <FlowTab href="/performance" icon={<BarChart3 className="w-5 h-5" />} label="Performance" active={isActive("/performance")} />
       )}
       
       {/* Warendurchlauf is prominent */}

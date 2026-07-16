@@ -18,60 +18,63 @@ interface NewOrderFormProps {
 
 export function NewOrderForm({ onClose, customerId, customerName, ocrData, previewUrl, onSuccess }: NewOrderFormProps) {
   const [loading, setLoading] = useState(false);
-  const [title, setTitle] = useState(ocrData?.itemName || "Neuer Auftrag");
-  const [quantity, setQuantity] = useState(ocrData?.quantity || "1");
+  const [title, setTitle] = useState(ocrData?.itemName?.trim() || "");
+  const [quantity, setQuantity] = useState(ocrData?.quantity?.trim() || "");
   const [surface, setSurface] = useState(ocrData?.surfaceRequested || "");
   const [task, setTask] = useState("");
   const [success, setSuccess] = useState(false);
+  const [persistedOrderNumber, setPersistedOrderNumber] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setTimeout(() => {
+    const timer = window.setTimeout(() => {
       titleInputRef.current?.focus();
     }, 100);
+    return () => window.clearTimeout(timer);
   }, []);
 
   const handleSave = async () => {
+    const normalizedTitle = title.trim();
+    const normalizedTask = task.trim();
+    const normalizedSurface = surface.trim();
+    const parsedQuantity = Number(quantity);
+
+    if (!normalizedTitle || normalizedTitle.length > 200) {
+      setError("Bitte eine Bezeichnung mit maximal 200 Zeichen eingeben.");
+      return;
+    }
+    if (!Number.isSafeInteger(parsedQuantity) || parsedQuantity < 1 || parsedQuantity > 1_000_000) {
+      setError("Die Stückzahl muss eine ganze Zahl zwischen 1 und 1.000.000 sein.");
+      return;
+    }
+    if (normalizedTask.length > 2_000 || normalizedSurface.length > 100) {
+      setError("Hinweise oder Oberfläche überschreiten das zulässige Größenlimit.");
+      return;
+    }
+
     try {
       setLoading(true);
-      let finalAttachmentUrl = "";
-      
-      if (previewUrl && previewUrl.startsWith("data:")) {
-        const { createClient } = await import("@/lib/supabase/client");
-        const supabase = createClient();
-        
-        // Convert base64 to Blob
-        const response = await fetch(previewUrl);
-        const blob = await response.blob();
-        
-        const fileName = `order_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.jpg`;
-        const { data, error } = await supabase.storage.from("attachments").upload(fileName, blob);
-        
-        if (!error && data) {
-          const { data: publicUrlData } = supabase.storage.from("attachments").getPublicUrl(fileName);
-          finalAttachmentUrl = publicUrlData.publicUrl;
-        }
-      }
-
-      await ordersRepository.create({
+      setError(null);
+      const created = await ordersRepository.create({
         customerId,
-        title,
-        task,
-        station: "wareneingang",
+        title: normalizedTitle,
+        ...(normalizedTask ? { task: normalizedTask } : {}),
         source: "customer",
-        attachmentUrl: finalAttachmentUrl || undefined,
         parts: [
           {
-            name: title,
-            quantity: parseInt(quantity, 10) || 1,
-            surfaceRequested: surface,
-          }
-        ]
+            name: normalizedTitle,
+            quantity: parsedQuantity,
+            ...(normalizedSurface ? { surfaceRequested: normalizedSurface } : {}),
+          },
+        ],
       });
+      setPersistedOrderNumber(created.orderNumber);
       setSuccess(true);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Fehler beim Erfassen des Auftrags", err);
+      setError(err instanceof Error ? err.message : "Der Auftrag konnte nicht gespeichert werden.");
     } finally {
       setLoading(false);
     }
@@ -86,7 +89,7 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
           </div>
           <h2 className="text-2xl font-serif text-navy-900 mb-2">Auftrag gespeichert!</h2>
           <p className="text-gray-600 mb-8">
-            Der Auftrag <strong>{title}</strong> für {customerName} wurde erfolgreich angelegt.
+            Auftrag <strong>{persistedOrderNumber}</strong> für {customerName} wurde in der Datenbank bestätigt.
           </p>
           <Button
             onClick={() => {
@@ -170,10 +173,17 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
               </div>
 
               {previewUrl && (
-                <div className="flex items-center gap-2 p-3 bg-blue-50 text-blue-800 rounded-lg border border-blue-100">
+                <div className="flex items-center gap-2 p-3 bg-amber-50 text-amber-900 rounded-lg border border-amber-200">
                   <FileText className="w-5 h-5" />
-                  <span className="text-sm font-bold">Lieferschein / Dokument angehängt</span>
-                  <CheckCircle2 className="w-4 h-4 ml-auto text-green-600" />
+                  <span className="text-sm font-medium">
+                    Dokument nur als Vorschau erkannt; eine dauerhafte Auftragsablage ist hier noch nicht angebunden.
+                  </span>
+                </div>
+              )}
+
+              {error && (
+                <div role="alert" className="p-3 rounded-lg border border-red-200 bg-red-50 text-sm font-semibold text-red-800">
+                  {error}
                 </div>
               )}
             </div>
@@ -184,7 +194,7 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
             <Button variant="outline" onClick={onClose} disabled={loading} className="font-bold">
               Abbrechen
             </Button>
-            <Button onClick={handleSave} disabled={loading || !title} className="bg-navy-900 hover:bg-navy-800 text-white font-bold min-w-[140px]">
+            <Button onClick={handleSave} disabled={loading || !title.trim() || !quantity.trim()} className="bg-navy-900 hover:bg-navy-800 text-white font-bold min-w-[140px]">
               {loading ? "Speichert..." : (
                 <>
                   <Save className="w-4 h-4 mr-2" />

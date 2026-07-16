@@ -1,23 +1,12 @@
 process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
 
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen, act, waitFor } from "@testing-library/react";
 import React from "react";
 import { PermissionsProvider, usePermissions, deriveInitials } from "../PermissionsContext";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import type { AuthorizationResult } from "@/lib/server/authorization";
-
-// Mock Supabase client to avoid real network
-vi.mock("@/lib/supabase/client", () => ({
-  createClient: () => ({
-    auth: {
-      onAuthStateChange: () => ({
-        data: { subscription: { unsubscribe: vi.fn() } }
-      })
-    }
-  })
-}));
 
 // Mock Server Actions to avoid real requests
 vi.mock("@/app/actions/auth.actions", () => ({
@@ -73,7 +62,7 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
     );
   };
 
-  it("T-01: Sessionidentität bleibt stabil", async () => {
+  it("T-01: Die serverbestätigte Identität ersetzt einen veralteten Bootstrap", async () => {
     const initialState: AuthBootstrapState = {
       status: "authenticated",
       session: {
@@ -86,7 +75,7 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       }
     };
 
-    // Client action returns different name, but context must NOT update name or initials
+    // Die kanonische Serveraktion ist nach dem Bootstrap die Lieferwahrheit.
     vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
       ok: true,
       data: {
@@ -107,8 +96,8 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       );
     });
 
-    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
-    expect(screen.getByTestId("initials").textContent).toBe("CD");
+    expect(screen.getByTestId("name").textContent).toBe("Anderer Benutzer");
+    expect(screen.getByTestId("initials").textContent).toBe("AB");
     expect(screen.getByTestId("role").textContent).toBe("buero");
     expect(screen.getByTestId("status").textContent).toBe("authenticated");
   });
@@ -249,6 +238,44 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
     spySet.mock.calls.forEach(call => {
       expect(call[0]).not.toMatch(/role|initial|user/);
     });
+  });
+
+  it("T-06: Fokus lädt Berechtigungen erneut über die kanonische Serveraktion", async () => {
+    const initialState: AuthBootstrapState = {
+      status: "authenticated",
+      session: {
+        userId: "1",
+        tenantId: "galvanik-kreile",
+        role: "buero",
+        displayName: "Christian Dieter",
+        issuedAt: 0,
+        expiresAt: 0,
+      }
+    };
+    render(
+      <PermissionsProvider initialAuthState={initialState}>
+        <TestComponent />
+      </PermissionsProvider>
+    );
+    await waitFor(() => expect(getAuthorizationSnapshotAction).toHaveBeenCalledTimes(1));
+
+    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
+      ok: true,
+      data: {
+        userId: "user-1",
+        tenantId: "galvanik-kreile",
+        displayName: "Hans Meister",
+        role: "meister",
+        permissions: ["perm_op_status"],
+        active: true,
+      }
+    } as AuthorizationResult);
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    await waitFor(() => expect(screen.getByTestId("permissions").textContent).toBe("perm_op_status"));
+    expect(screen.getByTestId("role").textContent).toBe("meister");
   });
 
   it("4. Provider übernimmt initialAuthState ohne nachträgliches Local-Storage-Überschreiben", () => {

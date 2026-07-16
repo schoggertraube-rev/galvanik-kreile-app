@@ -2,10 +2,13 @@
 
 import { db } from "@/db";
 import { segment } from "@/db/schema_marketing";
-import { eq, ilike, sql } from "drizzle-orm";
+import { eq, ilike } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { requireMarketingRead, requireMarketingWrite } from '@/lib/server/marketingAuthorization';
 
 export async function getSegments(query?: string) {
+  await requireMarketingRead();
+  if (query && query.length > 100) throw new Error('MARKETING_SEGMENT_QUERY_TOO_LONG');
   if (query) {
     return await db.select().from(segment).where(ilike(segment.name, `%${query}%`)).orderBy(segment.name);
   }
@@ -13,17 +16,19 @@ export async function getSegments(query?: string) {
 }
 
 export async function getSegmentById(id: string) {
+  await requireMarketingRead();
   const result = await db.select().from(segment).where(eq(segment.id, id)).limit(1);
   return result[0] || null;
 }
 
 export async function createSegment(formData: FormData) {
+  await requireMarketingWrite();
   const name = formData.get("name")?.toString();
   const icon = formData.get("icon")?.toString() || "";
   const farbe = formData.get("farbe")?.toString() || "#e91e63";
   const beschreibung = formData.get("beschreibung")?.toString() || "";
   
-  if (!name) {
+  if (!name || name.length > 120 || icon.length > 20 || beschreibung.length > 2_000 || !/^#[0-9a-f]{6}$/i.test(farbe)) {
     throw new Error("Name is required");
   }
 
@@ -40,12 +45,13 @@ export async function createSegment(formData: FormData) {
 }
 
 export async function updateSegment(id: string, formData: FormData) {
+  await requireMarketingWrite();
   const name = formData.get("name")?.toString();
   const icon = formData.get("icon")?.toString() || "";
   const farbe = formData.get("farbe")?.toString() || "#e91e63";
   const beschreibung = formData.get("beschreibung")?.toString() || "";
   
-  if (!name) {
+  if (!name || name.length > 120 || icon.length > 20 || beschreibung.length > 2_000 || !/^#[0-9a-f]{6}$/i.test(farbe)) {
     throw new Error("Name is required");
   }
 
@@ -62,17 +68,7 @@ export async function updateSegment(id: string, formData: FormData) {
 }
 
 export async function deleteSegment(id: string) {
-  const target = await getSegmentById(id);
-  if (target?.isDemo === false) {
-    // Only true demo items could be deleted if we want to restrict, 
-    // but the spec says "Bestandssegmente ... nicht löschbar". 
-    // Let's protect Oldtimer, Schmuck, etc. from deletion by Name or checking isDemo.
-    const protectedNames = ['Oldtimer', 'Schmuck', 'Besteck/Silber', 'Kirchen', 'Museen', 'Geschäftskunden', 'Privatkunden'];
-    if (protectedNames.includes(target.name)) {
-      throw new Error("Bestandssegmente können nicht gelöscht werden.");
-    }
-  }
-
-  await db.delete(segment).where(eq(segment.id, id));
-  revalidatePath("/marketing/segmente");
+  await requireMarketingWrite();
+  void id;
+  throw new Error('MARKETING_SEGMENT_DELETE_REQUIRES_ARCHIVE_WORKFLOW');
 }

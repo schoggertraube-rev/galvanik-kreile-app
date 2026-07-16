@@ -9,14 +9,23 @@ export const WerkstattPulsStationArena = {
   Ranking: ({ data }: Props) => {
     const { stations } = data;
     
-    // Sort by engpassScore desc, limit to top 5
-    const ranked = [...stations].sort((a, b) => (b.engpassScore || 0) - (a.engpassScore || 0)).slice(0, 5);
+    const ranked = [...stations].sort((a, b) => {
+      if (a.engpassScore !== null && b.engpassScore !== null) {
+        return b.engpassScore - a.engpassScore;
+      }
+      if (a.engpassScore !== null) return -1;
+      if (b.engpassScore !== null) return 1;
+      return b.wartendN - a.wartendN;
+    }).slice(0, 5);
+    const hasMeasuredEngpass = ranked.some((station) => station.engpassScore !== null);
 
     return (
       <div className="card">
         <div className="card-h">
-          <h3>Engpass-Ranking</h3>
-          <span className="pill pill-mute" style={{ fontSize: 10 }}>Engpass-Score</span>
+          <h3>{hasMeasuredEngpass ? 'Engpass-Ranking' : 'Stationsbestände'}</h3>
+          <span className="pill pill-mute" style={{ fontSize: 10 }}>
+            {hasMeasuredEngpass ? 'Engpass-Score' : 'Kapazität nicht gemessen'}
+          </span>
         </div>
         <div className="card-body" style={{ paddingTop: 8 }}>
           {ranked.length === 0 ? (
@@ -25,8 +34,8 @@ export const WerkstattPulsStationArena = {
             </div>
           ) : (
             ranked.map((st, idx) => {
-              const isR1 = idx === 0 && st.status === 'critical';
-              const isR2 = idx === 1 && st.status === 'watch';
+              const isR1 = hasMeasuredEngpass && idx === 0 && st.status === 'critical';
+              const isR2 = hasMeasuredEngpass && idx === 1 && st.status === 'watch';
               const rowClass = `rank-row ${isR1 ? 'r1' : ''} ${isR2 ? 'r2' : ''}`;
               
               const barColor = st.status === 'critical' ? 'var(--red)' : 
@@ -39,13 +48,17 @@ export const WerkstattPulsStationArena = {
                   <div className="rank-bar-cell">
                     <div className="rank-name">{st.stationName}</div>
                     <div className="rank-bar">
-                      <div style={{ width: `${st.auslastungPct || 0}%`, background: barColor }}></div>
+                      {st.auslastungPct !== null && (
+                        <div style={{ width: `${st.auslastungPct}%`, background: barColor }}></div>
+                      )}
                     </div>
                     <div className="rank-meta">
-                      {st.auslastungPct}% Auslastung · {st.wartendN} wartend · Ø {st.avgWartezeitTage} T
+                      {st.auslastungPct === null ? 'Auslastung nicht gemessen' : `${st.auslastungPct}% Auslastung`}
+                      {' · '}{st.wartendN} wartend{' · '}
+                      {st.avgWartezeitTage === null ? 'Wartezeit nicht gemessen' : `Ø ${st.avgWartezeitTage} T`}
                     </div>
                   </div>
-                  <div className="rank-score">{st.engpassScore}</div>
+                  <div className="rank-score">{st.engpassScore ?? '—'}</div>
                   <div style={{ marginLeft: 6 }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9099A8" strokeWidth="2"><path d="M9 6l6 6-6 6"/></svg>
                   </div>
@@ -73,7 +86,7 @@ export const WerkstattPulsStationArena = {
           <div className="grid-5">
             {stations.map(st => {
               let badgeClass = 'pill-mute';
-              let badgeText = 'FREI';
+              let badgeText = st.status === 'unavailable' ? 'NICHT GEMESSEN' : 'FREI';
               let numClass = '';
               let barColor = 'var(--ink-3)';
               
@@ -104,14 +117,21 @@ export const WerkstattPulsStationArena = {
                       <div className="stat-key">Wartend</div>
                     </div>
                     <div className="stat-block">
-                      <div className="stat-num">{st.avgWartezeitTage}<span style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink-2)' }}>T</span></div>
+                      <div className="stat-num">
+                        {st.avgWartezeitTage === null ? '—' : st.avgWartezeitTage}
+                        {st.avgWartezeitTage !== null && <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink-2)' }}>T</span>}
+                      </div>
                       <div className="stat-key">Ø Wartezeit</div>
                     </div>
                   </div>
-                  <div>
-                    <div className="stat-key" style={{ marginBottom: 4 }}>Auslastung {st.auslastungPct}%</div>
-                    <div className="util-bar"><div style={{ width: `${st.auslastungPct}%`, background: barColor }}></div></div>
-                  </div>
+                  {st.auslastungPct === null ? (
+                    <div className="stat-key">Kapazitätsauslastung nicht gemessen</div>
+                  ) : (
+                    <div>
+                      <div className="stat-key" style={{ marginBottom: 4 }}>Auslastung {st.auslastungPct}%</div>
+                      <div className="util-bar"><div style={{ width: `${st.auslastungPct}%`, background: barColor }}></div></div>
+                    </div>
+                  )}
                   {st.hauptursache && (
                     <div className="station-cause" style={{ marginTop: 12 }}>{st.hauptursache}</div>
                   )}

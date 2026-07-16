@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Lightbulb, PlusCircle, Camera, CheckCircle2, ListFilter, PlayCircle, BarChart3, ThumbsUp, Wrench, MessageSquare, AlertTriangle, User, Smile } from "lucide-react";
+import { Lightbulb, PlusCircle, CheckCircle2, ListFilter, PlayCircle, BarChart3, ThumbsUp, Wrench, MessageSquare, AlertTriangle, User, Smile } from "lucide-react";
 import { usePageView } from "@/hooks/usePageView";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
@@ -18,17 +18,25 @@ export function BetriebKvpClient() {
   const [items, setItems] = useState<KvpItem[]>([]);
   const [activeItem, setActiveItem] = useState<KvpItem | null>(null);
   const { role } = usePermissions();
-  const isChef = role === "admin" || role === "developer" || role === "chef";
+  const isChef = role === "admin" || role === "developer" || role === "meister";
 
   // Form State
   const [newTitle, setNewTitle] = useState("");
   const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
   const [newBenefit, setNewBenefit] = useState(BENEFITS[0]);
   const [newProblem, setNewProblem] = useState("");
-  const [hasPhotoMock, setHasPhotoMock] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    kvpRepository.getAll().then(data => setItems(data)).catch(console.error);
+    kvpRepository.getAll()
+      .then(data => {
+        setItems(data);
+        setLoadError(null);
+      })
+      .catch((error) => {
+        console.error(error);
+        setLoadError("KVP-Ideen konnten nicht geladen werden.");
+      });
   }, []);
 
   const handleSave = async () => {
@@ -41,15 +49,12 @@ export function BetriebKvpClient() {
         benefit: newBenefit,
         status: "neu",
         problemDesc: newProblem,
-        hasPhoto: hasPhotoMock,
-        date: "Gerade eben",
-        isDemo: false
+        hasPhoto: false,
       });
 
       setItems([newItem, ...items]);
       setNewTitle("");
       setNewProblem("");
-      setHasPhotoMock(false);
     } catch (e) {
       console.error("Failed to add KVP item", e);
       alert("Fehler beim Speichern der Idee.");
@@ -95,11 +100,16 @@ export function BetriebKvpClient() {
   };
 
   // Chef-Auswertung Stats
+  const categoryCounts = items.reduce<Record<string, number>>((counts, item) => {
+    counts[item.category] = (counts[item.category] || 0) + 1;
+    return counts;
+  }, {});
+  const topCategory = Object.entries(categoryCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "Keine Daten";
   const stats = {
     total: items.length,
     new: items.filter(i => i.status === 'neu').length,
     implemented: items.filter(i => i.status === 'umgesetzt').length,
-    topCategory: "Ordnung/Sauberkeit" // Mocked
+    topCategory,
   };
 
   return (
@@ -171,15 +181,9 @@ export function BetriebKvpClient() {
                     {BENEFITS.map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
                 </div>
-                <button 
-                  onClick={() => setHasPhotoMock(!hasPhotoMock)}
-                  className={`shrink-0 h-[34px] px-3 rounded-lg flex items-center justify-center gap-2 border transition-colors ${hasPhotoMock ? 'bg-accent-orange/10 border-accent-orange text-accent-orange' : 'bg-gray-100 border-neutral-gray-200 text-text-muted hover:bg-gray-200'}`}
-                  title="Foto anhängen (Mock)"
-                >
-                  <Camera className="w-4 h-4" /> 
-                  <span className="text-xs font-bold">{hasPhotoMock ? 'Foto' : 'Foto'}</span>
-                </button>
               </div>
+
+              <p className="text-xs text-text-muted">Fotos sind hier noch nicht an den sicheren Uploadpfad angebunden.</p>
 
               <button 
                 onClick={handleSave}
@@ -221,19 +225,16 @@ export function BetriebKvpClient() {
                 <span className="font-bold text-accent-orange">{stats.topCategory}</span>
               </li>
               <li className="flex justify-between items-center text-sm">
-                <span className="font-medium text-navy-900">Offene Mängel:</span>
-                <span className="font-bold text-navy-900">2 an Station &quot;Beschichtung&quot;</span>
+                <span className="font-medium text-navy-900">Detailauswertung:</span>
+                <span className="font-bold text-text-muted">Noch nicht instrumentiert</span>
               </li>
             </ul>
-
-            <button className="w-full flex items-center justify-center gap-2 bg-neutral-gray-100 text-navy-900 font-bold py-2 rounded-xl text-sm hover:bg-neutral-gray-200 transition">
-              Detail-Report öffnen
-            </button>
           </section>
         </div>
 
         {/* COL 2 & 3: LISTE */}
         <div className="lg:col-span-2 bg-white border border-neutral-gray-200 rounded-3xl p-6 shadow-sm flex flex-col h-full">
+          {loadError && <p className="mb-4 rounded-xl border border-danger-red bg-accent-orange-soft p-3 text-sm font-bold text-danger-red">{loadError}</p>}
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-bold font-serif text-navy-900 flex items-center gap-2">
               <ListFilter className="w-5 h-5 text-accent-orange" />
@@ -257,8 +258,6 @@ export function BetriebKvpClient() {
                     {item.title}
                   </h3>
                   <div className="shrink-0 flex items-center gap-2">
-                    {item.hasPhoto && <Camera className="w-4 h-4 text-text-muted" />}
-                    {!item.isDemo && <span className="bg-blue-50 text-blue-600 text-[10px] font-black uppercase px-2 py-0.5 rounded">Lokal</span>}
                     {getStatusBadge(item.status)}
                   </div>
                 </div>
@@ -268,7 +267,7 @@ export function BetriebKvpClient() {
                     <span className="font-bold bg-bg-app-soft px-2 py-0.5 rounded">{item.category}</span>
                     <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" /> Nutzen: {item.benefit}</span>
                   </div>
-                  <span className="text-xs font-bold text-neutral-gray-400">{item.date}</span>
+                  <span className="text-xs font-bold text-neutral-gray-400">{new Date(item.date).toLocaleString("de-DE")}</span>
                 </div>
               </div>
             ))}
@@ -318,15 +317,6 @@ export function BetriebKvpClient() {
                 {activeItem.problemDesc}
               </p>
             </div>
-
-            {activeItem.hasPhoto && (
-              <div>
-                <h3 className="font-bold text-sm uppercase text-text-muted mb-2 flex items-center gap-2"><Camera className="w-4 h-4"/> Angehängtes Foto</h3>
-                <div className="w-full h-40 bg-neutral-gray-100 border border-dashed border-neutral-gray-300 rounded-xl flex items-center justify-center text-neutral-gray-400 font-bold text-sm">
-                  [Foto Platzhalter - Demo]
-                </div>
-              </div>
-            )}
 
             {isChef && (
               <div className="pt-4 border-t border-neutral-gray-200">

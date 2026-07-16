@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { guardMockApi } from "@/lib/server/mockApiGuard";
 
 export async function GET() {
+  const blocked = await guardMockApi();
+  if (blocked) return blocked;
   const timeline = [
     { time: "08:00", title: "Wareneingang geprüft", description: "Alle Eingänge erfasst.", status: "done" },
     { time: "09:15", title: "3 Teile in Galvanik gestartet", description: "Sie laufen planmäßig.", status: "done" },

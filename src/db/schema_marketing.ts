@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, numeric, date } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, numeric, date, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { customers } from "./schema";
 import { orders, inquiries } from "./schema";
 
@@ -67,7 +67,9 @@ export const touchpoint = pgTable("touchpoint", {
   reichweite: integer("reichweite").default(0),
   klicks: integer("klicks").default(0),
   ausgefuehrtAm: timestamp("ausgefuehrt_am").defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("touchpoint_externe_ref_uidx").on(table.externeRef),
+]);
 
 export const attribution = pgTable("attribution", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -116,21 +118,42 @@ export const marketingAsset = pgTable("marketing_asset", {
   kundeId: text("kunde_id").references(() => customers.id),
   segmentId: uuid("segment_id").references(() => segment.id),
   storagePfad: text("storage_pfad").notNull(),
+  storageBucket: text("storage_bucket"),
   typ: text("typ").notNull(),
   freigabeMarketing: boolean("freigabe_marketing").default(false),
   qualitaetScore: numeric("qualitaet_score", { precision: 4, scale: 2 }).default("0"),
   erstelltAm: timestamp("erstellt_am").defaultNow().notNull(),
 });
 
+export const marketingPublishJob = pgTable("marketing_publish_job", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  aktionId: uuid("aktion_id").notNull().references(() => aktion.id),
+  assetId: uuid("asset_id").notNull().references(() => marketingAsset.id),
+  kanalId: uuid("kanal_id").notNull().references(() => kanal.id),
+  status: text("status").notNull().default("reserved"),
+  externalContainerId: text("external_container_id"),
+  externalMediaId: text("external_media_id"),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  claimedAt: timestamp("claimed_at"),
+  completedAt: timestamp("completed_at"),
+  errorCode: text("error_code"),
+  erstelltAm: timestamp("erstellt_am").defaultNow().notNull(),
+  aktualisiertAm: timestamp("aktualisiert_am").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("marketing_publish_job_action_uidx").on(table.aktionId),
+  index("marketing_publish_job_status_idx").on(table.status, table.claimedAt),
+]);
+
 export const feedbackMail = pgTable("feedback_mail", {
   id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull().default("galvanik-kreile"),
   auftragId: text("auftrag_id").references(() => orders.id),
   kundeId: text("kunde_id").references(() => customers.id),
   segmentId: uuid("segment_id").references(() => segment.id),
   ankunftQuelle: text("ankunft_quelle"),
   ankunftAm: timestamp("ankunft_am"),
   geplantFuer: timestamp("geplant_fuer"),
-  status: text("status").notNull().default("geplant"), // geplant, gesendet, geoeffnet, reagiert, storniert
+  status: text("status").notNull().default("geplant"), // geplant, gesendet, geoeffnet, reagiert, storniert, fehler, versand_unsicher
   gesendetAm: timestamp("gesendet_am"),
   tokenUpload: text("token_upload"),
   tokenFeedback: text("token_feedback"),

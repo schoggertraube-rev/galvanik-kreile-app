@@ -1,31 +1,30 @@
-import { supabase } from "@/lib/supabase/client";
 import { EmailProvider, EmailProviderOptions } from "./emailProvider";
 
 export class ResendAdapter implements EmailProvider {
   async send(opts: EmailProviderOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
-      const { data, error } = await supabase.functions.invoke("email-send", {
-        body: opts,
+      const response = await fetch('/api/email/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(opts),
+        cache: 'no-store',
       });
-
-      if (error) {
-        console.error("ResendAdapter Invoke Error:", error);
-        return { success: false, error: error.message };
+      const data = await response.json() as { ok?: boolean; messageId?: string; code?: string };
+      if (!response.ok || data.ok !== true || !data.messageId) {
+        return { success: false, error: data.code || 'EMAIL_DELIVERY_FAILED' };
       }
-
-      return { success: data.success, messageId: data.messageId, error: data.error };
-    } catch (e: any) {
-      console.error("ResendAdapter Exception:", e);
-      return { success: false, error: e.message };
+      return { success: true, messageId: data.messageId };
+    } catch {
+      return { success: false, error: 'EMAIL_DELIVERY_UNAVAILABLE' };
     }
   }
 
   supportsTemplates(): boolean {
-    return true; // We resolve templates via the Edge Function and DB
+    return true;
   }
 
   supportsWebhooks(): boolean {
-    return true; // Resend Webhooks update communications table via Edge Function
+    return true;
   }
 }
 

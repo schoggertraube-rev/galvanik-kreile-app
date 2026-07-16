@@ -5,30 +5,49 @@ import { BackButton } from "@/components/ui/BackButton";
 import { useEffect, useState } from "react";
 import { getAktionen, changeAktionStatus } from "./actions";
 import Link from "next/link";
-import { PlusCircle, Search, Play, CheckCircle, Clock } from "lucide-react";
+import { PlusCircle, Play, CheckCircle, Clock } from "lucide-react";
 
 export default function AktionenPage() {
-  const [aktionen, setAktionen] = useState<any[]>([]);
+  type MarketingActionRow = Awaited<ReturnType<typeof getAktionen>>[number];
+  const [aktionen, setAktionen] = useState<MarketingActionRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   async function loadData() {
     try {
       const data = await getAktionen();
       setAktionen(data);
+      setError(null);
       setLoading(false);
-    } catch (err) {
-      console.error(err);
+    } catch {
+      setError("Marketing-Aktionen konnten nicht geladen werden.");
       setLoading(false);
     }
   }
 
   useEffect(() => {
-    loadData();
+    let active = true;
+    void getAktionen().then((data) => {
+      if (!active) return;
+      setAktionen(data);
+      setError(null);
+      setLoading(false);
+    }).catch(() => {
+      if (!active) return;
+      setError("Marketing-Aktionen konnten nicht geladen werden.");
+      setLoading(false);
+    });
+    return () => { active = false; };
   }, []);
 
-  async function updateStatus(id: string, status: string) {
-    await changeAktionStatus(id, status);
-    loadData();
+  async function approve(id: string) {
+    try {
+      const receipt = await changeAktionStatus(id, 'freigegeben');
+      if (receipt.status !== 'freigegeben') throw new Error('MARKETING_ACTION_APPROVAL_NOT_CONFIRMED');
+      await loadData();
+    } catch {
+      setError("Die Freigabe konnte nicht dauerhaft bestätigt werden.");
+    }
   }
 
   return (
@@ -48,6 +67,8 @@ export default function AktionenPage() {
           <span>Neue Aktion</span>
         </Link>
       </div>
+
+      {error && <div role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto">
@@ -77,15 +98,13 @@ export default function AktionenPage() {
                   </td>
                   <td className="p-4">
                     <div className="flex items-center gap-2">
-                      {row.status === 'vorschlag' && (
-                        <button onClick={() => updateStatus(row.id, 'freigegeben')} className="text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1 rounded-md">
+                      {(row.status === 'vorschlag' || row.status === 'geplant' || row.status === 'fehler') && (
+                        <button onClick={() => approve(row.id)} className="text-sm bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1 rounded-md">
                           Freigeben
                         </button>
                       )}
                       {row.status === 'freigegeben' && (
-                        <button onClick={() => updateStatus(row.id, 'ausgefuehrt')} className="text-sm bg-green-500 text-white hover:bg-green-600 px-3 py-1 rounded-md">
-                          Ausführen
-                        </button>
+                        <span className="text-xs text-slate-500">Ausführung nur über einen verknüpften Kanal mit Provider-Receipt</span>
                       )}
                       {row.status === 'ausgefuehrt' && (
                         <span className="text-xs text-slate-400">Keine Aktion</span>

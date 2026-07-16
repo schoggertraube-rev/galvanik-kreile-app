@@ -310,14 +310,12 @@ function WarendurchlaufLeitstandContent() {
       {selectedOrderForEdit && (
         <OrderEditModal
           order={selectedOrderForEdit}
-          customers={[]} // Can be extended to load customers if needed
           onClose={() => setSelectedOrderForEdit(null)}
           onSave={async (changes) => {
-            // Placeholder: Call server action to update order
             const { updateOrderDb } = await import("@/app/actions/orders.actions");
-            await updateOrderDb(selectedOrderForEdit.id, changes);
+            const result = await updateOrderDb(selectedOrderForEdit.id, changes);
+            if (!result.ok) throw new Error(result.message);
             setSelectedOrderForEdit(null);
-            // Trigger reload
             window.dispatchEvent(new CustomEvent("kreile-orders-updated"));
           }}
         />

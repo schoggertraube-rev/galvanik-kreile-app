@@ -4,6 +4,7 @@ export interface EmailProviderOptions {
   variables: Record<string, string>;
   orderId?: string;
   customerId?: string;
+  idempotencyKey: string;
 }
 
 export interface EmailProvider {

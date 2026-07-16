@@ -10,7 +10,7 @@ export function KampagnenView({ kampagnen, onOpenAnalysis }: { kampagnen: Kampag
     <motion.div key="kampagnen" initial="hidden" animate="visible" exit="exit">
       <motion.div custom={0} variants={floatIn} className="mk-panel">
         <h3 className="font-serif">Laufende &amp; geplante Kampagnen</h3>
-        <div className="pdesc">Mehrere Aktionen mit einem Ziel gebündelt — das Studio verteilt sie auf die besten Zeitfenster.</div>
+        <div className="pdesc">Mehrere gespeicherte Aktionen mit einem gemeinsamen Ziel; Fortschritt und Ergebnis stammen aus Zeitraum, Ausführung und Attribution.</div>
         {kampagnen.map(k => (
           <div key={k.id} className="mk-camp cursor-pointer" onClick={() => onOpenAnalysis('Kampagnen')}>
             <span className="mk-camp-dot" style={{ background: k.statusColor }} />

@@ -65,7 +65,7 @@ export function LabelPrintView({ order, customerName: propCustomerName, onClose,
       // Trigger native print dialog
       window.print();
       // Record print log event via label service
-      await labelService.generateLabel(order.id);
+      await labelService.recordPreparedLabel(order.id);
     } catch (e) {
       console.error("Drucken fehlgeschlagen:", e);
     } finally {

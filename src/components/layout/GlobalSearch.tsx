@@ -2,28 +2,28 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Search, Package, ChevronRight, X, Sparkles, LayoutGrid, Droplets, Activity, FileText, Receipt, Truck, User } from 'lucide-react'
+import { Search, Package, ChevronRight, X, Sparkles, LayoutGrid, Droplets, Activity, FileText, Receipt, Truck } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { findActions, buildFallbackSuggestion } from '@/lib/search/fuzzy'
 import { SEARCH_ACTIONS } from '@/lib/search/actionRegistry'
-import { getRecentSearches, addRecentSearch } from '@/lib/search/recent'
+import { addRecentSearch } from '@/lib/search/recent'
 import type { SearchSuggestion } from '@/types/search'
-import { globalSearch } from '@/app/actions/search.actions'
+import { globalSearch, type SearchResult } from '@/app/actions/search.actions'
 import { GlobalSearchAIResult } from './GlobalSearchAIResult'
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import { useCustomerOverlay } from "@/components/customers/useCustomerOverlay";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 import { motion } from 'framer-motion';
-import { useGlobalSearch } from '@/features/analyse/hooks/useGlobalSearch';
 
 export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChange: (v: boolean) => void }) {
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
-  const [activeAIQuery, setActiveAIQuery] = useState("");
+  const [forceAiMode, setForceAiMode] = useState(false);
   const { openOrder } = useOrderModal();
   const { open: openCustomer } = useCustomerOverlay();
   const { openErfassung } = useErfassung();
-  const [globalResults, setGlobalResults] = useState<Record<string, any>[]>([]);
+  const [globalResults, setGlobalResults] = useState<SearchResult[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [prevOpen, setPrevOpen] = useState(open)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -31,6 +31,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
     setPrevOpen(open)
     if (!open) {
       setSearchTerm('')
+      setForceAiMode(false)
     }
   }
 
@@ -60,36 +61,27 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
         globalSearch(searchTerm).then(res => {
           if (res.ok && res.results) {
             setGlobalResults(res.results);
+            setSearchError(null);
           } else {
             setGlobalResults([]);
+            setSearchError(res.error || 'Suche konnte nicht ausgeführt werden.');
           }
+        }).catch(() => {
+          setGlobalResults([]);
+          setSearchError('Suche konnte nicht ausgeführt werden.');
         })
       }, 300)
       return () => clearTimeout(timer)
     } else {
-      setTimeout(() => setGlobalResults([]), 0)
+      setTimeout(() => {
+        setGlobalResults([])
+        setSearchError(null)
+      }, 0)
     }
   }, [searchTerm])
 
   // Determine if we should show the AI Result component. 
   // We explicitly show AI mode if the user clicks the AI fallback suggestion or if they type a question format.
-  const [forceAiMode, setForceAiMode] = useState(false);
-
-  // New Global Search Hook (Postgres-driven)
-  const [debouncedTerm, setDebouncedTerm] = useState('');
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedTerm(searchTerm), 300);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-  const { data: hookResults = [] } = useGlobalSearch(debouncedTerm);
-
-  // Reset forceAiMode when searchTerm changes
-  useEffect(() => {
-    // Only reset if forceAiMode is true and it's not naturally aiMode
-    const isNaturallyAiMode = /^(wie|was|wo|warum|welche|zeige|vergleiche|analysiere)/i.test(searchTerm.trim().toLowerCase()) || searchTerm.trim().toLowerCase().endsWith("?");
-    if (forceAiMode && !isNaturallyAiMode) setForceAiMode(false);
-  }, [searchTerm, forceAiMode]);
-
   if (!open) return null
 
   const cleanTerm = searchTerm.trim().toLowerCase()
@@ -105,13 +97,11 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   const filteredLager = globalResults.filter(r => r.type === 'lager')
   const filteredKosten = globalResults.filter(r => r.type === 'kostenposten')
 
-  // Hook results
-  const hookTeile = hookResults.filter(r => r.typ === 'teil');
   const kpiMatches = ['termintreue', 'durchlaufzeit', 'wochenziel'].some(k => cleanTerm.includes(k)) 
     ? [{ typ: 'kpi', label: 'Werkstatt-Puls', sublabel: 'Zur Analyse-Kachel', id: 'werkstatt-puls' }] 
     : [];
 
-  const hasResults = globalResults.length > 0 || hookResults.length > 0 || kpiMatches.length > 0
+  const hasResults = globalResults.length > 0 || kpiMatches.length > 0
 
   // Intent-based action suggestions (shown above entity results)
   const actionSuggestions: SearchSuggestion[] = cleanTerm
@@ -205,14 +195,20 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
             ref={inputRef}
             autoFocus
             value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
+            onChange={e => {
+              setSearchTerm(e.target.value)
+              setForceAiMode(false)
+            }}
             onKeyDown={handleKeyDown}
             className="flex-1 bg-transparent outline-none placeholder:text-text-muted text-base font-medium" 
             placeholder="Nach Aufträgen, Kunden, Belegen, Rechnungen..." 
           />
           {searchTerm && (
             <button 
-              onClick={() => setSearchTerm('')} 
+              onClick={() => {
+                setSearchTerm('')
+                setForceAiMode(false)
+              }}
               className="p-1 hover:bg-neutral-gray-100 rounded-lg text-text-muted hover:text-slate-650 transition-colors"
             >
               <X className="w-4 h-4" />
@@ -224,6 +220,11 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
         </div>
 
         <div className="overflow-y-auto flex-1 p-3 space-y-4">
+          {searchError && !isAiMode && (
+            <div role="alert" className="rounded-lg border border-error-red/30 bg-error-red/10 px-3 py-2 text-xs font-medium text-error-red">
+              {searchError}
+            </div>
+          )}
           
           {isAiMode && searchTerm.length > 2 ? (
             <GlobalSearchAIResult query={searchTerm} onClose={handleClose} />
@@ -350,33 +351,6 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                 </div>
               )}
               
-              {hookTeile.length > 0 && (
-                <div className="space-y-1.5">
-                  <div className="px-2">
-                    <span className="text-[10px] uppercase font-black text-slate-450 tracking-wider">🔩 Teile ({hookTeile.length} Treffer)</span>
-                  </div>
-                  <div className="space-y-1">
-                    {hookTeile.map(t => (
-                      <div 
-                        key={t.id} 
-                        className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-xl bg-linear-to-br from-gray-50 to-gray-100 border border-gray-200 flex items-center justify-center text-gray-700 shrink-0">
-                            <Package className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <span className="font-extrabold text-sm text-navy-900 block leading-tight">{t.label}</span>
-                            <span className="text-xs text-navy-500 font-medium block mt-0.5">{t.sublabel}</span>
-                          </div>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-text-muted group-hover:translate-x-0.5 transition-transform" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
               {filteredBelege.length > 0 && (
                 <div className="space-y-1.5">
                   <div className="px-2">
@@ -386,7 +360,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                     {filteredBelege.map(b => (
                       <Link 
                         key={b.id} 
-                        href={`/buchhaltung/belege/${b.id}`}
+                        href={b.url}
                         onClick={handleClose}
                         className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
                       >
@@ -499,7 +473,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                     {filteredRechnungen.map(r => (
                       <Link 
                         key={r.id} 
-                        href={`/buchhaltung/rechnungen/${r.id}`}
+                        href={r.url}
                         onClick={handleClose}
                         className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
                       >
@@ -528,7 +502,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                     {filteredLieferanten.map(l => (
                       <Link 
                         key={l.id} 
-                        href={`/lieferanten/${l.id}`}
+                        href={l.url}
                         onClick={handleClose}
                         className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
                       >
@@ -557,7 +531,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                     {filteredBaeder.map(b => (
                       <Link 
                         key={b.id} 
-                        href={`/baths/${b.id}`}
+                        href={b.url}
                         onClick={handleClose}
                         className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
                       >
@@ -586,7 +560,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                     {filteredLager.map(l => (
                       <Link 
                         key={l.id} 
-                        href={`/inventory/${l.id}`}
+                        href={l.url}
                         onClick={handleClose}
                         className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
                       >
@@ -615,7 +589,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                     {filteredKosten.map(k => (
                       <Link 
                         key={k.id} 
-                        href={`/buchhaltung/kosten/${k.id}`}
+                        href={k.url}
                         onClick={handleClose}
                         className="flex items-center justify-between p-2.5 rounded-xl hover:bg-bg-app-soft transition-colors border border-transparent hover:border-neutral-gray-100 group"
                       >

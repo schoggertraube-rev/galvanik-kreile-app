@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { guardMockApi } from "@/lib/server/mockApiGuard";
 
 export async function GET(request: Request) {
+  const blocked = await guardMockApi();
+  if (blocked) return blocked;
   const { searchParams } = new URL(request.url);
   const context = searchParams.get("context") || "morning";
 

@@ -56,16 +56,33 @@ import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { OrderModalProvider } from "@/components/orders/OrderModalProvider";
 import { ErfassungProvider } from "@/components/erfassung/ErfassungProvider";
 
-import { isAdminOrDeveloper } from "@/lib/auth/permissions";
 import { getAuthBootstrapState } from "@/lib/server/authBootstrap";
+import { resolveAuthorization } from "@/lib/server/authorization";
+import { resolveOperatorControlForTenant } from "@/lib/server/operatorControl";
+import { OperatorControlBanner, OperatorRestrictedAccess } from "@/components/layout/OperatorControlNotice";
 
 export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const isAdmin = await isAdminOrDeveloper();
-  const authState = await getAuthBootstrapState();
+  const [authState, authorization] = await Promise.all([
+    getAuthBootstrapState(),
+    resolveAuthorization(),
+  ]);
+  const operatorControl = authorization.ok && authorization.data.operatorControl
+    ? authorization.data.operatorControl
+    : authState.status === "authenticated"
+      ? await resolveOperatorControlForTenant(authState.session.tenantId)
+      : null;
+  const isAdmin = authorization.ok && (authorization.data.role === "admin" || authorization.data.role === "developer");
+  const developerBypass = authorization.ok && authorization.data.role === "developer";
+  const restricted = Boolean(
+    authState.status === "authenticated" &&
+    operatorControl?.enforced &&
+    operatorControl.accessRestricted &&
+    !developerBypass
+  );
 
   return (
     <html
@@ -74,12 +91,16 @@ export default async function RootLayout({
     >
       <body>
         <ServiceWorkerRegister />
+        {operatorControl ? <OperatorControlBanner status={operatorControl} developerBypass={developerBypass} /> : null}
+        {restricted && operatorControl ? (
+          <OperatorRestrictedAccess status={operatorControl} />
+        ) : (
         <Suspense fallback={null}>
         <TestpilotProvider isAdmin={isAdmin}>
           <SyncProvider>
             <PermissionsProvider initialAuthState={authState}>
               <DiagnosticsProvider>
-                <LicenseProvider>
+                <LicenseProvider plan={operatorControl?.plan}>
                   <AppShortcutProvider>
                     <FeatureFlagProvider>
                       <OrderModalProvider>
@@ -99,6 +120,7 @@ export default async function RootLayout({
           </SyncProvider>
         </TestpilotProvider>
         </Suspense>
+        )}
       </body>
     </html>
   );

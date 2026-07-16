@@ -1,49 +1,66 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase/client";
 import { getOrderWithDetails } from "./repositories/orderQueries";
 
+type OrderDetails = NonNullable<Awaited<ReturnType<typeof getOrderWithDetails>>>;
+
 export function useOrderLive(orderId: string | null) {
-  const [orderData, setOrderData] = useState<any>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [snapshot, setSnapshot] = useState<{
+    orderId: string;
+    data: OrderDetails | null;
+    error: string | null;
+  } | null>(null);
 
   useEffect(() => {
-    if (!orderId) {
-      setOrderData(null);
-      setLoading(false);
-      return;
-    }
+    if (!orderId) return;
 
     let isMounted = true;
 
     const fetchInitial = async () => {
-      const data = await getOrderWithDetails(orderId);
-      if (isMounted) {
-        setOrderData(data);
-        setLoading(false);
+      try {
+        const data = await getOrderWithDetails(orderId);
+        if (isMounted) {
+          setSnapshot({
+            orderId,
+            data,
+            error: data ? null : "Auftrag wurde nicht gefunden.",
+          });
+        }
+      } catch (fetchError) {
+        if (isMounted) {
+          setSnapshot({
+            orderId,
+            data: null,
+            error: fetchError instanceof Error ? fetchError.message : "Auftragsdaten konnten nicht aktualisiert werden.",
+          });
+        }
       }
     };
 
-    setOrderData(null);
-    setLoading(true);
     fetchInitial();
 
-    // Supabase Realtime Subscription for this order
-    const channel = supabase
-      .channel(`order_live_${orderId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'events', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'communications', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'price_lines', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'complaints', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .subscribe();
+    const refresh = () => void fetchInitial();
+    const interval = window.setInterval(refresh, 30_000);
+    window.addEventListener("kreile-orders-updated", refresh);
+    window.addEventListener("online", refresh);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
       isMounted = false;
-      supabase.removeChannel(channel);
+      window.clearInterval(interval);
+      window.removeEventListener("kreile-orders-updated", refresh);
+      window.removeEventListener("online", refresh);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [orderId]);
 
-  return { orderData, loading };
+  const current = orderId && snapshot?.orderId === orderId ? snapshot : null;
+  return {
+    orderData: current?.data ?? null,
+    loading: Boolean(orderId && !current),
+    error: current?.error ?? null,
+    refreshMode: "polling" as const,
+  };
 }

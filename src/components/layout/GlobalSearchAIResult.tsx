@@ -1,27 +1,36 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Sparkles, FileText, Download, RefreshCw, MessageSquare } from 'lucide-react';
-import { askGlobalAiAction } from '@/app/actions/aiSearch';
+import { Sparkles, Download } from 'lucide-react';
+import { askGlobalAiAction, type GlobalAiResponse } from '@/app/actions/aiSearch';
 
 interface AIResultProps {
   query: string;
   onClose?: () => void;
 }
 
-export function GlobalSearchAIResult({ query, onClose }: AIResultProps) {
+export function GlobalSearchAIResult({ query }: AIResultProps) {
   const [loading, setLoading] = useState(true);
-  const [result, setResult] = useState<Record<string, any> | null>(null);
+  const [result, setResult] = useState<GlobalAiResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
   
   useEffect(() => {
     let active = true;
     const fetchAi = async () => {
       setLoading(true);
+      setError(null);
       try {
-        const data = await askGlobalAiAction(query);
-        if (active) setResult(data);
+        const response = await askGlobalAiAction(query);
+        if (!active) return;
+        if (response.ok) {
+          setResult(response.data);
+        } else {
+          setResult(null);
+          setError(response.message);
+        }
       } catch (err) {
         console.error(err);
+        if (active) setError("Die KI-Analyse ist momentan nicht verfügbar.");
       } finally {
         if (active) setLoading(false);
       }
@@ -31,7 +40,6 @@ export function GlobalSearchAIResult({ query, onClose }: AIResultProps) {
   }, [query]);
 
   const handlePdfExport = () => {
-    // F-SEARCH-07 PDF Export stub
     window.print();
   };
 
@@ -49,10 +57,10 @@ export function GlobalSearchAIResult({ query, onClose }: AIResultProps) {
     );
   }
 
-  if (!result) {
+  if (error || !result) {
     return (
-      <div className="p-6 text-center text-navy-500">
-        Konnte keine Antwort generieren.
+      <div role="alert" className="p-6 text-center text-navy-500">
+        {error || "Konnte keine Antwort generieren."}
       </div>
     );
   }
@@ -82,7 +90,7 @@ export function GlobalSearchAIResult({ query, onClose }: AIResultProps) {
                 </tr>
               </thead>
               <tbody>
-                {result.kernzahlen.map((kz: Record<string, any>, i: number) => (
+                {result.kernzahlen.map((kz, i) => (
                   <tr key={i} className="border-b border-teal-50 last:border-0 hover:bg-teal-50/30 cursor-pointer transition-colors">
                     <td className="px-3 py-2.5 font-semibold text-navy-900">{kz.label}</td>
                     <td className="px-3 py-2.5 text-right font-bold">{kz.wert}</td>
@@ -132,11 +140,7 @@ export function GlobalSearchAIResult({ query, onClose }: AIResultProps) {
         <div className="flex items-center gap-2 mt-4 pt-3 border-t border-teal-100/50">
           <button onClick={handlePdfExport} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-teal-200 text-teal-800 rounded-md text-xs font-bold hover:bg-teal-50 transition-colors shadow-xs">
             <Download className="w-3.5 h-3.5" />
-            PDF Export
-          </button>
-          <button className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-teal-200 text-teal-800 rounded-md text-xs font-bold hover:bg-teal-50 transition-colors shadow-xs">
-            <MessageSquare className="w-3.5 h-3.5" />
-            Nachfragen
+            Drucken / PDF
           </button>
         </div>
 

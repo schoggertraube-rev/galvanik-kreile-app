@@ -14,6 +14,7 @@ import { appUsers } from "@/db/schema";
 // ─── Testschlüssel ──────────────────────────────────────────────────────────
 const TEST_SECRET = "test-secret-authhelper-unit-tests";
 process.env.APP_SESSION_SECRET = TEST_SECRET;
+process.env.KREILE_SESSION_SECRET = TEST_SECRET;
 
 // ─── Mocks ─────────────────
 const { mockCookieGet } = vi.hoisted(() => ({
@@ -54,8 +55,8 @@ function makeSession(overrides?: Partial<AppSession>): AppSession {
   };
 }
 
-function setMockCookie(session: AppSession) {
-  const token = signAppSession(session, TEST_SECRET);
+async function setMockCookie(session: AppSession) {
+  const token = await signAppSession(session, TEST_SECRET);
   mockCookieGet.mockImplementation((name: string) =>
     name === "kreile_app_session" ? { name, value: token } : undefined
   );
@@ -86,7 +87,7 @@ describe("checkAppSession() – typisierte Fehlergründe (A-11)", () => {
 
   it("abgelaufene Session → UNAUTHORIZED, Meldung enthält 'abgelaufen'", async () => {
     const now = Date.now();
-    setMockCookie(makeSession({ expiresAt: now - 1000 }));
+    await setMockCookie(makeSession({ expiresAt: now - 1000 }));
     const { checkAppSession } = await import("@/lib/server/authHelper");
     const result = await checkAppSession();
     expect(result.ok).toBe(false);
@@ -97,7 +98,7 @@ describe("checkAppSession() – typisierte Fehlergründe (A-11)", () => {
   });
 
   it("falscher Tenant → UNAUTHORIZED, Meldung enthält 'Mandant'", async () => {
-    setMockCookie(makeSession({ tenantId: "andere-firma" }));
+    await setMockCookie(makeSession({ tenantId: "andere-firma" }));
     const { checkAppSession } = await import("@/lib/server/authHelper");
     const result = await checkAppSession();
     expect(result.ok).toBe(false);
@@ -124,7 +125,7 @@ describe("checkAppSession() – typisierte Fehlergründe (A-11)", () => {
   });
 
   it("gültige Session → ok: true, vollständige AppSession", async () => {
-    setMockCookie(makeSession());
+    await setMockCookie(makeSession());
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-xyz",
@@ -152,7 +153,7 @@ describe("checkAppAuth() – Kompatibilität (A-12)", () => {
   });
 
   it("gültige Session, Rolle in READ_ROLES → ok: true, data = Rollenstring", async () => {
-    setMockCookie(makeSession({ role: "meister" }));
+    await setMockCookie(makeSession({ role: "meister" }));
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-xyz",
@@ -169,7 +170,7 @@ describe("checkAppAuth() – Kompatibilität (A-12)", () => {
   });
 
   it("gültige Session, Rolle NICHT in WRITE_ROLES (readonly) → FORBIDDEN", async () => {
-    setMockCookie(makeSession({ role: "readonly" }));
+    await setMockCookie(makeSession({ role: "readonly" }));
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-xyz",
@@ -194,7 +195,7 @@ describe("checkAppAuth() – Kompatibilität (A-12)", () => {
   });
 
   it("gültige Session, admin → ok: true im write-Modus", async () => {
-    setMockCookie(makeSession({ role: "admin" }));
+    await setMockCookie(makeSession({ role: "admin" }));
     vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
       {
         id: "user-xyz",

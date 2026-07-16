@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 
 export function SuggestedItemsPanel({ ocrData, onConfirm }: { ocrData: Record<string, string>, onConfirm: (items: Record<string, unknown>[]) => void }) {
   const [items, setItems] = useState(() => [
-    { id: Date.now().toString(), name: ocrData.itemName || "Bauteil", quantity: parseInt(ocrData.quantity) || 1, surfaceRequested: ocrData.surfaceRequested || "", photo: "" }
+    { id: crypto.randomUUID(), name: ocrData.itemName || "Bauteil", quantity: parseInt(ocrData.quantity) || 1, surfaceRequested: ocrData.surfaceRequested || "", photo: "" }
   ]);
 
   const updateItem = (index: number, key: string, val: string | number) => {
@@ -14,7 +14,7 @@ export function SuggestedItemsPanel({ ocrData, onConfirm }: { ocrData: Record<st
     setItems(newItems);
   }
 
-  const addItem = () => setItems([...items, { id: Date.now().toString() + Math.random(), name: "", quantity: 1, surfaceRequested: "", photo: "" }]);
+  const addItem = () => setItems([...items, { id: crypto.randomUUID(), name: "", quantity: 1, surfaceRequested: "", photo: "" }]);
   const removeItem = (index: number) => setItems(items.filter((_, i) => i !== index));
 
   const handlePhotoCapture = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {

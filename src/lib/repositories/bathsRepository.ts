@@ -1,11 +1,11 @@
-import { createId } from "@paralleldrive/cuid2";
-import { computeBathStatus, BathStatus, BathTargetValues, BathMeasurement } from "@/lib/baths/computeBathStatus";
+import { BathStatus, BathTargetValues, BathMeasurement } from "@/lib/baths/computeBathStatus";
 import {
   getBathsDb,
   getBathByIdDb,
   getBathMeasurementsDb,
-  createBathMeasurementDb,
-  updateBathDb
+  recordBathMeasurementDb,
+  updateBathDb,
+  type BathMeasurementRecord,
 } from "@/app/actions/baths.actions";
 
 export interface Bath {
@@ -26,7 +26,7 @@ export interface BathMeasurementLog extends BathMeasurement {
   id: string;
   bathId: string;
   measuredAt: string;
-  measuredBy: string;
+  measuredBy?: string;
   statusAfterMeasurement: BathStatus;
   note?: string;
 }
@@ -41,6 +41,26 @@ export interface BathAddition {
   reason: string;
   createdBy: string;
   createdAt: string;
+}
+
+const BATH_STATUSES: readonly BathStatus[] = ["critical", "watch", "stable", "not_evaluated"];
+
+function bathStatus(value: string | null): BathStatus {
+  return BATH_STATUSES.includes(value as BathStatus) ? value as BathStatus : "not_evaluated";
+}
+
+function mapMeasurement(row: BathMeasurementRecord): BathMeasurementLog {
+  return {
+    id: row.id,
+    bathId: row.badId,
+    measuredAt: row.measuredAt ? new Date(row.measuredAt).toISOString() : new Date(0).toISOString(),
+    ...(row.measuredByDisplayName ? { measuredBy: row.measuredByDisplayName } : {}),
+    statusAfterMeasurement: bathStatus(row.statusAfterMeasurement),
+    temperature: row.temperature != null ? Number(row.temperature) : null,
+    ph: row.phValue != null ? Number(row.phValue) : null,
+    concentration: null,
+    note: row.notes || undefined,
+  };
 }
 
 export const bathsRepository = {
@@ -68,11 +88,12 @@ export const bathsRepository = {
         bathNumber: b.name.substring(0, 3).toUpperCase(),
         name: b.name,
         processType: b.processType || "unknown",
-        status: (b.status as BathStatus) || "stable",
+        status: bathStatus(b.status),
         stationId: b.stationId || undefined,
         targetValues: targetValues,
         lastMeasurementAt: b.letzteWartung ? new Date(b.letzteWartung).toISOString() : undefined,
-        configurationMissing
+        notes: b.notes || undefined,
+        configurationMissing,
       };
     });
   },
@@ -84,28 +105,11 @@ export const bathsRepository = {
       throw new Error(result.message);
     }
 
-    // In the new schema, bath_measurements has:
-    // id, tenant_id, bath_id, measured_at, temperature, ph_value, notes, created_at.
-    // Each row represents a single measurement run with both temperature and ph_value.
-    // We map this directly to BathMeasurementLog.
-    return result.data.map(row => {
-      const tsStr = row.measuredAt ? new Date(row.measuredAt).toISOString() : new Date().toISOString();
-      return {
-        id: row.id,
-        bathId: row.badId,
-        measuredAt: tsStr,
-        measuredBy: "System", // Not stored in schema, default to System
-        statusAfterMeasurement: "stable" as BathStatus, // Will be computed if we have targetValues
-        temperature: row.temperature != null ? Number(row.temperature) : null,
-        ph: row.phValue != null ? Number(row.phValue) : null,
-        concentration: null, // Concentration not present in remote schema
-        note: row.notes || undefined
-      };
-    });
+    return result.data.map(mapMeasurement);
   },
 
   async getAllAdditions(): Promise<BathAddition[]> {
-    return [];
+    throw new Error("DATA_CAPABILITY_UNAVAILABLE: Badzugaben sind noch nicht an einen persistierten Buchungspfad angebunden.");
   },
 
   async getBathById(id: string): Promise<Bath | null> {
@@ -133,65 +137,45 @@ export const bathsRepository = {
       bathNumber: data.name.substring(0, 3).toUpperCase(),
       name: data.name,
       processType: data.processType || "unknown",
-      status: (data.status as BathStatus) || "stable",
+        status: bathStatus(data.status),
       stationId: data.stationId || undefined,
       targetValues: targetValues,
       lastMeasurementAt: data.letzteWartung ? new Date(data.letzteWartung).toISOString() : undefined,
-      configurationMissing
+      notes: data.notes || undefined,
+      configurationMissing,
     };
   },
 
   async getMeasurementsByBath(bathId: string): Promise<BathMeasurementLog[]> {
-    const all = await this.getAllMeasurements();
-    return all
-      .filter(m => m.bathId === bathId)
-      .sort((a, b) => new Date(b.measuredAt).getTime() - new Date(a.measuredAt).getTime());
+    const result = await getBathMeasurementsDb(bathId);
+    if (!result.ok) throw new Error(result.message);
+    return result.data.map(mapMeasurement);
   },
 
   async getAdditionsByBath(bathId: string): Promise<BathAddition[]> {
-    return [];
+    void bathId;
+    throw new Error("DATA_CAPABILITY_UNAVAILABLE: Badzugaben sind noch nicht an einen persistierten Buchungspfad angebunden.");
   },
 
   async addMeasurement(bathId: string, data: Omit<BathMeasurementLog, "id" | "bathId" | "measuredAt" | "statusAfterMeasurement">): Promise<BathMeasurementLog> {
-    const ts = new Date().toISOString();
-
-    const res = await createBathMeasurementDb({
+    const res = await recordBathMeasurementDb({
       bathId,
-      temperature: data.temperature || null,
-      phValue: data.ph || null,
+      temperature: data.temperature ?? null,
+      phValue: data.ph ?? null,
       notes: data.note || undefined,
-      measuredAt: ts
     });
     if (!res.ok) throw new Error(res.message);
-
-    const bath = await this.getBathById(bathId);
-    let newStatus = bath?.status || "stable";
-
-    if (bath && bath.targetValues) {
-      newStatus = computeBathStatus(data, bath.targetValues);
-    }
-
-    const updateRes = await updateBathDb(bathId, {
-      letzteWartung: ts,
-      status: newStatus
-    });
-    if (!updateRes.ok) throw new Error(updateRes.message);
-
-    return {
-      ...data,
-      id: res.data.id,
-      bathId,
-      measuredAt: ts,
-      statusAfterMeasurement: newStatus
-    };
+    return mapMeasurement(res.data.measurement);
   },
 
   async addAddition(bathId: string, data: Omit<BathAddition, "id" | "bathId" | "createdAt">): Promise<BathAddition> {
+    void bathId;
+    void data;
     throw new Error("addAddition not implemented in DB schema yet.");
   },
 
   async updateBathStatusManual(bathId: string, status: BathStatus, notes: string): Promise<Bath> {
-    const res = await updateBathDb(bathId, { status });
+    const res = await updateBathDb(bathId, { status, notes });
     if (!res.ok) throw new Error(res.message);
 
     const updated = await this.getBathById(bathId);

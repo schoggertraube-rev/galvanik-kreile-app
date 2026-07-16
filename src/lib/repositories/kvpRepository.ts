@@ -1,5 +1,8 @@
-import { createId } from "@paralleldrive/cuid2";
-import { createClient } from "@/lib/supabase/client";
+import {
+  createKvpItemAction,
+  getKvpItemsAction,
+  updateKvpStatusAction,
+} from "@/app/actions/kvp.actions";
 
 export type KvpItem = {
   id: string;
@@ -10,78 +13,31 @@ export type KvpItem = {
   problemDesc: string;
   hasPhoto: boolean;
   date: string;
-  isDemo?: boolean;
 };
-
-const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
 export const kvpRepository = {
   async getAll(): Promise<KvpItem[]> {
-    if (!isSupabase) return [];
-    
-    // Strict: Do not read from shadow DB
-
-    const supabase = createClient();
-    const { data, error } = await supabase.from('kvp_items').select('*').order('created_at', { ascending: false });
-    if (error) {
-      console.error("Supabase kvpRepository.getAll error:", error.message, error.details, error.hint);
-      return [];
-    }
-    
-    return data.map(c => ({
-      id: c.id,
-      title: c.title,
-      category: c.category,
-      benefit: c.benefit,
-      status: c.status as KvpItem["status"],
-      problemDesc: c.problem_desc || "",
-      hasPhoto: c.has_photo,
-      date: c.date || "",
-      isDemo: c.is_demo
-    }));
+    const result = await getKvpItemsAction();
+    if (!result.ok) throw new Error(`DATA_ERROR: ${result.message}`);
+    return result.data;
   },
 
-  async addItem(item: Omit<KvpItem, "id">): Promise<KvpItem> {
-    const id = "b-" + createId();
-    const newItem: KvpItem = { ...item, id };
-    
-
-
-    if (isSupabase) {
-      const supabase = createClient();
-      const { error } = await supabase.from('kvp_items').insert({
-        id,
-        tenant_id: "galvanik-kreile",
-        title: item.title,
-        category: item.category,
-        benefit: item.benefit,
-        status: item.status,
-        problem_desc: item.problemDesc,
-        has_photo: item.hasPhoto,
-        date: item.date,
-        is_demo: item.isDemo || false
-      });
-
-      if (error) {
-        console.error("Supabase kvpRepository.addItem error:", error.message, error.details, error.hint);
-        throw error;
-      }
-    }
-    
-    return newItem;
+  async addItem(item: Omit<KvpItem, "id" | "date"> & { date?: string }): Promise<KvpItem> {
+    const result = await createKvpItemAction({
+      title: item.title,
+      category: item.category,
+      benefit: item.benefit,
+      status: item.status,
+      problemDesc: item.problemDesc,
+      hasPhoto: item.hasPhoto,
+    });
+    if (!result.ok) throw new Error(`DATA_ERROR: ${result.message}`);
+    return result.data;
   },
 
   async updateItemStatus(id: string, status: KvpItem["status"]): Promise<KvpItem | null> {
-    if (isSupabase) {
-      const supabase = createClient();
-      const { error } = await supabase.from('kvp_items').update({ status }).eq('id', id);
-      if (error) {
-        console.error("Supabase kvpRepository.updateItemStatus error:", error.message, error.details, error.hint);
-        throw error;
-      }
-      return { id, status } as unknown as KvpItem;
-    }
-
-    return null;
+    const result = await updateKvpStatusAction(id, status);
+    if (!result.ok) throw new Error(`DATA_ERROR: ${result.message}`);
+    return result.data;
   }
 };

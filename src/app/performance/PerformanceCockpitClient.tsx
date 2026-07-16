@@ -3,12 +3,12 @@
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { AnalyseTileSummary, AnalyseTileKey } from '@/lib/analyse/dataContracts';
 import { AnalyseDrillOverlay } from '@/features/analyse/AnalyseDrillOverlay';
+import { getAnalyseOverview } from '@/features/analyse/analyse.actions';
 
 import { 
-  Moon, Sun, Sparkles, TrendingUp
+  Moon, Sun, Sparkles
 } from 'lucide-react';
 
 import { WerkstattPulsKachel } from "./components/WerkstattPulsKachel";
@@ -19,15 +19,21 @@ import { KundenMarktKachel } from "./components/KundenMarktKachel";
 import { MarketingWirkungKachel } from "./components/MarketingWirkungKachel";
 
 interface Props {
-  overviews: AnalyseTileSummary[];
+  initialOverviews: AnalyseTileSummary[];
+  initialError?: string;
+  initialLoadedAt: string;
 }
 
-export function PerformanceCockpitClient({ overviews }: Props) {
+type AnalysePeriod = 'Heute' | 'Woche' | 'Monat';
+
+export function PerformanceCockpitClient({ initialOverviews, initialError, initialLoadedAt }: Props) {
   const [drillTile, setDrillTile] = useState<AnalyseTileKey | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [tab, setTab] = useState('Monat');
-  const [cmpOn, setCmpOn] = useState(false);
-  const [cmpPer, setCmpPer] = useState('vormonat');
+  const [tab, setTab] = useState<AnalysePeriod>('Monat');
+  const [overviews, setOverviews] = useState(initialOverviews);
+  const [loadedAt, setLoadedAt] = useState(initialLoadedAt);
+  const [dataError, setDataError] = useState<string | null>(initialError || null);
+  const [loadingPeriod, setLoadingPeriod] = useState<AnalysePeriod | null>(null);
   
   // Sync theme
   useEffect(() => {
@@ -42,15 +48,35 @@ export function PerformanceCockpitClient({ overviews }: Props) {
     localStorage.setItem('perfTheme', t);
   };
 
-  const getDeltaText = (rawDataset: string) => {
-    if (!cmpOn) return null;
-    const parts = rawDataset.split('|');
-    for (const p of parts) {
-      const [k, v] = p.split(':');
-      if (k === cmpPer) return `${v} vs. ${cmpPer.charAt(0).toUpperCase() + cmpPer.slice(1)}`;
+  const loadPeriod = async (period: AnalysePeriod) => {
+    if (period === tab || loadingPeriod) return;
+    setLoadingPeriod(period);
+    try {
+      const result = await getAnalyseOverview(period);
+      if (result.error) {
+        setDataError(result.error.message);
+        return;
+      }
+      setOverviews(result.data);
+      setTab(period);
+      setLoadedAt(new Date().toISOString());
+      setDataError(null);
+      setDrillTile(null);
+    } catch {
+      setDataError("Analysedaten konnten nicht geladen werden.");
+    } finally {
+      setLoadingPeriod(null);
     }
-    return null;
   };
+
+  const loadedAtLabel = new Intl.DateTimeFormat('de-DE', {
+    timeZone: 'Europe/Berlin',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(loadedAt));
 
   return (
     <div className={`perf-wrapper ${theme === 'light' ? 'light' : ''}`}>
@@ -198,8 +224,15 @@ export function PerformanceCockpitClient({ overviews }: Props) {
         <div className="hd">
           <div className="ctrls">
             <div className="tabs">
-              {['Woche', 'Monat', 'Quartal', 'Jahr'].map(t => (
-                <button key={t} className={`tabb ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>{t}</button>
+              {(['Heute', 'Woche', 'Monat'] as const).map(period => (
+                <button
+                  key={period}
+                  disabled={loadingPeriod !== null}
+                  className={`tabb ${tab === period ? 'on' : ''}`}
+                  onClick={() => void loadPeriod(period)}
+                >
+                  {loadingPeriod === period ? 'Lädt…' : period}
+                </button>
               ))}
             </div>
             <div className="tsw">
@@ -208,30 +241,19 @@ export function PerformanceCockpitClient({ overviews }: Props) {
             </div>
           </div>
         </div>
-        <div className="stamp"><b>Mai 2026</b><span>·</span>Stand 09:14<span>·</span>22 Werktage · 5 MA</div>
-
-        <div className="cmp-row">
-          <button className={`cmp-btn ${cmpOn ? 'active' : ''}`} onClick={() => setCmpOn(!cmpOn)}>
-            <TrendingUp className="w-4 h-4" />
-            Zeig mir die Veränderungen zu
-          </button>
-          <div className="cmp-dd">
-            {['vorwoche', 'vormongat', 'vorquartal', 'vorjahr'].map(p => (
-              <button key={p} className={`cmp-opt ${cmpPer === p ? 'on' : ''}`} onClick={() => { setCmpPer(p); setCmpOn(true); }}>
-                {p.charAt(0).toUpperCase() + p.slice(1)}
-              </button>
-            ))}
+        <div className="stamp"><b>{overviews[0]?.periodLabel || tab}</b><span>·</span>Abfrage {loadedAtLabel}</div>
+        {dataError && (
+          <div role="alert" className="mb-4 rounded-lg border border-red-400/40 bg-red-500/10 p-3 text-sm text-red-300">
+            {dataError}
           </div>
-          <div className={`cmp-lbl ${cmpOn ? 'show' : ''}`}>
-            <span>Vergleich: {cmpPer.charAt(0).toUpperCase() + cmpPer.slice(1)}</span>
-            <span className="cmp-x" onClick={() => setCmpOn(false)}>✕</span>
-          </div>
+        )}
+        <div className="mb-4 rounded-lg border border-[var(--bd)] bg-[var(--sf)] p-3 text-xs text-[var(--ink2)]">
+          Historische Vergleiche bleiben deaktiviert, bis periodisierte Vergleichsreihen belastbar gespeichert sind.
         </div>
 
         {/* 2. KI-Kachel */}
         <div className="t-grid">
-          <Link href="/performance/ki-empfehlungen" style={{textDecoration:'none',color:'inherit'}}>
-            <div className="t-tile ki-tile">
+            <div className="t-tile ki-tile" style={{cursor:'default'}}>
               <div className="t-glow"></div>
               <div className="t-ico" style={{background: 'var(--posbg)'}}>
                 <Sparkles className="w-5 h-5" style={{color: 'var(--pos)'}} />
@@ -239,15 +261,13 @@ export function PerformanceCockpitClient({ overviews }: Props) {
               <div className="t-th">
                 <div className="t-tl" style={{gap:0}}>
                   <div>
-                    <div className="t-name" style={{color: 'var(--pos)'}}>Was kann ich besser machen?</div>
-                    <div className="ki-hint">KI-Analyse · Tipps · Handlungsempfehlungen für alle Bereiche</div>
+                    <div className="t-name" style={{color: 'var(--pos)'}}>KI-Empfehlungen</div>
+                    <div className="ki-hint">Noch nicht mit belastbarer, periodisierter Evidenz verbunden.</div>
                   </div>
                 </div>
-                <span className="t-pill t-pill-g">6 TIPPS</span>
+                <span className="t-pill t-pill-g">NICHT INSTRUMENTIERT</span>
               </div>
-              <div className="t-arr" style={{opacity:1, color:'var(--pos)'}}>Ansehen →</div>
             </div>
-          </Link>
         </div>
 
         {/* 3. Hauptkacheln */}

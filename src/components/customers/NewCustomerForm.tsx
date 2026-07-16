@@ -5,11 +5,9 @@ import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { customersRepository } from "@/lib/repositories/customersRepository";
-import { Customer } from "@/lib/types/customer";
-import { createClient } from "@/lib/supabase/client";
 import { createCustomerDb } from "@/app/actions/customers.actions";
 import { Loader } from "@googlemaps/js-api-loader";
-import { Building2, Mail, MapPin, Phone, Save, User, UserPlus, Upload, FilePlus2, Copy, AlertTriangle, Camera, X, CheckCircle2 } from "lucide-react";
+import { Building2, Save, AlertTriangle, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
 
 interface NewCustomerFormProps {
@@ -22,7 +20,6 @@ interface NewCustomerFormProps {
 
 export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inline = false }: NewCustomerFormProps) {
   const [loading, setLoading] = useState(false);
-  const [customer, setCustomer] = useState<Customer | null>(null);
   const [errors, setErrors] = useState<Record<string, string[]>>({});
   
   // Form State
@@ -37,7 +34,6 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
   const [customerNumber, setCustomerNumber] = useState("");
   
   // Images
-  const [files, setFiles] = useState<File[]>([]);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [success, setSuccess] = useState(false);
   
@@ -49,7 +45,6 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
     if (customerId) {
       customersRepository.getById(customerId).then(data => {
         if (data) {
-          setCustomer(data);
           setName(data.name || "");
           setCompanyName(data.companyName || "");
           setStreet(data.address || "");
@@ -62,11 +57,6 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
           setCustomerNumber(data.customerNumber || "");
         }
       });
-    } else {
-      // Auto-generate new customer number
-      const year = new Date().getFullYear();
-      const randomId = Math.floor(Math.random() * 10000).toString().padStart(4, "0");
-      setCustomerNumber(`K-${year}-${randomId}`);
     }
     
     // Autofocus
@@ -129,65 +119,10 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
     initAutocomplete();
   }, []);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const selectedFiles = Array.from(e.target.files).filter(
-        file => file.type === "image/jpeg" || file.type === "image/png"
-      );
-      setFiles(prev => [...prev, ...selectedFiles]);
-    }
-  };
-
-  const removeFile = (index: number) => {
-    setFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const removeExistingImage = (index: number) => {
-    setImageUrls(prev => prev.filter((_, i) => i !== index));
-  };
-
   const handleSave = async () => {
     try {
       setLoading(true);
       setErrors({});
-      const supabase = createClient();
-      
-      // 1. Upload new files
-      const uploadedUrls: string[] = [];
-      for (const file of files) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
-        const filePath = `${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("customer-images")
-          .upload(filePath, file);
-
-        if (uploadError) {
-          console.error("Error uploading image:", uploadError);
-          // Even if one fails, we continue with others
-          continue;
-        }
-
-        const { data } = supabase.storage.from("customer-images").getPublicUrl(filePath);
-        uploadedUrls.push(data.publicUrl);
-      }
-      
-      // Also upload previewUrl if provided
-      if (previewUrl && previewUrl.startsWith("data:")) {
-        const response = await fetch(previewUrl);
-        const blob = await response.blob();
-        const fileName = `customer_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.jpg`;
-        const { data, error } = await supabase.storage.from("customer-images").upload(fileName, blob);
-        if (!error && data) {
-          const { data: publicUrlData } = supabase.storage.from("customer-images").getPublicUrl(fileName);
-          uploadedUrls.push(publicUrlData.publicUrl);
-        }
-      }
-
-      const allImageUrls = [...imageUrls, ...uploadedUrls];
-
-      // 2. Save customer
       let savedId = customerId;
       if (customerId) {
         await customersRepository.updateCustomer(customerId, {
@@ -199,11 +134,10 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
           phone,
           email,
           notes,
-          imageUrls: allImageUrls,
         });
       } else {
         const res = await createCustomerDb({
-          name: name,
+          name,
           companyName,
           type: companyName ? "business" : "private",
           address: street,
@@ -212,7 +146,7 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
           phone,
           email,
           notes,
-          imageUrls: allImageUrls,
+          source: "manual",
         });
         if (!res.ok) {
           setErrors({ submit: [res.message || "Unbekannter Fehler"] });
@@ -220,6 +154,7 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
           return;
         } else if (res.data) {
           savedId = res.data.id;
+          setCustomerNumber(res.data.customerNumber);
         }
       }
 
@@ -233,12 +168,7 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
         setSuccess(true);
       }
     } catch (err: unknown) {
-      console.error("Failed to save customer", {
-        message: (err as Error).message || err,
-        details: (err as { details?: unknown }).details,
-        fullError: err
-      });
-      alert(`Fehler beim Speichern: ${(err as Error)?.message || "Unbekannter Fehler. Bitte überprüfen Sie Ihre Internetverbindung."}`);
+      setErrors({ submit: [err instanceof Error ? err.message : "Kunde konnte nicht gespeichert werden."] });
     } finally {
       setLoading(false);
     }
@@ -277,8 +207,9 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
         {/* Left Column: Form */}
         <div className="flex-1 flex flex-col gap-6">
           <p className="text-xs text-text-muted font-bold -mt-2 mb-2">
-            Kundennummer: <span className="font-mono text-navy-900 bg-neutral-gray-100 px-2 py-0.5 rounded border">{customerNumber}</span>
+            Kundennummer: <span className="font-mono text-navy-900 bg-neutral-gray-100 px-2 py-0.5 rounded border">{customerNumber || "wird serverseitig vergeben"}</span>
           </p>
+          {errors.submit && <p className="rounded-xl border border-danger-red/30 bg-danger-red/10 p-3 text-sm font-bold text-danger-red">{errors.submit[0]}</p>}
 
           {/* Body */}
           <div className="space-y-6">
@@ -386,80 +317,35 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
               />
             </div>
             
-            {/* Bilder Upload */}
+            {/* Existing media is read-only until a durable server upload workflow is available. */}
             <div className="space-y-2">
-              <label className="text-xs font-bold text-navy-900">Bilder & Dokumente (JPG/PNG)</label>
+              <label className="text-xs font-bold text-navy-900">Bilder & Dokumente</label>
+              <p className="text-xs text-text-muted">Neue Kundendateien werden in diesem Formular derzeit nicht gespeichert. Der frühere Browser-Direktupload ist deaktiviert.</p>
               <div className="flex items-center gap-4 flex-wrap">
-                <label className="cursor-pointer bg-white border-2 border-dashed border-neutral-gray-300 hover:border-navy-900 hover:bg-bg-app-soft transition-all rounded-xl p-4 flex flex-col items-center justify-center min-w-[120px]">
-                  <Camera className="w-5 h-5 text-navy-900 mb-2" />
-                  <span className="text-[10px] font-bold text-navy-900 text-center">Kamera<br/>starten</span>
-                  <input 
-                    type="file" 
-                    accept="image/jpeg, image/png" 
-                    capture="environment"
-                    className="hidden" 
-                    onChange={handleFileChange}
-                  />
-                </label>
-
-                <label className="cursor-pointer bg-white border-2 border-dashed border-neutral-gray-300 hover:border-navy-900 hover:bg-bg-app-soft transition-all rounded-xl p-4 flex flex-col items-center justify-center min-w-[120px]">
-                  <Upload className="w-5 h-5 text-navy-900 mb-2" />
-                  <span className="text-[10px] font-bold text-navy-900 text-center">Datei<br/>hochladen</span>
-                  <input 
-                    type="file" 
-                    multiple 
-                    accept="image/jpeg, image/png" 
-                    className="hidden" 
-                    onChange={handleFileChange}
-                  />
-                </label>
-                
                 <div className="flex gap-3 overflow-x-auto pb-2">
                   {imageUrls.map((url, idx) => (
-                    <div key={`existing-${idx}`} className="relative shrink-0 group">
+                    <div key={`existing-${idx}`} className="relative shrink-0">
                       <Image 
                         src={url} 
-                        alt="Customer file" 
+                        alt="Gespeicherte Kundendatei"
                         width={64} 
                         height={64} 
                         className="w-16 h-16 object-cover rounded-xl border border-neutral-gray-200"
                       />
-                      <button 
-                        onClick={() => removeExistingImage(idx)}
-                        className="absolute -top-2 -right-2 bg-danger-red text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
                     </div>
                   ))}
-                  {previewUrl && !imageUrls.length && !files.length && (
-                    <div className="relative shrink-0 group">
+                  {previewUrl && !imageUrls.length && (
+                    <div className="relative shrink-0">
                       <Image 
                         src={previewUrl} 
-                        alt="Scanned Preview" 
+                        alt="Nicht gespeicherte Scan-Vorschau"
                         width={64} 
                         height={64} 
                         className="w-16 h-16 object-cover rounded-xl border border-neutral-gray-200"
                       />
+                      <span className="mt-1 block text-[9px] font-bold text-amber-700">nur Vorschau</span>
                     </div>
                   )}
-                  {files.map((file, idx) => (
-                    <div key={`new-${idx}`} className="relative shrink-0 group">
-                      <Image 
-                        src={URL.createObjectURL(file)} 
-                        alt="Customer file preview" 
-                        width={64} 
-                        height={64} 
-                        className="w-16 h-16 object-cover rounded-xl border border-neutral-gray-200"
-                      />
-                      <button 
-                        onClick={() => removeFile(idx)}
-                        className="absolute -top-2 -right-2 bg-danger-red text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>
@@ -482,27 +368,15 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
           </div>
         </div>
 
-        {/* Right Column: Actions */}
+        {/* Follow-up actions are deliberately not simulated here. */}
         <div className="w-full lg:w-[300px] flex flex-col gap-4">
           <div className="bg-white rounded-2xl shadow-xl border border-neutral-gray-200 p-5 space-y-4">
             <h3 className="text-sm font-black font-serif text-navy-900 border-b border-neutral-gray-100 pb-2">
               Aktionen
             </h3>
             
-            <Button className="w-full justify-start h-12 bg-white border border-neutral-gray-200 hover:bg-bg-app-soft text-navy-900 font-bold shadow-sm">
-              <FilePlus2 className="w-4 h-4 mr-3 text-gold-600" />
-              Auftrag anlegen
-            </Button>
-
-            {customerId && customer?.orders && customer.orders.length > 0 && (
-              <Button className="w-full justify-start h-12 bg-white border border-neutral-gray-200 hover:bg-bg-app-soft text-navy-900 font-bold shadow-sm">
-                <Copy className="w-4 h-4 mr-3 text-gold-600" />
-                Letzten Auftrag duplizieren
-              </Button>
-            )}
-            
-            <p className="text-[10px] text-text-muted leading-relaxed mt-4">
-              Wenn Sie sofort einen Auftrag anlegen möchten, können Sie die Schaltflächen hier nutzen. Der Kunde wird vorab automatisch gespeichert.
+            <p className="text-xs text-text-muted leading-relaxed">
+              Erst den Kunden serverseitig speichern. Aufträge werden anschließend über die echte Auftragserfassung angelegt; dieses Formular simuliert keine Folgeaktion.
             </p>
           </div>
         </div>

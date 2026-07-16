@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
+import { guardMockApi } from "@/lib/server/mockApiGuard";
 
 export async function GET() {
+  const blocked = await guardMockApi();
+  if (blocked) return blocked;
   const alerts = [
     { icon: "alert-triangle", title: "Salzsäure fast leer", subtitle: "Bestellung nicht vergessen.", href: "/items", color: "warning" },
     { icon: "info", title: "2 Freigaben fehlen", subtitle: "Kunden warten auf Rückmeldung.", href: "/customers", color: "info" },

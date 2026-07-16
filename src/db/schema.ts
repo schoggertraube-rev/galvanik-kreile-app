@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createId } from "@paralleldrive/cuid2";
 
 // Helper for CUID primary keys
@@ -156,6 +156,7 @@ export const items = pgTable("items", {
 export const events = pgTable("events", {
   id: cuidPrimaryKey("id"),
   tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
+  clientEventId: uuid("client_event_id"),
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   itemId: text("item_id"),
   eventType: varchar("event_type", { length: 100 }).notNull(),
@@ -167,7 +168,11 @@ export const events = pgTable("events", {
   workerId: varchar("worker_id", { length: 100 }),
   station: text("station"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("events_tenant_client_event_uidx").on(table.tenantId, table.clientEventId),
+  index("events_tenant_order_created_idx").on(table.tenantId, table.orderId, table.createdAt),
+  index("events_tenant_item_created_idx").on(table.tenantId, table.itemId, table.createdAt),
+]);
 
 // 6. Complaints / Reklamationen
 export const complaints = pgTable("complaints", {
@@ -200,10 +205,10 @@ export const bathsOld = pgTable("baths", {
 
 export const inventoryItems = pgTable("inventory_items", {
   id: cuidPrimaryKey("id"),
-  tenantId: text("tenant_id"),
+  tenantId: text("tenant_id").notNull(),
   name: text("name").notNull(),
   category: varchar("category", { length: 100 }),
-  currentStock: integer("current_stock").default(0),
+  currentStock: numeric("current_stock", { precision: 14, scale: 4 }).default("0").notNull(),
   minStock: integer("min_stock").default(0),
   unit: varchar("unit", { length: 20 }),
   einkaufspreisEur: numeric("einkaufspreis_eur", { precision: 10, scale: 4 }),
@@ -229,7 +234,11 @@ export const stockMovements = pgTable("stock_movements", {
   vorlageId: uuid("vorlage_id"),
   snapshotEinkaufspreisEur: numeric("snapshot_einkaufspreis_eur", { precision: 10, scale: 4 }),
   notiz: text("notiz"),
-});
+  clientRequestId: uuid("client_request_id"),
+}, (table) => [
+  index("stock_movements_tenant_order_created_idx").on(table.tenantId, table.orderId, table.createdAt),
+  index("stock_movements_tenant_request_idx").on(table.tenantId, table.clientRequestId),
+]);
 
 // Legacy aliases for backward compatibility with old actions
 export const statusEvents = events;
@@ -267,6 +276,20 @@ export const inquiries = pgTable("inquiries", {
   convertedToCustomerId: text("converted_to_customer_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const kvpItems = pgTable("kvp_items", {
+  id: cuidPrimaryKey("id"),
+  tenantId: text("tenant_id").notNull(),
+  title: text("title").notNull(),
+  category: text("category").notNull(),
+  benefit: text("benefit").notNull(),
+  status: text("status").notNull().default("neu"),
+  problemDesc: text("problem_desc"),
+  hasPhoto: boolean("has_photo").notNull().default(false),
+  date: text("date"),
+  isDemo: boolean("is_demo").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // 8.5 Scan Uploads
@@ -328,13 +351,18 @@ export const importJobRows = pgTable("import_job_rows", {
 
 export const auditLog = pgTable("audit_log", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
+  tenantId: text("tenant_id").notNull(),
+  clientRequestId: uuid("client_request_id"),
   action: text("action").notNull(),
   tableName: text("table_name"),
   recordId: text("record_id"),
   actorId: uuid("actor_id").references(() => appUsers.id),
   payload: jsonb("payload"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("audit_log_tenant_request_action_uidx").on(table.tenantId, table.clientRequestId, table.action),
+  index("audit_log_tenant_created_idx").on(table.tenantId, table.createdAt),
+]);
 
 export const companySettingsTable = pgTable("company_settings", {
   id: text("id").primaryKey().default("default"),
@@ -458,8 +486,9 @@ export const qs = pgTable("qs", {
 // 15. Bäder (Galvanik)
 export const baeder = pgTable("baths", {
   id: cuidPrimaryKey("id"),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   name: varchar("name", { length: 100 }).notNull(),
-  status: varchar("status", { length: 50 }).notNull().default("stable"), // ok, warning, critical, stable
+  status: varchar("status", { length: 50 }).notNull().default("not_evaluated"),
   temperatureMin: numeric("temperature_min", { precision: 5, scale: 2 }),
   temperatureMax: numeric("temperature_max", { precision: 5, scale: 2 }),
   phMin: numeric("ph_min", { precision: 4, scale: 2 }),
@@ -468,6 +497,7 @@ export const baeder = pgTable("baths", {
   targetValues: jsonb("target_values").notNull().default({}),
   processType: text("process_type").notNull().default("unknown"),
   stationId: text("station_id"),
+  notes: text("notes"),
 });
 
 // 16. Bad-Messwerte (Historie)
@@ -478,6 +508,8 @@ export const badMesswerte = pgTable("bath_measurements", {
   temperature: numeric("temperature", { precision: 10, scale: 2 }),
   phValue: numeric("ph_value", { precision: 10, scale: 2 }),
   notes: text("notes"),
+  statusAfterMeasurement: varchar("status_after_measurement", { length: 50 }).notNull().default("not_evaluated"),
+  measuredByUserId: text("measured_by_user_id").references(() => appUsers.id, { onDelete: "restrict" }),
   measuredAt: timestamp("measured_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -509,17 +541,28 @@ export const communications = pgTable("communications", {
   tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   customerId: text("customer_id").references(() => customers.id),
   orderId: text("order_id").references(() => orders.id, { onDelete: "cascade" }),
+  createdBy: uuid("created_by").references(() => appUsers.id),
   subject: text("subject"),
   body: text("body"),
   type: text("type"),
   channelType: text("channel_type"),
   resendMessageId: text("resend_message_id"),
+  recipient: text("recipient"),
+  templateKey: text("template_key"),
+  idempotencyKey: text("idempotency_key"),
   status: text("status").default("queued"),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  errorCode: text("error_code"),
   openedAt: timestamp("opened_at"),
   bouncedAt: timestamp("bounced_at"),
   complainedAt: timestamp("complained_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("communications_tenant_idempotency_uidx").on(table.tenantId, table.idempotencyKey),
+  index("communications_delivery_status_idx").on(table.status, table.claimedAt),
+]);
 
 export const emailTemplates = pgTable("email_templates", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -533,6 +576,63 @@ export const emailTemplates = pgTable("email_templates", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const emailWebhookEvents = pgTable("email_webhook_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  providerEventId: text("provider_event_id").notNull(),
+  providerMessageId: text("provider_message_id"),
+  eventType: text("event_type").notNull(),
+  status: text("status").notNull().default("processing"),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  errorCode: text("error_code"),
+  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("email_webhook_events_provider_event_uidx").on(table.providerEventId),
+  index("email_webhook_events_message_idx").on(table.providerMessageId, table.receivedAt),
+]);
+
+export const appUsageEvents = pgTable("app_usage_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  clientEventId: uuid("client_event_id").notNull(),
+  actorPseudonym: varchar("actor_pseudonym", { length: 64 }).notNull(),
+  actorRole: varchar("actor_role", { length: 50 }).notNull(),
+  sessionId: uuid("session_id").notNull(),
+  eventType: varchar("event_type", { length: 50 }).notNull(),
+  route: varchar("route", { length: 200 }).notNull(),
+  target: varchar("target", { length: 100 }),
+  deviceClass: varchar("device_class", { length: 20 }).notNull(),
+  outcome: varchar("outcome", { length: 20 }),
+  durationMs: integer("duration_ms"),
+  resultCount: integer("result_count"),
+  queryLength: integer("query_length"),
+  clickCount: integer("click_count"),
+  buildId: varchar("build_id", { length: 100 }),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("app_usage_events_tenant_client_uidx").on(table.tenantId, table.clientEventId),
+  index("app_usage_events_tenant_occurred_idx").on(table.tenantId, table.occurredAt),
+  index("app_usage_events_tenant_type_idx").on(table.tenantId, table.eventType, table.occurredAt),
+]);
+
+export const developerFeedback = pgTable("developer_feedback", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  clientRequestId: uuid("client_request_id").notNull(),
+  actorPseudonym: varchar("actor_pseudonym", { length: 64 }).notNull(),
+  actorRole: varchar("actor_role", { length: 50 }).notNull(),
+  route: varchar("route", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  buildId: varchar("build_id", { length: 100 }),
+  status: varchar("status", { length: 20 }).notNull().default("new"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("developer_feedback_actor_request_uidx").on(table.tenantId, table.actorPseudonym, table.clientRequestId),
+  index("developer_feedback_tenant_created_idx").on(table.tenantId, table.createdAt),
+  index("developer_feedback_tenant_status_idx").on(table.tenantId, table.status, table.createdAt),
+]);
 
 export const priceLines = pgTable("price_lines", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -558,6 +658,9 @@ export const payments = pgTable("payments", {
   providerIntentId: text("provider_intent_id"),
   mollieStatus: text("mollie_status"),
   mollieMethod: text("mollie_method"),
+  quoteDigest: text("quote_digest"),
+  webhookTokenHash: text("webhook_token_hash"),
   receiptUrl: text("receipt_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });

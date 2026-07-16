@@ -1,110 +1,61 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { corsHeaders, handleCors, requireServiceRole } from "../_shared/security.ts";
+import {
+  claimAiUsage,
+  exactObject,
+  optionalText,
+  parseInternalAiBody,
+  requiredText,
+  settleAiUsage,
+} from "../_shared/aiUsage.ts";
+import { generateGeminiJson } from "../_shared/geminiJson.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const FEATURE = "inquiry-extract";
+
+function parseInput(value: unknown) {
+  const input = exactObject(value, ["text", "subject"]);
+  return {
+    text: requiredText(input.text, 12_000),
+    subject: optionalText(input.subject, 300),
+  };
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+  const cors = corsHeaders(req);
+  const preflight = handleCors(req);
+  if (preflight) return preflight;
+  const unauthorized = requireServiceRole(req);
+  if (unauthorized) return unauthorized;
+
+  let parsed;
+  try {
+    parsed = parseInternalAiBody(await req.json(), FEATURE, parseInput);
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid request" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
   }
 
   try {
-    const { text, subject } = await req.json()
-
-    if (!text) {
-      throw new Error("Missing 'text' in request body.")
+    if (!await claimAiUsage(parsed.usage)) {
+      return new Response(JSON.stringify({ error: "Usage reservation unavailable" }), { status: 409, headers: { ...cors, "Content-Type": "application/json" } });
     }
-
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
-    if (!geminiApiKey) {
-      throw new Error("Missing GEMINI_API_KEY environment variable.")
-    }
-
-    const systemPrompt = `Du analysierst E-Mails/Webformulare an eine Galvanik, um daraus eine Anfrage für einen Kostenvoranschlag zu generieren.
-Extrahiere strukturierte Auftragsdaten und Verhaltenshinweise.
-
-Antworte ausschließlich im JSON Format nach folgendem Schema:
-{
-  "customer": {
-    "name": "string oder null",
-    "companyName": "string oder null",
-    "phone": "string oder null",
-    "email": "string oder null",
-    "city": "string oder null"
-  },
-  "items": [
-    {
-      "name": "string",
-      "material": "string oder null",
-      "surfaceRequested": "string oder null",
-      "quantity": number
-    }
-  ],
-  "order": {
-    "title": "Kurztitel der Anfrage",
-    "priority": "normal oder express"
-  },
-  "behaviorNote": {
-    "text": "Verhaltenshinweise, Vorlieben, Dringlichkeiten oder null"
+  } catch {
+    return new Response(JSON.stringify({ error: "Usage accounting unavailable" }), { status: 503, headers: { ...cors, "Content-Type": "application/json" } });
   }
-}
 
-E-Mail Betreff: ${subject || "Kein Betreff"}
-E-Mail Text:
-${text}`
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [
-          { role: "user", parts: [{ text: systemPrompt }] }
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: "application/json"
-        }
-      })
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Gemini API error: ${response.status} ${errorText}`)
-    }
-
-    const aiData = await response.json()
-    const content = aiData.candidates?.[0]?.content?.parts?.[0]?.text
-    
-    if (!content) {
-      throw new Error("No text content returned from Gemini")
-    }
-
-    let result
+  try {
+    const generated = await generateGeminiJson({
+      prompt: `Extrahiere ausschließlich belegte Angaben aus dieser Anfrage an einen Galvanikbetrieb. Erfinde keine Werte. Antworte als JSON-Objekt mit customer, items, order und behaviorNote.\n\nBetreff: ${parsed.input.subject ?? "kein Betreff"}\nText:\n${parsed.input.text}`,
+      maxOutputTokens: 1_024,
+      temperature: 0.1,
+    });
+    await settleAiUsage({ usage: parsed.usage, outcome: "succeeded", actualUnits: generated.actualUnits, providerStatus: generated.providerStatus, result: generated.result });
+    return new Response(JSON.stringify(generated.result), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
+  } catch {
     try {
-      result = JSON.parse(content);
-    } catch (e) {
-      const match = content.match(/\{[\s\S]*\}/);
-      if (match) {
-         result = JSON.parse(match[0]);
-      } else {
-         throw new Error("AI returned invalid JSON format")
-      }
+      await settleAiUsage({ usage: parsed.usage, outcome: "uncertain", actualUnits: null, providerStatus: "gemini-error" });
+    } catch {
+      // Accounting failure remains fail-closed.
     }
-
-    return new Response(
-      JSON.stringify(result),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    )
-
-  } catch (error) {
-    console.error(error)
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    )
+    return new Response(JSON.stringify({ error: "AI provider unavailable" }), { status: 503, headers: { ...cors, "Content-Type": "application/json" } });
   }
-})
+});

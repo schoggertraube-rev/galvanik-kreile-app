@@ -3,18 +3,20 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
 import { useEffect, useState } from "react";
-import { getAttributionData } from "./actions";
+import { getAttributionData, type ChannelAttribution } from "./actions";
 import { Activity, ArrowUpRight, TrendingUp, DollarSign } from "lucide-react";
 
 export default function AttributionPage() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<ChannelAttribution[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     getAttributionData().then(res => {
       setData(res);
-      setLoading(false);
-    });
+    }).catch(() => {
+      setError("Attributionsdaten konnten nicht geladen werden.");
+    }).finally(() => setLoading(false));
   }, []);
 
   const totalLeads = data.reduce((acc, row) => acc + row.leads, 0);
@@ -30,8 +32,10 @@ export default function AttributionPage() {
       
       <div className="mb-8">
         <h1 className="text-2xl font-bold mb-2">Attribution & ROI</h1>
-        <p className="text-slate-500">Live-Auswertung: Touchpoint ➔ Lead ➔ Auftrag ➔ Umsatz</p>
+        <p className="text-slate-500">Gespeicherte Zuordnung: Touchpoint ➔ Lead ➔ Auftrag ➔ Umsatz. Keine Live- oder Vollständigkeitsbehauptung.</p>
       </div>
+
+      {error && <div role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
         <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
@@ -63,7 +67,8 @@ export default function AttributionPage() {
             <thead>
               <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
                 <th className="p-4 font-medium">Kanal</th>
-                <th className="p-4 font-medium">Ausgaben (Mtl.)</th>
+                <th className="p-4 font-medium">Budget (Plan)</th>
+                <th className="p-4 font-medium">Ist-Ausgaben</th>
                 <th className="p-4 font-medium">Leads</th>
                 <th className="p-4 font-medium">Aufträge</th>
                 <th className="p-4 font-medium">Umsatz</th>
@@ -71,15 +76,18 @@ export default function AttributionPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {data.map((row, idx) => (
-                <tr key={idx} className="hover:bg-slate-50">
+              {data.map((row) => (
+                <tr key={row.kanal} className="hover:bg-slate-50">
                   <td className="p-4 font-medium text-slate-900 capitalize">{row.kanal}</td>
-                  <td className="p-4 text-slate-600">{row.ausgaben} €</td>
+                  <td className="p-4 text-slate-600">{row.plannedBudget.toLocaleString('de-DE')} €</td>
+                  <td className="p-4 text-slate-500">{row.actualSpend === null ? 'Nicht erfasst' : `${row.actualSpend.toLocaleString('de-DE')} €`}</td>
                   <td className="p-4 font-semibold text-blue-600">{row.leads}</td>
                   <td className="p-4 font-semibold text-indigo-600">{row.auftraege}</td>
                   <td className="p-4 font-semibold text-green-600">{row.umsatz.toLocaleString('de-DE')} €</td>
                   <td className="p-4">
-                    {row.roi > 0 ? (
+                    {row.roi === null ? (
+                      <span className="text-slate-400">Nicht berechenbar</span>
+                    ) : row.roi > 0 ? (
                       <span className="inline-flex items-center gap-1 text-green-600 bg-green-50 px-2 py-1 rounded-full text-sm font-medium">
                         <ArrowUpRight size={16} /> {row.roi.toFixed(1)}%
                       </span>
@@ -87,15 +95,13 @@ export default function AttributionPage() {
                       <span className="inline-flex items-center gap-1 text-red-600 bg-red-50 px-2 py-1 rounded-full text-sm font-medium">
                         {row.roi.toFixed(1)}%
                       </span>
-                    ) : (
-                      <span className="text-slate-400">n/a</span>
-                    )}
+                    ) : <span className="text-slate-400">0,0%</span>}
                   </td>
                 </tr>
               ))}
               {data.length === 0 && !loading && (
                 <tr>
-                  <td colSpan={6} className="p-8 text-center text-slate-500">
+                  <td colSpan={7} className="p-8 text-center text-slate-500">
                     Keine Attributionsdaten vorhanden.
                   </td>
                 </tr>

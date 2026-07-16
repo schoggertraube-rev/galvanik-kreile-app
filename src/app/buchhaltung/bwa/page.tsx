@@ -13,23 +13,32 @@ export default function BwaPage() {
   usePageView();
   const [bwa, setBwa] = useState<Bwa | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
-      const provider = getBuchhaltungProvider();
-      const now = new Date();
-      const data = await provider.getBwa({
-        von: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`,
-        bis: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`,
-      });
-      setBwa(data);
-      setLoading(false);
+      try {
+        const provider = getBuchhaltungProvider();
+        const now = new Date();
+        const data = await provider.getBwa({
+          von: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`,
+          bis: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`,
+        });
+        setBwa(data);
+      } catch {
+        setError("Die BWA konnte nicht aus der Datenbank geladen werden.");
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, []);
 
-  if (loading || !bwa) {
+  if (loading) {
     return <div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-3 border-accent-orange/20 border-t-accent-orange rounded-full animate-spin" /></div>;
+  }
+  if (error || !bwa) {
+    return <FinanceLoadError title="BWA nicht verfügbar" message={error ?? "Es liegen keine auswertbaren Daten vor."} />;
   }
 
   return (
@@ -50,15 +59,15 @@ export default function BwaPage() {
       <h1 className="text-2xl font-extrabold text-navy-900 mb-1">Betriebswirtschaftliche Auswertung</h1>
       <p className="text-sm text-text-muted mb-8">
         {new Date(bwa.zeitraum.von).toLocaleDateString("de-DE", { month: "long", year: "numeric" })}
-        <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">Demo-Daten</span>
+        <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">Datenbank-Auswertung · vorläufig</span>
       </p>
 
       {/* KPI-Band */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <KPI label="Umsatzerlöse" value={`${bwa.umsatzerloese.toLocaleString("de-DE")} €`} icon={<TrendingUp className="w-5 h-5 text-emerald-500" />} positive />
-        <KPI label="Deckungsbeitrag" value={`${bwa.deckungsbeitrag.toLocaleString("de-DE")} €`} icon={<BarChart3 className="w-5 h-5 text-blue-500" />} positive />
+        <KPI label="Umsatzerlöse" value={`${bwa.umsatzerloese.toLocaleString("de-DE")} €`} icon={<TrendingUp className="w-5 h-5 text-emerald-500" />} />
+        <KPI label="Deckungsbeitrag" value={`${bwa.deckungsbeitrag.toLocaleString("de-DE")} €`} icon={<BarChart3 className="w-5 h-5 text-blue-500" />} />
         <KPI label="Fixkosten" value={`${bwa.fixkosten.toLocaleString("de-DE")} €`} icon={<TrendingDown className="w-5 h-5 text-red-500" />} />
-        <KPI label="Betriebsergebnis" value={`${bwa.betriebsergebnis.toLocaleString("de-DE")} €`} icon={<TrendingUp className="w-5 h-5 text-emerald-500" />} positive highlight />
+        <KPI label="Betriebsergebnis" value={`${bwa.betriebsergebnis.toLocaleString("de-DE")} €`} icon={<TrendingUp className="w-5 h-5 text-emerald-500" />} highlight />
       </div>
 
       {/* Positionen */}
@@ -91,7 +100,20 @@ export default function BwaPage() {
   );
 }
 
-function KPI({ label, value, icon, positive, highlight }: { label: string; value: string; icon: React.ReactNode; positive?: boolean; highlight?: boolean }) {
+function FinanceLoadError({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="w-full px-4 sm:px-6 xl:px-8 py-10">
+      <BackButton label="Buchhaltung" href="/buchhaltung" />
+      <div className="mt-6 max-w-2xl rounded-2xl border border-red-200 bg-red-50 p-6">
+        <h1 className="text-lg font-extrabold text-red-900">{title}</h1>
+        <p className="mt-2 text-sm text-red-800">{message}</p>
+        <p className="mt-2 text-xs text-red-700">Es werden keine Ersatz- oder Demo-Werte angezeigt.</p>
+      </div>
+    </div>
+  );
+}
+
+function KPI({ label, value, icon, highlight }: { label: string; value: string; icon: React.ReactNode; highlight?: boolean }) {
   return (
     <div className={`rounded-2xl border shadow-sm p-5 flex items-center gap-4 ${highlight ? "bg-emerald-50 border-emerald-200" : "bg-white border-neutral-gray-100"}`}>
       <div className="w-10 h-10 rounded-xl bg-neutral-gray-50 flex items-center justify-center shrink-0">{icon}</div>

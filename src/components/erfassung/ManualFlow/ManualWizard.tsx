@@ -6,7 +6,13 @@ import { User, Sparkles, ChevronDown, Check, Loader2 } from "lucide-react";
 import { CustomerSection } from "./CustomerSection";
 import { ItemsSection } from "./ItemsSection";
 import { DateSection } from "./DateSection";
-import { createOrderFromErfassung } from "@/app/actions/erfassung.actions";
+import { ordersRepository } from "@/lib/repositories/ordersRepository";
+
+type ManualDateInfo = {
+  dueDate?: string;
+  timeWindow?: "ganztaegig" | "vormittags" | "nachmittags" | "spaet";
+  calendarSync?: boolean;
+};
 
 export function ManualWizard() {
   const { options, closeErfassung, setIsDirty } = useErfassung();
@@ -14,7 +20,7 @@ export function ManualWizard() {
   // State for the three mandatory sections
   const [customer, setCustomer] = useState<Record<string, unknown> | null>(options?.prefill?.customer || null);
   const [items, setItems] = useState<Record<string, unknown>[]>(options?.prefill?.items || []);
-  const [dateInfo, setDateInfo] = useState<Record<string, unknown>>({ priority: options?.prefill?.order?.priority || "normal", shipping: "abholung" });
+  const [dateInfo, setDateInfo] = useState<ManualDateInfo>({});
   
   // Optional toggles
   const [showFreetext, setShowFreetext] = useState(false);
@@ -33,22 +39,18 @@ export function ManualWizard() {
 
   useEffect(() => {
     if (options?.customerId && !customer) {
-      // Fetch customer data if only ID was provided
-      fetch(`/api/erfassung/customer-search`) // this might not work perfectly, better to use the server action directly?
-        // Actually, we can just use getCustomerByIdDb directly from an action
-        import("@/app/actions/customers.actions").then(({ getCustomerByIdDb }) => {
-          getCustomerByIdDb(options.customerId as string).then(res => {
-            if (res.ok && res.data) {
-              setCustomer(res.data);
-            }
-          });
+      import("@/app/actions/customers.actions").then(({ getCustomerByIdDb }) => {
+        getCustomerByIdDb(options.customerId as string).then(res => {
+          if (res.ok && res.data) {
+            setCustomer(res.data);
+          }
         });
+      });
     }
   }, [options?.customerId, customer]);
 
   const handleSave = async () => {
-    // Basic validation
-    if (!customer?.id) return alert("Bitte wähle einen Kunden aus.");
+    if (typeof customer?.id !== "string" || !customer.id) return alert("Bitte wähle einen Kunden aus.");
     if (items.length === 0) return alert("Bitte füge mindestens ein Teil hinzu.");
     if (!dateInfo.dueDate) return alert("Bitte gib einen Liefertermin an.");
     
@@ -63,28 +65,40 @@ export function ManualWizard() {
 
     setIsSubmitting(true);
     try {
-      const result = await createOrderFromErfassung({
+      const orderParts = items.map((item, index) => {
+        const name = typeof item.name === "string" ? item.name.trim() : "";
+        const quantity = Number(item.quantity);
+        if (!name || !Number.isSafeInteger(quantity) || quantity < 1) {
+          throw new Error(`Position ${index + 1} benötigt eine Bezeichnung und eine gültige ganze Menge.`);
+        }
+        const material = typeof item.material === "string" ? item.material.trim() : "";
+        const surfaceRequested = typeof item.target === "string"
+          ? item.target.trim()
+          : (typeof item.surfaceRequested === "string" ? item.surfaceRequested.trim() : "");
+        return {
+          name,
+          quantity,
+          ...(material ? { material } : {}),
+          ...(surfaceRequested ? { surfaceRequested } : {}),
+        };
+      });
+      const title = orderParts[0]?.name;
+      if (!title) throw new Error("Der Auftrag benötigt einen belastbaren Titel.");
+
+      const created = await ordersRepository.create({
         customerId: customer.id,
-        items,
-        priority: dateInfo.priority,
-        dueDate: dateInfo.dueDate,
-        timeWindow: dateInfo.timeWindow,
-        calendarSync: dateInfo.calendarSync,
-        freetextOriginal: freetext,
-        behaviorNote,
+        title,
+        parts: orderParts,
+        dueDate: String(dateInfo.dueDate),
+        ...(dateInfo.timeWindow ? { timeWindow: dateInfo.timeWindow } : {}),
+        calendarSync: dateInfo.calendarSync === true,
+        ...(freetext.trim() ? { freetextOriginal: freetext.trim() } : {}),
+        ...(behaviorNote.trim() ? { customerBehaviorNote: behaviorNote.trim() } : {}),
         isQuote: options?.intent === "create_quote",
         source: options?.source || "manual",
-        sourceRef: options?.sourceRef || null,
-        title: items[0]?.name || "Unbenannt",
+        ...(options?.sourceRef ? { sourceRef: options.sourceRef } : {}),
       });
-
-      if (!result.ok) {
-        alert("Fehler beim Speichern: " + result.error);
-        setIsSubmitting(false);
-        return;
-      }
-
-      setSuccessResult(result.order as { isQuote?: boolean; orderNumber?: string; id?: string });
+      setSuccessResult(created);
     } catch (e: unknown) {
       if (e instanceof Error) {
         alert("Fehler beim Speichern: " + e.message);
@@ -198,7 +212,7 @@ export function ManualWizard() {
                 </div>
                 <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-red-100 text-red-700 rounded-full">PFLICHT</span>
               </div>
-              <DateSection dateInfo={dateInfo} onChange={setDateInfo} customer={customer} />
+              <DateSection dateInfo={dateInfo} onChange={setDateInfo} />
             </section>
           </>
         )}

@@ -1,47 +1,70 @@
-import { supabase } from "@/lib/supabase/client";
-import { PaymentProvider, PaymentIntentOptions } from "./paymentProvider";
+import {
+  boundedApiError,
+  isValidMolliePaymentId,
+  parsePaymentIntentApiSuccess,
+  parsePaymentStatusApiSuccess,
+} from "./mollieClientContract";
+import type {
+  PaymentIntentOptions,
+  PaymentIntentResult,
+  PaymentProvider,
+  PaymentStatusResult,
+} from "./paymentProvider";
+
+async function readJson(response: Response): Promise<unknown> {
+  const declaredLength = Number(response.headers.get("content-length") ?? "0");
+  if (Number.isFinite(declaredLength) && declaredLength > 32_768) throw new Error("RESPONSE_TOO_LARGE");
+  const body = await response.text();
+  if (body.length > 32_768) throw new Error("RESPONSE_TOO_LARGE");
+  return JSON.parse(body) as unknown;
+}
 
 export class MollieAdapter implements PaymentProvider {
-  async createPaymentIntent(opts: PaymentIntentOptions): Promise<{ success: boolean; checkoutUrl?: string; intentId?: string; error?: string }> {
+  async createPaymentIntent(opts: PaymentIntentOptions): Promise<PaymentIntentResult> {
     try {
-      const { data, error } = await supabase.functions.invoke("mollie-create-payment", {
-        body: opts,
+      const response = await fetch("/api/payments/mollie/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: opts.orderId }),
       });
-
-      if (error) {
-        console.error("MollieAdapter Create Error:", error);
-        return { success: false, error: error.message };
+      const data = await readJson(response);
+      if (!response.ok) {
+        return { success: false, error: boundedApiError(data, "Zahlungsanfrage fehlgeschlagen") };
       }
-
-      return { success: data.success, checkoutUrl: data.checkoutUrl, intentId: data.intentId, error: data.error };
-    } catch (e: any) {
-      console.error("MollieAdapter Exception:", e);
-      return { success: false, error: e.message };
+      const parsed = parsePaymentIntentApiSuccess(data);
+      return parsed ?? { success: false, error: "Ungültige Antwort des Zahlungsdienstes" };
+    } catch {
+      return { success: false, error: "Zahlungsdienst derzeit nicht erreichbar" };
     }
   }
 
-  async getPaymentStatus(intentId: string): Promise<{ success: boolean; status?: string; error?: string }> {
+  async getPaymentStatus(intentId: string): Promise<PaymentStatusResult> {
+    if (!isValidMolliePaymentId(intentId)) {
+      return { success: false, error: "Ungültige Zahlungs-ID" };
+    }
     try {
-      const { data, error } = await supabase
-        .from('payments')
-        .select('status, mollie_status')
-        .eq('provider_intent_id', intentId)
-        .single();
-
-      if (error) return { success: false, error: error.message };
-      return { success: true, status: data.status };
-    } catch (e: any) {
-      return { success: false, error: e.message };
+      const response = await fetch(`/api/payments/mollie/status?intentId=${encodeURIComponent(intentId)}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+      const data = await readJson(response);
+      if (!response.ok) {
+        return { success: false, error: boundedApiError(data, "Zahlungsstatus nicht verfügbar") };
+      }
+      const parsed = parsePaymentStatusApiSuccess(data);
+      return parsed ?? { success: false, error: "Ungültige Statusantwort" };
+    } catch {
+      return { success: false, error: "Zahlungsstatus derzeit nicht erreichbar" };
     }
   }
 
   supportsTapToPay(): boolean {
-    return false; // Mollie does not natively support Tap-to-Pay via NFC without external hardware
+    return false;
   }
 
   async cancelPayment(intentId: string): Promise<{ success: boolean; error?: string }> {
-    // Basic implementation
-    return { success: false, error: "Not implemented in MVP" };
+    void intentId;
+    return { success: false, error: "Stornierung ist noch nicht angebunden" };
   }
 }
 

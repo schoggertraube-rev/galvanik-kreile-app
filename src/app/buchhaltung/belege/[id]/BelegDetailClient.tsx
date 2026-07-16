@@ -3,12 +3,11 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
 import { usePageView } from "@/hooks/usePageView";
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight, ArrowLeft, Save, ShieldCheck, XCircle, FileText, CheckCircle2, AlertTriangle, Clock, Anchor, Euro, Package, Navigation } from "lucide-react";
+import { ChevronRight, ArrowLeft, Save, ShieldCheck, XCircle, FileText, CheckCircle2, AlertTriangle, Clock, Anchor, Euro, Navigation } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
-import { useOfflineManager } from "@/hooks/useOfflineManager";
 import type { BelegDetail } from "@/lib/buchhaltung/types";
 import { freigebenBelegAction, stornoBelegAction } from "@/app/buchhaltung/actions";
 import Image from "next/image";
@@ -20,21 +19,19 @@ interface BelegDetailClientProps {
 
 export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) {
   usePageView();
-  const offlineManager = useOfflineManager();
-
   const beleg = initialBeleg;
 
   const [form, setForm] = useState(() => beleg ? {
-    lieferant: beleg.lieferantText || beleg.lieferant?.name || "Unbekannt",
-    datum: beleg.belegdatum ? new Date(beleg.belegdatum).toISOString().split('T')[0] : new Date(beleg.erfasstAm).toISOString().split('T')[0],
+    lieferant: beleg.lieferantText || beleg.lieferant?.name || "",
+    datum: beleg.belegdatum || "",
     belegnummer: beleg.rechnungsnummerExtern || "",
-    brutto: (beleg.brutto || 0).toString(),
-    netto: (beleg.netto || 0).toString(),
-    ustSatz: (beleg.ustSatz || 0).toString(),
-    ustBetrag: (beleg.ustBetrag || 0).toString(),
-    kategorie: beleg.kategorie?.name || beleg.kategorieId || "Büro",
+    brutto: beleg.brutto?.toString() ?? "",
+    netto: beleg.netto?.toString() ?? "",
+    ustSatz: beleg.ustSatz?.toString() ?? "",
+    ustBetrag: beleg.ustBetrag?.toString() ?? "",
+    kategorie: beleg.kategorie?.name || beleg.kategorieId || "Nicht kategorisiert",
     skrKonto: beleg.skrKonto || "",
-    absetzbar: (beleg.absetzbarProzent || 100).toString(),
+    absetzbar: beleg.absetzbarProzent.toString(),
     notiz: beleg.absetzbarGrund || "",
   } : null);
 
@@ -78,52 +75,54 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
   };
 
   const handleSave = async () => {
-    if (!form.lieferant || !form.brutto) {
-      showToast("Pflichtfelder fehlen: Lieferant und Brutto sind erforderlich.");
+    const parseDecimal = (value: string): number | null => {
+      const normalized = value.trim().replace(',', '.');
+      if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
+      const parsed = Number(normalized);
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+    const brutto = parseDecimal(form.brutto);
+    const netto = parseDecimal(form.netto);
+    const ustSatz = parseDecimal(form.ustSatz);
+    const ustBetrag = parseDecimal(form.ustBetrag);
+    const absetzbarProzent = parseDecimal(form.absetzbar);
+    if (
+      !form.lieferant.trim() || !form.datum || brutto === null || netto === null
+      || ustSatz === null || ustBetrag === null || absetzbarProzent === null
+    ) {
+      showToast("Lieferant, Datum und gültige Beträge mit höchstens zwei Nachkommastellen sind erforderlich.");
       return;
     }
     
     const korrektur = {
-      lieferantId: form.lieferant,
-      brutto: parseFloat(form.brutto),
-      netto: parseFloat(form.netto),
-      ustBetrag: parseFloat(form.ustBetrag)
+      lieferantText: form.lieferant.trim(),
+      belegdatum: form.datum,
+      rechnungsnummerExtern: form.belegnummer,
+      brutto,
+      netto,
+      ustSatz,
+      ustBetrag,
+      skrKonto: form.skrKonto,
+      absetzbarProzent,
+      absetzbarGrund: form.notiz,
     };
     
     try {
-      await freigebenBelegAction(id, korrektur);
-      setStatus("erfasst");
-      showToast("Korrektur gespeichert. Im GoBD-Modus wird jede Korrektur über Audit-Log nachvollzogen.");
-    } catch (err) {
-      console.warn("Korrektur failed", err);
-      offlineManager.enqueueAction({
-        id: crypto.randomUUID(),
-        type: "BUCHHALTUNG_BELEG_UPDATE",
-        payload: { id, korrektur },
-        timestamp: new Date().toISOString(),
-        status: "pending"
-      });
-      setStatus("erfasst");
-      showToast("Offline gespeichert: Korrektur wird später synchronisiert.");
+      const saved = await freigebenBelegAction(id, korrektur);
+      setStatus(saved.status);
+      showToast("Korrektur wurde in der Datenbank gespeichert.");
+    } catch {
+      showToast("Korrektur konnte nicht gespeichert werden. Der angezeigte Datenbankstand bleibt unverändert.");
     }
   };
 
   const handleFreigabe = async () => {
     try {
-      await freigebenBelegAction(id);
-      setStatus("festgeschrieben");
-      showToast("Beleg freigegeben. Spätere GoBD-Festschreibung erfolgt mit Backend-Trigger.");
-    } catch (err) {
-      console.warn("Freigabe failed", err);
-      offlineManager.enqueueAction({
-        id: crypto.randomUUID(),
-        type: "BUCHHALTUNG_BELEG_FREIGABE",
-        payload: { id },
-        timestamp: new Date().toISOString(),
-        status: "pending"
-      });
-      setStatus("festgeschrieben");
-      showToast("Offline gespeichert: Freigabe wird später synchronisiert.");
+      const saved = await freigebenBelegAction(id);
+      setStatus(saved.status);
+      showToast("Der Beleg wurde in der Datenbank festgeschrieben.");
+    } catch {
+      showToast("Freigabe fehlgeschlagen. Der Beleg wurde nicht als festgeschrieben angezeigt.");
     }
   };
 
@@ -134,22 +133,12 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
     }
     
     try {
-      await stornoBelegAction(id, stornoGrund);
-      setStatus("storniert");
+      const saved = await stornoBelegAction(id, stornoGrund);
+      setStatus(saved.status);
       setStornoOpen(false);
-      showToast("Storno vorbereitet. Gegenbuchung wird im Backend erzeugt.");
-    } catch (err) {
-      console.warn("Storno failed", err);
-      offlineManager.enqueueAction({
-        id: crypto.randomUUID(),
-        type: "BUCHHALTUNG_BELEG_STORNO",
-        payload: { id, grund: stornoGrund },
-        timestamp: new Date().toISOString(),
-        status: "pending"
-      });
-      setStatus("storniert");
-      setStornoOpen(false);
-      showToast("Offline gespeichert: Storno wird später synchronisiert.");
+      showToast("Der Beleg wurde storniert und der Stornogrund protokolliert.");
+    } catch {
+      showToast("Storno fehlgeschlagen. Der Beleg bleibt unverändert.");
     }
   };
 
@@ -173,7 +162,11 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
         <ChevronRight className="w-3 h-3" />
         <Link href="/buchhaltung/belege" className="hover:text-navy-900 transition-colors">Belege</Link>
         <ChevronRight className="w-3 h-3" />
-        <Link href={`/lieferanten/${beleg.lieferantId || "unbekannt"}`} className="text-navy-900 truncate max-w-[200px] hover:underline">{beleg.lieferantText || beleg.lieferant?.name || "Unbekannter Lieferant"}</Link>
+        {beleg.lieferantId ? (
+          <Link href={`/lieferanten/${beleg.lieferantId}`} className="text-navy-900 truncate max-w-[200px] hover:underline">{beleg.lieferantText || beleg.lieferant?.name || "Lieferant ohne Namen"}</Link>
+        ) : (
+          <span className="text-navy-900 truncate max-w-[200px]">{beleg.lieferantText || "Lieferant nicht erfasst"}</span>
+        )}
       </div>
 
       {/* Back + Title */}
@@ -183,18 +176,22 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
             <ArrowLeft className="w-4 h-4 text-[#1e1b18]" />
           </Link>
           <div>
-            <Link href={`/lieferanten/${beleg.lieferantId || "unbekannt"}`} className="text-xl sm:text-2xl font-extrabold text-[#1e1b18] tracking-tight hover:underline hover:text-navy-600 transition-colors">
-              {beleg.lieferantText || beleg.lieferant?.name || "Unbekannter Lieferant"}
-            </Link>
+            {beleg.lieferantId ? (
+              <Link href={`/lieferanten/${beleg.lieferantId}`} className="text-xl sm:text-2xl font-extrabold text-[#1e1b18] tracking-tight hover:underline hover:text-navy-600 transition-colors">
+                {beleg.lieferantText || beleg.lieferant?.name || "Lieferant ohne Namen"}
+              </Link>
+            ) : (
+              <span className="text-xl sm:text-2xl font-extrabold text-[#1e1b18] tracking-tight">{beleg.lieferantText || "Lieferant nicht erfasst"}</span>
+            )}
             <div className="flex items-center gap-3 mt-1">
               <span className={`px-2.5 py-1 rounded text-[10px] font-extrabold tracking-wide uppercase ${statusColorClass}`}>{statusLabel}</span>
-              <span className="text-xs text-neutral-500">{beleg.belegart} · {beleg.id.substring(0,8)}</span>
+              <span className="text-xs text-neutral-500">{beleg.belegart || "Art nicht erfasst"} · {beleg.id.substring(0,8)}</span>
             </div>
           </div>
         </div>
         <div className="text-right">
-          <div className="text-2xl sm:text-3xl font-extrabold text-[#1e1b18]">{(beleg.brutto || 0).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</div>
-          <div className="text-xs text-neutral-400 mt-0.5">Confidence: {(beleg.ocrConfidence || 0).toFixed(1)} %</div>
+          <div className="text-2xl sm:text-3xl font-extrabold text-[#1e1b18]">{beleg.brutto === undefined ? "Betrag nicht erfasst" : `${beleg.brutto.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €`}</div>
+          <div className="text-xs text-neutral-400 mt-0.5">OCR-Konfidenz: {beleg.ocrConfidence === undefined ? "nicht verfügbar" : `${beleg.ocrConfidence.toFixed(1)} %`}</div>
         </div>
       </div>
 
@@ -269,7 +266,7 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
               <FormField label="Netto (€)" value={form.netto} onChange={v => setForm({ ...form, netto: v })} />
               <FormField label="USt-Satz (%)" value={form.ustSatz} onChange={v => setForm({ ...form, ustSatz: v })} />
               <FormField label="USt-Betrag (€)" value={form.ustBetrag} onChange={v => setForm({ ...form, ustBetrag: v })} />
-              <FormField label="Kategorie" value={form.kategorie} onChange={v => setForm({ ...form, kategorie: v })} />
+              <FormField label="Kategorie (nur Anzeige)" value={form.kategorie} onChange={() => undefined} readOnly />
               <FormField label="SKR-Konto" value={form.skrKonto} onChange={v => setForm({ ...form, skrKonto: v })} />
               <FormField label="Absetzbarkeit (%)" value={form.absetzbar} onChange={v => setForm({ ...form, absetzbar: v })} />
               <div className="sm:col-span-2">
@@ -277,7 +274,7 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
               </div>
             </div>
 
-            <p className="text-[10px] text-neutral-400 mt-4">Im späteren GoBD-Modus wird jede Korrektur über Audit-Log/Storno nachvollzogen.</p>
+            <p className="text-[10px] text-neutral-400 mt-4">Nur vom Server bestätigte Änderungen werden als gespeichert angezeigt.</p>
           </div>
 
         {/* Right: KI + Audit + Actions */}
@@ -303,7 +300,7 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
 
           {/* Audit */}
           <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">
-            <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">Audit-Historie</h3>
+            <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">Gespeicherter Nachweisstatus</h3>
             <div className="space-y-3">
               <div className="flex items-start gap-3">
                 <Clock className="w-3.5 h-3.5 text-neutral-400 mt-0.5 shrink-0" />
@@ -317,7 +314,7 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 shrink-0" />
                   <div>
                     <p className="text-xs font-bold text-emerald-700">Freigegeben</p>
-                    <p className="text-[10px] text-neutral-400">Soeben · Benutzer</p>
+                    <p className="text-[10px] text-neutral-400">Gespeicherter Belegstatus. Die vollständige Audit-Historie wird in dieser Ansicht noch nicht geladen.</p>
                   </div>
                 </div>
               )}
@@ -325,8 +322,8 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
                 <div className="flex items-start gap-3">
                   <XCircle className="w-3.5 h-3.5 text-rose-500 mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-xs font-bold text-rose-700">Storno vorbereitet</p>
-                    <p className="text-[10px] text-neutral-400">Soeben · Benutzer · Grund: {stornoGrund}</p>
+                    <p className="text-xs font-bold text-rose-700">Storniert</p>
+                    <p className="text-[10px] text-neutral-400">Gespeicherter Belegstatus. Der Stornogrund liegt im serverseitigen Auditnachweis.</p>
                   </div>
                 </div>
               )}
@@ -339,14 +336,15 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
             <div className="space-y-3">
               <button
                 onClick={handleSave}
-                disabled={status === "storniert"}
+                disabled={status === "festgeschrieben" || status === "storniert"}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1e1b18] text-white rounded-xl font-bold text-sm hover:bg-black transition-colors min-h-[48px] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" /> Korrektur speichern
               </button>
               <button
                 onClick={handleFreigabe}
-                disabled={status === "festgeschrieben" || status === "storniert"}
+                disabled={status !== "erfasst"}
+                title={status === "pruefen" ? "Korrektur zuerst speichern und prüfen" : undefined}
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-colors min-h-[48px] disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 <ShieldCheck className="w-4 h-4" /> Freigeben
@@ -400,21 +398,22 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
   );
 }
 
-function FormField({ label, value, onChange, type = "text", multiline = false }: {
+function FormField({ label, value, onChange, type = "text", multiline = false, readOnly = false }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
   multiline?: boolean;
+  readOnly?: boolean;
 }) {
   const cls = "w-full border border-neutral-200 rounded-xl px-3 py-2.5 text-sm text-[#1e1b18] focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-300 min-h-[44px]";
   return (
     <div>
       <label className="block text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1">{label}</label>
       {multiline ? (
-        <textarea value={value} onChange={e => onChange(e.target.value)} className={cls} rows={2} />
+        <textarea value={value} onChange={e => onChange(e.target.value)} className={cls} rows={2} readOnly={readOnly} />
       ) : (
-        <input type={type} value={value} onChange={e => onChange(e.target.value)} className={cls} />
+        <input type={type} value={value} onChange={e => onChange(e.target.value)} className={cls} readOnly={readOnly} />
       )}
     </div>
   );

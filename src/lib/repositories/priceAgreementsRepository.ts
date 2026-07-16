@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/client";
+import { getPriceAgreementsAction } from "@/app/actions/price-agreements.actions";
 
 export type PriceAgreement = {
   id: string;
@@ -14,56 +14,17 @@ export type PriceAgreement = {
   note?: string;
 };
 
-const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
+function unwrap<T>(result: { ok: true; data: T } | { ok: false; message: string }): T {
+  if (!result.ok) throw new Error(`DATA_ERROR: ${result.message}`);
+  return result.data;
+}
 
 export const priceAgreementsRepository = {
   async getAll(): Promise<PriceAgreement[]> {
-    if (!isSupabase) return [];
-    
-    const supabase = createClient();
-    const { data, error } = await supabase.from('price_agreements').select('*');
-    if (error) {
-      console.error("Supabase priceAgreementsRepository error:", error);
-      return [];
-    }
-    
-    return data.map(r => ({
-      id: r.id,
-      customerId: r.customer_id,
-      title: r.title,
-      description: r.description,
-      surfaceType: r.surface_type,
-      itemPattern: r.item_pattern,
-      price: r.price,
-      currency: r.currency || "EUR",
-      validFrom: r.valid_from,
-      validUntil: r.valid_until,
-      note: r.note
-    }));
+    return unwrap(await getPriceAgreementsAction());
   },
 
   async getByCustomer(customerId: string): Promise<PriceAgreement[]> {
-    if (!isSupabase) return [];
-    
-    const supabase = createClient();
-    const { data, error } = await supabase.from('price_agreements').select('*').eq('customer_id', customerId);
-    if (error) {
-      console.error("Supabase priceAgreementsRepository.getByCustomer error:", error);
-      return [];
-    }
-    
-    return data.map(r => ({
-      id: r.id,
-      customerId: r.customer_id,
-      title: r.title,
-      description: r.description,
-      surfaceType: r.surface_type,
-      itemPattern: r.item_pattern,
-      price: r.price,
-      currency: r.currency || "EUR",
-      validFrom: r.valid_from,
-      validUntil: r.valid_until,
-      note: r.note
-    }));
+    return unwrap(await getPriceAgreementsAction(customerId));
   }
 };

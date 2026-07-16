@@ -2,7 +2,7 @@
 
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,20 +12,13 @@ import {
   MapPin, 
   Plus, 
   Minus, 
-  Droplets, 
-  Thermometer, 
   FlaskConical, 
-  Check, 
   History, 
-  Activity, 
-  Lock,
-  Unlock,
   User
 } from "lucide-react";
 import { inventoryRepository, InventoryItem, StockMovement } from "@/lib/repositories/inventoryRepository";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { trackUiEvent } from "@/lib/tracking/tracking";
-import { DetailOverlay } from "@/components/ui/DetailOverlay";
 
 export default function ItemsPage() {
   usePageView();
@@ -35,6 +28,8 @@ export default function ItemsPage() {
   // Data States
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   
   // Selection States
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -46,13 +41,19 @@ export default function ItemsPage() {
 
   // Load repositories data
   const loadData = useCallback(async () => {
-    const items = await inventoryRepository.getAllItems();
-    const movements = await inventoryRepository.getAllMovements();
-    
-    setInventoryItems(items);
-    setStockMovements(movements);
-    
-    setSelectedItemId(prev => prev || (items.length > 0 ? items[0].id : null));
+    try {
+      const [items, movements] = await Promise.all([
+        inventoryRepository.getAllItems(),
+        inventoryRepository.getAllMovements(),
+      ]);
+      setInventoryItems(items);
+      setStockMovements(movements);
+      setSelectedItemId(prev => prev || (items.length > 0 ? items[0].id : null));
+      setLoadError(null);
+    } catch (error) {
+      console.error(error);
+      setLoadError("Lagerdaten konnten nicht geladen werden.");
+    }
   }, []);
 
   useEffect(() => {
@@ -68,15 +69,6 @@ export default function ItemsPage() {
     };
   }, [loadData]);
 
-  // Listen to custom local storage storage updates to stay synced with other components
-  useEffect(() => {
-    const handleStorageChange = () => {
-      loadData();
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, [loadData]);
-
   // Handlers for Quick Action Stock Increment/Decrement directly in list row
   const handleQuickAdjust = async (itemId: string, direction: "plus" | "minus", event: React.MouseEvent) => {
     event.stopPropagation(); // Avoid selecting row when pressing button
@@ -90,11 +82,12 @@ export default function ItemsPage() {
         quantity: 1,
         unit: targetItem.unit,
         reason: direction === "plus" ? "Schnellbuchung Zugang" : "Schnellbuchung Entnahme",
-        createdBy: "meister@kreile.de"
       });
-      loadData();
+      setActionError(null);
+      await loadData();
     } catch (e) {
       console.error(e);
+      setActionError(e instanceof Error ? e.message : "Lagerbuchung fehlgeschlagen.");
     }
   };
 
@@ -112,13 +105,14 @@ export default function ItemsPage() {
         quantity: bookingQty,
         unit: targetItem.unit,
         reason: bookingReason || (bookingType === "stock_in" ? "Bestandserhöhung" : "Bestandsminderung"),
-        createdBy: "meister@kreile.de"
       });
       setBookingQty(5);
       setBookingReason("");
-      loadData();
+      setActionError(null);
+      await loadData();
     } catch (e) {
       console.error(e);
+      setActionError(e instanceof Error ? e.message : "Lagerbuchung fehlgeschlagen.");
     }
   };
 
@@ -128,7 +122,7 @@ export default function ItemsPage() {
   const filteredInventoryItems = inventoryItems.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           item.sku.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          item.storageLocation.toLowerCase().includes(searchTerm.toLowerCase());
+                          (item.storageLocation || "").toLowerCase().includes(searchTerm.toLowerCase());
     
     if (!matchesSearch) return false;
     if (filterCategory === "all") return true;
@@ -139,9 +133,6 @@ export default function ItemsPage() {
   const selectedItem = inventoryItems.find(i => i.id === selectedItemId) || null;
   const selectedItemMovements = selectedItemId ? stockMovements.filter(m => m.inventoryItemId === selectedItemId) : [];
 
-  // Chemistry materials lists for chemical addition options in dropdown
-  const chemicalList = inventoryItems.filter(item => item.category === "chemical");
-
   return (
     <div className="space-y-6 pb-12 font-sans antialiased text-navy-900">
       
@@ -149,6 +140,9 @@ export default function ItemsPage() {
         title="Lager und Chemieverwaltung"
         subtitle="Tablet-Leitstand für Bestände, Materialbewegungen und chemische Beschichtung"
       />
+
+      {loadError && <p className="rounded-xl border border-danger-red bg-accent-orange-soft p-3 text-sm font-bold text-danger-red">{loadError}</p>}
+      {actionError && <p className="rounded-xl border border-danger-red bg-accent-orange-soft p-3 text-sm font-bold text-danger-red">{actionError}</p>}
 
 
 
@@ -207,7 +201,7 @@ export default function ItemsPage() {
                       return (
                         <div
                           key={item.id}
-                          onClick={() => { setSelectedItemId(item.id); trackUiEvent("detail_open", { target: "inventory", id: item.id }); }}
+                          onClick={() => { setSelectedItemId(item.id); trackUiEvent("detail_open", { target: "inventory" }); }}
                           className={`p-4 hover:bg-bg-app-soft/50 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
                             isSelected ? "bg-bg-app border-l-4 border-navy-900" : "border-l-4 border-transparent"
                           }`}
@@ -244,7 +238,7 @@ export default function ItemsPage() {
                               </h4>
                               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted mt-1 font-semibold">
                                 <span className="text-navy-900 flex items-center gap-1">
-                                  <MapPin className="h-3.5 w-3.5 text-accent-orange" /> {item.storageLocation}
+                                  <MapPin className="h-3.5 w-3.5 text-accent-orange" /> {item.storageLocation || "Nicht hinterlegt"}
                                 </span>
                                 <span>•</span>
                                 <span>Min-Soll: {item.minStock} {item.unit}</span>
@@ -321,7 +315,7 @@ export default function ItemsPage() {
                       ? "bg-navy-700 text-white border-navy-500" 
                       : "bg-gold-600 text-white border-gold-600"
                   }`}>
-                    {selectedItem.category === "chemical" ? "Chemie" : selectedItem.category === "consumable" ? "Verbrauchsmaterial" : selectedItem.category === "tooling" ? "Werkzeuge" : "Verpackung"}
+                    {selectedItem.category === "chemical" ? "Chemie" : selectedItem.category === "consumable" ? "Verbrauchsmaterial" : selectedItem.category === "tooling" ? "Werkzeuge" : selectedItem.category === "packaging" ? "Verpackung" : "Sonstiges"}
                   </Badge>
                 </div>
               </div>
@@ -332,7 +326,7 @@ export default function ItemsPage() {
                   <div>
                     <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Lagerort</span>
                     <p className="text-sm font-extrabold text-navy-900 flex items-center gap-1 mt-0.5">
-                      <MapPin className="h-4 w-4 text-accent-orange shrink-0" /> {selectedItem.storageLocation}
+                      <MapPin className="h-4 w-4 text-accent-orange shrink-0" /> {selectedItem.storageLocation || "Nicht hinterlegt"}
                     </p>
                   </div>
                   <div>
@@ -469,10 +463,10 @@ export default function ItemsPage() {
                                 {mov.reason || (isIn ? "Wareneingang" : "Warenabgang")}
                               </span>
                               <div className="flex items-center gap-2 text-[10px] text-text-muted font-semibold mt-0.5">
-                                <span>{new Date(mov.createdAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
+                                <span>{mov.createdAt ? new Date(mov.createdAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "Zeit nicht erfasst"}</span>
                                 <span>•</span>
                                 <span className="flex items-center gap-0.5">
-                                  <User className="h-2.5 w-2.5" /> Max M.
+                                  <User className="h-2.5 w-2.5" /> {mov.createdBy || "Nicht erfasst"}
                                 </span>
                               </div>
                             </div>
@@ -484,7 +478,7 @@ export default function ItemsPage() {
                                   ? "text-accent-orange" 
                                   : "text-danger-red"
                             }`}>
-                              {isIn ? "+" : "-"}{mov.quantity} {mov.unit}
+                              {isIn ? "+" : "-"}{Math.abs(mov.quantity)} {mov.unit}
                             </span>
                           </div>
                         );

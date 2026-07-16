@@ -1,75 +1,98 @@
-/**
- * loginWithPin.test.ts
- *
- * Unit-Tests für den PIN-Login.
- *
- * Abgedeckte Szenarien:
- *  8a. PIN-Login erstellt vollständige AppSession mit korrektem displayName
- *  8b. PIN-Login mit leerem fullName → Fehler statt UUID-Fallback
- *  8c. Falscher PIN → nicht-ok Ergebnis
- */
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+const {
+  mockCompare,
+  mockSetAppSession,
+  mockDbSelect,
+  mockVerifySelector,
+  mockReservePinLoginAttempt,
+  mockResetPinLoginAttempts,
+} = vi.hoisted(() => ({
+  mockCompare: vi.fn(),
+  mockSetAppSession: vi.fn(),
+  mockDbSelect: vi.fn(),
+  mockVerifySelector: vi.fn(),
+  mockReservePinLoginAttempt: vi.fn(),
+  mockResetPinLoginAttempts: vi.fn(),
+}));
 
-// ─── Testschlüssel ──────────────────────────────────────────────────────────
-const TEST_SECRET = "test-secret-loginwithpin-unit-tests";
-process.env.APP_SESSION_SECRET = TEST_SECRET;
-
-// ─── Mocks ──────────────────────────────────────────────────────────────────
-const mockSetAppSession = vi.fn();
-const mockCookieSet = vi.fn();
+vi.mock("bcryptjs", () => ({ compare: mockCompare }));
 
 vi.mock("@/lib/server/appSession", () => ({
   setAppSession: mockSetAppSession,
-  clearAppSession: vi.fn(),
-  getAppSession: vi.fn().mockResolvedValue(null),
-  readAppSession: vi.fn().mockResolvedValue({ ok: false, reason: "NO_COOKIE" }),
-  SESSION_TTL_MS: 12 * 60 * 60 * 1000,
-  COOKIE_NAME: "kreile_app_session",
+  SESSION_TTL_MS: 12 * 60 * 60 * 1_000,
 }));
 
-vi.mock("next/headers", () => ({
-  cookies: vi.fn().mockResolvedValue({
-    get: vi.fn().mockReturnValue(undefined),
-    set: mockCookieSet,
-    delete: vi.fn(),
-  }),
+vi.mock("@/lib/server/pinLoginSelector", () => ({
+  verifyPinLoginSelector: mockVerifySelector,
 }));
 
-vi.mock("next/navigation", () => ({
-  redirect: vi.fn(),
+vi.mock("@/lib/server/pinLoginAttempts", () => ({
+  PIN_LOGIN_PUBLIC_RETRY_SECONDS: 1,
+  reservePinLoginAttempt: mockReservePinLoginAttempt,
+  resetPinLoginAttempts: mockResetPinLoginAttempts,
 }));
 
-// DB-Mock: simuliert appUsers-Abfrage
-const mockDbSelect = vi.fn();
 vi.mock("@/db", () => ({
-  db: {
-    select: () => ({
-      from: () => ({
-        where: mockDbSelect,
-      }),
-    }),
-  },
+  db: { select: () => ({ from: () => ({ where: mockDbSelect }) }) },
 }));
 
 vi.mock("@/db/schema", () => ({
-  appUsers: { id: "id", tenantId: "tenant_id", pinHash: "pin_hash", active: "active", role: "role", fullName: "full_name" },
+  appUsers: {
+    id: "id",
+    tenantId: "tenant_id",
+    pinHash: "pin_hash",
+    active: "active",
+    role: "role",
+    fullName: "full_name",
+  },
 }));
 
-vi.mock("drizzle-orm", () => ({
-  eq: vi.fn(),
-  and: vi.fn(),
-}));
+vi.mock("drizzle-orm", () => ({ eq: vi.fn(), and: vi.fn() }));
 
-// ─── Tests ──────────────────────────────────────────────────────────────────
-
-describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
+describe("loginWithPin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockVerifySelector.mockResolvedValue({ ok: true, userId: "user-abc" });
+    mockCompare.mockResolvedValue(true);
+    mockReservePinLoginAttempt.mockResolvedValue({ allowed: true, remaining: 4 });
+    mockResetPinLoginAttempts.mockResolvedValue(undefined);
     mockSetAppSession.mockResolvedValue(undefined);
   });
 
-  it("8a – gültiger PIN mit vollständigem fullName → AppSession wird mit displayName gesetzt", async () => {
+  it("accepts only a valid selector and bcrypt PIN", async () => {
+    mockDbSelect.mockResolvedValue([{
+      id: "user-abc",
+      tenantId: "galvanik-kreile",
+      pinHash: "$2b$12$test-hash",
+      active: true,
+      role: "werkstatt",
+      fullName: "Max Mustermann",
+    }]);
+    const { loginWithPin } = await import("@/app/actions/auth.actions");
+    await expect(loginWithPin("signed-selector", "1234"))
+      .resolves.toEqual({ ok: true, role: "werkstatt" });
+    expect(mockSetAppSession).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "user-abc",
+      tenantId: "galvanik-kreile",
+      role: "werkstatt",
+      displayName: "Max Mustermann",
+    }));
+    expect(mockReservePinLoginAttempt).toHaveBeenCalledWith({
+      tenantId: "galvanik-kreile",
+      userId: "user-abc",
+      role: "werkstatt",
+    });
+    expect(mockResetPinLoginAttempts).toHaveBeenCalledWith({
+      tenantId: "galvanik-kreile",
+      userId: "user-abc",
+      role: "werkstatt",
+    });
+    expect(mockResetPinLoginAttempts.mock.invocationCallOrder[0])
+      .toBeLessThan(mockSetAppSession.mock.invocationCallOrder[0]);
+  });
+
+  it("fails closed for legacy plaintext PIN values", async () => {
     mockDbSelect.mockResolvedValue([{
       id: "user-abc",
       tenantId: "galvanik-kreile",
@@ -78,60 +101,92 @@ describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
       role: "werkstatt",
       fullName: "Max Mustermann",
     }]);
-
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin("user-abc", "1234");
-
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.role).toBe("werkstatt");
-
-    expect(mockSetAppSession).toHaveBeenCalledOnce();
-    const sessionArg = mockSetAppSession.mock.calls[0][0];
-    expect(sessionArg.userId).toBe("user-abc");
-    expect(sessionArg.displayName).toBe("Max Mustermann");
-    expect(sessionArg.role).toBe("werkstatt");
-    expect(sessionArg.tenantId).toBe("galvanik-kreile");
-    // Keine UUID als displayName
-    expect(sessionArg.displayName).not.toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    );
-  });
-
-  it("8b – fullName leer → Fehler statt UUID-Fallback", async () => {
-    mockDbSelect.mockResolvedValue([{
-      id: "user-def",
-      tenantId: "galvanik-kreile",
-      pinHash: "5678",
-      active: true,
-      role: "buero",
-      fullName: "   ", // nur Leerzeichen
-    }]);
-
-    const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin("user-def", "5678");
-
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.message).toMatch(/Anzeigename/i);
-    }
-    // setAppSession darf NICHT aufgerufen worden sein
+    await expect(loginWithPin("signed-selector", "1234"))
+      .resolves.toEqual({
+        ok: false,
+        message: "Ungültige PIN oder inaktiver Benutzer.",
+        retryAfterSeconds: 1,
+      });
+    expect(mockReservePinLoginAttempt).not.toHaveBeenCalled();
+    expect(mockCompare).not.toHaveBeenCalled();
     expect(mockSetAppSession).not.toHaveBeenCalled();
   });
 
-  it("8c – falscher PIN → nicht-ok, keine Session erstellt", async () => {
+  it("rejects tampered selectors before querying the database", async () => {
+    mockVerifySelector.mockResolvedValue({ ok: false });
+    const { loginWithPin } = await import("@/app/actions/auth.actions");
+    await expect(loginWithPin("tampered", "1234")).resolves.toMatchObject({ ok: false });
+    expect(mockDbSelect).not.toHaveBeenCalled();
+    expect(mockReservePinLoginAttempt).not.toHaveBeenCalled();
+  });
+
+  it("consumes an attempt and retains it after a wrong PIN", async () => {
     mockDbSelect.mockResolvedValue([{
-      id: "user-ghi",
+      id: "user-abc",
       tenantId: "galvanik-kreile",
-      pinHash: "9999",
+      pinHash: "$2b$12$test-hash",
       active: true,
-      role: "meister",
-      fullName: "Paul Meister",
+      role: "werkstatt",
+      fullName: "Max Mustermann",
     }]);
+    mockCompare.mockResolvedValue(false);
 
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin("user-ghi", "0000"); // falscher PIN
+    await expect(loginWithPin("selector-one", "9999")).resolves.toMatchObject({
+      ok: false,
+      retryAfterSeconds: 1,
+    });
 
-    expect(result.ok).toBe(false);
+    expect(mockReservePinLoginAttempt).toHaveBeenCalledTimes(1);
+    expect(mockCompare).toHaveBeenCalledTimes(1);
+    expect(mockResetPinLoginAttempts).not.toHaveBeenCalled();
+    expect(mockSetAppSession).not.toHaveBeenCalled();
+  });
+
+  it("denies an exhausted user budget before bcrypt even with a renewed selector", async () => {
+    mockDbSelect.mockResolvedValue([{
+      id: "user-abc",
+      tenantId: "galvanik-kreile",
+      pinHash: "$2b$12$test-hash",
+      active: true,
+      role: "werkstatt",
+      fullName: "Max Mustermann",
+    }]);
+    mockCompare.mockResolvedValue(false);
+    mockReservePinLoginAttempt
+      .mockResolvedValueOnce({ allowed: true, remaining: 0 })
+      .mockResolvedValueOnce({ allowed: false, remaining: 0, retryAfterSeconds: 600 });
+
+    const { loginWithPin } = await import("@/app/actions/auth.actions");
+    const first = await loginWithPin("selector-one", "9999");
+    const renewed = await loginWithPin("selector-two", "9999");
+
+    expect(first).toEqual(renewed);
+    expect(mockReservePinLoginAttempt).toHaveBeenCalledTimes(2);
+    expect(mockCompare).toHaveBeenCalledTimes(1);
+    expect(mockSetAppSession).not.toHaveBeenCalled();
+  });
+
+  it("fails closed before bcrypt when the durable ledger is unavailable", async () => {
+    mockDbSelect.mockResolvedValue([{
+      id: "user-abc",
+      tenantId: "galvanik-kreile",
+      pinHash: "$2b$12$test-hash",
+      active: true,
+      role: "admin",
+      fullName: "Admin Kreile",
+    }]);
+    mockReservePinLoginAttempt.mockRejectedValue(new Error("database unavailable"));
+
+    const { loginWithPin } = await import("@/app/actions/auth.actions");
+    await expect(loginWithPin("selector", "1234")).resolves.toEqual({
+      ok: false,
+      message: "Ungültige PIN oder inaktiver Benutzer.",
+      retryAfterSeconds: 1,
+    });
+
+    expect(mockCompare).not.toHaveBeenCalled();
     expect(mockSetAppSession).not.toHaveBeenCalled();
   });
 });

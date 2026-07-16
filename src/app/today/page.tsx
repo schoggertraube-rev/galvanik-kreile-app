@@ -31,7 +31,8 @@ export default function TodayDashboard() {
   const [orders, setOrders] = useState<MockOrder[]>(INITIAL_ORDERS);
   const [customers, setCustomers] = useState<MockCustomer[]>(INITIAL_CUSTOMERS);
   const [filter, setFilter] = useState<string>("all");
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>("o1");
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Load from Repositories on mount
   useEffect(() => {
@@ -39,16 +40,16 @@ export default function TodayDashboard() {
     const loadData = async () => {
       try {
         const dbOrders = await ordersRepository.getAll();
-        if (isMounted && dbOrders && dbOrders.length > 0) {
-          setOrders(dbOrders as unknown as MockOrder[]);
-        }
+        if (isMounted) setOrders(dbOrders as unknown as MockOrder[]);
         
         const dbCustomers = await customersRepository.getAll();
-        if (isMounted && dbCustomers && dbCustomers.length > 0) {
+        if (isMounted) {
           setCustomers(dbCustomers as unknown as MockCustomer[]);
+          setLoadError(null);
         }
       } catch (e) {
         console.error("Fehler beim Laden aus Repositories", e);
+        if (isMounted) setLoadError("Aufträge oder Kunden konnten nicht vollständig geladen werden.");
       }
     };
     loadData();
@@ -73,11 +74,10 @@ export default function TodayDashboard() {
   // Filter orders for "today" - overdue (red) or due today (orange)
   const todayOrders = orders.filter(o => {
     const evalRes = evaluateOrderPriority({
-      dueDate: o.dueValue,
+      dueDate: o.dueDate,
       risk: o.risk,
     });
-    return evalRes.risk === "red" || evalRes.risk === "orange" || evalRes.risk === "yellow"; 
-    // Including yellow (3 days) for a bit more data in demo, but strictly speaking it's red/orange
+    return evalRes.risk === "red" || evalRes.risk === "orange";
   });
 
   // Dynamic status counts based ONLY on today's orders
@@ -98,35 +98,6 @@ export default function TodayDashboard() {
       .reduce((sum, o) => sum + o.parts.length, 0);
   };
 
-  const handleAction = (orderId: string) => {
-    const updated = orders.map(o => {
-      if (o.id === orderId || o.orderNumber === orderId) {
-        return {
-          ...o,
-          risk: "green" as const,
-          statusText: "IM PLAN (Gegenmaßnahme eingeleitet)",
-          delayReason: undefined,
-          recommendedAction: undefined,
-          dueLabel: "Fällig in",
-          dueValue: "10 Tagen"
-        };
-      }
-      return o;
-    });
-
-    setOrders(updated);
-    // Fire async update to DB in background
-    try {
-      const orderToUpdate = updated.find(o => o.id === orderId || o.orderNumber === orderId);
-      // Async sync to DB
-      if (orderToUpdate) {
-        ordersRepository.updateOrder(orderId, (orderToUpdate as unknown) as Parameters<typeof ordersRepository.updateOrder>[1]).catch(console.error);
-      }
-    } catch (e) {
-      console.error("Fehler beim Speichern der Gegenmaßnahme", e);
-    }
-  };
-
   const getCustomerPhone = (customerId: string, customerName: string) => {
     const customer = customers.find(
       c => c.id === customerId || String(c?.name ?? "").toLowerCase().includes(String(customerName ?? "").toLowerCase())
@@ -144,7 +115,6 @@ export default function TodayDashboard() {
   const activeOrdersCount = todayOrders.length;
   const hour = new Date().getHours();
   const greeting = hour < 11 ? "Guten Morgen" : hour < 18 ? "Guten Tag" : "Guten Abend";
-  const userName = "Max";
 
   return (
     <div className="space-y-6 pb-12 font-sans antialiased text-navy-900">
@@ -152,6 +122,11 @@ export default function TodayDashboard() {
         title="Heute im Blick"
         subtitle="Kritische Fälligkeiten, Express-Freigaben und Gegenmaßnahmen für die Schicht."
       />
+      {loadError && (
+        <div role="alert" className="p-3 rounded-xl border border-red-200 bg-red-50 text-red-800 text-sm font-semibold">
+          {loadError}
+        </div>
+      )}
 
       {/* Cockpit Status Summary - Quiet elegance */}
       <div className="bg-linear-to-r from-navy-900 to-navy-700 text-white p-6 md:p-8 rounded-2xl border border-white/10 shadow-md relative overflow-hidden">
@@ -164,7 +139,7 @@ export default function TodayDashboard() {
               Fällige Aufträge für Heute
             </div>
             <h2 className="text-3xl md:text-4xl font-serif font-black tracking-tight text-white">
-              {greeting}, {userName}.
+              {greeting}.
             </h2>
             <p className="text-white/85 text-xs md:text-sm max-w-2xl font-sans font-medium">
               Heute stehen {activeOrdersCount} Aufträge auf dem Programm.<br className="hidden md:block"/>
@@ -313,19 +288,16 @@ export default function TodayDashboard() {
 
                       {order.recommendedAction && (
                         <Button 
-                          size="sm" 
+                          size="sm"
+                          disabled
+                          title="Ein auditierter Maßnahmen-Workflow ist noch nicht angebunden."
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleAction(order.id);
                           }}
-                          className={`h-10 font-extrabold text-xs gap-2 px-4 rounded-xl border shadow-sm transition-all cursor-pointer ${
-                            isRed 
-                              ? "bg-danger-red text-white hover:bg-danger-red border-danger-red hover:scale-[1.03]" 
-                              : "bg-navy-900 text-white hover:bg-navy-700 border-navy-900 hover:scale-[1.03]"
-                          }`}
+                          className="h-10 font-extrabold text-xs gap-2 px-4 rounded-xl border shadow-sm"
                         >
                           <Zap className="h-3.5 w-3.5" /> 
-                          <span>{order.recommendedAction}</span>
+                          <span>Maßnahme nicht angebunden</span>
                         </Button>
                       )}
                     </div>
@@ -471,11 +443,12 @@ export default function TodayDashboard() {
 
                   {selectedOrder.recommendedAction && (
                     <Button 
-                      className="w-full bg-navy-900 hover:bg-navy-700 text-white font-extrabold text-xs h-11 rounded-xl flex items-center justify-center gap-2 border border-navy-900 shadow-sm transition-all cursor-pointer"
-                      onClick={() => handleAction(selectedOrder.id)}
+                      disabled
+                      title="Ein auditierter Maßnahmen-Workflow ist noch nicht angebunden."
+                      className="w-full font-extrabold text-xs h-11 rounded-xl flex items-center justify-center gap-2 border shadow-sm"
                     >
                       <Zap className="h-3.5 w-3.5 text-accent-orange" />
-                      <span>Interne Maßnahme einleiten</span>
+                      <span>Maßnahme nicht angebunden</span>
                     </Button>
                   )}
                   <div className="grid grid-cols-2 gap-2">

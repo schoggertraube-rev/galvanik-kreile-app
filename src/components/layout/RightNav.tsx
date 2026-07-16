@@ -27,7 +27,7 @@ function SubMenuLink({ label, href, isAvailable, expanded }: { label: string, hr
       href={href}
       className={`text-[12px] font-bold py-2 px-3 rounded-xl text-left transition-colors mx-2 mb-1 flex items-center gap-2 ${isActive ? "text-navy-900 bg-neutral-gray-100" : "text-text-muted hover:text-navy-900 hover:bg-bg-app"
         } ${expanded ? "block" : "hidden"}`}
-      onClick={() => trackUiEvent("nav_click", { target: href, type: "sub_menu" })}
+      onClick={() => trackUiEvent("nav_click", { target: href })}
     >
       <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isActive ? 'bg-navy-900' : 'bg-neutral-gray-300'}`} />
       {expanded && <span>{label}</span>}
@@ -90,7 +90,7 @@ export function RightNav() {
 
       {["inhaber", "admin", "developer"].includes(role?.toLowerCase() || "") && (
         <div className="flex flex-col items-center w-full px-2 mt-2">
-          <RightNavItem label="Cockpit" href="/cockpit" icon={<BarChart3 className="w-5 h-5" strokeWidth={2} />} isActive={isActive("/cockpit")} isExpanded={expanded} onClick={() => trackUiEvent("nav_click", { target: "/cockpit" })} />
+          <RightNavItem label="Performance" href="/performance" icon={<BarChart3 className="w-5 h-5" strokeWidth={2} />} isActive={isActive("/performance")} isExpanded={expanded} onClick={() => trackUiEvent("nav_click", { target: "/performance" })} />
         </div>
       )}
 

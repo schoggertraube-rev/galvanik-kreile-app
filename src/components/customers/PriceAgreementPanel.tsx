@@ -15,9 +15,11 @@ export function PriceAgreementPanel({ agreements }: { agreements: PriceAgreement
             <div className="flex justify-between items-start">
               <div>
                 <h4 className="font-bold text-navy-900 text-lg">{a.title}</h4>
-                <p className="text-sm text-navy-500 font-bold mt-0.5">{a.surfaceType}</p>
+                {a.surfaceType && <p className="text-sm text-navy-500 font-bold mt-0.5">{a.surfaceType}</p>}
               </div>
-              <span className="text-2xl font-black text-gold-600 bg-gold-100 px-3 py-1 rounded-xl">{a.price} €</span>
+              <span className="text-2xl font-black text-gold-600 bg-gold-100 px-3 py-1 rounded-xl">
+                {typeof a.price === "number" ? `${a.price.toFixed(2)} €` : "Preis nicht numerisch hinterlegt"}
+              </span>
             </div>
             {a.note && <p className="text-sm font-medium text-text-muted mt-4 bg-gold-100 p-3 rounded-xl border border-gold-600">{a.note}</p>}
           </div>

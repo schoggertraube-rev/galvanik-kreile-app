@@ -6,13 +6,10 @@ import { StatusMailDrawer } from "./StatusMailDrawer";
 import { ItemDrawer } from "./ItemDrawer";
 import { 
   X, Check, AlertTriangle, Clock, Droplet, Package, Info, Plus, 
-  Send, Camera, Phone, FileText, Receipt, Truck, ArrowRight, CameraOff, Wrench, Loader2
+  Send, Phone, FileText, Receipt, Truck, ArrowRight, Wrench
 } from "lucide-react";
-import { StationContextBlock } from "./StationContextBlock";
 import { HeadCostBadge } from "./HeadCostBadge";
 import { AppOverlayPortal } from "@/components/ui/AppOverlayPortal";
-import { uploadOrderPhotoRecord } from "@/features/orders/orderPhoto.actions";
-import { createClient } from "@/lib/supabase/client";
 
 export function OrderOverlay() {
   const stack = useOverlayStore(state => state.stack);
@@ -22,18 +19,13 @@ export function OrderOverlay() {
   const [showPayment, setShowPayment] = useState(false);
   const [showMail, setShowMail] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | 'new' | null>(null);
-  const [activeStationOverride, setActiveStationOverride] = useState<string | null>(null);
-  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const currentOrderId = orderStack.length > 0 ? orderStack[orderStack.length - 1] : null;
 
-  const { orderData, loading } = useOrderLive(currentOrderId);
+  const { orderData, loading, error } = useOrderLive(currentOrderId);
 
   if (!currentOrderId) return null;
   
-  const activeStation = activeStationOverride || orderData?.station || 'wareneingang';
-
   // Calc z-indexes
   const stackIndex = stack.findLastIndex(item => item.type === 'order' && item.id === currentOrderId);
   const zIndex = 1010 + (stackIndex >= 0 ? stackIndex * 10 : 0);
@@ -63,7 +55,7 @@ export function OrderOverlay() {
             <div className="bg-[var(--ci-surface)] p-8 rounded-[18px] shadow-lg max-w-md w-full text-center">
               <AlertTriangle className="h-10 w-10 text-[var(--ci-warn)] mx-auto mb-4" />
               <h3 className="text-lg font-serif text-[var(--ci-ink)] mb-2">Auftrag nicht gefunden</h3>
-              <p className="text-[var(--ci-ink-3)] text-sm mb-6">Noch keine Daten erfasst oder gelöscht.</p>
+              <p className="text-[var(--ci-ink-3)] text-sm mb-6">{error || "Auftrag wurde nicht gefunden."}</p>
               <button onClick={popOrder} className="px-6 py-2 bg-[var(--ci-ink)] text-white rounded-[12px] font-medium hover:opacity-80 transition-opacity">
                 Schließen
               </button>
@@ -75,6 +67,8 @@ export function OrderOverlay() {
   }
 
   const hasItems = orderData.items && orderData.items.length > 0;
+  const currentCost = orderData.dbIst == null ? null : Number(orderData.dbIst);
+  const benchmarkCost = orderData.dbGeplant == null ? undefined : Number(orderData.dbGeplant);
 
   return (
     <AppOverlayPortal>
@@ -229,18 +223,17 @@ export function OrderOverlay() {
                       if (cid) openCustomer(cid);
                     }}
                   >
-                    <Info className="w-3 h-3"/> {orderData.customer?.name || orderData.customerName || "Unbekannter Kunde"} <ArrowRight className="w-3 h-3"/>
+                    <Info className="w-3 h-3"/> {orderData.customer?.name || "Kunde nicht verfügbar"} <ArrowRight className="w-3 h-3"/>
                   </button>
                 </div>
               </div>
 
-              <HeadCostBadge 
-                currentCostEur={orderData.cost_ist || 0}
-                benchmarkEur={orderData.cost_benchmark || undefined}
-                onClick={() => {
-                  document.getElementById('station-context-block')?.scrollIntoView({ behavior: 'smooth' });
-                }}
-              />
+              {currentCost !== null && Number.isFinite(currentCost) && (
+                <HeadCostBadge
+                  currentCostEur={currentCost}
+                  benchmarkEur={benchmarkCost !== undefined && Number.isFinite(benchmarkCost) ? benchmarkCost : undefined}
+                />
+              )}
 
               <button className="ci-close-btn" onClick={popOrder} aria-label="Schließen">
                 <X className="w-5 h-5"/>
@@ -279,7 +272,7 @@ export function OrderOverlay() {
                         if (isActive) circleClass = "ci-station-active";
                         
                         return (
-                          <div key={station} className="ci-station" onClick={() => { setActiveStationOverride(station); }}>
+                          <div key={station} className="ci-station">
                             <div className={`ci-station-circle ${circleClass}`}>
                               {isDone ? <Check className="w-5 h-5"/> : <Icon className="w-5 h-5"/>}
                             </div>
@@ -291,16 +284,9 @@ export function OrderOverlay() {
                   </div>
                 </div>
 
-                <StationContextBlock 
-                  orderId={orderData.id}
-                  activeStation={activeStation}
-                  orderCurrentStation={orderData.station || 'wareneingang'}
-                  orderRevenue={orderData.quoteTotalGross || orderData.dbGeplant || 0}
-                  orderMargin={0} // Needs actual margin data
-                  orderMarginPercent={0} // Needs actual margin data
-                  customerName={orderData.customer?.name || orderData.customerName || "Kunde"}
-                  isOrderCompleted={orderData.status === 'completed'}
-                />
+                <div id="station-context-block" className="ci-section rounded-xl border border-dashed border-[var(--ci-border)] p-4 text-xs text-[var(--ci-ink-3)]">
+                  Stationskosten, Margen und Versandkontext sind in diesem Overlay noch nicht belastbar instrumentiert. Buchungen erfolgen über die verifizierten Teile- und Lagerpfade.
+                </div>
 
                 {/* KPIs */}
                 <div className="ci-section">
@@ -333,10 +319,13 @@ export function OrderOverlay() {
                         <span className="text-[var(--ci-ink-3)] text-sm">Noch keine Daten erfasst</span>
                       </div>
                     ) : (
-                      orderData.items.map((item: any, idx: number) => (
-                        <div key={item.id || idx} className="ci-item-card cursor-pointer hover:border-[var(--ci-ink-3)] transition-colors" onClick={() => setEditingItemId(item.id)}>
-                          <div className={`ci-item-photo ${item.photo ? 'has-photo' : ''}`}>
-                            {item.photo ? <Camera className="w-5 h-5"/> : <CameraOff className="w-5 h-5"/>}
+                      orderData.items.map((item, idx) => {
+                        const itemPriceLines = (orderData.priceLines || []).filter((line) => line.itemId === item.id);
+                        const itemPrice = itemPriceLines.reduce((sum, line) => sum + Number(line.unitTotalEur || 0), 0);
+
+                        return <div key={item.id || idx} className="ci-item-card cursor-pointer hover:border-[var(--ci-ink-3)] transition-colors" onClick={() => setEditingItemId(item.id)}>
+                          <div className={`ci-item-photo ${Array.isArray(item.photoIds) && item.photoIds.length > 0 ? 'has-photo' : ''}`}>
+                            <Package className="w-5 h-5"/>
                           </div>
                           <div className="ci-item-body">
                             <div className="ci-item-top">
@@ -347,14 +336,14 @@ export function OrderOverlay() {
                             <div className="ci-item-meta">{item.material || 'Material erfassen'} → {item.surfaceRequested || 'Zielfinish erfassen'}</div>
                           </div>
                           <div className="ci-item-price">
-                            {item.price ? (
-                              <div className="ci-item-price-val">{Number(item.price).toFixed(2)} €</div>
+                            {itemPriceLines.length > 0 ? (
+                              <div className="ci-item-price-val">{itemPrice.toFixed(2)} €</div>
                             ) : (
                               <div className="ci-item-price-val missing">Preis offen</div>
                             )}
                           </div>
-                        </div>
-                      ))
+                        </div>;
+                      })
                     )}
 
                     <button className="ci-add-item-btn" onClick={() => setEditingItemId('new')}>
@@ -364,7 +353,7 @@ export function OrderOverlay() {
                     <div className="ci-item-sum">
                       <span className="ci-item-sum-label">Summe netto</span>
                       <span className="ci-item-sum-val">
-                        {(orderData.priceLines || []).reduce((sum: number, line: any) => sum + Number(line.unitTotalEur || 0), 0).toFixed(2)} €
+                        {(orderData.priceLines || []).reduce((sum, line) => sum + Number(line.unitTotalEur || 0), 0).toFixed(2)} €
                       </span>
                     </div>
                   </div>
@@ -385,7 +374,7 @@ export function OrderOverlay() {
                       </div>
                       <div className="bg-[var(--ci-surface)] border border-[var(--ci-border)] rounded-lg p-3">
                         <div className="text-[9px] text-[var(--ci-ink-3)] uppercase tracking-wider mb-1">Nächster Auftrag</div>
-                        <div className="font-serif text-lg text-[var(--ci-ink)]">-</div>
+                        <div className="text-xs font-bold text-[var(--ci-ink-3)]">Nicht instrumentiert</div>
                       </div>
                     </div>
                   ) : (
@@ -401,71 +390,30 @@ export function OrderOverlay() {
                 <div className="ci-section">
                   <div className="ci-section-label">Schnellaktionen</div>
                   <div className="ci-quick-actions">
-                    <button 
-                      className="ci-qa accent-link" 
-                      title="Springt zur Erfassung oben"
-                      onClick={() => document.getElementById('station-context-block')?.scrollIntoView({ behavior: 'smooth' })}
+                    <button
+                      className="ci-qa accent-link"
+                      onClick={() => setEditingItemId(orderData.items[0]?.id || "new")}
                       style={{ background: 'var(--ci-accent)', color: '#fff', borderColor: 'var(--ci-accent)' }}
                     >
-                      <Package className="w-[18px] h-[18px]"/><span className="ci-qa-label">Verbrauch ↑</span>
+                      <Package className="w-[18px] h-[18px]"/><span className="ci-qa-label">Teile</span>
                     </button>
                     <button className="ci-qa ci-primary" onClick={() => setShowMail(true)}>
                       <Send className="w-[18px] h-[18px]"/><span className="ci-qa-label">Status-Mail</span>
                     </button>
                     
-                    <label className="ci-qa cursor-pointer relative" style={isUploadingPhoto ? { opacity: 0.7, pointerEvents: 'none' } : {}}>
-                      <input 
-                        type="file" 
-                        accept="image/*,capture=camera" 
-                        className="hidden" 
-                        disabled={isUploadingPhoto}
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          
-                          setIsUploadingPhoto(true);
-                          setUploadError(null);
-                          try {
-                            const supabase = createClient();
-                            const fileName = `galvanik-kreile/${currentOrderId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-                            
-                            const { error: uploadError } = await supabase.storage
-                              .from("scans")
-                              .upload(fileName, file);
+                    <button className="ci-qa" disabled title="Fotos werden sicher am konkreten Teil erfasst."><span className="ci-qa-label">Foto am Teil</span></button>
 
-                            if (uploadError) throw new Error(uploadError.message);
-                            
-                            const { data: publicUrlData } = supabase.storage.from("scans").getPublicUrl(fileName);
-
-                            const dbRes = await uploadOrderPhotoRecord({
-                              orderId: currentOrderId,
-                              fileUrl: publicUrlData.publicUrl,
-                              fileType: file.type
-                            });
-
-                            if (!dbRes.success) throw new Error(dbRes.error);
-                            
-                          } catch (err: any) {
-                            console.error("Foto-Upload fehlgeschlagen:", err);
-                            setUploadError("Fehler beim Upload.");
-                          } finally {
-                            setIsUploadingPhoto(false);
-                            if (e.target) e.target.value = '';
-                          }
-                        }}
-                      />
-                      {isUploadingPhoto ? <Loader2 className="w-[18px] h-[18px] animate-spin text-[var(--ci-accent)]" /> : <Camera className="w-[18px] h-[18px]"/>}
-                      <span className="ci-qa-label">Foto +</span>
-                      {uploadError && <span className="absolute -bottom-5 text-red-500 text-[10px] whitespace-nowrap">{uploadError}</span>}
-                    </label>
-
-                    <button className="ci-qa"><Phone className="w-[18px] h-[18px]"/><span className="ci-qa-label">Anrufen</span></button>
-                    <button className="ci-qa"><FileText className="w-[18px] h-[18px]"/><span className="ci-qa-label">KV</span></button>
+                    {orderData.customer?.phone ? (
+                      <a className="ci-qa" href={`tel:${orderData.customer.phone}`}><Phone className="w-[18px] h-[18px]"/><span className="ci-qa-label">Anrufen</span></a>
+                    ) : (
+                      <button className="ci-qa" disabled title="Keine Telefonnummer hinterlegt"><Phone className="w-[18px] h-[18px]"/><span className="ci-qa-label">Anrufen</span></button>
+                    )}
+                    <button className="ci-qa" disabled title="Kostenvoranschlag ist hier noch nicht angebunden"><FileText className="w-[18px] h-[18px]"/><span className="ci-qa-label">KV</span></button>
                     <button className="ci-qa" onClick={() => setShowPayment(true)}>
                       <Receipt className="w-[18px] h-[18px]"/><span className="ci-qa-label">Rechnung</span>
                     </button>
-                    <button className="ci-qa"><Truck className="w-[18px] h-[18px]"/><span className="ci-qa-label">Versand</span></button>
-                    <button className="ci-qa"><AlertTriangle className="w-[18px] h-[18px]"/><span className="ci-qa-label">Reklam.</span></button>
+                    <button className="ci-qa" disabled title="Versand ist in diesem Overlay noch nicht angebunden"><Truck className="w-[18px] h-[18px]"/><span className="ci-qa-label">Versand</span></button>
+                    <button className="ci-qa" disabled title="Reklamationserfassung ist hier noch nicht angebunden"><AlertTriangle className="w-[18px] h-[18px]"/><span className="ci-qa-label">Reklam.</span></button>
                   </div>
                 </div>
 
@@ -474,7 +422,7 @@ export function OrderOverlay() {
                   <div className="ci-section-label">Auftragshistorie</div>
                   <div className="ci-history">
                     {orderData.events && orderData.events.length > 0 ? (
-                      orderData.events.map((evt: any, i: number) => (
+                      orderData.events.map((evt, i) => (
                         <div key={evt.id || i} className="ci-h-item">
                           <div className={`ci-h-dot ${evt.status === 'success' ? 'done' : 'info'}`}>
                             {evt.status === 'success' ? <Check className="w-3.5 h-3.5"/> : <Info className="w-3.5 h-3.5"/>}
@@ -513,7 +461,18 @@ export function OrderOverlay() {
         <ItemDrawer 
           orderId={orderData.id} 
           itemId={editingItemId} 
-          existingItems={orderData.items || []} 
+          existingItems={(orderData.items || []).map((item) => ({
+            id: item.id,
+            orderId: item.orderId,
+            name: item.name,
+            quantity: item.quantity,
+            material: item.material || undefined,
+            surfaceRequested: item.surfaceRequested || undefined,
+            photoIds: Array.isArray(item.photoIds) ? item.photoIds.filter((value): value is string => typeof value === "string") : [],
+            currentStationId: item.currentStationId || undefined,
+            stationSequence: Array.isArray(item.stationSequence) ? item.stationSequence.filter((value): value is string => typeof value === "string") : [],
+            internalNotes: item.internalNotes || undefined,
+          }))}
           onClose={() => setEditingItemId(null)}
           onSaved={() => {}} 
         />

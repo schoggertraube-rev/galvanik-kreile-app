@@ -7,19 +7,21 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { 
   Beaker, AlertTriangle, CalendarDays, FlaskConical, 
-  TrendingDown, DollarSign, ShieldAlert, ArrowRight, Info, CheckCircle2, Droplets
+  TrendingDown, DollarSign, ShieldAlert, ArrowRight, Info
 } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
+import type { BaederOverviewItem } from './actions';
 
 interface Props {
-  baederData?: any[];
+  baederData?: BaederOverviewItem[];
+  loadError?: string | null;
 }
 
-export function BaederDashboardClient({ baederData = [] }: Props) {
+export function BaederDashboardClient({ baederData = [], loadError = null }: Props) {
   const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
 
   const baederCount = baederData.length;
-  const kritischeCount = baederData.filter((b: any) => b.status === "kritisch").length;
+  const kritischeCount = baederData.filter((bath) => bath.status === "critical").length;
   const messungenCount = baederData.reduce((acc, b) => acc + (b.messwerte?.length || 0), 0);
 
   const closeOverlay = () => setActiveOverlay(null);
@@ -36,11 +38,19 @@ export function BaederDashboardClient({ baederData = [] }: Props) {
         <p className="text-text-muted text-sm md:text-base">Zentrale für Galvanik-Bäder, Messwerte und Betriebsstoffe.</p>
       </header>
 
+      {loadError && (
+        <div role="alert" className="mb-6 rounded-xl border border-error-red/30 bg-error-red/10 p-4 text-sm font-medium text-error-red">
+          Baddaten konnten nicht geladen werden: {loadError}
+        </div>
+      )}
+
       {/* Bäder Kontrollbereich */}
       <div>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-navy-900 font-serif">Bad-Zentrale</h2>
-          <span className="bg-accent-orange/10 text-accent-orange text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">Demo / In Vorbereitung</span>
+          <span className="bg-accent-orange/10 text-accent-orange text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+            {loadError ? "Daten nicht verfÃ¼gbar" : "Persistierte Daten"}
+          </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -79,7 +89,7 @@ export function BaederDashboardClient({ baederData = [] }: Props) {
             </div>
           </button>
 
-          {/* 3. Messplan heute */}
+          {/* 3. Persistierte Messhistorie */}
           <button onClick={() => setActiveOverlay("measurement_plan")} className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer">
             <div>
               <div className="flex items-start justify-between mb-4">
@@ -88,16 +98,16 @@ export function BaederDashboardClient({ baederData = [] }: Props) {
                 </div>
                 <span className="text-2xl font-bold text-navy-900">{messungenCount}</span>
               </div>
-              <h3 className="font-bold text-navy-900 text-lg mb-1">Messplan heute</h3>
-              <p className="text-sm text-text-muted font-medium">Anstehende Analysen</p>
+              <h3 className="font-bold text-navy-900 text-lg mb-1">Messhistorie</h3>
+              <p className="text-sm text-text-muted font-medium">Persistierte Messungen</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
-              Plan ansehen <ArrowRight className="w-4 h-4" />
+              Historie ansehen <ArrowRight className="w-4 h-4" />
             </div>
           </button>
 
           {/* 4. Chemie und Bestand */}
-          <button onClick={() => setActiveOverlay("chemicals_inventory")} className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer">
+          <Link href="/lager" className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer">
             <div>
               <div className="flex items-start justify-between mb-4">
                 <div className="w-12 h-12 bg-[#107C41]/10 rounded-xl flex items-center justify-center text-[#107C41]">
@@ -110,10 +120,10 @@ export function BaederDashboardClient({ baederData = [] }: Props) {
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
               Bestände prüfen <ArrowRight className="w-4 h-4" />
             </div>
-          </button>
+          </Link>
 
           {/* 5. Metallverbrauch */}
-          <button onClick={() => setActiveOverlay("metal_consumption")} className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer">
+          <button disabled title="Metallverbrauch ist noch nicht belastbar instrumentiert" className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between opacity-70 cursor-not-allowed">
             <div>
               <div className="flex items-start justify-between mb-4">
                 <div className="w-12 h-12 bg-accent-orange/10 rounded-xl flex items-center justify-center text-accent-orange">
@@ -121,15 +131,15 @@ export function BaederDashboardClient({ baederData = [] }: Props) {
                 </div>
               </div>
               <h3 className="font-bold text-navy-900 text-lg mb-1">Metallverbrauch</h3>
-              <p className="text-sm text-text-muted font-medium">Hochrechnung und Logik</p>
+              <p className="text-sm text-text-muted font-medium">Noch nicht belastbar instrumentiert</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
-              Verbrauch zeigen <ArrowRight className="w-4 h-4" />
+              Auswertung deaktiviert
             </div>
           </button>
 
           {/* 6. Badkosten / Metallmarge */}
-          <button onClick={() => setActiveOverlay("metal_margins")} className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer">
+          <button disabled title="Badkosten und Metallmarge sind noch nicht belastbar instrumentiert" className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between opacity-70 cursor-not-allowed">
             <div>
               <div className="flex items-start justify-between mb-4">
                 <div className="w-12 h-12 bg-success-green/10 rounded-xl flex items-center justify-center text-success-green">
@@ -137,15 +147,15 @@ export function BaederDashboardClient({ baederData = [] }: Props) {
                 </div>
               </div>
               <h3 className="font-bold text-navy-900 text-lg mb-1">Kosten / Marge</h3>
-              <p className="text-sm text-text-muted font-medium">Preis-Mengen-Vorbereitung</p>
+              <p className="text-sm text-text-muted font-medium">Noch nicht belastbar instrumentiert</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
-              Kalkulation ansehen <ArrowRight className="w-4 h-4" />
+              Auswertung deaktiviert
             </div>
           </button>
 
           {/* 7. Sperrungen und Risiken */}
-          <button onClick={() => setActiveOverlay("bath_locks")} className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between group hover:shadow-md transition-all cursor-pointer md:col-span-2 lg:col-span-3">
+          <button disabled title="Badsperren sind noch nicht an eine persistierte Verriegelungslogik angebunden" className="text-left bg-white rounded-2xl p-5 border border-neutral-gray-200 shadow-sm flex flex-col justify-between opacity-70 cursor-not-allowed md:col-span-2 lg:col-span-3">
             <div>
               <div className="flex items-start justify-between mb-4">
                 <div className="w-12 h-12 bg-neutral-gray-100 rounded-xl flex items-center justify-center text-navy-900">
@@ -154,10 +164,10 @@ export function BaederDashboardClient({ baederData = [] }: Props) {
                 <span className="text-sm font-bold bg-neutral-gray-100 text-navy-900 px-3 py-1 rounded-full">Sicherheit</span>
               </div>
               <h3 className="font-bold text-navy-900 text-lg mb-1">Sperrungen und Betriebsrisiken</h3>
-              <p className="text-sm text-text-muted font-medium">Verriegelte Anlagen und betroffene Aufträge.</p>
+              <p className="text-sm text-text-muted font-medium">Persistierte Verriegelungslogik fehlt noch.</p>
             </div>
             <div className="mt-6 flex items-center justify-between w-full text-sm font-bold text-text-muted group-hover:text-navy-900 transition-colors">
-              Sperrungen prüfen <ArrowRight className="w-4 h-4" />
+              Funktion deaktiviert
             </div>
           </button>
 
@@ -178,7 +188,7 @@ export function BaederDashboardClient({ baederData = [] }: Props) {
       </div>
       {baederCount > 0 && (
         <ul className="space-y-3">
-          {baederData.map((b: any) => (
+          {baederData.map((b) => (
              <li key={b.id} className="bg-white p-3 rounded-lg border border-neutral-gray-100">
                <p className="font-bold">{b.name} <span className="text-xs text-text-muted ml-2">Status: {b.status}</span></p>
              </li>
@@ -234,7 +244,7 @@ export function BaederDashboardClient({ baederData = [] }: Props) {
         <Info className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
         <div>
           <h4 className="font-bold text-navy-900">Keine Daten</h4>
-          <p className="text-sm text-text-muted">0 kg verbraucht.</p>
+          <p className="text-sm text-text-muted">Keine belastbare Verbrauchsbuchung vorhanden; Auswertung deaktiviert.</p>
         </div>
       </div>
     </div>
@@ -247,7 +257,7 @@ export function BaederDashboardClient({ baederData = [] }: Props) {
         <Info className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
         <div>
           <h4 className="font-bold text-navy-900">Keine Daten</h4>
-          <p className="text-sm text-text-muted">0% Abweichung.</p>
+          <p className="text-sm text-text-muted">Keine belastbare Kosten- oder Margenbasis vorhanden; Auswertung deaktiviert.</p>
         </div>
       </div>
     </div>
@@ -260,7 +270,7 @@ export function BaederDashboardClient({ baederData = [] }: Props) {
         <Info className="w-5 h-5 text-text-muted shrink-0 mt-0.5" />
         <div>
           <h4 className="font-bold text-navy-900">Keine Daten</h4>
-          <p className="text-sm text-text-muted">0 Bäder gesperrt.</p>
+          <p className="text-sm text-text-muted">Sperrstatus ist noch nicht persistiert; Funktion deaktiviert.</p>
         </div>
       </div>
     </div>

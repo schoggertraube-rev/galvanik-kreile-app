@@ -1,109 +1,98 @@
-/* ═══════════════════════════════════════════════════════════
-   Instagram Adapter (Meta Graph API)
-   Spec: 22 §2 (Instagram - Stufe 1/2)
-   ═══════════════════════════════════════════════════════════ */
+import type { AktionVorschlag } from '../marketingTypes'
 
-import type { AktionVorschlag } from "../marketingTypes";
+export interface ChannelPublishResult {
+  success: boolean
+  message: string
+  touchpointId?: string
+}
 
 export interface ChannelAdapter {
-  id: string;
-  isConnected(): Promise<boolean>;
-  publish(aktion: AktionVorschlag): Promise<{ success: boolean; message: string; touchpointId?: string }>;
+  id: string
+  isConnected(): Promise<boolean>
+  publish(aktion: AktionVorschlag): Promise<ChannelPublishResult>
+}
+
+type StatusResponse = {
+  connected?: boolean
+}
+
+type PublishResponse = {
+  ok?: boolean
+  code?: string
+  message?: string
+  touchpointId?: string
+}
+
+const PUBLISH_MESSAGES: Record<string, string> = {
+  ASSET_REQUIRED: 'Vor dem Veröffentlichen muss ein freigegebenes Bild mit der Aktion verknüpft sein.',
+  ACTION_NOT_APPROVED: 'Die Aktion muss vor dem Veröffentlichen freigegeben werden.',
+  ACTION_CONTENT_NOT_APPROVED: 'Die sichtbare Textvariante ist nicht als freigegebener Inhalt gespeichert. Bitte veröffentlichen Sie nur den freigegebenen Stand.',
+  ASSET_NOT_APPROVED: 'Das verknüpfte Bild ist nicht für Marketing freigegeben.',
+  CHANNEL_NOT_CONNECTED: 'Instagram ist nicht verknüpft.',
+  PUBLISH_IN_PROGRESS: 'Die Veröffentlichung wird bereits verarbeitet.',
+  PUBLISH_UNCERTAIN: 'Der Veröffentlichungsstatus ist unklar. Bitte prüfen Sie Instagram, bevor erneut veröffentlicht wird.',
+  CONFIGURATION_MISSING: 'Die Instagram-Verbindung ist serverseitig noch nicht vollständig konfiguriert.',
 }
 
 export class InstagramAdapter implements ChannelAdapter {
-  id = 'instagram';
-
-  private async getStoredToken(): Promise<string | null> {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('ig_access_token') || null;
-    }
-    return null;
-  }
+  id = 'instagram'
 
   async isConnected(): Promise<boolean> {
-    const token = await this.getStoredToken();
-    return !!token;
-  }
-
-  connect(redirectUri: string) {
-    const appId = process.env.NEXT_PUBLIC_META_APP_ID || '1480036612948628'; // fallback to a generic app id if missing
-    const scope = 'instagram_basic,instagram_content_publish,pages_show_list,pages_read_engagement';
-    const authUrl = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&display=page&extras={"setup":{"channel":"IG_API_ONBOARDING"}}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${scope}`;
-    
-    if (typeof window !== 'undefined') {
-      window.location.href = authUrl;
+    try {
+      const response = await fetch('/api/marketing/instagram/status', {
+        method: 'GET',
+        credentials: 'same-origin',
+        cache: 'no-store',
+      })
+      if (!response.ok) return false
+      const body = await response.json() as StatusResponse
+      return body.connected === true
+    } catch {
+      return false
     }
   }
 
-  async fetchIgUserId(token: string): Promise<string> {
-    // 1. Get Pages
-    const pagesRes = await fetch(`https://graph.facebook.com/v19.0/me/accounts?access_token=${token}`);
-    const pagesData = await pagesRes.json();
-    if (pagesData.error) throw new Error(pagesData.error.message);
-    if (!pagesData.data || pagesData.data.length === 0) throw new Error("Keine Facebook-Seite gefunden.");
-
-    const pageId = pagesData.data[0].id;
-
-    // 2. Get IG Business Account
-    const igRes = await fetch(`https://graph.facebook.com/v19.0/${pageId}?fields=instagram_business_account&access_token=${token}`);
-    const igData = await igRes.json();
-    if (igData.error) throw new Error(igData.error.message);
-    if (!igData.instagram_business_account) throw new Error("Kein Instagram Business Account mit dieser Facebook-Seite verknüpft.");
-
-    return igData.instagram_business_account.id;
+  connect(): void {
+    if (typeof window !== 'undefined') {
+      window.location.assign('/api/marketing/instagram/connect')
+    }
   }
 
-  async publish(aktion: AktionVorschlag): Promise<{ success: boolean; message: string; touchpointId?: string }> {
-    const token = await this.getStoredToken();
-    if (!token) {
-      return { success: false, message: "Instagram ist nicht verknüpft." };
+  async publish(aktion: AktionVorschlag): Promise<ChannelPublishResult> {
+    if (!aktion.assetId) {
+      return { success: false, message: PUBLISH_MESSAGES.ASSET_REQUIRED }
+    }
+    const expectedCaption = [
+      aktion.caption.trim(),
+      aktion.hashtags.trim(),
+    ].filter(Boolean).join('\n\n')
+    if (!expectedCaption || expectedCaption.length > 2_200) {
+      return { success: false, message: PUBLISH_MESSAGES.ACTION_CONTENT_NOT_APPROVED }
     }
 
     try {
-      const igUserId = await this.fetchIgUserId(token);
-      
-      // 1. Container erstellen (Bild hochladen)
-      const containerRes = await fetch(`https://graph.facebook.com/v19.0/${igUserId}/media`, {
+      const response = await fetch('/api/marketing/instagram/publish', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image_url: 'https://via.placeholder.com/1080', // Fallback for now if image is missing
-          caption: `[${aktion.titel}]\n\n${Array.isArray(aktion.hashtags) ? aktion.hashtags.join(' ') : (aktion.hashtags || '')}`,
-          access_token: token
-        })
-      });
-
-      const containerData = await containerRes.json();
-      if (containerData.error) throw new Error(containerData.error.message);
-
-      // Wait a bit for FB processing
-      await new Promise(r => setTimeout(r, 2000));
-
-      // 2. Veröffentlichen
-      const publishRes = await fetch(`https://graph.facebook.com/v19.0/${igUserId}/media_publish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          creation_id: containerData.id,
-          access_token: token
-        })
-      });
-
-      const publishData = await publishRes.json();
-      if (publishData.error) throw new Error(publishData.error.message);
-
+        body: JSON.stringify({ actionId: aktion.id, assetId: aktion.assetId, expectedCaption }),
+      })
+      const body = await response.json() as PublishResponse
+      if (response.ok && body.ok) {
+        return {
+          success: true,
+          message: body.message || 'Erfolgreich auf Instagram veröffentlicht.',
+          touchpointId: body.touchpointId,
+        }
+      }
       return {
-        success: true,
-        message: "Erfolgreich auf Instagram veröffentlicht!",
-        touchpointId: publishData.id
-      };
-
-    } catch (err: any) {
-      console.error("Instagram API Error:", err);
-      return { success: false, message: `Instagram API Fehler: ${err.message}` };
+        success: false,
+        message: (body.code && PUBLISH_MESSAGES[body.code]) || 'Instagram-Veröffentlichung fehlgeschlagen.',
+      }
+    } catch {
+      return { success: false, message: 'Instagram-Veröffentlichung konnte nicht erreicht werden.' }
     }
   }
 }
 
-export const instagramAdapter = new InstagramAdapter();
+export const instagramAdapter = new InstagramAdapter()

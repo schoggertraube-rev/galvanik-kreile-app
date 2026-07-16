@@ -4,8 +4,10 @@ import { db } from "@/db";
 import { einwilligung } from "@/db/schema_marketing";
 import { customers } from "@/db/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { requireMarketingRead } from '@/lib/server/marketingAuthorization';
 
 export async function getEinwilligungen() {
+  const actor = await requireMarketingRead();
   const data = await db
     .select({
       id: einwilligung.id,
@@ -18,15 +20,18 @@ export async function getEinwilligungen() {
       zeitpunkt: einwilligung.zeitpunkt,
     })
     .from(einwilligung)
-    .leftJoin(customers, eq(einwilligung.kundeId, customers.id))
+    .innerJoin(customers, and(eq(einwilligung.kundeId, customers.id), eq(customers.tenantId, actor.tenantId)))
     .orderBy(desc(einwilligung.zeitpunkt));
   return data;
 }
 
 export async function checkEinwilligung(kundeId: string, kanalTyp: string): Promise<boolean> {
+  const actor = await requireMarketingRead();
+  if (!['email', 'sms'].includes(kanalTyp)) return false;
   const result = await db
     .select({ status: einwilligung.status })
     .from(einwilligung)
+    .innerJoin(customers, and(eq(einwilligung.kundeId, customers.id), eq(customers.tenantId, actor.tenantId)))
     .where(
       and(
         eq(einwilligung.kundeId, kundeId),

@@ -223,15 +223,15 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           </Link>
         )}
 
-        {/* Live-Sync Indicator */}
+        {/* Server refresh indicator */}
         {realtimeStatus !== "disabled" && (
-          <div className="hidden lg:flex items-center gap-1.5 px-3 h-9 rounded-full bg-white/50 backdrop-blur-sm border border-white/60 shadow-sm text-xs font-bold text-navy-700 transition-all duration-300 hover:bg-white">
-            {realtimeStatus === "active" ? (
-              <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live</>
-            ) : realtimeStatus === "connecting" ? (
+          <div title="Sichtbare Seiten laden periodisch über autorisierte Server-Actions nach." className="hidden lg:flex items-center gap-1.5 px-3 h-9 rounded-full bg-white/50 backdrop-blur-sm border border-white/60 shadow-sm text-xs font-bold text-navy-700 transition-all duration-300 hover:bg-white">
+            {realtimeStatus === "ready" ? (
+              <><span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Auto-Refresh</>
+            ) : realtimeStatus === "refreshing" ? (
               <><span className="w-1.5 h-1.5 rounded-full bg-accent-orange animate-pulse" /> Sync...</>
             ) : (
-              <><span className="w-1.5 h-1.5 rounded-full bg-danger-red" /> Getrennt</>
+              <><span className="w-1.5 h-1.5 rounded-full bg-danger-red" /> Offline</>
             )}
           </div>
         )}

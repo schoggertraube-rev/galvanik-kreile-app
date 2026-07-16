@@ -1,14 +1,15 @@
 "use client";
+
 import { useMemo } from "react";
-import { MockCustomer, MockOrder } from "@/lib/mockData";
-const INITIAL_ORDERS: MockOrder[] = [];
+import type { LocalAnalysisResult } from "@/lib/localPhoneAnalysis";
+import type { Customer } from "@/lib/repositories/customersRepository";
+import type { Order } from "@/lib/repositories/ordersRepository";
 
 export interface LiveContextData {
   customer: {
+    id: string;
     name: string;
-    city: string;
-    since: string;
-    totalOrders: number;
+    city: string | null;
     initials: string;
   } | null;
   orders: {
@@ -20,101 +21,62 @@ export interface LiveContextData {
     isHighlighted: boolean;
   }[];
   calendar: {
-    days: { label: string; num: number; info: string; type: "normal" | "suggested" | "holiday" | "today" }[];
+    days: [];
     hint: string;
+    availability: "not_connected";
   };
-  stock: {
-    name: string;
-    level: string;
-    status: "ok" | "low" | "empty";
-  } | null;
-  payment: {
-    open: string;
-    total: string;
-    moral: string;
-  } | null;
+  stock: null;
+  stockHint: string;
+  payment: null;
+  paymentHint: string;
 }
 
 export function useLiveContext(
-  matchedCustomer: MockCustomer | null,
-  matchedOrder: MockOrder | null,
+  matchedCustomer: Customer | null,
+  matchedOrder: Order | null,
+  customerOrders: readonly Order[],
   matchedMaterial: string | null,
-  matchedTime: { label: string; dayOfWeek: number; isFree: boolean } | null,
+  matchedTime: LocalAnalysisResult["matchedTime"],
 ): LiveContextData {
   return useMemo(() => {
-    // Customer
-    let customer: LiveContextData["customer"] = null;
-    if (matchedCustomer) {
-      customer = {
-        name: matchedCustomer.name,
-        city: matchedCustomer.city || "Unbekannt",
-        since: "Kunde seit 2019",
-        totalOrders: matchedCustomer.orders?.length || 0,
-        initials: matchedCustomer.name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase(),
-      };
-    }
-
-    // Orders
-    let orders: LiveContextData["orders"] = [];
-    if (matchedCustomer) {
-      const custOrders = INITIAL_ORDERS.filter(o => o.customerId === matchedCustomer.id);
-      orders = custOrders.slice(0, 3).map(o => ({
-        id: o.id,
-        orderNumber: o.orderNumber,
-        task: o.task,
-        status: o.status || "active",
-        statusText: o.statusText,
-        isHighlighted: matchedOrder?.id === o.id,
-      }));
-    }
-
-    // Calendar (next 5 days)
-    const now = new Date();
-    const weekdayLabels = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
-    const calDays: LiveContextData["calendar"]["days"] = [];
-    for (let i = 0; i < 5; i++) {
-      const d = new Date(now);
-      d.setDate(now.getDate() + i);
-      const dow = d.getDay();
-      const isWeekend = dow === 0 || dow === 6;
-      const isSuggested = matchedTime && !isWeekend && i > 0 && matchedTime.dayOfWeek === dow;
-      calDays.push({
-        label: weekdayLabels[dow],
-        num: d.getDate(),
-        info: i === 0 ? "heute" : isWeekend ? "zu" : isSuggested ? "frei ✓" : "—",
-        type: i === 0 ? "today" : isWeekend ? "holiday" : isSuggested ? "suggested" : "normal",
-      });
-    }
-    const calHint = matchedTime
-      ? (matchedTime.isFree ? `Termin ${matchedTime.label} ist frei` : "Wochenende — Werkstatt geschlossen")
-      : "Kein Termin im Gespräch erkannt";
-
-    // Stock (demo data based on material)
-    let stock: LiveContextData["stock"] = null;
-    if (matchedMaterial) {
-      const mat = matchedMaterial.charAt(0).toUpperCase() + matchedMaterial.slice(1);
-      // Demo stock levels
-      const levels: Record<string, { level: string; status: "ok" | "low" }> = {
-        zink: { level: "88 % voll", status: "ok" },
-        chrom: { level: "45 % voll", status: "low" },
-        nickel: { level: "72 % voll", status: "ok" },
-        messing: { level: "91 % voll", status: "ok" },
-        kupfer: { level: "33 % voll", status: "low" },
-      };
-      const info = levels[matchedMaterial.toLowerCase()] || { level: "—", status: "ok" as const };
-      stock = { name: `${mat}-Bad 3`, ...info };
-    }
-
-    // Payment (demo data)
-    let payment: LiveContextData["payment"] = null;
-    if (matchedCustomer) {
-      payment = {
-        open: "248,00 €",
-        total: "2024 · Nr. 0231",
-        moral: "pünktlich",
-      };
-    }
-
-    return { customer, orders, calendar: { days: calDays, hint: calHint }, stock, payment };
-  }, [matchedCustomer, matchedOrder, matchedMaterial, matchedTime]);
+    const customer = matchedCustomer
+      ? {
+          id: matchedCustomer.id,
+          name: matchedCustomer.name,
+          city: matchedCustomer.city?.trim() || null,
+          initials: matchedCustomer.name
+            .split(/\s+/)
+            .filter(Boolean)
+            .map((word) => word[0])
+            .join("")
+            .slice(0, 2)
+            .toUpperCase(),
+        }
+      : null;
+    const orders = customerOrders.slice(0, 3).map((order) => ({
+      id: order.id,
+      orderNumber: order.orderNumber,
+      task: order.task?.trim() || order.title?.trim() || "Keine Beschreibung hinterlegt",
+      status: order.status,
+      statusText: order.statusText?.trim() || order.status,
+      isHighlighted: matchedOrder?.id === order.id,
+    }));
+    return {
+      customer,
+      orders,
+      calendar: {
+        days: [],
+        hint: matchedTime
+          ? `Terminangabe erkannt: ${matchedTime.label}. Kalenderverfügbarkeit ist nicht angebunden.`
+          : "Kalenderverfügbarkeit ist nicht angebunden.",
+        availability: "not_connected",
+      },
+      stock: null,
+      stockHint: matchedMaterial
+        ? `Material „${matchedMaterial}“ erkannt; Lagerbestand ist hier noch nicht angebunden.`
+        : "Lagerbestand ist hier noch nicht angebunden.",
+      payment: null,
+      paymentHint: "Offene Posten und Zahlungsmoral sind hier noch nicht angebunden.",
+    };
+  }, [matchedCustomer, matchedOrder, customerOrders, matchedMaterial, matchedTime]);
 }

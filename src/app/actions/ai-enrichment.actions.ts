@@ -1,95 +1,83 @@
 "use server";
 
-import { checkAppAuth } from "@/lib/server/authHelper";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { resolveAuthorization } from "@/lib/server/authorization";
+import {
+  parseCustomerEnrichInput,
+  parseCustomerEnrichmentResult,
+  parseCustomerFreetextResult,
+  parseFreetextInput,
+  type CustomerEnrichmentResult,
+  type CustomerFreetextResult,
+} from "@/lib/server/aiInputs";
+import { proxyMeteredAiRequest } from "@/lib/server/aiUsage";
 
-export async function extractCustomerDataFromFreetext(text: string) {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return { ok: false, error: auth.message };
+type AiActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
-  if (!process.env.GEMINI_API_KEY) {
-    return { ok: false, error: "Kein Gemini API Key konfiguriert." };
+async function authorizedCustomerWriter() {
+  const auth = await resolveAuthorization();
+  if (!auth.ok || auth.data.tenantId !== "galvanik-kreile" || !auth.data.permissions.includes("perm_data_customers")) {
+    return null;
   }
+  return auth.data;
+}
 
+async function resultFromResponse<T>(
+  response: Response,
+  parser: (value: unknown) => T,
+): Promise<AiActionResult<T>> {
+  if (!response.ok) {
+    return {
+      ok: false,
+      error: response.status === 429
+        ? "KI-Nutzungslimit erreicht. Bitte später erneut versuchen."
+        : "KI-Dienst ist derzeit nicht verfügbar.",
+    };
+  }
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL_TEXT || "gemini-2.5-flash" });
-
-    const prompt = `
-Extrahiere strukturierte Kundendaten aus folgendem Freitext einer Notiz.
-Antworte AUSSCHLIESSLICH als gültiges JSON im folgenden Format:
-{
-  "type": "privat" | "business" | "lead",
-  "company": "Firmenname falls erkennbar, sonst null",
-  "contactName": "Vor- und Nachname falls erkennbar, sonst null",
-  "email": "Email falls erkennbar, sonst null",
-  "phone": "Telefon falls erkennbar, sonst null",
-  "street": "Straße und Hausnummer falls erkennbar, sonst null",
-  "zipCode": "PLZ falls erkennbar, sonst null",
-  "city": "Stadt falls erkennbar, sonst null",
-  "notes": "Relevante zusätzliche Informationen, die sich auf den Kunden beziehen, sonst null"
-}
-
-Freitext: "${text}"
-`;
-
-    const result = await model.generateContent(prompt);
-    const textResponse = result.response.text();
-    
-    // Bereinige Markdown Code Blocks falls Gemini sie mitschickt
-    const cleanedJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-    const data = JSON.parse(cleanedJson);
-
-    return { ok: true, data };
-  } catch (error: unknown) {
-    console.error("Failed to extract data:", error);
-    return { ok: false, error: "Fehler bei der KI-Auswertung: " + (error instanceof Error ? error.message : "Unknown error") };
+    return { ok: true, data: parser(await response.json()) };
+  } catch {
+    return { ok: false, error: "KI-Antwort hatte kein gültiges Datenformat." };
   }
 }
 
-export async function enrichCustomerData(company: string, city: string) {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return { ok: false, error: auth.message };
+export async function extractCustomerDataFromFreetext(text: string): Promise<AiActionResult<CustomerFreetextResult>> {
+  const identity = await authorizedCustomerWriter();
+  if (!identity) return { ok: false, error: "Keine Berechtigung für Kundendaten." };
 
-  if (!process.env.GEMINI_API_KEY) {
-    return { ok: false, error: "Kein Gemini API Key konfiguriert." };
-  }
-
-  if (!company && !city) {
-      return { ok: false, error: "Mindestens Firma oder Stadt muss angegeben werden." };
-  }
-
+  let payload;
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL_TEXT || "gemini-2.5-flash" });
-
-    const prompt = `
-Führe eine Web-Recherche für folgendes Unternehmen durch und liefere die Kontaktdaten.
-Unternehmen: "${company}"
-Ort/Stadt: "${city}"
-
-Antworte AUSSCHLIESSLICH als gültiges JSON im folgenden Format:
-{
-  "website": "Website falls gefunden, sonst null",
-  "phone": "Öffentliche Telefonnummer falls gefunden, sonst null",
-  "email": "Öffentliche Email falls gefunden, sonst null",
-  "street": "Straße und Hausnummer falls gefunden, sonst null",
-  "zipCode": "PLZ (korrekt für das Land) falls gefunden oder ableitbar, sonst null",
-  "city": "Stadt falls gefunden oder ableitbar, sonst null",
-  "country": "Länderkürzel (DE, AT, CH) falls gefunden, sonst null",
-  "confidence": "hoch" | "mittel" | "niedrig"
-}
-`;
-
-    const result = await model.generateContent(prompt);
-    const textResponse = result.response.text();
-    
-    const cleanedJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-    const data = JSON.parse(cleanedJson);
-
-    return { ok: true, data };
-  } catch (error: unknown) {
-    console.error("Failed to enrich data:", error);
-    return { ok: false, error: "Fehler bei der KI-Recherche: " + (error instanceof Error ? error.message : "Unknown error") };
+    payload = parseFreetextInput({ text });
+  } catch {
+    return { ok: false, error: "Freitext fehlt oder ist zu lang." };
   }
+  const response = await proxyMeteredAiRequest({
+    request: new Request("https://kreile.invalid/internal/customer-freetext", { method: "POST" }),
+    identity,
+    feature: "freetext-extract",
+    payload,
+    maxOutputTokens: 1_024,
+    parseResult: parseCustomerFreetextResult,
+  });
+  return resultFromResponse(response, parseCustomerFreetextResult);
+}
+
+export async function enrichCustomerData(company: string, city: string): Promise<AiActionResult<CustomerEnrichmentResult>> {
+  const identity = await authorizedCustomerWriter();
+  if (!identity) return { ok: false, error: "Keine Berechtigung für Kundendaten." };
+
+  let payload;
+  try {
+    payload = parseCustomerEnrichInput({ company_name: company, city: city || undefined });
+  } catch {
+    return { ok: false, error: "Für die Recherche ist ein Firmenname erforderlich." };
+  }
+  const response = await proxyMeteredAiRequest({
+    request: new Request("https://kreile.invalid/internal/customer-enrich", { method: "POST" }),
+    identity,
+    feature: "customer-enrich",
+    payload,
+    maxOutputTokens: 512,
+    parseResult: parseCustomerEnrichmentResult,
+  });
+  return resultFromResponse(response, parseCustomerEnrichmentResult);
 }

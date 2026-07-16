@@ -3,6 +3,7 @@ import type { Order } from "@/lib/repositories/ordersRepository";
 
 export async function generateDeliveryMailHtml(order: Order, customerName: string): Promise<string> {
   const settings = await getCompanySettings();
+  if (!settings.configured) throw new Error("Firmendaten sind noch nicht konfiguriert.");
   
   const greeting = settings.emailGreeting || "Sehr geehrte Damen und Herren,";
   const pickupInfo = settings.emailPickupInfo || "Ihr Auftrag ist fertig und kann abgeholt werden.";

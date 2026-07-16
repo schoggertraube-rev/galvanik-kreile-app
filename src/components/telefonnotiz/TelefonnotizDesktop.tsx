@@ -1,40 +1,25 @@
 "use client";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Phone, Edit2, Mic, MicOff, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, ArrowLeft, Mail, Image as ImageIcon } from "lucide-react";
+import { Phone, Edit2, Mic, MicOff, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, ArrowLeft } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePhoneNoteAnalysis, AnalysisResult } from "@/hooks/usePhoneNoteAnalysis";
+import { usePhoneNoteAnalysis, type LivePhoneAction } from "@/hooks/usePhoneNoteAnalysis";
 import { useLiveContext } from "@/hooks/useLiveContext";
 import { useAutosaveDraft } from "@/hooks/useAutosaveDraft";
-import { createPhoneNote } from "@/app/actions/phoneNotes.actions";
+import { createPhoneNote, getPhoneNoteById, updatePhoneNote } from "@/app/actions/phoneNotes.actions";
 import { useParkedCall } from "@/contexts/ParkedCallContext";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
+import { buildHighlightedHtml } from "@/lib/security/highlightHtml";
+import { safeReturnTo } from "@/lib/navigation/safeReturnTo";
 
 /* ===== Step definitions ===== */
 const STEPS = [
   { id: 1, label: "Erfassen" },
   { id: 2, label: "Auswerten" },
   { id: 3, label: "Prüfen" },
-  { id: 4, label: "Verteilen" },
+  { id: 4, label: "Speichern" },
 ];
-
-/* ===== Mirror Highlight Helper ===== */
-function buildHighlightedHtml(text: string, highlights: AnalysisResult["highlights"]): string {
-  if (!text || highlights.length === 0) return escapeHtml(text);
-  const sorted = [...highlights].sort((a, b) => b.word.length - a.word.length);
-  let result = text;
-  for (const h of sorted) {
-    const escaped = h.word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const regex = new RegExp(`(${escaped})`, "gi");
-    result = result.replace(regex, `<mark class="${h.type}">$1</mark>`);
-  }
-  return result;
-}
-
-function escapeHtml(str: string): string {
-  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
 
 /* ===== MAIN COMPONENT ===== */
 export function TelefonnotizDesktop() {
@@ -43,10 +28,11 @@ export function TelefonnotizDesktop() {
   const { openErfassung } = useErfassung();
   const source = searchParams.get("source") || "home";
   const returnTo = searchParams.get("returnTo");
+  const resumeId = searchParams.get("resumeId");
 
   // Compute return path
   const returnPath = useMemo(() => {
-    if (returnTo) return returnTo;
+    if (returnTo) return safeReturnTo(returnTo, "/");
     if (source === "kommunikation") return "/kommunikation";
     if (source === "warendurchlauf") return "/warendurchlauf/wareneingang";
     return "/";
@@ -67,12 +53,8 @@ export function TelefonnotizDesktop() {
   const [showSaveSheet, setShowSaveSheet] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isSaving, setIsSaving] = useState(false);
-  const [showUndo, setShowUndo] = useState(false);
-  const [showReminder, setShowReminder] = useState(false);
-  const [reminderTime, setReminderTime] = useState("Heute 17:00");
-  const [showEmailMock, setShowEmailMock] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   
   // Marketing Source State
   const [quelleTyp, setQuelleTyp] = useState("weiß nicht");
@@ -83,7 +65,6 @@ export function TelefonnotizDesktop() {
   // Disambiguation state
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
-  const [forceAI, setForceAI] = useState(false);
   
   // Saved Note State
   const [savedNoteId, setSavedNoteId] = useState<string | null>(null);
@@ -99,6 +80,7 @@ export function TelefonnotizDesktop() {
   const recordingWantedRef = useRef(false);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
+  const loadedResumeIdRef = useRef<string | null>(null);
 
   function startRecognitionSafely() {
     if (!recognitionRef.current) return;
@@ -194,19 +176,54 @@ export function TelefonnotizDesktop() {
   }, [speechSupported, speechError, recordingWanted]);
 
   // Hooks
-  const { result, analyze, isAnalyzing } = usePhoneNoteAnalysis();
-  const { clearDraft } = useAutosaveDraft(text, setText);
+  const { result, analyze, requestAi, isAnalyzing, dataStatus, dataError, aiError } = usePhoneNoteAnalysis();
+  const { clearDraft, draftError } = useAutosaveDraft(text, setText);
   const ctx = useLiveContext(
     result?.matchedCustomer || null,
     result?.matchedOrder || null,
+    result?.allCustomerOrders || [],
     result?.matchedMaterial || null,
     result?.matchedTime || null,
   );
 
   // Analyze on text change (with disambiguation overrides)
   useEffect(() => {
-    analyze(text, selectedCustomerId || undefined, selectedOrderIds.length > 0 ? selectedOrderIds : undefined, forceAI);
-  }, [text, analyze, selectedCustomerId, selectedOrderIds, forceAI]);
+    analyze(text, selectedCustomerId || undefined, selectedOrderIds.length > 0 ? selectedOrderIds : undefined);
+  }, [text, analyze, selectedCustomerId, selectedOrderIds]);
+
+  useEffect(() => {
+    if (!resumeId || loadedResumeIdRef.current === resumeId) return;
+    loadedResumeIdRef.current = resumeId;
+    let active = true;
+    const timer = window.setTimeout(() => {
+      getPhoneNoteById(resumeId)
+        .then((note) => {
+          if (!active) return;
+          if (!note) {
+            setSaveError("Die geparkte Telefonnotiz wurde nicht gefunden.");
+            return;
+          }
+          if (!note.rawText?.trim()) {
+            setSaveError("Die geparkte Telefonnotiz enthält keinen fortsetzbaren Text.");
+            return;
+          }
+          setText(note.rawText);
+          setSavedNoteId(note.id);
+          setSelectedCustomerId(note.customerId);
+          setSelectedOrderIds(note.orderId ? [note.orderId] : []);
+          setSaveError(null);
+        })
+        .catch((error) => {
+          if (!active) return;
+          console.error("Geparkte Telefonnotiz konnte nicht geladen werden", error);
+          setSaveError(error instanceof Error ? error.message : "Geparkte Telefonnotiz konnte nicht geladen werden.");
+        });
+    }, 0);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [resumeId]);
 
   // Date for header
   const dateStr = useMemo(() => {
@@ -232,63 +249,38 @@ export function TelefonnotizDesktop() {
   // Handlers
   const handleAnalyze = useCallback(async () => {
     if (!text.trim()) return;
-    
-    // Save to DB before proceeding (Phase 3 requirement)
-    try {
-      setIsSaving(true);
-      const noteData = {
-        rawText: text,
-        category: "Neuanfrage",
-        urgency: "Normal",
-        status: "open",
-        extractionJson: { mode: "auto" }
-      };
-      await createPhoneNote(noteData);
-    } catch (e) {
-      console.error("Fehler beim Speichern der Notiz:", e);
-    } finally {
-      setIsSaving(false);
-    }
-
     setStep(3);
-  }, [text]);
+    await requestAi(
+      text,
+      selectedCustomerId || undefined,
+      selectedOrderIds.length > 0 ? selectedOrderIds : undefined,
+    );
+  }, [requestAi, selectedCustomerId, selectedOrderIds, text]);
 
-  const handleLiveActionClick = useCallback((action: any) => {
+  const handleLiveActionClick = useCallback((action: LivePhoneAction) => {
     if (action.type === "create_order") {
-      const draftId = `draft_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
-      
-      const draftPayload = {
-        draftId,
-        source: "phone_note",
-        rawText: text,
-        customerId: action.payload.customerId,
-        customerName: action.payload.customerName,
-        customerCandidateIds: action.payload.customerCandidateIds,
-        material: action.payload.material,
-        surfaceRequested: action.payload.surfaceRequested,
-        requestedDate: action.payload.requestedDate,
-        notes: `Aus Telefonnotiz: ${text}`
-      };
-      
-      sessionStorage.setItem(draftId, JSON.stringify(draftPayload));
-      
-      const query = new URLSearchParams({
-        mode: "new-order",
-        source: "phone-note",
-        draftId
+      openErfassung({
+        mode: "order",
+        intent: "create_order",
+        source: "phone",
+        customerId: typeof action.payload.customerId === "string" ? action.payload.customerId : undefined,
+        sourceRef: savedNoteId,
+        prefill: { rawText: text },
       });
-      openErfassung({ mode: "order", intent: "create_order", source: "phone", prefill: { rawText: text } });
     } else if (action.type === "create_customer") {
-      openErfassung({ mode: "customer", intent: "create_customer", source: "phone", prefill: { rawText: text } });
-    } else if (action.type === "review_email") {
-      setShowEmailMock(true);
-    } else if (action.type === "prepare_quote") {
-      alert("Angebotsmodul öffnet sich (Mock)");
+      openErfassung({
+        mode: "customer",
+        intent: "create_customer",
+        source: "phone",
+        sourceRef: savedNoteId,
+        prefill: { rawText: text },
+      });
     }
-  }, [router]);
+  }, [openErfassung, savedNoteId, text]);
 
   const handleSave = useCallback(async (saveMode: "auto" | "park") => {
     setIsSaving(true);
+    setSaveError(null);
     try {
       const noteData = {
         rawText: text,
@@ -304,36 +296,40 @@ export function TelefonnotizDesktop() {
           actions: result?.liveActions,
           mode: saveMode,
           quelleTyp,
+          followUpStatus: "not_executed",
         },
       };
 
-      const res = await createPhoneNote(noteData);
+      const res = savedNoteId
+        ? await updatePhoneNote(savedNoteId, noteData)
+        : await createPhoneNote(noteData);
+      if (!res.success) {
+        setSaveError(res.error);
+        return;
+      }
 
-      if (saveMode === "park" && res.data) {
+      if (saveMode === "park") {
         parkCall({
           id: res.data.id,
-          rawText: text,
-          matchedCustomerName: result?.matchedCustomer?.name,
-          matchedOrderNumber: result?.matchedOrder?.orderNumber,
           parkedAt: Date.now()
         });
         clearDraft();
         setShowExitDialog(false);
         router.push(returnPath);
       } else {
+        clearDraft();
         setShowSaveSheet(false);
         setStep(4);
         setShowSuccess(true);
-        setShowUndo(true);
-        setTimeout(() => setShowUndo(false), 10000);
-        setSavedNoteId(res.data?.id || null);
+        setSavedNoteId(res.data.id);
       }
     } catch (err) {
       console.error("Save failed:", err);
+      setSaveError("Telefonnotiz konnte nicht gespeichert werden.");
     } finally {
       setIsSaving(false);
     }
-  }, [text, result, clearDraft, parkCall, returnPath, router]);
+  }, [text, result, clearDraft, parkCall, quelleTyp, returnPath, router, savedNoteId]);
 
   const handleExit = useCallback(() => {
     if (text.trim() && step < 4) {
@@ -499,10 +495,11 @@ export function TelefonnotizDesktop() {
                         spellCheck={false}
                       />
                     </div>
-                    <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                      <Check size={12} style={{ color: "var(--tn-green-bright)" }} />
-                      Auto-Speichern aktiv.
+                    <div style={{ fontSize: 11, color: draftError ? "var(--tn-red)" : "var(--tn-ink-mute)", marginTop: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                      {draftError ? <AlertTriangle size={12} /> : <Check size={12} style={{ color: "var(--tn-green-bright)" }} />}
+                      {draftError || "Entwurf nur in dieser Browsersitzung; endgültig erst nach „Speichern“."}
                     </div>
+                    {dataError && <div role="alert" style={{ fontSize: 11, color: "var(--tn-red)", marginTop: 6 }}>{dataError}</div>}
                   </div>
                   
                   {/* Right: Answer */}
@@ -512,16 +509,17 @@ export function TelefonnotizDesktop() {
                       {isAnalyzing && <Activity size={10} className="animate-spin" />}
                     </div>
                     <p style={{ fontFamily: "'Fraunces', serif", fontSize: 15, lineHeight: 1.5, margin: 0, flex: 1 }}>
-                      {result?.suggestedAnswer || `„Sobald du sprichst oder tippst, entsteht hier eine fertige Antwort."`}
+                      {result?.suggestedAnswer || "Sobald du sprichst oder tippst, entsteht hier eine lokale Auswertung."}
                     </p>
                     {!result?.usedAI && text.length > 5 && (
                       <button 
-                        onClick={() => setForceAI(true)}
+                        onClick={() => requestAi(text, selectedCustomerId || undefined, selectedOrderIds.length > 0 ? selectedOrderIds : undefined)}
                         style={{ marginTop: 12, width: "100%", padding: "8px", background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 8, color: "var(--tn-cream)", fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}
                       >
-                        <Zap size={12} /> Zu generisch? KI anfordern
+                        <Zap size={12} /> Gemessene KI-Analyse anfordern
                       </button>
                     )}
+                    {aiError && <div role="alert" style={{ marginTop: 10, fontSize: 11, color: "var(--tn-yellow)" }}>{aiError}</div>}
                   </div>
                 </div>
               )}
@@ -649,12 +647,7 @@ export function TelefonnotizDesktop() {
                       >
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <div style={{ width: 34, height: 34, borderRadius: 10, background: action.priority === "high" ? "var(--tn-orange-soft)" : "var(--tn-cream-3)", color: action.priority === "high" ? "var(--tn-orange)" : "var(--tn-ink)", display: "grid", placeItems: "center", flexShrink: 0 }}>
-                            {action.type === "create_order" ? <Package size={16} /> :
-                             action.type === "create_customer" ? <User size={16} /> :
-                             action.type === "review_email" ? <Mail size={16} /> :
-                             action.type === "prepare_quote" ? <FileText size={16} /> :
-                             action.type.includes("cal") ? <Calendar size={16} /> :
-                             <Zap size={16} />}
+                            {action.type === "create_order" ? <Package size={16} /> : <User size={16} />}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tn-ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{action.title}</div>
@@ -723,16 +716,16 @@ export function TelefonnotizDesktop() {
               {result.liveActions.length > 0 && (
                 <div>
                   <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--tn-ink-mute)", fontWeight: 700, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                    <span className="tn-pulse" /> Was passiert beim Verteilen
+                    <span className="tn-pulse" /> Optionale Folgeaktionen
                   </div>
                   {result.liveActions.map(action => (
                     <div key={action.id} className="tn-action-row">
                       <div style={{
                         width: 18, height: 18, borderRadius: "50%",
-                        background: action.source === "database" || action.priority === "high" ? "var(--tn-green-bright)" : "var(--tn-yellow)",
+                        background: "var(--tn-yellow)",
                         color: "white", display: "grid", placeItems: "center"
                       }}>
-                        {action.source === "database" || action.priority === "high" ? <Check size={9} /> : <AlertTriangle size={9} />}
+                        <AlertTriangle size={9} />
                       </div>
                       <div>
                         <div style={{ fontWeight: 600 }}>{action.title}</div>
@@ -740,10 +733,10 @@ export function TelefonnotizDesktop() {
                       </div>
                       <span style={{
                         fontSize: 9, padding: "2px 6px", borderRadius: 4, fontWeight: 700, letterSpacing: "0.04em",
-                        background: action.source === "database" || action.priority === "high" ? "var(--tn-green-soft)" : "var(--tn-yellow-soft)",
-                        color: action.source === "database" || action.priority === "high" ? "var(--tn-green)" : "var(--tn-yellow)"
+                        background: "var(--tn-yellow-soft)",
+                        color: "var(--tn-yellow)"
                       }}>
-                        {action.source === "database" || action.priority === "high" ? "auto" : "prüfen"}
+                        Entwurf
                       </span>
                     </div>
                   ))}
@@ -752,9 +745,10 @@ export function TelefonnotizDesktop() {
 
               {/* Save button */}
               <div style={{ marginTop: 18, paddingTop: 14 }}>
-                <button className="tn-btn-primary" onClick={() => setShowSaveSheet(true)}>
-                  <Check size={14} /> Speichern & verteilen
+                <button className="tn-btn-primary" onClick={() => setShowSaveSheet(true)} disabled={isSaving}>
+                  <Check size={14} /> Telefonnotiz speichern
                 </button>
+                {saveError && <div role="alert" style={{ marginTop: 8, color: "var(--tn-red)", fontSize: 12 }}>{saveError}</div>}
               </div>
 
               {/* Back to edit */}
@@ -770,20 +764,10 @@ export function TelefonnotizDesktop() {
               <div className="tn-pop" style={{ width: 76, height: 76, borderRadius: "50%", background: "var(--tn-green-bright)", display: "grid", placeItems: "center", color: "white", marginBottom: 20 }}>
                 <Check size={36} />
               </div>
-              <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 24, margin: 0, marginBottom: 8, textAlign: "center" }}>Alles verteilt.</h2>
+              <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 24, margin: 0, marginBottom: 8, textAlign: "center" }}>Telefonnotiz gespeichert.</h2>
               <p style={{ fontSize: 13, color: "var(--tn-ink-soft)", textAlign: "center", marginBottom: 20, maxWidth: 340, lineHeight: 1.5 }}>
-                Die Telefonnotiz wurde gespeichert und alle Aktionen wurden ausgeführt.
+                Die Notiz ist dauerhaft gespeichert. Folgeaktionen wurden nicht automatisch ausgeführt und können unten bewusst geöffnet werden.
               </p>
-              {result && result.liveActions.length > 0 && (
-                <div style={{ background: "var(--tn-paper)", border: "1px solid var(--tn-line)", borderRadius: 12, padding: "12px 16px", marginBottom: 18, maxWidth: 320, width: "100%" }}>
-                  {result.liveActions.map(a => (
-                    <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", fontSize: 12 }}>
-                      <Check size={14} style={{ color: "var(--tn-green-bright)", flexShrink: 0 }} />
-                      <span>{a.title}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
               <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 320, width: "100%" }}>
                 <button
                   onClick={() => openErfassung({ mode: "customer", intent: "create_customer", source: "phone", sourceRef: savedNoteId, prefill: { rawText: text, ...result?.fields } })}
@@ -808,7 +792,7 @@ export function TelefonnotizDesktop() {
           )}
         </div>
 
-        {/* ===== RIGHT PANE: Live Context (Callcenter-optimized order) ===== */}
+        {/* ===== RIGHT PANE: verifizierter Datenkontext ===== */}
         <aside style={{
           background: "var(--tn-paper)", borderLeft: isMobile ? "none" : "1px solid var(--tn-line)",
           borderTop: isMobile ? "1px solid var(--tn-line)" : "none",
@@ -821,7 +805,7 @@ export function TelefonnotizDesktop() {
                 <Activity size={11} />
               </span>
               <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--tn-ink-mute)" }}>
-                Live · zum Vorlesen
+                Datenabgleich
               </span>
               {isAnalyzing && <Activity size={12} className="animate-spin" style={{ color: "var(--tn-orange)" }} />}
             </div>
@@ -830,8 +814,8 @@ export function TelefonnotizDesktop() {
                 🤖 KI Scan
               </span>
             ) : (
-              <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "var(--tn-green-soft)", color: "var(--tn-green)", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
-                ⚡ Lokal DB
+              <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: dataStatus === "ready" ? "var(--tn-green-soft)" : "var(--tn-yellow-soft)", color: dataStatus === "ready" ? "var(--tn-green)" : "var(--tn-yellow)", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                {dataStatus === "ready" ? "DB geladen" : dataStatus === "loading" ? "DB lädt" : "DB nicht verfügbar"}
               </span>
             )}
           </div>
@@ -900,16 +884,10 @@ export function TelefonnotizDesktop() {
 
           {/* ===== 3. PROMINENT APPOINTMENT CARD ===== */}
           {result?.matchedTime && (
-            <div className={`tn-appointment-card ${result.matchedTime.isFree ? "free" : "conflict"}`}>
-              <div className="tn-appt-label">
-                {result.matchedTime.isFree ? "✓ TERMIN FREI" : "⚠ TERMINKONFLIKT"}
-              </div>
+            <div className="tn-appointment-card">
+              <div className="tn-appt-label">TERMINANGABE · NICHT GEPRÜFT</div>
               <div className="tn-appt-value">{result.matchedTime.label}</div>
-              <div className="tn-appt-hint">
-                {result.matchedTime.isFree
-                  ? "Frei und möglich — kann direkt zugesagt werden"
-                  : "Wochenende / geschlossen — Alternative vorschlagen"}
-              </div>
+              <div className="tn-appt-hint">Kalenderverfügbarkeit ist nicht angebunden; keine Zusage ohne separate Prüfung.</div>
             </div>
           )}
 
@@ -938,44 +916,16 @@ export function TelefonnotizDesktop() {
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{ctx.customer?.name || "— wartet auf Eingabe"}</div>
                 <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 1 }}>
-                  {ctx.customer ? `${ctx.customer.city} · ${ctx.customer.since}` : "noch keine Erkennung"}
+                  {ctx.customer ? (ctx.customer.city || "Ort nicht hinterlegt") : "noch keine Erkennung"}
                 </div>
                 {ctx.customer && (
-                  <Link href="/customers" style={{ fontSize: 11, color: "var(--tn-orange)", fontWeight: 500, textDecoration: "none", marginTop: 3, display: "inline-block" }}>
+                  <Link href={`/customers/${encodeURIComponent(ctx.customer.id)}`} style={{ fontSize: 11, color: "var(--tn-orange)", fontWeight: 500, textDecoration: "none", marginTop: 3, display: "inline-block" }}>
                     Kundenakte öffnen →
                   </Link>
                 )}
               </div>
             </div>
           </div>
-
-          {/* ===== 5b. Email & History card ===== */}
-          {ctx.customer && (
-            <div className="tn-ctx-card">
-              <div style={{ marginBottom: 12, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--tn-ink-mute)", display: "flex", alignItems: "center", gap: 4 }}><Mail size={12} /> Letzte Kommunikation</span>
-                <span style={{ fontSize: 9, color: "var(--tn-ink-mute)" }}>Vor 2 Tagen</span>
-              </div>
-              
-              <div style={{ background: "white", border: "1px solid var(--tn-line)", borderRadius: 8, padding: 12 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Bilder zum Auftrag</div>
-                <div style={{ fontSize: 11, color: "var(--tn-ink-soft)", marginBottom: 10, lineHeight: 1.4 }}>
-                  "Guten Tag, anbei wie besprochen die Bilder der Teile. Können Sie diese noch retten?"
-                </div>
-                
-                {/* Mock Attachment */}
-                <button onClick={(e) => { e.preventDefault(); alert("Bildvorschau öffnet sich im Vollbild (Mockup)"); }} style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--tn-cream-2)", border: "1px solid var(--tn-line)", borderRadius: 6, padding: "6px 10px", width: "100%", cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
-                  <div style={{ background: "var(--tn-orange-soft)", color: "var(--tn-orange)", width: 24, height: 24, borderRadius: 4, display: "grid", placeItems: "center", flexShrink: 0 }}>
-                    <ImageIcon size={12} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "var(--tn-ink)" }}>kratzer_detail.jpg</div>
-                    <div style={{ fontSize: 9, color: "var(--tn-ink-mute)" }}>2.4 MB</div>
-                  </div>
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* ===== 6. Orders card ===== */}
           <div className="tn-ctx-card">
@@ -1014,15 +964,6 @@ export function TelefonnotizDesktop() {
                 <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 4, background: "var(--tn-orange-soft)", color: "var(--tn-orange)", fontWeight: 700 }}>prüfen</span>
               )}
             </div>
-            <div className="tn-cal-strip">
-              {ctx.calendar.days.map((d, i) => (
-                <div key={i} className={`tn-cal-day ${d.type}`}>
-                  <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", opacity: 0.75 }}>{d.label}</div>
-                  <div style={{ fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 500, marginTop: 1 }}>{d.num}</div>
-                  <div style={{ fontSize: 8.5, marginTop: 1, opacity: 0.8 }}>{d.info}</div>
-                </div>
-              ))}
-            </div>
             <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", marginTop: 8 }}>{ctx.calendar.hint}</div>
           </div>
 
@@ -1031,18 +972,7 @@ export function TelefonnotizDesktop() {
             <div style={{ marginBottom: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--tn-ink-mute)" }}>Lager</span>
             </div>
-            {ctx.stock ? (
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12, padding: "3px 0" }}>
-                <span style={{ fontWeight: 500 }}>{ctx.stock.name}</span>
-                <span style={{
-                  fontSize: 10, padding: "2px 7px", borderRadius: 4, fontWeight: 600,
-                  background: ctx.stock.status === "ok" ? "var(--tn-green-soft)" : "var(--tn-yellow-soft)",
-                  color: ctx.stock.status === "ok" ? "var(--tn-green)" : "var(--tn-yellow)"
-                }}>{ctx.stock.level}</span>
-              </div>
-            ) : (
-              <div style={{ fontSize: 12, color: "var(--tn-ink-mute)" }}>— wartet auf Material</div>
-            )}
+            <div style={{ fontSize: 12, color: "var(--tn-ink-mute)" }}>{ctx.stockHint}</div>
           </div>
 
           {/* Payment card */}
@@ -1050,42 +980,7 @@ export function TelefonnotizDesktop() {
             <div style={{ marginBottom: 8 }}>
               <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--tn-ink-mute)" }}>Zahlung</span>
             </div>
-            {ctx.payment ? (
-              <div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
-                  <span style={{ color: "var(--tn-ink-mute)" }}>LEFTA Rechnung</span>
-                  <span style={{ fontWeight: 600 }}>{ctx.payment.total}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
-                  <span style={{ color: "var(--tn-ink-mute)" }}>Offen</span>
-                  <span style={{ fontWeight: 600, color: "var(--tn-orange)" }}>{ctx.payment.open}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0" }}>
-                  <span style={{ color: "var(--tn-ink-mute)" }}>Zahlungsmoral</span>
-                  <span style={{ fontWeight: 600, color: "var(--tn-green)" }}>{ctx.payment.moral}</span>
-                </div>
-              </div>
-            ) : (
-              <div style={{ fontSize: 12, color: "var(--tn-ink-mute)" }}>— wartet auf Kunde</div>
-            )}
-          </div>
-
-          {/* Quick lookups */}
-          <div>
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--tn-ink-mute)", fontWeight: 700, marginBottom: 8 }}>⚡ 1-Tap-Antworten</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-              {[
-                { label: "Wo ist Ware?", icon: <Package size={11} />, bg: "var(--tn-blue-soft)", fg: "var(--tn-blue)" },
-                { label: "Reklamation?", icon: <AlertTriangle size={11} />, bg: "var(--tn-red-soft)", fg: "var(--tn-red)" },
-                { label: "Wann fertig?", icon: <Check size={11} />, bg: "var(--tn-green-soft)", fg: "var(--tn-green)" },
-                { label: "Zahlung offen?", icon: <CreditCard size={11} />, bg: "var(--tn-orange-soft)", fg: "var(--tn-orange)" },
-              ].map(ql => (
-                <button key={ql.label} className="tn-ql-btn">
-                  <span style={{ width: 20, height: 20, borderRadius: 5, display: "grid", placeItems: "center", flexShrink: 0, background: ql.bg, color: ql.fg }}>{ql.icon}</span>
-                  {ql.label}
-                </button>
-              ))}
-            </div>
+            <div style={{ fontSize: 12, color: "var(--tn-ink-mute)" }}>{ctx.paymentHint}</div>
           </div>
         </aside>
       </div>
@@ -1094,9 +989,9 @@ export function TelefonnotizDesktop() {
       {showSaveSheet && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(27,27,27,0.55)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: 24 }} onClick={e => { if (e.target === e.currentTarget) setShowSaveSheet(false); }}>
           <div style={{ background: "var(--tn-cream)", borderRadius: 18, padding: "24px 26px", maxWidth: 440, width: "100%", boxShadow: "var(--tn-shadow-lg)" }}>
-            <h3 style={{ fontFamily: "'Fraunces', serif", fontSize: 21, margin: 0, marginBottom: 6 }}>Was soll passieren?</h3>
+            <h3 style={{ fontFamily: "'Fraunces', serif", fontSize: 21, margin: 0, marginBottom: 6 }}>Telefonnotiz speichern</h3>
             <div style={{ fontSize: 13, color: "var(--tn-ink-soft)", marginBottom: 18, lineHeight: 1.5 }}>
-              Egal welcher Weg — alles landet sauber. Nichts versandet.
+              Gespeichert wird ausschließlich die Notiz. Angezeigte Folgeaktionen bleiben prüfbare Vorschläge.
             </div>
 
             {/* Marketing Dropdown */}
@@ -1118,57 +1013,39 @@ export function TelefonnotizDesktop() {
               </select>
             </div>
 
-            {/* Auto */}
-            <div onClick={() => handleSave("auto")} style={{
+            {/* Abschließen */}
+            <div onClick={() => { if (!isSaving) void handleSave("auto"); }} style={{
               background: "var(--tn-ink)", color: "var(--tn-cream)", border: "1px solid var(--tn-ink)", borderRadius: 14,
-              padding: "14px 16px", marginBottom: 8, display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 12, alignItems: "center", cursor: "pointer"
+              padding: "14px 16px", marginBottom: 8, display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 12, alignItems: "center", cursor: isSaving ? "wait" : "pointer", opacity: isSaving ? 0.7 : 1,
             }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.1)", display: "grid", placeItems: "center" }}>
                 <Zap size={16} />
               </div>
               <div>
-                <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 2 }}>Automatisch verarbeiten</h4>
+                <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 2 }}>Abschließen und speichern</h4>
                 <div style={{ fontSize: 11, color: "rgba(250,246,238,0.6)", lineHeight: 1.4 }}>
-                  {result?.liveActions.filter((a: any) => a.source === "database" || a.priority === "high").length || 0} grüne Aktionen sofort anwenden
+                  Dauerhafte Notiz mit Datenbankbestätigung; keine automatische Folgeaktion.
                 </div>
               </div>
               <ChevronRight size={14} style={{ opacity: 0.5 }} />
             </div>
 
-            {/* Park */}
-            <div onClick={() => setShowReminder(!showReminder)} style={{
+            {/* Parken */}
+            <div onClick={() => { if (!isSaving) void handleSave("park"); }} style={{
               background: "var(--tn-paper)", border: "1px solid var(--tn-line)", borderRadius: 14,
-              padding: "14px 16px", marginBottom: 8, display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 12, alignItems: "center", cursor: "pointer"
+              padding: "14px 16px", marginBottom: 8, display: "grid", gridTemplateColumns: "36px 1fr auto", gap: 12, alignItems: "center", cursor: isSaving ? "wait" : "pointer", opacity: isSaving ? 0.7 : 1,
             }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--tn-cream-2)", display: "grid", placeItems: "center", color: "var(--tn-ink-soft)" }}>
                 <Clock size={16} />
               </div>
               <div>
-                <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 2 }}>Mit Vermerk für später parken</h4>
-                <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", lineHeight: 1.4 }}>Erinnerung {reminderTime} — du wirst angepingt</div>
+                <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 2 }}>Als offen parken</h4>
+                <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", lineHeight: 1.4 }}>Speichert den Status „geparkt“. Eine automatische Erinnerung ist noch nicht angebunden.</div>
               </div>
               <ChevronRight size={14} style={{ opacity: 0.5 }} />
             </div>
 
-            {/* Reminder picker */}
-            {showReminder && (
-              <div style={{ background: "var(--tn-paper)", border: "1px solid var(--tn-line)", borderRadius: 14, padding: "14px 16px", marginBottom: 8 }}>
-                <div style={{ fontSize: 11, color: "var(--tn-ink-mute)", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>Wann erinnern?</div>
-                <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 10 }}>
-                  {["In 30 Min", "Heute 17:00", "Morgen 8:00"].map(t => (
-                    <button key={t} onClick={() => setReminderTime(t)} style={{
-                      background: reminderTime === t ? "var(--tn-ink)" : "var(--tn-cream-2)",
-                      color: reminderTime === t ? "var(--tn-cream)" : "var(--tn-ink)",
-                      border: `1px solid ${reminderTime === t ? "var(--tn-ink)" : "var(--tn-line)"}`,
-                      padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit"
-                    }}>{t}</button>
-                  ))}
-                </div>
-                <button className="tn-btn-primary" onClick={() => handleSave("park")} style={{ marginTop: 14 }}>
-                  <Check size={14} /> Parken mit Erinnerung
-                </button>
-              </div>
-            )}
+            {saveError && <div role="alert" style={{ marginTop: 10, color: "var(--tn-red)", fontSize: 12 }}>{saveError}</div>}
           </div>
         </div>
       )}
@@ -1206,8 +1083,8 @@ export function TelefonnotizDesktop() {
                 <Check size={16} />
               </div>
               <div>
-                <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 2 }}>Speichern und verteilen</h4>
-                <div style={{ fontSize: 11, color: "var(--tn-ink-mute)" }}>Notiz final abschließen</div>
+                <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 2 }}>Telefonnotiz speichern</h4>
+                <div style={{ fontSize: 11, color: "var(--tn-ink-mute)" }}>Notiz final abschließen; Folgeaktionen bleiben Vorschläge</div>
               </div>
               <ChevronRight size={14} style={{ opacity: 0.5 }} />
             </div>
@@ -1241,23 +1118,6 @@ export function TelefonnotizDesktop() {
         </div>
       )}
 
-      {/* ===== UNDO TOAST ===== */}
-      {showUndo && (
-        <div style={{
-          position: "fixed", left: 24, right: 24, bottom: 24,
-          background: "var(--tn-ink)", color: "var(--tn-cream)", borderRadius: 12, padding: "12px 16px",
-          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
-          boxShadow: "0 20px 50px -10px rgba(27,27,27,0.4)", zIndex: 70, maxWidth: 420, margin: "0 auto",
-          animation: "fadeSlideUp 0.3s ease"
-        }}>
-          <span style={{ fontSize: 12.5, fontWeight: 500 }}>Alle Aktionen ausgeführt. 10 Sek. Undo.</span>
-          <button onClick={() => setShowUndo(false)} style={{
-            background: "transparent", border: "1px solid rgba(255,255,255,0.3)", color: "var(--tn-cream)",
-            padding: "5px 12px", borderRadius: 6, fontFamily: "inherit", fontSize: 11.5, fontWeight: 600, cursor: "pointer"
-          }}>Rückgängig</button>
-        </div>
-      )}
-
       {/* Animation keyframes */}
       <style>{`
         @keyframes fadeSlideUp {
@@ -1266,40 +1126,6 @@ export function TelefonnotizDesktop() {
         }
       `}</style>
 
-      {/* ===== EMAIL MOCK OVERLAY ===== */}
-      {showEmailMock && (
-        <div className="fixed inset-0 z-100 flex items-center justify-center p-6 bg-navy-900/40 backdrop-blur-sm" onClick={(e) => { if (e.target === e.currentTarget) setShowEmailMock(false); }}>
-          <div style={{ background: "white", borderRadius: 16, width: "100%", maxWidth: 600, boxShadow: "0 20px 40px rgba(0,0,0,0.2)", overflow: "hidden" }}>
-            <div style={{ background: "var(--tn-ink)", color: "white", padding: "16px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0, fontFamily: "'Fraunces', serif", fontSize: 18, display: "flex", alignItems: "center", gap: 8 }}><Mail size={18}/> Letzte E-Mails & Anhänge</h3>
-              <button onClick={() => setShowEmailMock(false)} style={{ background: "none", border: "none", color: "white", cursor: "pointer" }}><X size={20}/></button>
-            </div>
-            <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
-              <div style={{ border: "1px solid var(--tn-line)", borderRadius: 8, padding: 16, background: "var(--tn-cream-2)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 14 }}>Kratzer am Kronleuchter</div>
-                    <div style={{ fontSize: 12, color: "var(--tn-ink-mute)" }}>Von: {result?.matchedCustomer?.name || "Kunde"} · Gestern, 14:32</div>
-                  </div>
-                  <div style={{ background: "var(--tn-blue-soft)", color: "var(--tn-blue)", padding: "4px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, alignSelf: "flex-start" }}>Posteingang</div>
-                </div>
-                <p style={{ fontSize: 13, lineHeight: 1.5, color: "var(--tn-ink)", margin: 0 }}>
-                  "Guten Tag, anbei wie telefonisch besprochen die Bilder der beschädigten Teile. Können Sie diese noch retten und neu versilbern? Bitte um kurze Rückmeldung bezüglich Preis und Dauer."
-                </p>
-                <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
-                  <button onClick={() => alert("Bildvorschau öffnet sich")} style={{ display: "flex", alignItems: "center", gap: 8, background: "white", border: "1px solid var(--tn-line)", borderRadius: 6, padding: "8px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                    <ImageIcon size={14} color="var(--tn-orange)" /> kratzer_detail_1.jpg
-                  </button>
-                  <button onClick={() => alert("Bildvorschau öffnet sich")} style={{ display: "flex", alignItems: "center", gap: 8, background: "white", border: "1px solid var(--tn-line)", borderRadius: 6, padding: "8px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
-                    <ImageIcon size={14} color="var(--tn-orange)" /> kratzer_detail_2.jpg
-                  </button>
-                </div>
-              </div>
-              <button onClick={() => setShowEmailMock(false)} className="tn-btn-primary" style={{ alignSelf: "flex-end" }}>Zurück zur Notiz</button>
-            </div>
-          </div>
-        </div>
-      )}
         </div>
       </div>
     </div>

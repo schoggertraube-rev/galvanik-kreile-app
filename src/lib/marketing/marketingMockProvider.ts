@@ -98,7 +98,8 @@ const funnel: FunnelDaten = {
     { label: 'Aufträge', wert: 9, breite: 11 },
   ],
   umsatz: 5760,
-  roi: 9.1,
+  plannedBudget: 0,
+  roi: null,
 };
 
 /* ── Segmente ──────────────────────────────────────────────── */

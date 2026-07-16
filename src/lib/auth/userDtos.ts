@@ -1,14 +1,11 @@
 export type StartUserDto = {
-  id: string;
+  selector: string;
   initials: string;
-  role: string;
-  fullName: string;
 };
 
 export type StartUserSource = {
-  id: string;
+  selector: string;
   fullName: string;
-  role: string;
 };
 
 export type AdminUserDto = {
@@ -39,9 +36,7 @@ export function deriveUserInitials(fullName: string): string {
 
 export function toStartUserDto(user: StartUserSource): StartUserDto {
   return {
-    id: user.id,
-    fullName: user.fullName,
-    role: user.role,
+    selector: user.selector,
     initials: deriveUserInitials(user.fullName),
   };
 }

@@ -1,12 +1,10 @@
 "use client";
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
-import { useRouter, usePathname } from "next/navigation";
+
+import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 
 interface ParkedCallData {
-  id: string; // The DB id of the phone note
-  rawText: string;
-  matchedCustomerName?: string;
-  matchedOrderNumber?: string;
+  id: string;
   parkedAt: number;
 }
 
@@ -14,87 +12,56 @@ interface ParkedCallContextType {
   activeParkedCall: ParkedCallData | null;
   parkCall: (data: ParkedCallData) => void;
   resumeCall: () => void;
-  finishCall: () => void;
-  showResumePrompt: boolean;
-  setShowResumePrompt: (show: boolean) => void;
+  dismissParkedHint: () => void;
 }
 
+const STORAGE_KEY = "kreile_parked_call_session_v2";
 const ParkedCallContext = createContext<ParkedCallContextType | undefined>(undefined);
 
-export function ParkedCallProvider({ children }: { children: React.ReactNode }) {
-  const [activeParkedCall, setActiveParkedCall] = useState<ParkedCallData | null>(null);
-  const [showResumePrompt, setShowResumePrompt] = useState(false);
-  const router = useRouter();
-  const pathname = usePathname();
-  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const INACTIVITY_LIMIT = 5000; // 5 seconds
+function storedCall(): ParkedCallData | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+    const entry = value as Record<string, unknown>;
+    if (typeof entry.id !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(entry.id) || typeof entry.parkedAt !== "number") return null;
+    return { id: entry.id, parkedAt: entry.parkedAt };
+  } catch {
+    return null;
+  }
+}
 
-  // Initialize from localStorage if exists
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem("kreile_parked_call");
-      if (stored) {
-        setActiveParkedCall(JSON.parse(stored));
-      }
-    } catch (e) {}
-  }, []);
+export function ParkedCallProvider({ children }: { children: ReactNode }) {
+  const [activeParkedCall, setActiveParkedCall] = useState<ParkedCallData | null>(storedCall);
+  const router = useRouter();
 
   const parkCall = useCallback((data: ParkedCallData) => {
     setActiveParkedCall(data);
-    localStorage.setItem("kreile_parked_call", JSON.stringify(data));
+    try {
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (error) {
+      console.error("Geparkter Telefonnotiz-Hinweis konnte nicht in dieser Sitzung gespeichert werden", error);
+    }
   }, []);
 
-  const finishCall = useCallback(() => {
+  const dismissParkedHint = useCallback(() => {
     setActiveParkedCall(null);
-    setShowResumePrompt(false);
-    localStorage.removeItem("kreile_parked_call");
+    try {
+      window.sessionStorage.removeItem(STORAGE_KEY);
+    } catch (error) {
+      console.error("Geparkter Telefonnotiz-Hinweis konnte nicht entfernt werden", error);
+    }
   }, []);
 
   const resumeCall = useCallback(() => {
-    setShowResumePrompt(false);
-    if (activeParkedCall) {
-      // We navigate to /telefonnotiz and pass the ID so it can load the draft
-      router.push(`/telefonnotiz?resumeId=${activeParkedCall.id}`);
-    }
+    if (!activeParkedCall) return;
+    router.push(`/telefonnotiz?source=kommunikation&resumeId=${encodeURIComponent(activeParkedCall.id)}&returnTo=%2Fkommunikation`);
   }, [activeParkedCall, router]);
 
-  // Inactivity Logic
-  const resetTimer = useCallback(() => {
-    if (inactivityTimerRef.current) {
-      clearTimeout(inactivityTimerRef.current);
-    }
-    // Only start timer if there is an active call AND we are NOT on the telefonnotiz page
-    if (activeParkedCall && pathname !== "/telefonnotiz" && !showResumePrompt) {
-      inactivityTimerRef.current = setTimeout(() => {
-        setShowResumePrompt(true);
-      }, INACTIVITY_LIMIT);
-    }
-  }, [activeParkedCall, pathname, showResumePrompt]);
-
-  useEffect(() => {
-    // Attach global event listeners
-    const events = ["mousemove", "keydown", "touchstart", "click", "scroll"];
-    
-    events.forEach(e => window.addEventListener(e, resetTimer));
-    
-    // Initial start
-    resetTimer();
-
-    return () => {
-      events.forEach(e => window.removeEventListener(e, resetTimer));
-      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
-    };
-  }, [resetTimer]);
-
   return (
-    <ParkedCallContext.Provider value={{
-      activeParkedCall,
-      parkCall,
-      resumeCall,
-      finishCall,
-      showResumePrompt,
-      setShowResumePrompt
-    }}>
+    <ParkedCallContext.Provider value={{ activeParkedCall, parkCall, resumeCall, dismissParkedHint }}>
       {children}
     </ParkedCallContext.Provider>
   );
@@ -102,8 +69,6 @@ export function ParkedCallProvider({ children }: { children: React.ReactNode }) 
 
 export function useParkedCall() {
   const context = useContext(ParkedCallContext);
-  if (context === undefined) {
-    throw new Error("useParkedCall must be used within a ParkedCallProvider");
-  }
+  if (!context) throw new Error("useParkedCall must be used within a ParkedCallProvider");
   return context;
 }

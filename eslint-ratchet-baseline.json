@@ -1,0 +1,550 @@
+{
+  "version": 1,
+  "purpose": "Known ESLint debt ceiling. New file/rule/severity violations fail; reductions are allowed.",
+  "entries": {
+    "create_migrate.js": {
+      "error:@typescript-eslint/no-require-imports": 1
+    },
+    "enrich.js": {
+      "error:@typescript-eslint/no-require-imports": 1
+    },
+    "init_marketing_db.js": {
+      "error:@typescript-eslint/no-require-imports": 3
+    },
+    "rewrite.js": {
+      "error:@typescript-eslint/no-require-imports": 1
+    },
+    "run_audit.js": {
+      "error:@typescript-eslint/no-require-imports": 2
+    },
+    "scratch/run_vitest.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "scripts/fetch_and_classify_orders.ts": {
+      "error:@typescript-eslint/no-explicit-any": 2
+    },
+    "scripts/test_order_source.ts": {
+      "error:@typescript-eslint/no-explicit-any": 1,
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "seed_channels.js": {
+      "error:@typescript-eslint/no-require-imports": 3,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "seed_segments.js": {
+      "error:@typescript-eslint/no-require-imports": 3,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/actions/ocr.actions.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/actions/performance.actions.ts": {
+      "error:@typescript-eslint/no-explicit-any": 2,
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/app/actions/price-lines.actions.ts": {
+      "error:@typescript-eslint/no-explicit-any": 6
+    },
+    "src/app/admin/import/AdminImportClient.tsx": {
+      "error:react/no-unescaped-entities": 2,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/api/erfassung/item-photo-upload/route.ts": {
+      "error:@typescript-eslint/no-explicit-any": 3
+    },
+    "src/app/api/morning-message/route.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/archive/page.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 2,
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/app/buchhaltung/components/Tile.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/app/buchhaltung/components/ZahlungKachel.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/app/buchhaltung/fristen/page.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/buchhaltung/rechnungen/[id]/page.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/buchhaltung/rechnungen/RechnungenClient.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/cockpit/actions.ts": {
+      "error:@typescript-eslint/no-explicit-any": 3,
+      "error:prefer-const": 1,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/cockpit/CockpitClient.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 5
+    },
+    "src/app/cockpit/components/AgingKachel.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 7
+    },
+    "src/app/cockpit/components/DbRankingKachel.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 3,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/cockpit/components/EngpassKachel.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 5
+    },
+    "src/app/cockpit/components/ForecastKachel.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 4,
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/app/cockpit/components/FruehwarnungenKachel.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 3,
+      "error:react-hooks/set-state-in-effect": 1,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/cockpit/components/TopKundenKachel.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 4,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/cockpit/components/WhatIfStudio.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 10
+    },
+    "src/app/cockpit/jahresplan/JahresplanClient.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/customers/[id]/page.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 2
+    },
+    "src/app/kalender/page.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/app/kommunikation/PhoneNoteDetailView.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1,
+      "warning:<unclassified>": 1
+    },
+    "src/app/kommunikation/smartMatcher.ts": {
+      "error:@typescript-eslint/no-explicit-any": 2
+    },
+    "src/app/kontrolle/actions.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/kontrolle/KontrolleDashboardClient.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 2,
+      "error:react-hooks/set-state-in-effect": 1,
+      "error:react/no-unescaped-entities": 2,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/kvp/KvpClient.tsx": {
+      "error:react-hooks/set-state-in-effect": 1,
+      "error:react/no-unescaped-entities": 2,
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/app/lager/LagerCockpitClient.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 5,
+      "error:react-hooks/purity": 1,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/lieferanten/[id]/page.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/app/lieferanten/page.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/app/marketing/aktion/neu/page.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 2
+    },
+    "src/app/marketing/components/StudioView.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/app/marketing/segmente/[id]/page.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 3
+    },
+    "src/app/orders/page.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 7,
+      "warning:@typescript-eslint/no-unused-vars": 19
+    },
+    "src/app/performance/actions.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/performance/PerformanceDetailLayout.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/app/print-queue/page.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/app/settings/page.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/app/settings/SettingsClient.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/station/[slug]/page.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 4
+    },
+    "src/app/warendurchlauf/actions.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/app/warendurchlauf/components/DurchlaufzeitKachel.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 5,
+      "error:react-hooks/purity": 3,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/warendurchlauf/components/EngpassKachel.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 3,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/warendurchlauf/components/OffeneAuftraegeKachel.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 7
+    },
+    "src/app/warendurchlauf/components/TermintreueKachel.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 5,
+      "error:react-hooks/purity": 1,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/warendurchlauf/galvanik/page.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 5
+    },
+    "src/app/warendurchlauf/warenausgang/page.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 2,
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/app/warendurchlauf/warenausgang/PaymentCaptureModal.tsx": {
+      "error:react-hooks/set-state-in-effect": 1,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/app/warendurchlauf/WarendurchlaufCockpitClient.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/app/warendurchlauf/wareneingang/page.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 6,
+      "error:react-hooks/set-state-in-effect": 1,
+      "warning:@typescript-eslint/no-unused-vars": 8
+    },
+    "src/components/admin/AdminDashboard.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/admin/CompanySettingsForm.tsx": {
+      "warning:@next/next/no-img-element": 1
+    },
+    "src/components/admin/DataImportCenter.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 5
+    },
+    "src/components/admin/FeatureToggles.tsx": {
+      "error:react-hooks/set-state-in-effect": 1,
+      "warning:@typescript-eslint/no-unused-vars": 4
+    },
+    "src/components/admin/RoleMatrix.tsx": {
+      "error:react-hooks/immutability": 1
+    },
+    "src/components/analytics/AnalyticsDrillDrawer.tsx": {
+      "error:react-hooks/immutability": 1,
+      "error:react-hooks/set-state-in-effect": 2,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/analytics/DatenherkunftZeile.tsx": {
+      "error:@next/next/no-html-link-for-pages": 1
+    },
+    "src/components/analytics/DrillChart.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/components/analytics/DrillComposition.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/analytics/InfoPopover.tsx": {
+      "error:react-hooks/rules-of-hooks": 1,
+      "error:react-hooks/set-state-in-effect": 1
+    },
+    "src/components/buchhaltung/MassenzuordnungModal.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/customers/CustomerKommHistorie.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/customers/CustomerMemoryCard.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/customers/CustomerStammdaten.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/customers/CustomerTagEditor.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/customers/tabs/CustomerAnalysisTab.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1,
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/components/customers/tabs/CustomerCommunicationTab.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/components/customers/tabs/CustomerComplaintsTab.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/components/customers/tabs/CustomerHistorySimilarTab.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/components/customers/tabs/CustomerInvoicesTab.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 2
+    },
+    "src/components/customers/tabs/CustomerItemsProfileTab.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/components/customers/tabs/CustomerNotesTab.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/components/customers/tabs/CustomerOrdersTab.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/components/customers/tabs/CustomerOverviewTab.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 2,
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/components/customers/tabs/CustomerPhotosTab.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/customers/tabs/CustomerPricesTab.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/components/customers/useCustomerData.ts": {
+      "error:@typescript-eslint/no-explicit-any": 2,
+      "error:react-hooks/set-state-in-effect": 1
+    },
+    "src/components/diagnostics/DiagnosticsWidget.tsx": {
+      "error:react-hooks/set-state-in-effect": 2
+    },
+    "src/components/entities/CustomerFocusView.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/entities/OrderFocusView.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 4
+    },
+    "src/components/erfassung/InquiryFlow/InquiryToQuote.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 2
+    },
+    "src/components/erfassung/ManualFlow/CustomerSection.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 4,
+      "error:react-hooks/set-state-in-effect": 1,
+      "error:react/no-unescaped-entities": 4
+    },
+    "src/components/erfassung/ManualFlow/ItemsSection.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 3
+    },
+    "src/components/erfassung/PhoneFlow/PhoneExtractionResult.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 2,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/erfassung/ScanFlow/ScanResult.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 2,
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/components/erfassung/ScanFlow/ScanUpload.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1,
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/components/erfassung/shared/ItemPhotoUploader.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 2,
+      "warning:@next/next/no-img-element": 1
+    },
+    "src/components/erfassung/VorschlagBanner.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/erfassung/ZeitSlider.tsx": {
+      "warning:react-hooks/exhaustive-deps": 1
+    },
+    "src/components/galvanik/GalvanikOrderRow.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 5
+    },
+    "src/components/galvanik/GalvanikQueue.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/components/home/DayTimeline.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/home/HomeKpiCard.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx": {
+      "error:react-hooks/immutability": 1,
+      "error:react-hooks/preserve-manual-memoization": 1,
+      "error:react-hooks/set-state-in-effect": 1,
+      "error:react/no-unescaped-entities": 3,
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/components/layout/KreileHeader.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 3
+    },
+    "src/components/offline/OfflineSyncBadge.tsx": {
+      "error:react-hooks/set-state-in-effect": 1
+    },
+    "src/components/orders/BenchmarkSlider.tsx": {
+      "warning:react-hooks/exhaustive-deps": 1
+    },
+    "src/components/orders/BulkLabelPrintView.tsx": {
+      "error:react-hooks/set-state-in-effect": 2,
+      "warning:@typescript-eslint/no-unused-vars": 5
+    },
+    "src/components/orders/CostSummaryTable.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/components/orders/HeadCostBadge.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/orders/OrderCompactCard.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/orders/OrderProfitabilityCard.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/orders/OrderTile.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 2
+    },
+    "src/components/orders/PriceLinesEditor.tsx": {
+      "error:react-hooks/immutability": 1,
+      "warning:react-hooks/exhaustive-deps": 1
+    },
+    "src/components/orders/StationContextBlock.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 2
+    },
+    "src/components/orders/variants/ErfassungVariant.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 4,
+      "warning:react-hooks/exhaustive-deps": 1
+    },
+    "src/components/orders/variants/VersandVariant.tsx": {
+      "error:@typescript-eslint/ban-ts-comment": 1,
+      "error:react/no-unescaped-entities": 2
+    },
+    "src/components/orders/variants/WareneingangActive.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/components/start/EmailLoginDialog.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 4
+    },
+    "src/components/start/PinDialog.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/start/StartScreenClient.tsx": {
+      "warning:@next/next/no-img-element": 1
+    },
+    "src/components/start/WeatherBubble.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/ui/AnalysisChart.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/ui/AnalysisOverlay.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 3,
+      "error:react/no-unescaped-entities": 2,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/ui/AppOverlayPortal.tsx": {
+      "error:react-hooks/set-state-in-effect": 1
+    },
+    "src/components/ui/AppShortcutOverlay.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/ui/DetailOverlay.tsx": {
+      "error:react-hooks/set-state-in-effect": 1
+    },
+    "src/components/ui/PreviewDrawer.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/components/ui/ResponsiveDetailDrawer.tsx": {
+      "error:react-hooks/set-state-in-effect": 1
+    },
+    "src/components/ui/ThemeToggle.tsx": {
+      "error:react-hooks/set-state-in-effect": 1
+    },
+    "src/components/warenausgang/WarenausgangQueue.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "src/db/schema_buchhaltung.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/features/analyse/AnalyseDrillOverlay.tsx": {
+      "error:react-hooks/set-state-in-effect": 1,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/features/analyse/kacheln/werkstatt-puls/WerkstattPulsOverlay.tsx": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/features/analyse/kacheln/werkstatt-puls/WerkstattPulsTile.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/features/customers/customer-card/customerCard.actions.ts": {
+      "error:@typescript-eslint/no-explicit-any": 14,
+      "warning:<unclassified>": 1
+    },
+    "src/features/orders/orderCost.actions.ts": {
+      "error:@typescript-eslint/no-explicit-any": 1,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/features/orders/orderPhoto.actions.ts": {
+      "error:@typescript-eslint/no-explicit-any": 1,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/hooks/useOfflineManager.ts": {
+      "error:react-hooks/set-state-in-effect": 1
+    },
+    "src/lib/analyse/insights.ts": {
+      "error:@typescript-eslint/no-explicit-any": 2
+    },
+    "src/lib/analyse/routes.ts": {
+      "error:@typescript-eslint/no-explicit-any": 1
+    },
+    "src/lib/analytics/drillContext.tsx": {
+      "error:react-hooks/set-state-in-effect": 1
+    },
+    "src/lib/analytics/useFeatureFlag.tsx": {
+      "error:react-hooks/set-state-in-effect": 1
+    },
+    "src/lib/buchhaltung/erechnung/MockERechnungParser.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/lib/buchhaltung/providers/MockBuchhaltungProvider.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 9
+    },
+    "src/lib/buchhaltung/stufe2/mocks.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 3
+    },
+    "src/lib/offline/idbSync.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/lib/offline/SyncContext.tsx": {
+      "error:react-hooks/set-state-in-effect": 1,
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/lib/pdf/DeliveryNote.tsx": {
+      "warning:@typescript-eslint/no-unused-vars": 2,
+      "warning:jsx-a11y/alt-text": 1
+    },
+    "src/lib/pdf/OrderLabel.tsx": {
+      "warning:jsx-a11y/alt-text": 1
+    },
+    "src/lib/server/itemPhotoJobs.ts": {
+      "error:@typescript-eslint/no-explicit-any": 3
+    },
+    "src/lib/services/customerInsights.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "src/lib/warendurchlaufIconResolver.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "supabase/functions/scan-analyze/index.ts": {
+      "error:@typescript-eslint/no-explicit-any": 1,
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "test_legacy.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "test_station_counts.ts": {
+      "warning:@typescript-eslint/no-unused-vars": 1
+    },
+    "test-routes.js": {
+      "error:@typescript-eslint/no-require-imports": 3,
+      "warning:@typescript-eslint/no-unused-vars": 2
+    },
+    "verify.js": {
+      "error:@typescript-eslint/no-require-imports": 2
+    }
+  }
+}

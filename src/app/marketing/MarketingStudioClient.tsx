@@ -95,18 +95,7 @@ export default function MarketingStudioClient({
   }, [analysisOpen]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.location.hash.includes('access_token')) {
-      const hash = window.location.hash.substring(1);
-      const params = new URLSearchParams(hash);
-      const token = params.get('access_token');
-      if (token) {
-        localStorage.setItem('ig_access_token', token);
-        setTimeout(() => setIgConnected(true), 0);
-      }
-      window.history.replaceState(null, '', window.location.pathname);
-    } else {
-      instagramAdapter.isConnected().then(setIgConnected);
-    }
+    instagramAdapter.isConnected().then(setIgConnected);
   }, []);
 
   const handleSort = useCallback(async (sort: SortMode) => {
@@ -129,8 +118,7 @@ export default function MarketingStudioClient({
 
   const handlePost = useCallback(async () => {
     if (!besteAktion) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = await instagramAdapter.publish(besteAktion as any);
+    const res = await instagramAdapter.publish(besteAktion);
     setToastMsg(res.message);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 5000);
@@ -142,7 +130,7 @@ export default function MarketingStudioClient({
       setShowToast(true);
       setTimeout(() => setShowToast(false), 3000);
     } else {
-      instagramAdapter.connect(window.location.origin + '/marketing');
+      instagramAdapter.connect();
     }
   }, [igConnected]);
 
@@ -173,8 +161,32 @@ export default function MarketingStudioClient({
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getAnalysisProps = (key: string | null): any => {
-    // Keep it minimal for now, logic preserved from original
     if (!key) return {};
+    if (key === "Kampagnen") {
+      const active = kampagnen.filter((campaign) => campaign.status === 'aktiv').length;
+      return {
+        title: "Kampagnen-Performance",
+        subtitle: "Gespeicherte Kampagnen mit ihrem belegten Fortschritt und attribuierten Ergebnis.",
+        isEmpty: kampagnen.length === 0,
+        emptyState: { title: "Noch keine Kampagnen", description: "Es sind keine Kampagnen gespeichert.", actionLabel: "Schließen", onAction: () => setAnalysisOpen(null) },
+        hero: {
+          kicker: "KAMPAGNENSTATUS",
+          value: `${active} aktiv`,
+          changePill: { text: `${kampagnen.length} gespeichert`, variant: "gray" as const },
+          meta: "Fortschritt aus Zeitraum oder tatsächlich ausgeführten Aktionen; Ergebnis nur aus Attributionen.",
+        },
+        composition: {
+          title: "Gespeicherte Kampagnen",
+          rows: kampagnen.map((campaign) => ({
+            avatar: campaign.titel.substring(0, 2).toUpperCase(),
+            avatarColor: campaign.statusColor,
+            name: campaign.titel,
+            meta: `${campaign.statusLabel} · ${campaign.fortschritt} %`,
+            amount: campaign.ergebnis,
+          })),
+        },
+      };
+    }
     const data = analysisDataMap[key];
     if (!data) return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
 
@@ -189,8 +201,8 @@ export default function MarketingStudioClient({
         hero: {
           kicker: "ANFRAGEN (LFD. MONAT)",
           value: `${data.gesamt} Leads`,
-          changePill: { text: "Datenqualität: 95 % (Sehr hoch)", variant: "teal" as const },
-          meta: "Definition: Eingehende Anfragen via Telefonnotiz, Web-Formular oder Instagram-DM, bei denen der Marketing-Touchpoint erfasst wurde.",
+          changePill: { text: `${data.evidence.attributionRows} Attributionszeilen`, variant: "gray" as const },
+          meta: "Gezählt werden ausschließlich eindeutige Lead-IDs mit expliziter Touchpoint-Zuordnung.",
         },
         trend: { title: "Anfragen im Zeitverlauf", chartType: "bar", chartData: data.chartData },
         composition: {
@@ -202,9 +214,9 @@ export default function MarketingStudioClient({
           footerLink: { label: "Zu allen Anfragen", href: "/kunden" }
         },
         crossKpi: [
-          { label: "Qualifizierungsrate", value: "66%", delta: "Ziel: > 50%", deltaColor: "var(--green)" },
-          { label: "Höchster Kanal", value: data.topKategorien[0]?.name || "-", delta: "Diesen Monat", deltaColor: "var(--text3)" },
-          { label: "Ø Anfragen pro Tag", value: (data.gesamt / 30).toFixed(1), delta: "Normal", deltaColor: "var(--text3)" }
+          { label: "Touchpoints im Zeitraum", value: String(data.evidence.touchpoints), delta: "DB-Fakten", deltaColor: "var(--text3)" },
+          { label: "Attributionszeilen", value: String(data.evidence.attributionRows), delta: data.evidence.source, deltaColor: "var(--text3)" },
+          { label: "Stärkster belegter Kanal", value: data.topKategorien[0]?.name || "keiner", delta: "Keine Schätzung", deltaColor: "var(--text3)" }
         ],
         insight: {
           body: data.insights.beobachtungen.map((b: string) => `<b>Beobachtung:</b> ${b}`).join('<br/>') + 
@@ -229,24 +241,27 @@ export default function MarketingStudioClient({
         hero: {
           kicker: "UMSATZ (LFD. MONAT)",
           value: `${data.gesamt.toLocaleString("de-DE")} €`,
-          changePill: { text: "Datenqualität: 100 % (Exakt)", variant: "teal" as const },
-          meta: "Definition: Netto-Auftragswert von abgerechneten oder bestätigten Aufträgen, die mit einer Marketing-Anfrage verknüpft sind.",
+          changePill: { text: `${data.evidence.attributedOrders} zugeordnete Aufträge`, variant: "gray" as const },
+          meta: "Summe ausschließlich aus gespeicherten marketing.attribution.umsatz-Werten.",
         },
         trend: { title: "Umsatz im Zeitverlauf", chartType: "bar", chartData: data.chartData },
         composition: {
           title: "Höchste umgesetzte Aufträge",
-          rows: [
-            { avatar: "A1", avatarColor: "#1E3A8A", name: "Auftrag ORD-2026-89", meta: "Quelle: Google Suche", amount: "1.200 €" },
-            { avatar: "A2", avatarColor: "#1E3A8A", name: "Auftrag ORD-2026-92", meta: "Quelle: Instagram", amount: "850 €" }
-          ],
+          rows: data.topAuftraege.map((order: { auftragId: string; umsatz: number; kanal: string }) => ({
+            avatar: order.auftragId.substring(0, 2).toUpperCase(),
+            avatarColor: "#1E3A8A",
+            name: `Auftrag ${order.auftragId}`,
+            meta: `Quelle: ${order.kanal}`,
+            amount: `${order.umsatz.toLocaleString("de-DE")} €`,
+          })),
           footerLink: { label: "Alle Marketing-Aufträge", href: "/auftraege" }
         },
         crossKpi: [
-          { label: "Conversion-Rate (Anfrage -> Auftrag)", value: "66%", delta: "Sehr gut", deltaColor: "var(--green)" },
-          { label: "Ø Ticketgröße", value: "1.450 €", delta: "Branchen-Ø: 1.200 €", deltaColor: "var(--green)" }
+          { label: "Zugeordnete Aufträge", value: String(data.evidence.attributedOrders), delta: "eindeutige IDs", deltaColor: "var(--text3)" },
+          { label: "Attributionszeilen", value: String(data.evidence.attributionRows), delta: data.evidence.source, deltaColor: "var(--text3)" }
         ],
         insight: {
-          body: "<b>Beobachtung:</b> Die Zuordnung funktioniert perfekt (100%). Die Conversion-Rate von Anfrage zu Auftrag liegt bei 66%.",
+          body: data.insights.beobachtungen.map((observation: string) => `<b>Beobachtung:</b> ${observation}`).join('<br/>'),
           actions: [{ label: "Zu den Aufträgen", onClick: () => window.location.href = "/auftraege" }]
         },
         linkedAreas: [
@@ -258,67 +273,38 @@ export default function MarketingStudioClient({
     if (key === "Return on Invest") {
       return {
         icon: <svg viewBox="0 0 24 24" width={24} height={24} stroke="currentColor" strokeWidth={2} fill="none"><path d="M23 6l-9.5 9.5-5-5L1 18"/></svg>,
-        title: "Return on Invest & Lead-Kosten",
-        subtitle: "Wie viel Umsatz jeder investierte Marketing-Euro zurückbringt.",
+        title: "ROI-Datenlücke",
+        subtitle: "Attribuierter Umsatz und Planbudget sind vorhanden; tatsächliche Ausgaben fehlen.",
         accentBg: "linear-gradient(180deg, var(--posbg), transparent)",
         tabs: [{ id: "gesamt", label: "Gesamt-ROI" }],
         activeTab: "gesamt",
         hero: {
           kicker: "MARKETING-ROI",
-          value: `${data.gesamt} € / Post`,
-          changePill: { text: "Datenqualität: 85 % (Geschätzt)", variant: "amber" as const },
-          meta: "Definition: (Marketing-Umsatz minus Marketing-Kosten) geteilt durch Anzahl der Aktionen/Posts.",
+          value: data.gesamt === null ? "nicht berechenbar" : `${data.gesamt.toLocaleString("de-DE", { maximumFractionDigits: 2 })}×`,
+          changePill: { text: `${data.plannedBudget.toLocaleString("de-DE")} € Planbudget`, variant: "amber" as const },
+          meta: "Keine ROI-Berechnung, solange tatsächliche Marketingausgaben nicht gespeichert und zugeordnet sind.",
         },
         trend: { title: "ROI-Entwicklung", chartType: "line", chartData: data.chartData },
         composition: {
           title: "Berechnungsgrundlage",
           rows: [
-            { avatar: "R", avatarColor: "#10B981", name: "Umsatz (Positiv)", meta: "Aus konvertierten Aufträgen", amount: "18.400 €" },
-            { avatar: "K", avatarColor: "#EF4444", name: "Kosten (Negativ)", meta: "Instagram Ads + Agentur (kosten_posten DB)", amount: "-1.600 €" },
-            { avatar: "P", avatarColor: "#3B82F6", name: "Anzahl Posts (Teiler)", meta: "marketing_touchpoints DB", amount: "40 Stk." }
+            { avatar: "R", avatarColor: "#10B981", name: "Attribuierter Umsatz", meta: "marketing.attribution.umsatz", amount: `${data.revenue.toLocaleString("de-DE")} €` },
+            { avatar: "P", avatarColor: "#F59E0B", name: "Planbudget", meta: "marketing.aktion.kosten_budget (Planwert)", amount: `${data.plannedBudget.toLocaleString("de-DE")} €` },
+            { avatar: "K", avatarColor: "#94A3B8", name: "Tatsächliche Ausgaben", meta: "noch nicht mit Kostenledger verknüpft", amount: "nicht erfasst" },
+            { avatar: "A", avatarColor: "#3B82F6", name: "Ausgeführte Aktionen", meta: "im gewählten Zeitraum", amount: `${data.actions} Stk.` }
           ],
           footerLink: { label: "Kosten in Buchhaltung ansehen", href: "/buchhaltung" }
         },
         crossKpi: [
-          { label: "Invest pro Monat", value: "1.600 €", delta: "Plan: 2.000 €", deltaColor: "var(--text3)" },
-          { label: "CAC (Customer Acq. Cost)", value: "57 €", delta: "Ziel: < 100 €", deltaColor: "var(--green)" }
+          { label: "Aktionen mit Planbudget", value: String(data.evidence.budgetedActions), delta: "kosten_budget > 0 (Planwert)", deltaColor: "var(--text3)" },
+          { label: "Attributionszeilen", value: String(data.evidence.attributionRows), delta: data.evidence.source, deltaColor: "var(--text3)" }
         ],
         insight: {
-          body: "<b>Beobachtung:</b> Die Kosten für Arbeitszeit der Mitarbeiter bei der Content-Erstellung fehlen noch (Datenqualität 85%).",
-          actions: [{ label: "Zeiterfassung verknüpfen", onClick: () => alert("Verknüpfung öffnen") }]
+          body: data.insights.beobachtungen.map((observation: string) => `<b>Beobachtung:</b> ${observation}`).join('<br/>')
         },
         linkedAreas: [
           { label: "Buchhaltung (kosten_posten)", href: "/buchhaltung/kosten" },
           { label: "Performance Overview", href: "/performance" }
-        ]
-      };
-    }
-
-    if (key === "Kampagnen") {
-      return {
-        icon: <svg viewBox="0 0 24 24" width={24} height={24} stroke="currentColor" strokeWidth={2} fill="none"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
-        title: "Kampagnen-Performance",
-        subtitle: "Detailanalyse der laufenden und geplanten Kampagnen.",
-        accentBg: "linear-gradient(180deg, var(--posbg), transparent)",
-        tabs: [{ id: "gesamt", label: "Aktive Kampagnen" }],
-        activeTab: "gesamt",
-        hero: {
-          kicker: "KAMPAGNEN STATUS",
-          value: "2 Aktiv",
-          changePill: { text: "Guter Verlauf", variant: "teal" as const },
-          meta: "Messung der Interaktionen und Conversion-Rate aller gebündelten Aktionen.",
-        },
-        composition: {
-          title: "Performance nach Kampagne",
-          rows: [
-            { avatar: "M", avatarColor: "bg-navy-900", name: "Messe-Nachfass", amount: "+14 Leads", href: "/marketing/kampagne/1" },
-            { avatar: "O", avatarColor: "bg-posbg", name: "Oberflächen-Push", amount: "+8 Leads", href: "/marketing/kampagne/2" }
-          ]
-        },
-        insight: { body: "Messe-Nachfass konvertiert aktuell 15% besser als erwartet. Budget-Erhöhung empfohlen." },
-        linkedAreas: [
-          { label: "Kunden & CRM", href: "/customers" },
-          { label: "Umsatz-Performance", href: "/performance" }
         ]
       };
     }
@@ -357,7 +343,7 @@ export default function MarketingStudioClient({
           </button>
           <div className="mk-live-pill">
             <span className="dot" />
-            System lernt mit
+            Echte Datenbasis
           </div>
         </div>
       </div>
@@ -410,8 +396,8 @@ export default function MarketingStudioClient({
       </AnimatePresence>
 
       <div className="mk-footnote">
-        Jede Aktion trägt <b>Aufwand, Kosten und erwarteten Umsatz</b> — das Studio lernt aus jedem Post, was bei dir wirkt.<br />
-        Kosten fließen automatisch in die Buchhaltung, Umsatz in Performance. Komplett per Feature-Toggle abschaltbar.
+        Jede Aktion kann <b>Aufwand und Kosten</b> tragen. Wirkung erscheint erst nach einem echten Touchpoint und einer expliziten Attribution.<br />
+        Fehlende Verknüpfungen bleiben sichtbar und werden nicht durch Schätzwerte ersetzt.
       </div>
 
       <div className={`mk-toast ${showToast ? 'show' : ''}`}>
@@ -424,8 +410,6 @@ export default function MarketingStudioClient({
       <AnalysisOverlay
         isEmpty={false}
         emptyState={{ title: "Noch keine Daten", description: "Es wurden noch keine Daten für diesen Bereich erfasst.", actionLabel: "Jetzt Daten erfassen", actionHref: "/" }}
-        trend={{ chartType: "line", chartData: [{ name: "KW19", ist: 85, vorjahr: 70 }, { name: "KW20", ist: 82, vorjahr: 72 }, { name: "KW21", ist: 79, vorjahr: 75 }, { name: "KW22", ist: 76, vorjahr: 78 }] }}
-        tabs={[{ id: "1", label: "Aktueller Monat" }, { id: "2", label: "Vorjahr" }]}
         open={!!analysisOpen}
         onClose={() => setAnalysisOpen(null)}
         title={analysisOpen ? `Analyse: ${analysisOpen}` : ""}

@@ -1,389 +1,420 @@
 "use server";
 
-import { checkAppAuth } from "@/lib/server/authHelper";
-import { createClient } from "@/lib/supabase/server";
+import { and, asc, eq, gte, inArray, isNull, lt, notIlike, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { sql } from "drizzle-orm";
-import { AnalyseTileKey, AnalyseTileSummary, AnalyseTileDetail, AnalyseEntityLink, AnalyseTileStatus } from "@/lib/analyse/dataContracts";
+import { customers, orders } from "@/db/schema";
+import type {
+  AnalyseEntityLink,
+  AnalyseTileDetail,
+  AnalyseTileKey,
+  AnalyseTileStatus,
+  AnalyseTileSummary,
+  WerkstattPulsData,
+} from "@/lib/analyse/dataContracts";
+import { resolveAuthorization } from "@/lib/server/authorization";
 
-async function getWerkstattPulsSummary(supabase: any, period: string): Promise<AnalyseTileSummary> {
-  const { data: t } = await supabase.from('v_analyse_termintreue').select('*').single();
-  const { data: d } = await supabase.from('v_analyse_durchlaufzeit').select('*').single();
-  const { data: w } = await supabase.from('v_analyse_wochenziel').select('*').single();
-  const { data: s } = await supabase.from('v_analyse_station_durchlauf').select('*');
+const TENANT_ID = "galvanik-kreile";
+const DAY_MS = 24 * 60 * 60 * 1_000;
 
-  // Ampellogik & Werte
-  const termintreue = t?.termintreue_pct ?? 0;
-  const ohneZusage = t?.ohne_zusagetermin ?? 0;
-  const avgTage = d?.avg_tage ?? 0;
-  
-  // Wochenziel
-  const wochenzielIst = w?.fertig_diese_woche ?? 0;
-  const wochenzielSoll = null;
-  const wochenzielPct = 0;
+type AnalyseActor = { tenantId: string };
+type Period = {
+  key: "today" | "week" | "month";
+  label: string;
+  start: Date;
+  end: Date;
+};
 
-  // Status-Logik
-  let status: AnalyseTileStatus = "data_missing";
-  if (t && d && w) {
-    if (termintreue < 80 || avgTage > 10 || ohneZusage > 10) {
-      status = "critical";
-    } else if (termintreue < 90 || avgTage > 7 || ohneZusage > 0) {
-      status = "watch";
-    } else {
-      status = "stable";
-    }
+type WorkshopSnapshot = {
+  period: Period;
+  summary: AnalyseTileSummary;
+  detail: WerkstattPulsData;
+};
+
+async function requireAnalyseRead(): Promise<AnalyseActor> {
+  const authorization = await resolveAuthorization();
+  if (
+    !authorization.ok ||
+    authorization.data.tenantId !== TENANT_ID ||
+    !authorization.data.permissions.includes("perm_view_leitstand")
+  ) {
+    throw new Error("AUTH_ERROR: Forbidden");
   }
+  return { tenantId: authorization.data.tenantId };
+}
 
-  // Score Ring (Beispiel: Ohne Wochenziel nur Termintreue)
-  let scoreRing: number | undefined = undefined;
-  if (t) {
-    scoreRing = termintreue;
+function parsePeriod(value: string, now = new Date()): Period {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "heute" || normalized === "today") {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    return { key: "today", label: "Heute", start, end: new Date(start.getTime() + DAY_MS) };
   }
+  if (normalized === "woche" || normalized === "week") {
+    const start = new Date(now);
+    const day = start.getDay() || 7;
+    start.setDate(start.getDate() - day + 1);
+    start.setHours(0, 0, 0, 0);
+    return { key: "week", label: "Woche", start, end: new Date(start.getTime() + 7 * DAY_MS) };
+  }
+  if (normalized === "monat" || normalized === "month") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    return { key: "month", label: "Monat", start, end };
+  }
+  throw new Error("INVALID_ANALYSE_PERIOD");
+}
 
-  // Stationen-Minibalken (Top 4 Stationen mit dem höchsten Durchlauf)
-  const progressBars = (s || [])
-    .sort((a: any, b: any) => b.avg_tage - a.avg_tage)
-    .slice(0, 4)
-    .map((station: any) => ({
-      label: station.station,
-      value: station.avg_tage,
-      fillRatio: Math.min(100, (station.avg_tage / 10) * 100), // Angenommen 10 Tage ist max
-      colorClass: station.avg_tage > 5 ? "bg-red-500" : "bg-blue-500",
-    }));
+function unavailableTiles(periodLabel: string): AnalyseTileSummary[] {
+  const tiles: Array<Pick<AnalyseTileSummary, "key" | "title" | "subtitle" | "primaryLabel"> & { description: string }> = [
+    {
+      key: "umsatz_marge",
+      title: "Umsatz & Marge",
+      subtitle: "Finanzielle Kennzahlen",
+      primaryLabel: "Umsatz",
+      description: "Diese Kennzahl wird erst angezeigt, wenn der mandantengebundene Rechnungs- und Kostenpfad vollständig auswertbar ist.",
+    },
+    {
+      key: "qualitaet_risiko",
+      title: "Qualität & Risiko",
+      subtitle: "Reklamationen & Ausschuss",
+      primaryLabel: "Reklamationen",
+      description: "Eine belastbare Qualitätsquote ist noch nicht instrumentiert. Fehlende Daten werden nicht als null Reklamationen gewertet.",
+    },
+    {
+      key: "baeder_material",
+      title: "Bäder & Material",
+      subtitle: "Verbräuche & Messungen",
+      primaryLabel: "Status",
+      description: "Mess- und Verbrauchsdaten besitzen noch keine vollständige, periodisierte Auswertungsgrundlage.",
+    },
+    {
+      key: "kunden_markt",
+      title: "Kunden & Markt",
+      subtitle: "Neukunden & Abwanderung",
+      primaryLabel: "Aktivität",
+      description: "Aktiv- und Abwanderungsdefinitionen sind noch nicht fachlich festgelegt und werden deshalb nicht geschätzt.",
+    },
+    {
+      key: "marketing_reaktivierung",
+      title: "Marketing & Kundenreaktivierung",
+      subtitle: "Kampagnen & Response",
+      primaryLabel: "Wirkung",
+      description: "Marketingwirkung wird erst mit bestätigten Touchpoints und Attribution angezeigt.",
+    },
+  ];
 
-  return {
+  return tiles.map((tile) => ({
+    key: tile.key,
+    title: tile.title,
+    subtitle: tile.subtitle,
+    status: "data_missing",
+    primaryLabel: tile.primaryLabel,
+    primaryValue: null,
+    periodLabel,
+    dataSources: [{ tableOrView: "nicht_instrumentiert", maturityNote: tile.description }],
+    linkedEntities: [],
+    emptyState: { title: "Noch nicht belastbar", description: tile.description },
+  }));
+}
+
+async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, now = new Date()): Promise<WorkshopSnapshot> {
+  const period = parsePeriod(periodInput, now);
+  const normalizedStatus = sql<string>`lower(coalesce(${orders.status}, ''))`;
+  const promisedDueDate = sql<Date | null>`coalesce(${orders.promisedDueDate}, ${orders.dueDate})`;
+  const productionOrder = and(
+    notInArray(sql`coalesce(${orders.source}, 'manual')`, ["seed", "test", "demo", "integration-test"]),
+    notIlike(sql`coalesce(${orders.orderNumber}, '')`, "A-SEED-%"),
+    notIlike(sql`coalesce(${orders.orderNumber}, '')`, "%TEST%"),
+  );
+  const activeOrder = and(
+    eq(orders.tenantId, actor.tenantId),
+    isNull(orders.completedDate),
+    notInArray(normalizedStatus, ["completed", "shipped", "cancelled", "canceled", "abgeschlossen", "versendet", "storniert", "fertig", "done"]),
+    productionOrder,
+  );
+  const completedInPeriod = and(
+    eq(orders.tenantId, actor.tenantId),
+    gte(orders.completedDate, period.start),
+    lt(orders.completedDate, period.end),
+    inArray(normalizedStatus, ["completed", "shipped", "abgeschlossen", "versendet", "fertig", "done"]),
+    productionOrder,
+  );
+  const stationName = sql<string>`coalesce(${orders.currentStationId}, ${orders.station}, 'nicht_zugeordnet')`;
+
+  const [completedRows, openRows, stationRows, delayedOrders, missingDueOrders] = await Promise.all([
+    db.select({
+      completedCount: sql<number>`count(*)::int`,
+      dueDateMeasurable: sql<number>`count(*) filter (where ${promisedDueDate} is not null)::int`,
+      deliveredOnTime: sql<number>`count(*) filter (
+        where ${promisedDueDate} is not null and ${orders.completedDate} <= ${promisedDueDate}
+      )::int`,
+      cycleMeasurable: sql<number>`count(*) filter (where ${orders.intakeDate} is not null)::int`,
+      averageCycleDays: sql<number | null>`avg(
+        extract(epoch from (${orders.completedDate} - ${orders.intakeDate})) / 86400.0
+      ) filter (where ${orders.intakeDate} is not null)`,
+    }).from(orders).where(completedInPeriod),
+    db.select({
+      openCount: sql<number>`count(*)::int`,
+      withoutDueDate: sql<number>`count(*) filter (where ${promisedDueDate} is null)::int`,
+      overdueCount: sql<number>`count(*) filter (where ${promisedDueDate} < ${now})::int`,
+    }).from(orders).where(activeOrder),
+    db.select({ station: stationName, count: sql<number>`count(*)::int` })
+      .from(orders)
+      .where(activeOrder)
+      .groupBy(stationName)
+      .orderBy(sql`count(*) desc`, stationName),
+    db.select({
+      id: orders.id,
+      orderNumber: orders.orderNumber,
+      title: orders.title,
+      customerId: orders.customerId,
+      customerName: customers.name,
+      station: stationName,
+      promisedDueDate,
+      completedDate: orders.completedDate,
+      priority: orders.priority,
+    }).from(orders).innerJoin(customers, and(
+      eq(customers.id, orders.customerId),
+      eq(customers.tenantId, actor.tenantId),
+    )).where(and(activeOrder, lt(promisedDueDate, now)))
+      .orderBy(asc(promisedDueDate)).limit(10),
+    db.select({
+      id: orders.id,
+      orderNumber: orders.orderNumber,
+      title: orders.title,
+      customerId: orders.customerId,
+      customerName: customers.name,
+      station: stationName,
+      promisedDueDate,
+      completedDate: orders.completedDate,
+      priority: orders.priority,
+    }).from(orders).innerJoin(customers, and(
+      eq(customers.id, orders.customerId),
+      eq(customers.tenantId, actor.tenantId),
+    )).where(and(activeOrder, isNull(promisedDueDate)))
+      .orderBy(asc(orders.createdAt)).limit(10),
+  ]);
+
+  const completed = completedRows[0];
+  const open = openRows[0];
+  const completedCount = Number(completed?.completedCount || 0);
+  const dueDateMeasurable = Number(completed?.dueDateMeasurable || 0);
+  const deliveredOnTime = Number(completed?.deliveredOnTime || 0);
+  const cycleMeasurable = Number(completed?.cycleMeasurable || 0);
+  const openCount = Number(open?.openCount || 0);
+  const withoutDueDate = Number(open?.withoutDueDate || 0);
+  const overdueCount = Number(open?.overdueCount || 0);
+  const termintreuePct = dueDateMeasurable > 0 ? Math.round(deliveredOnTime / dueDateMeasurable * 1_000) / 10 : null;
+  const averageCycleDays = completed?.averageCycleDays === null || completed?.averageCycleDays === undefined
+    ? null
+    : Math.round(Number(completed.averageCycleDays) * 10) / 10;
+  const hasData = completedCount > 0 || openCount > 0;
+  const status: AnalyseTileStatus = !hasData || dueDateMeasurable === 0
+    ? "data_missing"
+    : overdueCount > 0
+      ? "watch"
+      : "stable";
+  const maxStationCount = stationRows.reduce((maximum, row) => Math.max(maximum, Number(row.count)), 0);
+  const returnTo = "/performance?tile=werkstatt_puls";
+
+  const mappedAffectedOrders: WerkstattPulsData["affectedOrders"] = [
+    ...delayedOrders.map((order) => ({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      title: order.title,
+      customerId: order.customerId,
+      customerName: order.customerName,
+      stationName: order.station,
+      promisedDueDate: order.promisedDueDate?.toISOString() || null,
+      completedDate: null,
+      delayDays: order.promisedDueDate ? Math.max(1, Math.floor((now.getTime() - order.promisedDueDate.getTime()) / DAY_MS)) : null,
+      status: "critical" as const,
+      priority: order.priority,
+      openUrl: `/orders/${encodeURIComponent(order.id)}?returnTo=${encodeURIComponent(returnTo)}`,
+    })),
+    ...missingDueOrders.slice(0, Math.max(0, 10 - delayedOrders.length)).map((order) => ({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      title: order.title,
+      customerId: order.customerId,
+      customerName: order.customerName,
+      stationName: order.station,
+      promisedDueDate: null,
+      completedDate: null,
+      delayDays: null,
+      status: "missing_due_date" as const,
+      priority: order.priority,
+      openUrl: `/orders/${encodeURIComponent(order.id)}?returnTo=${encodeURIComponent(returnTo)}`,
+    })),
+  ];
+
+  const linkedEntities: AnalyseEntityLink[] = mappedAffectedOrders.map((order) => ({
+    id: order.orderId,
+    label: `${order.orderNumber} · ${order.title}`,
+    type: "order",
+    href: order.openUrl,
+    overlay: "order",
+    returnTo,
+  }));
+
+  const summary: AnalyseTileSummary = {
     key: "werkstatt_puls",
     title: "Werkstatt-Puls",
     subtitle: "Termintreue & Durchlaufzeit",
     status,
     primaryLabel: "Termintreue",
-    primaryValue: t?.termintreue_pct ? `${t.termintreue_pct}%` : null,
+    primaryValue: termintreuePct === null ? null : `${termintreuePct.toLocaleString("de-DE")}%`,
     secondaryLabel: "Ø Durchlaufzeit",
-    secondaryValue: d?.avg_tage ? `${d.avg_tage} Tage` : null,
-    tertiaryLabel: "Wochenziel",
-    tertiaryValue: w ? `${wochenzielIst} (kein Ziel gesetzt)` : null,
-    periodLabel: period,
-    scoreRing,
-    progressBars,
-    dataSources: [
-      { tableOrView: "v_analyse_termintreue" },
-      { tableOrView: "v_analyse_durchlaufzeit" },
-      { tableOrView: "v_analyse_wochenziel" },
-      { tableOrView: "v_analyse_station_durchlauf" }
-    ],
-    linkedEntities: [], 
-    emptyState: status === "data_missing" ? {
-      title: "Daten nicht belastbar",
-      description: "Es fehlen Start-/End-Events oder Zusagetermine.",
-      targetLabel: "Zur Erfassung",
-      targetHref: "/warendurchlauf"
-    } : undefined
+    secondaryValue: averageCycleDays === null ? null : `${averageCycleDays.toLocaleString("de-DE")} Tage`,
+    tertiaryLabel: "Fertig im Zeitraum",
+    tertiaryValue: completedCount.toLocaleString("de-DE"),
+    periodLabel: period.label,
+    scoreRing: termintreuePct ?? undefined,
+    progressBars: stationRows.slice(0, 4).map((row) => ({
+      label: row.station,
+      value: Number(row.count),
+      fillRatio: maxStationCount > 0 ? Number(row.count) / maxStationCount * 100 : 0,
+      colorClass: "bg-blue-500",
+    })),
+    dataSources: [{
+      tableOrView: "orders",
+      fields: ["tenant_id", "completed_date", "promised_due_date", "intake_date", "current_station_id"],
+      calculation: "Mandantengefilterte Aufträge; Zeitraum ist halboffen [Start, Ende).",
+    }],
+    linkedEntities,
+    emptyState: !hasData ? {
+      title: "Keine auswertbaren Aufträge",
+      description: "Im gewählten Zeitraum liegen keine abgeschlossenen Aufträge und aktuell keine offenen Aufträge vor.",
+      targetLabel: "Warendurchlauf öffnen",
+      targetHref: "/warendurchlauf",
+    } : undefined,
   };
+
+  const detail: WerkstattPulsData = {
+    period: period.key,
+    dataStatus: {
+      isLive: true,
+      lastUpdatedAt: new Date().toISOString(),
+      maturity: "S1",
+      warnings: [
+        ...(dueDateMeasurable === 0 ? ["Für abgeschlossene Aufträge fehlen im Zeitraum messbare Zusagetermine."] : []),
+        ...(cycleMeasurable === 0 ? ["Für abgeschlossene Aufträge fehlen im Zeitraum messbare Eingangszeiten."] : []),
+        "Stationswerte zeigen Bestände, keine Kapazitätsauslastung oder Wartezeit.",
+      ],
+    },
+    hero: {
+      termintreuePct,
+      termintreueMessbarN: dueDateMeasurable,
+      ohneZusageterminN: withoutDueDate,
+      avgDurchlaufzeitTage: averageCycleDays,
+      avgDurchlaufzeitMessbarN: cycleMeasurable,
+      wochenzielIst: completedCount,
+      wochenzielSoll: null,
+      wochenzielQuelle: "missing",
+      offeneAuftraegeN: openCount,
+      kritischeAuftraegeN: overdueCount,
+      dokumentationsquotePct: null,
+      dokumentationsquoteMessbarN: 0,
+      werkstattScore: null,
+      scoreStatus: "insufficient_data",
+    },
+    trend: {
+      termintreue: [],
+      avgDurchlaufzeit: [],
+      comparison: { mode: "previous_period", available: false, reasonIfMissing: "Historische Vergleichsreihen sind noch nicht instrumentiert." },
+    },
+    stations: stationRows.map((row) => ({
+      stationId: row.station,
+      stationName: row.station,
+      status: "unavailable",
+      auslastungPct: null,
+      wartendN: Number(row.count),
+      avgWartezeitTage: null,
+      engpassScore: null,
+      hauptursache: null,
+      openUrl: `/orders?station=${encodeURIComponent(row.station)}&returnTo=${encodeURIComponent(returnTo)}`,
+    })),
+    affectedOrders: mappedAffectedOrders,
+    economics: {
+      engpassRevenueEur: null,
+      engpassDbEur: null,
+      actualDelayCostEur: null,
+      modelDelayRiskEur: null,
+      confidence: "none",
+      missingReasons: ["Auftragsumsatz und bestätigte Verzögerungskosten sind nicht vollständig verknüpft."],
+      affectedOrderCount: overdueCount,
+    },
+    insight: {
+      available: overdueCount > 0,
+      source: overdueCount > 0 ? "rules" : "none",
+      observation: overdueCount > 0 ? `${overdueCount} offene Aufträge liegen hinter ihrem gespeicherten Zusagetermin.` : null,
+      recommendation: overdueCount > 0 ? "Betroffene Aufträge und gespeicherte Verzögerungsgründe prüfen." : null,
+      actionLinks: overdueCount > 0 ? [{ label: "Betroffene Aufträge öffnen", href: "/orders?risk=overdue" }] : [],
+    },
+    connectedLinks: [
+      { label: "Bäder & Material", value: "Bäder öffnen", href: "/baeder", enabled: true },
+      { label: "Qualitätskontrolle", value: "Kontrolle öffnen", href: "/kontrolle", enabled: true },
+      { label: "Warendurchlauf", value: "Stationen öffnen", href: "/warendurchlauf", enabled: true },
+    ],
+    dataSources: [
+      { label: "Aufträge im Zeitraum", sourceName: "orders", recordCount: completedCount, status: completedCount > 0 ? "live" : "empty" },
+      { label: "Offene Aufträge", sourceName: "orders", recordCount: openCount, status: openCount > 0 ? "live" : "empty" },
+      { label: "Verlauf", sourceName: "nicht_instrumentiert", recordCount: null, status: "missing" },
+      { label: "Wirtschaftlichkeit", sourceName: "nicht_instrumentiert", recordCount: null, status: "missing" },
+    ],
+  };
+
+  return { period, summary, detail };
 }
 
-export async function getAnalyseOverview(period: string, filters?: any): Promise<{ data: AnalyseTileSummary[], error?: any }> {
+export async function getAnalyseOverview(period: string): Promise<{ data: AnalyseTileSummary[]; error?: { code: string; message: string } }> {
+  const actor = await requireAnalyseRead();
   try {
-    await checkAppAuth();
-    const supabase = await createClient();
-
-    // Werkstatt Puls
-    const werkstattPuls = await getWerkstattPulsSummary(supabase, period);
-
-    const emptyTiles: AnalyseTileSummary[] = [
-      {
-        key: "umsatz_marge",
-        title: "Umsatz & Marge",
-        subtitle: "Finanzielle Kennzahlen",
-        status: "data_missing",
-        primaryLabel: "Umsatz",
-        primaryValue: null,
-        periodLabel: period,
-        dataSources: [{ tableOrView: "v_analyse_umsatz_marge", maturityNote: "View not yet created." }],
-        linkedEntities: [],
-        emptyState: {
-          title: "Datenansicht in Vorbereitung",
-          description: "Diese Kachel wird zukünftig auf Basis echter Rechnungsausgänge aggregiert. Derzeit fehlen noch Live-Daten aus dem Buchhaltungsmodul.",
-        }
-      },
-      {
-        key: "qualitaet_risiko",
-        title: "Qualität & Risiko",
-        subtitle: "Reklamationen & Ausschuss",
-        status: "data_missing",
-        primaryLabel: "Reklamationen",
-        primaryValue: null,
-        periodLabel: period,
-        dataSources: [{ tableOrView: "v_analyse_qualitaet_risiko", maturityNote: "View not yet created." }],
-        linkedEntities: [],
-        emptyState: {
-          title: "Datenansicht in Vorbereitung",
-          description: "Die Integration der Qualitätsdaten wird in einer späteren Phase erfolgen.",
-        }
-      },
-      {
-        key: "baeder_material",
-        title: "Bäder & Material",
-        subtitle: "Verbräuche & Messungen",
-        status: "data_missing",
-        primaryLabel: "Status",
-        primaryValue: null,
-        periodLabel: period,
-        dataSources: [{ tableOrView: "v_analyse_baeder_material", maturityNote: "View not yet created." }],
-        linkedEntities: [],
-        emptyState: {
-          title: "Datenansicht in Vorbereitung",
-          description: "Bäderdaten werden noch nicht zentral gesammelt.",
-        }
-      },
-      {
-        key: "kunden_markt",
-        title: "Kunden & Markt",
-        subtitle: "Neukunden & Abwanderung",
-        status: "data_missing",
-        primaryLabel: "Aktiv",
-        primaryValue: null,
-        periodLabel: period,
-        dataSources: [{ tableOrView: "v_analyse_kunden_markt", maturityNote: "View not yet created." }],
-        linkedEntities: [],
-        emptyState: {
-          title: "Datenansicht in Vorbereitung",
-          description: "Kundendaten werden in der CRM Phase 3 angebunden.",
-        }
-      },
-      {
-        key: "marketing_reaktivierung",
-        title: "Marketing & Kundenreaktivierung",
-        subtitle: "Kampagnen & Response",
-        status: "data_missing",
-        primaryLabel: "Wirkung",
-        primaryValue: null,
-        periodLabel: period,
-        dataSources: [{ tableOrView: "v_analyse_marketing_reaktivierung", maturityNote: "View not yet created." }],
-        linkedEntities: [],
-        emptyState: {
-          title: "Datenansicht in Vorbereitung",
-          description: "Noch keine Marketing-Attribution verfügbar.",
-        }
-      }
-    ];
-
-    return { data: [werkstattPuls, ...emptyTiles] };
-  } catch (error: any) {
-    console.error("Error in getAnalyseOverview:", error);
-    return { error: error.message, data: [] };
+    const workshop = await loadWorkshopSnapshot(actor, period);
+    return { data: [workshop.summary, ...unavailableTiles(workshop.period.label)] };
+  } catch (error) {
+    if (error instanceof Error && error.message === "INVALID_ANALYSE_PERIOD") {
+      return { data: [], error: { code: "INVALID_PERIOD", message: "Der gewählte Analysezeitraum wird nicht unterstützt." } };
+    }
+    return { data: [], error: { code: "ANALYSE_UNAVAILABLE", message: "Analysedaten konnten nicht geladen werden." } };
   }
 }
 
-export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: string, filters?: any): Promise<{ data: AnalyseTileDetail | null, error?: any }> {
+export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: string): Promise<{ data: AnalyseTileDetail | null; error?: { code: string; message: string } }> {
+  const actor = await requireAnalyseRead();
   try {
-    await checkAppAuth();
-    
-    // We get the summary for this tile
-    const { data: overviews } = await getAnalyseOverview(period, filters);
-    const summary = overviews.find(o => o.key === tileKey);
-    
-    if (!summary) throw new Error("Tile not found");
+    const workshop = await loadWorkshopSnapshot(actor, period);
+    const summary = tileKey === "werkstatt_puls"
+      ? workshop.summary
+      : unavailableTiles(workshop.period.label).find((tile) => tile.key === tileKey);
+    if (!summary) return { data: null, error: { code: "UNKNOWN_TILE", message: "Diese Analyseansicht ist nicht verfügbar." } };
 
-    const detail: AnalyseTileDetail = {
-      summary,
-      charts: [],
-      rankings: [],
-      affectedEntities: [],
-      measures: [],
-      dataSources: summary.dataSources
+    return {
+      data: {
+        summary,
+        charts: tileKey === "werkstatt_puls" ? [] : [{ id: "empty", title: "Historie", type: "line", dataset: [], emptyState: summary.emptyState }],
+        rankings: [],
+        affectedEntities: summary.linkedEntities,
+        measures: [],
+        dataSources: summary.dataSources,
+        ...(tileKey === "werkstatt_puls" ? { werkstattPulsData: workshop.detail } : {}),
+      },
     };
-
-    const supabase = await createClient();
-
-    if (tileKey === "werkstatt_puls") {
-      // 1. Fetch Views for Level 2 Details
-      const { data: t } = await supabase.from('v_analyse_termintreue').select('*').single();
-      const { data: d } = await supabase.from('v_analyse_durchlaufzeit').select('*').single();
-      const { data: w } = await supabase.from('v_analyse_wochenziel').select('*').single();
-      const { data: s } = await supabase.from('v_analyse_station_durchlauf').select('*');
-      const { data: eco } = await supabase.from('v_analyse_werkstatt_puls_economics').select('*').single();
-
-      // Hole echte verspätete Aufträge
-      const { data: delayedOrders } = await supabase.from('orders')
-        .select('id, internal_id, title, customer_id, customers(name), current_station_id, promised_due_date, completed_date, status')
-        .eq('tenant_id', 'galvanik-kreile')
-        .not('promised_due_date', 'is', null)
-        .is('completed_date', null)
-        .lt('promised_due_date', new Date().toISOString())
-        .limit(10);
-
-      const { data: missingDueOrders } = await supabase.from('orders')
-        .select('id, internal_id, title, customer_id, customers(name), current_station_id, promised_due_date, completed_date, status')
-        .eq('tenant_id', 'galvanik-kreile')
-        .is('promised_due_date', null)
-        .neq('status', 'storniert')
-        .limit(10);
-
-      // Mappings
-      const termintreuePct = t?.termintreue_pct ?? null;
-      const termintreueMessbarN = t?.nenner ?? 0;
-      const ohneZusageterminN = t?.ohne_zusagetermin ?? 0;
-      const { count: openOrdersCount } = await supabase
-        .from('orders')
-        .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', 'galvanik-kreile')
-        .is('completed_date', null);
-
-      const avgTage = d?.avg_tage ?? null;
-      const avgDurchlaufzeitMessbarN = d?.n ?? 0;
-      const wochenzielIst = w?.fertig_diese_woche ?? 0;
-      const wochenzielSoll = null; 
-      const offeneAuftraegeN = openOrdersCount ?? 0; 
-      const kritischeAuftraegeN = delayedOrders ? delayedOrders.length : 0;
-      const dokumentationsquotePct = null; // not in view yet
-      const dokumentationsquoteMessbarN = 0;
-      
-      let status: "ok" | "watch" | "critical" | "insufficient_data" = "insufficient_data";
-      if (t && d) {
-        if ((termintreuePct !== null && termintreuePct < 80) || (avgTage !== null && avgTage > 10) || ohneZusageterminN > 10) status = "critical";
-        else if ((termintreuePct !== null && termintreuePct < 90) || (avgTage !== null && avgTage > 7) || ohneZusageterminN > 0) status = "watch";
-        else status = "ok";
-      }
-
-      const scoreRing = termintreuePct !== null ? termintreuePct : null;
-
-      // Stations
-      const stations = (s || []).map((st: any) => ({
-        stationId: st.station,
-        stationName: st.station,
-        status: (st.avg_tage > 5 ? "critical" : (st.avg_tage > 2 ? "watch" : "ok")) as "critical" | "watch" | "ok" | "free",
-        auslastungPct: Math.min(100, Math.round((st.avg_tage / 10) * 100)),
-        wartendN: st.teile_aktuell ?? 0,
-        avgWartezeitTage: st.avg_tage ?? null,
-        engpassScore: Math.round((st.avg_tage ?? 0) * (st.teile_aktuell ?? 0)),
-        hauptursache: null,
-        openUrl: `/orders?station=${encodeURIComponent(st.station)}&returnTo=/performance?tile=werkstatt_puls`
-      }));
-
-      // Affected Orders
-      const affectedOrdersMapped: any[] = [];
-      (delayedOrders || []).forEach((o: any) => {
-        affectedOrdersMapped.push({
-          orderId: o.id,
-          orderNumber: o.internal_id,
-          title: o.title || 'Ohne Titel',
-          customerId: o.customer_id,
-          customerName: o.customers?.name || 'Unbekannt',
-          stationName: o.current_station_id || 'Unbekannt',
-          promisedDueDate: o.promised_due_date,
-          completedDate: o.completed_date,
-          delayDays: Math.round((new Date().getTime() - new Date(o.promised_due_date).getTime()) / (1000 * 3600 * 24)),
-          status: "critical",
-          priority: o.status,
-          openUrl: `/orders/${o.id}?returnTo=/performance?tile=werkstatt_puls`
-        });
-      });
-      (missingDueOrders || []).forEach((o: any) => {
-        affectedOrdersMapped.push({
-          orderId: o.id,
-          orderNumber: o.internal_id,
-          title: o.title || 'Ohne Titel',
-          customerId: o.customer_id,
-          customerName: o.customers?.name || 'Unbekannt',
-          stationName: o.current_station_id || 'Unbekannt',
-          promisedDueDate: o.promised_due_date,
-          completedDate: o.completed_date,
-          delayDays: null,
-          status: "missing_due_date",
-          priority: o.status,
-          openUrl: `/orders/${o.id}?returnTo=/performance?tile=werkstatt_puls`
-        });
-      });
-
-      // Data Sources list
-      const ds = [
-        { label: "Termintreue & DQ", sourceName: "v_analyse_termintreue", recordCount: 1, status: t ? "live" : "missing" },
-        { label: "Durchlaufzeit", sourceName: "v_analyse_durchlaufzeit", recordCount: 1, status: d ? "live" : "missing" },
-        { label: "Wochenziel", sourceName: "v_analyse_wochenziel", recordCount: 1, status: w ? "live" : "missing" },
-        { label: "Stationen Durchlauf", sourceName: "v_analyse_station_durchlauf", recordCount: s ? s.length : 0, status: s ? "live" : "missing" },
-        { label: "Wirtschaftlichkeit", sourceName: "v_analyse_werkstatt_puls_economics", recordCount: 1, status: eco ? "live" : "missing" },
-        { label: "Verlauf", sourceName: "kpi_snapshots", recordCount: null, status: "missing" }
-      ] as any[];
-
-      detail.werkstattPulsData = {
-        period: period as any,
-        dataStatus: {
-          isLive: true,
-          lastUpdatedAt: new Date().toISOString(),
-          maturity: "S2",
-          warnings: []
-        },
-        hero: {
-          termintreuePct, termintreueMessbarN, ohneZusageterminN,
-          avgDurchlaufzeitTage: avgTage, avgDurchlaufzeitMessbarN,
-          wochenzielIst, wochenzielSoll, wochenzielQuelle: "missing",
-          offeneAuftraegeN, kritischeAuftraegeN,
-          dokumentationsquotePct, dokumentationsquoteMessbarN,
-          werkstattScore: scoreRing, scoreStatus: status
-        },
-        trend: {
-          termintreue: [],
-          avgDurchlaufzeit: [],
-          comparison: { mode: "previous_period", available: false, reasonIfMissing: "Für einen Wochenverlauf werden mindestens zwei auswertbare Wochen benötigt." }
-        },
-        stations,
-        affectedOrders: affectedOrdersMapped,
-        economics: {
-          engpassRevenueEur: eco?.engpass_revenue_eur ?? 0,
-          engpassDbEur: eco?.engpass_db_eur ?? 0,
-          actualDelayCostEur: eco?.actual_delay_cost_eur ?? 0,
-          modelDelayRiskEur: eco?.model_delay_risk_eur ?? 0,
-          confidence: eco ? (eco.n_delayed_orders > 0 ? "high" : "medium") : "none",
-          missingReasons: [],
-          affectedOrderCount: eco?.n_delayed_orders ?? 0,
-        },
-        insight: {
-          available: stations.length > 0,
-          source: "rules",
-          observation: stations.length > 0 ? `${stations[0].stationName} ist aktuell stärkster Engpass. ${stations[0].wartendN} Teile warten dort, Ø Wartezeit ${stations[0].avgWartezeitTage} Tage.` : 'Noch keine belastbare Engpass-Einschätzung.',
-          recommendation: stations.length > 0 ? "Betroffene Aufträge prüfen und Reihenfolge für heute festlegen." : null,
-          actionLinks: stations.length > 0 ? [{ label: "Aufträge öffnen", href: stations[0].openUrl }] : []
-        },
-        connectedLinks: [
-          { label: "Bäder & Material", value: "Galvanik Status prüfen", href: "/baeder", enabled: true },
-          { label: "Qualitätskontrolle", value: "Ausschuss prüfen", href: "/kontrolle", enabled: true },
-          { label: "Warendurchlauf", value: "Stationen anzeigen", href: "/warendurchlauf", enabled: true }
-        ],
-        dataSources: ds
-      };
-
-      detail.charts = [];
-    } else {
-      detail.charts = [
-        {
-          id: "empty_chart",
-          title: "Historie",
-          type: "line",
-          dataset: [],
-          emptyState: summary.emptyState
-        }
-      ];
+  } catch (error) {
+    if (error instanceof Error && error.message === "INVALID_ANALYSE_PERIOD") {
+      return { data: null, error: { code: "INVALID_PERIOD", message: "Der gewählte Analysezeitraum wird nicht unterstützt." } };
     }
-
-    return { data: detail };
-  } catch (error: any) {
-    console.error("Error in getAnalyseTileDetail:", error);
-    return { error: error.message, data: null };
+    return { data: null, error: { code: "ANALYSE_UNAVAILABLE", message: "Analysedaten konnten nicht geladen werden." } };
   }
 }
 
-export async function getAnalyseLinkedEntities(tileKey: AnalyseTileKey, filters?: any): Promise<{ data: AnalyseEntityLink[], error?: any }> {
+export async function getAnalyseLinkedEntities(tileKey: AnalyseTileKey, period = "Monat"): Promise<{ data: AnalyseEntityLink[]; error?: { code: string; message: string } }> {
+  const actor = await requireAnalyseRead();
   try {
-    await checkAppAuth();
-    
-    if (tileKey === "werkstatt_puls") {
-      // In future: load delayed orders
-      return { data: [] };
-    }
-
-    return { data: [] };
-  } catch (error: any) {
-    console.error("Error in getAnalyseLinkedEntities:", error);
-    return { error: error.message, data: [] };
+    if (tileKey !== "werkstatt_puls") return { data: [] };
+    const workshop = await loadWorkshopSnapshot(actor, period);
+    return { data: workshop.summary.linkedEntities };
+  } catch {
+    return { data: [], error: { code: "ANALYSE_UNAVAILABLE", message: "Verknüpfte Datensätze konnten nicht geladen werden." } };
   }
 }

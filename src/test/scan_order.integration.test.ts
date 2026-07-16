@@ -1,29 +1,31 @@
-import dotenv from "dotenv";
-dotenv.config({ path: ".env.local" });
-
 import { test, expect, vi } from "vitest";
+
+const integrationDatabaseUrl = process.env.KREILE_INTEGRATION_DATABASE_URL;
+const integrationTest = integrationDatabaseUrl ? test : test.skip;
 
 // Mock authorization to bypass auth guards during testing
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: vi.fn().mockResolvedValue({
     ok: true,
     data: {
-      userId: "test-admin-id",
+      userId: "00000000-0000-4000-8000-000000000001",
       tenantId: "galvanik-kreile",
       displayName: "Test Admin",
       role: "admin",
-      permissions: ["perm_sys_diag"],
+      permissions: ["perm_data_orders"],
       active: true
     }
   })
 }));
 
-import { createOrderFromScan } from "@/app/actions/orders.actions";
-import { db } from "@/db";
-import { orders, customers } from "@/db/schema";
-import { sql } from "drizzle-orm";
-
-test("createOrderFromScan creates order successfully in the database", async () => {
+integrationTest("createOrderFromScan creates order successfully in the database", async () => {
+  process.env.DATABASE_URL = integrationDatabaseUrl;
+  const [{ createOrderFromScan }, { db }, { orders, customers }, { sql }] = await Promise.all([
+    import("@/app/actions/orders.actions"),
+    import("@/db"),
+    import("@/db/schema"),
+    import("drizzle-orm"),
+  ]);
   console.log("Starting Scan-to-Order Vitest integration test...");
 
   // 1. Ensure a customer exists to link the order to

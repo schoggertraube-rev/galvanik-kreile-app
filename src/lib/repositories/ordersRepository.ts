@@ -1,7 +1,6 @@
-import { createId } from "@paralleldrive/cuid2";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { IndexedDBHelper } from "@/lib/offline/IndexedDBHelper";
 import { getOrdersDb, createOrderDb, updateOrderDb } from "@/app/actions/orders.actions";
+import type { OrderSource } from "@/lib/validation/orderSchema";
+import type { OrderUpdateInput } from "@/lib/orders/orderMutationContract";
 
 export type Order = {
   id: string;
@@ -28,65 +27,59 @@ export type Order = {
   source?: string;
   rawDueDate?: string;
   attachmentUrl?: string;
+  isQuote?: boolean;
 }
 
-const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
+export type OrderCreateInput = {
+  customerId: string;
+  title: string;
+  task?: string;
+  source: OrderSource;
+  sourceRef?: string;
+  dueDate?: string | Date;
+  isQuote?: boolean;
+  calendarSync?: boolean;
+  timeWindow?: "ganztaegig" | "vormittags" | "nachmittags" | "spaet";
+  freetextOriginal?: string;
+  customerBehaviorNote?: string;
+  parts: Array<{
+    name: string;
+    quantity: number;
+    surfaceRequested?: string;
+    material?: string;
+  }>;
+};
+
+function repositoryError(operation: string, result: { message: string; error: string }): Error {
+  const prefix = result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN"
+    ? "AUTH_ERROR"
+    : "DATA_ERROR";
+  return new Error(`${prefix}: ${operation}: ${result.message}`);
+}
 
 export const ordersRepository = {
   async getAll(): Promise<Order[]> {
-    if (isSupabase) {
-      try {
-        const result = await getOrdersDb();
-        if (!result.ok) {
-          if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
-            throw new Error(`AUTH_ERROR: ${result.message}`);
-          }
-          console.warn("Drizzle ordersRepository fallback:", result.message, result.error);
-          return [];
-        } else {
-          return result.data as unknown as Order[];
-        }
-      } catch (error) {
-        if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
-          throw error; // hard crash for auth errors
-        }
-        console.warn("Drizzle ordersRepository.getAll error. Message:", error instanceof Error ? error.message : "Unknown", "Details:", error);
-        return [];
-      }
+    const result = await getOrdersDb();
+    if (!result.ok) {
+      throw repositoryError("Aufträge laden", result);
     }
-    return [];
+    return result.data as unknown as Order[];
   },
 
-  async create(data: Omit<Order, "id" | "orderNumber" | "status" | "risk"> & { id?: string }): Promise<Order> {
-    const intakeDate = new Date().toISOString();
-    const dueDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
-    
-    if (isSupabase) {
-      const result = await createOrderDb(data as Record<string, unknown>);
-      if (!result.ok) {
-        if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
-          throw new Error(`AUTH_ERROR: ${result.message}`);
-        }
-        throw new Error("Drizzle Server Action failed: " + result.message);
-      }
-      return result.data as unknown as Order;
+  async create(data: OrderCreateInput): Promise<Order> {
+    const result = await createOrderDb(data);
+    if (!result.ok) {
+      throw repositoryError("Auftrag anlegen", result);
     }
-    throw new Error("Supabase is not enabled.");
+    return result.data as unknown as Order;
   },
 
-  async updateOrder(idOrNumber: string, changes: Partial<Order>): Promise<Order | null> {
-    if (isSupabase) {
-      const result = await updateOrderDb(idOrNumber, changes);
-      if (!result.ok) {
-        if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
-          throw new Error(`AUTH_ERROR: ${result.message}`);
-        }
-        throw new Error("Update failed: " + result.message);
-      }
-      const all = await this.getAll();
-      const updatedOrder = all.find(o => o.id === idOrNumber || o.orderNumber === idOrNumber);
-      return updatedOrder || null;
+  async updateOrder(idOrNumber: string, changes: OrderUpdateInput): Promise<Order | null> {
+    const result = await updateOrderDb(idOrNumber, changes);
+    if (!result.ok) {
+      throw repositoryError("Auftrag aktualisieren", result);
     }
-    throw new Error("Supabase is not enabled.");
+    const all = await this.getAll();
+    return all.find(o => o.id === idOrNumber || o.orderNumber === idOrNumber) ?? null;
   }
 };

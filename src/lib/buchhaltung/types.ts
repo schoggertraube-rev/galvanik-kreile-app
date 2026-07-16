@@ -33,14 +33,36 @@ export interface RechnungFilter {
 
 export type BelegStatus = "pruefen" | "erfasst" | "festgeschrieben" | "storniert";
 export type Belegart = "rechnung" | "kassenbon" | "tankbeleg" | "bewirtung" | "abo";
-export type AusgangsrechnungStatus = "offen" | "bezahlt" | "ueberfaellig" | "teilbezahlt" | "storniert";
+export type AusgangsrechnungStatus = "offen" | "bezahlt" | "ueberfaellig" | "teilbezahlt" | "gemahnt" | "storniert";
 export type ZahlungTyp = "eingang" | "ausgang";
 export type Zahlungsart = "ueberweisung" | "bar" | "karte" | "paypal";
 export type KategorieTyp = "ausgabe" | "einnahme";
-export type KraftstoffSorte = "diesel" | "super" | "superplus" | "adblue";
+export type KraftstoffSorte = "diesel" | "super" | "superplus" | "adblue" | "unbekannt";
 export type UstvaPeriodeStatus = "entwurf" | "berechnet" | "freigegeben" | "uebermittelt";
 export type ExportTyp = "datev" | "lexware" | "steuerberater_zip" | "elster";
 export type AuditAktion = "create" | "storno" | "export" | "freigabe" | "korrektur";
+
+export function calculateOutstandingAmount(input: {
+  brutto: number;
+  bezahltBetrag?: number | null;
+  status: AusgangsrechnungStatus;
+}): number {
+  const paid = input.bezahltBetrag ?? 0;
+  if (!Number.isFinite(input.brutto) || !Number.isFinite(paid) || input.brutto < 0 || paid < 0) {
+    throw new Error("FINANCE_DATA_INVALID:payment_amount");
+  }
+  if (input.status === "bezahlt" || input.status === "storniert") return 0;
+  return Math.max(0, Math.round((input.brutto - paid) * 100) / 100);
+}
+
+export function normalizeOcrConfidencePercent(value: number | null | undefined): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (!Number.isFinite(value) || value < 0 || value > 100) {
+    throw new Error("FINANCE_DATA_INVALID:ocr_confidence");
+  }
+  const percent = value <= 1 ? value * 100 : value;
+  return Math.round(percent * 100) / 100;
+}
 
 // ── Entitäten ────────────────────────────────────────────────────────────
 
@@ -143,6 +165,8 @@ export interface Ausgangsrechnung {
   ustSatz?: number;
   ustBetrag?: number;
   bezahltAm?: string;
+  bezahltBetrag: number;
+  offenerBetrag: number;
   status: AusgangsrechnungStatus;
   mahnstufe: number;
   erechnungXml?: string;

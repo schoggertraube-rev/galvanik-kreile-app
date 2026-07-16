@@ -4,8 +4,8 @@ import { getSegments } from "./actions";
 import Link from "next/link";
 import { PlusCircle, Search, Edit2 } from "lucide-react";
 
-export default async function SegmentePage({ searchParams }: { searchParams: { q?: string } }) {
-  const query = searchParams.q || "";
+export default async function SegmentePage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+  const query = (await searchParams).q || "";
   const segmente = await getSegments(query);
 
   return (

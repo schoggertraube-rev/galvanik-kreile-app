@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, boolean, integer, uuid, numeric, date, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, boolean, integer, uuid, numeric, date, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { orders, appUsers, inventoryItems } from "./schema";
 
 export const vorlageZeit = pgTable("vorlage_zeit", {
@@ -49,7 +49,28 @@ export const arbeitszeitBuchung = pgTable("arbeitszeit_buchung", {
   bemerkung: text("bemerkung"),
   erstelltAm: timestamp("erstellt_am", { withTimezone: true }).defaultNow(),
   aktualisiertAm: timestamp("aktualisiert_am", { withTimezone: true }).defaultNow(),
-});
+  clientRequestId: uuid("client_request_id"),
+}, (table) => [
+  index("arbeitszeit_buchung_tenant_order_idx").on(table.tenantId, table.auftragId, table.erstelltAm),
+  index("arbeitszeit_buchung_tenant_request_idx").on(table.tenantId, table.clientRequestId),
+]);
+
+export const captureRequestReceipts = pgTable("capture_request_receipts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull(),
+  clientRequestId: uuid("client_request_id").notNull(),
+  kind: text("kind").notNull(),
+  actorId: uuid("actor_id").notNull().references(() => appUsers.id),
+  orderId: text("order_id").notNull().references(() => orders.id),
+  stationKuerzel: text("station_kuerzel"),
+  requestHash: text("request_hash").notNull(),
+  result: jsonb("result").$type<Record<string, unknown> | null>(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+}, (table) => [
+  uniqueIndex("capture_request_receipts_tenant_request_kind_uidx").on(table.tenantId, table.clientRequestId, table.kind),
+  index("capture_request_receipts_tenant_order_created_idx").on(table.tenantId, table.orderId, table.createdAt),
+]);
 
 export const kostensatzDefault = pgTable("kostensatz_default", {
   id: uuid("id").primaryKey().defaultRandom(),

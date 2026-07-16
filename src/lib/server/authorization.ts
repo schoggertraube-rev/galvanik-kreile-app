@@ -8,6 +8,10 @@ import {
   type AppRole,
   type PermissionKey,
 } from "@/lib/auth/authorizationContract";
+import {
+  resolveOperatorControlForTenant,
+  type OperatorControlStatus,
+} from "@/lib/server/operatorControl";
 
 export type AuthorizationSnapshot = {
   userId: string;
@@ -16,6 +20,7 @@ export type AuthorizationSnapshot = {
   role: AppRole;
   permissions: readonly PermissionKey[];
   active: true;
+  operatorControl?: OperatorControlStatus;
 };
 
 export type AuthorizationFailureReason =
@@ -25,6 +30,8 @@ export type AuthorizationFailureReason =
   | "USER_INACTIVE"
   | "ROLE_MISMATCH"
   | "UNKNOWN_ROLE"
+  | "TENANT_SUSPENDED"
+  | "TENANT_MAINTENANCE"
   | "AUTHORIZATION_UNAVAILABLE";
 
 export type AuthorizationResult =
@@ -160,6 +167,19 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
 
   // 6. Berechtigungen ableiten
   const permissions = getPermissionsForRole(dbRole);
+  const operatorControl = await resolveOperatorControlForTenant(sessionTenantId);
+
+  // Der signierte Betreiberstatus gilt für alle Kundenrollen. Der bestätigte
+  // Entwicklerzugang bleibt für Diagnose und Wiederherstellung erreichbar.
+  if (dbRole !== "developer" && operatorControl.enforced && operatorControl.accessRestricted) {
+    return {
+      ok: false,
+      reason: operatorControl.mode === "maintenance" ? "TENANT_MAINTENANCE" : "TENANT_SUSPENDED",
+      message: operatorControl.mode === "maintenance"
+        ? "AUTH_ERROR: Der Kundenbetrieb befindet sich transparent im Wartungsmodus"
+        : "AUTH_ERROR: Der Kundenzugang ist transparent ausgesetzt",
+    };
+  }
 
   return {
     ok: true,
@@ -170,6 +190,7 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
       role: dbRole,
       permissions,
       active: true,
+      operatorControl,
     },
   };
 }

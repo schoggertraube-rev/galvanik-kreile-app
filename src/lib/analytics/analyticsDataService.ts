@@ -492,39 +492,51 @@ async function assembleKraftstoff(): Promise<DataResult<KpiSnapshot>> {
 }
 
 async function assembleEnergie(): Promise<DataResult<KpiSnapshot>> {
-  // Mock data for the screenshot-like Energie KPI
-  const currentValues = [7100, 7500, 7800, 8100, 8600, 9200, 9000, 8400, 8200, 8500, 8600, 9800];
-  const previousValues = [7100, 7200, 7400, 7700, 8200, 8600, 8400, 8000, 7900, 8100, 8200, 8400];
-  
+  const categoryResult = await fetchKostenKategorien();
+  if (categoryResult.status !== "ok" || !categoryResult.data) {
+    return { status: categoryResult.status, data: null, message: categoryResult.message };
+  }
+  const energyCategories = categoryResult.data.filter((entry) =>
+    /(energie|strom|gas|wasser|heiz)/i.test(entry.kategorieName)
+  );
+  const value = energyCategories.reduce((sum, entry) => sum + entry.summe, 0);
+  const receiptCount = energyCategories.reduce((sum, entry) => sum + entry.anzahl, 0);
+
   return {
     status: "ok",
     data: {
-      value: 9800,
+      value,
       unit: "EUR",
       label: "Energie",
-      changePct: 12.5,
-      changeText: "mehr als Vormonat",
-      meta: `Juni 2026 \u00B7 3 Belege \u00B7 98 % vom Budget`,
+      changePct: null,
+      changeText: null,
+      meta: `${formatMonth()} \u00B7 ${receiptCount} Belege \u00B7 kein historischer Vergleich konfiguriert`,
 
-      chartType: "sparkline", // We mapped sparkline to the new LineChart
+      chartType: "sparkline",
       chartData: {
-        labels: ["Jul", "Aug", "Sep", "Okt", "Nov", "Dez", "Jan", "Feb", "M\u00E4r", "Apr", "Mai", "Jun"],
-        values: currentValues,
-        previousValues: previousValues,
+        labels: [formatMonth()],
+        values: [value],
+        previousValues: [],
       },
 
       compositionType: "belege" as const,
-      compositionItems: [
-        { id: "e1", date: "12.06.", label: "Mainova \u00B7 Strom Werkstatt", sublabel: "RE 24-118", amount: 5840, href: "/buchhaltung", avatarInitial: "M", avatarColor: "#E8943C" },
-        { id: "e2", date: "08.06.", label: "Mainova \u00B7 Gas Galvanikb\u00E4der", sublabel: "RE 24-117", amount: 2980, href: "/buchhaltung", avatarInitial: "M", avatarColor: "#5A8F4D" },
-        { id: "e3", date: "03.06.", label: "Shell \u00B7 Heiz\u00F6l Reserve", sublabel: "BEL 24-093", amount: 980, href: "/buchhaltung", avatarInitial: "S", avatarColor: "#D14F3D" }
-      ],
+      compositionItems: energyCategories.map((entry) => ({
+        id: entry.kategorieId,
+        date: "",
+        label: entry.kategorieName,
+        sublabel: `${entry.anzahl} Belege`,
+        amount: entry.summe,
+        href: `/buchhaltung/ausgaben?kategorie=${entry.kategorieId}`,
+        avatarInitial: entry.kategorieName.charAt(0),
+        avatarColor: avatarColor(entry.kategorieName),
+      })),
 
       crossInputs: {
-        energieUmsatz: 23, // ct
-        energieAuftrag: 196, // EUR
-        anteilDeckungsbeitrag: 83, // %
-        co2: 1.8 // t
+        energieKosten: value,
+        energieUmsatz: null,
+        energieAuftrag: null,
+        anteilDeckungsbeitrag: null,
+        co2: null,
       },
     },
   };

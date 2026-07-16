@@ -5,7 +5,7 @@ import { UserPlus, UserCheck, FilePlus2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { matchCustomer } from "@/lib/customers/matchCustomer";
 import { Customer } from "@/lib/repositories/customersRepository";
-import { eventsRepository } from "@/lib/repositories/eventsRepository";
+import { trackUiEvent } from "@/lib/tracking/tracking";
 import { NewCustomerForm } from "@/components/customers/NewCustomerForm";
 import { NewOrderForm } from "@/components/orders/NewOrderForm";
 import Image from "next/image";
@@ -17,7 +17,7 @@ interface OcrMatchResultProps {
   onComplete: () => void; // Triggered when flow is finished
 }
 
-export function OcrMatchResult({ ocrData, attachmentUrl, previewUrl, onComplete }: OcrMatchResultProps) {
+export function OcrMatchResult({ ocrData, previewUrl, onComplete }: OcrMatchResultProps) {
   const [matches, setMatches] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -32,13 +32,11 @@ export function OcrMatchResult({ ocrData, attachmentUrl, previewUrl, onComplete 
       setMatches(results);
       setLoading(false);
       
-      // Tracking
-      eventsRepository.addEvent({ 
-        eventType: "OCR_SCAN_COMPLETED", 
-        metadata: { 
-          action: "ocr_match_completed", 
-          matchCount: results.length 
-        } 
+      trackUiEvent("search", {
+        target: "customer-match",
+        resultCount: results.length,
+        queryLength: Math.min(500, ocrText.length),
+        outcome: results.length > 0 ? "success" : "empty",
       });
     }
     search();
@@ -46,20 +44,14 @@ export function OcrMatchResult({ ocrData, attachmentUrl, previewUrl, onComplete 
 
   const handleCustomerSelected = (cust: Customer) => {
     setSelectedCustomer({ id: cust.id, name: cust.name });
-    eventsRepository.addEvent({ 
-      eventType: "CUSTOMER_MATCHED", 
-      metadata: { action: "customer_match_selected" } 
-    });
+    trackUiEvent("action", { target: "customer-match", outcome: "success" });
   };
 
   const handleNewCustomerCreated = (newId: string) => {
     setShowNewCustomer(false);
     // In a real app we'd fetch the new customer name, for now just use "Neu angelegt"
     setSelectedCustomer({ id: newId, name: "Neu angelegt" });
-    eventsRepository.addEvent({ 
-      eventType: "CUSTOMER_MATCHED", 
-      metadata: { action: "customer_created_from_ocr" } 
-    });
+    trackUiEvent("workflow_completed", { target: "customer-create", outcome: "success" });
   };
 
   if (showNewCustomer) {

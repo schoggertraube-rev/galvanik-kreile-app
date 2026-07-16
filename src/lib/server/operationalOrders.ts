@@ -1,6 +1,8 @@
 import { db } from "@/db";
-import { orders, customers, items } from "@/db/schema";
-import { eq, desc, and, notInArray, notIlike, sql, inArray } from "drizzle-orm";
+import { orders, customers, items, events, calendarEvents } from "@/db/schema";
+import { eq, desc, and, notInArray, notIlike, sql, inArray, like } from "drizzle-orm";
+import { createId } from "@paralleldrive/cuid2";
+import type { OrderInput } from "@/lib/validation/orderSchema";
 
 // Short-lived in-memory cache (5 seconds) — prevents parallel duplicate DB calls
 // during a single page render without blocking real-time updates.
@@ -33,10 +35,15 @@ async function _fetchAndMap() {
       title: orders.title,
       task: orders.task,
       status: orders.status,
+      statusText: orders.statusText,
+      delayReason: orders.delayReason,
+      recommendedAction: orders.recommendedAction,
       risk: orders.priorityComputed,
+      station: orders.station,
       currentStationId: orders.currentStationId,
       intakeDate: orders.intakeDate,
       dueDate: orders.dueDate,
+      promisedDueDate: orders.promisedDueDate,
       createdAt: orders.createdAt,
     })
     .from(orders)
@@ -65,8 +72,10 @@ async function _fetchAndMap() {
 
   return results.map((o) => {
     const orderParts = allParts.filter((p) => p.orderId === o.id);
-    const intakeDate = o.intakeDate ? new Date(o.intakeDate).toISOString() : (o.createdAt ? new Date(o.createdAt).toISOString() : new Date().toISOString());
-    const dueDate = o.dueDate ? new Date(o.dueDate).toISOString() : new Date(new Date(intakeDate).getTime() + 10 * 24 * 60 * 60 * 1000).toISOString();
+    const intakeDate = new Date(o.intakeDate || o.createdAt).toISOString();
+    const dueDateValue = o.promisedDueDate || o.dueDate;
+    const dueDate = dueDateValue ? new Date(dueDateValue).toISOString() : undefined;
+    const station = o.currentStationId || o.station;
 
     return {
       id: o.id,
@@ -74,18 +83,24 @@ async function _fetchAndMap() {
       customerId: o.customerId,
       customerName: o.customerName || null,
       title: o.title,
-      task: o.task,
-      itemDescription: o.task || (orderParts.length > 0 ? orderParts[0].name : null),
-      surfaceRequested: orderParts.length > 0 ? (orderParts[0] as any).surfaceRequested || (orderParts[0] as any).finish || null : null,
-      station: o.currentStationId || "wareneingang",
+      task: o.task || o.title,
+      itemDescription: o.task || (orderParts.length > 0 ? orderParts[0].name : o.title),
+      surfaceRequested: orderParts.length > 0 ? orderParts[0].surfaceRequested || null : null,
+      station,
       status: o.status,
+      statusText: o.statusText || undefined,
+      delayReason: o.delayReason || undefined,
+      recommendedAction: o.recommendedAction || undefined,
       risk: o.risk || "green",
-      currentStationId: o.currentStationId || "wareneingang",
+      currentStationId: station,
       parts: orderParts,
       intakeDate,
-      dueDate,
-      dueLabel: "Fällig in",
-      dueValue: "10 Tagen",
+      ...(dueDate ? {
+        dueDate,
+        rawDueDate: dueDate,
+        dueLabel: "Fällig am",
+        dueValue: new Date(dueDate).toLocaleDateString("de-DE"),
+      } : {}),
       createdAt: o.createdAt?.toISOString(),
     };
   });
@@ -111,98 +126,168 @@ export async function getOperationalOrdersForCustomer(customerId: string) {
   return all.filter((o) => o.customerId === customerId);
 }
 
-// ── Auth-Independent Services ───────────────────────────────────────────────
+// ── Authenticated services ─────────────────────────────────────────────────
 
-import { createId } from "@paralleldrive/cuid2";
-import { events } from "@/db/schema";
-import { like } from "drizzle-orm";
+export class OperationalOrderPersistenceError extends Error {
+  constructor(
+    readonly code: "CUSTOMER_NOT_FOUND" | "CUSTOMER_NOTE_LIMIT",
+    message: string,
+  ) {
+    super(message);
+    this.name = "OperationalOrderPersistenceError";
+  }
+}
 
-export async function createOperationalOrderService(data: Record<string, unknown>, actorId?: string) {
+export type OperationalOrderActor = {
+  tenantId: string;
+  userId: string;
+};
+
+export async function createOperationalOrderService(
+  validData: OrderInput,
+  actor: OperationalOrderActor,
+) {
   if (!db) throw new Error("Database not available");
 
-  const { orderSchema } = await import("@/lib/validation/orderSchema");
-  const parsed = orderSchema.safeParse(data);
-  if (!parsed.success) {
-    throw new Error("Validation Error: " + JSON.stringify(parsed.error.flatten().fieldErrors));
-  }
-
-  const validData = parsed.data;
-  const orderId = (typeof data.id === "string" ? data.id : undefined) || createId();
+  const orderId = createId();
   const year = new Date().getFullYear();
-  const pattern = `A-${year}-%`;
+  const prefix = validData.isQuote ? "KV" : "A";
+  const pattern = `${prefix}-${year}-%`;
+  const numberPattern = new RegExp(`^${prefix}-${year}-(\\d+)$`);
+  const stationId = "wareneingang";
 
-  return await db.transaction(async (tx) => {
-    // Advisory lock to prevent race conditions during parallel order creation
-    await tx.execute(sql`SELECT pg_advisory_xact_lock(2026001)`);
+  return db.transaction(async (tx) => {
+    const customer = (await tx
+      .select({ id: customers.id, behaviorNotes: customers.behaviorNotes })
+      .from(customers)
+      .where(and(
+        eq(customers.id, validData.customerId),
+        eq(customers.tenantId, actor.tenantId),
+        notInArray(sql`coalesce(${customers.source}, 'manual')`, ["seed", "test", "demo", "integration-test"]),
+      ))
+      .limit(1)
+      .for("update"))[0];
+
+    if (!customer) {
+      throw new OperationalOrderPersistenceError(
+        "CUSTOMER_NOT_FOUND",
+        "Der ausgewählte Kunde wurde im aktuellen Mandanten nicht gefunden.",
+      );
+    }
+
+    await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${actor.tenantId}), ${year})`);
 
     const existingOrders = await tx
       .select({ orderNumber: orders.orderNumber })
       .from(orders)
-      .where(like(orders.orderNumber, pattern));
+      .where(and(eq(orders.tenantId, actor.tenantId), like(orders.orderNumber, pattern)));
 
-    const regex = new RegExp(`^A-\\d{4}-(\\d+)$`);
-    let maxSeq = 10000;
-
-    for (const o of existingOrders) {
-      if (!o.orderNumber) continue;
-      const match = regex.exec(o.orderNumber);
-      if (match) {
-        const seq = parseInt(match[1], 10);
-        if (!isNaN(seq) && seq > maxSeq) {
-          maxSeq = seq;
-        }
-      }
+    let maxSequence = 0;
+    for (const existing of existingOrders) {
+      const match = numberPattern.exec(existing.orderNumber);
+      if (!match) continue;
+      const sequence = Number(match[1]);
+      if (Number.isSafeInteger(sequence) && sequence > maxSequence) maxSequence = sequence;
     }
 
-    const nextSeq = maxSeq + 1;
-    const orderNumber = `A-${year}-${nextSeq}`;
-
-    if (!regex.test(orderNumber)) {
-      throw new Error(`Ungültiges Auftragsnummer-Format generiert: ${orderNumber}`);
-    }
-
-    // Canonical station check
-    const stationId = validData.currentStationId === "beschichtung" ? "galvanik" : (validData.currentStationId || "wareneingang");
-
-    const newOrderVal = {
+    const orderNumber = `${prefix}-${year}-${String(maxSequence + 1).padStart(4, "0")}`;
+    const newOrderVal: typeof orders.$inferInsert = {
       id: orderId,
-      tenantId: "galvanik-kreile",
+      tenantId: actor.tenantId,
       orderNumber,
-      customerId: validData.customerId as string,
-      title: validData.title || "Unbenannt",
+      customerId: validData.customerId,
+      title: validData.title,
+      task: validData.task,
+      station: stationId,
       currentStationId: stationId,
       status: "in_progress",
+      risk: "green",
+      priority: "normal",
       priorityComputed: "green",
+      dueDate: validData.dueDate,
+      promisedDueDate: validData.dueDate,
       source: validData.source,
+      sourceRef: validData.sourceRef,
+      freetextOriginal: validData.freetextOriginal,
+      isQuote: validData.isQuote,
+      quoteStatus: validData.isQuote ? "offen" : null,
     };
 
-    await tx.insert(orders).values(newOrderVal);
+    const insertedOrder = (await tx.insert(orders).values(newOrderVal).returning())[0];
+    if (!insertedOrder) throw new Error("ORDER_INSERT_NOT_CONFIRMED");
 
-    if (validData.parts && validData.parts.length > 0) {
-      const newItems = validData.parts.map((p) => ({
-        id: p.id || createId(),
-        tenantId: "galvanik-kreile",
+    const itemValues: (typeof items.$inferInsert)[] = validData.parts.map((part) => ({
+      id: createId(),
+      tenantId: actor.tenantId,
+      orderId,
+      customerId: validData.customerId,
+      name: part.name,
+      quantity: part.quantity,
+      currentStationId: stationId,
+      material: part.material,
+      surfaceRequested: part.surfaceRequested,
+      photoIds: [],
+      stationSequence: [],
+    }));
+    const insertedItems = await tx.insert(items).values(itemValues).returning();
+    if (insertedItems.length !== itemValues.length) throw new Error("ORDER_ITEMS_NOT_CONFIRMED");
+
+    if (validData.calendarSync && validData.dueDate) {
+      await tx.insert(calendarEvents).values({
+        id: createId(),
+        tenantId: actor.tenantId,
         orderId,
-        customerId: validData.customerId || "",
-        name: p.name,
-        quantity: typeof p.quantity === "number" ? p.quantity : parseInt(p.quantity as string) || 1,
-        currentStationId: stationId,
-        surfaceRequested: (p as any).surfaceRequested || (p as any).surface || (p as any).finish || (p as any).verfahren || null,
-      }));
-      await tx.insert(items).values(newItems);
+        customerId: validData.customerId,
+        title: `Abgabe/Lieferung: ${validData.title}`,
+        eventType: "delivery",
+        startsAt: validData.dueDate,
+        timeSlot: validData.timeWindow || "ganztaegig",
+        status: "planned",
+        source: validData.source,
+        sourceRef: validData.sourceRef,
+      });
+    }
+
+    if (validData.customerBehaviorNote) {
+      const existingNote = customer.behaviorNotes?.trim();
+      const nextNote = existingNote
+        ? `${existingNote}\n${validData.customerBehaviorNote}`
+        : validData.customerBehaviorNote;
+      if (nextNote.length > 10_000) {
+        throw new OperationalOrderPersistenceError(
+          "CUSTOMER_NOTE_LIMIT",
+          "Die Verhaltensnotiz würde das sichere Größenlimit des Kundenprofils überschreiten.",
+        );
+      }
+      await tx
+        .update(customers)
+        .set({ behaviorNotes: nextNote, updatedAt: new Date() })
+        .where(and(eq(customers.id, customer.id), eq(customers.tenantId, actor.tenantId)));
     }
 
     await tx.insert(events).values({
       id: createId(),
-      tenantId: "galvanik-kreile",
+      tenantId: actor.tenantId,
       orderId,
-      eventType: "ORDER_CREATED",
-      description: "Auftrag erstellt",
+      eventType: validData.isQuote ? "QUOTE_CREATED" : "ORDER_CREATED",
+      description: validData.isQuote ? "Kostenvoranschlag erstellt" : "Auftrag erstellt",
       station: stationId,
-      userId: actorId,
+      userId: actor.userId,
     });
 
-    return orderId;
+    if (validData.customerBehaviorNote) {
+      await tx.insert(events).values({
+        id: createId(),
+        tenantId: actor.tenantId,
+        orderId,
+        eventType: "CUSTOMER_BEHAVIOR_NOTE_ADDED",
+        description: "Verhaltensnotiz im Kundenprofil ergänzt",
+        station: stationId,
+        userId: actor.userId,
+      });
+    }
+
+    return { order: insertedOrder, items: insertedItems };
   });
 }
 

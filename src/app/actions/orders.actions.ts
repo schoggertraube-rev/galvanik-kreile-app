@@ -2,14 +2,107 @@
 
 import { db } from "@/db";
 import { orders, items, customers, events } from "@/db/schema";
-import { eq, like, desc, and, sql, notInArray, notIlike, ilike } from "drizzle-orm";
-import { createId } from "@paralleldrive/cuid2";
+import { eq, or, and, sql, notInArray, notIlike, ilike } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { resolveAuthorization } from "@/lib/server/authorization";
-import { unstable_noStore as noStore } from "next/cache";
+import { revalidatePath, unstable_noStore as noStore } from "next/cache";
+import { orderSchema, scanOrderRequestSchema, type OrderInput } from "@/lib/validation/orderSchema";
+import {
+  createOperationalOrderService,
+  invalidateOperationalOrdersCache,
+  OperationalOrderPersistenceError,
+} from "@/lib/server/operationalOrders";
+import {
+  canTransitionOrderStatus,
+  isCompletedOrderStatus,
+  isTerminalOrderStatus,
+  normalizeStoredOrderStatus,
+  ORDER_STATIONS,
+  orderUpdateSchema,
+  parseOrderIdentifier,
+  processTransitionSchema,
+  type OrderStation,
+  type OrderStatus,
+} from "@/lib/orders/orderMutationContract";
 
 // DTO Typen (zur Vereinfachung)
 export type OrderResponse = Record<string, unknown>;
+
+type OrderWriteActor = { tenantId: string; userId: string };
+
+async function requireOrderWrite(): Promise<ActionResult<OrderWriteActor>> {
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      error: authorization.reason === "AUTHORIZATION_UNAVAILABLE" ? "DB_ERROR" : "UNAUTHORIZED",
+      message: authorization.message,
+    };
+  }
+  if (!authorization.data.permissions.includes("perm_data_orders")) {
+    return { ok: false, error: "FORBIDDEN", message: "Keine Berechtigung zum Anlegen von Aufträgen." };
+  }
+  return {
+    ok: true,
+    data: { tenantId: authorization.data.tenantId, userId: authorization.data.userId },
+  };
+}
+
+async function persistValidatedOrder(
+  input: OrderInput,
+  actor: OrderWriteActor,
+): Promise<ActionResult<Record<string, unknown>>> {
+  try {
+    const persisted = await createOperationalOrderService(input, actor);
+    invalidateOperationalOrdersCache();
+    try {
+      revalidatePath("/");
+      revalidatePath("/orders");
+      revalidatePath("/customers");
+      revalidatePath("/warendurchlauf");
+      revalidatePath("/warendurchlauf/wareneingang");
+    } catch {
+      // Revalidation is unavailable in isolated service tests.
+    }
+
+    return {
+      ok: true,
+      data: {
+        id: persisted.order.id,
+        orderNumber: persisted.order.orderNumber,
+        customerId: persisted.order.customerId,
+        title: persisted.order.title,
+        task: persisted.order.task || undefined,
+        station: persisted.order.currentStationId || "wareneingang",
+        currentStationId: persisted.order.currentStationId || "wareneingang",
+        status: persisted.order.status,
+        risk: persisted.order.priorityComputed || "green",
+        source: persisted.order.source || undefined,
+        dueDate: persisted.order.dueDate?.toISOString(),
+        isQuote: persisted.order.isQuote === true,
+        parts: persisted.items.map((part) => ({
+          id: part.id,
+          orderId: part.orderId,
+          name: part.name,
+          quantity: part.quantity,
+          currentStationId: part.currentStationId || "wareneingang",
+          ...(part.material ? { material: part.material } : {}),
+          ...(part.surfaceRequested ? { surfaceRequested: part.surfaceRequested } : {}),
+        })),
+      },
+    };
+  } catch (error) {
+    if (error instanceof OperationalOrderPersistenceError) {
+      return {
+        ok: false,
+        error: error.code === "CUSTOMER_NOT_FOUND" ? "EMPTY_RESULT" : "UNKNOWN",
+        message: error.message,
+      };
+    }
+    console.error("Failed to create order in DB:", error);
+    return { ok: false, error: "DB_ERROR", message: "Fehler beim Erstellen des Auftrags" };
+  }
+}
 
 export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
   noStore();
@@ -54,401 +147,347 @@ export async function getOrderCountDb(): Promise<ActionResult<{ count: number }>
   }
 }
 
-export async function createOrderDb(data: Record<string, unknown>): Promise<ActionResult<Record<string, unknown>>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
+export async function createOrderDb(data: unknown): Promise<ActionResult<Record<string, unknown>>> {
+  const actor = await requireOrderWrite();
+  if (!actor.ok) return actor;
 
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  
-  const { orderSchema } = await import("@/lib/validation/orderSchema");
   const parsed = orderSchema.safeParse(data);
-  
   if (!parsed.success) {
-    const formattedErrors = parsed.error.flatten().fieldErrors;
-    return { ok: false, error: "UNKNOWN", message: "Validierungsfehler", details: formattedErrors };
+    return {
+      ok: false,
+      error: "UNKNOWN",
+      message: "Ungültige Auftragsdaten.",
+      details: parsed.error.flatten().fieldErrors,
+    };
   }
-  
-  const validData = parsed.data;
-  
+
+  return persistValidatedOrder(parsed.data, actor.data);
+}
+
+export async function updateOrderDb(identifierValue: unknown, changesValue: unknown): Promise<ActionResult<Record<string, unknown>>> {
+  const actor = await requireOrderWrite();
+  if (!actor.ok) return actor;
+
+  let identifier: string;
   try {
-    const orderId = (typeof data.id === 'string' ? data.id : undefined) || createId();
-    const year = new Date().getFullYear();
-    const pattern = `A-${year}-%`;
+    identifier = parseOrderIdentifier(identifierValue);
+  } catch {
+    return { ok: false, error: "UNKNOWN", message: "Ungültige Auftragskennung." };
+  }
+  const parsedChanges = orderUpdateSchema.safeParse(changesValue);
+  if (!parsedChanges.success) {
+    return {
+      ok: false,
+      error: "UNKNOWN",
+      message: "Ungültige oder nicht unterstützte Auftragsänderung.",
+      details: parsedChanges.error.flatten().fieldErrors,
+    };
+  }
 
-    const newOrder = await db.transaction(async (tx) => {
-      const existingOrders = await tx
-        .select({ orderNumber: orders.orderNumber })
+  try {
+    const updated = await db.transaction(async (tx) => {
+      const current = (await tx
+        .select()
         .from(orders)
-        .where(like(orders.orderNumber, pattern))
-        .orderBy(desc(orders.orderNumber))
-        .limit(50);
+        .where(and(
+          eq(orders.tenantId, actor.data.tenantId),
+          or(eq(orders.id, identifier), eq(orders.orderNumber, identifier)),
+        ))
+        .limit(1)
+        .for("update"))[0];
+      if (!current) return null;
 
-      let maxSequenceNum = 0;
-      for (const o of existingOrders) {
-        if (o.orderNumber) {
-          const parts = o.orderNumber.split("-");
-          if (parts.length === 3) {
-            const num = parseInt(parts[2], 10);
-            if (!isNaN(num) && num > maxSequenceNum) {
-              maxSequenceNum = num;
-            }
-          }
+      const currentStatus = normalizeStoredOrderStatus(current.status);
+      if (currentStatus === "unknown" && parsedChanges.data.status !== undefined) {
+        throw new Error("UNKNOWN_STORED_ORDER_STATUS");
+      }
+      if (
+        currentStatus !== "unknown"
+        && isTerminalOrderStatus(currentStatus)
+        && (parsedChanges.data.status !== undefined || parsedChanges.data.currentStationId !== undefined)
+      ) {
+        throw new Error("TERMINAL_ORDER_IMMUTABLE");
+      }
+      if (
+        parsedChanges.data.status !== undefined
+        && currentStatus !== "unknown"
+        && !canTransitionOrderStatus(currentStatus, parsedChanges.data.status)
+      ) {
+        throw new Error("INVALID_ORDER_STATUS_TRANSITION");
+      }
+
+      const updateSet: Partial<typeof orders.$inferInsert> = {};
+      if (parsedChanges.data.status !== undefined) {
+        updateSet.status = parsedChanges.data.status;
+        if (isCompletedOrderStatus(parsedChanges.data.status)) {
+          updateSet.completedDate = current.completedDate || new Date();
         }
       }
-      const sequenceNum = maxSequenceNum > 0 ? maxSequenceNum + 1 : 1;
-      const sequenceString = sequenceNum.toString().padStart(4, "0");
-      const orderNumber = `A-${year}-${sequenceString}`;
-      
-      const newOrderVal = {
-        id: orderId,
-        tenantId: "galvanik-kreile",
-        orderNumber,
-        customerId: validData.customerId || "",
-        title: validData.title || "Unbenannt",
-        currentStationId: validData.currentStationId || "wareneingang",
-        status: "in_progress",
-        priorityComputed: "green",
-        source: validData.source || "manual",
-      };
-      
-      await tx.insert(orders).values(newOrderVal);
-      
-      if (validData.parts && validData.parts.length > 0) {
-        const newItems = validData.parts.map(p => ({
-          id: p.id || createId(),
-          tenantId: "galvanik-kreile",
-          orderId,
-          customerId: validData.customerId || "",
-          name: p.name,
-          quantity: typeof p.quantity === "number" ? p.quantity : parseInt(p.quantity as string) || 1,
-          currentStationId: validData.currentStationId || "wareneingang"
-        }));
-        await tx.insert(items).values(newItems);
+      if (parsedChanges.data.currentStationId !== undefined) {
+        updateSet.currentStationId = parsedChanges.data.currentStationId;
+        updateSet.station = parsedChanges.data.currentStationId;
       }
-      
+      if (parsedChanges.data.risk !== undefined) updateSet.priorityComputed = parsedChanges.data.risk;
+      if (parsedChanges.data.title !== undefined) updateSet.title = parsedChanges.data.title;
+      if (parsedChanges.data.task !== undefined) updateSet.task = parsedChanges.data.task;
+      if ("dueDate" in parsedChanges.data) {
+        updateSet.dueDate = parsedChanges.data.dueDate;
+        updateSet.promisedDueDate = parsedChanges.data.dueDate;
+      }
+
+      const persisted = (await tx
+        .update(orders)
+        .set(updateSet)
+        .where(and(eq(orders.id, current.id), eq(orders.tenantId, actor.data.tenantId)))
+        .returning())[0];
+      if (!persisted) throw new Error("ORDER_UPDATE_NOT_CONFIRMED");
+
+      if (parsedChanges.data.currentStationId !== undefined) {
+        await tx
+          .update(items)
+          .set({ currentStationId: parsedChanges.data.currentStationId })
+          .where(and(eq(items.orderId, current.id), eq(items.tenantId, actor.data.tenantId)));
+      }
+
       await tx.insert(events).values({
-        id: createId(),
-        tenantId: "galvanik-kreile",
-        orderId,
-        eventType: "ORDER_CREATED",
-        description: "Auftrag erstellt",
-        station: "wareneingang",
+        id: crypto.randomUUID(),
+        tenantId: actor.data.tenantId,
+        orderId: current.id,
+        eventType: "ORDER_UPDATED",
+        description: "Auftragsdaten bestätigt aktualisiert",
+        station: persisted.currentStationId || persisted.station,
+        payload: { changedFields: Object.keys(parsedChanges.data).sort() },
+        userId: actor.data.userId,
       });
 
-      return newOrderVal;
+      return persisted;
     });
 
-    try { 
-      const { revalidatePath } = await import("next/cache");
-      revalidatePath("/"); 
+    if (!updated) return { ok: false, error: "EMPTY_RESULT", message: "Auftrag nicht gefunden." };
+    invalidateOperationalOrdersCache();
+    try {
+      revalidatePath("/");
       revalidatePath("/orders");
-      revalidatePath("/customers");
       revalidatePath("/warendurchlauf");
-      revalidatePath("/warendurchlauf/wareneingang");
-    } catch { /* ignore when not in Next runtime */ }
-    
+    } catch {
+      // unavailable in isolated tests
+    }
     return {
       ok: true,
       data: {
-        ...newOrder,
-        station: newOrder.currentStationId,
-        risk: newOrder.priorityComputed,
-        parts: validData.parts
-      }
+        id: updated.id,
+        orderNumber: updated.orderNumber,
+        status: updated.status,
+        currentStationId: updated.currentStationId || updated.station,
+        risk: updated.priorityComputed,
+        title: updated.title,
+        task: updated.task,
+        dueDate: (updated.promisedDueDate || updated.dueDate)?.toISOString() || null,
+        completedDate: updated.completedDate?.toISOString() || null,
+      },
     };
   } catch (error) {
-    console.error("Failed to create order in DB:", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Erstellen des Auftrags", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
-  }
-}
-
-export async function updateOrderDb(id: string, changes: {
-  status?: string;
-  currentStationId?: string;
-  priorityComputed?: string;
-  title?: string;
-}): Promise<ActionResult<Record<string, unknown>>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  try {
-    const updateData: Record<string, string> = {};
-    if (changes.status !== undefined) updateData.status = changes.status;
-    if (changes.currentStationId !== undefined) updateData.currentStationId = changes.currentStationId;
-    if (changes.priorityComputed !== undefined) updateData.priorityComputed = changes.priorityComputed;
-    if (changes.title !== undefined) updateData.title = changes.title;
-    
-    await db.update(orders).set(updateData).where(eq(orders.id, id));
-    
-    if (changes.currentStationId !== undefined) {
-      await db.update(items).set({ currentStationId: changes.currentStationId }).where(eq(items.orderId, id));
+    const message = error instanceof Error ? error.message : "";
+    if (message === "TERMINAL_ORDER_IMMUTABLE") {
+      return { ok: false, error: "FORBIDDEN", message: "Abgeschlossene oder stornierte Aufträge sind für Status- und Stationswechsel gesperrt." };
     }
-
-    if (changes.status === "abgeschlossen" || changes.status === "completed") {
-      try {
-        const orderRec = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
-        if (orderRec.length > 0) {
-          const o = orderRec[0];
-          if (o.customerId) {
-            const plannedDate = new Date();
-            plannedDate.setDate(plannedDate.getDate() + 7); // Schedule for 7 days later
-            const { feedbackMail } = await import("@/db/schema_marketing");
-            // Check if one already exists
-            const existing = await db.select().from(feedbackMail).where(eq(feedbackMail.auftragId, id)).limit(1);
-            if (existing.length === 0) {
-              await db.insert(feedbackMail).values({
-                auftragId: id,
-                kundeId: o.customerId,
-                geplantFuer: plannedDate,
-                status: "geplant",
-                tokenFeedback: crypto.randomUUID()
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Failed to schedule feedback mail:", err);
-      }
+    if (message === "INVALID_ORDER_STATUS_TRANSITION" || message === "UNKNOWN_STORED_ORDER_STATUS") {
+      return { ok: false, error: "UNKNOWN", message: "Der angeforderte Statuswechsel ist nicht zulässig." };
     }
-    
-    return { ok: true, data: { id, ...changes } };
-  } catch (error) {
     console.error("Failed to update order in DB:", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Aktualisieren des Auftrags", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
+    return { ok: false, error: "DB_ERROR", message: "Fehler beim Aktualisieren des Auftrags" };
   }
 }
 
 export async function getRiskOrders(limit = 3) {
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok || !authorization.data.permissions.includes("perm_data_orders")) return [];
+  const safeLimit = Number.isInteger(limit) ? Math.min(20, Math.max(1, limit)) : 3;
   try {
-    const { sql, desc } = await import("drizzle-orm");
     const riskOrders = await db.select({
       id: orders.orderNumber,
       kunde: customers.name,
-      tage: sql<number>`-2` // Mock risk days for now to keep the UI the same
+      tage: sql<number>`-greatest(0, floor(extract(epoch from (now() - ${orders.dueDate})) / 86400))::int`
     })
     .from(orders)
-    .leftJoin(customers, eq(orders.customerId, customers.id))
-    .where(eq(orders.status, 'in_progress'))
-    .orderBy(desc(orders.createdAt))
-    .limit(limit);
+    .innerJoin(customers, and(eq(orders.customerId, customers.id), eq(customers.tenantId, authorization.data.tenantId)))
+    .where(and(
+      eq(orders.tenantId, authorization.data.tenantId),
+      eq(orders.status, 'in_progress'),
+      sql`${orders.dueDate} IS NOT NULL AND ${orders.dueDate} < now()`
+    ))
+    .orderBy(orders.dueDate)
+    .limit(safeLimit);
 
-    return riskOrders.map((o, i) => ({
-      id: o.id || `A-2026-00${89 + i}`,
-      kunde: o.kunde || "Unbekannter Kunde",
-      tage: -2 + i
-    }));
+    return riskOrders;
   } catch (error) {
     console.error("Failed to get risk orders:", error);
     return [];
   }
 }
 
-export async function setOrderStationDb(orderId: string, newStation: string): Promise<ActionResult<{ success: boolean }>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  try {
-    // removed unused createId import
-    
-    // fetch current order to get current station
-    const currentOrder = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-    const aktuelleStation = currentOrder[0]?.currentStationId || currentOrder[0]?.station || "wareneingang";
-    // update order to new station
-    await db.update(orders).set({ currentStationId: newStation }).where(eq(orders.id, orderId));
-    
-    // Insert exit event
-    // events are imported statically
-    await db.insert(events).values({
-      id: crypto.randomUUID(),
-      tenantId: "galvanik-kreile",
-      orderId,
-      eventType: "STATION_AUSGANG",
-      station: aktuelleStation,
-      description: `Station verlassen: ${aktuelleStation}`,
-      createdAt: new Date()
-    });
-    
-    // Insert entry event
-    await db.insert(events).values({
-      id: crypto.randomUUID(),
-      tenantId: "galvanik-kreile",
-      orderId,
-      eventType: "STATION_EINGANG",
-      station: newStation,
-      description: `Station betreten: ${newStation}`,
-      createdAt: new Date()
-    });
-
-    return { ok: true, data: { success: true } };
-  } catch (error) {
-    console.error("Failed to update station:", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Setzen der Station", details: String(error) };
-  }
+export async function setOrderStationDb(orderId: unknown, newStation: unknown): Promise<ActionResult<{ success: boolean }>> {
+  const result = await updateOrderDb(orderId, { currentStationId: newStation });
+  if (!result.ok) return result;
+  return { ok: true, data: { success: true } };
 }
 
-export async function transitionOrderProcess(params: {
-  orderId: string;
-  targetStep?: string;
-  action?: string;
-}) {
-  const { orderId, targetStep, action } = params;
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  
-  try {
-    const currentOrder = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-    if (currentOrder.length === 0) return { ok: false, error: "NOT_FOUND", message: "Auftrag nicht gefunden" };
-    const o = currentOrder[0];
-    
-    let newStation = o.currentStationId || "wareneingang";
-    let newStatus = o.status;
-    let eventType = "STATION_STARTED";
-    let description = "Prozessschritt gestartet";
-    
-    if (action === "start") {
-      newStatus = "in_progress";
-      description = `Bearbeitung gestartet in ${newStation}`;
-    } else if (action === "complete") {
-      const orderProcessChain = ["wareneingang", "entmetallisierung", "schleiferei", "galvanik", "qualitaetssicherung", "warenausgang"];
-      const currIdx = orderProcessChain.indexOf(newStation);
-      if (currIdx >= 0 && currIdx < orderProcessChain.length - 1) {
-        newStation = orderProcessChain[currIdx + 1];
-        if (newStation === "qualitaetssicherung") {
-          newStatus = "QS/Fertigprüfung";
-        } else if (newStation === "warenausgang") {
-          newStatus = "Bereit für Versand";
-        } else {
-          newStatus = "ready";
-        }
-        eventType = "STATION_COMPLETED";
-        description = `Station abgeschlossen. Weitergeleitet an ${newStation}`;
-      } else if (currIdx === orderProcessChain.length - 1) {
-        newStatus = "abgeschlossen";
-        eventType = "STATION_COMPLETED";
-        description = `Auftrag abgeschlossen und versendet.`;
-      }
-    } else if (targetStep) {
-      newStation = targetStep;
-      if (newStation === "qualitaetssicherung") newStatus = "QS/Fertigprüfung";
-      else if (newStation === "warenausgang") newStatus = "Bereit für Versand";
-      else newStatus = "ready";
-      description = `Manuell zu Station ${newStation} gewechselt`;
-    }
+export async function transitionOrderProcess(params: unknown) {
+  const actor = await requireOrderWrite();
+  if (!actor.ok) return actor;
+  const parsed = processTransitionSchema.safeParse(params);
+  if (!parsed.success) {
+    return { ok: false, error: "UNKNOWN" as const, message: "Ungültiger Prozesswechsel.", details: parsed.error.flatten().fieldErrors };
+  }
 
-    await db.transaction(async (tx) => {
-      await tx.update(orders).set({
+  try {
+    const transitioned = await db.transaction(async (tx) => {
+      const current = (await tx
+        .select()
+        .from(orders)
+        .where(and(eq(orders.id, parsed.data.orderId), eq(orders.tenantId, actor.data.tenantId)))
+        .limit(1)
+        .for("update"))[0];
+      if (!current) return null;
+
+      const currentStatus = normalizeStoredOrderStatus(current.status);
+      if (currentStatus === "unknown" || isTerminalOrderStatus(currentStatus)) {
+        throw new Error("ORDER_PROCESS_LOCKED");
+      }
+      const storedStation = current.currentStationId === "beschichtung"
+        ? "galvanik"
+        : (current.currentStationId || current.station);
+      if (!ORDER_STATIONS.includes(storedStation as OrderStation)) throw new Error("UNKNOWN_ORDER_STATION");
+
+      let newStation = storedStation as OrderStation;
+      let newStatus: OrderStatus = currentStatus;
+      let eventType = "STATION_STARTED";
+      let description = `Bearbeitung in ${newStation} gestartet`;
+
+      if (parsed.data.action === "start") {
+        newStatus = "in_progress";
+      } else if (parsed.data.action === "complete") {
+        const currentIndex = ORDER_STATIONS.indexOf(newStation);
+        if (currentIndex === ORDER_STATIONS.length - 1) {
+          newStatus = "shipped";
+          eventType = "SHIPMENT_SENT";
+          description = "Auftrag im Warenausgang als versendet abgeschlossen";
+        } else {
+          const nextStation = ORDER_STATIONS[currentIndex + 1];
+          newStation = nextStation;
+          newStatus = "ready";
+          eventType = "STATION_COMPLETED";
+          description = `Station abgeschlossen; Auftrag für ${newStation} bereit`;
+        }
+      } else if (parsed.data.targetStep) {
+        newStation = parsed.data.targetStep;
+        newStatus = "ready";
+        eventType = "STATION_READY";
+        description = `Auftrag für ${newStation} bereitgestellt`;
+      }
+
+      if (!canTransitionOrderStatus(currentStatus, newStatus)) throw new Error("INVALID_ORDER_STATUS_TRANSITION");
+      const updateSet: Partial<typeof orders.$inferInsert> = {
         currentStationId: newStation,
-        status: newStatus
-      }).where(eq(orders.id, orderId));
-      
-      await tx.update(items).set({
-        currentStationId: newStation
-      }).where(eq(items.orderId, orderId));
-      
+        station: newStation,
+        status: newStatus,
+      };
+      if (isCompletedOrderStatus(newStatus)) updateSet.completedDate = current.completedDate || new Date();
+
+      const persisted = (await tx
+        .update(orders)
+        .set(updateSet)
+        .where(and(eq(orders.id, current.id), eq(orders.tenantId, actor.data.tenantId)))
+        .returning())[0];
+      if (!persisted) throw new Error("ORDER_TRANSITION_NOT_CONFIRMED");
+
+      await tx
+        .update(items)
+        .set({ currentStationId: newStation })
+        .where(and(eq(items.orderId, current.id), eq(items.tenantId, actor.data.tenantId)));
+
       await tx.insert(events).values({
         id: crypto.randomUUID(),
-        tenantId: "galvanik-kreile",
-        orderId,
+        tenantId: actor.data.tenantId,
+        orderId: current.id,
         eventType,
         station: newStation,
         description,
-        createdAt: new Date()
+        userId: actor.data.userId,
       });
+
+      return { newStation, newStatus };
     });
 
-    try { 
-      const { revalidatePath } = await import("next/cache");
-      revalidatePath("/"); 
+    if (!transitioned) return { ok: false, error: "EMPTY_RESULT" as const, message: "Auftrag nicht gefunden." };
+    invalidateOperationalOrdersCache();
+    try {
+      revalidatePath("/");
       revalidatePath("/orders");
       revalidatePath("/warendurchlauf");
-    } catch { /* ignore */ }
+    } catch {
+      // unavailable in isolated tests
+    }
 
-    return { ok: true, data: { success: true, newStation, newStatus } };
+    return { ok: true, data: { success: true, ...transitioned } };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (["ORDER_PROCESS_LOCKED", "UNKNOWN_ORDER_STATION", "INVALID_ORDER_STATUS_TRANSITION"].includes(message)) {
+      return { ok: false, error: "FORBIDDEN" as const, message: "Dieser Prozesswechsel ist aus dem aktuellen Auftragszustand nicht zulässig." };
+    }
     console.error("Failed transition:", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Prozesswechsel" };
+    return { ok: false, error: "DB_ERROR" as const, message: "Fehler beim Prozesswechsel" };
   }
 }
 
-export async function createOrderFromScan(params: {
-  customerId?: string;
-  customerName?: string;
-  title?: string;
-  parts: { name: string; quantity: number; surfaceRequested?: string; material?: string }[];
-  forceCreateCustomer?: boolean;
-}): Promise<
-  | { ok: true; data: { orderId: string; newCustomerId?: string; status: string; customerChoices?: Record<string, unknown>[] } }
+export async function createOrderFromScan(params: unknown): Promise<
+  | { ok: true; data: { orderId: string; status: "persisted" } }
   | { ok: false; error: string; message: string; details?: unknown }
 > {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return { ok: false, error: auth.error, message: auth.message };
+  const actor = await requireOrderWrite();
+  if (!actor.ok) return actor;
 
-  const authRes = await resolveAuthorization();
-  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
-  const tenantId = authRes.data.tenantId;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  const parsedRequest = scanOrderRequestSchema.safeParse(params);
+  if (!parsedRequest.success) {
+    return {
+      ok: false,
+      error: "INVALID_INPUT",
+      message: "Ungültige oder unvollständige Scan-Auftragsdaten.",
+      details: parsedRequest.error.flatten().fieldErrors,
+    };
+  }
 
   try {
-    let finalCustomerId = params.customerId;
+    let finalCustomerId = parsedRequest.data.customerId;
 
-    // 1. Wenn kein customerId übergeben wurde, suchen wir über den Namen
-    if (!finalCustomerId && params.customerName && params.customerName.trim() !== "") {
-      const searchPattern = `%${params.customerName.trim()}%`;
-      const matches = await db.select().from(customers).where(
-        and(
-          eq(customers.tenantId, tenantId),
-          ilike(customers.name, searchPattern),
-          sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`
-        )
-      );
+    if (!finalCustomerId && parsedRequest.data.customerName) {
+      const escapedName = parsedRequest.data.customerName.replace(/[\\%_]/g, "\\$&");
+      const matches = await db
+        .select({ id: customers.id, name: customers.name, companyName: customers.companyName })
+        .from(customers)
+        .where(and(
+          eq(customers.tenantId, actor.data.tenantId),
+          ilike(customers.name, `%${escapedName}%`),
+          notInArray(sql`coalesce(${customers.source}, 'manual')`, ["seed", "test", "demo", "integration-test"]),
+        ))
+        .limit(11);
 
       if (matches.length === 1) {
-        // Eindeutiger Treffer
         finalCustomerId = matches[0].id;
       } else if (matches.length > 1) {
-        // Mehrdeutige Treffer
         return {
           ok: false,
           error: "CUSTOMER_AMBIGUOUS",
-          message: "Mehrere Kunden mit diesem Namen gefunden",
-          details: matches.map(c => ({ id: c.id, name: c.name, companyName: c.companyName }))
+          message: "Mehrere Kunden mit diesem Namen gefunden.",
+          details: matches.slice(0, 10),
         };
       } else {
-        // Kein Treffer
-        if (params.forceCreateCustomer) {
-          const { createCustomerDb } = await import("./customers.actions");
-          const createResult = await createCustomerDb({
-            company: params.customerName,
-            firstName: "",
-            lastName: "",
-            street: "Hauptstraße",
-            houseNumber: "1",
-            city: "Frankfurt",
-            postalCode: "60311",
-            country: "Deutschland"
-          });
-          if (createResult.ok) {
-            finalCustomerId = createResult.data.id;
-          } else {
-            return {
-              ok: false,
-              error: "CUSTOMER_CREATION_FAILED",
-              message: "Kunde konnte nicht angelegt werden",
-              details: createResult.error
-            };
-          }
-        } else {
-          return {
-            ok: false,
-            error: "CUSTOMER_NOT_FOUND",
-            message: "Kunde wurde in der Datenbank nicht gefunden. Möchten Sie diesen neu anlegen?",
-            details: { customerName: params.customerName }
-          };
-        }
+        return {
+          ok: false,
+          error: "CUSTOMER_NOT_FOUND",
+          message: "Kunde wurde nicht gefunden. Bitte zuerst vollständige Kundendaten im Kundenmodul erfassen.",
+          details: { customerName: parsedRequest.data.customerName },
+        };
       }
     }
 
@@ -456,19 +495,26 @@ export async function createOrderFromScan(params: {
       return {
         ok: false,
         error: "CUSTOMER_REQUIRED",
-        message: "Ein Kunde ist zwingend erforderlich, um einen Auftrag zu erstellen."
+        message: "Ein gespeicherter Kunde ist für den Auftrag erforderlich.",
       };
     }
 
-    // 2. Erstelle den Auftrag mit der Server Action createOrderDb
-    const orderData = {
+    const parsedOrder = orderSchema.safeParse({
       customerId: finalCustomerId,
-      title: params.title || `Auftrag per Scan - ${new Date().toLocaleDateString("de-DE")}`,
+      title: parsedRequest.data.title,
       source: "scan",
-      parts: params.parts
-    };
+      parts: parsedRequest.data.parts,
+    });
+    if (!parsedOrder.success) {
+      return {
+        ok: false,
+        error: "INVALID_INPUT",
+        message: "Scan-Daten konnten nicht in einen gültigen Auftrag überführt werden.",
+        details: parsedOrder.error.flatten().fieldErrors,
+      };
+    }
 
-    const orderResult = await createOrderDb(orderData);
+    const orderResult = await persistValidatedOrder(parsedOrder.data, actor.data);
     if (!orderResult.ok) {
       return {
         ok: false,
@@ -482,9 +528,8 @@ export async function createOrderFromScan(params: {
       ok: true,
       data: {
         orderId: String(orderResult.data.id),
-        newCustomerId: params.forceCreateCustomer ? finalCustomerId : undefined,
-        status: "success"
-      }
+        status: "persisted",
+      },
     };
   } catch (error: unknown) {
     console.error("createOrderFromScan error:", error);
@@ -492,8 +537,6 @@ export async function createOrderFromScan(params: {
       ok: false,
       error: "SERVER_ERROR",
       message: "Interner Serverfehler beim Erstellen des Auftrags",
-      details: error instanceof Error ? error.message : "Unbekannter Fehler"
     };
   }
 }
-

@@ -1,7 +1,7 @@
-import AnalysePage from '@/features/analyse/AnalysePage';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
 export default function Page() {
-  return <AnalysePage />;
+  redirect('/performance');
 }

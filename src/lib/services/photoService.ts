@@ -1,39 +1,45 @@
-import { eventsRepository } from "../repositories/eventsRepository";
-import { createClient } from "@/lib/supabase/client";
+import { eventsRepository } from "@/lib/repositories/eventsRepository";
+
+export type StoredItemPhoto = {
+  jobId: string;
+  storagePath: string;
+  previewUrl: string;
+};
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 export const photoService = {
-  async savePhotoForOrder(orderId: string, photoDataUrl: string) {
-    // If no Supabase URL is provided, fallback to the offline/mock approach
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes("placeholder")) {
-      console.log(`📸 Photo virtuell gespeichert (kein Supabase) für Order ${orderId}`);
-      await eventsRepository.addEvent({ eventType: "PHOTO_CAPTURED", orderId });
-      return photoDataUrl; 
+  async savePhotoForItem(itemId: string, orderId: string, photoDataUrl: string): Promise<StoredItemPhoto> {
+    const source = await fetch(photoDataUrl);
+    const blob = await source.blob();
+    if (blob.size < 12 || blob.size > 12 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(blob.type)) {
+      throw new Error("Ungültiges oder zu großes Teilefoto.");
     }
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()));
+    const extension = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
+    const formData = new FormData();
+    formData.set("itemId", itemId);
+    formData.set("file", new File([blob], `item-photo.${extension}`, { type: blob.type }));
 
-    try {
-      // Decode base64 for real upload
-      const response = await fetch(photoDataUrl);
-      const blob = await response.blob();
-      
-      const fileName = `${orderId}-${Date.now()}.jpg`;
-      const supabase = createClient();
-      const { error } = await supabase.storage
-        .from('intake-photos')
-        .upload(fileName, blob, {
-          contentType: 'image/jpeg',
-          upsert: false
-        });
-
-      if (error) throw error;
-      
-      const { data: { publicUrl } } = supabase.storage.from('intake-photos').getPublicUrl(fileName);
-      await eventsRepository.addEvent({ eventType: "PHOTO_CAPTURED", orderId });
-      console.log("☁️ Photo erfolgreich zu Supabase hochgeladen:", publicUrl);
-      return publicUrl;
-    } catch (error) {
-      console.error("Fehler beim Upload des Bildes zu Supabase:", error);
-      // Fallback: return the base64 string directly so we don't lose the photo
-      return photoDataUrl;
+    const response = await fetch("/api/erfassung/item-photo-upload", {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "X-Idempotency-Key": `item-photo:${itemId}:${bytesToHex(digest).slice(0, 32)}` },
+      body: formData,
+    });
+    const text = await response.text();
+    if (text.length > 262_144) throw new Error("Ungültige Fotoantwort.");
+    let body: unknown;
+    try { body = JSON.parse(text); }
+    catch { throw new Error("Ungültige Fotoantwort."); }
+    const result = body as Record<string, unknown>;
+    if (!response.ok || typeof result.jobId !== "string" || typeof result.storagePath !== "string" || typeof result.previewUrl !== "string") {
+      throw new Error("Teilefoto konnte nicht dauerhaft bestätigt werden.");
     }
-  }
+    await eventsRepository.addEvent({ orderId, itemId, eventType: "PHOTO_CAPTURED" });
+    return { jobId: result.jobId, storagePath: result.storagePath, previewUrl: result.previewUrl };
+  },
 };

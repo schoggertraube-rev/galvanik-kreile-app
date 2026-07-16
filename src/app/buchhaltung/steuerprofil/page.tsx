@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getBuchhaltungProvider } from "@/lib/buchhaltung";
 import type { Steuerprofil, UstvaWerte } from "@/lib/buchhaltung/types";
-import { ChevronRight, Banknote, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
+import { ChevronRight, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 export default function SteuerprofilPage() {
@@ -14,27 +14,45 @@ export default function SteuerprofilPage() {
   const [profil, setProfil] = useState<Steuerprofil | null>(null);
   const [ustva, setUstva] = useState<UstvaWerte | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
-      const provider = getBuchhaltungProvider();
-      const now = new Date();
-      const [p, u] = await Promise.all([
-        provider.getSteuerprofil(),
-        provider.berechneUstva({
-          von: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`,
-          bis: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`,
-        }),
-      ]);
-      setProfil(p);
-      setUstva(u);
-      setLoading(false);
+      try {
+        const provider = getBuchhaltungProvider();
+        const now = new Date();
+        const [p, u] = await Promise.all([
+          provider.getSteuerprofil(),
+          provider.berechneUstva({
+            von: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`,
+            bis: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`,
+          }),
+        ]);
+        setProfil(p);
+        setUstva(u);
+      } catch {
+        setError("Steuerprofil und UStVA konnten nicht aus der Datenbank geladen werden.");
+      } finally {
+        setLoading(false);
+      }
     };
     load();
   }, []);
 
-  if (loading || !profil || !ustva) {
+  if (loading) {
     return <div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-3 border-accent-orange/20 border-t-accent-orange rounded-full animate-spin" /></div>;
+  }
+  if (error || !profil || !ustva) {
+    return (
+      <div className="w-full px-4 sm:px-6 xl:px-8 py-10">
+        <BackButton label="Buchhaltung" href="/buchhaltung" />
+        <div className="mt-6 max-w-2xl rounded-2xl border border-red-200 bg-red-50 p-6">
+          <h1 className="text-lg font-extrabold text-red-900">Steuerdaten nicht verfügbar</h1>
+          <p className="mt-2 text-sm text-red-800">{error ?? "Es liegen keine auswertbaren Steuerdaten vor."}</p>
+          <p className="mt-2 text-xs text-red-700">Es werden keine Ersatz- oder Demo-Werte angezeigt.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -89,7 +107,7 @@ export default function SteuerprofilPage() {
           </div>
           <div className="flex gap-3 mt-6">
             <Link href="/buchhaltung/export?format=datev" className="flex items-center gap-2 px-4 py-2.5 bg-navy-900 text-white rounded-xl font-bold text-sm hover:bg-navy-800 transition-colors active:scale-[0.98]">
-              <CheckCircle2 className="w-4 h-4" /> UStVA prüfen
+              <CheckCircle2 className="w-4 h-4" /> DATEV-Export öffnen
             </Link>
             <Link href="/buchhaltung/export?format=steuerberater" className="flex items-center gap-2 px-4 py-2.5 bg-white text-navy-900 rounded-xl font-semibold text-sm border border-neutral-gray-200 hover:bg-neutral-gray-50 transition-colors active:scale-[0.98]">
               An Steuerberater <ArrowRight className="w-3.5 h-3.5" />
@@ -97,13 +115,13 @@ export default function SteuerprofilPage() {
           </div>
         </div>
 
-        {/* ELSTER Stufe 2 */}
+        {/* ELSTER connector truth */}
         <div className="lg:col-span-2 bg-amber-50 border border-amber-200 rounded-2xl p-6 flex items-start gap-4">
           <AlertCircle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
           <div>
-            <h3 className="font-bold text-amber-800">ELSTER-Direktversand — Stufe 2</h3>
-            <p className="text-sm text-amber-700 mt-1">Der ELSTER-Direktversand wird aktiviert, sobald dein Organisationszertifikat hinterlegt ist. Bis dahin: Export für manuellen ELSTER-Upload.</p>
-            <Link href="/buchhaltung/einstellungen" className="text-xs font-bold text-amber-800 underline mt-2 inline-block">Zertifikat in Einstellungen hinterlegen →</Link>
+            <h3 className="font-bold text-amber-800">ELSTER-Direktversand nicht angebunden</h3>
+            <p className="text-sm text-amber-700 mt-1">Es gibt derzeit weder Zertifikatsverwaltung noch ELSTER-Übertragung in der App. Die Werte sind eine vorläufige Datenbank-Auswertung und müssen fachlich geprüft sowie manuell übertragen werden.</p>
+            <Link href="/buchhaltung/export" className="text-xs font-bold text-amber-800 underline mt-2 inline-block">Verfügbare Datei-Exporte öffnen →</Link>
           </div>
         </div>
       </div>

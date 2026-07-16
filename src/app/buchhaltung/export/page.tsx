@@ -1,14 +1,16 @@
-import { exportBelegeAction } from "@/app/buchhaltung/actions";
-import { ExportClient } from "./ExportClient";
+import { ExportClient, type ExportFormat } from "./ExportClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function ExportPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const sp = await searchParams;
-  const initialFormat = (sp.format as string) || "datev";
+const FORMATS = new Set<ExportFormat>(["datev", "lexware", "steuerberater"]);
 
-  // Wir rufen zur Demonstration einfach den "DATEV" Export auf.
-  const previewData = await exportBelegeAction("DATEV");
-
-  return <ExportClient initialFormat={initialFormat} previewData={previewData} />;
+export default async function ExportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ format?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const requested = typeof params.format === "string" ? params.format : "datev";
+  const initialFormat = FORMATS.has(requested as ExportFormat) ? requested as ExportFormat : "datev";
+  return <ExportClient initialFormat={initialFormat} />;
 }

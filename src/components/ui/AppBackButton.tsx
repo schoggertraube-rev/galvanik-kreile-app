@@ -4,6 +4,7 @@ import React from "react";
 import { ArrowLeft } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { safeReturnTo } from "@/lib/navigation/safeReturnTo";
 
 interface AppBackButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   fallbackHref: string;
@@ -31,7 +32,7 @@ export function AppBackButton({
     if (useReturnTo) {
       const returnTo = searchParams.get("returnTo");
       if (returnTo) {
-        router.push(returnTo);
+        router.push(safeReturnTo(returnTo, fallbackHref));
         return;
       }
     }

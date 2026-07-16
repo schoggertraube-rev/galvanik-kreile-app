@@ -156,7 +156,7 @@ export type WerkstattPulsData = {
   stations: Array<{
     stationId: string;
     stationName: string;
-    status: "free" | "ok" | "watch" | "critical";
+    status: "free" | "ok" | "watch" | "critical" | "unavailable";
     auslastungPct: number | null;
     wartendN: number;
     avgWartezeitTage: number | null;

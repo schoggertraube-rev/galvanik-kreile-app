@@ -33,7 +33,6 @@ export function ItemPhotoUploader({ itemId, onUploadComplete, onRemove, photos }
       const formData = new FormData();
       formData.append("file", file);
       formData.append("itemId", itemId);
-      formData.append("tenantId", "galvanik-kreile");
 
       const res = await fetch("/api/erfassung/item-photo-upload", {
         method: "POST",
@@ -48,7 +47,8 @@ export function ItemPhotoUploader({ itemId, onUploadComplete, onRemove, photos }
         setAnalysisHint(data.analysis);
       }
       
-      onUploadComplete(data.url, data.analysis);
+      if (typeof data.previewUrl !== "string") throw new Error("Upload response is incomplete");
+      onUploadComplete(data.previewUrl, data.analysis);
       
     } catch (err) {
       console.error(err);
@@ -114,7 +114,7 @@ export function ItemPhotoUploader({ itemId, onUploadComplete, onRemove, photos }
           <input
             type="file"
             className="hidden"
-            accept="image/jpeg,image/png,image/heic,application/pdf"
+            accept="image/jpeg,image/png,image/webp"
             onChange={handleFileChange}
             disabled={isUploading}
           />

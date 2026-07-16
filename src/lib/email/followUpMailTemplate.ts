@@ -7,6 +7,7 @@ import type { Order } from "@/lib/repositories/ordersRepository";
  */
 export async function generateFollowUpMailHtml(order: Order, customerName: string): Promise<string> {
   const settings = await getCompanySettings();
+  if (!settings.configured) throw new Error("Firmendaten sind noch nicht konfiguriert.");
   
   // Customizing greeting
   const isFormal = !customerName.includes(" "); // very rough heuristic, better to have a formal flag
@@ -27,12 +28,9 @@ export async function generateFollowUpMailHtml(order: Order, customerName: strin
         Für uns als Handwerksbetrieb ist das Feedback unserer Kunden extrem wichtig. Wir würden uns riesig freuen, wenn Sie sich eine Minute Zeit nehmen könnten, um unsere Arbeit auf Google zu bewerten:
       </p>
 
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="https://g.page/r/YOUR_GOOGLE_REVIEW_LINK/review" 
-           style="background-color: #D4AF37; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block;">
-          ⭐️ Auf Google bewerten
-        </a>
-      </div>
+      <p style="font-size: 15px;">
+        Antworten Sie gern direkt auf diese E-Mail. Ein externer Bewertungslink ist derzeit nicht konfiguriert.
+      </p>
 
       <div style="background-color: #F7FAFC; border-left: 4px solid #D4AF37; padding: 16px; margin: 25px 0; border-radius: 0 8px 8px 0;">
         <h3 style="margin-top: 0; color: #2D3748; font-size: 16px;">📸 Zeigen Sie uns das Ergebnis!</h3>

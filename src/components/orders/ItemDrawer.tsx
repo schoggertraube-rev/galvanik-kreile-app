@@ -1,218 +1,122 @@
-import React, { useState, useEffect } from 'react';
-import { X, Save, Box, Trash2, Tag } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
-import { PriceLinesEditor } from './PriceLinesEditor';
-import { createItemDb, updateItemDb, deleteItemDb } from '@/app/actions/items.actions';
+"use client";
+
+import { useState } from "react";
+import { Box, Save, Tag, X } from "lucide-react";
+import { createItemDb, updateItemDb, type ItemResponse } from "@/app/actions/items.actions";
+import { PriceLinesEditor } from "./PriceLinesEditor";
 
 interface ItemDrawerProps {
   orderId: string;
-  itemId: string | 'new' | null;
-  existingItems: any[];
+  itemId: string | "new" | null;
+  existingItems: ItemResponse[];
   onClose: () => void;
   onSaved: () => void;
 }
 
 const WORKFLOW_TEMPLATES = [
-  { label: 'Standard Zink (Trommel)', sequence: ['wareneingang', 'entfettung', 'zink_trommel', 'passivierung', 'trocknung', 'warenausgang'] },
-  { label: 'Gestell Nickel', sequence: ['wareneingang', 'schleiferei', 'entfettung', 'nickel_gestell', 'trocknung', 'warenausgang'] },
-  { label: 'Nur Entlacken', sequence: ['wareneingang', 'entlackung', 'warenausgang'] }
+  { label: "Standard Zink (Trommel)", sequence: ["wareneingang", "entfettung", "zink_trommel", "passivierung", "trocknung", "warenausgang"] },
+  { label: "Gestell Nickel", sequence: ["wareneingang", "schleiferei", "entfettung", "nickel_gestell", "trocknung", "warenausgang"] },
+  { label: "Nur Entlacken", sequence: ["wareneingang", "entlackung", "warenausgang"] },
 ];
 
 export function ItemDrawer({ orderId, itemId, existingItems, onClose, onSaved }: ItemDrawerProps) {
-  const isNew = itemId === 'new';
-  const existingItem = isNew ? null : existingItems.find(i => i.id === itemId);
-
+  const isNew = itemId === "new";
+  const existingItem = isNew ? null : existingItems.find((item) => item.id === itemId);
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    quantity: 1,
-    material: '',
-    surfaceRequested: '',
-    stationSequence: [] as string[],
-    internalNotes: ''
-  });
+  const [error, setError] = useState<string | null>(null);
+  const [formData, setFormData] = useState(() => ({
+    name: existingItem?.name || "",
+    quantity: existingItem?.quantity || 1,
+    material: existingItem?.material || "",
+    surfaceRequested: existingItem?.surfaceRequested || "",
+    stationSequence: existingItem?.stationSequence || [] as string[],
+    internalNotes: existingItem?.internalNotes || "",
+  }));
 
-  useEffect(() => {
-    if (existingItem) {
-      setFormData({
-        name: existingItem.name || '',
-        quantity: existingItem.quantity || 1,
-        material: existingItem.material || '',
-        surfaceRequested: existingItem.surfaceRequested || '',
-        stationSequence: existingItem.stationSequence || [],
-        internalNotes: existingItem.internalNotes || ''
-      });
-    }
-  }, [existingItem]);
-
-  const handleSave = async () => {
+  async function handleSave() {
     setLoading(true);
-    
+    setError(null);
     const payload = {
-      order_id: orderId,
       name: formData.name,
       quantity: formData.quantity,
       material: formData.material,
-      surface_requested: formData.surfaceRequested,
-      station_sequence: formData.stationSequence,
-      internal_notes: formData.internalNotes
+      surfaceRequested: formData.surfaceRequested,
+      stationSequence: formData.stationSequence,
+      internalNotes: formData.internalNotes,
     };
-
-    if (isNew) {
-      await createItemDb({ ...payload, current_station_id: 'wareneingang' });
-    } else {
-      await updateItemDb(itemId as string, payload);
-    }
-    
-    setLoading(false);
-    onSaved();
-    onClose();
-  };
-
-  const handleDelete = async () => {
-    if (isNew) return;
-    if (confirm('Dieses Teil wirklich löschen?')) {
-      setLoading(true);
-      await deleteItemDb(itemId as string);
-      setLoading(false);
+    try {
+      const result = isNew
+        ? await createItemDb({ ...payload, orderId, currentStationId: "wareneingang" })
+        : await updateItemDb(itemId as string, payload);
+      if (!result.ok) throw new Error(result.message);
       onSaved();
       onClose();
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "Teil konnte nicht gespeichert werden.");
+    } finally {
+      setLoading(false);
     }
-  };
-
-  const applyTemplate = (sequence: string[]) => {
-    setFormData(prev => ({ ...prev, stationSequence: sequence }));
-  };
+  }
 
   if (!itemId) return null;
 
   return (
-    <div className="fixed inset-0 z-1000 bg-[rgba(26,31,46,0.42)] backdrop-blur-sm flex items-start justify-center pt-12 pb-12 overflow-y-auto" onClick={onClose}>
-      <div className="w-full max-w-[560px] mx-4 -() rounded-[18px] border -() shadow-[0_1px_2px_rgba(20,15,5,0.04),0_12px_32px_rgba(20,15,5,0.08)]" onClick={e => e.stopPropagation()}>
-        
-        <div className="flex items-center justify-between px-6 py-4 border-b -() -()">
-          <h2 className="text-lg font-medium -() flex items-center gap-2">
-            <Box className="w-5 h-5"/>
-            {isNew ? 'Neues Teil anlegen' : 'Teil bearbeiten'}
-          </h2>
-          <button onClick={onClose} className="p-2 -() hover:-() transition-colors rounded-full hover:-()">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <div className="fixed inset-0 z-1000 flex items-start justify-center overflow-y-auto bg-navy-900/40 px-4 py-12 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-full max-w-[560px] rounded-2xl border border-neutral-gray-200 bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <header className="flex items-center justify-between border-b border-neutral-gray-200 px-6 py-4">
+          <h2 className="flex items-center gap-2 text-lg font-bold"><Box className="h-5 w-5" />{isNew ? "Neues Teil anlegen" : "Teil bearbeiten"}</h2>
+          <button type="button" onClick={onClose} aria-label="Schließen" className="rounded-full p-2 hover:bg-neutral-gray-100"><X className="h-5 w-5" /></button>
+        </header>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          
-          <div className="space-y-4">
+        <div className="space-y-6 p-6">
+          <div>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider">Bezeichnung</label>
+            <input value={formData.name} maxLength={200} onChange={(event) => setFormData({ ...formData, name: event.target.value })} className="w-full rounded-lg border p-3 text-sm" placeholder="Zum Beispiel Kotflügel vorne links" />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-xs uppercase tracking-wider -() mb-1 block">Bezeichnung</label>
-              <input 
-                value={formData.name}
-                onChange={e => setFormData({...formData, name: e.target.value})}
-                className="w-full p-3 -() border -() rounded-lg text-sm outline-none focus:-()"
-                placeholder="z.B. Kotflügel Vorne Links"
-              />
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider">Menge</label>
+              <input type="number" min={1} max={1_000_000} value={formData.quantity} onChange={(event) => setFormData({ ...formData, quantity: Number(event.target.value) || 1 })} className="w-full rounded-lg border p-3 text-sm" />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs uppercase tracking-wider -() mb-1 block">Menge</label>
-                <input 
-                  type="number"
-                  min="1"
-                  value={formData.quantity}
-                  onChange={e => setFormData({...formData, quantity: parseInt(e.target.value) || 1})}
-                  className="w-full p-3 -() border -() rounded-lg text-sm outline-none focus:-()"
-                />
-              </div>
-              <div>
-                <label className="text-xs uppercase tracking-wider -() mb-1 block">Material (Ausgang)</label>
-                <input 
-                  value={formData.material}
-                  onChange={e => setFormData({...formData, material: e.target.value})}
-                  className="w-full p-3 -() border -() rounded-lg text-sm outline-none focus:-()"
-                  placeholder="z.B. Stahl"
-                />
-              </div>
-            </div>
-
             <div>
-              <label className="text-xs uppercase tracking-wider -() mb-1 block">Zielfinish (Oberfläche)</label>
-              <input 
-                value={formData.surfaceRequested}
-                onChange={e => setFormData({...formData, surfaceRequested: e.target.value})}
-                className="w-full p-3 -() border -() rounded-lg text-sm outline-none focus:-()"
-                placeholder="z.B. Zink Blau"
-              />
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider">Material</label>
+              <input value={formData.material} maxLength={100} onChange={(event) => setFormData({ ...formData, material: event.target.value })} className="w-full rounded-lg border p-3 text-sm" />
             </div>
           </div>
+          <div>
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider">Zielfinish</label>
+            <input value={formData.surfaceRequested} maxLength={100} onChange={(event) => setFormData({ ...formData, surfaceRequested: event.target.value })} className="w-full rounded-lg border p-3 text-sm" />
+          </div>
 
-          <div className="border-t -() pt-6">
-            <label className="text-xs uppercase tracking-wider -() mb-3 block">Stationen-Abfolge (Workflow)</label>
-            <div className="flex flex-wrap gap-2 mb-3">
-              {WORKFLOW_TEMPLATES.map((tmpl, i) => (
-                <button 
-                  key={i} 
-                  onClick={() => applyTemplate(tmpl.sequence)}
-                  className="text-xs px-3 py-1.5 rounded-md -() border -() hover:-() transition-colors -()"
-                >
-                  {tmpl.label}
-                </button>
+          <div className="border-t pt-5">
+            <label className="mb-3 block text-xs font-bold uppercase tracking-wider">Stationen-Abfolge</label>
+            <div className="mb-3 flex flex-wrap gap-2">
+              {WORKFLOW_TEMPLATES.map((template) => (
+                <button key={template.label} type="button" onClick={() => setFormData({ ...formData, stationSequence: template.sequence })} className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-neutral-gray-50">{template.label}</button>
               ))}
             </div>
-            
-            <div className="p-3 -() border -() rounded-lg min-h-[60px] text-sm -() flex flex-wrap gap-2">
-              {formData.stationSequence.length === 0 ? (
-                <span className="-()">Keine Stationen definiert...</span>
-              ) : (
-                formData.stationSequence.map((station, i) => (
-                  <span key={i} className="flex items-center gap-1 -() px-2 py-1 rounded border -()">
-                    <span className="text-[10px] -()">{i+1}.</span> {station}
-                  </span>
-                ))
-              )}
+            <div className="flex min-h-14 flex-wrap gap-2 rounded-lg border bg-neutral-gray-50 p-3 text-sm">
+              {formData.stationSequence.length === 0
+                ? <span className="text-text-muted">Keine Stationen definiert.</span>
+                : formData.stationSequence.map((station, index) => <span key={`${station}-${index}`} className="rounded border bg-white px-2 py-1">{index + 1}. {station}</span>)}
             </div>
           </div>
 
-          <div className="border-t -() pt-6">
-             <label className="text-xs uppercase tracking-wider -() mb-1 block">Interne Notizen</label>
-             <textarea 
-                value={formData.internalNotes}
-                onChange={e => setFormData({...formData, internalNotes: e.target.value})}
-                className="w-full p-3 -() border -() rounded-lg text-sm outline-none focus:-() min-h-[100px]"
-                placeholder="Besonderheiten für die Produktion..."
-              />
+          <div className="border-t pt-5">
+            <label className="mb-1 block text-xs font-bold uppercase tracking-wider">Interne Notizen</label>
+            <textarea value={formData.internalNotes} maxLength={2_000} onChange={(event) => setFormData({ ...formData, internalNotes: event.target.value })} className="min-h-24 w-full rounded-lg border p-3 text-sm" />
           </div>
 
-          {!isNew && (
-            <div className="border-t -() pt-6">
-              <label className="text-xs uppercase tracking-wider -() mb-3 flex items-center gap-1">
-                <Tag className="w-3 h-3"/> Preispositionen (für dieses Teil)
-              </label>
-              <PriceLinesEditor orderId={orderId} itemId={itemId} />
-            </div>
-          )}
-
+          {!isNew && <div className="border-t pt-5"><label className="mb-3 flex items-center gap-1 text-xs font-bold uppercase tracking-wider"><Tag className="h-3 w-3" /> Preispositionen</label><PriceLinesEditor orderId={orderId} itemId={itemId} /></div>}
         </div>
 
-        <div className="p-6 border-t -() -() flex gap-3">
-          {!isNew && (
-            <button 
-              onClick={handleDelete}
-              disabled={loading}
-              className="p-3 -() -() rounded-xl hover:bg-opacity-80 transition-colors"
-              title="Teil löschen"
-            >
-              <Trash2 className="w-5 h-5"/>
-            </button>
-          )}
-          <button 
-            onClick={handleSave} 
-            disabled={loading || !formData.name}
-            className="flex-1 flex items-center justify-center gap-2 -() -() py-3 rounded-xl font-medium hover:bg-opacity-90 disabled:opacity-50 transition-all"
-          >
-            {loading ? "Speichern..." : <><Save className="w-5 h-5"/> {isNew ? 'Anlegen' : 'Speichern'}</>}
+        <footer className="space-y-3 border-t border-neutral-gray-200 p-6">
+          {!isNew && <p className="text-xs text-text-muted">Direktes Löschen ist gesperrt, bis ein auditierter Stornoablauf vorhanden ist.</p>}
+          {error && <p role="alert" className="text-sm font-medium text-error-red">{error}</p>}
+          <button type="button" onClick={handleSave} disabled={loading || formData.name.trim().length === 0} className="flex w-full items-center justify-center gap-2 rounded-xl bg-navy-900 py-3 font-bold text-white disabled:opacity-50">
+            <Save className="h-5 w-5" />{loading ? "Speichert …" : isNew ? "Anlegen" : "Speichern"}
           </button>
-        </div>
-
+        </footer>
       </div>
     </div>
   );

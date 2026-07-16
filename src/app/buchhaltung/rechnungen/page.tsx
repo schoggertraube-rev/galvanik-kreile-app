@@ -1,14 +1,21 @@
 import { listRechnungenAction } from "@/app/buchhaltung/actions";
-import { RechnungFilter } from "@/lib/buchhaltung/types";
+import { RechnungFilter, type AusgangsrechnungStatus } from "@/lib/buchhaltung/types";
 import { RechnungenClient } from "./RechnungenClient";
 
 export const dynamic = "force-dynamic";
 
+const INVOICE_STATUSES = new Set<AusgangsrechnungStatus>([
+  "offen", "bezahlt", "ueberfaellig", "teilbezahlt", "gemahnt", "storniert",
+]);
+
 export default async function RechnungenPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
   const sp = await searchParams;
+  const requestedStatus = typeof sp.status === "string" && INVOICE_STATUSES.has(sp.status as AusgangsrechnungStatus)
+    ? sp.status as AusgangsrechnungStatus
+    : undefined;
 
   const filter: RechnungFilter = {
-    status: sp.status as any,
+    status: requestedStatus,
     kundeId: sp.kunde as string | undefined,
     ueberfaellig: sp.ueberfaellig === '1',
   };
@@ -27,8 +34,8 @@ export default async function RechnungenPage({ searchParams }: { searchParams: P
   const initialRechnungen = await listRechnungenAction(filter);
 
   // We can also fetch the OP sum here or just let the client reduce it
-  const offeneSumme = initialRechnungen.filter(i => ["offen", "teilbezahlt", "ueberfaellig", "gemahnt"].includes(i.status)).reduce((s, i) => s + (i.brutto || 0), 0);
-  const ueberfaelligSumme = initialRechnungen.filter(i => ["ueberfaellig", "gemahnt"].includes(i.status) || (new Date(i.faelligAm || '') < new Date() && ["offen", "teilbezahlt"].includes(i.status))).reduce((s, i) => s + (i.brutto || 0), 0);
+  const offeneSumme = initialRechnungen.filter(i => ["offen", "teilbezahlt", "ueberfaellig", "gemahnt"].includes(i.status)).reduce((s, i) => s + i.offenerBetrag, 0);
+  const ueberfaelligSumme = initialRechnungen.filter(i => ["ueberfaellig", "gemahnt"].includes(i.status) || (new Date(i.faelligAm || '') < new Date() && ["offen", "teilbezahlt"].includes(i.status))).reduce((s, i) => s + i.offenerBetrag, 0);
 
   return <RechnungenClient initialRechnungen={initialRechnungen} offeneSumme={offeneSumme} ueberfaelligSumme={ueberfaelligSumme} initialFilter={sp} />;
 }

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { eventsRepository } from "@/lib/repositories/eventsRepository";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { STATION_CONFIGS } from "@/constants/stations";
-import { createStatusEvent } from "@/app/actions/status-events.actions";
+import { parseOrderStation } from "@/lib/orders/orderMutationContract";
 
 interface StationStatusButtonProps {
   orderId: string;
@@ -18,7 +18,6 @@ interface StationStatusButtonProps {
 
 export function StationStatusButton({
   orderId,
-  customerId,
   currentStationId,
   currentStatus,
   onCompleteStation
@@ -32,10 +31,9 @@ export function StationStatusButton({
   };
 
   const executeStart = async () => {
-    const sel = selectedStation;
-    await ordersRepository.updateOrder(orderId, { currentStationId: sel, station: sel, status: "in_progress" });
-    await eventsRepository.addEvent({ orderId, customerId, eventType: "STATION_STARTED", metadata: { stationId: sel } });
-    createStatusEvent({ orderId, eventType: "STATION_STARTED", notes: `Station: ${sel}` }).catch(e => console.warn(e));
+    const sel = parseOrderStation(selectedStation);
+    await ordersRepository.updateOrder(orderId, { currentStationId: sel, status: "in_progress" });
+    await eventsRepository.addEvent({ orderId, eventType: "STATION_STARTED", metadata: { stationId: sel } });
     if (typeof window !== "undefined") window.dispatchEvent(new Event("storage"));
     setIsStarting(false);
   };

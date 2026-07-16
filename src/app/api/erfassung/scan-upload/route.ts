@@ -1,67 +1,85 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { db } from "@/db";
 import { scanUploads } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { extractDocumentData } from "@/lib/ocr/geminiOcr";
+import { resolveAuthorization } from "@/lib/server/authorization";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function storageClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) throw new Error("SCAN_STORAGE_MISCONFIGURED");
+  return createClient(url, key);
+}
 
 export async function POST(request: Request) {
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (
+    auth.data.tenantId !== "galvanik-kreile" ||
+    !auth.data.permissions.includes("perm_data_orders")
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   try {
     const formData = await request.formData();
-    const file = formData.get("file") as File;
-    const tenantId = formData.get("tenantId") as string || "galvanik-kreile";
-
-    if (!file) {
+    const file = formData.get("file");
+    if (!(file instanceof File)) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
-
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${tenantId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-    const { data: uploadData, error: uploadError } = await supabase.storage
-      .from("scans")
-      .upload(fileName, file, { contentType: file.type });
-
-    if (uploadError) {
-      console.error("Storage upload error:", uploadError);
-      return NextResponse.json({ error: "Failed to upload file" }, { status: 500 });
+    if (file.size <= 0 || file.size > 20 * 1024 * 1024) {
+      return NextResponse.json({ error: "Invalid file size" }, { status: 400 });
     }
 
-    const { data: publicUrlData } = supabase.storage.from("scans").getPublicUrl(fileName);
+    const scanId = randomUUID();
+    const extension = file.name.split(".").pop()?.replace(/[^a-z0-9]/gi, "").slice(0, 10) || "bin";
+    const storagePath = `${auth.data.tenantId}/${scanId}/original.${extension}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
 
-    const [newScan] = await db.insert(scanUploads).values({
-      tenantId,
-      fileUrl: publicUrlData.publicUrl,
+    const [scan] = await db.insert(scanUploads).values({
+      id: scanId,
+      tenantId: auth.data.tenantId,
+      uploadedBy: auth.data.userId,
+      fileUrl: storagePath,
       fileType: file.type,
-      status: "analyzing"
+      status: "uploading",
     }).returning();
 
-    // Convert file to Base64 for Gemini
-    const buffer = await file.arrayBuffer();
-    const base64Str = Buffer.from(buffer).toString('base64');
-    
-    // Process synchronously to ensure it completes before Vercel freezes the function
-    try {
-      const extraction = await extractDocumentData(base64Str);
-      await db.update(scanUploads).set({
-        status: "processed",
-        detectedType: "Lieferschein", // default
-        detectionConfidence: "0.9",
-        extractedData: extraction
-      }).where(eq(scanUploads.id, newScan.id));
-    } catch (e) {
-      console.error("Local OCR extraction failed:", e);
-      await db.update(scanUploads).set({ status: "error" }).where(eq(scanUploads.id, newScan.id));
+    const { error: uploadError } = await storageClient().storage
+      .from("scans")
+      .upload(storagePath, file, { contentType: file.type, upsert: false });
+    if (uploadError) {
+      console.error("Scan storage upload failed", uploadError.message);
+      await db.update(scanUploads).set({ status: "error" }).where(and(
+        eq(scanUploads.id, scan.id),
+        eq(scanUploads.tenantId, auth.data.tenantId),
+      ));
+      return NextResponse.json({ error: "Upload failed" }, { status: 500 });
     }
 
-    return NextResponse.json({ id: newScan.id });
+    let update: Partial<typeof scanUploads.$inferInsert> = {
+      status: "secured",
+    };
+    try {
+      update = {
+        ...update,
+        status: "processed",
+        extractedData: await extractDocumentData(buffer.toString("base64")),
+      };
+    } catch (error) {
+      console.error("OCR extraction failed", error);
+    }
+    await db.update(scanUploads).set(update).where(and(
+      eq(scanUploads.id, scan.id),
+      eq(scanUploads.tenantId, auth.data.tenantId),
+    ));
+
+    return NextResponse.json({ id: scan.id });
   } catch (error) {
-    console.error("Scan upload error:", error);
+    console.error("Scan upload error", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

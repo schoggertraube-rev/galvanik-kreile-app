@@ -12,6 +12,6 @@ export function usePageView() {
   const pathname = usePathname();
 
   useEffect(() => {
-    trackUiEvent("page_view", { route: pathname });
+    trackUiEvent("page_view");
   }, [pathname]);
 }

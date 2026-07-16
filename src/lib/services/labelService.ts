@@ -1,10 +1,7 @@
-import { eventsRepository } from "../repositories/eventsRepository";
+import { eventsRepository } from "@/lib/repositories/eventsRepository";
 
 export const labelService = {
-  async generateLabel(orderId: string) {
-    // Fake logic for label printer
-    console.log(`🖨️ Etikett generiert für Order ${orderId}`);
-    await eventsRepository.addEvent({ eventType: "LABEL_PREPARED", orderId });
-    return "label-mock-url";
-  }
+  async recordPreparedLabel(orderId: string) {
+    return eventsRepository.addEvent({ eventType: "LABEL_PREPARED", orderId });
+  },
 };

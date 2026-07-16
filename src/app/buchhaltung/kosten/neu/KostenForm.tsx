@@ -15,11 +15,7 @@ export function KostenForm() {
   const [kategorie, setKategorie] = useState("");
   const [betrag, setBetrag] = useState("");
   const [intervall, setIntervall] = useState<"einmalig" | "monatlich" | "jaehrlich">("monatlich");
-  const [belegId, setBelegId] = useState("");
-  const [kampagneId, setKampagneId] = useState("");
   const [giltAb, setGiltAb] = useState("");
-  const [giltBis, setGiltBis] = useState("");
-  const [isDemo, setIsDemo] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,16 +33,12 @@ export function KostenForm() {
         if (kategorie) fd.append("kategorie", kategorie);
         fd.append("betrag", betrag);
         fd.append("intervall", intervall);
-        if (belegId) fd.append("belegId", belegId);
-        if (kampagneId) fd.append("kampagneId", kampagneId);
         if (giltAb) fd.append("giltAb", giltAb);
-        if (giltBis) fd.append("giltBis", giltBis);
-        fd.append("isDemo", isDemo.toString());
 
         await createKostenpostenAction(fd);
         router.push("/buchhaltung/kosten");
-      } catch (err: any) {
-        setError(err.message || "Fehler beim Speichern des Kostenpostens.");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Fehler beim Speichern des Kostenpostens.");
       }
     });
   };
@@ -134,16 +126,6 @@ export function KostenForm() {
       </div>
 
       <div className="flex items-center gap-4 border-t border-neutral-100 pt-6">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={isDemo}
-            onChange={e => setIsDemo(e.target.checked)}
-            className="w-4 h-4 text-navy-900 border-neutral-300 rounded focus:ring-navy-900"
-          />
-          <span className="text-xs font-semibold text-neutral-500">Demo-Eintrag</span>
-        </label>
-        
         <div className="flex-1" />
         
         <button

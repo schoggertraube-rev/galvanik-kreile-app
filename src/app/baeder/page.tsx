@@ -3,6 +3,10 @@ import { getBaederListAction } from "./actions";
 
 export default async function BaederPage() {
   const result = await getBaederListAction();
-  const baederData = result.ok ? result.data : [];
-  return <BaederDashboardClient baederData={baederData} />;
+  return (
+    <BaederDashboardClient
+      baederData={result.ok ? result.data : []}
+      loadError={result.ok ? null : result.message}
+    />
+  );
 }

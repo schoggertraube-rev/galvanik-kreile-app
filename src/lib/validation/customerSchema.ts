@@ -1,47 +1,78 @@
 import { z } from "zod";
 
+const shortText = (max: number) => z.string().trim().max(max);
+const optionalEmail = z.union([z.literal(""), z.string().trim().email().max(254)]).optional();
+const customerType = z.enum([
+  "business",
+  "private",
+  "privat",
+  "institution",
+  "Privatkunde",
+  "Geschäftskunde",
+  "Institution",
+  "lead",
+]).optional();
+
 export const customerSchema = z.object({
-  firstName: z.string().optional(),
-  lastName: z.string().optional(),
-  company: z.string().optional(),
-  
-  street: z.string().min(1, "Straße darf nicht leer sein."),
-  houseNumber: z.string().min(1, "Hausnummer darf nicht leer sein."),
-  postalCode: z.string(),
-  city: z.string().min(1, "Ort darf nicht leer sein."),
-  country: z.string().min(1, "Land darf nicht leer sein."),
-  
-  phone: z.string().trim().min(4, "Bitte geben Sie eine gültige Telefonnummer ein."),
-  email: z.string().email("Bitte geben Sie eine gültige E-Mail-Adresse ein."),
-  
-  notes: z.string().optional(),
-  customerNumber: z.string().optional(),
-  imageUrls: z.array(z.string()).optional()
-}).superRefine((data, ctx) => {
-  if (!data.company && (!data.firstName || !data.lastName)) {
+  name: shortText(300).optional(),
+  firstName: shortText(150).optional(),
+  lastName: shortText(150).optional(),
+  company: shortText(300).optional(),
+  companyName: shortText(300).optional(),
+  type: customerType,
+  address: shortText(500).optional(),
+  street: shortText(300).optional(),
+  houseNumber: shortText(30).optional(),
+  postalCode: shortText(20).optional(),
+  zipCode: shortText(20).optional(),
+  city: shortText(150).optional(),
+  country: shortText(100).optional(),
+  phone: shortText(50).optional(),
+  email: optionalEmail,
+  notes: shortText(5_000).optional(),
+  behaviorNote: shortText(2_000).optional(),
+  source: shortText(80).optional(),
+  sourceRef: shortText(200).nullable().optional(),
+  isLead: z.boolean().optional(),
+  imageUrls: z.array(z.string().url().max(2_048)).max(20).optional(),
+}).strict().superRefine((data, ctx) => {
+  const company = data.company || data.companyName;
+  const person = data.name || [data.firstName, data.lastName].filter(Boolean).join(" ");
+  if (!company && !person) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Entweder Firma oder Vor- und Nachname müssen angegeben werden.",
-      path: ["company"]
+      code: "custom",
+      message: "Name oder Firma ist erforderlich.",
+      path: ["name"],
     });
   }
-
-  const pc = data.postalCode.trim();
-  const ctry = data.country.toUpperCase();
-  
-  if (ctry === "DE" || ctry === "DEUTSCHLAND") {
-    if (!/^\d{5}$/.test(pc)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "PLZ in Deutschland muss exakt 5 Ziffern haben.", path: ["postalCode"] });
-    }
-  } else if (ctry === "CH" || ctry === "SCHWEIZ" || ctry === "AT" || ctry === "ÖSTERREICH") {
-    if (!/^\d{4}$/.test(pc)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "PLZ in CH/AT muss exakt 4 Ziffern haben.", path: ["postalCode"] });
-    }
-  } else {
-    if (pc.length === 0) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "PLZ darf nicht leer sein.", path: ["postalCode"] });
-    }
+  const postalCode = data.postalCode || data.zipCode;
+  const country = data.country?.toUpperCase();
+  if (postalCode && (country === "DE" || country === "DEUTSCHLAND") && !/^\d{5}$/.test(postalCode)) {
+    ctx.addIssue({ code: "custom", message: "Deutsche PLZ muss fünfstellig sein.", path: ["postalCode"] });
+  }
+  if (postalCode && ["AT", "ÖSTERREICH", "CH", "SCHWEIZ"].includes(country || "") && !/^\d{4}$/.test(postalCode)) {
+    ctx.addIssue({ code: "custom", message: "PLZ für Österreich/Schweiz muss vierstellig sein.", path: ["postalCode"] });
   }
 });
+
+export const customerUpdateSchema = z.object({
+  name: shortText(300).min(1).optional(),
+  companyName: shortText(300).nullable().optional(),
+  type: customerType,
+  address: shortText(500).nullable().optional(),
+  street: shortText(300).nullable().optional(),
+  city: shortText(150).nullable().optional(),
+  zipCode: shortText(20).nullable().optional(),
+  country: shortText(100).nullable().optional(),
+  contactPerson: shortText(300).nullable().optional(),
+  email: z.union([z.literal(""), z.string().trim().email().max(254), z.null()]).optional(),
+  phone: shortText(50).nullable().optional(),
+  notes: shortText(5_000).nullable().optional(),
+  imageUrls: z.array(z.string().url().max(2_048)).max(20).optional(),
+  trustLevel: z.enum(["unknown", "stable", "very_reliable", "needs_attention"]).nullable().optional(),
+  internalWarning: shortText(2_000).nullable().optional(),
+  tags: z.array(shortText(80)).max(50).optional(),
+  creditRating: shortText(80).nullable().optional(),
+}).strict().refine((value) => Object.keys(value).length > 0, "Mindestens eine Änderung ist erforderlich.");
 
 export type CustomerInput = z.infer<typeof customerSchema>;

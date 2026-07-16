@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { getCurrentTimeOfDay, getCurrentWeather, getWareneingangVolumeState, getStationIcon, StationId, TimeOfDay, WeatherStatus, VolumeState } from "@/lib/warendurchlaufIconResolver";
 
 import { ordersRepository, Order } from "@/lib/repositories/ordersRepository";
+import { getLast7DaysOrderTrend } from "@/lib/warendurchlauf/orderTrend";
 
 /* ═══════════════════════════════════════════════════
    Warendurchlauf Station Nav — Bild-basiert, sticky
@@ -26,6 +27,7 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
   const [weather, setWeather] = React.useState<WeatherStatus>("normal");
   const [volume, setVolume] = React.useState<VolumeState>("normal");
   const [orders, setOrders] = React.useState<Order[]>([]);
+  const [ordersState, setOrdersState] = React.useState<"loading" | "ready" | "unavailable">("loading");
 
   React.useEffect(() => {
     const timer = setTimeout(() => {
@@ -37,7 +39,21 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
   }, []);
 
   React.useEffect(() => {
-    ordersRepository.getAll().then(setOrders).catch(console.error);
+    let active = true;
+    ordersRepository.getAll()
+      .then((loadedOrders) => {
+        if (!active) return;
+        setOrders(loadedOrders);
+        setOrdersState("ready");
+      })
+      .catch(() => {
+        if (!active) return;
+        setOrders([]);
+        setOrdersState("unavailable");
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   // Berechnungen für Diagramme und Chips
@@ -55,20 +71,14 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
   const waBereit = waOrders.filter(o => o.status === "ready" || o.statusText?.toLowerCase().includes("bereit")).length;
   const waWeg = waOrders.filter(o => o.status === "done" || o.statusText?.toLowerCase().includes("abgeholt") || o.statusText?.toLowerCase().includes("versendet")).length;
 
-  const getLast7DaysTrend = (filteredOrders: Order[]) => {
-    const trend = [0, 0, 0, 0, 0, 0, 0];
-    const now = new Date();
-    filteredOrders.forEach(o => {
-      const d = o.intakeDate || o.rawIntakeDate;
-      if (!d) return;
-      const diffTime = Math.abs(now.getTime() - new Date(d).getTime());
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-      if (diffDays >= 0 && diffDays < 7) {
-        trend[6 - diffDays]++;
-      }
-    });
-    if (trend.every(v => v === 0)) return [1, 2, 1, 3, 2, 4, filteredOrders.length || 1];
-    return trend;
+  const createTrend = (filteredOrders: Order[], color: string) => {
+    const values = getLast7DaysOrderTrend(filteredOrders);
+    const total = values.reduce((sum, value) => sum + value, 0);
+    return {
+      values,
+      label: total === 0 ? "Keine Vorgänge (7T)" : `${total} Vorgänge (7T)`,
+      color,
+    };
   };
 
   const STATIONS = [
@@ -82,7 +92,7 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
         { label: `${weWarten} warten`, color: "#d4850a", bg: "rgba(212,133,10,.1)" },
         { label: `${weDone} ✓`, color: "#1e7e45", bg: "rgba(30,126,69,.1)" },
       ],
-      trend: { values: getLast7DaysTrend(weOrders), label: `${weOrders.length} Gesamt (7T)`, color: "#1e7e45" }
+      trend: createTrend(weOrders, "#1e7e45")
     },
     {
       id: "galvanik" as StationId,
@@ -94,7 +104,7 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
         { label: `${galvBald} bald`, color: "#d4850a", bg: "rgba(212,133,10,.1)" },
         { label: `${galvDone} ✓`, color: "#1e7e45", bg: "rgba(30,126,69,.1)" },
       ],
-      trend: { values: getLast7DaysTrend(galvOrders), label: `${galvOrders.length} Gesamt (7T)`, color: "#c0392b" }
+      trend: createTrend(galvOrders, "#c0392b")
     },
     {
       id: "warenausgang" as StationId,
@@ -105,7 +115,7 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
         { label: `${waBereit} bereit`, color: "#1e7e45", bg: "rgba(30,126,69,.1)" },
         { label: `${waWeg} weg`, color: "#d4850a", bg: "rgba(212,133,10,.1)" },
       ],
-      trend: { values: getLast7DaysTrend(waOrders), label: `${waOrders.length} Gesamt (7T)`, color: "#d4850a" }
+      trend: createTrend(waOrders, "#d4850a")
     },
   ];
 
@@ -121,6 +131,7 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
       <nav className="w-full px-5 md:px-8 lg:px-12 xl:px-16 mx-auto flex items-center justify-around gap-2">
         {STATIONS.map((station, i) => {
           const isActive = getIsActive(station);
+          const maxTrendValue = Math.max(...station.trend.values, 1);
 
           return (
             <React.Fragment key={station.id}>
@@ -161,7 +172,7 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
                 </span>
 
                 {/* Chips */}
-                {!compact && (
+                {!compact && ordersState === "ready" && (
                   <div className="flex gap-1 flex-wrap justify-center">
                     {station.chips.map((chip) => (
                       <span
@@ -178,24 +189,31 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
                     ))}
                   </div>
                 )}
+                {!compact && ordersState !== "ready" && (
+                  <span className="text-[10px] font-semibold text-[#6f685f]">
+                    {ordersState === "loading" ? "Daten werden geladen" : "Daten nicht verfügbar"}
+                  </span>
+                )}
 
                 {/* Trend Bars */}
-                {!compact && station.trend && (
+                {!compact && station.trend && ordersState === "ready" && (
                   <div className="mt-2 flex flex-col items-center gap-1 group-hover:opacity-100 opacity-80 transition-opacity">
-                    <div className="flex items-end gap-0.5 h-4">
-                      {station.trend.values.map((v, idx) => (
-                        <div
-                          key={idx}
-                          className="w-1.5 rounded-t-sm"
-                          style={{
-                            height: `${Math.max(10, (v / Math.max(...station.trend!.values)) * 100)}%`,
-                            backgroundColor: station.trend!.color,
-                            opacity: idx === station.trend!.values.length - 1 ? 1 : 0.4
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <span className="text-[9px] text-[#9e9689] font-medium" title="Aus vorhandenen Testaufträgen berechnet (Demo-Auswertung)">
+                    {station.trend.values.some((value) => value > 0) && (
+                      <div className="flex items-end gap-0.5 h-4" aria-label="Reale Vorgänge der letzten sieben Tage">
+                        {station.trend.values.map((value, index) => (
+                          <div
+                            key={index}
+                            className="w-1.5 rounded-t-sm"
+                            style={{
+                              height: `${Math.max(10, (value / maxTrendValue) * 100)}%`,
+                              backgroundColor: station.trend.color,
+                              opacity: index === station.trend.values.length - 1 ? 1 : 0.4,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    <span className="text-[9px] text-[#9e9689] font-medium" title="Aus den geladenen Aufträgen berechnet">
                       {station.trend.label}
                     </span>
                   </div>

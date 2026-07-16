@@ -1,15 +1,16 @@
 import { test } from 'vitest';
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is required for integration tests");
-}
-import { transitionOrderProcess } from '@/app/actions/orders.actions';
-import { createCustomerDb } from '@/app/actions/customers.actions';
-import { db } from '@/db';
-import { orders, customers } from '@/db/schema';
-import { createId } from '@paralleldrive/cuid2';
+const integrationDatabaseUrl = process.env.KREILE_INTEGRATION_DATABASE_URL;
+const integrationTest = integrationDatabaseUrl ? test : test.skip;
 
-test('transitionOrderProcess moves order through chain correctly', async () => {
+integrationTest('transitionOrderProcess moves order through chain correctly', async () => {
+  process.env.DATABASE_URL = integrationDatabaseUrl;
+  const [{ transitionOrderProcess }, { db }, { orders, customers }, { createId }] = await Promise.all([
+    import('@/app/actions/orders.actions'),
+    import('@/db'),
+    import('@/db/schema'),
+    import('@paralleldrive/cuid2'),
+  ]);
   console.log("TEST: Prozessschritt klicken -> DB-Zustand korrekt");
   
   // create dummy order
@@ -40,20 +41,22 @@ test('transitionOrderProcess moves order through chain correctly', async () => {
 
   // Galvanik -> QS
   res = await transitionOrderProcess({ orderId: oid, action: "complete" });
-  if (!res.ok || res.data?.newStation !== "qualitaetssicherung" || res.data?.newStatus !== "QS/Fertigprüfung") throw new Error("Failed step 4");
+  if (!res.ok || res.data?.newStation !== "qualitaetssicherung" || res.data?.newStatus !== "ready") throw new Error("Failed step 4");
   
   // QS -> Warenausgang
   res = await transitionOrderProcess({ orderId: oid, action: "complete" });
-  if (!res.ok || res.data?.newStation !== "warenausgang" || res.data?.newStatus !== "Bereit für Versand") throw new Error("Failed step 5");
+  if (!res.ok || res.data?.newStation !== "warenausgang" || res.data?.newStatus !== "ready") throw new Error("Failed step 5");
 
   // Warenausgang -> Abgeschlossen
   res = await transitionOrderProcess({ orderId: oid, action: "complete" });
-  if (!res.ok || res.data?.newStatus !== "abgeschlossen") throw new Error("Failed step 6");
+  if (!res.ok || res.data?.newStatus !== "shipped") throw new Error("Failed step 6");
 
   console.log("PASS: transitionOrderProcess verified");
 });
 
-test('Customer creation works with full payload', async () => {
+integrationTest('Customer creation works with full payload', async () => {
+  process.env.DATABASE_URL = integrationDatabaseUrl;
+  const { createCustomerDb } = await import('@/app/actions/customers.actions');
   console.log("TEST: ausgefüllter Kunde wird validiert und gespeichert");
 
   const payload = {

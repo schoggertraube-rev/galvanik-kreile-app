@@ -13,8 +13,10 @@ export interface OcrErgebnis {
   belegart: string | null;      // rechnung, quittung, tankbeleg, kassenbon
   zahlungsart: string | null;   // bar, karte, überweisung
   rechnungsnummer: string | null;
-  confidence: number;           // 0..1
-  rohtext: string;              // vollständiger OCR-Text für Suche
+  confidence: number;           // Prozentwert 0..100; 0 = keine belastbare Anbieter-Confidence
+  rohtext: string;              // extrahierter OCR-Text für Suche
+  actualUnits?: number | null;  // echte Provider-Nutzung, sofern verfügbar
+  providerStatus?: string | null;
 }
 
 export interface OcrPosition {

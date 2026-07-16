@@ -4,8 +4,16 @@ import { db } from '@/db'
 import { orders, customers, appUsers } from '@/db/schema'
 import { seedDatabase } from '@/db/seed'
 import { count } from 'drizzle-orm'
+import { resolveAuthorization } from '@/lib/server/authorization'
 
 export async function initializeDemoIfNeeded() {
+  if (process.env.NODE_ENV === 'production' || process.env.KREILE_DEMO_MODE !== 'true') {
+    return { initialized: false, reason: 'demo_disabled' }
+  }
+  const auth = await resolveAuthorization()
+  if (!auth.ok || !['admin', 'developer'].includes(auth.data.role)) {
+    return { initialized: false, reason: 'unauthorized' }
+  }
   // Wenn DATA_PROVIDER nicht supabase ist, machen wir gar nichts
   if (process.env.NEXT_PUBLIC_DATA_PROVIDER !== 'supabase') {
     return { initialized: false, reason: 'not_supabase' }

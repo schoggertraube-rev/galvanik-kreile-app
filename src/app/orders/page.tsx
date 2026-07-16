@@ -111,15 +111,6 @@ function OrdersPageInner() {
     };
   }, [router]);
 
-  // Search tracking — fires 800 ms after the user stops typing
-  useEffect(() => {
-    if (!searchTerm.trim()) return;
-    const timer = setTimeout(() => {
-      trackUiEvent("search", { term: searchTerm });
-    }, 800);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
-
   // Wait... we don't need selected order locally anymore!
 
   // Filter orders by search term, status filter AND station filter
@@ -172,6 +163,21 @@ function OrdersPageInner() {
     const db = new Date(b.dueDate || "9999-12-31").getTime();
     return da - db;
   });
+
+  // Datensparsame Suchmessung: niemals Suchtext oder Entitäts-IDs übertragen.
+  useEffect(() => {
+    const queryLength = searchTerm.trim().length;
+    if (queryLength === 0) return;
+    const timer = setTimeout(() => {
+      trackUiEvent("search", {
+        target: "orders",
+        queryLength,
+        resultCount: filteredOrders.length,
+        outcome: filteredOrders.length === 0 ? "empty" : "success",
+      });
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [searchTerm, statusFilter, stationFilter, surfaceFilter, filteredOrders.length]);
 
   // Station display helper
   const getStationHeadline = () => {
@@ -342,7 +348,7 @@ function OrdersPageInner() {
                 dueValue={order.dueValue || "14 T"}
                 dueLabel={order.dueLabel || "Fällig in"}
                 onClick={() => {
-                  trackUiEvent("detail_open", { target: "order", id: order.id, orderNumber: order.orderNumber });
+                  trackUiEvent("detail_open", { target: "order" });
                   openOrder(order.id);
                 }}
               />
@@ -375,4 +381,3 @@ export default function OrdersPage() {
     </Suspense>
   );
 }
-

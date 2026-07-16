@@ -1,6 +1,3 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '@/lib/supabase/client';
-
 export interface CustomerKpi {
   customer_id: string;
   kunde: string;
@@ -13,5 +10,4 @@ export interface CustomerKpi {
   puenktlichkeit_pct: number | null;
   reklamationen: number;
 }
-
 

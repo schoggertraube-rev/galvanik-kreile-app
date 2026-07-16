@@ -1,111 +1,107 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { corsHeaders, handleCors, requireServiceRole } from "../_shared/security.ts";
+import {
+  claimAiUsage,
+  exactObject,
+  parseInternalAiBody,
+  requiredText,
+  settleAiUsage,
+} from "../_shared/aiUsage.ts";
+import { generateGeminiJson } from "../_shared/geminiJson.ts";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+const FEATURE = "notes-extract";
+const CATEGORIES = new Set([
+  "pickup_request", "status_question", "payment_question", "complaint", "callback",
+  "new_order_intake", "new_customer_request", "quote_request", "email_review",
+  "attachment_review", "photo_review", "document_review", "appointment_request",
+  "deadline_request", "material_or_surface_info", "shipping_question",
+  "technical_question", "general",
+]);
+
+function parseInput(value: unknown) {
+  const input = exactObject(value, ["text"]);
+  return { text: requiredText(input.text, 12_000) };
+}
+
+function outputText(value: unknown, maximum: number, nullable = false): string | null {
+  if (nullable && (value === null || value === undefined)) return null;
+  if (typeof value !== "string") throw new Error("INVALID_AI_RESULT");
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maximum || /[\u0000-\u001f\u007f]/.test(normalized)) {
+    throw new Error("INVALID_AI_RESULT");
+  }
+  return normalized;
+}
+
+function parsePhoneNoteResult(value: unknown): Record<string, unknown> {
+  const result = exactObject(value, [
+    "category", "material", "surfaceRequested", "suggestedAnswer", "overallConfidence",
+  ]);
+  if (
+    typeof result.category !== "string" || !CATEGORIES.has(result.category)
+    || typeof result.overallConfidence !== "number"
+    || !Number.isInteger(result.overallConfidence)
+    || result.overallConfidence < 0
+    || result.overallConfidence > 100
+  ) {
+    throw new Error("INVALID_AI_RESULT");
+  }
+  return {
+    category: result.category,
+    material: outputText(result.material, 120, true),
+    surfaceRequested: outputText(result.surfaceRequested, 160, true),
+    suggestedAnswer: outputText(result.suggestedAnswer, 2_000),
+    overallConfidence: result.overallConfidence,
+  };
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+  const cors = corsHeaders(req);
+  const preflight = handleCors(req);
+  if (preflight) return preflight;
+  const unauthorized = requireServiceRole(req);
+  if (unauthorized) return unauthorized;
+
+  let parsed;
+  try {
+    parsed = parseInternalAiBody(await req.json(), FEATURE, parseInput);
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid request" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
   }
 
   try {
-    const { text } = await req.json()
-
-    if (!text) {
-      throw new Error("Missing 'text' in request body.")
+    if (!await claimAiUsage(parsed.usage)) {
+      return new Response(JSON.stringify({ error: "Usage reservation unavailable" }), { status: 409, headers: { ...cors, "Content-Type": "application/json" } });
     }
-
-    const geminiApiKey = Deno.env.get('GEMINI_API_KEY')
-    if (!geminiApiKey) {
-      throw new Error("Missing GEMINI_API_KEY environment variable.")
-    }
-
-    const systemPrompt = `Extrahiere aus dieser Telefonnotiz strukturierte Auftragsdaten und Verhaltenshinweise.
-Antworte ausschließlich im JSON Format nach folgendem Schema:
-{
-  "customer": {
-    "name": "string oder null",
-    "companyName": "string oder null",
-    "phone": "string oder null",
-    "email": "string oder null",
-    "city": "string oder null"
-  },
-  "items": [
-    {
-      "name": "string",
-      "material": "string oder null",
-      "surfaceRequested": "string oder null",
-      "quantity": number
-    }
-  ],
-  "order": {
-    "title": "Kurztitel der Anfrage",
-    "priority": "normal oder express"
-  },
-  "behaviorNote": {
-    "text": "Besondere Vorlieben, Verhaltensweisen des Kunden (z.B. ruft immer morgens an, will nur Email, immer ungeduldig) oder null"
-  },
-  "followUp": {
-    "type": "callback | mail | quote | none",
-    "dueAtText": "Terminwunsch/Rückruf-Wunsch (Text) oder null"
+  } catch {
+    return new Response(JSON.stringify({ error: "Usage accounting unavailable" }), { status: 503, headers: { ...cors, "Content-Type": "application/json" } });
   }
-}
+
+  try {
+    const generated = await generateGeminiJson({
+      prompt: `Analysiere ausschließlich den folgenden Text einer Telefonnotiz für eine Galvanik-Werkstatt.
+Erfinde keine Kunden-, Auftrags-, Termin-, Lager-, Zahlungs- oder Kommunikationsdaten und behaupte nicht, dass eine Folgeaktion ausgeführt wurde.
+Antworte ausschließlich als JSON-Objekt mit exakt diesen Feldern:
+- category: eine der Kategorien pickup_request, status_question, payment_question, complaint, callback, new_order_intake, new_customer_request, quote_request, email_review, attachment_review, photo_review, document_review, appointment_request, deadline_request, material_or_surface_info, shipping_question, technical_question, general
+- material: im Text ausdrücklich genanntes Material oder null
+- surfaceRequested: im Text ausdrücklich genanntes Verfahren/Oberfläche oder null
+- suggestedAnswer: kurzer deutscher Formulierungsvorschlag; unbekannte Fakten ausdrücklich als noch zu prüfen benennen
+- overallConfidence: ganze Zahl von 0 bis 100
 
 Telefonnotiz:
-${text}`
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [
-          { role: "user", parts: [{ text: systemPrompt }] }
-        ],
-        generationConfig: {
-          temperature: 0.1,
-          responseMimeType: "application/json"
-        }
-      })
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Gemini API error: ${response.status} ${errorText}`)
-    }
-
-    const aiData = await response.json()
-    const content = aiData.candidates?.[0]?.content?.parts?.[0]?.text
-    
-    if (!content) {
-      throw new Error("No text content returned from Gemini")
-    }
-
-    let result
+${parsed.input.text}`,
+      maxOutputTokens: 1_024,
+      temperature: 0.1,
+    });
+    const result = parsePhoneNoteResult(generated.result);
+    await settleAiUsage({ usage: parsed.usage, outcome: "succeeded", actualUnits: generated.actualUnits, providerStatus: generated.providerStatus, result });
+    return new Response(JSON.stringify(result), { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
+  } catch {
     try {
-      result = JSON.parse(content);
-    } catch (e) {
-      const match = content.match(/\{[\s\S]*\}/);
-      if (match) {
-         result = JSON.parse(match[0]);
-      } else {
-         throw new Error("AI returned invalid JSON format")
-      }
+      await settleAiUsage({ usage: parsed.usage, outcome: "uncertain", actualUnits: null, providerStatus: "gemini-error" });
+    } catch {
+      // Accounting failure remains fail-closed.
     }
-
-    return new Response(
-      JSON.stringify(result),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-    )
-
-  } catch (error) {
-    console.error(error)
-    return new Response(
-      JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
-    )
+    return new Response(JSON.stringify({ error: "AI provider unavailable" }), { status: 503, headers: { ...cors, "Content-Type": "application/json" } });
   }
-})
+});

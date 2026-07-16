@@ -2,22 +2,24 @@
 
 import { useState, useEffect } from "react";
 import { getCompanySettings, updateCompanySettings } from "@/app/actions/company.actions";
-import { CompanySettings } from "@/lib/repositories/companySettingsRepository";
+import type { CompanySettings } from "@/lib/repositories/companySettingsRepository";
 import { Loader2, Save, Upload, Building2, Mail } from "lucide-react";
 
 export function CompanySettingsForm() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<CompanySettings | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
       try {
         const settings = await getCompanySettings();
         setFormData(settings);
+        setLoadError(null);
       } catch (e) {
         console.error("Failed to load company settings", e);
-        alert("Firmendaten konnten nicht geladen werden.");
+        setLoadError("Firmendaten konnten nicht geladen werden.");
       } finally {
         setLoading(false);
       }
@@ -36,7 +38,8 @@ export function CompanySettingsForm() {
     
     setSaving(true);
     try {
-      await updateCompanySettings(formData);
+      const saved = await updateCompanySettings(formData);
+      setFormData(saved);
       alert("Firmendaten erfolgreich gespeichert.");
     } catch (err) {
       console.error("Failed to save settings", err);
@@ -46,11 +49,7 @@ export function CompanySettingsForm() {
     }
   };
 
-  const handleLogoUpload = () => {
-    alert("Upload-Funktion für Logo (Supabase Storage) noch nicht implementiert.\nLogo-URL kann im Textfeld angepasst werden.");
-  };
-
-  if (loading || !formData) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center p-12">
         <Loader2 className="w-8 h-8 animate-spin text-navy-500" />
@@ -58,10 +57,19 @@ export function CompanySettingsForm() {
     );
   }
 
+  if (loadError || !formData) {
+    return <p className="rounded-xl border border-danger-red bg-accent-orange-soft p-4 text-sm font-bold text-danger-red">{loadError || "Firmendaten sind nicht verfügbar."}</p>;
+  }
+
   const logoUrl = formData.logoUrl;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8 max-w-4xl mx-auto pb-12">
+      {!formData.configured && (
+        <p className="rounded-xl border border-warning-yellow bg-warning-yellow/10 p-4 text-sm font-bold text-navy-900">
+          Firmendaten sind noch nicht konfiguriert. Dokumente und E-Mails werden bis zum ersten erfolgreichen Speichern nicht erzeugt.
+        </p>
+      )}
       <div className="bg-white border-2 border-neutral-gray-200 rounded-3xl overflow-hidden shadow-sm">
         <div className="p-6 border-b border-neutral-gray-100 flex items-center justify-between bg-bg-app-soft">
           <div className="flex items-center gap-3">
@@ -107,11 +115,11 @@ export function CompanySettingsForm() {
               </div>
               <button 
                 type="button" 
-                onClick={handleLogoUpload}
-                className="flex items-center gap-2 bg-white border-2 border-neutral-gray-200 hover:bg-neutral-gray-100 text-navy-900 px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                disabled
+                className="flex items-center gap-2 bg-white border-2 border-neutral-gray-200 text-text-muted px-4 py-2 rounded-xl text-xs font-bold opacity-70"
               >
                 <Upload className="w-4 h-4" />
-                Logo hochladen (Storage)
+                Logo-Upload noch nicht angebunden
               </button>
             </div>
           </div>

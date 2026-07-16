@@ -1,5 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { COOKIE_NAME, getSessionSecret, verifyAppSessionToken, type AppSession } from '@/lib/server/appSessionToken'
+import { decideCurrentProxyIdentity, readCurrentAppUserStates } from '@/lib/server/proxySessionState'
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -41,29 +43,65 @@ export async function proxy(request: NextRequest) {
     }
   )
 
-  // Allow bypassing Supabase auth in local development / E2E testing via a cookie
-  if (request.cookies.get('bypass-auth')?.value === 'true') {
+  // Dev-only escape hatch; Preview und Production ignorieren den Cookie immer.
+  if (
+    process.env.NODE_ENV === 'development' &&
+    process.env.KREILE_ALLOW_DEV_AUTH_BYPASS === 'true' &&
+    request.cookies.get('bypass-auth')?.value === 'true'
+  ) {
     return supabaseResponse
   }
 
-  const hasAppSession = request.cookies.has('kreile_app_session')
+  const sessionToken = request.cookies.get(COOKIE_NAME)?.value
+  let verifiedAppSession: AppSession | null = null
+  if (sessionToken) {
+    try {
+      const verified = await verifyAppSessionToken(sessionToken, getSessionSecret())
+      verifiedAppSession = verified.ok ? verified.session : null
+    } catch {
+      verifiedAppSession = null
+    }
+  }
 
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
+  const candidateUserIds = [verifiedAppSession?.userId, user?.id]
+    .filter((value): value is string => Boolean(value))
+  const currentUsers = candidateUserIds.length > 0
+    ? await readCurrentAppUserStates({
+        supabaseUrl,
+        serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+        userIds: candidateUserIds,
+      })
+    : new Map()
+  const identity = decideCurrentProxyIdentity({
+    hadAppSessionCookie: Boolean(sessionToken),
+    verifiedAppSession,
+    supabaseUserId: user?.id ?? null,
+    currentUsers,
+  })
+  const hasCurrentIdentity = identity.allowed
+
+  if (identity.staleAppSession) {
+    supabaseResponse.cookies.delete(COOKIE_NAME)
+  }
+
   if (
-    !user && !hasAppSession &&
+    !hasCurrentIdentity &&
     !request.nextUrl.pathname.startsWith('/start') &&
     !request.nextUrl.pathname.startsWith('/auth')
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/start'
-    return NextResponse.redirect(url)
+    const response = NextResponse.redirect(url)
+    if (identity.staleAppSession) response.cookies.delete(COOKIE_NAME)
+    return response
   }
 
   // Verhindere, dass eingeloggte Nutzer die Start-Seite (Login) erneut aufrufen
-  if ((user || hasAppSession) && request.nextUrl.pathname.startsWith('/start')) {
+  if (hasCurrentIdentity && request.nextUrl.pathname.startsWith('/start')) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     return NextResponse.redirect(url)

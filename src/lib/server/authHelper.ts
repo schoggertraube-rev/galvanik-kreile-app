@@ -79,13 +79,15 @@ export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<Act
   const result = await resolveAuthorization();
 
   if (!result.ok) {
-    const errorMap: Record<string, "UNAUTHORIZED" | "DB_ERROR" | "UNKNOWN"> = {
+    const errorMap: Record<string, "UNAUTHORIZED" | "FORBIDDEN" | "DB_ERROR" | "UNKNOWN"> = {
       NO_SESSION: "UNAUTHORIZED",
       INVALID_SESSION: "UNAUTHORIZED",
       USER_NOT_FOUND: "UNAUTHORIZED",
       USER_INACTIVE: "UNAUTHORIZED",
       ROLE_MISMATCH: "UNAUTHORIZED",
       UNKNOWN_ROLE: "UNAUTHORIZED",
+      TENANT_SUSPENDED: "FORBIDDEN",
+      TENANT_MAINTENANCE: "FORBIDDEN",
       AUTHORIZATION_UNAVAILABLE: "DB_ERROR",
     };
 

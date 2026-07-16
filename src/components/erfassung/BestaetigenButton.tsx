@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 
 interface BestaetigenButtonProps {
   label: string;
-  euroBetrag: number;
+  euroBetrag: number | null;
   dauerMinuten?: number;
   disabled?: boolean;
   disabledHinweis?: string;
@@ -33,7 +33,7 @@ export function BestaetigenButton({
           <Loader2 className="w-6 h-6 animate-spin" />
         ) : (
           <>
-            {label} — {dauerMinuten ? `${dauerMinuten} Min · ` : ''}{euroBetrag.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
+            {label} — {dauerMinuten ? `${dauerMinuten} Min · ` : ''}{euroBetrag === null ? "Kosten nicht verfügbar" : euroBetrag.toLocaleString('de-DE', { style: 'currency', currency: 'EUR' })}
           </>
         )}
       </Button>

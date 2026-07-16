@@ -7,13 +7,12 @@ import { eventsRepository } from "@/lib/repositories/eventsRepository";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { getNextStation } from "@/lib/stations/nextStation";
 import { computeStationCost, ConsumableUse } from "@/lib/costs/stationCost";
-import { createStatusEvent } from "@/app/actions/status-events.actions";
 import { STATION_CONFIGS } from "@/constants/stations";
 import { DEFAULT_HOURLY_RATE_EUR } from "@/constants/pricing";
+import { parseOrderStation } from "@/lib/orders/orderMutationContract";
 
 export function StationCompletionModal({ 
   orderId, 
-  customerId, 
   currentStationId, 
   onClose 
 }: { 
@@ -89,33 +88,31 @@ export function StationCompletionModal({
           unit: mat.unit,
           orderId: orderId,
           reason: `Verbrauchsbuchung in ${currentStationLabel}`,
-          createdBy: "meister@kreile.de"
         });
       }
 
       await eventsRepository.addEvent({
-        orderId, customerId,
+        orderId,
         eventType: "COSTS_BOOKED",
-        metadata: { minutes, taskType, note, multiplier, materials: bookedMaterials.map(m => ({ id: m.inventoryItemId, qty: m.quantity })) }
+        metadata: { durationMinutes: minutes, materialCount: bookedMaterials.length, stationId: currentStationId }
       });
 
       await eventsRepository.addEvent({
-        orderId, customerId,
+        orderId,
         eventType: "STATION_COMPLETED",
         metadata: { stationId: currentStationId }
       });
-      createStatusEvent({ orderId, eventType: "STATION_COMPLETED", notes: `Station: ${currentStationId}` }).catch(e => console.warn(e));
 
       if (nextStation) {
-        await ordersRepository.updateOrder(orderId, { currentStationId: nextStation, station: nextStation, status: "ready" });
+        const persistedNextStation = parseOrderStation(nextStation);
+        await ordersRepository.updateOrder(orderId, { currentStationId: persistedNextStation, status: "ready" });
         await eventsRepository.addEvent({
-          orderId, customerId,
+          orderId,
           eventType: "STATION_READY",
-          metadata: { stationId: nextStation }
+          metadata: { stationId: persistedNextStation }
         });
-        createStatusEvent({ orderId, eventType: "STATION_READY", notes: `Station: ${nextStation}` }).catch(e => console.warn(e));
       } else {
-        await ordersRepository.updateOrder(orderId, { status: "shipped", currentStationId: "warenausgang", station: "warenausgang" });
+        await ordersRepository.updateOrder(orderId, { status: "shipped", currentStationId: "warenausgang" });
       }
 
       if (typeof window !== "undefined") {

@@ -1,15 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { encode } from "https://deno.land/std@0.168.0/encoding/base64.ts"
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { corsHeaders, handleCors, requireServiceRole } from "../_shared/security.ts"
+import { loadStorageFile, validateBase64 } from "../_shared/storageFetch.ts"
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
-  }
+  const cors = corsHeaders(req)
+  const preflight = handleCors(req)
+  if (preflight) return preflight
+  const unauthorized = requireServiceRole(req)
+  if (unauthorized) return unauthorized
 
   try {
     const { scan_upload_id, file_url, base64_data, mime_type } = await req.json()
@@ -27,11 +26,11 @@ serve(async (req) => {
     let mime = mime_type || "image/jpeg";
 
     if (file_url && !b64) {
-      const fileRes = await fetch(file_url);
-      if (!fileRes.ok) throw new Error("Failed to fetch file from file_url");
-      const arrayBuffer = await fileRes.arrayBuffer();
-      b64 = encode(arrayBuffer);
-      mime = fileRes.headers.get("content-type") || mime;
+      const file = await loadStorageFile(file_url)
+      b64 = encode(file.bytes)
+      mime = file.mime
+    } else if (b64) {
+      validateBase64(b64, mime)
     }
 
     const systemPrompt = `Du bist ein OCR und Erkennungssystem für eine Galvanik. Analysiere das Dokument/Bild.
@@ -120,14 +119,14 @@ Antworte ausschließlich im JSON Format nach folgendem Schema:
 
     return new Response(
       JSON.stringify(result),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      { headers: { ...cors, 'Content-Type': 'application/json' }, status: 200 }
     )
 
   } catch (error) {
     console.error(error)
     return new Response(
       JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      { headers: { ...cors, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
 })

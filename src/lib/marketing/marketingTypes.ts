@@ -32,6 +32,8 @@ export interface AktionVorschlag {
   varianten: PostVariante[];
   segment?: string;
   quelle?: string;              // z.B. "Auftrag #8043"
+  /** Persisted, explicitly approved marketing asset. Never inferred in the browser. */
+  assetId?: string;
 }
 
 /** Kampagne (Bündel von Aktionen) */
@@ -57,7 +59,8 @@ export interface FunnelStufe {
 export interface FunnelDaten {
   stufen: FunnelStufe[];
   umsatz: number;
-  roi: number;
+  plannedBudget: number;
+  roi: number | null;
 }
 
 /** Kundensegment */

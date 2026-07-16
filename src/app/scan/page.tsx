@@ -7,7 +7,7 @@ import { SuggestedItemsPanel } from "@/components/intake/SuggestedItemsPanel";
 import { OcrResult } from "@/lib/ocr/geminiOcr";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { createOrderFromScan } from "@/app/actions/orders.actions";
-import { RefreshCw, CheckCircle2, AlertTriangle, UserPlus, HelpCircle } from "lucide-react";
+import { RefreshCw, CheckCircle2, AlertTriangle, HelpCircle } from "lucide-react";
 
 export default function ScanPage() {
   usePageView();
@@ -16,15 +16,11 @@ export default function ScanPage() {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Ambiguity & Missing Customer Handling
   const [customerChoices, setCustomerChoices] = useState<Array<{ id: string; name: string; companyName?: string | null }> | null>(null);
-  const [showCreateCustomerDialog, setShowCreateCustomerDialog] = useState<boolean>(false);
-  const [customerNameToCreate, setCustomerNameToCreate] = useState<string | null>(null);
   const [lastConfirmedParts, setLastConfirmedParts] = useState<Record<string, unknown>[] | null>(null);
 
   const handleConfirmOrder = async (options?: {
     customerId?: string;
-    forceCreateCustomer?: boolean;
     customParts?: Record<string, unknown>[];
   }) => {
     if (!scan) return;
@@ -32,35 +28,48 @@ export default function ScanPage() {
     setError(null);
     setConfirmMessage("");
 
-    const parts = options?.customParts || lastConfirmedParts || [
+    const rawParts = options?.customParts || lastConfirmedParts || [
       {
-        name: scan.articleDescription || "Bauteil",
-        quantity: scan.quantity || 1,
+        name: scan.articleDescription || "",
+        quantity: scan.quantity,
         surfaceRequested: scan.surface || "",
-        material: scan.material || ""
-      }
+        material: scan.material || "",
+      },
     ];
 
     try {
+      const parts = rawParts.map((part, index) => {
+        const name = typeof part.name === "string" ? part.name.trim() : "";
+        const quantity = Number(part.quantity);
+        if (!name || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1_000_000) {
+          throw new Error(`Position ${index + 1} benötigt eine erkannte Bezeichnung und eine gültige ganze Menge.`);
+        }
+        const surfaceRequested = typeof part.surfaceRequested === "string" ? part.surfaceRequested.trim() : "";
+        const material = typeof part.material === "string" ? part.material.trim() : "";
+        return {
+          name,
+          quantity,
+          ...(surfaceRequested ? { surfaceRequested } : {}),
+          ...(material ? { material } : {}),
+        };
+      });
+      const customerName = (scan.customerName || scan.company || "").trim();
+      const title = (scan.articleDescription || "").trim() || parts[0]?.name;
+      if (!title) throw new Error("Es wurde kein belastbarer Auftragstitel erkannt.");
+      if (!options?.customerId && !customerName) throw new Error("Es wurde kein Kunde erkannt oder ausgewählt.");
+
       const res = await createOrderFromScan({
         customerId: options?.customerId,
-        customerName: options?.customerId ? undefined : (scan.customerName || scan.company),
-        title: `Auftrag per Scan - ${scan.customerName || scan.company || "Unbekannt"}`,
-        parts: parts.map(p => ({
-          name: String(p.name || "Bauteil"),
-          quantity: Number(p.quantity) || 1,
-          surfaceRequested: String(p.surfaceRequested || ""),
-          material: String(p.material || "")
-        })),
-        forceCreateCustomer: options?.forceCreateCustomer
+        ...(!options?.customerId ? { customerName } : {}),
+        title,
+        parts,
       });
 
       if (res.ok) {
-        setConfirmMessage("Auftrag erfolgreich in der Datenbank angelegt!");
+        setConfirmMessage("Auftrag wurde in der Datenbank bestätigt.");
         setScan(null);
         setError(null);
         setCustomerChoices(null);
-        setShowCreateCustomerDialog(false);
         setLastConfirmedParts(null);
       } else {
         if (res.error === "CUSTOMER_AMBIGUOUS") {
@@ -68,10 +77,8 @@ export default function ScanPage() {
           setLastConfirmedParts(parts);
           setError("Kundenname ist mehrdeutig. Bitte wähle den passenden Kunden aus.");
         } else if (res.error === "CUSTOMER_NOT_FOUND") {
-          setCustomerNameToCreate(scan.customerName || scan.company || null);
           setLastConfirmedParts(parts);
-          setShowCreateCustomerDialog(true);
-          setError(null);
+          setError("Kunde nicht gefunden. Bitte zuerst vollständige Kundendaten im Kundenmodul erfassen und danach erneut bestätigen.");
         } else {
           setError(res.message || "Fehler beim Erstellen des Auftrags");
         }
@@ -131,38 +138,6 @@ export default function ScanPage() {
           >
             Abbrechen
           </button>
-        </div>
-      )}
-
-      {/* Dialog for Missing Customer Creation */}
-      {showCreateCustomerDialog && customerNameToCreate && (
-        <div className="mb-6 p-6 bg-white border-2 border-navy-900 rounded-3xl shadow-lg space-y-4">
-          <div className="flex items-center gap-3 text-navy-900">
-            <UserPlus className="w-8 h-8" />
-            <h3 className="text-xl font-bold">Kunde neu anlegen?</h3>
-          </div>
-          <p className="text-sm text-text-muted">
-            Der Kunde <strong className="text-navy-900">&quot;{customerNameToCreate}&quot;</strong> wurde nicht gefunden. 
-            Möchten Sie diesen als neuen Kunden in der Datenbank anlegen?
-          </p>
-          <div className="flex gap-4">
-            <button
-              onClick={() => handleConfirmOrder({ forceCreateCustomer: true })}
-              disabled={loading}
-              className="flex-1 bg-navy-900 text-white p-4 rounded-xl font-bold hover:bg-navy-700 transition-colors"
-            >
-              Ja, neu anlegen
-            </button>
-            <button
-              onClick={() => {
-                setShowCreateCustomerDialog(false);
-                setCustomerNameToCreate(null);
-              }}
-              className="flex-1 bg-neutral-gray-200 p-4 rounded-xl font-bold"
-            >
-              Nein, abbrechen
-            </button>
-          </div>
         </div>
       )}
 

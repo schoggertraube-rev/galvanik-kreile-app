@@ -1,7 +1,7 @@
 import { db } from "@/db";
-import { beleg, ausgangsrechnung, lieferant } from "@/db/schema_buchhaltung";
-import { orders, customers } from "@/db/schema";
-import { sql, and, gte, lte } from "drizzle-orm";
+import { beleg, ausgangsrechnung } from "@/db/schema_buchhaltung";
+import { appUsers, orders, customers } from "@/db/schema";
+import { sql, and, eq, gte, lt, ne } from "drizzle-orm";
 
 export function extractZeitraum(query: string) {
   const q = query.toLowerCase();
@@ -66,9 +66,15 @@ export function extractZeitraum(query: string) {
   };
 }
 
-export async function buildDataContext(zeitraum: { startDate: Date, endDate: Date, label: string, comparisonLabel?: string, assumption?: string }) {
+export async function buildDataContext(
+  zeitraum: { startDate: Date; endDate: Date; label: string; comparisonLabel?: string; assumption?: string },
+  tenantId: string,
+) {
+  if (tenantId !== "galvanik-kreile") throw new Error("INVALID_TENANT");
   const startStr = zeitraum.startDate.toISOString().split('T')[0];
-  const endStr = zeitraum.endDate.toISOString().split('T')[0];
+  const endExclusive = new Date(zeitraum.endDate);
+  endExclusive.setDate(endExclusive.getDate() + 1);
+  const endExclusiveStr = endExclusive.toISOString().split('T')[0];
 
   const [
     belegeCount,
@@ -78,12 +84,48 @@ export async function buildDataContext(zeitraum: { startDate: Date, endDate: Dat
     umsatzResult,
     kostenResult
   ] = await Promise.all([
-    db.select({ count: sql<number>`count(*)` }).from(beleg).where(and(gte(beleg.belegdatum, startStr), lte(beleg.belegdatum, endStr))),
-    db.select({ count: sql<number>`count(*)` }).from(ausgangsrechnung).where(and(gte(ausgangsrechnung.datum, startStr), lte(ausgangsrechnung.datum, endStr))),
-    db.select({ count: sql<number>`count(*)` }).from(orders).where(and(gte(orders.createdAt, zeitraum.startDate), lte(orders.createdAt, zeitraum.endDate))),
-    db.select({ count: sql<number>`count(*)` }).from(customers),
-    db.select({ summe: sql<number>`sum(${ausgangsrechnung.netto})` }).from(ausgangsrechnung).where(and(gte(ausgangsrechnung.datum, startStr), lte(ausgangsrechnung.datum, endStr), sql`${ausgangsrechnung.status} != 'storniert'`)),
-    db.select({ summe: sql<number>`sum(${beleg.netto})` }).from(beleg).where(and(gte(beleg.belegdatum, startStr), lte(beleg.belegdatum, endStr)))
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(beleg)
+      .innerJoin(appUsers, and(eq(beleg.erstelltVon, appUsers.id), eq(appUsers.tenantId, tenantId)))
+      .where(and(gte(beleg.belegdatum, startStr), lt(beleg.belegdatum, endExclusiveStr), ne(beleg.status, "storniert"))),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(ausgangsrechnung)
+      .where(and(
+        eq(ausgangsrechnung.tenantId, tenantId),
+        gte(ausgangsrechnung.datum, startStr),
+        lt(ausgangsrechnung.datum, endExclusiveStr),
+        ne(ausgangsrechnung.status, "storniert"),
+        eq(ausgangsrechnung.isDemo, false),
+      )),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(orders)
+      .where(and(
+        eq(orders.tenantId, tenantId),
+        gte(orders.createdAt, zeitraum.startDate),
+        lt(orders.createdAt, endExclusive),
+      )),
+    db
+      .select({ count: sql<number>`count(*)` })
+      .from(customers)
+      .where(eq(customers.tenantId, tenantId)),
+    db
+      .select({ summe: sql<number>`sum(${ausgangsrechnung.netto})` })
+      .from(ausgangsrechnung)
+      .where(and(
+        eq(ausgangsrechnung.tenantId, tenantId),
+        gte(ausgangsrechnung.datum, startStr),
+        lt(ausgangsrechnung.datum, endExclusiveStr),
+        ne(ausgangsrechnung.status, "storniert"),
+        eq(ausgangsrechnung.isDemo, false),
+      )),
+    db
+      .select({ summe: sql<number>`sum(${beleg.netto})` })
+      .from(beleg)
+      .innerJoin(appUsers, and(eq(beleg.erstelltVon, appUsers.id), eq(appUsers.tenantId, tenantId)))
+      .where(and(gte(beleg.belegdatum, startStr), lt(beleg.belegdatum, endExclusiveStr), ne(beleg.status, "storniert"))),
   ]);
 
   const topCustomersData = await db.select({
@@ -91,26 +133,42 @@ export async function buildDataContext(zeitraum: { startDate: Date, endDate: Dat
     summe: sql<number>`sum(${ausgangsrechnung.netto})`
   })
   .from(customers)
-  .leftJoin(ausgangsrechnung, sql`${customers.id} = ${ausgangsrechnung.kundeId}`)
-  .where(and(gte(ausgangsrechnung.datum, startStr), lte(ausgangsrechnung.datum, endStr)))
+  .innerJoin(
+    ausgangsrechnung,
+    and(
+      eq(customers.id, ausgangsrechnung.kundeId),
+      eq(ausgangsrechnung.tenantId, tenantId),
+    ),
+  )
+  .where(and(
+    eq(customers.tenantId, tenantId),
+    gte(ausgangsrechnung.datum, startStr),
+    lt(ausgangsrechnung.datum, endExclusiveStr),
+    ne(ausgangsrechnung.status, "storniert"),
+    eq(ausgangsrechnung.isDemo, false),
+  ))
   .groupBy(customers.id)
   .orderBy(sql`sum(${ausgangsrechnung.netto}) desc nulls last`)
   .limit(3);
 
   const topKunden = topCustomersData.map(c => c.name);
   
-  const realUmsatz = umsatzResult[0]?.summe || 0;
-  const realKosten = kostenResult[0]?.summe || 0;
+  const anzahlBelege = Number(belegeCount[0]?.count ?? 0);
+  const anzahlRechnungen = Number(rechnungenCount[0]?.count ?? 0);
+  const anzahlAuftraege = Number(ordersCount[0]?.count ?? 0);
+  const anzahlKunden = Number(customersCount[0]?.count ?? 0);
+  const realUmsatz = umsatzResult[0]?.summe;
+  const realKosten = kostenResult[0]?.summe;
 
   // Base metrics for current timeframe
   const metrics = {
-    anzahlBelege: belegeCount[0]?.count || 0,
-    anzahlRechnungen: rechnungenCount[0]?.count || 0,
-    anzahlAuftraege: ordersCount[0]?.count || 0,
-    aktiveKunden: customersCount[0]?.count || 0,
-    gesamtUmsatz: Number(realUmsatz).toFixed(2),
-    gesamtKosten: Number(realKosten).toFixed(2),
-    topKunden: topKunden.length > 0 ? topKunden : ["Keine Daten"],
+    anzahlBelege,
+    anzahlRechnungen,
+    anzahlAuftraege,
+    anzahlKunden,
+    gesamtUmsatz: anzahlRechnungen > 0 && realUmsatz != null ? Number(realUmsatz).toFixed(2) : "Keine Daten",
+    gesamtKosten: anzahlBelege > 0 && realKosten != null ? Number(realKosten).toFixed(2) : "Keine Daten",
+    topKunden,
     durchlaufzeit: "Nicht berechenbar (fehlende Tabellendaten)",
     termintreue: "Nicht berechenbar"
   };
@@ -120,7 +178,7 @@ export async function buildDataContext(zeitraum: { startDate: Date, endDate: Dat
     anzahlBelege: "Keine Daten",
     anzahlRechnungen: "Keine Daten",
     anzahlAuftraege: "Keine Daten",
-    aktiveKunden: "Keine Daten",
+    anzahlKunden: "Keine Daten",
     gesamtUmsatz: "Keine Daten",
     gesamtKosten: "Keine Daten",
     durchlaufzeit: "Keine Daten",

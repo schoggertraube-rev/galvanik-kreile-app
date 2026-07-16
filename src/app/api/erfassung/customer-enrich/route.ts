@@ -1,27 +1,30 @@
 import { NextResponse } from "next/server";
+import { resolveAuthorization } from "@/lib/server/authorization";
+import { parseCustomerEnrichInput, parseCustomerEnrichmentResult } from "@/lib/server/aiInputs";
+import { proxyMeteredAiRequest } from "@/lib/server/aiUsage";
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-
-    const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/customer-enrich`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
-      },
-      body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Edge Function error: ${response.status} ${errText}`);
-    }
-
-    const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error("Customer enrich proxy error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  const auth = await resolveAuthorization();
+  if (!auth.ok) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (
+    auth.data.tenantId !== "galvanik-kreile" ||
+    !auth.data.permissions.includes("perm_data_customers")
+  ) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  let payload;
+  try {
+    payload = parseCustomerEnrichInput(await request.json());
+  } catch {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+  return proxyMeteredAiRequest({
+    request,
+    identity: auth.data,
+    feature: "customer-enrich",
+    payload,
+    maxOutputTokens: 512,
+    parseResult: parseCustomerEnrichmentResult,
+  });
 }

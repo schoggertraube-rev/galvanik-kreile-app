@@ -1,90 +1,61 @@
-import { customersRepository } from "../repositories/customersRepository";
 import { ordersRepository } from "../repositories/ordersRepository";
-import { itemsRepository } from "../repositories/itemsRepository";
 import { eventsRepository } from "../repositories/eventsRepository";
 import { photoService } from "./photoService";
 
 export const intakeService = {
   async processIntake(data: {
     customerId: string | null;
-    newCustomerName?: string;
-    newCustomerDetails?: Record<string, string>;
     orderTitle: string;
     items: { name: string; quantity: number; surfaceRequested?: string; photo?: string }[];
   }) {
-    await eventsRepository.addEvent({ eventType: "ORDER_CREATED_MANUAL" });
-
-    // 1. Kunde zuordnen oder anlegen
-    let customerId = data.customerId;
+    const customerId = data.customerId;
     if (!customerId) {
-      // If no new customer name provided, use placeholder
-  let newName = data.newCustomerName;
-  if (!newName) {
-    console.warn("⚠️ Kein Kunde angegeben – erstelle Platzhalterkunde 'Unbekannter Kunde'.");
-    newName = "Unbekannter Kunde";
-  }
-  const details = data.newCustomerDetails || {};
-
-      
-      // Merge street and zip/city to address if street exists
-      let address = details.address || "";
-      if (!address && details.street) {
-        address = details.street;
-        if (details.zip) {
-          address += `, ${details.zip}`;
-        }
-        if (details.city) {
-          address += ` ${details.city}`;
-        }
-      }
-
-      const newCust = await customersRepository.create({
-        name: newName,
-        type: "Privatkunde",
-        city: details.city || "Unbekannt",
-        phone: details.phone || "",
-        email: details.email || "",
-        prefComm: "Telefon",
-        ...details,
-        address
-      });
-      customerId = newCust.id;
-      await eventsRepository.addEvent({ eventType: "CUSTOMER_MATCHED", customerId });
-    } else {
-      await eventsRepository.addEvent({ eventType: "CUSTOMER_MATCHED", customerId });
+      throw new Error("Vor der Auftragserfassung muss ein echter Kunde ausgewählt oder im Kundenmodul gespeichert werden.");
+    }
+    if (!data.orderTitle.trim() || data.items.length === 0) {
+      throw new Error("Auftragstitel und mindestens ein Teil sind erforderlich.");
     }
 
-    // 2. Auftrag erstellen
+    const orderParts = data.items.map((item) => {
+      const name = item.name.trim();
+      if (!name || !Number.isSafeInteger(item.quantity) || item.quantity < 1) {
+        throw new Error("Alle Auftragsteile benötigen eine Bezeichnung und eine gültige ganze Stückzahl.");
+      }
+      const surfaceRequested = item.surfaceRequested?.trim();
+      return {
+        name,
+        quantity: item.quantity,
+        ...(surfaceRequested ? { surfaceRequested } : {}),
+      };
+    });
+
     const order = await ordersRepository.create({
       customerId,
-      title: data.orderTitle,
-      station: "wareneingang",
-      parts: data.items,
-      source: "manual"
+      title: data.orderTitle.trim(),
+      parts: orderParts,
+      source: "manual",
     });
-    await eventsRepository.addEvent({ eventType: "ORDER_CREATED_MANUAL", orderId: order.id, customerId });
 
-    // 3. Teile zuordnen & Fotos hochladen
-    const itemsData = data.items.map(i => ({
-      orderId: order.id,
-      name: i.name,
-      quantity: i.quantity,
-      surfaceRequested: i.surfaceRequested,
-      photoUrl: i.photo || undefined
-    }));
-    await itemsRepository.createMany(itemsData);
-
-    // Fotos im Hintergrund an Supabase schicken
-    for (const item of data.items) {
+    for (const [index, item] of data.items.entries()) {
       if (item.photo) {
-        await photoService.savePhotoForOrder(order.id, item.photo);
+        const persistedItemId = order.parts[index]?.id;
+        if (typeof persistedItemId !== "string") {
+          throw new Error(`Auftrag ${order.orderNumber} wurde angelegt, aber die Teilebestätigung für das Foto fehlt.`);
+        }
+        try {
+          await photoService.savePhotoForItem(persistedItemId, order.id, item.photo);
+        } catch {
+          throw new Error(`Auftrag ${order.orderNumber} wurde angelegt, das Foto für Position ${index + 1} aber nicht bestätigt.`);
+        }
       }
     }
 
-    await eventsRepository.addEvent({ eventType: "ITEM_COUNT_CONFIRMED", orderId: order.id });
-
-    // 4. Abschluss
-    await eventsRepository.addEvent({ eventType: "WARENEINGANG_COMPLETED", orderId: order.id });
+    try {
+      await eventsRepository.addEvent({ eventType: "ITEM_COUNT_CONFIRMED", orderId: order.id });
+      await eventsRepository.addEvent({ eventType: "WARENEINGANG_COMPLETED", orderId: order.id });
+    } catch {
+      throw new Error(`Auftrag ${order.orderNumber} wurde angelegt, der Wareneingangsabschluss aber nicht vollständig bestätigt.`);
+    }
     
     // Dispatch global event so listeners (like Warendurchlauf Leitstand) reload the orders
     if (typeof window !== "undefined") {

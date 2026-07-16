@@ -7,9 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
   RefreshCw, 
-  Flame, 
-  ShieldAlert, 
-  Phone, 
   ShieldCheck 
 } from "lucide-react";
 import { MockOrder } from "@/lib/mockData";
@@ -18,72 +15,29 @@ import { getStationConfig, getAllStations } from "@/constants/stations";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { PageHeader } from "@/components/ui/PageHeader";
 
-const DELAY_METADATA: Record<string, {
-  reasonCategory: "Überlastung" | "Material" | "Kundenfreigabe" | "Zusatzarbeit" | "Entlackung";
-  reasonDetail: string;
-  recommendedAction: string;
-}> = {
-  "A-2026-0042": {
-    reasonCategory: "Zusatzarbeit",
-    reasonDetail: "Extrem tiefe Rostnarben erfordern hohen Schleif- & Glättungsaufwand.",
-    recommendedAction: "Zusatzstunden buchen / Express-Kupferbad aktivieren",
-  },
-  "A-2026-0038": {
-    reasonCategory: "Überlastung",
-    reasonDetail: "Schleiferei & Polierstation aktuell durch Parallelaufträge voll belegt.",
-    recommendedAction: "Schichtzuteilung Schleiferei optimieren / Prio erhöhen",
-  },
-  "A-2026-0035": {
-    reasonCategory: "Kundenfreigabe",
-    reasonDetail: "Kostenvoranschlag von 420 CHF per E-Mail gesendet. Freigabe steht aus.",
-    recommendedAction: "Mitarbeiter anweisen: Telefonische Nachfassung",
-  },
-  "A-2026-0040": {
-    reasonCategory: "Material",
-    reasonDetail: "Spezifisches Feinsilber-Badesalz knapp, Lieferung verzögert sich.",
-    recommendedAction: "Lieferant anrufen / Express-Expressversand verlangen",
-  },
-  "A-2026-0027": {
-    reasonCategory: "Entlackung",
-    reasonDetail: "Hartnäckige, alte Epoxid-Spachtelschicht im chemischen Bad verzögert die Reinigung.",
-    recommendedAction: "Einwirkzeit erhöhen / Manuelle Nacharbeit freigeben",
-  }
-};
-
 export default function StatusDelayPage() {
   usePageView();
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [selectedStation, setSelectedStation] = useState<string | null>(null);
   const [orders, setOrders] = useState<MockOrder[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Load from ordersRepository on mount & sync on storage changes
   useEffect(() => {
     const loadData = async () => {
-      const all = await ordersRepository.getAll();
-      setOrders(all as unknown as MockOrder[]);
+      try {
+        const all = await ordersRepository.getAll();
+        setOrders(all as unknown as MockOrder[]);
+        setLoadError(null);
+      } catch (error) {
+        console.error("Statusaufträge konnten nicht geladen werden", error);
+        setLoadError("Risikodaten konnten nicht geladen werden.");
+      }
     };
     loadData();
     window.addEventListener("storage", loadData);
     return () => window.removeEventListener("storage", loadData);
   }, []);
-
-  const handleTriggerAction = async (orderNumber: string) => {
-    const changes = {
-      risk: "green" as const,
-      statusText: "Im Plan (Gegenmaßnahme eingeleitet)",
-      delayReason: undefined,
-      recommendedAction: undefined,
-      dueLabel: "Fällig in",
-      dueValue: "10 Tagen"
-    };
-
-    // Update through unified repository supporting offline queuing
-    await ordersRepository.updateOrder(orderNumber, changes);
-
-    // Refresh state
-    const all = await ordersRepository.getAll();
-    setOrders(all as unknown as MockOrder[]);
-  };
 
   // Compute stats dynamically from the loaded state
   const countRed = orders.filter(o => o.risk === "red").length;
@@ -94,12 +48,6 @@ export default function StatusDelayPage() {
   const delayedOrders = orders.filter(o => o.risk !== "green");
 
   const delaysList = delayedOrders.map(o => {
-    const meta = DELAY_METADATA[o.orderNumber] || {
-      reasonCategory: o.risk === "blocked" ? "Kundenfreigabe" : "Überlastung",
-      reasonDetail: o.delayReason || "Keine näheren Werkstattdetails hinterlegt.",
-      recommendedAction: o.recommendedAction || "Prozessgeschwindigkeit überprüfen",
-    };
-
     let severity: "critical" | "warning" | "minor" = "minor";
     if (o.risk === "red") severity = "critical";
     else if (o.risk === "orange" || o.risk === "yellow" || o.risk === "blocked") severity = "warning";
@@ -109,10 +57,10 @@ export default function StatusDelayPage() {
       orderId: o.id,
       customerName: o.customerName,
       task: o.task,
-      delayText: o.dueValue ? `${o.dueLabel} ${o.dueValue}` : o.statusText,
-      reasonCategory: meta.reasonCategory,
-      reasonDetail: meta.reasonDetail,
-      recommendedAction: meta.recommendedAction,
+      delayText: o.dueValue ? `${o.dueLabel} ${o.dueValue}` : (o.statusText || "Kein Terminstatus dokumentiert"),
+      reasonCategory: "Nicht dokumentiert",
+      reasonDetail: o.delayReason || "Kein Verzögerungsgrund dokumentiert.",
+      recommendedAction: o.recommendedAction || null,
       severity,
       stationName: getStationConfig(o.station).name,
       stationKey: o.station,
@@ -177,7 +125,7 @@ export default function StatusDelayPage() {
       
       <PageHeader
         title="Werkstatt-Eskalationszentrale"
-        subtitle="Operative Steuerung bei Verzug, Materialengpässen und Kundenfreigaben."
+        subtitle="Kritische und gefährdete Aufträge nach gespeichertem Risikostatus."
         action={{
           label: "Filter zurücksetzen",
           onClick: () => { setFilterCategory("all"); setSelectedStation(null); },
@@ -185,6 +133,11 @@ export default function StatusDelayPage() {
           variant: "outline"
         }}
       />
+      {loadError && (
+        <div role="alert" className="p-3 rounded-xl border border-red-200 bg-red-50 text-red-800 text-sm font-semibold">
+          {loadError}
+        </div>
+      )}
 
       {/* Summary Info Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -235,11 +188,7 @@ export default function StatusDelayPage() {
           <div className="flex flex-wrap gap-1.5 p-1 bg-bg-app-soft rounded-lg border text-xs">
             {[
               { id: "all", label: "Alle Gründe" },
-              { id: "Zusatzarbeit", label: "🛠️ Zusatzaufwand" },
-              { id: "Überlastung", label: "⚠️ Überbelegung" },
-              { id: "Kundenfreigabe", label: "⏱️ KV-Freigabe" },
-              { id: "Material", label: "📦 Materialmangel" },
-              { id: "Entlackung", label: "🧪 Badprozess" }
+              { id: "Nicht dokumentiert", label: "Grund nicht dokumentiert" },
             ].map(cat => (
               <button
                 key={cat.id}
@@ -323,27 +272,14 @@ export default function StatusDelayPage() {
                         </div>
                         
                         <div className="flex gap-2 w-full sm:w-auto">
-                          {item.reasonCategory === "Kundenfreigabe" ? (
-                            <Button 
-                              size="sm" 
-                              onClick={() => handleTriggerAction(item.id)}
-                              className="bg-navy-900 text-white hover:bg-navy-700 h-12 text-xs font-bold w-full sm:w-auto px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                            >
-                              <Phone className="h-4 w-4" /> Kunde anrufen
-                            </Button>
-                          ) : (
-                            <Button 
-                              size="sm"
-                              onClick={() => handleTriggerAction(item.id)}
-                              className={`h-12 text-xs font-bold w-full sm:w-auto px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
-                                isCritical 
-                                  ? "bg-danger-red text-white hover:bg-danger-red" 
-                                  : "bg-navy-900 text-white hover:bg-navy-700"
-                              }`}
-                            >
-                              <Flame className="h-4 w-4 text-accent-orange animate-pulse" /> Maßnahme einleiten
-                            </Button>
-                          )}
+                          <Button
+                            size="sm"
+                            disabled
+                            title="Ein auditierter Maßnahmen-Workflow ist noch nicht angebunden."
+                            className="h-12 text-xs font-bold w-full sm:w-auto px-4 rounded-xl"
+                          >
+                            Maßnahme nicht angebunden
+                          </Button>
                         </div>
                       </div>
 

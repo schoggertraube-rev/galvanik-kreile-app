@@ -7,15 +7,20 @@ import { getEinwilligungen } from "./actions";
 import { CheckCircle, XCircle, Search, Upload } from "lucide-react";
 
 export default function EinwilligungenPage() {
-  const [data, setData] = useState<any[]>([]);
+  type ConsentRow = Awaited<ReturnType<typeof getEinwilligungen>>[number];
+  const [data, setData] = useState<ConsentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     getEinwilligungen().then(res => {
       setData(res);
       setLoading(false);
-    }).catch(console.error);
+    }).catch(() => {
+      setError("Einwilligungen konnten nicht geladen werden.");
+      setLoading(false);
+    });
   }, []);
 
   const filtered = data.filter(d => 
@@ -36,13 +41,16 @@ export default function EinwilligungenPage() {
           <p className="text-slate-500">Protokoll aller Marketing-Einwilligungen nach DSGVO.</p>
         </div>
         <button 
-          onClick={() => alert("Bulk-Import von bestehenden Opt-Ins (in Vorbereitung)")}
-          className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800"
+          disabled
+          title="Bulk-Import ist noch nicht angebunden."
+          className="flex cursor-not-allowed items-center gap-2 rounded-lg bg-slate-100 px-4 py-2 text-slate-400"
         >
           <Upload size={20} />
-          <span>Importieren</span>
+          <span>Import nicht angebunden</span>
         </button>
       </div>
+
+      {error && <div role="alert" className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-4 border-b border-slate-200">

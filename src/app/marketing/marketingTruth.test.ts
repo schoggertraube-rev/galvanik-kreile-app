@@ -1,0 +1,157 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import {
+  aktion,
+  attribution,
+  kampagne,
+  kanal,
+  lernMetrik,
+  marketingAsset,
+  segment,
+  feedbackMail,
+  einwilligung,
+  touchpoint,
+} from '@/db/schema_marketing'
+
+const state = vi.hoisted(() => ({
+  rows: new Map<unknown, unknown[]>(),
+  suggestionRows: [] as unknown[],
+  insert: vi.fn(),
+}))
+
+vi.mock('@/lib/server/marketingAuthorization', () => ({
+  requireMarketingRead: vi.fn(async () => ({ tenantId: 'galvanik-kreile' })),
+  requireMarketingWrite: vi.fn(async () => ({ tenantId: 'galvanik-kreile' })),
+}))
+
+vi.mock('@/db', () => ({
+  db: {
+    select: vi.fn((selection?: Record<string, unknown>) => {
+      let result: unknown[] = []
+      const query = {
+        from(table: unknown) {
+          result = table === aktion && selection && 'kanalTyp' in selection
+            ? state.suggestionRows
+            : state.rows.get(table) || []
+          return query
+        },
+        leftJoin() { return query },
+        innerJoin() { return query },
+        where() { return query },
+        orderBy() { return query },
+        limit(count: number) { result = result.slice(0, count); return query },
+        then(resolve: (value: unknown[]) => unknown, reject?: (reason: unknown) => unknown) {
+          return Promise.resolve(result).then(resolve, reject)
+        },
+      }
+      return query
+    }),
+    insert: state.insert,
+  },
+}))
+
+import {
+  getFunnelAction,
+  getWirkungMiniAction,
+  listVorschlaegeAction,
+} from '@/app/marketing/marketing.actions'
+import { getAttributionData } from '@/app/marketing/attribution/actions'
+import {
+  getMarketingAnfragenAnalysisAction,
+  getMarketingRoiAnalysisAction,
+  getMarketingUmsatzAnalysisAction,
+} from '@/app/marketing/analysis.actions'
+
+describe('marketing truth and networking contract', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    const at = new Date('2026-07-10T10:00:00.000Z')
+    state.rows = new Map<unknown, unknown[]>([
+      [aktion, [
+        { id: 'a1', status: 'ausgefuehrt', kostenBudget: '100', ausgefuehrtAm: at },
+      ]],
+      [touchpoint, [{ id: 't1', aktionId: 'a1', kanalId: 'k1', reichweite: 100, klicks: 20, ausgefuehrtAm: at }]],
+      [attribution, [{ id: 'at1', touchpointId: 't1', leadId: 'lead-1', auftragId: 'order-1', umsatz: '300' }]],
+      [kanal, [{ id: 'k1', name: 'Instagram', typ: 'instagram' }]],
+      [kampagne, []],
+      [segment, []],
+      [marketingAsset, []],
+      [feedbackMail, []],
+      [einwilligung, []],
+      [lernMetrik, []],
+    ] as Array<[unknown, unknown[]]>)
+    state.suggestionRows = [{
+      id: 'a2',
+      titel: 'Echter Vorschlag',
+      typ: 'post',
+      inhalt: { caption: 'Aus gespeicherten Daten', hashtags: '#galvanik' },
+      score: '42',
+      erwarteterOutput: null,
+      aufwandMin: 5,
+      kostenBudget: '0',
+      kanalTyp: 'instagram',
+      kanalName: 'Instagram',
+      segmentName: null,
+    }]
+  })
+
+  it('derives the funnel from evidence but keeps ROI unavailable without actual spend', async () => {
+    await expect(getFunnelAction()).resolves.toEqual(expect.objectContaining({
+      umsatz: 300,
+      plannedBudget: 100,
+      roi: null,
+      stufen: expect.arrayContaining([
+        expect.objectContaining({ label: 'Ausgeführte Aktionen', wert: 1 }),
+        expect.objectContaining({ label: 'Zugeordnete Anfragen', wert: 1 }),
+        expect.objectContaining({ label: 'Zugeordnete Aufträge', wert: 1 }),
+      ]),
+    }))
+    await expect(getWirkungMiniAction()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Zugeordneter Umsatz', wert: 300 }),
+      expect.objectContaining({ label: 'Planbudget ausgeführter Aktionen', wert: 100 }),
+    ]))
+  })
+
+  it('returns stored proposals without auto-seeding production-looking demo records', async () => {
+    await expect(listVorschlaegeAction()).resolves.toEqual([
+      expect.objectContaining({ titel: 'Echter Vorschlag', caption: 'Aus gespeicherten Daten', score: 42 }),
+    ])
+    expect(state.insert).not.toHaveBeenCalled()
+  })
+
+  it('uses exact attribution links instead of distributing orders and revenue heuristically', async () => {
+    await expect(getAttributionData()).resolves.toEqual([
+      expect.objectContaining({ kanal: 'Instagram', plannedBudget: 100, actualSpend: null, leads: 1, auftraege: 1, umsatz: 300, roi: null }),
+    ])
+    await expect(getMarketingAnfragenAnalysisAction('2026-07-01', '2026-07-31'))
+      .resolves.toEqual(expect.objectContaining({ gesamt: 1 }))
+    await expect(getMarketingUmsatzAnalysisAction('2026-07-01', '2026-07-31'))
+      .resolves.toEqual(expect.objectContaining({ gesamt: 300 }))
+    await expect(getMarketingRoiAnalysisAction('2026-07-01', '2026-07-31'))
+      .resolves.toEqual(expect.objectContaining({ gesamt: null, revenue: 300, cost: null, plannedBudget: 100 }))
+  })
+
+  it('does not present planned budgets as actual spend or a live ROI', () => {
+    const actionSource = readFileSync(resolve(process.cwd(), 'src/app/marketing/analysis.actions.ts'), 'utf8')
+    const attributionPage = readFileSync(resolve(process.cwd(), 'src/app/marketing/attribution/page.tsx'), 'utf8')
+    const consentPage = readFileSync(resolve(process.cwd(), 'src/app/marketing/einwilligungen/page.tsx'), 'utf8')
+
+    expect(actionSource).toContain('cost: null')
+    expect(actionSource).toContain('kosten_budget ist ein Planwert')
+    expect(attributionPage).not.toContain('Live-Auswertung')
+    expect(attributionPage).toContain('Ist-Ausgaben')
+    expect(consentPage).not.toContain('alert(')
+  })
+
+  it('does not expose a providerless execute button and requires an update receipt for approval', () => {
+    const actionPage = readFileSync(resolve(process.cwd(), 'src/app/marketing/aktion/page.tsx'), 'utf8')
+    const actionServer = readFileSync(resolve(process.cwd(), 'src/app/marketing/aktion/actions.ts'), 'utf8')
+
+    expect(actionPage).not.toContain("updateStatus(row.id, 'ausgefuehrt')")
+    expect(actionPage).toContain('Provider-Receipt')
+    expect(actionServer).toContain("eq(aktion.status, target.status)")
+    expect(actionServer).toContain('.returning({')
+    expect(actionServer).toContain('MARKETING_ACTION_STATUS_CONFLICT')
+  })
+})

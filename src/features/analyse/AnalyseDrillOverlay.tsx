@@ -28,7 +28,7 @@ export function AnalyseDrillOverlay({ tileKey, period, onClose }: Props) {
       const res = await getAnalyseTileDetail(tileKey!, period);
       if (!mounted) return;
       if (res.error) {
-        setError(res.error);
+        setError(res.error.message);
       } else {
         setDetail(res.data);
       }

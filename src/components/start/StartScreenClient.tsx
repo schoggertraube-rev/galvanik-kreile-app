@@ -2,7 +2,7 @@
 
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, useEffectEvent } from "react";
-import { Delete, Clock, Wrench, Calculator, Sun } from "lucide-react";
+import { Delete, Clock, Wrench, Sun } from "lucide-react";
 import { getGreeting } from "@/lib/greeting";
 import { EmailLoginDialog } from "@/components/start/EmailLoginDialog";
 import { useSearchParams } from "next/navigation";
@@ -108,8 +108,6 @@ function WeatherCard() {
   );
 }
 
-import { initializeDemoIfNeeded } from "@/app/actions/demoSetup";
-
 // PIN Dialog Component
 function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void }) {
   const [pin, setPin] = useState("");
@@ -126,24 +124,11 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
       setIsInitializing(true);
 
       try {
-        const res = await loginWithPin(user.id, newPin);
+        const res = await loginWithPin(user.selector, newPin);
 
         if (res.ok) {
-          // Setup / Initialisierung nur im echten Demo-Modus
-          if (process.env.NEXT_PUBLIC_DEMO_MODE === "true" && !localStorage.getItem("setup_done")) {
-            try {
-              const initRes = await initializeDemoIfNeeded();
-              if (initRes?.initialized || initRes?.reason === "data_exists" || initRes?.reason === "not_supabase") {
-                localStorage.setItem("setup_done", "true");
-              }
-            } catch (e) {
-              console.warn("Demo setup failed", e);
-            }
-          }
-
           // UI state in localStorage (not auth relevant)
           try {
-            localStorage.setItem("kreile_user_role", res.role || user.role);
             localStorage.setItem("kreile_user_initials", user.initials);
           } catch (e) {
             console.warn("localStorage is blocked, skipping user info storage", e);
@@ -199,13 +184,6 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
           <button onClick={onClose} className="text-text-muted hover:text-navy-900 text-2xl leading-none cursor-pointer" disabled={isInitializing}>×</button>
         </div>
 
-        {isInitializing && process.env.NEXT_PUBLIC_DEMO_MODE === "true" && !localStorage.getItem("setup_done") && (
-          <div className="bg-accent-orange/10 px-6 py-3 border-b border-accent-orange/20 flex flex-col items-center justify-center">
-             <span className="text-sm font-semibold text-accent-orange animate-pulse">Beispieldaten werden vorbereitet...</span>
-             <span className="text-xs text-text-muted text-center mt-1">Dieser Vorgang dauert einen Moment.</span>
-          </div>
-        )}
-
         {/* PIN Dots */}
         <div className="flex justify-center gap-4 py-7">
           {[0, 1, 2, 3].map((i) => (
@@ -220,7 +198,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
         {error && (
           <p className="text-center text-danger-red text-xs font-semibold -mt-4 mb-3">
             Falscher PIN. <button onClick={async () => {
-              const res = await notifyAdminPinReset(user.id, user.fullName);
+              const res = await notifyAdminPinReset(user.selector);
               if (res.success) {
                 alert("Der Administrator wurde benachrichtigt und wird sich bei Ihnen melden.");
               } else {
@@ -354,10 +332,10 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
       {/* User Avatar Kacheln */}
       <div className="flex gap-5 md:gap-7 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-300 fill-mode-both overflow-x-auto pb-4 snap-x">
         {users.map((user) => {
-          const Icon = user.role === "buero" ? Calculator : Wrench;
+          const Icon = Wrench;
           return (
             <button
-              key={user.id}
+              key={user.selector}
               onClick={() => setSelectedUser(user)}
               className="w-[220px] h-[260px] shrink-0 snap-center bg-bg-app-soft rounded-[28px] border border-neutral-gray-100 shadow-card hover:shadow-md hover:-translate-y-1 transition-all duration-300 active:scale-95 flex flex-col items-center justify-center gap-6 p-6 group cursor-pointer"
             >
@@ -388,30 +366,6 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
           Administrator / E-Mail Login
         </button>
 
-        {/* Robust Tablet Test Login */}
-        <button
-          onClick={() => {
-            try {
-              alert("Button wurde geklickt!"); // DEBUG
-              localStorage.setItem("kreile_user_role", "werkstatt");
-              localStorage.setItem("kreile_user_initials", "CD");
-              const isHttps = window.location.protocol === "https:";
-
-              // WARNING: Demo Cookies (bypass-auth, kreile_role) are no longer used for secure auth.
-              // They are still set here for the tablet test login fallback, but checkAppAuth will reject them in production.
-              document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-              document.cookie = `kreile_role=werkstatt; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-
-              window.location.href = "/";
-            } catch (err: unknown) {
-              alert("Fehler beim Login: " + (err as Error).message);
-            }
-          }}
-          className="mt-4 px-6 py-2 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-900 text-sm font-bold rounded-full transition-colors cursor-pointer flex items-center gap-2"
-        >
-          <span className="w-2 h-2 rounded-full bg-accent-orange animate-pulse"></span>
-          Tablet Test-Login (Werkstatt)
-        </button>
       </div>
 
       {selectedUser && (

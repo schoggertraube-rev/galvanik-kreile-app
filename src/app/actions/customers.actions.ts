@@ -6,19 +6,34 @@ import { eq, ilike, or, and, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { InferSelectModel } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
-import { Customer } from "@/lib/types/customer";
+import { Customer, type CustomerType } from "@/lib/types/customer";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization } from "@/lib/server/authorization";
 
 type DbCustomer = InferSelectModel<typeof customers>;
 
+function normalizedCustomerType(value: string | undefined | null, hasCompany = false): CustomerType {
+  if (value === "institution" || value === "Institution") return "institution";
+  if (value === "private" || value === "privat" || value === "Privatkunde") return "private";
+  if (value === "business" || value === "Geschäftskunde") return "business";
+  if (value === "lead") return hasCompany ? "business" : "private";
+  throw new Error("CUSTOMER_DATA_INVALID:type");
+}
+
+function imageUrls(value: unknown): string[] {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || entry.length > 2_048)) {
+    throw new Error("CUSTOMER_DATA_INVALID:image_urls");
+  }
+  return value;
+}
+
 function mapDbCustomer(c: DbCustomer): Customer {
   return {
     id: c.id,
-    customerNumber: c.customerNumber || c.id.substring(0, 8),
+    customerNumber: c.customerNumber || "Nicht vergeben",
     name: c.name,
     companyName: c.companyName || undefined,
-    type: c.type as import("@/lib/types/customer").CustomerType,
+    type: normalizedCustomerType(c.type, Boolean(c.companyName)),
     contactPerson: c.contactPerson || undefined,
     email: c.email || undefined,
     phone: c.phone || undefined,
@@ -30,38 +45,16 @@ function mapDbCustomer(c: DbCustomer): Customer {
     internalWarning: c.internalWarning || undefined,
     tags: (c.tags as string[]) || [],
     creditRating: c.creditRating || undefined,
-    imageUrls: (c.imageUrls as string[]) || [],
+    imageUrls: imageUrls(c.imageUrls),
     address: c.address || c.street || undefined, // fallback for legacy
     street: c.street || undefined,
     city: c.city || undefined,
     zipCode: c.zipCode || undefined,
     country: c.country || undefined,
-    createdAt: c.createdAt ? c.createdAt.toISOString() : new Date().toISOString(),
-    updatedAt: c.updatedAt ? c.updatedAt.toISOString() : new Date().toISOString(),
+    notes: c.notes || undefined,
+    createdAt: c.createdAt.toISOString(),
+    updatedAt: c.updatedAt.toISOString(),
   };
-}
-
-function sanitizeCustomerPayload(data: Record<string, unknown>, isUpdate = false): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(data)) {
-    if (value === undefined) continue;
-
-    if (['approvalProfile', 'paymentProfile', 'expectationProfile', 'technicalProfile'].includes(key)) {
-      result[key] = value ?? {};
-    } else if (key === 'tags') {
-      result[key] = value ?? [];
-    } else if (key === 'imageUrls') {
-      result[key] = value ?? [];
-    } else {
-      if (!isUpdate && value === null) {
-        continue;
-      }
-      result[key] = value;
-    }
-  }
-
-  return result;
 }
 
 export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
@@ -140,50 +133,38 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
   const validData = parsed.data;
 
   try {
-    const newId = (typeof data.id === 'string' ? data.id : undefined) || createId();
-    
-    const nameStr = validData.company || [validData.firstName, validData.lastName].filter(Boolean).join(" ");
-    const streetCombined = validData.street + " " + validData.houseNumber;
+    const newId = createId();
+    const companyName = validData.companyName || validData.company || null;
+    const personName = validData.name || [validData.firstName, validData.lastName].filter(Boolean).join(" ");
+    const nameStr = companyName || personName;
+    const composedStreet = [validData.street, validData.houseNumber].filter(Boolean).join(" ").trim();
+    const streetCombined = validData.address || composedStreet || null;
+    const type = normalizedCustomerType(validData.type || (companyName ? "business" : "private"), Boolean(companyName));
 
-    const rawCustomerDb = {
+    const newCustomerDb: typeof customers.$inferInsert = {
       id: newId,
       tenantId: tenantId,
-      customerNumber: `K-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      customerNumber: `K-${new Date().getFullYear()}-${newId.slice(0, 8).toUpperCase()}`,
       name: nameStr,
-      companyName: validData.company || null,
-      type: "business",
+      companyName,
+      type,
       address: streetCombined,
       street: streetCombined,
       city: validData.city || null,
-      zipCode: validData.postalCode || null,
+      zipCode: validData.postalCode || validData.zipCode || null,
       country: validData.country || null,
       imageUrls: validData.imageUrls || [],
       contactPerson: [validData.firstName, validData.lastName].filter(Boolean).join(" ") || null,
-      email: validData.email,
-      phone: validData.phone,
-      paymentProfile: null,
-      approvalProfile: null,
-      expectationProfile: null,
-      technicalProfile: null,
-      trustLevel: null,
-      internalWarning: null,
-      tags: null,
-      creditRating: null,
+      email: validData.email || null,
+      phone: validData.phone || null,
       notes: validData.notes || null,
+      behaviorNotes: validData.behaviorNote || null,
+      source: validData.source || "manual",
+      sourceRef: validData.sourceRef || null,
+      isLead: validData.isLead ?? validData.type === "lead",
     };
-    
-    const newCustomerDb = sanitizeCustomerPayload(rawCustomerDb, false);
-    
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await db.insert(customers).values(newCustomerDb as any);
-    
-    const dbCustomers = await db.select().from(customers).where(
-      and(
-        eq(customers.id, newId),
-        eq(customers.tenantId, tenantId)
-      )
-    ).limit(1);
-    if (dbCustomers.length === 0) throw new Error("Insert failed to return data");
+    const [created] = await db.insert(customers).values(newCustomerDb).returning();
+    if (!created) throw new Error("Insert failed to return data");
     
     try { 
       const { revalidatePath } = await import("next/cache");
@@ -193,7 +174,7 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
       revalidatePath("/warendurchlauf");
     } catch { /* ignore when not in Next runtime */ }
     
-    return { ok: true, data: mapDbCustomer(dbCustomers[0]) };
+    return { ok: true, data: mapDbCustomer(created) };
   } catch (error) {
     console.error("Failed to create customer in DB:", error);
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Erstellen des Kunden", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
@@ -204,38 +185,36 @@ export async function updateCustomerDb(id: string, changes: Partial<Customer>): 
   const auth = await checkAppAuth("write");
   if (!auth.ok) return auth;
 
+  const authRes = await resolveAuthorization();
+  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
+    return { ok: false, error: "UNKNOWN", message: "Ungültige Kunden-ID" };
+  }
+
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  
+
+  const { customerUpdateSchema } = await import("@/lib/validation/customerSchema");
+  const parsed = customerUpdateSchema.safeParse(changes);
+  if (!parsed.success) {
+    return { ok: false, error: "UNKNOWN", message: "Validierungsfehler", details: parsed.error.flatten().fieldErrors };
+  }
+
   try {
-    const rawUpdateData: Record<string, unknown> = {};
-    if (changes.name !== undefined) rawUpdateData.name = changes.name;
-    if (changes.companyName !== undefined) rawUpdateData.companyName = changes.companyName;
-    if (changes.type !== undefined) rawUpdateData.type = changes.type;
-    if (changes.address !== undefined) rawUpdateData.address = changes.address;
-    if (changes.city !== undefined) rawUpdateData.city = changes.city;
-    if (changes.zipCode !== undefined) rawUpdateData.zipCode = changes.zipCode;
-    if (changes.imageUrls !== undefined) rawUpdateData.imageUrls = changes.imageUrls;
-    if (changes.contactPerson !== undefined) rawUpdateData.contactPerson = changes.contactPerson;
-    if (changes.email !== undefined) rawUpdateData.email = changes.email;
-    if (changes.phone !== undefined) rawUpdateData.phone = changes.phone;
-    if (changes.paymentProfile !== undefined) rawUpdateData.paymentProfile = changes.paymentProfile;
-    if (changes.approvalProfile !== undefined) rawUpdateData.approvalProfile = changes.approvalProfile;
-    if (changes.expectationProfile !== undefined) rawUpdateData.expectationProfile = changes.expectationProfile;
-    if (changes.technicalProfile !== undefined) rawUpdateData.technicalProfile = changes.technicalProfile;
-    if (changes.trustLevel !== undefined) rawUpdateData.trustLevel = changes.trustLevel;
-    if (changes.internalWarning !== undefined) rawUpdateData.internalWarning = changes.internalWarning;
-    if (changes.tags !== undefined) rawUpdateData.tags = changes.tags;
-    if (changes.creditRating !== undefined) rawUpdateData.creditRating = changes.creditRating;
-    
-    const updateData = sanitizeCustomerPayload(rawUpdateData, true);
-    
-    if (Object.keys(updateData).length > 0) {
-      updateData.updatedAt = new Date();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await db.update(customers).set(updateData as any).where(eq(customers.id, id));
-    }
-    
-    return await getCustomerByIdDb(id);
+    const valid = parsed.data;
+    const updateData: Partial<typeof customers.$inferInsert> = {
+      ...valid,
+      type: valid.type === undefined
+        ? undefined
+        : normalizedCustomerType(valid.type, Boolean(valid.companyName)),
+      email: valid.email === "" ? null : valid.email,
+      updatedAt: new Date(),
+    };
+    const [updated] = await db.update(customers).set(updateData).where(and(
+      eq(customers.id, id),
+      eq(customers.tenantId, authRes.data.tenantId),
+      sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
+    )).returning();
+    return { ok: true, data: updated ? mapDbCustomer(updated) : null };
   } catch (error) {
     console.error("Failed to update customer in DB:", error);
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Aktualisieren des Kunden", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
@@ -298,6 +277,8 @@ export async function getTopKunden(limit = 5) {
     .where(
       and(
         eq(customers.tenantId, tenantId),
+        eq(ausgangsrechnung.tenantId, tenantId),
+        eq(ausgangsrechnung.isDemo, false),
         sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`
       )
     )

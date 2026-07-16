@@ -8,15 +8,15 @@ import { OrderTimeline } from "@/components/orders/OrderTimeline";
 import { OrderProfitabilityCard } from "@/components/orders/OrderProfitabilityCard";
 import { StationCompletionModal } from "@/components/orders/StationCompletionModal";
 import { LabelPrintView } from "@/components/orders/LabelPrintView";
-import { ErfassungCard } from "@/components/erfassung/ErfassungCard";
+import { CaptureCard } from "@/components/erfassung/CaptureCard";
 import { timelineRepository, TimelineEntry } from "@/lib/repositories/timelineRepository";
 import { ordersRepository, Order } from "@/lib/repositories/ordersRepository";
 import { Clock, Box, PhoneCall, CheckCircle2, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { getStationConfig } from "@/constants/stations";
-import { AppBackButton } from "@/components/ui/AppBackButton";
 import { customersRepository, Customer } from "@/lib/repositories/customersRepository";
+import { getOrderConnections, type OrderConnections } from "./orderConnections.actions";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
   usePageView();
@@ -26,25 +26,49 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [order, setOrder] = useState<Order | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [connections, setConnections] = useState<OrderConnections | null>(null);
+  const [connectionsError, setConnectionsError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
-      // Wenn "new" übergeben wird, ist das ein fehlerhafter Pfad durch Next.js Cache o.ä.
-      if (id === "new") return;
-      
-      const orders = await ordersRepository.getAll();
-      const o = orders.find(x => x.id === id || x.orderNumber === id) || orders[0];
-      setOrder(o);
-      
-      const custs = await customersRepository.getAll();
-      setCustomer(custs.find(c => c.id === o.customerId) || null);
+      if (id === "new") {
+        setLoadError("Der Pfad /orders/new ist kein gespeicherter Auftrag.");
+        return;
+      }
+      try {
+        setConnections(null);
+        setConnectionsError(null);
+        const orders = await ordersRepository.getAll();
+        const found = orders.find(x => x.id === id || x.orderNumber === id);
+        if (!found) {
+          setLoadError("Auftrag wurde nicht gefunden.");
+          return;
+        }
+        setOrder(found);
 
-      const t = await timelineRepository.getForOrder(o.id);
-      setTimeline(t);
+        const [custs, entries, connectionResult] = await Promise.all([
+          customersRepository.getAll(),
+          timelineRepository.getForOrder(found.id),
+          getOrderConnections(found.id),
+        ]);
+        setCustomer(custs.find(c => c.id === found.customerId) || null);
+        setTimeline(entries);
+        if (connectionResult.ok) {
+          setConnections(connectionResult.data);
+        } else {
+          setConnectionsError(connectionResult.message);
+        }
+        setLoadError(null);
+      } catch (error) {
+        console.error(error);
+        setLoadError(error instanceof Error ? error.message : "Auftragsdaten konnten nicht geladen werden.");
+      }
     }
     load();
   }, [id]);
 
+  if (loadError) return <div className="p-8 font-bold text-danger-red flex items-center justify-center min-h-screen">{loadError}</div>;
   if (!order) return <div className="p-8 font-bold text-text-muted flex items-center justify-center min-h-screen">Lade Auftrag...</div>;
 
   return (
@@ -136,7 +160,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           </div>
           
-          <ErfassungCard orderId={order.id} />
+          <CaptureCard orderId={order.id} stationKuerzel={order.currentStationId || order.station} />
           
           <OrderProfitabilityCard order={order} />
         </div>
@@ -144,49 +168,81 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         {/* Right Column (Timeline & Docs) */}
         <div className="lg:col-span-5 space-y-8">
           
-          {/* Vernetzte Bereiche */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white border-2 border-neutral-gray-200 rounded-3xl p-5 hover:border-navy-400 transition-colors shadow-sm">
-              <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-2">Kontrolle</span>
-              {(parseInt(order.orderNumber.replace(/\\D/g, '') || "0") % 2 === 0) ? (
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm font-black text-emerald-600 flex items-center gap-1"><CheckCircle2 className="w-4 h-4" /> QS Bestanden</span>
-                  <Link href={`/kontrolle?order=${order.orderNumber}`} className="text-xs text-navy-600 font-bold hover:underline">Prüfprotokoll öffnen</Link>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm font-black text-amber-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" /> Nacharbeit</span>
-                  <Link href={`/kontrolle?order=${order.orderNumber}`} className="text-xs text-navy-600 font-bold hover:underline">Details ansehen</Link>
-                </div>
-              )}
+          {/* Mandantengebundene, serverbestätigte Verknüpfungen */}
+          {connectionsError ? (
+            <div role="alert" className="bg-red-50 border-2 border-red-200 rounded-3xl p-5 text-sm font-bold text-red-800">
+              {connectionsError}
             </div>
+          ) : !connections ? (
+            <div className="animate-pulse bg-neutral-gray-100 rounded-3xl h-40" />
+          ) : (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white border-2 border-neutral-gray-200 rounded-3xl p-5 shadow-sm">
+                <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-2">Qualitätskontrolle</span>
+                {connections.quality ? (
+                  <div className="flex flex-col gap-1">
+                    <span className={`text-sm font-black flex items-center gap-1 ${connections.quality.result.toLowerCase() === "bestanden" ? "text-emerald-700" : "text-amber-700"}`}>
+                      {connections.quality.result.toLowerCase() === "bestanden"
+                        ? <CheckCircle2 className="w-4 h-4" />
+                        : <AlertTriangle className="w-4 h-4" />}
+                      {connections.quality.result}
+                    </span>
+                    <span className="text-xs font-semibold text-text-muted">
+                      Geprüft {new Date(connections.quality.inspectedAt).toLocaleDateString("de-DE")}
+                      {connections.quality.examiner ? ` · ${connections.quality.examiner}` : ""}
+                    </span>
+                    <Link href={`/kontrolle?order=${encodeURIComponent(order.orderNumber)}`} className="text-xs text-navy-600 font-bold hover:underline">Prüfdatensatz öffnen</Link>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-bold text-text-muted">Keine QS-Prüfung verknüpft</span>
+                    <Link href={`/kontrolle?order=${encodeURIComponent(order.orderNumber)}`} className="text-xs text-navy-600 font-bold hover:underline">Zur Qualitätskontrolle</Link>
+                  </div>
+                )}
+              </div>
 
-            <div className="bg-white border-2 border-neutral-gray-200 rounded-3xl p-5 hover:border-navy-400 transition-colors shadow-sm">
-              <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-2">Rechnung</span>
-              {order.status === "completed" || order.status === "done" ? (
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm font-black text-navy-900">RE-{new Date().getFullYear()}-{order.orderNumber.substring(0,4)}</span>
-                  <Link href={`/buchhaltung/rechnungen/1`} className="text-xs text-navy-600 font-bold hover:underline">Rechnung anzeigen</Link>
-                </div>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm font-bold text-text-muted italic">Noch nicht abgerechnet</span>
-                </div>
-              )}
-            </div>
-            
-            <div className="col-span-2 bg-linear-to-r from-blue-50 to-indigo-50 border-2 border-blue-100 rounded-3xl p-5 shadow-sm">
-              <div className="flex justify-between items-center">
-                <div>
-                  <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider block mb-1">Marketing-Quelle</span>
-                  <span className="text-sm font-black text-navy-900">Empfehlung / Bestandskunde</span>
-                </div>
-                <Link href="/marketing/attribution" className="text-xs font-bold text-blue-600 bg-white px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50">
-                  Kampagne ansehen
-                </Link>
+              <div className="bg-white border-2 border-neutral-gray-200 rounded-3xl p-5 shadow-sm">
+                <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-2">Rechnung</span>
+                {connections.invoice ? (
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-black text-navy-900">{connections.invoice.number}</span>
+                    <span className="text-xs font-semibold text-text-muted">
+                      {connections.invoice.status} · {connections.invoice.grossEur.toLocaleString("de-DE", { style: "currency", currency: "EUR" })}
+                    </span>
+                    <Link href={`/buchhaltung/rechnungen/${connections.invoice.id}`} className="text-xs text-navy-600 font-bold hover:underline">Rechnung anzeigen</Link>
+                  </div>
+                ) : (
+                  <span className="text-sm font-bold text-text-muted">Keine Rechnung mit diesem Auftrag verknüpft</span>
+                )}
+              </div>
+
+              <div className="col-span-2 bg-blue-50 border-2 border-blue-100 rounded-3xl p-5 shadow-sm">
+                <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider block mb-1">Anfrage- und Marketingquelle</span>
+                {connections.marketing ? (
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <span className="text-sm font-black text-navy-900 block">{connections.marketing.sourceLabel}</span>
+                      <span className="text-xs font-semibold text-text-muted">
+                        Typ: {connections.marketing.sourceType}
+                        {connections.marketing.touchpoint ? ` · Kanal: ${connections.marketing.touchpoint.channel}` : ""}
+                        {connections.marketing.confidencePercent !== null ? ` · Konfidenz: ${connections.marketing.confidencePercent.toLocaleString("de-DE")} %` : ""}
+                      </span>
+                    </div>
+                    <Link href="/marketing/attribution" className="text-xs font-bold text-blue-700 bg-white px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-100">
+                      Attribution öffnen
+                    </Link>
+                  </div>
+                ) : (
+                  <span className="text-sm font-bold text-text-muted">Keine Anfrage oder Marketingquelle mit diesem Auftrag verknüpft</span>
+                )}
+                {connections.warnings.length > 0 && (
+                  <ul className="mt-3 space-y-1 text-xs font-semibold text-amber-800">
+                    {connections.warnings.map((warning) => <li key={warning}>Datenhinweis: {warning}</li>)}
+                  </ul>
+                )}
               </div>
             </div>
-          </div>
+          )}
           <div className="bg-white border-2 border-neutral-gray-300 rounded-3xl p-6 md:p-8 shadow-sm">
             <OrderTimeline entries={timeline} />
           </div>
