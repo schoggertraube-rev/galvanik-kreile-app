@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useErfassung } from "../ErfassungProvider";
 import { User, Sparkles, ChevronDown, Check, Loader2 } from "lucide-react";
 import { CustomerSection } from "./CustomerSection";
 import { ItemsSection } from "./ItemsSection";
 import { DateSection } from "./DateSection";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
+import { isRouteTemplateId } from "@/lib/orders/routeSnapshot";
 
 type ManualDateInfo = {
   dueDate?: string;
@@ -29,6 +30,7 @@ export function ManualWizard() {
   const [behaviorNote, setBehaviorNote] = useState((options?.prefill?.behaviorNote as string) || "");
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const createRequestId = useRef(crypto.randomUUID());
   const [successResult, setSuccessResult] = useState<{ isQuote?: boolean; orderNumber?: string; id?: string } | null>(null);
   const { openErfassung } = useErfassung();
 
@@ -75,17 +77,22 @@ export function ManualWizard() {
         const surfaceRequested = typeof item.target === "string"
           ? item.target.trim()
           : (typeof item.surfaceRequested === "string" ? item.surfaceRequested.trim() : "");
+        if (!isRouteTemplateId(item.routeTemplateId)) {
+          throw new Error(`Position ${index + 1} benötigt eine bestätigte Positionsroute.`);
+        }
         return {
           name,
           quantity,
           ...(material ? { material } : {}),
           ...(surfaceRequested ? { surfaceRequested } : {}),
+          routeTemplateId: item.routeTemplateId,
         };
       });
       const title = orderParts[0]?.name;
       if (!title) throw new Error("Der Auftrag benötigt einen belastbaren Titel.");
 
       const created = await ordersRepository.create({
+        clientRequestId: createRequestId.current,
         customerId: customer.id,
         title,
         parts: orderParts,

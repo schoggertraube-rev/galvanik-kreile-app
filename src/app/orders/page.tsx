@@ -31,7 +31,7 @@ import { getCustomersDb } from "@/app/actions/customers.actions";
 import type { Customer } from "@/lib/types/customer";
 import type { OrderResponse } from "@/app/actions/orders.actions";
 
-type Order = any; // Fallback since Order was from repo
+type Order = OrderResponse;
 import { usePageView } from "@/hooks/usePageView";
 import { OrderWideCard, type UrgencyType } from "@/components/orders/OrderWideCard";
 import { useAppShortcut } from "@/components/ui/AppShortcutContext";
@@ -62,6 +62,8 @@ function OrdersPageInner() {
   }
 
   const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [customersList, setCustomersList] = useState<Customer[]>([]);
   
@@ -73,25 +75,36 @@ function OrdersPageInner() {
     const loadData = async () => {
       try {
         const dbOrdersResult = await getOrdersDb();
-        if (dbOrdersResult && !dbOrdersResult.ok && dbOrdersResult.error === "UNAUTHORIZED") {
-          router.push("/start?reason=session_expired");
+        if (!dbOrdersResult.ok) {
+          if (dbOrdersResult.error === "UNAUTHORIZED") {
+            router.push("/start?reason=session_expired");
+          } else if (isMounted) {
+            setLoadError(dbOrdersResult.message);
+          }
           return;
         }
-        if (isMounted && dbOrdersResult.ok) {
-          setOrders(dbOrdersResult.data as any);
-      console.log("[ORDERS_CLIENT]", (dbOrdersResult.data as any).map((o:any)=>({id:o.id, number:o.orderNumber, source:o.source})) );
+        if (isMounted) {
+          setOrders(dbOrdersResult.data);
+          setLoadError(null);
         }
         
         const dbCustomersResult = await getCustomersDb();
-        if (dbCustomersResult && !dbCustomersResult.ok && dbCustomersResult.error === "UNAUTHORIZED") {
-          router.push("/start?reason=session_expired");
+        if (!dbCustomersResult.ok) {
+          if (dbCustomersResult.error === "UNAUTHORIZED") {
+            router.push("/start?reason=session_expired");
+          } else if (isMounted) {
+            setLoadError(dbCustomersResult.message);
+          }
           return;
         }
-        if (isMounted && dbCustomersResult.ok) {
-          setCustomersList(dbCustomersResult.data as any);
+        if (isMounted) {
+          setCustomersList(dbCustomersResult.data);
         }
       } catch (e) {
         console.error("Fehler beim Laden aus Repositories", e);
+        if (isMounted) setLoadError("Auftragsdaten konnten nicht geladen werden.");
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
     };
     loadData();
@@ -138,7 +151,7 @@ function OrdersPageInner() {
 
     // 5. Surface filter
     if (surfaceFilter) {
-      const text = (o.task + " " + (o.parts?.map((p: any) => p.surfaceRequested || p.finish).join(" ") || "")).toLowerCase();
+      const text = (o.task + " " + (o.parts?.map((p) => p.surfaceRequested).join(" ") || "")).toLowerCase();
       if (!text.includes(surfaceFilter.toLowerCase())) return false;
     }
 
@@ -269,6 +282,12 @@ function OrdersPageInner() {
         <button className="btn-new py-1.5 px-3 text-xs" onClick={() => openShortcut("new_order")}>+ Neu</button>
       </div>
 
+      {loadError && (
+        <div role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          {loadError}
+        </div>
+      )}
+
       <div className="status-strip">
         <div className="sr" style={{ flex: counts.red || 0.1 }}></div>
         <div className="sa" style={{ flex: counts.orange || 0.1 }}></div>
@@ -313,7 +332,12 @@ function OrdersPageInner() {
 
       <div className="count-line">{filteredOrders.length} Aufträge gefunden</div>
 
-      {filteredOrders.length > 0 ? (
+      {isLoading && orders.length === 0 ? (
+        <div className="p-12 text-center text-text-muted bg-[#faf8f4] border border-[#d8d0c4] rounded-xl space-y-2 mt-4">
+          <RefreshCw className="h-8 w-8 mx-auto text-[#9e9689] animate-spin" />
+          <p className="font-bold text-[#5e5850]">Auftragsdaten werden geladen</p>
+        </div>
+      ) : filteredOrders.length > 0 ? (
         <div className="card-list">
           {filteredOrders.map((order) => {
             const u = getUrgency(order.dueDate);
@@ -322,7 +346,7 @@ function OrdersPageInner() {
             else if (order.risk === "orange" || u === "gefaehrdet") urgencyType = "soon";
             else if (order.risk === "blocked") urgencyType = "wait";
 
-            const textForSurface = (order.task + " " + (order.parts?.map((p: any) => p.surfaceRequested || p.finish).join(" ") || "")).toLowerCase();
+            const textForSurface = (order.task + " " + (order.parts?.map((p) => p.surfaceRequested).join(" ") || "")).toLowerCase();
             let surfaceKey: "chrom" | "nickel" | "gold" | "kupfer" | "zink" | "offen" = "offen";
             if (textForSurface.includes("chrom")) surfaceKey = "chrom";
             else if (textForSurface.includes("nickel")) surfaceKey = "nickel";
@@ -358,8 +382,8 @@ function OrdersPageInner() {
       ) : (
         <div className="p-12 text-center text-text-muted bg-[#faf8f4] border border-[#d8d0c4] rounded-xl space-y-2 mt-4">
           <Package className="h-8 w-8 mx-auto text-[#9e9689] animate-pulse" />
-          <p className="font-bold text-[#5e5850]">Noch keine Aufträge erfasst</p>
-          <p className="text-xs">Passe den Filter oder den Suchbegriff an.</p>
+          <p className="font-bold text-[#5e5850]">{loadError ? "Aufträge nicht verfügbar" : "Noch keine Aufträge erfasst"}</p>
+          <p className="text-xs">{loadError ? "Die Datenquelle hat keinen bestätigten Erfolg geliefert." : "Passe den Filter oder den Suchbegriff an."}</p>
         </div>
       )}
 

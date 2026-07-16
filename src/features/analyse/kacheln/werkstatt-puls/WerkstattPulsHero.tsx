@@ -37,7 +37,9 @@ export function WerkstattPulsHero({ data }: Props) {
               )}
             </>
           ) : (
-            <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>Nicht messbar (Keine fertigen Aufträge)</div>
+            <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>
+              {(hero.wochenzielIst ?? 0) > 0 ? 'Nicht messbar: abgeschlossene Aufträge ohne Kundenzusage' : 'Nicht messbar: keine abgeschlossenen Aufträge im Zeitraum'}
+            </div>
           )}
         </div>
 
@@ -63,7 +65,7 @@ export function WerkstattPulsHero({ data }: Props) {
 
         {/* Wochenziel */}
         <div>
-          <div className="kpi-label">Wochenziel</div>
+          <div className="kpi-label">Periodenziel</div>
           {hero.wochenzielSoll ? (
             <>
               <div>
@@ -80,7 +82,7 @@ export function WerkstattPulsHero({ data }: Props) {
               <div>
                 <span className="kpi-value">{hero.wochenzielIst}</span>
               </div>
-              <div className="kpi-trend">Diese Woche fertig</div>
+              <div className="kpi-trend">Im gewählten Zeitraum abgeschlossen</div>
               <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 14 }}>Ziel nicht konfiguriert</div>
             </>
           )}

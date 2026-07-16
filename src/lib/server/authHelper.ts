@@ -5,7 +5,7 @@ export type ActionResult<T> =
   | { ok: true; data: T }
   | {
       ok: false;
-      error: "UNAUTHORIZED" | "FORBIDDEN" | "DB_ERROR" | "NETWORK_ERROR" | "UNKNOWN" | "EMPTY_RESULT";
+      error: "UNAUTHORIZED" | "FORBIDDEN" | "DB_ERROR" | "NETWORK_ERROR" | "UNKNOWN" | "EMPTY_RESULT" | "CONFLICT";
       message: string;
       details?: unknown;
     };

@@ -179,7 +179,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white border-2 border-neutral-gray-200 rounded-3xl p-5 shadow-sm">
                 <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-2">Qualitätskontrolle</span>
-                {connections.quality ? (
+                {connections.capabilities.quality === "forbidden" ? (
+                  <span className="text-sm font-bold text-text-muted">QS-Daten sind für diese Rolle nicht freigegeben</span>
+                ) : connections.quality ? (
                   <div className="flex flex-col gap-1">
                     <span className={`text-sm font-black flex items-center gap-1 ${connections.quality.result.toLowerCase() === "bestanden" ? "text-emerald-700" : "text-amber-700"}`}>
                       {connections.quality.result.toLowerCase() === "bestanden"
@@ -203,7 +205,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
               <div className="bg-white border-2 border-neutral-gray-200 rounded-3xl p-5 shadow-sm">
                 <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block mb-2">Rechnung</span>
-                {connections.invoice ? (
+                {connections.capabilities.invoice === "forbidden" ? (
+                  <span className="text-sm font-bold text-text-muted">Rechnungsdaten sind für diese Rolle nicht freigegeben</span>
+                ) : connections.invoice ? (
                   <div className="flex flex-col gap-1">
                     <span className="text-sm font-black text-navy-900">{connections.invoice.number}</span>
                     <span className="text-xs font-semibold text-text-muted">
@@ -218,7 +222,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
               <div className="col-span-2 bg-blue-50 border-2 border-blue-100 rounded-3xl p-5 shadow-sm">
                 <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider block mb-1">Anfrage- und Marketingquelle</span>
-                {connections.marketing ? (
+                {connections.capabilities.marketing === "forbidden" ? (
+                  <span className="text-sm font-bold text-text-muted">Marketing-Attribution ist für diese Rolle nicht freigegeben</span>
+                ) : connections.marketing ? (
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <span className="text-sm font-black text-navy-900 block">{connections.marketing.sourceLabel}</span>

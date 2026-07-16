@@ -59,6 +59,9 @@ export class InstagramAdapter implements ChannelAdapter {
   }
 
   async publish(aktion: AktionVorschlag): Promise<ChannelPublishResult> {
+    if (aktion.publishCapability !== 'ready' || aktion.status !== 'freigegeben' || aktion.kanal !== 'instagram') {
+      return { success: false, message: aktion.publishReason || PUBLISH_MESSAGES.ACTION_NOT_APPROVED }
+    }
     if (!aktion.assetId) {
       return { success: false, message: PUBLISH_MESSAGES.ASSET_REQUIRED }
     }

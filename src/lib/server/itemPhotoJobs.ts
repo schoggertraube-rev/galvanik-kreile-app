@@ -1,7 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-type ItemPhotoSupabaseClient = SupabaseClient<any, "public", "public", any, any>;
+type ItemPhotoSupabaseClient = SupabaseClient;
 
 export type ValidatedItemPhoto = {
   bytes: Uint8Array;

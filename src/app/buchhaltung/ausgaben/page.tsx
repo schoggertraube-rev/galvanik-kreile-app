@@ -2,9 +2,9 @@
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 import { usePageView } from "@/hooks/usePageView";
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import Link from "next/link";
-import { BarChart3, ChevronRight, Database, Wallet } from "lucide-react";
+import { BarChart3, ChevronRight, Database, RefreshCw, Wallet } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { getAusgabenKategorien } from '@/app/buchhaltung/analysis.actions';
 
@@ -12,11 +12,30 @@ export default function AusgabenPage() {
   usePageView();
 
   const [categories, setCategories] = useState<Awaited<ReturnType<typeof getAusgabenKategorien>>>([]);
-  const [loadError, setLoadError] = useState(false);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getAusgabenKategorien().then(setCategories).catch(() => setLoadError(true));
+  const load = useCallback(() => {
+    return getAusgabenKategorien()
+      .then((nextCategories) => {
+      setCategories(nextCategories);
+      setLoadError(null);
+      setLoadState("ready");
+      })
+      .catch((error: unknown) => {
+        setCategories([]);
+        setLoadError(error instanceof Error ? error.message : "Ausgabendaten konnten nicht geladen werden.");
+        setLoadState("error");
+      });
   }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  function retryLoad() {
+    setLoadState("loading");
+    setLoadError(null);
+    void load();
+  }
 
   const gesamt = categories.reduce((s, k) => s + k.sum, 0);
   const receiptCount = categories.reduce((sum, entry) => sum + entry.count, 0);
@@ -52,10 +71,22 @@ export default function AusgabenPage() {
         </div>
         <div className="text-right">
           <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-1">Gesamtausgaben</div>
-          <div className="text-3xl font-extrabold text-rose-600">{gesamt.toLocaleString("de-DE")} €</div>
+          <div className="text-3xl font-extrabold text-rose-600">{loadState === "ready" ? `${gesamt.toLocaleString("de-DE")} €` : "—"}</div>
         </div>
       </div>
 
+      {loadState === "loading" ? (
+        <div role="status" className="mb-10 rounded-2xl border border-neutral-200 bg-white p-8 text-center text-neutral-600">Ausgabenbelege werden geladen …</div>
+      ) : loadState === "error" ? (
+        <div role="alert" className="mb-10 rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-800">
+          <p className="font-bold">Ausgabendaten nicht verfügbar</p>
+          <p className="mt-1 text-sm">{loadError}</p>
+          <button type="button" onClick={retryLoad} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-rose-700 px-4 py-2 text-sm font-bold text-white">
+            <RefreshCw className="h-4 w-4" /> Erneut laden
+          </button>
+        </div>
+      ) : (
+      <>
       <h2 className="text-sm font-semibold text-neutral-600 mb-3">Datenbasis</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100 flex flex-col relative overflow-hidden">
@@ -86,8 +117,6 @@ export default function AusgabenPage() {
           </div>
         </div>
       </div>
-
-      {loadError && <p className="mb-6 text-sm font-semibold text-rose-600">Ausgabendaten konnten nicht geladen werden.</p>}
 
       {/* Kategorie-Karten */}
       <h2 className="text-sm font-semibold text-neutral-600 mb-3">Detail-Aufschlüsselung</h2>
@@ -133,6 +162,8 @@ export default function AusgabenPage() {
           );
         })}
       </div>
+      </>
+      )}
 
       <FeedbackFooter pageTitle="Ausgaben" route="/buchhaltung/ausgaben" variant="full" />
     </div>

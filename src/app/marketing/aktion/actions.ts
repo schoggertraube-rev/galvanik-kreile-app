@@ -33,24 +33,49 @@ export async function getAktionById(id: string) {
 
 export async function createAktion(formData: FormData) {
   await requireMarketingWrite();
+  const clientRequestId = formData.get("clientRequestId")?.toString();
   const titel = formData.get("titel")?.toString();
   const typ = formData.get("typ")?.toString(); // post, mail, review_request
   const kanalId = formData.get("kanalId")?.toString();
   const segmentId = formData.get("segmentId")?.toString();
   const inhalt = formData.get("inhalt")?.toString();
 
-  if (!titel || titel.length > 200 || !typ || !['post', 'mail', 'review_request', 'ad'].includes(typ) || !kanalId || (inhalt?.length || 0) > 10_000) {
+  if (!clientRequestId || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientRequestId)
+    || !titel || titel.length > 200 || !typ || !['post', 'mail', 'review_request', 'ad'].includes(typ)
+    || !kanalId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(kanalId)
+    || (segmentId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(segmentId))
+    || (inhalt?.length || 0) > 10_000) {
     throw new Error("Pflichtfelder fehlen oder sind ungültig");
   }
 
+  const content = inhalt ? { text: inhalt } : null;
   const result = await db.insert(aktion).values({
+    id: clientRequestId,
     titel,
     typ,
     kanalId,
     segmentId: segmentId || null,
-    inhalt: inhalt ? { text: inhalt } : null,
+    inhalt: content,
     status: "vorschlag"
-  }).returning();
+  }).onConflictDoNothing({ target: aktion.id }).returning();
+
+  if (!result[0]) {
+    const [existing] = await db.select().from(aktion).where(eq(aktion.id, clientRequestId)).limit(1);
+    const existingText = existing?.inhalt && typeof existing.inhalt === 'object' && !Array.isArray(existing.inhalt)
+      ? (existing.inhalt as Record<string, unknown>).text
+      : null;
+    if (!existing
+      || existing.titel !== titel
+      || existing.typ !== typ
+      || existing.kanalId !== kanalId
+      || existing.segmentId !== (segmentId || null)
+      || existingText !== (inhalt || null)
+      || existing.status !== 'vorschlag') {
+      throw new Error('MARKETING_ACTION_REQUEST_CONFLICT');
+    }
+    revalidatePath("/marketing/aktion");
+    return existing;
+  }
 
   revalidatePath("/marketing/aktion");
   return result[0];

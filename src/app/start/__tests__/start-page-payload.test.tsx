@@ -21,12 +21,14 @@ vi.mock("@/db/schema", () => ({
     id: "id",
     fullName: "full_name",
     role: "role",
+    tenantId: "tenant_id",
     active: "active",
   },
 }));
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn(),
+  and: vi.fn(),
 }));
 
 vi.mock("@/lib/server/pinLoginSelector", () => ({

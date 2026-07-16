@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { X, ExternalLink } from "lucide-react";
+import { X } from "lucide-react";
 import { AnalyseTileKey, AnalyseTileDetail } from "@/lib/analyse/dataContracts";
 import { getAnalyseTileDetail } from "@/features/analyse/analyse.actions";
 import { WerkstattPulsLevel2 } from "./kacheln/werkstatt-puls/WerkstattPulsLevel2";
@@ -13,34 +13,47 @@ interface Props {
 }
 
 export function AnalyseDrillOverlay({ tileKey, period, onClose }: Props) {
-  const [detail, setDetail] = useState<AnalyseTileDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const requestKey = tileKey ? `${tileKey}\u0000${period}` : "";
+  const [loadState, setLoadState] = useState<{
+    requestKey: string;
+    detail: AnalyseTileDetail | null;
+    error: string | null;
+  }>({ requestKey: "", detail: null, error: null });
 
   useEffect(() => {
     if (!tileKey) return;
-    
+    const activeTileKey = tileKey;
+
     let mounted = true;
-    setIsLoading(true);
-    setError(null);
 
     async function load() {
-      const res = await getAnalyseTileDetail(tileKey!, period);
-      if (!mounted) return;
-      if (res.error) {
-        setError(res.error.message);
-      } else {
-        setDetail(res.data);
+      try {
+        const res = await getAnalyseTileDetail(activeTileKey, period);
+        if (!mounted) return;
+        setLoadState({
+          requestKey,
+          detail: res.error ? null : res.data,
+          error: res.error ? res.error.message : null,
+        });
+      } catch (loadError) {
+        if (!mounted) return;
+        setLoadState({
+          requestKey,
+          detail: null,
+          error: loadError instanceof Error ? loadError.message : "Analysedaten nicht verfügbar",
+        });
       }
-      setIsLoading(false);
     }
 
-    load();
+    void load();
 
     return () => { mounted = false; };
-  }, [tileKey, period]);
+  }, [tileKey, period, requestKey]);
 
   if (!tileKey) return null;
+  const isLoading = loadState.requestKey !== requestKey;
+  const detail = isLoading ? null : loadState.detail;
+  const error = isLoading ? null : loadState.error;
 
   return (
     <div className="fixed inset-0 z-[2000] bg-[#f1e9dc] overflow-y-auto" onClick={onClose}>
@@ -86,14 +99,14 @@ export function AnalyseDrillOverlay({ tileKey, period, onClose }: Props) {
                   {detail.charts.map(chart => (
                     <div key={chart.id} className="p-6 border border-[var(--ci-border)] rounded-xl">
                       <h3 className="font-semibold mb-4 text-[var(--ci-ink)]">{chart.title}</h3>
-                      {chart.emptyState ? (
+                      {chart.emptyState || chart.dataset.length === 0 ? (
                         <div className="flex flex-col items-center justify-center p-8 bg-gray-50 rounded-lg text-center border border-dashed border-gray-200">
-                          <div className="font-semibold text-gray-700">{chart.emptyState.title}</div>
-                          <div className="text-sm text-gray-500 mt-2 max-w-sm">{chart.emptyState.description}</div>
+                          <div className="font-semibold text-gray-700">{chart.emptyState?.title || 'Keine Diagrammdaten'}</div>
+                          <div className="text-sm text-gray-500 mt-2 max-w-sm">{chart.emptyState?.description || 'Für diesen Zeitraum ist kein gespeicherter Datensatz vorhanden.'}</div>
                         </div>
                       ) : (
-                        <div className="h-48 flex items-center justify-center bg-gray-50 text-gray-400 rounded-lg">
-                          [Chart Placeholder: {chart.type}]
+                        <div className="min-h-24 flex items-center justify-center bg-gray-50 text-gray-600 rounded-lg p-6 text-center">
+                          {chart.dataset.length} gespeicherte Datenpunkte · Visualisierungstyp „{chart.type}“ ist in dieser Ansicht noch nicht umgesetzt.
                         </div>
                       )}
                     </div>

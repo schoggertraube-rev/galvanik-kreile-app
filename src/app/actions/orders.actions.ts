@@ -1,46 +1,53 @@
 "use server";
 
 import { db } from "@/db";
-import { orders, items, customers, events } from "@/db/schema";
+import { orders, customers, events } from "@/db/schema";
 import { eq, or, and, sql, notInArray, notIlike, ilike } from "drizzle-orm";
-import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
+import { ActionResult } from "@/lib/server/authHelper";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { revalidatePath, unstable_noStore as noStore } from "next/cache";
 import { orderSchema, scanOrderRequestSchema, type OrderInput } from "@/lib/validation/orderSchema";
 import {
   createOperationalOrderService,
   invalidateOperationalOrdersCache,
+  type OperationalOrder,
   OperationalOrderPersistenceError,
 } from "@/lib/server/operationalOrders";
 import {
   canTransitionOrderStatus,
-  isCompletedOrderStatus,
+  getProcessTransitionConflict,
   isTerminalOrderStatus,
   normalizeStoredOrderStatus,
-  ORDER_STATIONS,
   orderUpdateSchema,
   parseOrderIdentifier,
+  parseOrderStation,
   processTransitionSchema,
+  requiredPermissionsForOrderUpdate,
   type OrderStation,
   type OrderStatus,
 } from "@/lib/orders/orderMutationContract";
+import type { PermissionKey } from "@/lib/auth/authorizationContract";
 
 // DTO Typen (zur Vereinfachung)
-export type OrderResponse = Record<string, unknown>;
+export type OrderResponse = OperationalOrder;
 
 type OrderWriteActor = { tenantId: string; userId: string };
 
-async function requireOrderWrite(): Promise<ActionResult<OrderWriteActor>> {
+async function requireOrderAccess(...permissions: PermissionKey[]): Promise<ActionResult<OrderWriteActor>> {
   const authorization = await resolveAuthorization();
   if (!authorization.ok) {
     return {
       ok: false,
-      error: authorization.reason === "AUTHORIZATION_UNAVAILABLE" ? "DB_ERROR" : "UNAUTHORIZED",
+      error: authorization.reason === "AUTHORIZATION_UNAVAILABLE"
+        ? "DB_ERROR"
+        : authorization.reason === "TENANT_SUSPENDED" || authorization.reason === "TENANT_MAINTENANCE"
+          ? "FORBIDDEN"
+          : "UNAUTHORIZED",
       message: authorization.message,
     };
   }
-  if (!authorization.data.permissions.includes("perm_data_orders")) {
-    return { ok: false, error: "FORBIDDEN", message: "Keine Berechtigung zum Anlegen von Aufträgen." };
+  if (permissions.some((permission) => !authorization.data.permissions.includes(permission))) {
+    return { ok: false, error: "FORBIDDEN", message: "Keine Berechtigung für diese Auftragsaktion." };
   }
   return {
     ok: true,
@@ -76,10 +83,11 @@ async function persistValidatedOrder(
         station: persisted.order.currentStationId || "wareneingang",
         currentStationId: persisted.order.currentStationId || "wareneingang",
         status: persisted.order.status,
-        risk: persisted.order.priorityComputed || "green",
+        risk: persisted.order.priorityComputed || "unknown",
         source: persisted.order.source || undefined,
         dueDate: persisted.order.dueDate?.toISOString(),
         isQuote: persisted.order.isQuote === true,
+        replayed: persisted.replayed,
         parts: persisted.items.map((part) => ({
           id: part.id,
           orderId: part.orderId,
@@ -106,12 +114,12 @@ async function persistValidatedOrder(
 
 export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const actor = await requireOrderAccess("perm_view_leitstand");
+  if (!actor.ok) return actor;
 
   try {
     const { getOperationalOrders } = await import("@/lib/server/operationalOrders");
-    const data = await getOperationalOrders();
+    const data = await getOperationalOrders(actor.data.tenantId);
     return { ok: true, data: data as OrderResponse[] };
   } catch (error: unknown) {
     console.error("[DB_ERROR_DETAIL]", error);
@@ -122,8 +130,8 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
 /** Leichtgewichtige Variante nur für Header-Badge — führt nur COUNT(*) aus. */
 export async function getOrderCountDb(): Promise<ActionResult<{ count: number }>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const actor = await requireOrderAccess("perm_view_leitstand");
+  if (!actor.ok) return actor;
 
   try {
     const result = await db
@@ -131,7 +139,7 @@ export async function getOrderCountDb(): Promise<ActionResult<{ count: number }>
       .from(orders)
       .where(
         and(
-          eq(orders.tenantId, "galvanik-kreile"),
+          eq(orders.tenantId, actor.data.tenantId),
           notInArray(
             sql`coalesce(${orders.source}, 'manual')`,
             ["seed", "test", "demo", "integration-test"]
@@ -148,7 +156,7 @@ export async function getOrderCountDb(): Promise<ActionResult<{ count: number }>
 }
 
 export async function createOrderDb(data: unknown): Promise<ActionResult<Record<string, unknown>>> {
-  const actor = await requireOrderWrite();
+  const actor = await requireOrderAccess("perm_data_orders");
   if (!actor.ok) return actor;
 
   const parsed = orderSchema.safeParse(data);
@@ -165,9 +173,6 @@ export async function createOrderDb(data: unknown): Promise<ActionResult<Record<
 }
 
 export async function updateOrderDb(identifierValue: unknown, changesValue: unknown): Promise<ActionResult<Record<string, unknown>>> {
-  const actor = await requireOrderWrite();
-  if (!actor.ok) return actor;
-
   let identifier: string;
   try {
     identifier = parseOrderIdentifier(identifierValue);
@@ -183,6 +188,8 @@ export async function updateOrderDb(identifierValue: unknown, changesValue: unkn
       details: parsedChanges.error.flatten().fieldErrors,
     };
   }
+  const actor = await requireOrderAccess(...requiredPermissionsForOrderUpdate(parsedChanges.data));
+  if (!actor.ok) return actor;
 
   try {
     const updated = await db.transaction(async (tx) => {
@@ -197,36 +204,7 @@ export async function updateOrderDb(identifierValue: unknown, changesValue: unkn
         .for("update"))[0];
       if (!current) return null;
 
-      const currentStatus = normalizeStoredOrderStatus(current.status);
-      if (currentStatus === "unknown" && parsedChanges.data.status !== undefined) {
-        throw new Error("UNKNOWN_STORED_ORDER_STATUS");
-      }
-      if (
-        currentStatus !== "unknown"
-        && isTerminalOrderStatus(currentStatus)
-        && (parsedChanges.data.status !== undefined || parsedChanges.data.currentStationId !== undefined)
-      ) {
-        throw new Error("TERMINAL_ORDER_IMMUTABLE");
-      }
-      if (
-        parsedChanges.data.status !== undefined
-        && currentStatus !== "unknown"
-        && !canTransitionOrderStatus(currentStatus, parsedChanges.data.status)
-      ) {
-        throw new Error("INVALID_ORDER_STATUS_TRANSITION");
-      }
-
       const updateSet: Partial<typeof orders.$inferInsert> = {};
-      if (parsedChanges.data.status !== undefined) {
-        updateSet.status = parsedChanges.data.status;
-        if (isCompletedOrderStatus(parsedChanges.data.status)) {
-          updateSet.completedDate = current.completedDate || new Date();
-        }
-      }
-      if (parsedChanges.data.currentStationId !== undefined) {
-        updateSet.currentStationId = parsedChanges.data.currentStationId;
-        updateSet.station = parsedChanges.data.currentStationId;
-      }
       if (parsedChanges.data.risk !== undefined) updateSet.priorityComputed = parsedChanges.data.risk;
       if (parsedChanges.data.title !== undefined) updateSet.title = parsedChanges.data.title;
       if (parsedChanges.data.task !== undefined) updateSet.task = parsedChanges.data.task;
@@ -241,13 +219,6 @@ export async function updateOrderDb(identifierValue: unknown, changesValue: unkn
         .where(and(eq(orders.id, current.id), eq(orders.tenantId, actor.data.tenantId)))
         .returning())[0];
       if (!persisted) throw new Error("ORDER_UPDATE_NOT_CONFIRMED");
-
-      if (parsedChanges.data.currentStationId !== undefined) {
-        await tx
-          .update(items)
-          .set({ currentStationId: parsedChanges.data.currentStationId })
-          .where(and(eq(items.orderId, current.id), eq(items.tenantId, actor.data.tenantId)));
-      }
 
       await tx.insert(events).values({
         id: crypto.randomUUID(),
@@ -287,13 +258,6 @@ export async function updateOrderDb(identifierValue: unknown, changesValue: unkn
       },
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    if (message === "TERMINAL_ORDER_IMMUTABLE") {
-      return { ok: false, error: "FORBIDDEN", message: "Abgeschlossene oder stornierte Aufträge sind für Status- und Stationswechsel gesperrt." };
-    }
-    if (message === "INVALID_ORDER_STATUS_TRANSITION" || message === "UNKNOWN_STORED_ORDER_STATUS") {
-      return { ok: false, error: "UNKNOWN", message: "Der angeforderte Statuswechsel ist nicht zulässig." };
-    }
     console.error("Failed to update order in DB:", error);
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Aktualisieren des Auftrags" };
   }
@@ -301,7 +265,7 @@ export async function updateOrderDb(identifierValue: unknown, changesValue: unkn
 
 export async function getRiskOrders(limit = 3) {
   const authorization = await resolveAuthorization();
-  if (!authorization.ok || !authorization.data.permissions.includes("perm_data_orders")) return [];
+  if (!authorization.ok || !authorization.data.permissions.includes("perm_view_leitstand")) return [];
   const safeLimit = Number.isInteger(limit) ? Math.min(20, Math.max(1, limit)) : 3;
   try {
     const riskOrders = await db.select({
@@ -326,14 +290,8 @@ export async function getRiskOrders(limit = 3) {
   }
 }
 
-export async function setOrderStationDb(orderId: unknown, newStation: unknown): Promise<ActionResult<{ success: boolean }>> {
-  const result = await updateOrderDb(orderId, { currentStationId: newStation });
-  if (!result.ok) return result;
-  return { ok: true, data: { success: true } };
-}
-
 export async function transitionOrderProcess(params: unknown) {
-  const actor = await requireOrderWrite();
+  const actor = await requireOrderAccess("perm_op_status");
   if (!actor.ok) return actor;
   const parsed = processTransitionSchema.safeParse(params);
   if (!parsed.success) {
@@ -350,40 +308,60 @@ export async function transitionOrderProcess(params: unknown) {
         .for("update"))[0];
       if (!current) return null;
 
+      const [existingReceipt] = await tx
+        .select({ orderId: events.orderId, payload: events.payload })
+        .from(events)
+        .where(and(
+          eq(events.tenantId, actor.data.tenantId),
+          eq(events.clientEventId, parsed.data.clientRequestId),
+        ))
+        .limit(1);
+      if (existingReceipt) {
+        const payload = existingReceipt.payload;
+        const expectedAction = parsed.data.action;
+        if (
+          !payload
+          || existingReceipt.orderId !== current.id
+          || payload.processAction !== expectedAction
+          || payload.expectedStation !== parsed.data.expectedStation
+          || typeof payload.newStation !== "string"
+          || typeof payload.newStatus !== "string"
+        ) {
+          throw new Error("REQUEST_CONFLICT");
+        }
+        const replayStatus = normalizeStoredOrderStatus(payload.newStatus);
+        if (replayStatus === "unknown") throw new Error("REQUEST_CONFLICT");
+        return {
+          newStation: parseOrderStation(payload.newStation),
+          newStatus: replayStatus,
+          replayed: true,
+        };
+      }
+
       const currentStatus = normalizeStoredOrderStatus(current.status);
       if (currentStatus === "unknown" || isTerminalOrderStatus(currentStatus)) {
         throw new Error("ORDER_PROCESS_LOCKED");
       }
-      const storedStation = current.currentStationId === "beschichtung"
-        ? "galvanik"
-        : (current.currentStationId || current.station);
-      if (!ORDER_STATIONS.includes(storedStation as OrderStation)) throw new Error("UNKNOWN_ORDER_STATION");
+      let storedStation: OrderStation;
+      try {
+        storedStation = parseOrderStation(current.currentStationId || current.station);
+      } catch {
+        throw new Error("UNKNOWN_ORDER_STATION");
+      }
+      const stateConflict = getProcessTransitionConflict(currentStatus, storedStation, parsed.data);
+      if (stateConflict) throw new Error(stateConflict);
 
-      let newStation = storedStation as OrderStation;
+      const newStation = storedStation;
       let newStatus: OrderStatus = currentStatus;
-      let eventType = "STATION_STARTED";
+      let eventType: "STATION_STARTED" | "ORDER_CANCELLED" = "STATION_STARTED";
       let description = `Bearbeitung in ${newStation} gestartet`;
 
       if (parsed.data.action === "start") {
         newStatus = "in_progress";
-      } else if (parsed.data.action === "complete") {
-        const currentIndex = ORDER_STATIONS.indexOf(newStation);
-        if (currentIndex === ORDER_STATIONS.length - 1) {
-          newStatus = "shipped";
-          eventType = "SHIPMENT_SENT";
-          description = "Auftrag im Warenausgang als versendet abgeschlossen";
-        } else {
-          const nextStation = ORDER_STATIONS[currentIndex + 1];
-          newStation = nextStation;
-          newStatus = "ready";
-          eventType = "STATION_COMPLETED";
-          description = `Station abgeschlossen; Auftrag für ${newStation} bereit`;
-        }
-      } else if (parsed.data.targetStep) {
-        newStation = parsed.data.targetStep;
-        newStatus = "ready";
-        eventType = "STATION_READY";
-        description = `Auftrag für ${newStation} bereitgestellt`;
+      } else if (parsed.data.action === "cancel") {
+        newStatus = "cancelled";
+        eventType = "ORDER_CANCELLED";
+        description = "Auftrag storniert";
       }
 
       if (!canTransitionOrderStatus(currentStatus, newStatus)) throw new Error("INVALID_ORDER_STATUS_TRANSITION");
@@ -392,8 +370,6 @@ export async function transitionOrderProcess(params: unknown) {
         station: newStation,
         status: newStatus,
       };
-      if (isCompletedOrderStatus(newStatus)) updateSet.completedDate = current.completedDate || new Date();
-
       const persisted = (await tx
         .update(orders)
         .set(updateSet)
@@ -401,22 +377,24 @@ export async function transitionOrderProcess(params: unknown) {
         .returning())[0];
       if (!persisted) throw new Error("ORDER_TRANSITION_NOT_CONFIRMED");
 
-      await tx
-        .update(items)
-        .set({ currentStationId: newStation })
-        .where(and(eq(items.orderId, current.id), eq(items.tenantId, actor.data.tenantId)));
-
       await tx.insert(events).values({
         id: crypto.randomUUID(),
         tenantId: actor.data.tenantId,
+        clientEventId: parsed.data.clientRequestId,
         orderId: current.id,
         eventType,
         station: newStation,
         description,
         userId: actor.data.userId,
+        payload: {
+          processAction: parsed.data.action,
+          expectedStation: parsed.data.expectedStation,
+          newStation,
+          newStatus,
+        },
       });
 
-      return { newStation, newStatus };
+      return { newStation, newStatus, replayed: false };
     });
 
     if (!transitioned) return { ok: false, error: "EMPTY_RESULT" as const, message: "Auftrag nicht gefunden." };
@@ -432,7 +410,14 @@ export async function transitionOrderProcess(params: unknown) {
     return { ok: true, data: { success: true, ...transitioned } };
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
-    if (["ORDER_PROCESS_LOCKED", "UNKNOWN_ORDER_STATION", "INVALID_ORDER_STATUS_TRANSITION"].includes(message)) {
+    if ([
+      "ORDER_PROCESS_LOCKED",
+      "UNKNOWN_ORDER_STATION",
+      "INVALID_ORDER_STATUS_TRANSITION",
+      "ORDER_NOT_READY",
+      "STALE_ORDER_STATION",
+      "REQUEST_CONFLICT",
+    ].includes(message)) {
       return { ok: false, error: "FORBIDDEN" as const, message: "Dieser Prozesswechsel ist aus dem aktuellen Auftragszustand nicht zulässig." };
     }
     console.error("Failed transition:", error);
@@ -444,7 +429,7 @@ export async function createOrderFromScan(params: unknown): Promise<
   | { ok: true; data: { orderId: string; status: "persisted" } }
   | { ok: false; error: string; message: string; details?: unknown }
 > {
-  const actor = await requireOrderWrite();
+  const actor = await requireOrderAccess("perm_data_orders");
   if (!actor.ok) return actor;
 
   const parsedRequest = scanOrderRequestSchema.safeParse(params);
@@ -500,10 +485,14 @@ export async function createOrderFromScan(params: unknown): Promise<
     }
 
     const parsedOrder = orderSchema.safeParse({
+      clientRequestId: parsedRequest.data.clientRequestId,
       customerId: finalCustomerId,
       title: parsedRequest.data.title,
       source: "scan",
-      parts: parsedRequest.data.parts,
+      parts: parsedRequest.data.parts.map((part) => ({
+        ...part,
+        routeTemplateId: parsedRequest.data.routeTemplateId,
+      })),
     });
     if (!parsedOrder.success) {
       return {

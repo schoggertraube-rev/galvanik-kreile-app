@@ -1,12 +1,21 @@
 import React from 'react';
-import { Customer } from '@/lib/types/customer';
 import { TrendingUp, Award, Clock, DollarSign, Tag } from 'lucide-react';
 
-export function CustomerAnalysisTab({ customerId, customerData }: { customerId: string, customerData: any }) {
+function metric(value: unknown, suffix: string): string {
+  if (value === null || value === undefined || value === "") return "Nicht verfügbar";
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number.toFixed(0)} ${suffix}`.trim() : "Ungültiger Messwert";
+}
+
+export function CustomerAnalysisTab({ customerData }: { customerId: string, customerData: any }) {
   if (!customerData) return <div className="p-4 text-gray-500">Lade Analyse...</div>;
 
   const kpi = customerData.kpi;
   const tags = customerData.tags || [];
+
+  if (!kpi) {
+    return <div role="status" className="rounded-xl border border-dashed border-gray-300 p-6 text-sm text-gray-600">Kundenanalyse ist noch nicht belastbar verbunden. Es werden keine Nullwerte abgeleitet.</div>;
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -19,7 +28,7 @@ export function CustomerAnalysisTab({ customerId, customerData }: { customerId: 
             <DollarSign className="w-4 h-4" />
             <span className="text-xs font-bold uppercase tracking-wider">Umsatz LTV</span>
           </div>
-          <span className="text-xl font-bold text-gray-900">{kpi?.umsatz_ltv ? `${Number(kpi.umsatz_ltv).toFixed(0)} €` : '0 €'}</span>
+          <span className="text-xl font-bold text-gray-900">{metric(kpi.umsatz_ltv, "€")}</span>
         </div>
         
         <div className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
@@ -27,7 +36,7 @@ export function CustomerAnalysisTab({ customerId, customerData }: { customerId: 
             <TrendingUp className="w-4 h-4" />
             <span className="text-xs font-bold uppercase tracking-wider">Gewinn LTV</span>
           </div>
-          <span className="text-xl font-bold text-green-600">{kpi?.gewinn_ltv ? `${Number(kpi.gewinn_ltv).toFixed(0)} €` : '0 €'}</span>
+          <span className="text-xl font-bold text-green-600">{metric(kpi.gewinn_ltv, "€")}</span>
         </div>
         
         <div className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
@@ -35,7 +44,7 @@ export function CustomerAnalysisTab({ customerId, customerData }: { customerId: 
             <Clock className="w-4 h-4" />
             <span className="text-xs font-bold uppercase tracking-wider">Pünktlichkeit</span>
           </div>
-          <span className="text-xl font-bold text-gray-900">{kpi?.puenktlichkeit_pct !== null ? `${kpi.puenktlichkeit_pct} %` : 'N/A'}</span>
+          <span className="text-xl font-bold text-gray-900">{metric(kpi.puenktlichkeit_pct, "%")}</span>
         </div>
         
         <div className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
@@ -43,7 +52,7 @@ export function CustomerAnalysisTab({ customerId, customerData }: { customerId: 
             <Award className="w-4 h-4" />
             <span className="text-xs font-bold uppercase tracking-wider">Klasse</span>
           </div>
-          <span className="text-xl font-bold text-[var(--ci-blue)]">{customerData.classification || 'B'}</span>
+          <span className="text-xl font-bold text-[var(--ci-blue)]">{customerData.classification || "Nicht hinterlegt"}</span>
         </div>
       </div>
 

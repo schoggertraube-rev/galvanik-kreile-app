@@ -64,6 +64,9 @@ export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
 
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  if (!authRes.data.permissions.includes("perm_view_customers")) {
+    return { ok: false, error: "FORBIDDEN", message: "Keine Berechtigung zum Anzeigen von Kundendaten." };
+  }
   const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
@@ -91,6 +94,9 @@ export async function getCustomerByIdDb(id: string): Promise<ActionResult<Custom
 
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  if (!authRes.data.permissions.includes("perm_view_customers")) {
+    return { ok: false, error: "FORBIDDEN", message: "Keine Berechtigung zum Anzeigen von Kundendaten." };
+  }
   const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
@@ -118,6 +124,9 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
 
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  if (!authRes.data.permissions.includes("perm_data_customers")) {
+    return { ok: false, error: "FORBIDDEN", message: "Keine Berechtigung zum Bearbeiten von Kundendaten." };
+  }
   const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
@@ -187,6 +196,9 @@ export async function updateCustomerDb(id: string, changes: Partial<Customer>): 
 
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  if (!authRes.data.permissions.includes("perm_data_customers")) {
+    return { ok: false, error: "FORBIDDEN", message: "Keine Berechtigung zum Bearbeiten von Kundendaten." };
+  }
   if (!/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
     return { ok: false, error: "UNKNOWN", message: "Ungültige Kunden-ID" };
   }
@@ -228,6 +240,9 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
 
   const authRes = await resolveAuthorization();
   if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
+  if (!authRes.data.permissions.includes("perm_view_customers")) {
+    return { ok: false, error: "FORBIDDEN", message: "Keine Berechtigung zum Anzeigen von Kundendaten." };
+  }
   const tenantId = authRes.data.tenantId;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
@@ -261,8 +276,12 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
 export async function getTopKunden(limit = 5) {
   try {
     const authRes = await resolveAuthorization();
-    if (!authRes.ok) return [];
+    if (!authRes.ok) return { ok: false as const, error: "UNAUTHORIZED" as const, message: "Anmeldung erforderlich." };
+    if (!authRes.data.permissions.includes("perm_view_customers") || !authRes.data.permissions.includes("perm_view_prices")) {
+      return { ok: false as const, error: "FORBIDDEN" as const, message: "Keine Berechtigung für Kundenumsätze." };
+    }
     const tenantId = authRes.data.tenantId;
+    const safeLimit = Number.isInteger(limit) ? Math.min(Math.max(limit, 1), 50) : 5;
 
     const { sql, desc } = await import("drizzle-orm");
     const { ausgangsrechnung } = await import("@/db/schema_buchhaltung");
@@ -284,15 +303,15 @@ export async function getTopKunden(limit = 5) {
     )
     .groupBy(customers.id)
     .orderBy(desc(sql`sum(${ausgangsrechnung.netto})`))
-    .limit(limit);
+    .limit(safeLimit);
 
-    return top.map((t, idx) => ({
+    return { ok: true as const, data: top.map((t, idx) => ({
       id: t.id || String(idx),
       name: t.name,
-      wert: Number(t.summe) || 0
-    }));
+      wert: t.summe === null || t.summe === undefined ? null : Number(t.summe),
+    })) };
   } catch (error) {
     console.error("Failed to get top customers:", error);
-    return [];
+    return { ok: false as const, error: "DB_ERROR" as const, message: "Top-Kunden konnten nicht geladen werden." };
   }
 }

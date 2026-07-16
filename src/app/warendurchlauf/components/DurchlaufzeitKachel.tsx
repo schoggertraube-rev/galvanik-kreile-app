@@ -4,32 +4,50 @@ import { useState } from "react";
 import { Tile } from "@/app/buchhaltung/components/Tile";
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { Clock } from "lucide-react";
-import Link from "next/link";
+import type { WarendurchlaufKpiData } from "@/app/warendurchlauf/actions";
+import { isTerminalOrderStatus, normalizeStoredOrderStatus } from "@/lib/orders/orderMutationContract";
 
-export function DurchlaufzeitKachel({ data }: { data: any }) {
+function isOpenStatus(value: string): boolean {
+  const status = normalizeStoredOrderStatus(value);
+  return status !== "unknown" && !isTerminalOrderStatus(status);
+}
+
+function validTimestamp(value: string | undefined): number | null {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+export function DurchlaufzeitKachel({ data }: { data: WarendurchlaufKpiData | null }) {
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const [renderedAt] = useState(() => Date.now());
 
-  const dlz = data?.durchlaufzeitTage ?? 0;
-  const orders = data?.orders || [];
+  const dlz = data?.durchlaufzeitTage ?? null;
+  const metricValue = dlz === null ? "–" : `${dlz} Tage`;
+  const orders = data?.orders ?? [];
   
-  // Find longest running active orders
-  const activeOrders = orders.filter((o: any) => o.status !== "completed" && o.status !== "abgeschlossen");
-  const sortedLongest = activeOrders.sort((a: any, b: any) => {
-    const aDate = a.intakeDate ? new Date(a.intakeDate).getTime() : Date.now();
-    const bDate = b.intakeDate ? new Date(b.intakeDate).getTime() : Date.now();
-    return aDate - bDate; // Oldest first
+  const activeOrders = orders.filter((order) => isOpenStatus(order.status));
+  const sortedLongest = [...activeOrders].sort((a, b) => {
+    const aDate = validTimestamp(a.intakeDate) ?? Infinity;
+    const bDate = validTimestamp(b.intakeDate) ?? Infinity;
+    return aDate - bDate;
   }).slice(0, 5);
 
-  const compositionRows = sortedLongest.length > 0 ? sortedLongest.map((o: any) => {
-    const daysActive = o.intakeDate ? ((Date.now() - new Date(o.intakeDate).getTime()) / (1000 * 60 * 60 * 24)).toFixed(1) : 0;
+  const compositionRows = !data ? [{
+    avatar: "!", avatarColor: "bg-neutral-gray-400", name: "Durchlaufdaten nicht verfügbar", amount: "",
+  }] : sortedLongest.length > 0 ? sortedLongest.map((order) => {
+    const intakeAt = validTimestamp(order.intakeDate);
+    const daysActive = intakeAt !== null && intakeAt <= renderedAt
+      ? ((renderedAt - intakeAt) / (1000 * 60 * 60 * 24)).toFixed(1)
+      : null;
     return {
-      avatar: o.orderNumber?.charAt(0) || "A",
-      avatarColor: Number(daysActive) > 14 ? "bg-error-red" : "bg-accent-orange",
-      name: `${o.orderNumber} (${o.currentStationId || "Unbekannt"})`,
-      amount: `${daysActive} Tage`,
-      href: `/orders/${o.id}`
+      avatar: order.orderNumber.charAt(0) || "A",
+      avatarColor: daysActive !== null && Number(daysActive) > 14 ? "bg-error-red" : "bg-accent-orange",
+      name: `${order.orderNumber} (${order.currentStationId || "Unbekannt"})`,
+      amount: daysActive === null ? "Startdatum fehlt" : `${daysActive} Tage aktiv`,
+      href: `/orders/${order.id}`,
     };
-  }) : [{ avatar: "✓", avatarColor: "bg-teal-500", name: "Keine Aufträge in Bearbeitung", amount: "", href: "#" }];
+  }) : [{ avatar: "✓", avatarColor: "bg-neutral-gray-400", name: "Keine bestätigten Aufträge in Bearbeitung", amount: "" }];
 
   return (
     <>
@@ -37,9 +55,9 @@ export function DurchlaufzeitKachel({ data }: { data: any }) {
         icon={<Clock className="w-6 h-6" />}
         iconColor="text-navy-900"
         title="Durchlaufzeit"
-        kpi={`${dlz} Tage`}
-        description="Ø pro Auftrag"
-        footer="Gleitender Durchschnitt"
+        kpi={metricValue}
+        description="Ø abgeschlossener Auftrag"
+        footer={data ? `${data.durchlaufzeitMessbar} / ${data.abgeschlosseneAuftraege} Abschlüsse messbar · ${data.durchlaufzeitOhneMessdaten} ausgeschlossen` : "Daten nicht verfügbar"}
         onClick={() => setOverlayOpen(true)}
         analyseLink={{ label: "Details ansehen", onClick: () => setOverlayOpen(true) }}
       />
@@ -51,15 +69,17 @@ export function DurchlaufzeitKachel({ data }: { data: any }) {
         subtitle="Analysieren Sie die Dauer der einzelnen Aufträge."
         hero={{
           kicker: "Durchschnittliche DLZ",
-          value: `${dlz} Tage`,
-          changePill: { text: "Basierend auf Livedaten", variant: "gray" }
+          value: metricValue,
+          changePill: { text: dlz === null ? "Noch nicht messbar" : "Aus bestätigten Abschlussdaten", variant: "gray" }
         }}
         composition={{
           title: "Am längsten in Bearbeitung",
           rows: compositionRows
         }}
         insight={{
-          body: sortedLongest.length > 0 ? "Überprüfen Sie diese Aufträge auf Liegezeiten." : "Keine auffälligen Liegezeiten."
+          body: dlz === null
+            ? "Die Durchlaufzeit wird erst ausgewiesen, sobald abgeschlossene Aufträge ein gültiges Start- und Abschlussdatum besitzen."
+            : `${data?.durchlaufzeitMessbar ?? 0} von ${data?.abgeschlosseneAuftraege ?? 0} Abschlüssen sind messbar; ${data?.durchlaufzeitOhneMessdaten ?? 0} wurden wegen fehlender oder ungültiger Start-/Endzeit ausgeschlossen. ${sortedLongest.length > 0 ? "Die Liste zeigt offene Laufzeiten, keine bestätigten Ursachen." : "Keine offenen Laufzeiten vorhanden."}`
         }}
         linkedAreas={[
           { label: "Bäder-Status", href: "/baeder" },

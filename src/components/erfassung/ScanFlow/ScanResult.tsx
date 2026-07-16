@@ -3,33 +3,36 @@
 import { useErfassung } from "../ErfassungProvider";
 import { FileText, UserPlus, PackagePlus, Link, ArrowRight, Building2, User } from "lucide-react";
 import { AiBadge } from "../shared/AiBadge";
+import type { OcrResult } from "@/lib/ocr/geminiOcr";
 
 export function ScanResult({ data }: { data: any }) {
-  const { openErfassung, closeErfassung } = useErfassung();
+  const { openErfassung } = useErfassung();
+  const ext: Partial<OcrResult> | null = data?.extractedData && typeof data.extractedData === "object"
+    ? data.extractedData as Partial<OcrResult>
+    : null;
+  const hasConfirmedExtraction = data?.status === "processed" && ext !== null;
 
   const handleNewOrder = () => {
+    if (!hasConfirmedExtraction) return;
+    const customerName = ext.company || ext.customerName;
+    const hasItem = typeof ext.articleDescription === "string" && ext.articleDescription.trim().length > 0;
     openErfassung({
       mode: "order",
-      prefill: data.extracted,
+      prefill: {
+        customer: customerName ? { name: customerName, companyName: ext.company } : null,
+        items: hasItem ? [{
+          id: crypto.randomUUID(),
+          name: ext.articleDescription,
+          quantity: typeof ext.quantity === "number" && Number.isSafeInteger(ext.quantity) && ext.quantity > 0 ? ext.quantity : "",
+          material: typeof ext.material === "string" ? ext.material : "",
+          target: typeof ext.surface === "string" ? ext.surface : "",
+          routeTemplateId: "",
+        }] : [],
+        rawText: typeof ext.rawText === "string" ? ext.rawText : "",
+      },
       source: "scan",
       sourceRef: data.id
     });
-  };
-
-  const handleOnlyCustomer = () => {
-    // Navigate to customer creation or open manual flow with only customer section
-    alert("Kunde anlegen Flow (WIP)");
-    closeErfassung();
-  };
-
-  const handleAssignToOrder = () => {
-    alert("Bestehendem Auftrag zuordnen (WIP)");
-    closeErfassung();
-  };
-
-  const handleToAccounting = () => {
-    alert("Als Beleg an Buchhaltung senden (WIP)");
-    closeErfassung();
   };
 
   const typeLabels: Record<string, string> = {
@@ -42,9 +45,10 @@ export function ScanResult({ data }: { data: any }) {
     unbekannt: "Dokument"
   };
 
-  const detectedType = data.detectedType || "unbekannt";
-  const confidence = data.detectionConfidence ? Math.round(data.detectionConfidence * 100) : 0;
-  const ext = data.extractedData || {};
+  const detectedType = typeof data.detectedType === "string" ? data.detectedType : "unbekannt";
+  const confidence = typeof data.detectionConfidence === "number" && data.detectionConfidence >= 0 && data.detectionConfidence <= 1
+    ? Math.round(data.detectionConfidence * 100)
+    : null;
 
   return (
     <div className="p-8">
@@ -59,46 +63,42 @@ export function ScanResult({ data }: { data: any }) {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-xl font-bold text-gray-900">
-                  {typeLabels[detectedType]} erkannt
+                  {detectedType === "unbekannt" ? "Dokumentdaten extrahiert" : `${typeLabels[detectedType] || "Dokument"} erkannt`}
                 </h3>
                 <AiBadge />
               </div>
-              <p className="text-sm text-gray-500">
-                Sicherheit: {confidence}%
-              </p>
+              {confidence !== null && <p className="text-sm text-gray-500">Modellkonfidenz: {confidence}%</p>}
             </div>
           </div>
 
           <div className="bg-gray-50 rounded-xl p-5 border border-gray-100 space-y-4">
             <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider">Erkannte Daten</h4>
             
-            {ext.customer && (
+            {(ext?.company || ext?.customerName) && (
               <div className="space-y-2">
                 <div className="flex items-start gap-2 text-sm">
                   <Building2 className="w-4 h-4 text-gray-400 mt-0.5" />
-                  <span className="text-gray-700">{ext.customer.companyName || ext.customer.name || "Kein Name erkannt"}</span>
+                  <span className="text-gray-700">{ext.company || ext.customerName}</span>
                 </div>
-                {ext.customer.address && (
-                  <div className="text-sm text-gray-600 pl-6">{ext.customer.address}</div>
+                {ext.address && (
+                  <div className="text-sm text-gray-600 pl-6">{ext.address}</div>
                 )}
               </div>
             )}
 
-            {ext.items && ext.items.length > 0 && (
+            {ext?.articleDescription && (
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="text-xs font-semibold text-gray-500 mb-2">ERFASSTE TEILE ({ext.items.length})</div>
+                <div className="text-xs font-semibold text-gray-500 mb-2">EXTRAHIERTE POSITION</div>
                 <ul className="space-y-2">
-                  {ext.items.map((item: any, i: number) => (
-                    <li key={i} className="text-sm text-gray-700 flex justify-between">
-                      <span>{item.quantity}x {item.name}</span>
-                      <span className="text-gray-500">{item.material}</span>
-                    </li>
-                  ))}
+                  <li className="text-sm text-gray-700 flex justify-between">
+                    <span>{Number.isSafeInteger(ext.quantity) ? `${ext.quantity}x ` : "Menge offen · "}{ext.articleDescription}</span>
+                    <span className="text-gray-500">{ext.material || "Material offen"}</span>
+                  </li>
                 </ul>
               </div>
             )}
             
-            {!ext.customer && (!ext.items || ext.items.length === 0) && (
+            {!ext?.customerName && !ext?.company && !ext?.articleDescription && (
               <p className="text-sm text-gray-500 italic">Keine strukturierten Daten extrahiert.</p>
             )}
           </div>
@@ -110,6 +110,7 @@ export function ScanResult({ data }: { data: any }) {
           
           <button 
             onClick={handleNewOrder}
+            disabled={!hasConfirmedExtraction}
             className="group flex flex-col p-4 bg-white border-2 border-blue-600 rounded-xl hover:bg-blue-50 transition-colors text-left"
           >
             <div className="flex items-center gap-2 text-blue-700 font-bold mb-1">
@@ -121,30 +122,33 @@ export function ScanResult({ data }: { data: any }) {
             </p>
           </button>
 
-          <button 
-            onClick={handleAssignToOrder}
-            className="group flex flex-col p-4 bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:bg-gray-50 transition-colors text-left"
+          <button
+            disabled
+            title="Ein idempotenter Dokument-Zuordnungsbeleg ist noch nicht angebunden"
+            className="group flex flex-col p-4 bg-white border border-gray-200 rounded-xl opacity-60 cursor-not-allowed text-left"
           >
             <div className="flex items-center gap-2 text-gray-900 font-medium mb-1">
               <Link className="w-5 h-5 text-gray-500 group-hover:text-gray-700" />
               Bestehendem zuordnen
             </div>
             <p className="text-sm text-gray-500">
-              Dokument an einen laufenden Auftrag hängen.
+              Noch nicht sicher an einen laufenden Auftrag angebunden.
             </p>
           </button>
 
           <div className="flex gap-3 mt-2">
-            <button 
-              onClick={handleOnlyCustomer}
-              className="flex-1 flex flex-col items-center justify-center p-3 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+            <button
+              disabled
+              title="Der Kunden-Übernahmevertrag ist noch nicht angebunden"
+              className="flex-1 flex flex-col items-center justify-center p-3 bg-white border border-gray-200 rounded-xl opacity-60 cursor-not-allowed"
             >
               <UserPlus className="w-5 h-5 text-gray-500 mb-1" />
               <span className="text-xs font-medium text-gray-700">Nur Kunde</span>
             </button>
-            <button 
-              onClick={handleToAccounting}
-              className="flex-1 flex flex-col items-center justify-center p-3 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+            <button
+              disabled
+              title="Die Buchhaltungsübergabe benötigt einen bestätigten Belegvertrag"
+              className="flex-1 flex flex-col items-center justify-center p-3 bg-white border border-gray-200 rounded-xl opacity-60 cursor-not-allowed"
             >
               <FileText className="w-5 h-5 text-gray-500 mb-1" />
               <span className="text-xs font-medium text-gray-700">Beleg</span>

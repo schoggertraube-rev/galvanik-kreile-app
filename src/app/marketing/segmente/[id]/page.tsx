@@ -5,19 +5,43 @@ import { BackButton } from "@/components/ui/BackButton";
 import { getSegmentById, updateSegment, deleteSegment } from "../actions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Save, Trash2, AlertTriangle } from "lucide-react";
-import { use, useState, useEffect } from "react";
+import { ArrowLeft, Save, Trash2, AlertTriangle, RefreshCw } from "lucide-react";
+import { use, useCallback, useState, useEffect } from "react";
 
 export default function SegmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  return <SegmentDetailPageContent key={id} id={id} />;
+}
+
+function SegmentDetailPageContent({ id }: { id: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [segment, setSegment] = useState<any>(null);
+  const [segment, setSegment] = useState<Awaited<ReturnType<typeof getSegmentById>> | null>(null);
   const [error, setError] = useState("");
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "not_found" | "error">("loading");
+  const [loadError, setLoadError] = useState("");
 
-  useEffect(() => {
-    getSegmentById(id).then(setSegment).catch(console.error);
+  const loadSegment = useCallback(() => {
+    return getSegmentById(id)
+      .then((result) => {
+        setSegment(result);
+        setLoadError("");
+        setLoadState(result ? "ready" : "not_found");
+      })
+      .catch((loadFailure: unknown) => {
+        setSegment(null);
+        setLoadError(loadFailure instanceof Error ? loadFailure.message : "Segment konnte nicht geladen werden.");
+        setLoadState("error");
+      });
   }, [id]);
+
+  useEffect(() => { void loadSegment(); }, [loadSegment]);
+
+  function retryLoad() {
+    setLoadState("loading");
+    setLoadError("");
+    void loadSegment();
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -26,9 +50,9 @@ export default function SegmentDetailPage({ params }: { params: Promise<{ id: st
     try {
       await updateSegment(id, formData);
       router.push("/marketing/segmente");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Fehler beim Aktualisieren");
+      setError(err instanceof Error ? err.message : "Fehler beim Aktualisieren");
       setLoading(false);
     }
   }
@@ -39,15 +63,30 @@ export default function SegmentDetailPage({ params }: { params: Promise<{ id: st
     try {
       await deleteSegment(id);
       router.push("/marketing/segmente");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Fehler beim Löschen");
+      setError(err instanceof Error ? err.message : "Fehler beim Löschen");
       setLoading(false);
     }
   }
 
-  if (!segment) {
-    return <div className="p-12 text-center text-slate-500">Lade...</div>;
+  if (loadState === "loading") {
+    return <div role="status" className="p-12 text-center text-slate-500">Segment wird geladen …</div>;
+  }
+  if (loadState === "error") {
+    return (
+      <div role="alert" className="mx-auto mt-12 max-w-xl rounded-xl border border-red-200 bg-red-50 p-6 text-red-800">
+        <h1 className="font-bold">Segmentdaten nicht verfügbar</h1>
+        <p className="mt-2 text-sm">{loadError}</p>
+        <div className="mt-4 flex gap-3">
+          <button type="button" onClick={retryLoad} className="inline-flex items-center gap-2 rounded-lg bg-red-700 px-4 py-2 text-sm font-bold text-white"><RefreshCw className="h-4 w-4" /> Erneut laden</button>
+          <Link href="/marketing/segmente" className="rounded-lg border border-red-300 px-4 py-2 text-sm font-bold">Zurück</Link>
+        </div>
+      </div>
+    );
+  }
+  if (loadState === "not_found" || !segment) {
+    return <div className="mx-auto mt-12 max-w-xl rounded-xl border border-slate-200 bg-white p-8 text-center"><h1 className="font-bold">Segment nicht gefunden</h1><Link href="/marketing/segmente" className="mt-4 inline-block text-sm font-bold text-blue-700 underline">Zur Segmentliste</Link></div>;
   }
 
   return (
@@ -90,7 +129,7 @@ export default function SegmentDetailPage({ params }: { params: Promise<{ id: st
               <input 
                 type="text" 
                 name="icon" 
-                defaultValue={segment.icon}
+                defaultValue={segment.icon ?? ""}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -110,7 +149,7 @@ export default function SegmentDetailPage({ params }: { params: Promise<{ id: st
             <textarea 
               name="beschreibung" 
               rows={4}
-              defaultValue={segment.beschreibung}
+              defaultValue={segment.beschreibung ?? ""}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

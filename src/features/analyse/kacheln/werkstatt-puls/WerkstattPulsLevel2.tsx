@@ -16,6 +16,7 @@ interface Props {
 }
 
 export function WerkstattPulsLevel2({ data, onClose }: Props) {
+  const periodLabel = data.period === 'today' ? 'Heute' : data.period === 'week' ? 'Woche' : data.period === 'month' ? 'Monat' : 'Freier Zeitraum';
   return (
     <div className="page" style={{ paddingTop: 0 }}>
       {/* BACK BUTTON */}
@@ -43,16 +44,10 @@ export function WerkstattPulsLevel2({ data, onClose }: Props) {
           </div>
         </div>
         <div className="controls">
-          <div className="seg">
-            <button className={data.period === 'today' ? 'active' : ''}>Heute</button>
-            <button className={data.period === 'week' ? 'active' : ''}>Woche</button>
-            <button className={data.period === 'month' ? 'active' : ''}>Monat</button>
-            <button className={data.period === 'custom' ? 'active' : ''}>Frei</button>
-          </div>
-          <button className="btn-compare" disabled={!data.trend.comparison?.available}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M7 7h10M7 17h10M5 3v18M19 3v18"/></svg>
-            Vergleich: Vorwoche
-          </button>
+          <span className="pill pill-mute">Zeitraum: {periodLabel}</span>
+          <span className="pill pill-mute">
+            {data.trend.comparison?.available ? 'Vergleichsdaten gespeichert' : 'Kein Vergleichsdatensatz'}
+          </span>
           {data.hero.scoreStatus === 'critical' && <span className="pill pill-bad">HANDLUNGSBEDARF</span>}
           {data.hero.scoreStatus === 'watch' && <span className="pill pill-warn">BEOBACHTEN</span>}
           {data.hero.scoreStatus === 'ok' && <span className="pill pill-ok">OK</span>}

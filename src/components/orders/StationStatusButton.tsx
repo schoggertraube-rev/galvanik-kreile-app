@@ -1,12 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Play, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { eventsRepository } from "@/lib/repositories/eventsRepository";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
-import { STATION_CONFIGS } from "@/constants/stations";
-import { parseOrderStation } from "@/lib/orders/orderMutationContract";
+import { transitionOrderProcess } from "@/app/actions/orders.actions";
 
 interface StationStatusButtonProps {
   orderId: string;
@@ -22,20 +19,33 @@ export function StationStatusButton({
   currentStatus,
   onCompleteStation
 }: StationStatusButtonProps) {
-  const [isStarting, setIsStarting] = useState(false);
-  const [selectedStation, setSelectedStation] = useState(currentStationId || "wareneingang");
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const startRequestId = useRef<string | null>(null);
 
   const handleStartStation = async () => {
-    setSelectedStation(currentStationId || "wareneingang");
-    setIsStarting(true);
-  };
-
-  const executeStart = async () => {
-    const sel = parseOrderStation(selectedStation);
-    await ordersRepository.updateOrder(orderId, { currentStationId: sel, status: "in_progress" });
-    await eventsRepository.addEvent({ orderId, eventType: "STATION_STARTED", metadata: { stationId: sel } });
-    if (typeof window !== "undefined") window.dispatchEvent(new Event("storage"));
-    setIsStarting(false);
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setError(null);
+    try {
+      startRequestId.current ||= crypto.randomUUID();
+      const result = await transitionOrderProcess({
+        orderId,
+        action: "start",
+        expectedStation: currentStationId,
+        clientRequestId: startRequestId.current,
+      });
+      if (!result.ok) {
+        setError(result.message || "Bearbeitung konnte nicht bestätigt gestartet werden.");
+        return;
+      }
+      startRequestId.current = null;
+      window.dispatchEvent(new Event("kreile-orders-updated"));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Bearbeitung konnte nicht bestätigt gestartet werden.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (currentStatus === "in_progress") {
@@ -50,31 +60,25 @@ export function StationStatusButton({
     );
   }
 
-  if (isStarting) {
+  if (currentStatus !== "ready") {
     return (
-      <div className="h-24 w-full flex flex-col justify-center gap-2 rounded-2xl bg-gold-100 border-2 border-navy-700 p-2">
-        <select 
-          className="w-full text-xs p-1 rounded border border-neutral-gray-100 bg-white" 
-          value={selectedStation} 
-          onChange={(e) => setSelectedStation(e.target.value)}
-        >
-          {Object.values(STATION_CONFIGS).map(s => <option key={s.key} value={s.key}>{s.name}</option>)}
-        </select>
-        <div className="flex gap-2">
-          <Button size="sm" variant="ghost" onClick={() => setIsStarting(false)} className="flex-1 h-6 text-xs px-0">Abbrechen</Button>
-          <Button size="sm" className="flex-1 h-6 text-xs bg-navy-700 text-white px-0" onClick={executeStart}>Starten</Button>
-        </div>
+      <div className="h-24 w-full flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-neutral-gray-200 bg-bg-app-soft p-3 text-center text-text-muted">
+        <Play className="w-5 h-5" />
+        <span className="text-xs font-bold">Station ist nicht startbereit</span>
+        {error && <span role="alert" className="text-[10px] text-danger-red">{error}</span>}
       </div>
     );
   }
 
   return (
     <Button 
-      onClick={handleStartStation} 
+      onClick={() => void handleStartStation()}
+      disabled={isSubmitting}
       className="h-24 w-full flex flex-col gap-2 rounded-2xl bg-navy-700 hover:bg-navy-700 text-white shadow-lg active:scale-95 transition-all"
     >
       <Play className="w-6 h-6" />
-      <span className="font-bold">Bearbeitung starten</span>
+      <span className="font-bold">{isSubmitting ? "Wird bestätigt..." : "Bearbeitung starten"}</span>
+      {error && <span role="alert" className="text-[10px] text-red-200">{error}</span>}
     </Button>
   );
 }

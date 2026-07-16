@@ -35,9 +35,9 @@ export const SEARCH_ACTIONS: SearchAction[] = [
     code: "ACTION_CREATE_INVOICE",
     label: "Rechnung schreiben",
     synonyms: ["rechnung erstellen", "abrechnen", "fakturieren", "invoice", "rechnung ausstellen", "rechnung stellen"],
-    routeOnSelect: "/orders?filter=billable",
+    routeOnSelect: "/buchhaltung/rechnungen/neu",
     icon: "🧾",
-    description: "Zu abrechenbaren Aufträgen",
+    description: "Neue Rechnung im angebundenen Buchhaltungsbereich",
   },
   {
     id: "action-warendurchlauf",
@@ -89,9 +89,9 @@ export const SEARCH_ACTIONS: SearchAction[] = [
     code: "ACTION_OVERDUE",
     label: "Überfällige Rechnungen",
     synonyms: ["mahnung", "überfällig", "offen", "rückstand", "zahlungsverzug"],
-    routeOnSelect: "/orders?filter=overdue",
+    routeOnSelect: "/buchhaltung/rechnungen?ueberfaellig=1",
     icon: "⚠️",
-    description: "Aufträge mit überfälligen Zahlungen",
+    description: "Serverseitig gefilterte überfällige Rechnungen",
   },
   {
     id: "action-home",
@@ -179,7 +179,7 @@ export const SEARCH_ACTIONS: SearchAction[] = [
     code: "ACTION_ADMIN",
     label: "Admin & Testanalyse",
     synonyms: ["admin", "developer", "import", "geräte", "lizenzen", "testanalyse", "analytics", "analyse der app", "system"],
-    routeOnSelect: "/admin",
+    routeOnSelect: "/admin/analytics",
     icon: "🛡️",
     description: "Systemverwaltung",
   }

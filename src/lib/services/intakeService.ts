@@ -1,10 +1,11 @@
 import { ordersRepository } from "../repositories/ordersRepository";
-import { eventsRepository } from "../repositories/eventsRepository";
-import { photoService } from "./photoService";
+import { isRouteTemplateId, type RouteTemplateId } from "@/lib/orders/routeSnapshot";
 
 export const intakeService = {
   async processIntake(data: {
     customerId: string | null;
+    clientRequestId: string;
+    routeTemplateId: RouteTemplateId;
     orderTitle: string;
     items: { name: string; quantity: number; surfaceRequested?: string; photo?: string }[];
   }) {
@@ -14,6 +15,9 @@ export const intakeService = {
     }
     if (!data.orderTitle.trim() || data.items.length === 0) {
       throw new Error("Auftragstitel und mindestens ein Teil sind erforderlich.");
+    }
+    if (!isRouteTemplateId(data.routeTemplateId)) {
+      throw new Error("Vor der Auftragserstellung muss eine bestätigte Positionsroute ausgewählt werden.");
     }
 
     const orderParts = data.items.map((item) => {
@@ -26,42 +30,23 @@ export const intakeService = {
         name,
         quantity: item.quantity,
         ...(surfaceRequested ? { surfaceRequested } : {}),
+        routeTemplateId: data.routeTemplateId,
       };
     });
 
     const order = await ordersRepository.create({
+      clientRequestId: data.clientRequestId,
       customerId,
       title: data.orderTitle.trim(),
       parts: orderParts,
       source: "manual",
     });
 
-    for (const [index, item] of data.items.entries()) {
-      if (item.photo) {
-        const persistedItemId = order.parts[index]?.id;
-        if (typeof persistedItemId !== "string") {
-          throw new Error(`Auftrag ${order.orderNumber} wurde angelegt, aber die Teilebestätigung für das Foto fehlt.`);
-        }
-        try {
-          await photoService.savePhotoForItem(persistedItemId, order.id, item.photo);
-        } catch {
-          throw new Error(`Auftrag ${order.orderNumber} wurde angelegt, das Foto für Position ${index + 1} aber nicht bestätigt.`);
-        }
-      }
-    }
-
-    try {
-      await eventsRepository.addEvent({ eventType: "ITEM_COUNT_CONFIRMED", orderId: order.id });
-      await eventsRepository.addEvent({ eventType: "WARENEINGANG_COMPLETED", orderId: order.id });
-    } catch {
-      throw new Error(`Auftrag ${order.orderNumber} wurde angelegt, der Wareneingangsabschluss aber nicht vollständig bestätigt.`);
-    }
-    
-    // Dispatch global event so listeners (like Warendurchlauf Leitstand) reload the orders
+    // Photos and Wareneingangs-Abschluss need their own atomic receipts. This
+    // intake operation confirms only order + initial items + route snapshot.
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("kreile-orders-updated"));
     }
-    
     return order;
-  }
+  },
 };

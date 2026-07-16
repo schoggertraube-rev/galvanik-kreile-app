@@ -57,9 +57,14 @@ describe("repository connectivity truth", () => {
   it("loads detailed orders only through authorized tenant-scoped queries", () => {
     const query = source("src/lib/repositories/orderQueries.ts");
     expect(query).toContain("resolveAuthorization");
-    for (const table of ["orders", "customers", "items", "events", "priceLines", "payments", "communications", "ausgangsrechnung"]) {
+    for (const table of ["orders", "customers", "items", "events", "priceLines"]) {
       expect(query).toContain(`${table}.tenantId`);
     }
+    expect(query).toContain('permissions.includes("perm_view_prices")');
+    expect(query).toContain('permissions.includes("perm_view_customers")');
+    expect(query).not.toContain("payments");
+    expect(query).not.toContain("communications");
+    expect(query).not.toContain("ausgangsrechnung");
     expect(query).not.toContain("return null;\n  }");
   });
 

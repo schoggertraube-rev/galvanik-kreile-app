@@ -11,7 +11,7 @@ export function ReichweiteView({ funnel, funnelKey }: { funnel: FunnelDaten | nu
     <motion.div key="reichweite" initial="hidden" animate="visible" exit="exit">
       <motion.div custom={0} variants={floatIn} className="mk-panel">
         <h3 className="font-serif">Gespeicherte Marketing-Zuordnungen</h3>
-        <div className="pdesc">Ausgeführte Aktionen, Touchpoints und explizite Attributionen — {new Date().toLocaleDateString('de-DE', { month: 'long', year: 'numeric' })}.</div>
+        <div className="pdesc">Ausgeführte Aktionen, Touchpoints und explizite Attributionen aus dem gesamten gespeicherten Datenbestand.</div>
         <div className="mk-fbars">
           {funnel.stufen.map((s, i) => (
             <div key={i} className="mk-fbar">
@@ -38,7 +38,7 @@ export function ReichweiteView({ funnel, funnelKey }: { funnel: FunnelDaten | nu
           </div>
           <div style={{ textAlign: 'right' }}>
             <div className="mk-roi-label">Planbudget</div>
-            <div className="mk-roi-value">{funnel.plannedBudget.toLocaleString('de-DE')} €</div>
+            <div className="mk-roi-value">{funnel.plannedBudget === null ? 'nicht erfasst' : `${funnel.plannedBudget.toLocaleString('de-DE')} €`}</div>
           </div>
         </div>
         <div className="pdesc" style={{ marginTop: 8 }}>ROI nicht berechenbar: Tatsächliche Marketingausgaben sind noch nicht mit dem Kostenledger verknüpft.</div>

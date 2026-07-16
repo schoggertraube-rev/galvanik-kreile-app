@@ -36,13 +36,12 @@ function AnimatedCounter({ wert, suffix, divisor, running }: WirkungMini & { run
 }
 
 export function StudioView({
-  aktion, varianteIdx, onNextVar, onPrevVar, onPost, storyIdeen, wirkungMini, onStoryClick, onEntryClick, isVisible
+  aktion, varianteIdx, onNextVar, onPrevVar, storyIdeen, wirkungMini, onStoryClick, onEntryClick, isVisible
 }: {
   aktion: AktionVorschlag;
   varianteIdx: number;
   onNextVar: () => void;
   onPrevVar: () => void;
-  onPost: () => void;
   storyIdeen: StoryIdee[];
   wirkungMini: WirkungMini[];
   onStoryClick: (s: StoryIdee) => void;
@@ -60,7 +59,7 @@ export function StudioView({
             </div>
             <div className="mk-pv-name">
               galvanik_kreile
-              <small>Frankfurt Â· jetzt</small>
+              <small>Entwurfsvorschau · nicht veröffentlicht</small>
             </div>
           </div>
           <div className="mk-pv-img">
@@ -94,7 +93,7 @@ export function StudioView({
         </div>
 
         <div className="mk-ctrl">
-          <span className="mk-badge mk-animated">âœ¦ Gelernt Â· beste Aktion heute</span>
+          <span className="mk-badge">Gespeicherter Marketing-Vorschlag</span>
           <h2 className="font-serif">{aktion.titel}</h2>
           <div className="why">{aktion.begruendung}</div>
           <div className="mk-meta">
@@ -106,14 +105,14 @@ export function StudioView({
             <button className="mk-nav-var" onClick={onPrevVar}>
               <svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6" /></svg>
             </button>
-            <motion.button
+            <Link
+              href="/marketing/aktion"
               className="mk-cta mk-animated"
-              whileTap={{ scale: 0.96 }}
-              onClick={onPost}
+              title={aktion.publishReason}
             >
               <Send size={18} />
-              Jetzt posten
-            </motion.button>
+              Zur Prüfung und Freigabe
+            </Link>
             <button className="mk-nav-var" onClick={onNextVar}>
               <svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" /></svg>
             </button>
@@ -130,17 +129,17 @@ export function StudioView({
       <motion.div custom={1} variants={floatIn} className="mk-steps">
         <div className="mk-step">
           <div className="mk-step-num">1</div>
-          <div className="mk-step-text"><b>Foto wählen</b>aus deinen Aufträgen</div>
+          <div className="mk-step-text"><b>Vorschlag prüfen</b>gespeicherten Text kontrollieren</div>
         </div>
         <div className="mk-step-arrow"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></svg></div>
         <div className="mk-step">
           <div className="mk-step-num">2</div>
-          <div className="mk-step-text"><b>Text kommt automatisch</b>Bildunterschrift &amp; Hashtags</div>
+          <div className="mk-step-text"><b>Freigabe erteilen</b>über die Aktionsliste</div>
         </div>
         <div className="mk-step-arrow"><svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6" /></svg></div>
         <div className="mk-step">
           <div className="mk-step-num">3</div>
-          <div className="mk-step-text"><b>Ein Tipp — fertig</b>Rest macht das Studio</div>
+          <div className="mk-step-text"><b>Veröffentlichung gesperrt</b>Asset-Workflow und Provider-Beleg fehlen</div>
         </div>
       </motion.div>
 
@@ -156,10 +155,10 @@ export function StudioView({
 
       {/* Wirkung Mini */}
       <motion.div custom={3} variants={floatIn}>
-        <div className="mk-sec-label">Was es bringt — diesen Monat</div>
+        <div className="mk-sec-label">Explizit gespeicherte Wirkung — gesamter Datenbestand</div>
         <div className="mk-impact">
           {wirkungMini.map(w => (
-            <div key={w.label} className="mk-imp cursor-pointer hover:shadow-md transition-shadow">
+            <div key={w.label} className="mk-imp">
               <div className="mk-imp-label">{w.label}</div>
               <div className="mk-imp-value">
                 <AnimatedCounter {...w} running={isVisible} />

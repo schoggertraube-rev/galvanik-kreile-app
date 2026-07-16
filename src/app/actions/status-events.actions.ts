@@ -29,7 +29,13 @@ export type OperationalEventReceipt = {
 
 export type OperationalEventResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: "UNAUTHORIZED" | "FORBIDDEN" | "INVALID_INPUT" | "NOT_FOUND" | "STORAGE_UNAVAILABLE"; message: string };
+  | { ok: false; error: "UNAUTHORIZED" | "FORBIDDEN" | "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "STORAGE_UNAVAILABLE"; message: string };
+
+const DOCUMENTARY_EVENT_TYPES: readonly OperationalEventType[] = [
+  "LABEL_PREPARED",
+  "PHOTO_CAPTURED",
+  "NOTE_ADDED",
+];
 
 function authorize(snapshot: Awaited<ReturnType<typeof resolveAuthorization>>, permission: "perm_op_status" | "perm_view_leitstand"): OperationalEventResult<AuthorizationSnapshot> {
   if (!snapshot.ok) return { ok: false, error: "UNAUTHORIZED", message: "Anmeldung erforderlich." };
@@ -80,6 +86,13 @@ export async function createStatusEvent(value: unknown): Promise<OperationalEven
   } catch {
     return { ok: false, error: "INVALID_INPUT", message: "Ungültiges Betriebsereignis." };
   }
+  if (!DOCUMENTARY_EVENT_TYPES.includes(input.eventType)) {
+    return {
+      ok: false,
+      error: "FORBIDDEN",
+      message: "Fachliche Erfolgsereignisse dürfen nur atomar in der zuständigen Domain-Transaktion entstehen.",
+    };
+  }
 
   try {
     const order = (await db.select({ id: orders.id }).from(orders).where(and(
@@ -117,6 +130,15 @@ export async function createStatusEvent(value: unknown): Promise<OperationalEven
     )).limit(1))[0];
     if (!persisted || !persisted.clientEventId) {
       return { ok: false, error: "STORAGE_UNAVAILABLE", message: "Ereignis wurde nicht bestätigt." };
+    }
+    if (inserted.length === 0) {
+      const sameRequest = persisted.orderId === input.orderId
+        && (persisted.itemId || undefined) === input.itemId
+        && persisted.eventType === input.eventType
+        && JSON.stringify(persisted.payload || {}) === JSON.stringify(input.metadata || {});
+      if (!sameRequest) {
+        return { ok: false, error: "CONFLICT", message: "Diese Ereignis-ID wurde bereits mit anderen Daten verwendet." };
+      }
     }
     return { ok: true, data: receipt(persisted, inserted.length === 0) };
   } catch {

@@ -6,14 +6,22 @@ import { AiBadge } from "./AiBadge";
 
 interface ItemPhotoUploaderProps {
   itemId: string;
-  onUploadComplete: (url: string, analysis?: any) => void;
+  onUploadComplete: (url: string, analysis?: Record<string, unknown>) => void;
   onRemove: (url: string) => void;
   photos: string[];
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function optionalText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
 export function ItemPhotoUploader({ itemId, onUploadComplete, onRemove, photos }: ItemPhotoUploaderProps) {
   const [isUploading, setIsUploading] = useState(false);
-  const [analysisHint, setAnalysisHint] = useState<any>(null);
+  const [analysisHint, setAnalysisHint] = useState<Record<string, unknown> | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -41,14 +49,13 @@ export function ItemPhotoUploader({ itemId, onUploadComplete, onRemove, photos }
 
       if (!res.ok) throw new Error("Upload failed");
 
-      const data = await res.json();
-      
-      if (data.analysis) {
-        setAnalysisHint(data.analysis);
+      const data: unknown = await res.json();
+      if (!isRecord(data) || typeof data.previewUrl !== "string") {
+        throw new Error("Upload response is incomplete");
       }
-      
-      if (typeof data.previewUrl !== "string") throw new Error("Upload response is incomplete");
-      onUploadComplete(data.previewUrl, data.analysis);
+      const analysis = isRecord(data.analysis) ? data.analysis : undefined;
+      setAnalysisHint(analysis ?? null);
+      onUploadComplete(data.previewUrl, analysis);
       
     } catch (err) {
       console.error(err);
@@ -88,9 +95,9 @@ export function ItemPhotoUploader({ itemId, onUploadComplete, onRemove, photos }
             <span className="font-medium text-purple-900">Vorschlag für dieses Teil</span>
           </div>
           <div className="text-purple-800 space-y-1 mt-2">
-            {analysisHint.material && <p><strong>Material:</strong> {analysisHint.material}</p>}
-            {analysisHint.schaeden && <p><strong>Schäden:</strong> {analysisHint.schaeden}</p>}
-            {analysisHint.masse && <p><strong>Maße:</strong> {analysisHint.masse}</p>}
+            {optionalText(analysisHint.material) && <p><strong>Material:</strong> {optionalText(analysisHint.material)}</p>}
+            {optionalText(analysisHint.schaeden) && <p><strong>Schäden:</strong> {optionalText(analysisHint.schaeden)}</p>}
+            {optionalText(analysisHint.masse) && <p><strong>Maße:</strong> {optionalText(analysisHint.masse)}</p>}
           </div>
         </div>
       )}

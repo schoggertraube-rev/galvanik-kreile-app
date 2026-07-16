@@ -20,7 +20,7 @@ function serviceClient() {
 }
 
 async function signedPreview(
-  client: SupabaseClient<any, "public", "public", any, any>,
+  client: SupabaseClient,
   storagePath: string,
 ): Promise<string> {
   const { data, error } = await client.storage.from("item-photos").createSignedUrl(storagePath, 5 * 60);

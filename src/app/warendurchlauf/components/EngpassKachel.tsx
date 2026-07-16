@@ -4,42 +4,65 @@ import { useState } from "react";
 import { Tile } from "@/app/buchhaltung/components/Tile";
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { AlertTriangle } from "lucide-react";
-import Link from "next/link";
+import type { WarendurchlaufKpiData } from "@/app/warendurchlauf/actions";
+import { isTerminalOrderStatus, normalizeStoredOrderStatus } from "@/lib/orders/orderMutationContract";
 
-export function EngpassKachel({ data }: { data: any }) {
+function isOpenStatus(value: string): boolean {
+  const status = normalizeStoredOrderStatus(value);
+  return status !== "unknown" && !isTerminalOrderStatus(status);
+}
+
+export function EngpassKachel({ data }: { data: WarendurchlaufKpiData | null }) {
   const [overlayOpen, setOverlayOpen] = useState(false);
 
-  const engpassStation = data?.engpassStation || "Kein Engpass";
-  const engpassCount = data?.engpassCount || 0;
-  const orders = data?.orders || [];
+  const engpassStation = data?.engpassStation ?? "–";
+  const engpassCount = data?.engpassCount ?? null;
+  const orders = data?.orders ?? [];
 
-  // Group by station
   const stations: Record<string, number> = {};
-  orders.filter((o: any) => o.status !== "completed" && o.status !== "abgeschlossen").forEach((o: any) => {
-    const s = o.currentStationId || "wareneingang";
-    stations[s] = (stations[s] || 0) + 1;
+  orders.filter((order) => isOpenStatus(order.status)).forEach((order) => {
+    const station = order.currentStationId?.trim();
+    if (!station) return;
+    stations[station] = (stations[station] || 0) + 1;
   });
 
   const sortedStations = Object.entries(stations).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
-  const compositionRows = sortedStations.length > 0 ? sortedStations.map(([station, count]) => {
+  const stationRows = sortedStations.map(([station, count]) => {
     return {
       avatar: station.charAt(0).toUpperCase(),
       avatarColor: count > 5 ? "bg-error-red" : "bg-accent-orange",
       name: station,
       amount: `${count} Aufträge`,
-      href: `/warendurchlauf/${station}`
+      href: "/orders",
     };
-  }) : [{ avatar: "✓", avatarColor: "bg-teal-500", name: "Keine Engpässe", amount: "", href: "#" }];
+  });
+  const compositionRows = stationRows.length > 0
+    ? [
+        ...stationRows,
+        ...(data && data.offeneOhneStation > 0 ? [{
+          avatar: "?",
+          avatarColor: "bg-neutral-gray-400",
+          name: "Station nicht zugeordnet",
+          amount: `${data.offeneOhneStation} Aufträge`,
+          href: "/orders",
+        }] : []),
+      ]
+    : [{
+        avatar: data ? "✓" : "!",
+        avatarColor: data ? "bg-teal-500" : "bg-neutral-gray-400",
+        name: data ? "Keine messbare Stationslast" : "Stationsdaten nicht verfügbar",
+        amount: data && data.offeneOhneStation > 0 ? `${data.offeneOhneStation} nicht zugeordnet` : "",
+      }];
 
   return (
     <>
       <Tile
         icon={<AlertTriangle className="w-6 h-6" />}
-        iconColor={engpassCount > 0 ? "text-error-red" : "text-teal-600"}
-        title="Engpass-Radar"
+        iconColor={engpassCount === null ? "text-neutral-gray-400" : engpassCount > 0 ? "text-accent-orange" : "text-teal-600"}
+        title="Stationslast-Radar"
         kpi={engpassStation}
-        description={engpassCount > 0 ? "Höchste Last" : "Alles im Plan"}
+        description={data ? (engpassCount !== null && engpassCount > 0 ? "Höchster offener Auftragsbestand · kein Kapazitätsnachweis" : "Keine messbare Stationslast") : "Daten nicht verfügbar"}
         onClick={() => setOverlayOpen(true)}
         analyseLink={{ label: "Details ansehen", onClick: () => setOverlayOpen(true) }}
       />
@@ -47,19 +70,28 @@ export function EngpassKachel({ data }: { data: any }) {
       <AnalysisOverlay
         open={overlayOpen}
         onClose={() => setOverlayOpen(false)}
-        title="Engpässe"
-        subtitle="Analysieren Sie gestaute Stationen."
+        title="Offene Stationslast"
+        subtitle="Vergleicht offene Aufträge je gespeicherter Station; Kapazität und Bearbeitungsrate sind nicht angebunden."
         hero={{
-          kicker: "Kritischster Engpass",
+          kicker: "Höchster offener Bestand",
           value: engpassStation,
-          changePill: { text: `${engpassCount} Aufträge in der Station`, variant: engpassCount > 0 ? "red" : "gray" }
+          changePill: {
+            text: engpassCount === null ? "Daten nicht verfügbar" : `${engpassCount} Aufträge in der Station`,
+            variant: engpassCount !== null && engpassCount > 0 ? "red" : "gray",
+          }
         }}
         composition={{
-          title: "Stau nach Stationen",
+          title: "Offene Aufträge nach Station",
           rows: compositionRows
         }}
         insight={{
-          body: engpassCount > 0 ? `${engpassStation} hat mit ${engpassCount} Aufträgen die höchste Last.` : "Keine Station verzeichnet auffälligen Stau."
+          body: !data
+            ? "Ohne bestätigte Auftragsdaten wird kein Engpass behauptet."
+            : engpassCount !== null && engpassCount > 0
+              ? `${engpassStation} hat mit ${engpassCount} Aufträgen den höchsten offenen Bestand. Ohne Kapazitäts- und Bearbeitungsraten ist das kein nachgewiesener Engpass.`
+              : data.offeneOhneStation > 0
+                ? `${data.offeneOhneStation} offene Aufträge besitzen keine Stationszuordnung und sind nicht im Ranking enthalten.`
+                : "Keine Station verzeichnet offene Aufträge."
         }}
         linkedAreas={[
           { label: "Bäder-Verwaltung", href: "/baeder" }

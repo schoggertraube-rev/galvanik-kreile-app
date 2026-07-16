@@ -1,15 +1,14 @@
 "use server";
 
-import { createId } from "@paralleldrive/cuid2";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { items, orders } from "@/db/schema";
+import { items } from "@/db/schema";
 import type { ActionResult } from "@/lib/server/authHelper";
 import { resolveAuthorization } from "@/lib/server/authorization";
+import { parseRouteSnapshot, type RouteTemplateId } from "@/lib/orders/routeSnapshot";
 
 const TENANT_ID = "galvanik-kreile";
 const ENTITY_ID = /^[A-Za-z0-9_-]{1,100}$/;
-const STATION_ID = /^[a-z][a-z0-9_-]{0,79}$/;
 
 export type ItemResponse = {
   id: string;
@@ -21,13 +20,10 @@ export type ItemResponse = {
   photoIds: string[];
   currentStationId?: string;
   stationSequence: string[];
+  currentStep: number;
+  routeTemplateId?: RouteTemplateId;
+  routeSnapshotVersion?: 1;
   internalNotes?: string;
-};
-
-type ItemCreate = Omit<ItemResponse, "id" | "photoIds" | "stationSequence"> & {
-  id?: string;
-  photoIds?: string[];
-  stationSequence?: string[];
 };
 
 async function authorize(permission: "perm_view_leitstand" | "perm_data_orders"): Promise<ActionResult<{ tenantId: string; userId: string }>> {
@@ -39,78 +35,13 @@ async function authorize(permission: "perm_view_leitstand" | "perm_data_orders")
   return { ok: true, data: { tenantId: authorization.data.tenantId, userId: authorization.data.userId } };
 }
 
-function boundedText(value: unknown, maximum: number, required = false): string | undefined {
-  if (value === undefined || value === null || value === "") {
-    if (required) throw new Error("INVALID_ITEM");
-    return undefined;
-  }
-  if (typeof value !== "string") throw new Error("INVALID_ITEM");
-  const normalized = value.trim();
-  if ((required && normalized.length === 0) || normalized.length > maximum || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(normalized)) throw new Error("INVALID_ITEM");
-  return normalized || undefined;
-}
-
 function parseId(value: unknown): string {
   if (typeof value !== "string" || !ENTITY_ID.test(value)) throw new Error("INVALID_ITEM");
   return value;
 }
 
-function parseCodes(value: unknown, maximum: number): string[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > maximum || value.some((entry) => typeof entry !== "string" || !STATION_ID.test(entry))) throw new Error("INVALID_ITEM");
-  return [...new Set(value as string[])];
-}
-
-function parseEntityIds(value: unknown, maximum: number): string[] {
-  if (value === undefined) return [];
-  if (!Array.isArray(value) || value.length > maximum || value.some((entry) => typeof entry !== "string" || !ENTITY_ID.test(entry))) throw new Error("INVALID_ITEM");
-  return [...new Set(value as string[])];
-}
-
-function parseCreate(value: unknown): ItemCreate {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("INVALID_ITEM");
-  const input = value as Record<string, unknown>;
-  const allowed = ["id", "orderId", "name", "quantity", "material", "surfaceRequested", "photoIds", "currentStationId", "stationSequence", "internalNotes"];
-  if (Object.keys(input).some((key) => !allowed.includes(key))) throw new Error("INVALID_ITEM");
-  const quantity = Number(input.quantity);
-  if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1_000_000) throw new Error("INVALID_ITEM");
-  const photoIds = input.photoIds === undefined ? [] : parseEntityIds(input.photoIds, 6);
-  return {
-    ...(input.id !== undefined ? { id: parseId(input.id) } : {}),
-    orderId: parseId(input.orderId),
-    name: boundedText(input.name, 200, true)!,
-    quantity,
-    ...(boundedText(input.material, 100) ? { material: boundedText(input.material, 100) } : {}),
-    ...(boundedText(input.surfaceRequested, 100) ? { surfaceRequested: boundedText(input.surfaceRequested, 100) } : {}),
-    photoIds,
-    ...(input.currentStationId !== undefined ? { currentStationId: parseCodes([input.currentStationId], 1)[0] } : {}),
-    stationSequence: parseCodes(input.stationSequence, 20),
-    ...(boundedText(input.internalNotes, 2_000) ? { internalNotes: boundedText(input.internalNotes, 2_000) } : {}),
-  };
-}
-
-function parseUpdate(value: unknown): Partial<Omit<ItemResponse, "id" | "orderId">> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("INVALID_ITEM");
-  const input = value as Record<string, unknown>;
-  const allowed = ["name", "quantity", "material", "surfaceRequested", "photoIds", "currentStationId", "stationSequence", "internalNotes"];
-  if (Object.keys(input).length === 0 || Object.keys(input).some((key) => !allowed.includes(key))) throw new Error("INVALID_ITEM");
-  const update: Partial<Omit<ItemResponse, "id" | "orderId">> = {};
-  if (input.name !== undefined) update.name = boundedText(input.name, 200, true)!;
-  if (input.quantity !== undefined) {
-    const quantity = Number(input.quantity);
-    if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1_000_000) throw new Error("INVALID_ITEM");
-    update.quantity = quantity;
-  }
-  if (input.material !== undefined) update.material = boundedText(input.material, 100);
-  if (input.surfaceRequested !== undefined) update.surfaceRequested = boundedText(input.surfaceRequested, 100);
-  if (input.photoIds !== undefined) update.photoIds = parseEntityIds(input.photoIds, 6);
-  if (input.currentStationId !== undefined) update.currentStationId = parseCodes([input.currentStationId], 1)[0];
-  if (input.stationSequence !== undefined) update.stationSequence = parseCodes(input.stationSequence, 20);
-  if (input.internalNotes !== undefined) update.internalNotes = boundedText(input.internalNotes, 2_000);
-  return update;
-}
-
 function mapItem(row: typeof items.$inferSelect): ItemResponse {
+  const snapshot = parseRouteSnapshot(row.stationSequence);
   return {
     id: row.id,
     orderId: row.orderId,
@@ -120,7 +51,9 @@ function mapItem(row: typeof items.$inferSelect): ItemResponse {
     ...(row.surfaceRequested ? { surfaceRequested: row.surfaceRequested } : {}),
     photoIds: row.photoIds || [],
     ...(row.currentStationId ? { currentStationId: row.currentStationId } : {}),
-    stationSequence: Array.isArray(row.stationSequence) ? row.stationSequence.filter((entry): entry is string => typeof entry === "string") : [],
+    stationSequence: snapshot?.stations ?? (Array.isArray(row.stationSequence) ? row.stationSequence.filter((entry): entry is string => typeof entry === "string") : []),
+    currentStep: row.currentStep ?? 0,
+    ...(snapshot ? { routeTemplateId: snapshot.templateId, routeSnapshotVersion: snapshot.contractVersion } : {}),
     ...(row.internalNotes ? { internalNotes: row.internalNotes } : {}),
   };
 }
@@ -143,68 +76,37 @@ export async function getItemsByOrderDb(orderIdValue: unknown): Promise<ActionRe
   try { orderId = parseId(orderIdValue); }
   catch { return { ok: false, error: "UNKNOWN", message: "Ungültige Auftrags-ID." }; }
   try {
-    const rows = await db.select().from(items).where(and(eq(items.tenantId, actor.data.tenantId), eq(items.orderId, orderId))).orderBy(desc(items.createdAt));
+    const rows = await db.select().from(items).where(and(
+      eq(items.tenantId, actor.data.tenantId),
+      eq(items.orderId, orderId),
+    )).orderBy(desc(items.createdAt));
     return { ok: true, data: rows.map(mapItem) };
   } catch {
     return { ok: false, error: "DB_ERROR", message: "Auftragsteile konnten nicht geladen werden." };
   }
 }
 
-export async function createItemDb(value: unknown): Promise<ActionResult<ItemResponse>> {
+export async function createItemDb(_value: unknown): Promise<ActionResult<ItemResponse>> {
+  void _value;
   const actor = await authorize("perm_data_orders");
   if (!actor.ok) return actor;
-  let input: ItemCreate;
-  try { input = parseCreate(value); }
-  catch { return { ok: false, error: "UNKNOWN", message: "Ungültige Teiledaten." }; }
-  try {
-    const order = (await db.select({ customerId: orders.customerId }).from(orders).where(and(
-      eq(orders.id, input.orderId), eq(orders.tenantId, actor.data.tenantId),
-    )).limit(1))[0];
-    if (!order) return { ok: false, error: "EMPTY_RESULT", message: "Auftrag nicht gefunden." };
-    const inserted = await db.insert(items).values({
-      id: input.id || createId(),
-      tenantId: actor.data.tenantId,
-      orderId: input.orderId,
-      customerId: order.customerId,
-      name: input.name,
-      quantity: input.quantity,
-      material: input.material,
-      surfaceRequested: input.surfaceRequested,
-      photoIds: input.photoIds,
-      currentStationId: input.currentStationId || "wareneingang",
-      stationSequence: input.stationSequence,
-      internalNotes: input.internalNotes,
-    }).returning();
-    if (!inserted[0]) return { ok: false, error: "DB_ERROR", message: "Auftragsteil wurde nicht bestätigt." };
-    return { ok: true, data: mapItem(inserted[0]) };
-  } catch {
-    return { ok: false, error: "DB_ERROR", message: "Auftragsteil konnte nicht erstellt werden." };
-  }
+  return {
+    ok: false,
+    error: "FORBIDDEN",
+    message: "Zusätzliche Teile sind gesperrt, bis ein atomarer, idempotenter Rework-/Handling-Unit-Beleg verfügbar ist. Initiale Positionen werden ausschließlich mit dem Auftrag angelegt.",
+  };
 }
 
-export async function updateItemDb(idValue: unknown, value: unknown): Promise<ActionResult<ItemResponse>> {
+export async function updateItemDb(_idValue: unknown, _value: unknown): Promise<ActionResult<ItemResponse>> {
+  void _idValue;
+  void _value;
   const actor = await authorize("perm_data_orders");
   if (!actor.ok) return actor;
-  let id: string;
-  let input: ReturnType<typeof parseUpdate>;
-  try { id = parseId(idValue); input = parseUpdate(value); }
-  catch { return { ok: false, error: "UNKNOWN", message: "Ungültige Teiledaten." }; }
-  try {
-    const updateSet: Partial<typeof items.$inferInsert> = {};
-    if (input.name !== undefined) updateSet.name = input.name;
-    if (input.quantity !== undefined) updateSet.quantity = input.quantity;
-    if ("material" in input) updateSet.material = input.material ?? null;
-    if ("surfaceRequested" in input) updateSet.surfaceRequested = input.surfaceRequested ?? null;
-    if (input.photoIds !== undefined) updateSet.photoIds = input.photoIds;
-    if (input.currentStationId !== undefined) updateSet.currentStationId = input.currentStationId;
-    if (input.stationSequence !== undefined) updateSet.stationSequence = input.stationSequence;
-    if ("internalNotes" in input) updateSet.internalNotes = input.internalNotes ?? null;
-    const updated = await db.update(items).set(updateSet).where(and(eq(items.id, id), eq(items.tenantId, actor.data.tenantId))).returning();
-    if (!updated[0]) return { ok: false, error: "EMPTY_RESULT", message: "Auftragsteil nicht gefunden." };
-    return { ok: true, data: mapItem(updated[0]) };
-  } catch {
-    return { ok: false, error: "DB_ERROR", message: "Auftragsteil konnte nicht aktualisiert werden." };
-  }
+  return {
+    ok: false,
+    error: "FORBIDDEN",
+    message: "Positionsänderungen sind gesperrt, bis Wareneingangsgrenze, Idempotenz und Auditbeleg atomar verbunden sind.",
+  };
 }
 
 export async function deleteItemDb(): Promise<ActionResult<{ success: boolean }>> {

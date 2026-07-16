@@ -100,17 +100,20 @@ export async function getMarketingUmsatzAnalysisAction(von: string, bis: string)
   await requireMarketingRead()
   assertFinanceDateRange(von, bis)
   const facts = await loadPeriodFacts(von, bis)
-  const revenue = facts.attributions.reduce((sum, entry) => sum + (Number(entry.umsatz) || 0), 0)
+  const revenueRows = facts.attributions.filter((entry) => Number(entry.umsatz) > 0)
+  const revenue = revenueRows.length > 0
+    ? revenueRows.reduce((sum, entry) => sum + Number(entry.umsatz), 0)
+    : null
   const byMonth = new Map<string, number>()
-  const topOrders = facts.attributions.flatMap((entry) => {
+  const topOrders = revenueRows.flatMap((entry) => {
     if (!entry.touchpointId) return []
     const touch = facts.touchpointById.get(entry.touchpointId)
     if (!touch) return []
     const month = monthKey(touch.ausgefuehrtAm)
-    byMonth.set(month, (byMonth.get(month) || 0) + (Number(entry.umsatz) || 0))
+    byMonth.set(month, (byMonth.get(month) || 0) + Number(entry.umsatz))
     return entry.auftragId ? [{
       auftragId: entry.auftragId,
-      umsatz: Number(entry.umsatz) || 0,
+      umsatz: Number(entry.umsatz),
       kanal: touch.kanalId ? facts.channelById.get(touch.kanalId) || 'Unbekannt' : 'Unbekannt',
     }] : []
   }).sort((a, b) => b.umsatz - a.umsatz)
@@ -118,11 +121,17 @@ export async function getMarketingUmsatzAnalysisAction(von: string, bis: string)
   return {
     gesamt: revenue,
     chartData: [...byMonth.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([name, ist]) => ({ name, ist })),
-    insights: evidenceInsight(`${revenue.toLocaleString('de-DE')} € explizit attribuierter Umsatz im Zeitraum.`, false),
+    insights: evidenceInsight(
+      revenue === null
+        ? 'Kein positiver, explizit gespeicherter Attributionsumsatz im Zeitraum.'
+        : `${revenue.toLocaleString('de-DE')} € explizit attribuierter Umsatz im Zeitraum.`,
+      false
+    ),
     topAuftraege: topOrders.slice(0, 5),
     evidence: {
       attributedOrders: new Set(topOrders.map((entry) => entry.auftragId)).size,
       attributionRows: facts.attributions.length,
+      revenueEvidenceRows: revenueRows.length,
       source: 'marketing.attribution.umsatz',
     },
   }
@@ -132,8 +141,14 @@ export async function getMarketingRoiAnalysisAction(von: string, bis: string) {
   await requireMarketingRead()
   assertFinanceDateRange(von, bis)
   const facts = await loadPeriodFacts(von, bis)
-  const revenue = facts.attributions.reduce((sum, entry) => sum + (Number(entry.umsatz) || 0), 0)
-  const plannedBudget = facts.actions.reduce((sum, entry) => sum + (Number(entry.kostenBudget) || 0), 0)
+  const revenueRows = facts.attributions.filter((entry) => Number(entry.umsatz) > 0)
+  const revenue = revenueRows.length > 0
+    ? revenueRows.reduce((sum, entry) => sum + Number(entry.umsatz), 0)
+    : null
+  const budgetedActions = facts.actions.filter((entry) => Number(entry.kostenBudget) > 0)
+  const plannedBudget = budgetedActions.length > 0
+    ? budgetedActions.reduce((sum, entry) => sum + Number(entry.kostenBudget), 0)
+    : null
 
   return {
     gesamt: null,
@@ -148,7 +163,8 @@ export async function getMarketingRoiAnalysisAction(von: string, bis: string) {
     ),
     evidence: {
       attributionRows: facts.attributions.length,
-      budgetedActions: facts.actions.filter((entry) => Number(entry.kostenBudget) > 0).length,
+      budgetedActions: budgetedActions.length,
+      revenueEvidenceRows: revenueRows.length,
       source: 'marketing.attribution.umsatz + marketing.aktion.kosten_budget (Planwert)',
     },
   }

@@ -11,6 +11,9 @@ export function WerkstattPulsOrdersTable({ data }: Props) {
   const criticalCount = affectedOrders.filter(o => o.status === 'critical').length;
   const missingCount = affectedOrders.filter(o => o.status === 'missing_due_date').length;
   const watchCount = affectedOrders.filter(o => o.status === 'watch').length;
+  const totalCritical = data.hero.kritischeAuftraegeN;
+  const totalMissing = data.hero.ohneZusageterminN;
+  const expectedAffected = totalCritical + totalMissing;
 
   return (
     <section>
@@ -18,16 +21,18 @@ export function WerkstattPulsOrdersTable({ data }: Props) {
         <div className="card-h">
           <h3>Verzögerte und gefährdete Aufträge</h3>
           <div style={{ display: 'flex', gap: 8 }}>
-            {criticalCount > 0 && <span className="pill pill-bad" style={{ fontSize: 10 }}>{criticalCount} kritisch</span>}
-            {missingCount > 0 && <span className="pill pill-warn" style={{ fontSize: 10 }}>{missingCount} ohne Zusage</span>}
+            {totalCritical > 0 && <span className="pill pill-bad" style={{ fontSize: 10 }}>{totalCritical} kritisch · {criticalCount} im Auszug</span>}
+            {totalMissing > 0 && <span className="pill pill-warn" style={{ fontSize: 10 }}>{totalMissing} ohne Zusage · {missingCount} im Auszug</span>}
             {watchCount > 0 && <span className="pill pill-warn" style={{ fontSize: 10 }}>{watchCount} gefährdet</span>}
-            {affectedOrders.length === 0 && <span className="pill pill-ok" style={{ fontSize: 10 }}>Keine Vorfälle</span>}
+            {expectedAffected === 0 && <span className="pill pill-mute" style={{ fontSize: 10 }}>Keine gespeicherten Betroffenen</span>}
           </div>
         </div>
         
         {affectedOrders.length === 0 ? (
           <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
-            Aktuell keine kritischen Aufträge vorhanden. Alles läuft im Plan.
+            {expectedAffected > 0
+              ? `Die Zusammenfassung weist ${expectedAffected} betroffene Aufträge aus; der begrenzte Detailauszug konnte dazu keinen Datensatz liefern.`
+              : 'Im gewählten Zeitraum wurden keine verspäteten Aufträge oder fehlenden Kundenzusagen ermittelt.'}
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>

@@ -1,6 +1,7 @@
 import { getOrdersDb, createOrderDb, updateOrderDb } from "@/app/actions/orders.actions";
 import type { OrderSource } from "@/lib/validation/orderSchema";
 import type { OrderUpdateInput } from "@/lib/orders/orderMutationContract";
+import type { RouteTemplateId } from "@/lib/orders/routeSnapshot";
 
 export type Order = {
   id: string;
@@ -31,6 +32,7 @@ export type Order = {
 }
 
 export type OrderCreateInput = {
+  clientRequestId: string;
   customerId: string;
   title: string;
   task?: string;
@@ -47,6 +49,7 @@ export type OrderCreateInput = {
     quantity: number;
     surfaceRequested?: string;
     material?: string;
+    routeTemplateId?: RouteTemplateId;
   }>;
 };
 

@@ -61,6 +61,8 @@ export default function MarketingStudioClient({
   const [analysisOpen, setAnalysisOpen] = useState<string | null>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [analysisDataMap, setAnalysisDataMap] = useState<Record<string, any>>({});
+  const [analysisErrors, setAnalysisErrors] = useState<Record<string, string>>({});
+  const [analysisReloadKey, setAnalysisReloadKey] = useState(0);
   const [igConnected, setIgConnected] = useState(false);
 
   useEffect(() => {
@@ -68,34 +70,39 @@ export default function MarketingStudioClient({
     const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().substring(0, 10);
     const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().substring(0, 10);
     
-    if (analysisOpen === "Anfragen aus Marketing" && !analysisDataMap["Anfragen aus Marketing"]) {
-      import("@/app/marketing/analysis.actions").then(m => {
-        m.getMarketingAnfragenAnalysisAction(firstDay, lastDay).then(res => {
-          setAnalysisDataMap(p => ({ ...p, "Anfragen aus Marketing": res }));
-        });
-      });
-    }
+    const key = analysisOpen;
+    if (!key || !["Anfragen aus Marketing", "Umsatz daraus", "Return on Invest"].includes(key) || analysisDataMap[key]) return;
 
-    if (analysisOpen === "Umsatz daraus" && !analysisDataMap["Umsatz daraus"]) {
-      import("@/app/marketing/analysis.actions").then(m => {
-        m.getMarketingUmsatzAnalysisAction(firstDay, lastDay).then(res => {
-          setAnalysisDataMap(p => ({ ...p, "Umsatz daraus": res }));
-        });
-      });
-    }
-
-    if (analysisOpen === "Return on Invest" && !analysisDataMap["Return on Invest"]) {
-      import("@/app/marketing/analysis.actions").then(m => {
-        m.getMarketingRoiAnalysisAction(firstDay, lastDay).then(res => {
-          setAnalysisDataMap(p => ({ ...p, "Return on Invest": res }));
-        });
-      });
-    }
+    let cancelled = false;
+    setAnalysisErrors(previous => {
+      const next = { ...previous };
+      delete next[key];
+      return next;
+    });
+    void (async () => {
+      try {
+        const actions = await import("@/app/marketing/analysis.actions");
+        const result = key === "Anfragen aus Marketing"
+          ? await actions.getMarketingAnfragenAnalysisAction(firstDay, lastDay)
+          : key === "Umsatz daraus"
+            ? await actions.getMarketingUmsatzAnalysisAction(firstDay, lastDay)
+            : await actions.getMarketingRoiAnalysisAction(firstDay, lastDay);
+        if (!cancelled) setAnalysisDataMap(previous => ({ ...previous, [key]: result }));
+      } catch (error) {
+        if (!cancelled) {
+          setAnalysisErrors(previous => ({
+            ...previous,
+            [key]: error instanceof Error ? error.message : "Analysedaten konnten nicht geladen werden.",
+          }));
+        }
+      }
+    })();
+    return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [analysisOpen]);
+  }, [analysisOpen, analysisReloadKey]);
 
   useEffect(() => {
-    instagramAdapter.isConnected().then(setIgConnected);
+    instagramAdapter.isConnected().then(setIgConnected).catch(() => setIgConnected(false));
   }, []);
 
   const handleSort = useCallback(async (sort: SortMode) => {
@@ -114,14 +121,6 @@ export default function MarketingStudioClient({
     } : prev);
     setActiveTab("Studio");
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  }, [besteAktion]);
-
-  const handlePost = useCallback(async () => {
-    if (!besteAktion) return;
-    const res = await instagramAdapter.publish(besteAktion);
-    setToastMsg(res.message);
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 5000);
   }, [besteAktion]);
 
   const handleInstagramConnect = useCallback(() => {
@@ -188,6 +187,20 @@ export default function MarketingStudioClient({
       };
     }
     const data = analysisDataMap[key];
+    const loadError = analysisErrors[key];
+    if (loadError) {
+      return {
+        title: "Analysedaten nicht verfügbar",
+        subtitle: loadError,
+        isEmpty: true,
+        emptyState: {
+          title: "Laden fehlgeschlagen",
+          description: "Es werden keine alten oder geschätzten Werte als Ersatz angezeigt.",
+          actionLabel: "Erneut versuchen",
+          onAction: () => setAnalysisReloadKey(value => value + 1),
+        },
+      };
+    }
     if (!data) return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
 
     if (key === "Anfragen aus Marketing") {
@@ -211,7 +224,7 @@ export default function MarketingStudioClient({
             avatar: k.name.substring(0, 2).toUpperCase(), avatarColor: "#E1306C",
             name: k.name, meta: "Zugewiesene Anfragen", amount: `${k.amount}`
           })),
-          footerLink: { label: "Zu allen Anfragen", href: "/kunden" }
+          footerLink: { label: "Zu allen Anfragen", href: "/customers" }
         },
         crossKpi: [
           { label: "Touchpoints im Zeitraum", value: String(data.evidence.touchpoints), delta: "DB-Fakten", deltaColor: "var(--text3)" },
@@ -224,7 +237,7 @@ export default function MarketingStudioClient({
           actions: data.insights.vorschlaege.map((v: { label: string; href: string }) => ({ label: v.label, onClick: () => window.location.href = v.href }))
         },
         linkedAreas: [
-          { label: "Telefonnotiz & CRM", href: "/kunden" },
+          { label: "Telefonnotiz & CRM", href: "/customers" },
           { label: "Performance Marketing Touchpoints", href: "/performance" }
         ]
       };
@@ -240,7 +253,7 @@ export default function MarketingStudioClient({
         activeTab: "gesamt",
         hero: {
           kicker: "UMSATZ (LFD. MONAT)",
-          value: `${data.gesamt.toLocaleString("de-DE")} €`,
+          value: data.gesamt === null ? "nicht erfasst" : `${data.gesamt.toLocaleString("de-DE")} €`,
           changePill: { text: `${data.evidence.attributedOrders} zugeordnete Aufträge`, variant: "gray" as const },
           meta: "Summe ausschließlich aus gespeicherten marketing.attribution.umsatz-Werten.",
         },
@@ -254,7 +267,7 @@ export default function MarketingStudioClient({
             meta: `Quelle: ${order.kanal}`,
             amount: `${order.umsatz.toLocaleString("de-DE")} €`,
           })),
-          footerLink: { label: "Alle Marketing-Aufträge", href: "/auftraege" }
+          footerLink: { label: "Alle Marketing-Aufträge", href: "/orders" }
         },
         crossKpi: [
           { label: "Zugeordnete Aufträge", value: String(data.evidence.attributedOrders), delta: "eindeutige IDs", deltaColor: "var(--text3)" },
@@ -262,7 +275,7 @@ export default function MarketingStudioClient({
         ],
         insight: {
           body: data.insights.beobachtungen.map((observation: string) => `<b>Beobachtung:</b> ${observation}`).join('<br/>'),
-          actions: [{ label: "Zu den Aufträgen", onClick: () => window.location.href = "/auftraege" }]
+          actions: [{ label: "Zu den Aufträgen", onClick: () => window.location.href = "/orders" }]
         },
         linkedAreas: [
           { label: "Rechnungen & Buchhaltung", href: "/buchhaltung" }
@@ -274,22 +287,22 @@ export default function MarketingStudioClient({
       return {
         icon: <svg viewBox="0 0 24 24" width={24} height={24} stroke="currentColor" strokeWidth={2} fill="none"><path d="M23 6l-9.5 9.5-5-5L1 18"/></svg>,
         title: "ROI-Datenlücke",
-        subtitle: "Attribuierter Umsatz und Planbudget sind vorhanden; tatsächliche Ausgaben fehlen.",
+        subtitle: "ROI bleibt ohne tatsächliche Ausgaben gesperrt; fehlende Umsatz- und Planwerte bleiben unbekannt.",
         accentBg: "linear-gradient(180deg, var(--posbg), transparent)",
         tabs: [{ id: "gesamt", label: "Gesamt-ROI" }],
         activeTab: "gesamt",
         hero: {
           kicker: "MARKETING-ROI",
           value: data.gesamt === null ? "nicht berechenbar" : `${data.gesamt.toLocaleString("de-DE", { maximumFractionDigits: 2 })}×`,
-          changePill: { text: `${data.plannedBudget.toLocaleString("de-DE")} € Planbudget`, variant: "amber" as const },
+          changePill: { text: data.plannedBudget === null ? "Planbudget nicht erfasst" : `${data.plannedBudget.toLocaleString("de-DE")} € Planbudget`, variant: "amber" as const },
           meta: "Keine ROI-Berechnung, solange tatsächliche Marketingausgaben nicht gespeichert und zugeordnet sind.",
         },
         trend: { title: "ROI-Entwicklung", chartType: "line", chartData: data.chartData },
         composition: {
           title: "Berechnungsgrundlage",
           rows: [
-            { avatar: "R", avatarColor: "#10B981", name: "Attribuierter Umsatz", meta: "marketing.attribution.umsatz", amount: `${data.revenue.toLocaleString("de-DE")} €` },
-            { avatar: "P", avatarColor: "#F59E0B", name: "Planbudget", meta: "marketing.aktion.kosten_budget (Planwert)", amount: `${data.plannedBudget.toLocaleString("de-DE")} €` },
+            { avatar: "R", avatarColor: "#10B981", name: "Attribuierter Umsatz", meta: "marketing.attribution.umsatz", amount: data.revenue === null ? "nicht erfasst" : `${data.revenue.toLocaleString("de-DE")} €` },
+            { avatar: "P", avatarColor: "#F59E0B", name: "Planbudget", meta: "marketing.aktion.kosten_budget (Planwert)", amount: data.plannedBudget === null ? "nicht erfasst" : `${data.plannedBudget.toLocaleString("de-DE")} €` },
             { avatar: "K", avatarColor: "#94A3B8", name: "Tatsächliche Ausgaben", meta: "noch nicht mit Kostenledger verknüpft", amount: "nicht erfasst" },
             { avatar: "A", avatarColor: "#3B82F6", name: "Ausgeführte Aktionen", meta: "im gewählten Zeitraum", amount: `${data.actions} Stk.` }
           ],
@@ -343,7 +356,7 @@ export default function MarketingStudioClient({
           </button>
           <div className="mk-live-pill">
             <span className="dot" />
-            Echte Datenbasis
+            Gespeicherte Datenbasis
           </div>
         </div>
       </div>
@@ -357,7 +370,6 @@ export default function MarketingStudioClient({
             varianteIdx={varianteIdx}
             onNextVar={nextVar}
             onPrevVar={prevVar}
-            onPost={handlePost}
             storyIdeen={storyIdeen}
             wirkungMini={wirkungMini}
             onStoryClick={handleStoryClick}

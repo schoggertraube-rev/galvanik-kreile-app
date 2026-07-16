@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS public.capture_request_receipts (
   result jsonb,
   created_at timestamptz NOT NULL DEFAULT now(),
   completed_at timestamptz,
-  CONSTRAINT capture_request_receipts_kind_check CHECK (kind IN ('time', 'material', 'template')),
+  CONSTRAINT capture_request_receipts_kind_check CHECK (kind IN ('time', 'material', 'template', 'station_completion')),
   CONSTRAINT capture_request_receipts_hash_check CHECK (request_hash ~ '^[0-9a-f]{64}$')
 );
 

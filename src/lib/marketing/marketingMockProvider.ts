@@ -12,6 +12,7 @@ import type {
 /* ── Beste Aktion ─────────────────────────────────────────── */
 const besteAktion: AktionVorschlag = {
   id: 'a-001',
+  status: 'vorschlag', publishCapability: 'proposal_only', publishReason: 'Nur Testdaten; keine Provider-Freigabe.',
   titel: 'Vorher-/Nachher der Oldtimer-Felge posten',
   kanal: 'instagram',
   kanalLabel: 'Instagram',
@@ -36,6 +37,7 @@ const alleVorschlaege: AktionVorschlag[] = [
   besteAktion,
   {
     id: 'a-002',
+    status: 'vorschlag', publishCapability: 'proposal_only', publishReason: 'Nur Testdaten; keine Provider-Freigabe.',
     titel: 'Museen & Restaurierung wecken',
     kanal: 'email',
     kanalLabel: 'E-Mail',
@@ -52,6 +54,7 @@ const alleVorschlaege: AktionVorschlag[] = [
   },
   {
     id: 'a-003',
+    status: 'vorschlag', publishCapability: 'proposal_only', publishReason: 'Nur Testdaten; keine Provider-Freigabe.',
     titel: '3 Google-Bewertungen anfragen',
     kanal: 'google',
     kanalLabel: 'Google',
@@ -67,6 +70,7 @@ const alleVorschlaege: AktionVorschlag[] = [
   },
   {
     id: 'a-004',
+    status: 'vorschlag', publishCapability: 'proposal_only', publishReason: 'Nur Testdaten; keine Provider-Freigabe.',
     titel: 'Wissens-Post „Was ist Vernickeln?"',
     kanal: 'instagram',
     kanalLabel: 'Instagram',
@@ -104,12 +108,12 @@ const funnel: FunnelDaten = {
 
 /* ── Segmente ──────────────────────────────────────────────── */
 const segmente: Segment[] = [
-  { id: 's-1', name: 'Oldtimer / Fahrzeuge', emoji: '🚗', kundenAnzahl: 31, weckbar: 4 },
-  { id: 's-2', name: 'Schmuck', emoji: '💎', kundenAnzahl: 18, weckbar: 2 },
-  { id: 's-3', name: 'Besteck / Silber', emoji: '🍴', kundenAnzahl: 24, weckbar: 5 },
-  { id: 's-4', name: 'Kirchen / Institutionen', emoji: '⛪', kundenAnzahl: 9, weckbar: 4 },
-  { id: 's-5', name: 'Museen / Restaurierung', emoji: '🏛️', kundenAnzahl: 11, weckbar: 6 },
-  { id: 's-6', name: 'Geschäftskunden', emoji: '🏢', kundenAnzahl: 12, weckbar: 3 },
+  { id: 's-1', name: 'Oldtimer / Fahrzeuge', emoji: '🚗', kundenAnzahl: null, weckbar: null, evidence: 'membership_not_connected' },
+  { id: 's-2', name: 'Schmuck', emoji: '💎', kundenAnzahl: null, weckbar: null, evidence: 'membership_not_connected' },
+  { id: 's-3', name: 'Besteck / Silber', emoji: '🍴', kundenAnzahl: null, weckbar: null, evidence: 'membership_not_connected' },
+  { id: 's-4', name: 'Kirchen / Institutionen', emoji: '⛪', kundenAnzahl: null, weckbar: null, evidence: 'membership_not_connected' },
+  { id: 's-5', name: 'Museen / Restaurierung', emoji: '🏛️', kundenAnzahl: null, weckbar: null, evidence: 'membership_not_connected' },
+  { id: 's-6', name: 'Geschäftskunden', emoji: '🏢', kundenAnzahl: null, weckbar: null, evidence: 'membership_not_connected' },
 ];
 
 /* ── Lern-Insights ─────────────────────────────────────────── */
@@ -144,9 +148,9 @@ export const marketingMockProvider: MarketingDataProvider = {
     const list = [...alleVorschlaege];
     switch (sort) {
       case 'einfach': return list.sort((a, b) => a.aufwand.localeCompare(b.aufwand));
-      case 'relevanz': return list.sort((a, b) => b.score - a.score);
+      case 'relevanz': return list.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
       case 'kanal': return list.sort((a, b) => a.kanal.localeCompare(b.kanal));
-      default: return list.sort((a, b) => b.score - a.score);
+      default: return list.sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
     }
   },
   async getKampagnen() { return kampagnen; },

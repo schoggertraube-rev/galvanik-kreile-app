@@ -32,7 +32,7 @@ export function TabletTopFlowNav({ className = "" }: { className?: string }) {
 
       <FlowTab href="/orders" icon={<ClipboardList className="w-4 h-4" />} label="Aufträge" active={isActive("/orders")} />
       <FlowTab href="/customers" icon={<Users className="w-4 h-4" />} label="Kunden" active={isActive("/customers")} />
-      <FlowTab href="/station" icon={<Factory className="w-4 h-4" />} label="Stationen" active={isActive("/station") && !isActive("/warendurchlauf")} />
+      <FlowTab href="/warendurchlauf" icon={<Factory className="w-4 h-4" />} label="Stationen" active={isActive("/warendurchlauf")} />
       <FlowTab href="/kontrolle" icon={<ShieldCheck className="w-4 h-4" />} label="Kontrolle" active={isActive("/kontrolle")} />
     </nav>
   );

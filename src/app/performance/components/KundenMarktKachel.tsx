@@ -59,9 +59,7 @@ export function KundenMarktKachel({ summary, onClick }: Props) {
         )}
         
         <div className="custrow">
-          <span>🚗 82% Abholung</span>
-          <span>📦 18% Versand</span>
-          <span>🌍 3 Länder</span>
+          <span>Versandart- und Länderanteile sind noch nicht als belegte Kennzahlen angebunden.</span>
         </div>
         <div className="t-arr">Details →</div>
       </div>

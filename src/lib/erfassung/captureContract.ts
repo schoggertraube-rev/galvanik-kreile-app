@@ -30,6 +30,17 @@ export type TemplateCaptureInput = {
   clientRequestId: string;
 };
 
+export type StationCompletionCaptureInput = {
+  orderId: string;
+  expectedStation: string;
+  minutes: number;
+  multiplier: 1 | 2 | 3 | 4;
+  taskType: string;
+  note?: string;
+  materials: MaterialCaptureLine[];
+  clientRequestId: string;
+};
+
 function strictRecord(value: unknown, allowed: readonly string[]): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("INVALID_CAPTURE");
   const record = value as Record<string, unknown>;
@@ -69,6 +80,37 @@ function positiveFourDecimalNumber(value: unknown, maximum: number): number {
   return rounded;
 }
 
+function boundedText(value: unknown, maximum: number, required: boolean): string | undefined {
+  if (value === undefined || value === null || value === "") {
+    if (required) throw new Error("INVALID_CAPTURE");
+    return undefined;
+  }
+  if (typeof value !== "string") throw new Error("INVALID_CAPTURE");
+  const normalized = value.trim();
+  if ((required && normalized.length === 0) || normalized.length > maximum || /[\u0000-\u001F\u007F]/.test(normalized)) {
+    throw new Error("INVALID_CAPTURE");
+  }
+  return normalized || undefined;
+}
+
+function parseMaterialLines(value: unknown, allowEmpty: boolean): MaterialCaptureLine[] {
+  if (!Array.isArray(value) || value.length > 50 || (!allowEmpty && value.length < 1)) {
+    throw new Error("INVALID_CAPTURE");
+  }
+  const seen = new Set<string>();
+  return value.map((raw) => {
+    const line = strictRecord(raw, ["inventoryItemId", "quantity", "templateId"]);
+    const inventoryItemId = parseCaptureEntityId(line.inventoryItemId);
+    if (seen.has(inventoryItemId)) throw new Error("INVALID_CAPTURE");
+    seen.add(inventoryItemId);
+    return {
+      inventoryItemId,
+      quantity: positiveFourDecimalNumber(line.quantity, 1_000_000),
+      templateId: parseOptionalTemplateId(line.templateId),
+    };
+  });
+}
+
 export function parseTimeCaptureInput(value: unknown): TimeCaptureInput {
   const input = strictRecord(value, ["orderId", "stationKuerzel", "minutes", "clientRequestId", "templateId"]);
   const minutes = positiveFourDecimalNumber(input.minutes, 1_440);
@@ -84,24 +126,43 @@ export function parseTimeCaptureInput(value: unknown): TimeCaptureInput {
 
 export function parseMaterialCaptureInput(value: unknown): MaterialCaptureInput {
   const input = strictRecord(value, ["orderId", "stationKuerzel", "materials", "clientRequestId"]);
-  if (!Array.isArray(input.materials) || input.materials.length < 1 || input.materials.length > 50) {
-    throw new Error("INVALID_CAPTURE");
-  }
-  const seen = new Set<string>();
-  const materials = input.materials.map((raw) => {
-    const line = strictRecord(raw, ["inventoryItemId", "quantity", "templateId"]);
-    const inventoryItemId = parseCaptureEntityId(line.inventoryItemId);
-    if (seen.has(inventoryItemId)) throw new Error("INVALID_CAPTURE");
-    seen.add(inventoryItemId);
-    return {
-      inventoryItemId,
-      quantity: positiveFourDecimalNumber(line.quantity, 1_000_000),
-      templateId: parseOptionalTemplateId(line.templateId),
-    };
-  });
+  const materials = parseMaterialLines(input.materials, false);
   return {
     orderId: parseCaptureEntityId(input.orderId),
     stationKuerzel: parseCaptureStation(input.stationKuerzel),
+    materials,
+    clientRequestId: parseCaptureRequestId(input.clientRequestId),
+  };
+}
+
+export function parseStationCompletionCaptureInput(value: unknown): StationCompletionCaptureInput {
+  const input = strictRecord(value, [
+    "orderId",
+    "expectedStation",
+    "minutes",
+    "multiplier",
+    "taskType",
+    "note",
+    "materials",
+    "clientRequestId",
+  ]);
+  if (!Number.isInteger(input.minutes) || Number(input.minutes) < 0 || Number(input.minutes) > 1_440) {
+    throw new Error("INVALID_CAPTURE");
+  }
+  if (![1, 2, 3, 4].includes(Number(input.multiplier)) || !Number.isInteger(input.multiplier)) {
+    throw new Error("INVALID_CAPTURE");
+  }
+  const materials = parseMaterialLines(input.materials, true);
+  if (Number(input.minutes) === 0 && materials.length === 0) throw new Error("INVALID_CAPTURE");
+  const taskType = boundedText(input.taskType, 80, true);
+  if (!taskType) throw new Error("INVALID_CAPTURE");
+  return {
+    orderId: parseCaptureEntityId(input.orderId),
+    expectedStation: parseCaptureStation(input.expectedStation),
+    minutes: Number(input.minutes),
+    multiplier: Number(input.multiplier) as 1 | 2 | 3 | 4,
+    taskType,
+    note: boundedText(input.note, 500, false),
     materials,
     clientRequestId: parseCaptureRequestId(input.clientRequestId),
   };

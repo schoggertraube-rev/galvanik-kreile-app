@@ -1,9 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
 
 export interface VorlageResult {
   hat_vorlage: boolean;
@@ -26,25 +24,16 @@ export interface VorlageResult {
 
 interface VorschlagBannerProps {
   vorlage: VorlageResult;
-  onUebernehmen: () => Promise<void>;
   onAnpassen: () => void;
 }
 
-export function VorschlagBanner({ vorlage, onUebernehmen, onAnpassen }: VorschlagBannerProps) {
-  const [loading, setLoading] = useState(false);
-
+export function VorschlagBanner({ vorlage, onAnpassen }: VorschlagBannerProps) {
   if (!vorlage.hat_vorlage) return null;
 
   const konfText = 
     vorlage.konfidenz === 'aufbauen' ? `⚪ Erste Erfahrungswerte (n=${vorlage.n_referenzauftraege})` :
     vorlage.konfidenz === 'aktiv'    ? `🔵 Vorlage aktiv (n=${vorlage.n_referenzauftraege})` :
                                        `🟢 Stabile Vorlage (n=${vorlage.n_referenzauftraege})`;
-
-  const handleUebernehmen = async () => {
-    setLoading(true);
-    await onUebernehmen();
-    setLoading(false);
-  };
 
   return (
     <div className="bg-blue-50 border-2 border-blue-200 rounded-2xl p-4 mb-4">
@@ -62,25 +51,15 @@ export function VorschlagBanner({ vorlage, onUebernehmen, onAnpassen }: Vorschla
         </div>
       </div>
 
+      <p className="mb-3 rounded-lg border border-blue-200 bg-white p-3 text-xs text-blue-900">
+        Erfahrungswerte sind ausschließlich Vorschläge. Sie buchen niemals automatisch Zeiten oder Material für aktuelle oder zukünftige Stationen.
+      </p>
       <div className="flex flex-col sm:flex-row gap-3">
-        <Button 
-          onClick={handleUebernehmen}
-          disabled={loading}
+        <Button
+          onClick={onAnpassen}
           className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold h-12 rounded-xl transition-colors"
         >
-          {loading ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            "Wie üblich übernehmen"
-          )}
-        </Button>
-        <Button 
-          onClick={onAnpassen}
-          variant="outline"
-          disabled={loading}
-          className="flex-1 bg-white border-blue-300 text-blue-700 hover:bg-blue-100 font-bold h-12 rounded-xl transition-colors"
-        >
-          Anpassen
+          Vorschlag prüfen · aktuelle Station erfassen
         </Button>
       </div>
     </div>

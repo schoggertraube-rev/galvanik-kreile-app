@@ -23,15 +23,37 @@ import { useCustomerData } from './useCustomerData';
 
 export function CustomerOverlay() {
   const { customerId, isOpen, close } = useCustomerOverlay();
-  const { data: customerData, isLoading } = useCustomerData(customerId);
+  const { data: customerData, isLoading, error } = useCustomerData(customerId);
   const stack = useOverlayStore(state => state.stack);
-  const [activeTab, setActiveTab] = useState('ueberblick');
+  const [tabSelection, setTabSelection] = useState<{ customerId: string | null; tab: string }>({
+    customerId: null,
+    tab: "ueberblick",
+  });
+  const activeTab = tabSelection.customerId === customerId ? tabSelection.tab : "ueberblick";
 
   if (!isOpen) return null;
 
   // Calculate dynamic z-index based on stack position
   const stackIndex = stack.findLastIndex(item => item.type === 'customer' && item.id === customerId);
   const zIndex = 1000 + stackIndex * 10;
+  const capabilities = customerData?.capabilities ?? {
+    canViewPrices: false,
+    canCreateOrders: false,
+    canManageQa: false,
+  };
+  const tabs = [
+    'Ueberblick',
+    'Auftraege',
+    'Historie',
+    'Teile',
+    ...(capabilities.canViewPrices ? ['Preise'] : []),
+    'Kommunikation',
+    ...(capabilities.canManageQa ? ['Reklamationen'] : []),
+    ...(capabilities.canViewPrices ? ['Rechnungen'] : []),
+    'Fotos',
+    ...(capabilities.canViewPrices && customerData?.kpi ? ['Analyse'] : []),
+    'Notizen',
+  ];
 
   return (
     <AppOverlayPortal>
@@ -64,19 +86,10 @@ export function CustomerOverlay() {
           <div className="w-full">
             {isLoading ? (
               <div className="h-16 animate-pulse bg-gray-200 rounded"></div>
+            ) : error ? (
+              <div role="alert" className="flex h-16 items-center justify-center text-red-600">{error}</div>
             ) : customerData ? (
-              <CustomerHeader data={customerData.kpi || {
-                customer_id: customerData.id,
-                kunde: customerData.name,
-                classification: customerData.classification || 'B',
-                kunde_seit: customerData.createdAt || new Date().toISOString(),
-                umsatz_ltv: 0,
-                gewinn_ltv: 0,
-                offene_posten: 0,
-                aktive_auftraege: 0,
-                puenktlichkeit_pct: null,
-                reklamationen: 0
-              }} />
+              <CustomerHeader customer={customerData} capabilities={capabilities} />
             ) : (
               <div className="h-16 flex items-center justify-center text-red-500">Kunde nicht gefunden.</div>
             )}
@@ -86,9 +99,9 @@ export function CustomerOverlay() {
         {customerData && (
           <>
             <div className="px-6 py-4 border-b border-[var(--ci-border)] bg-[var(--ci-bg)]">
-              {customerData.kpi ? <CustomerKpiRow data={customerData.kpi} /> : (
+              {capabilities.canViewPrices && customerData.kpi ? <CustomerKpiRow data={customerData.kpi} /> : (
                 <div className="bg-bg-app-soft/30 border border-neutral-gray-100 rounded-2xl p-6 text-center">
-                  <p className="text-sm font-medium text-text-muted">Noch keine belastbaren Analysedaten vorhanden</p>
+                  <p className="text-sm font-medium text-text-muted">{capabilities.canViewPrices ? "Analysedaten sind noch nicht belastbar verbunden." : "Finanzkennzahlen sind für diese Rolle nicht freigegeben."}</p>
                 </div>
               )}
             </div>
@@ -97,10 +110,10 @@ export function CustomerOverlay() {
             <div className="flex-1 bg-[var(--ci-surface)] flex flex-col min-h-[600px] max-h-[80vh] overflow-hidden">
               <div className="w-full overflow-x-auto border-b border-[var(--ci-border)] bg-[var(--ci-bg)] scrollbar-hide">
                 <div className="flex gap-1 px-4 py-2 min-w-max">
-                  {['Ueberblick', 'Auftraege', 'Historie', 'Teile', 'Preise', 'Kommunikation', 'Reklamationen', 'Rechnungen', 'Fotos', 'Analyse', 'Notizen'].map((tabName) => (
+                  {tabs.map((tabName) => (
                     <button
                       key={tabName}
-                      onClick={() => setActiveTab(tabName.toLowerCase())}
+                      onClick={() => setTabSelection({ customerId, tab: tabName.toLowerCase() })}
                       className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${
                         activeTab === tabName.toLowerCase() 
                           ? 'bg-white text-[var(--ci-ink)] shadow-sm' 
@@ -119,12 +132,12 @@ export function CustomerOverlay() {
                 {activeTab === 'auftraege' && <CustomerOrdersTab customerId={customerId!} />}
                 {activeTab === 'historie' && <CustomerHistorySimilarTab customerId={customerId!} />}
                 {activeTab === 'teile' && <CustomerItemsProfileTab customerId={customerId!} />}
-                {activeTab === 'preise' && <CustomerPricesTab customerId={customerId!} />}
+                {activeTab === 'preise' && capabilities.canViewPrices && <CustomerPricesTab key={customerId} customerId={customerId!} />}
                 {activeTab === 'kommunikation' && <CustomerCommunicationTab customerId={customerId!} />}
-                {activeTab === 'reklamationen' && <CustomerComplaintsTab customerId={customerId!} />}
-                {activeTab === 'rechnungen' && <CustomerInvoicesTab customerId={customerId!} />}
+                {activeTab === 'reklamationen' && capabilities.canManageQa && <CustomerComplaintsTab customerId={customerId!} />}
+                {activeTab === 'rechnungen' && capabilities.canViewPrices && <CustomerInvoicesTab key={customerId} customerId={customerId!} />}
                 {activeTab === 'fotos' && <CustomerPhotosTab customerId={customerId!} />}
-                {activeTab === 'analyse' && <CustomerAnalysisTab customerId={customerId!} customerData={customerData} />}
+                {activeTab === 'analyse' && capabilities.canViewPrices && customerData.kpi && <CustomerAnalysisTab customerId={customerId!} customerData={customerData} />}
                 {activeTab === 'notizen' && <CustomerNotesTab customerId={customerId!} customerData={customerData} />}
               </div>
             </div>

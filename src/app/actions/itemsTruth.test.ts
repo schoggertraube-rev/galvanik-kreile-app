@@ -11,11 +11,14 @@ describe('item repository truth', () => {
     expect(repository).not.toContain('mock item')
   })
 
-  it('tenant-qualifies reads and writes and returns database rows', () => {
+  it('tenant-qualifies reads and quarantines standalone writes without an atomic receipt', () => {
     const actions = readFileSync(resolve(process.cwd(), 'src/app/actions/items.actions.ts'), 'utf8')
     expect(actions).toContain('eq(items.tenantId, actor.data.tenantId)')
-    expect(actions).toContain('eq(orders.tenantId, actor.data.tenantId)')
-    expect(actions).toContain('.returning()')
+    expect(actions).toContain('atomarer, idempotenter Rework-/Handling-Unit-Beleg')
+    expect(actions).toContain('Wareneingangsgrenze, Idempotenz und Auditbeleg atomar verbunden')
+    expect(actions).not.toContain('db.insert(items)')
+    expect(actions).not.toContain('db.update(items)')
+    expect(actions).not.toContain('db.delete(items)')
     expect(actions).not.toMatch(/data:\s*\{\s*id,\s*\.\.\.changes/)
   })
 

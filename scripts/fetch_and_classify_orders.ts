@@ -1,6 +1,6 @@
-import { getOperationalOrders } from "../src/lib/server/operationalOrders";
+import { getOperationalOrders, type OperationalOrder } from "../src/lib/server/operationalOrders";
 
-function classify(order: any): string {
+function classify(order: OperationalOrder): string {
   const title = (order.title || "").toLowerCase();
   const customer = (order.customerName || "").toLowerCase();
   const number = (order.orderNumber || "").toLowerCase();
@@ -11,13 +11,13 @@ function classify(order: any): string {
 }
 
 (async () => {
-  const orders = await getOperationalOrders();
+  const orders = await getOperationalOrders(process.env.TENANT_ID ?? "galvanik-kreile");
   const enriched = orders.map(o => ({
     id: o.id,
     orderNumber: o.orderNumber,
     title: o.title,
     customerName: o.customerName,
-    source: (o as any).source,
+    source: o.source,
     createdAt: o.createdAt,
     currentStationId: o.currentStationId,
     status: o.status,

@@ -4,11 +4,12 @@ import { orderSchema, scanOrderRequestSchema } from "./orderSchema";
 const futureDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1_000).toISOString().slice(0, 10);
 
 const validOrder = {
+  clientRequestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
   customerId: "customer_123",
   title: "  Kotflügel verzinken  ",
   source: "manual",
   dueDate: futureDate,
-  parts: [{ name: " Kotflügel ", quantity: 2, material: " Stahl " }],
+  parts: [{ name: " Kotflügel ", quantity: 2, material: " Stahl ", routeTemplateId: "direct_galvanik" }],
 };
 
 describe("orderSchema", () => {
@@ -16,7 +17,12 @@ describe("orderSchema", () => {
     const result = orderSchema.parse(validOrder);
 
     expect(result.title).toBe("Kotflügel verzinken");
-    expect(result.parts[0]).toEqual({ name: "Kotflügel", quantity: 2, material: "Stahl" });
+    expect(result.parts[0]).toEqual({
+      name: "Kotflügel",
+      quantity: 2,
+      material: "Stahl",
+      routeTemplateId: "direct_galvanik",
+    });
     expect(result.dueDate).toBeInstanceOf(Date);
     expect(result.isQuote).toBe(false);
     expect(result.calendarSync).toBe(false);

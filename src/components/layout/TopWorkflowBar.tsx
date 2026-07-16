@@ -3,15 +3,37 @@
 import React, { Suspense } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Package, FlaskConical, Truck, ArrowRight, Eraser, Layers } from 'lucide-react';
+import { Package, FlaskConical, Truck, ArrowRight, Eraser, Layers, ShieldCheck } from 'lucide-react';
+import {
+  ORDER_STATIONS,
+  ORDER_STATION_LABELS,
+  type OrderStation,
+} from '@/lib/orders/orderMutationContract';
 
-const STATIONS = [
-  { name: 'Wareneingang', path: '/station/wareneingang', icon: Package },
-  { name: 'Entmetall.', path: '/station/entmetallisierung', icon: Eraser },
-  { name: 'Schleiferei', path: '/station/schleiferei', icon: Layers },
-  { name: 'Galvanik', path: '/station/beschichtung', icon: FlaskConical },
-  { name: 'Warenausgang', path: '/station/warenausgang', icon: Truck },
-];
+const STATION_ROUTES: Record<OrderStation, string> = {
+  wareneingang: '/warendurchlauf/wareneingang',
+  entmetallisierung: '/orders?station=entmetallisierung',
+  schleiferei: '/orders?station=schleiferei',
+  galvanik: '/warendurchlauf/galvanik',
+  qualitaetssicherung: '/orders?station=qualitaetssicherung',
+  warenausgang: '/warendurchlauf/warenausgang',
+};
+
+const STATION_ICONS: Record<OrderStation, typeof Package> = {
+  wareneingang: Package,
+  entmetallisierung: Eraser,
+  schleiferei: Layers,
+  galvanik: FlaskConical,
+  qualitaetssicherung: ShieldCheck,
+  warenausgang: Truck,
+};
+
+const STATIONS = ORDER_STATIONS.map((key) => ({
+  key,
+  name: ORDER_STATION_LABELS[key],
+  path: STATION_ROUTES[key],
+  icon: STATION_ICONS[key],
+}));
 
 function TopWorkflowBarContent() {
   const pathname = usePathname();
@@ -38,14 +60,16 @@ function TopWorkflowBarContent() {
             pathname === '/warendurchlauf/neu' ||
             (searchParams?.get('station') === 'wareneingang')
           );
-          const isActive = pathname === station.path || 
-                           (station.path !== '/' && pathname.startsWith(station.path)) ||
+          const routePath = station.path.split('?')[0];
+          const stationQueryActive = routePath === '/orders' && searchParams?.get('station') === station.key;
+          const isActive = pathname === routePath && (routePath !== '/orders' || stationQueryActive) ||
+                           (routePath !== '/orders' && pathname.startsWith(routePath + '/')) ||
                            isWareneingangActive;
           
           const Icon = station.icon;
           
           return (
-            <React.Fragment key={station.path}>
+            <React.Fragment key={station.key}>
               <Link
                 href={station.path}
                 className={`relative shrink-0 snap-center min-w-[120px] md:min-w-[100px] flex-1 max-w-md bg-white rounded-2xl border ${

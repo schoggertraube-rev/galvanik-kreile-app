@@ -1,6 +1,18 @@
 "use server";
 
 import { createClient } from '@/lib/supabase/server';
+import { resolveAuthorization } from '@/lib/server/authorization';
+
+async function requireCustomerFinanceRead() {
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) throw new Error('AUTH_ERROR');
+  if (authorization.data.tenantId !== 'galvanik-kreile'
+    || !authorization.data.permissions.includes('perm_view_customers')
+    || !authorization.data.permissions.includes('perm_view_prices')) {
+    throw new Error('FORBIDDEN');
+  }
+  return authorization.data;
+}
 
 export async function getCockpitKpis() {
   const supabase = await createClient();
@@ -69,6 +81,7 @@ export async function getCockpitKpis() {
 }
 
 export async function getTopKunden(limit = 10) {
+  await requireCustomerFinanceRead();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_kunde_clv')
@@ -78,12 +91,13 @@ export async function getTopKunden(limit = 10) {
 
   if (error) {
     console.error("Error getTopKunden:", error.message, error.details, error.hint);
-    return [];
+    throw new Error('TOP_CUSTOMERS_UNAVAILABLE');
   }
   return data || [];
 }
 
 export async function getInaktiveKunden() {
+  await requireCustomerFinanceRead();
   const supabase = await createClient();
   
   const nineMonthsAgo = new Date();
@@ -97,7 +111,7 @@ export async function getInaktiveKunden() {
 
   if (error) {
     console.error("Error getInaktiveKunden:", error.message, error.details, error.hint);
-    return [];
+    throw new Error('INACTIVE_CUSTOMERS_UNAVAILABLE');
   }
   return data || [];
 }
@@ -307,28 +321,40 @@ export async function getForecastDaten() {
 }
 
 export async function getKundenDetails(customerId: string) {
+  await requireCustomerFinanceRead();
+  if (!/^[A-Za-z0-9_-]{1,100}$/.test(customerId)) throw new Error('CUSTOMER_ID_INVALID');
   const supabase = await createClient();
-  
-  const { data: clv } = await supabase.from('v_kunde_clv').select('*').eq('customer_id', customerId).single();
-  
-  const { data: orders } = await supabase.from('orders')
+
+  const clvQuery = supabase.from('v_kunde_clv').select('*').eq('customer_id', customerId).single();
+  const ordersQuery = supabase.from('orders')
     .select('id, order_number, intake_date, due_date, status')
+    .eq('tenant_id', 'galvanik-kreile')
     .eq('customer_id', customerId)
     .order('intake_date', { ascending: false })
     .limit(5);
-
-  const { data: auftraegeDb } = await supabase.from('v_auftrag_db')
+  const contributionQuery = supabase.from('v_auftrag_db')
     .select('order_id, order_number, deckungsbeitrag, erloes_netto, intake_date')
     .eq('customer_id', customerId);
 
-  let details = orders ? await Promise.all(orders.map(async o => {
+  const [clvResult, ordersResult, contributionResult] = await Promise.all([clvQuery, ordersQuery, contributionQuery]);
+  if (clvResult.error || ordersResult.error || contributionResult.error || !clvResult.data) {
+    console.error('Customer cockpit detail unavailable', clvResult.error, ordersResult.error, contributionResult.error);
+    throw new Error('CUSTOMER_DETAILS_UNAVAILABLE');
+  }
+  const clv = clvResult.data;
+  const orders = ordersResult.data;
+  const auftraegeDb = contributionResult.data;
+
+  const details = orders.map(o => {
     const dbInfo = auftraegeDb?.find(x => x.order_id === o.id);
+    const revenue = dbInfo?.erloes_netto === null || dbInfo?.erloes_netto === undefined ? null : Number(dbInfo.erloes_netto);
+    const contribution = dbInfo?.deckungsbeitrag === null || dbInfo?.deckungsbeitrag === undefined ? null : Number(dbInfo.deckungsbeitrag);
     return {
       ...o,
-      umsatz: dbInfo?.erloes_netto || 0,
-      db: dbInfo?.deckungsbeitrag || 0
+      umsatz: Number.isFinite(revenue) ? revenue : null,
+      db: Number.isFinite(contribution) ? contribution : null,
     };
-  })) : [];
+  });
 
   return { clv, letzeAuftraege: details };
 }

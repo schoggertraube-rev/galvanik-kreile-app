@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ROUTE_TEMPLATE_IDS } from "@/lib/orders/routeSnapshot";
 
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 const ENTITY_ID = /^[A-Za-z0-9_-]{1,100}$/;
@@ -70,11 +71,13 @@ export const orderPartSchema = z
     quantity: z.number().int().min(1).max(1_000_000),
     surfaceRequested: optionalText(100),
     material: optionalText(100),
+    routeTemplateId: z.enum(ROUTE_TEMPLATE_IDS).optional(),
   })
   .strict();
 
 export const orderSchema = z
   .object({
+    clientRequestId: z.string().uuid(),
     customerId: z.string().regex(ENTITY_ID, "Ungültige Kunden-ID."),
     title: requiredText(200, "Auftragstitel darf nicht leer sein."),
     task: optionalText(2_000),
@@ -99,12 +102,33 @@ export const orderSchema = z
         message: "Für einen Kalendereintrag ist ein Fälligkeitsdatum erforderlich.",
       });
     }
+    if (!value.isQuote) {
+      value.parts.forEach((part, index) => {
+        if (!part.routeTemplateId) {
+          context.addIssue({
+            code: "custom",
+            path: ["parts", index, "routeTemplateId"],
+            message: "Vor der Auftragserstellung muss eine explizite Positionsroute ausgewählt werden.",
+          });
+        }
+      });
+      const routeTemplates = new Set(value.parts.map((part) => part.routeTemplateId).filter(Boolean));
+      if (routeTemplates.size > 1) {
+        context.addIssue({
+          code: "custom",
+          path: ["parts"],
+          message: "Gemischte Positionsrouten benötigen eine Handling-Unit-Engine und sind noch nicht ausführbar.",
+        });
+      }
+    }
   });
 
 export type OrderInput = z.infer<typeof orderSchema>;
 
 export const scanOrderRequestSchema = z
   .object({
+    clientRequestId: z.string().uuid(),
+    routeTemplateId: z.enum(ROUTE_TEMPLATE_IDS),
     customerId: z.string().regex(ENTITY_ID, "Ungültige Kunden-ID.").optional(),
     customerName: optionalText(200),
     title: requiredText(200, "Auftragstitel darf nicht leer sein."),

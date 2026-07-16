@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Lightbulb, PlusCircle, CheckCircle2, ListFilter, PlayCircle, BarChart3, ThumbsUp, Wrench, MessageSquare, AlertTriangle, User, Smile } from "lucide-react";
 import { usePageView } from "@/hooks/usePageView";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
@@ -16,6 +16,7 @@ export function BetriebKvpClient() {
   usePageView();
 
   const [items, setItems] = useState<KvpItem[]>([]);
+  const [itemsState, setItemsState] = useState<"loading" | "ready" | "error">("loading");
   const [activeItem, setActiveItem] = useState<KvpItem | null>(null);
   const { role } = usePermissions();
   const isChef = role === "admin" || role === "developer" || role === "meister";
@@ -26,24 +27,38 @@ export function BetriebKvpClient() {
   const [newBenefit, setNewBenefit] = useState(BENEFITS[0]);
   const [newProblem, setNewProblem] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const createRequestId = useRef<string | null>(null);
 
   useEffect(() => {
     kvpRepository.getAll()
       .then(data => {
         setItems(data);
         setLoadError(null);
+        setItemsState("ready");
       })
       .catch((error) => {
         console.error(error);
         setLoadError("KVP-Ideen konnten nicht geladen werden.");
+        setItemsState("error");
       });
   }, []);
 
   const handleSave = async () => {
-    if (!newTitle.trim()) return;
+    if (!newTitle.trim() || isSaving) return;
+
+    let clientRequestId = createRequestId.current;
+    if (!clientRequestId) {
+      clientRequestId = crypto.randomUUID();
+      createRequestId.current = clientRequestId;
+    }
+    setIsSaving(true);
+    setMutationError(null);
 
     try {
       const newItem = await kvpRepository.addItem({
+        clientRequestId,
         title: newTitle,
         category: newCategory,
         benefit: newBenefit,
@@ -52,12 +67,16 @@ export function BetriebKvpClient() {
         hasPhoto: false,
       });
 
-      setItems([newItem, ...items]);
+      createRequestId.current = null;
+      setItems((current) => [newItem, ...current.filter((item) => item.id !== newItem.id)]);
+      setItemsState("ready");
       setNewTitle("");
       setNewProblem("");
     } catch (e) {
       console.error("Failed to add KVP item", e);
-      alert("Fehler beim Speichern der Idee.");
+      setMutationError(e instanceof Error ? e.message : "KVP-Idee konnte nicht bestätigt gespeichert werden.");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -71,7 +90,7 @@ export function BetriebKvpClient() {
       }
     } catch (e) {
       console.error("Failed to update status", e);
-      alert("Fehler beim Aktualisieren des Status.");
+      setMutationError(e instanceof Error ? e.message : "KVP-Status konnte nicht bestätigt werden.");
     }
   };
 
@@ -136,14 +155,24 @@ export function BetriebKvpClient() {
               <PlusCircle className="w-5 h-5 text-accent-orange" />
               Idee oder Mangel melden
             </h2>
-            
+
+            {mutationError && (
+              <p role="alert" className="mb-4 rounded-xl border border-danger-red/30 bg-accent-orange-soft p-3 text-xs font-bold text-danger-red">
+                {mutationError}
+              </p>
+            )}
+
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-text-muted uppercase mb-1">Kurzer Titel</label>
                 <input 
                   type="text" 
                   value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
+                  onChange={e => {
+                    createRequestId.current = null;
+                    setNewTitle(e.target.value);
+                  }}
+                  disabled={isSaving}
                   placeholder="Z.B. Besen kaputt..."
                   className="w-full rounded-xl border border-neutral-gray-300 px-3 py-2 text-sm focus:border-navy-900 focus:ring-1 focus:ring-navy-900 outline-none"
                 />
@@ -153,7 +182,11 @@ export function BetriebKvpClient() {
                 <label className="block text-xs font-bold text-text-muted uppercase mb-1">Kategorie</label>
                 <select 
                   value={newCategory}
-                  onChange={e => setNewCategory(e.target.value)}
+                  onChange={e => {
+                    createRequestId.current = null;
+                    setNewCategory(e.target.value);
+                  }}
+                  disabled={isSaving}
                   className="w-full rounded-lg border border-neutral-gray-300 px-2 py-1.5 text-sm focus:border-navy-900 outline-none bg-white"
                 >
                   {CATEGORIES.map((c: string) => <option key={c} value={c}>{c}</option>)}
@@ -164,7 +197,11 @@ export function BetriebKvpClient() {
                 <label className="block text-xs font-bold text-text-muted uppercase mb-1">Kurznotiz / Details</label>
                 <textarea 
                   value={newProblem}
-                  onChange={e => setNewProblem(e.target.value)}
+                  onChange={e => {
+                    createRequestId.current = null;
+                    setNewProblem(e.target.value);
+                  }}
+                  disabled={isSaving}
                   placeholder="Was genau ist das Problem oder die Idee?"
                   className="w-full rounded-xl border border-neutral-gray-300 px-3 py-2 text-sm h-20 resize-none focus:border-navy-900 focus:ring-1 focus:ring-navy-900 outline-none"
                 />
@@ -175,7 +212,11 @@ export function BetriebKvpClient() {
                   <label className="block text-xs font-bold text-text-muted uppercase mb-1">Nutzen</label>
                   <select 
                     value={newBenefit}
-                    onChange={e => setNewBenefit(e.target.value)}
+                    onChange={e => {
+                      createRequestId.current = null;
+                      setNewBenefit(e.target.value);
+                    }}
+                    disabled={isSaving}
                     className="w-full rounded-lg border border-neutral-gray-300 px-2 py-1.5 text-xs focus:border-navy-900 outline-none bg-white"
                   >
                     {BENEFITS.map(b => <option key={b} value={b}>{b}</option>)}
@@ -187,10 +228,10 @@ export function BetriebKvpClient() {
 
               <button 
                 onClick={handleSave}
-                disabled={!newTitle.trim()}
+                disabled={!newTitle.trim() || isSaving}
                 className="w-full mt-2 bg-navy-900 text-white font-bold py-3 rounded-xl hover:bg-navy-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Einreichen
+                {isSaving ? "Wird bestätigt …" : "Einreichen"}
               </button>
             </div>
           </section>
@@ -210,11 +251,11 @@ export function BetriebKvpClient() {
 
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="bg-bg-app-soft rounded-xl p-3 border border-neutral-gray-100">
-                <div className="text-2xl font-black text-navy-900">{stats.new}</div>
+                <div className="text-2xl font-black text-navy-900">{itemsState === "ready" ? stats.new : "—"}</div>
                 <div className="text-xs font-bold text-text-muted uppercase mt-1">Neu zu prüfen</div>
               </div>
               <div className="bg-bg-app-soft rounded-xl p-3 border border-neutral-gray-100">
-                <div className="text-2xl font-black text-success-green">{stats.implemented}</div>
+                <div className="text-2xl font-black text-success-green">{itemsState === "ready" ? stats.implemented : "—"}</div>
                 <div className="text-xs font-bold text-text-muted uppercase mt-1">Umgesetzt</div>
               </div>
             </div>
@@ -222,7 +263,7 @@ export function BetriebKvpClient() {
             <ul className="space-y-3 mb-4 border-t border-neutral-gray-100 pt-4">
               <li className="flex justify-between items-center text-sm">
                 <span className="font-medium text-navy-900">Häufigste Kategorie:</span>
-                <span className="font-bold text-accent-orange">{stats.topCategory}</span>
+                <span className="font-bold text-accent-orange">{itemsState === "ready" ? stats.topCategory : "Nicht verfügbar"}</span>
               </li>
               <li className="flex justify-between items-center text-sm">
                 <span className="font-medium text-navy-900">Detailauswertung:</span>
@@ -241,12 +282,18 @@ export function BetriebKvpClient() {
               Eingereichte Ideen & Mängel
             </h2>
             <div className="text-xs font-bold bg-bg-app-soft text-navy-900 px-3 py-1.5 rounded-lg">
-              {items.length} Einträge
+              {itemsState === "ready" ? `${items.length} Einträge` : itemsState === "loading" ? "Wird geladen" : "Nicht verfügbar"}
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-            {items.map(item => (
+            {itemsState === "loading" ? (
+              <p className="rounded-xl border border-dashed border-neutral-gray-300 p-4 text-center text-sm text-text-muted">KVP-Ideen werden geladen …</p>
+            ) : itemsState === "error" ? (
+              <p className="rounded-xl border border-dashed border-danger-red/30 p-4 text-center text-sm text-danger-red">Bestand unbekannt – keine Nullanzeige.</p>
+            ) : items.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-neutral-gray-300 p-4 text-center text-sm text-text-muted">Noch keine bestätigten KVP-Ideen vorhanden.</p>
+            ) : items.map(item => (
               <div 
                 key={item.id}
                 onClick={() => setActiveItem(item)}

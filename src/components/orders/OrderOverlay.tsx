@@ -5,11 +5,31 @@ import { PaymentDrawer } from "./PaymentDrawer";
 import { StatusMailDrawer } from "./StatusMailDrawer";
 import { ItemDrawer } from "./ItemDrawer";
 import { 
-  X, Check, AlertTriangle, Clock, Droplet, Package, Info, Plus, 
-  Send, Phone, FileText, Receipt, Truck, ArrowRight, Wrench
+  X, Check, AlertTriangle, Clock, Package, Info,
+  Send, Phone, FileText, Receipt, Truck, ArrowRight
 } from "lucide-react";
 import { HeadCostBadge } from "./HeadCostBadge";
 import { AppOverlayPortal } from "@/components/ui/AppOverlayPortal";
+import { parseRouteSnapshot } from "@/lib/orders/routeSnapshot";
+import { normalizeStoredOrderStatus } from "@/lib/orders/orderMutationContract";
+import { HandoverVariant } from "./variants/HandoverVariant";
+import { StationStatusButton } from "./StationStatusButton";
+
+function riskLabel(value: string | null): string {
+  switch (value) {
+    case "green": return "Im Plan";
+    case "yellow": return "Achtung";
+    case "orange": return "Gefährdet";
+    case "red": return "Kritisch";
+    case "blocked": return "Blockiert";
+    default: return "Nicht bewertet";
+  }
+}
+
+function stationLabel(value: string | null): string {
+  if (!value) return "Nicht hinterlegt";
+  return value.replaceAll("_", " ").replace(/^./, (character) => character.toUpperCase());
+}
 
 export function OrderOverlay() {
   const stack = useOverlayStore(state => state.stack);
@@ -67,8 +87,14 @@ export function OrderOverlay() {
   }
 
   const hasItems = orderData.items && orderData.items.length > 0;
-  const currentCost = orderData.dbIst == null ? null : Number(orderData.dbIst);
-  const benchmarkCost = orderData.dbGeplant == null ? undefined : Number(orderData.dbGeplant);
+  const canViewPrices = orderData.capabilities.canViewPrices;
+  const canViewCustomerDetails = orderData.capabilities.canViewCustomerDetails;
+  const canEditOrders = orderData.capabilities.canEditOrders;
+  const canCompleteHandover = orderData.capabilities.canCompleteHandover;
+  const currentCost = canViewPrices && orderData.dbIst != null ? Number(orderData.dbIst) : null;
+  const benchmarkCost = canViewPrices && orderData.dbGeplant != null ? Number(orderData.dbGeplant) : undefined;
+  const storedStation = orderData.currentStationId || orderData.station || null;
+  const storedStatus = normalizeStoredOrderStatus(orderData.status || "");
 
   return (
     <AppOverlayPortal>
@@ -214,11 +240,14 @@ export function OrderOverlay() {
                 <div className="ci-order-title">{orderData.title || orderData.task || "Kein Titel vergeben"}</div>
                 <div className="ci-head-meta">
                   {orderData.priority === 'express' && <span className="ci-pill ci-pill-accent"><AlertTriangle className="w-3 h-3"/>Express</span>}
-                  <span className="ci-pill ci-pill-warn"><span className="w-1.5 h-1.5 bg-[var(--ci-warn)] rounded-full"></span>{orderData.station || 'Wareneingang'}</span>
+                  <span className="ci-pill ci-pill-warn"><span className="w-1.5 h-1.5 bg-[var(--ci-warn)] rounded-full"></span>{stationLabel(storedStation)}</span>
                   {orderData.dueDate && <span className="ci-pill ci-pill-success">Fällig {new Date(orderData.dueDate).toLocaleDateString()}</span>}
                   <button 
                     className="ci-pill ci-pill-customer flex items-center gap-1"
+                    disabled={!canViewCustomerDetails}
+                    title={canViewCustomerDetails ? "Kundendetails öffnen" : "Kundendetails sind für diese Rolle nicht freigegeben"}
                     onClick={() => {
+                      if (!canViewCustomerDetails) return;
                       const cid = orderData.customer?.id || orderData.customerId;
                       if (cid) openCustomer(cid);
                     }}
@@ -245,48 +274,54 @@ export function OrderOverlay() {
               {/* LINKE SPALTE */}
               <div className="ci-col-left">
                 
-                {/* Stationen */}
+                {/* Gespeicherte Stationswahrheit; keine Route wird abgeleitet. */}
                 <div className="ci-section">
                   <div className="ci-section-label">Aktuelle Lage</div>
-                  <div className="ci-stations">
-                    {(() => {
-                      const STATIONS = ['wareneingang', 'entmetallisierung', 'schleiferei', 'galvanik', 'warenausgang'];
-                      const LABELS = ['Wareneingang', 'Entmetallisierung', 'Schleiferei', 'Galvanik', 'Warenausgang'];
-                      const ICONS = [Droplet, Wrench, Wrench, Droplet, Package];
-                      
-                      const currentStation = orderData.station || 'wareneingang';
-                      let currentIndex = STATIONS.indexOf(currentStation);
-                      if (orderData.status === 'completed') {
-                        currentIndex = STATIONS.length;
-                      } else if (currentIndex < 0) {
-                        currentIndex = 0;
-                      }
-
-                      return STATIONS.map((station, idx) => {
-                        const Icon = ICONS[idx];
-                        const isDone = idx < currentIndex;
-                        const isActive = idx === currentIndex;
-                        
-                        let circleClass = "ci-station-wait";
-                        if (isDone) circleClass = "ci-station-done";
-                        if (isActive) circleClass = "ci-station-active";
-                        
-                        return (
-                          <div key={station} className="ci-station">
-                            <div className={`ci-station-circle ${circleClass}`}>
-                              {isDone ? <Check className="w-5 h-5"/> : <Icon className="w-5 h-5"/>}
-                            </div>
-                            <div className="ci-station-label">{LABELS[idx]}</div>
-                          </div>
-                        );
-                      });
-                    })()}
+                  <div className="rounded-xl border border-[var(--ci-border)] bg-[var(--ci-surface)] p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="ci-station-circle ci-station-active"><Package className="h-5 w-5" /></div>
+                      <div>
+                        <div className="text-xs uppercase tracking-wider text-[var(--ci-ink-3)]">Gespeicherte aktuelle Station</div>
+                        <div className="font-semibold text-[var(--ci-ink)]">{stationLabel(storedStation)}</div>
+                      </div>
+                    </div>
+                    <p className="mt-3 text-xs text-[var(--ci-ink-3)]">Ein historischer Stationsweg wird erst angezeigt, wenn ein versionierter Routen-Snapshot und atomare Übergabebelege vorhanden sind.</p>
                   </div>
                 </div>
 
-                <div id="station-context-block" className="ci-section rounded-xl border border-dashed border-[var(--ci-border)] p-4 text-xs text-[var(--ci-ink-3)]">
-                  Stationskosten, Margen und Versandkontext sind in diesem Overlay noch nicht belastbar instrumentiert. Buchungen erfolgen über die verifizierten Teile- und Lagerpfade.
-                </div>
+                {storedStation === "warenausgang" ? (
+                  <div id="active-handover" className="ci-section">
+                    {!canCompleteHandover ? (
+                      <div className="rounded-xl border border-dashed border-[var(--ci-border)] p-4 text-xs text-[var(--ci-ink-3)]">
+                        Keine Berechtigung zum Bestätigen der physischen Übergabe.
+                      </div>
+                    ) : storedStatus === "ready" ? (
+                      <div className="space-y-3">
+                        <p className="text-xs text-[var(--ci-ink-3)]">Vor dem Übergabebeleg muss der Warenausgang atomar gestartet werden.</p>
+                        <StationStatusButton
+                          orderId={orderData.id}
+                          customerId={orderData.customerId}
+                          currentStationId="warenausgang"
+                          currentStatus="ready"
+                        />
+                      </div>
+                    ) : storedStatus === "in_progress" ? (
+                      <HandoverVariant orderId={orderData.id} customerName={orderData.customer?.name || "Kunde nicht verfügbar"} />
+                    ) : storedStatus === "shipped" || storedStatus === "completed" ? (
+                      <div className="rounded-xl border border-green-300 bg-green-50 p-4 text-sm font-semibold text-green-900">
+                        Der Auftrag besitzt einen terminalen Übergabestatus. Der zugehörige Beleg ist in der Auftragshistorie sichtbar.
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-dashed border-[var(--ci-border)] p-4 text-xs text-[var(--ci-ink-3)]">
+                        Der gespeicherte Auftragsstatus erlaubt aktuell keinen Übergabebeleg.
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div id="station-context-block" className="ci-section rounded-xl border border-dashed border-[var(--ci-border)] p-4 text-xs text-[var(--ci-ink-3)]">
+                    Stationskosten und Margen sind in diesem Overlay noch nicht belastbar instrumentiert. Buchungen erfolgen über die verifizierten Teile- und Lagerpfade.
+                  </div>
+                )}
 
                 {/* KPIs */}
                 <div className="ci-section">
@@ -294,12 +329,12 @@ export function OrderOverlay() {
                     <div className={`ci-kpi-card ${orderData.risk === 'red' ? 'bg-[var(--ci-danger-soft)] border-red-200' : orderData.risk === 'yellow' ? 'bg-[var(--ci-warn-soft)] border-yellow-200' : ''}`}>
                       <div className="ci-kpi-label"><Clock className="w-3 h-3 inline-block" /> Risiko</div>
                       <div className={`ci-kpi-value ${orderData.risk === 'red' ? 'text-[var(--ci-danger)]' : orderData.risk === 'yellow' ? 'text-[#6B4A0D]' : ''}`}>
-                        {orderData.risk === 'red' ? 'Kritisch' : orderData.risk === 'yellow' ? 'Achtung' : 'Im Plan'}
+                        {riskLabel(orderData.risk)}
                       </div>
                     </div>
                     <div className="ci-kpi-card ci-warn">
                       <div className="ci-kpi-label">Status</div>
-                      <div className="ci-kpi-value ci-warn-text">{orderData.statusText || 'In Arbeit'}</div>
+                      <div className="ci-kpi-value ci-warn-text">{orderData.statusText || orderData.status || 'Nicht hinterlegt'}</div>
                     </div>
                     <div className="ci-kpi-card">
                       <div className="ci-kpi-label">Fällig</div>
@@ -323,7 +358,7 @@ export function OrderOverlay() {
                         const itemPriceLines = (orderData.priceLines || []).filter((line) => line.itemId === item.id);
                         const itemPrice = itemPriceLines.reduce((sum, line) => sum + Number(line.unitTotalEur || 0), 0);
 
-                        return <div key={item.id || idx} className="ci-item-card cursor-pointer hover:border-[var(--ci-ink-3)] transition-colors" onClick={() => setEditingItemId(item.id)}>
+                        return <div key={item.id || idx} className={`ci-item-card transition-colors ${canEditOrders ? "cursor-pointer hover:border-[var(--ci-ink-3)]" : ""}`} onClick={() => canEditOrders && setEditingItemId(item.id)}>
                           <div className={`ci-item-photo ${Array.isArray(item.photoIds) && item.photoIds.length > 0 ? 'has-photo' : ''}`}>
                             <Package className="w-5 h-5"/>
                           </div>
@@ -336,7 +371,9 @@ export function OrderOverlay() {
                             <div className="ci-item-meta">{item.material || 'Material erfassen'} → {item.surfaceRequested || 'Zielfinish erfassen'}</div>
                           </div>
                           <div className="ci-item-price">
-                            {itemPriceLines.length > 0 ? (
+                            {!canViewPrices ? (
+                              <div className="ci-item-price-val missing">Nicht freigegeben</div>
+                            ) : itemPriceLines.length > 0 ? (
                               <div className="ci-item-price-val">{itemPrice.toFixed(2)} €</div>
                             ) : (
                               <div className="ci-item-price-val missing">Preis offen</div>
@@ -346,35 +383,33 @@ export function OrderOverlay() {
                       })
                     )}
 
-                    <button className="ci-add-item-btn" onClick={() => setEditingItemId('new')}>
-                      <Plus className="w-4 h-4"/> Teil hinzufügen
-                    </button>
-
-                    <div className="ci-item-sum">
-                      <span className="ci-item-sum-label">Summe netto</span>
-                      <span className="ci-item-sum-val">
-                        {(orderData.priceLines || []).reduce((sum, line) => sum + Number(line.unitTotalEur || 0), 0).toFixed(2)} €
-                      </span>
-                    </div>
+                    {canViewPrices ? (
+                      <div className="ci-item-sum">
+                        <span className="ci-item-sum-label">Summe netto</span>
+                        <span className="ci-item-sum-val">
+                          {(orderData.priceLines || []).reduce((sum, line) => sum + Number(line.unitTotalEur || 0), 0).toFixed(2)} €
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="ci-item-sum text-xs text-[var(--ci-ink-3)]">Preise sind für diese Rolle nicht freigegeben.</div>
+                    )}
                   </div>
                 </div>
 
                 {/* CUSTOMER KPIs */}
                 <div className="ci-section">
                   <div className="ci-section-label">Kunden-Werte</div>
-                  {orderData.customerKpis ? (
-                    <div className="grid grid-cols-3 gap-2">
+                  {!canViewCustomerDetails ? (
+                    <div className="text-[var(--ci-ink-3)] text-xs">Kundenauswertungen sind für diese Rolle nicht freigegeben.</div>
+                  ) : orderData.customerKpis ? (
+                    <div className="grid grid-cols-2 gap-2">
                       <div className="bg-[var(--ci-surface)] border border-[var(--ci-border)] rounded-lg p-3">
                         <div className="text-[9px] text-[var(--ci-ink-3)] uppercase tracking-wider mb-1">Lifetime Revenue</div>
-                        <div className="font-serif text-lg text-[var(--ci-ink)]">{orderData.customerKpis.ltv.toFixed(2)} €</div>
+                        <div className="text-xs font-bold text-[var(--ci-ink-3)]">Nicht angebunden</div>
                       </div>
                       <div className="bg-[var(--ci-surface)] border border-[var(--ci-border)] rounded-lg p-3">
                         <div className="text-[9px] text-[var(--ci-ink-3)] uppercase tracking-wider mb-1">Aktive Aufträge</div>
                         <div className="font-serif text-lg text-[var(--ci-ink)]">{orderData.customerKpis.activeOrdersCount}</div>
-                      </div>
-                      <div className="bg-[var(--ci-surface)] border border-[var(--ci-border)] rounded-lg p-3">
-                        <div className="text-[9px] text-[var(--ci-ink-3)] uppercase tracking-wider mb-1">Nächster Auftrag</div>
-                        <div className="text-xs font-bold text-[var(--ci-ink-3)]">Nicht instrumentiert</div>
                       </div>
                     </div>
                   ) : (
@@ -409,10 +444,21 @@ export function OrderOverlay() {
                       <button className="ci-qa" disabled title="Keine Telefonnummer hinterlegt"><Phone className="w-[18px] h-[18px]"/><span className="ci-qa-label">Anrufen</span></button>
                     )}
                     <button className="ci-qa" disabled title="Kostenvoranschlag ist hier noch nicht angebunden"><FileText className="w-[18px] h-[18px]"/><span className="ci-qa-label">KV</span></button>
-                    <button className="ci-qa" onClick={() => setShowPayment(true)}>
-                      <Receipt className="w-[18px] h-[18px]"/><span className="ci-qa-label">Rechnung</span>
-                    </button>
-                    <button className="ci-qa" disabled title="Versand ist in diesem Overlay noch nicht angebunden"><Truck className="w-[18px] h-[18px]"/><span className="ci-qa-label">Versand</span></button>
+                    {canViewPrices ? (
+                      <button className="ci-qa" onClick={() => setShowPayment(true)}>
+                        <Receipt className="w-[18px] h-[18px]"/><span className="ci-qa-label">Rechnung</span>
+                      </button>
+                    ) : (
+                      <button className="ci-qa" disabled title="Finanzdaten sind für diese Rolle nicht freigegeben">
+                        <Receipt className="w-[18px] h-[18px]"/><span className="ci-qa-label">Rechnung</span>
+                      </button>
+                    )}
+                    <button
+                      className="ci-qa"
+                      disabled={storedStation !== "warenausgang" || !canCompleteHandover}
+                      title={storedStation === "warenausgang" && canCompleteHandover ? "Zum Übergabebeleg" : "Nur im Warenausgang mit Statusberechtigung verfügbar"}
+                      onClick={() => document.getElementById("active-handover")?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                    ><Truck className="w-[18px] h-[18px]"/><span className="ci-qa-label">Übergabe</span></button>
                     <button className="ci-qa" disabled title="Reklamationserfassung ist hier noch nicht angebunden"><AlertTriangle className="w-[18px] h-[18px]"/><span className="ci-qa-label">Reklam.</span></button>
                   </div>
                 </div>
@@ -455,13 +501,15 @@ export function OrderOverlay() {
         </div>
       </div>
 
-      {showPayment && <PaymentDrawer orderData={orderData} onClose={() => setShowPayment(false)} />}
+      {showPayment && canViewPrices && <PaymentDrawer orderData={orderData} onClose={() => setShowPayment(false)} />}
       {showMail && <StatusMailDrawer orderData={orderData} onClose={() => setShowMail(false)} />}
       {editingItemId && (
         <ItemDrawer 
           orderId={orderData.id} 
           itemId={editingItemId} 
-          existingItems={(orderData.items || []).map((item) => ({
+          existingItems={(orderData.items || []).map((item) => {
+            const routeSnapshot = parseRouteSnapshot(item.stationSequence);
+            return {
             id: item.id,
             orderId: item.orderId,
             name: item.name,
@@ -470,9 +518,11 @@ export function OrderOverlay() {
             surfaceRequested: item.surfaceRequested || undefined,
             photoIds: Array.isArray(item.photoIds) ? item.photoIds.filter((value): value is string => typeof value === "string") : [],
             currentStationId: item.currentStationId || undefined,
-            stationSequence: Array.isArray(item.stationSequence) ? item.stationSequence.filter((value): value is string => typeof value === "string") : [],
+            stationSequence: routeSnapshot?.stations ?? (Array.isArray(item.stationSequence) ? item.stationSequence.filter((value): value is string => typeof value === "string") : []),
+            currentStep: item.currentStep ?? 0,
+            ...(routeSnapshot ? { routeTemplateId: routeSnapshot.templateId, routeSnapshotVersion: routeSnapshot.contractVersion } : {}),
             internalNotes: item.internalNotes || undefined,
-          }))}
+          };})}
           onClose={() => setEditingItemId(null)}
           onSaved={() => {}} 
         />

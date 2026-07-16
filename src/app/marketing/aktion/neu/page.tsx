@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Save, Wand2 } from "lucide-react";
@@ -11,27 +11,55 @@ import { getSegments } from "../../segmente/actions";
 export default function NeueAktionPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [kanaele, setKanaele] = useState<any[]>([]);
-  const [segmente, setSegmente] = useState<any[]>([]);
+  const [kanaele, setKanaele] = useState<Awaited<ReturnType<typeof getKanaele>>>([]);
+  const [segmente, setSegmente] = useState<Awaited<ReturnType<typeof getSegments>>>([]);
   const [inhalt, setInhalt] = useState("");
+  const [optionsState, setOptionsState] = useState<"loading" | "ready" | "error">("loading");
+  const [error, setError] = useState<string | null>(null);
+  const createRequestId = useRef<string | null>(null);
 
   useEffect(() => {
-    getKanaele().then(setKanaele);
-    getSegments().then(setSegmente);
+    let active = true;
+    void Promise.all([getKanaele(), getSegments()])
+      .then(([channelRows, segmentRows]) => {
+        if (!active) return;
+        setKanaele(channelRows);
+        setSegmente(segmentRows);
+        setOptionsState("ready");
+      })
+      .catch((loadError) => {
+        console.error("Marketing options failed", loadError);
+        if (!active) return;
+        setOptionsState("error");
+        setError("Kanäle und Segmente konnten nicht geladen werden; die Aktion wird nicht mit Ersatzwerten angelegt.");
+      });
+    return () => { active = false; };
   }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (loading || optionsState !== "ready") return;
     setLoading(true);
+    setError(null);
     const formData = new FormData(e.currentTarget);
-    formData.append("inhalt", inhalt);
+    formData.set("inhalt", inhalt);
+    let clientRequestId = createRequestId.current;
+    if (!clientRequestId) {
+      clientRequestId = crypto.randomUUID();
+      createRequestId.current = clientRequestId;
+    }
+    formData.set("clientRequestId", clientRequestId);
     
     try {
-      await createAktion(formData);
+      const receipt = await createAktion(formData);
+      if (receipt.id !== clientRequestId || receipt.status !== "vorschlag") {
+        throw new Error("MARKETING_ACTION_CREATE_NOT_CONFIRMED");
+      }
+      createRequestId.current = null;
       router.push("/marketing/aktion");
     } catch (err) {
       console.error(err);
-      alert("Fehler beim Erstellen der Aktion");
+      setError("Die Marketing-Aktion konnte nicht dauerhaft bestätigt werden. Ein unveränderter Retry verwendet dieselbe Anfrage-ID.");
       setLoading(false);
     }
   }
@@ -46,7 +74,15 @@ export default function NeueAktionPage() {
       </div>
 
       <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-        <form onSubmit={handleSubmit} className="space-y-6">
+        {error && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+        <form
+          onSubmit={handleSubmit}
+          onInput={() => {
+            if (!loading) createRequestId.current = null;
+          }}
+          className="space-y-6"
+        >
+          <fieldset disabled={loading || optionsState !== "ready"} className="contents">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Titel (intern)</label>
             <input 
@@ -126,13 +162,14 @@ export default function NeueAktionPage() {
             </Link>
             <button 
               type="submit" 
-              disabled={loading}
+              disabled={loading || optionsState !== "ready"}
               className="flex items-center gap-2 bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
               <Save size={20} />
-              <span>Als Vorschlag speichern</span>
+              <span>{loading ? "Wird bestätigt …" : optionsState === "loading" ? "Optionen werden geladen …" : "Als Vorschlag speichern"}</span>
             </button>
           </div>
+          </fieldset>
         </form>
       </div>
     </div>

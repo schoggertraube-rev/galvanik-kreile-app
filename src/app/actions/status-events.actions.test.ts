@@ -16,7 +16,7 @@ import { createStatusEvent } from './status-events.actions'
 const valid = {
   clientEventId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
   orderId: 'order-a',
-  eventType: 'STATION_STARTED',
+  eventType: 'NOTE_ADDED',
   metadata: { stationId: 'galvanik' },
 }
 

@@ -1,29 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
-import { Download, Upload, Server, Clock, AlertTriangle, FileJson, CheckCircle2 } from "lucide-react";
+import React from "react";
+import { Download, Upload, Server, AlertTriangle, FileJson } from "lucide-react";
 import { useSync } from "@/lib/offline/SyncContext";
 
 export function BackupRestoreCenter() {
-  const { outboxItems } = useSync();
-  const [exporting, setExporting] = useState(false);
-  const [lastBackup, setLastBackup] = useState<string | null>("Heute, 03:00 Uhr (Automatisch)");
-
-  const handleExport = () => {
-    setExporting(true);
-    // Simulate export delay
-    setTimeout(() => {
-      setExporting(false);
-      setLastBackup(new Date().toLocaleString("de-DE", { 
-        day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" 
-      }) + " (Manuell)");
-      alert("Backup erfolgreich erstellt! In einer echten Umgebung würde nun ein Download einer .zip Datei starten.");
-    }, 1500);
-  };
-
-  const handleImportClick = () => {
-    alert("Wiederherstellung (Restore) ist im Demo-Modus deaktiviert, um versehentlichen Datenverlust zu vermeiden. Bitte kontaktieren Sie den Entwickler für eine echte Wiederherstellung.");
-  };
+  const { outboxItems, outboxError } = useSync();
 
   return (
     <div className="space-y-6">
@@ -37,10 +19,10 @@ export function BackupRestoreCenter() {
             </div>
             <div>
               <h3 className="font-bold text-navy-900">Datenbank</h3>
-              <p className="text-xs text-success-green font-bold flex items-center gap-1"><CheckCircle2 size={12}/> Verbunden & Aktiv</p>
+              <p className="text-xs text-amber-700 font-bold">Status nicht verifiziert</p>
             </div>
           </div>
-          <p className="text-sm text-text-muted">Enthält alle Aufträge, Kunden, und Zeitstrahl-Ereignisse.</p>
+          <p className="text-sm text-text-muted">Diese Ansicht besitzt noch keinen autorisierten Health-/Backup-Nachweis der Datenbank.</p>
         </div>
 
         <div className="bg-white border-2 border-neutral-gray-200 rounded-3xl p-6 shadow-sm flex flex-col justify-between">
@@ -50,10 +32,10 @@ export function BackupRestoreCenter() {
             </div>
             <div>
               <h3 className="font-bold text-navy-900">Storage (Dateien)</h3>
-              <p className="text-xs text-success-green font-bold flex items-center gap-1"><CheckCircle2 size={12}/> Intakt</p>
+              <p className="text-xs text-amber-700 font-bold">Status nicht verifiziert</p>
             </div>
           </div>
-          <p className="text-sm text-text-muted">Enthält alle Fotos, PDF-Dokumente und Rechnungen.</p>
+          <p className="text-sm text-text-muted">Dateibestand, Vollständigkeit und Wiederherstellbarkeit sind hier noch nicht serverseitig belegt.</p>
         </div>
 
         <div className={`border-2 rounded-3xl p-6 shadow-sm flex flex-col justify-between ${outboxItems.length > 0 ? 'bg-gold-50 border-gold-400' : 'bg-white border-neutral-gray-200'}`}>
@@ -64,7 +46,7 @@ export function BackupRestoreCenter() {
             <div>
               <h3 className="font-bold text-navy-900">Lokale Outbox</h3>
               <p className={`text-xs font-bold ${outboxItems.length > 0 ? 'text-gold-700' : 'text-success-green'}`}>
-                {outboxItems.length} {outboxItems.length === 1 ? 'Eintrag' : 'Einträge'} wartend
+                {outboxError ? "Status nicht lesbar" : `${outboxItems.length} ${outboxItems.length === 1 ? 'Eintrag' : 'Einträge'} wartend`}
               </p>
             </div>
           </div>
@@ -76,19 +58,18 @@ export function BackupRestoreCenter() {
         <div>
           <h2 className="text-xl font-bold text-navy-900 mb-2">Manuelle Sicherung (Export)</h2>
           <p className="text-sm text-text-muted mb-4 max-w-2xl">
-            Erstellen Sie eine vollständige Kopie aller aktuellen Daten (Datenbank & Dateien). Diese kann sicher auf einem lokalen Laufwerk verwahrt werden.
+            Ein vollständiger Export benötigt einen autorisierten, tenant-gebundenen Export-Job, Integritätsmanifest und Abschlussbeleg. Dieser Vertrag ist noch nicht angebunden.
           </p>
           <div className="flex items-center gap-4">
             <button 
-              onClick={handleExport}
-              disabled={exporting}
+              disabled
               className="px-6 py-3 bg-navy-900 hover:bg-navy-800 text-white font-bold rounded-xl flex items-center gap-2 disabled:opacity-70 transition-colors"
             >
-              {exporting ? <Clock className="animate-spin" size={20} /> : <Download size={20} />}
-              {exporting ? "Backup wird generiert..." : "Vollständiges Backup herunterladen"}
+              <Download size={20} />
+              Export noch nicht angebunden
             </button>
             <span className="text-sm text-text-muted font-medium">
-              Letztes Backup: <strong className="text-navy-900">{lastBackup || "Unbekannt"}</strong>
+              Letzter verifizierter Backup-Beleg: <strong className="text-navy-900">nicht vorhanden</strong>
             </span>
           </div>
         </div>
@@ -96,14 +77,14 @@ export function BackupRestoreCenter() {
         <div className="border-t border-neutral-gray-200 pt-8">
           <h2 className="text-xl font-bold text-danger-red mb-2">Wiederherstellung (Restore)</h2>
           <p className="text-sm text-text-muted mb-4 max-w-2xl">
-            Warnung: Eine Wiederherstellung überschreibt die aktuellen Live-Daten. Dieser Vorgang ist irreversibel und darf nur in Notfällen durchgeführt werden.
+            Restore bleibt gesperrt, bis ein freigegebener Runbook-, Vier-Augen-, Integritäts- und Audit-Vertrag implementiert ist.
           </p>
           <button 
-            onClick={handleImportClick}
-            className="px-6 py-3 bg-red-50 border-2 border-red-200 hover:bg-red-100 text-danger-red font-bold rounded-xl flex items-center gap-2 transition-colors"
+            disabled
+            className="px-6 py-3 bg-red-50 border-2 border-red-200 text-danger-red font-bold rounded-xl flex items-center gap-2 opacity-60 cursor-not-allowed"
           >
             <Upload size={20} />
-            Backup-Datei hochladen & wiederherstellen
+            Restore noch nicht angebunden
           </button>
         </div>
       </div>

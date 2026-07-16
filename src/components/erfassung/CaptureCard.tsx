@@ -1,12 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Box, Clock, RefreshCw } from "lucide-react";
-import {
-  applyCaptureTemplate,
-  getCaptureOverview,
-  type CaptureOverview,
-} from "@/app/actions/capture.actions";
+import { getCaptureOverview, type CaptureOverview } from "@/app/actions/capture.actions";
 import { Button } from "@/components/ui/button";
 import { VorschlagBanner } from "./VorschlagBanner";
 import { CaptureSheet } from "./CaptureSheet";
@@ -23,7 +19,6 @@ export function CaptureCard({ orderId, stationKuerzel }: CaptureCardProps) {
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [selectedStation, setSelectedStation] = useState<string | null>(stationKuerzel || null);
-  const templateRequestId = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     await Promise.resolve();
@@ -37,7 +32,7 @@ export function CaptureCard({ orderId, stationKuerzel }: CaptureCardProps) {
         return;
       }
       setOverview(result.data);
-      setSelectedStation((current) => current || result.data.currentStation);
+      setSelectedStation(result.data.currentStation);
     } catch {
       setOverview(null);
       setLoadError("Erfassungsdaten konnten nicht vom Server bestätigt werden.");
@@ -66,25 +61,6 @@ export function CaptureCard({ orderId, stationKuerzel }: CaptureCardProps) {
     return [...result].sort((left, right) => left.localeCompare(right, "de"));
   }, [overview]);
 
-  const applyTemplate = async () => {
-    setMutationError(null);
-    try {
-      templateRequestId.current ||= crypto.randomUUID();
-      const result = await applyCaptureTemplate({
-        orderId,
-        clientRequestId: templateRequestId.current,
-      });
-      if (!result.ok) {
-        setMutationError(result.message);
-        if (result.error !== "STORAGE_UNAVAILABLE") templateRequestId.current = null;
-        return;
-      }
-      templateRequestId.current = null;
-      await load();
-    } catch {
-      setMutationError("Vorlage konnte nicht belastbar bestätigt werden. Ein erneuter Versuch verwendet dieselbe Anforderungs-ID.");
-    }
-  };
 
   const openSheet = (station: string) => {
     setSelectedStation(station);
@@ -122,7 +98,6 @@ export function CaptureCard({ orderId, stationKuerzel }: CaptureCardProps) {
           {overview.template.hat_vorlage ? (
             <VorschlagBanner
               vorlage={overview.template}
-              onUebernehmen={applyTemplate}
               onAnpassen={() => overview.currentStation && openSheet(overview.currentStation)}
             />
           ) : (
@@ -153,9 +128,13 @@ export function CaptureCard({ orderId, stationKuerzel }: CaptureCardProps) {
                       <div className="text-sm font-semibold text-text-muted">{summary}</div>
                     </div>
                   </div>
-                  <Button variant="ghost" className="font-bold" onClick={() => openSheet(station)}>
-                    {hasBookings ? "Nachtragen" : "Erfassen"}
-                  </Button>
+                  {station === overview.currentStation ? (
+                    <Button variant="ghost" className="font-bold" onClick={() => openSheet(station)}>
+                      {hasBookings ? "Aktuelle Station ergänzen" : "Erfassen"}
+                    </Button>
+                  ) : (
+                    <span className="text-xs font-semibold text-text-muted">Historie · Korrekturvertrag nicht angebunden</span>
+                  )}
                 </div>
               );
             })}

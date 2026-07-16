@@ -22,8 +22,9 @@ export const kvpRepository = {
     return result.data;
   },
 
-  async addItem(item: Omit<KvpItem, "id" | "date"> & { date?: string }): Promise<KvpItem> {
+  async addItem(item: Omit<KvpItem, "id" | "date"> & { clientRequestId: string; date?: string }): Promise<KvpItem> {
     const result = await createKvpItemAction({
+      clientRequestId: item.clientRequestId,
       title: item.title,
       category: item.category,
       benefit: item.benefit,

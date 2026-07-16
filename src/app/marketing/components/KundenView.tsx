@@ -10,7 +10,7 @@ export function KundenView({ segmente }: { segmente: Segment[] }) {
     <motion.div key="kunden" initial="hidden" animate="visible" exit="exit">
       <motion.div custom={0} variants={floatIn} className="mk-panel">
         <h3 className="font-serif">Kunden wecken</h3>
-        <div className="pdesc">Segmente aus deiner Kartei — das Studio schlägt vor, wen du wann ansprichst.</div>
+        <div className="pdesc">Gespeicherte Segmentdefinitionen. Eine belastbare Kundenmitgliedschaft und Einwilligungszählung ist noch nicht angebunden.</div>
         <div className="mk-segs">
           {segmente.map(s => (
             <div key={s.id} className="mk-seg">
@@ -19,9 +19,9 @@ export function KundenView({ segmente }: { segmente: Segment[] }) {
               </div>
               <div style={{ flex: 1 }}>
                 <div className="mk-seg-name">{s.name}</div>
-                <div className="mk-seg-desc">{s.kundenAnzahl} Kunden</div>
+                <div className="mk-seg-desc">{s.kundenAnzahl === null ? 'Mitgliederzahl nicht verfügbar' : `${s.kundenAnzahl} Kunden`}</div>
               </div>
-              <span className="mk-seg-badge">{s.weckbar} weckbar</span>
+              <span className="mk-seg-badge">{s.weckbar === null ? 'Einwilligung unbekannt' : `${s.weckbar} ansprechbar`}</span>
             </div>
           ))}
         </div>

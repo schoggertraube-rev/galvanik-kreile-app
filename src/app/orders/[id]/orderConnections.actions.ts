@@ -10,6 +10,11 @@ const TENANT_ID = "galvanik-kreile";
 const ENTITY_ID = /^[A-Za-z0-9_-]{1,100}$/;
 
 export type OrderConnections = {
+  capabilities: {
+    quality: "available" | "forbidden";
+    invoice: "available" | "forbidden";
+    marketing: "available" | "forbidden";
+  };
   quality: {
     id: string;
     result: string;
@@ -53,6 +58,10 @@ export async function getOrderConnections(orderIdValue: unknown): Promise<OrderC
   }
 
   try {
+    const canViewQuality = authorization.data.permissions.includes("perm_op_qa");
+    const canViewInvoice = authorization.data.permissions.includes("perm_view_prices");
+    const canViewMarketing = authorization.data.permissions.includes("perm_view_customers")
+      && authorization.data.permissions.includes("perm_view_prices");
     const [order] = await db.select({
       id: orders.id,
       inquiryId: orders.inquiryId,
@@ -62,21 +71,32 @@ export async function getOrderConnections(orderIdValue: unknown): Promise<OrderC
     )).limit(1);
     if (!order) return { ok: false, error: "NOT_FOUND", message: "Auftrag wurde im angemeldeten Mandanten nicht gefunden." };
 
-    const [qualityRows, invoiceRows] = await Promise.all([
-      db.select().from(qs).where(and(
-        eq(qs.tenantId, authorization.data.tenantId),
-        eq(qs.orderId, order.id),
-      )).orderBy(desc(qs.datum), desc(qs.createdAt)).limit(1),
-      db.select().from(ausgangsrechnung).where(and(
-        eq(ausgangsrechnung.tenantId, authorization.data.tenantId),
-        eq(ausgangsrechnung.orderId, order.id),
-        or(eq(ausgangsrechnung.isDemo, false), isNull(ausgangsrechnung.isDemo)),
-      )).orderBy(desc(ausgangsrechnung.erstelltAm)).limit(1),
-    ]);
+    const qualityRows = canViewQuality ? await db.select({
+      id: qs.id,
+      ergebnis: qs.ergebnis,
+      pruefer: qs.pruefer,
+      datum: qs.datum,
+      bemerkung: qs.bemerkung,
+    }).from(qs).where(and(
+      eq(qs.tenantId, authorization.data.tenantId),
+      eq(qs.orderId, order.id),
+    )).orderBy(desc(qs.datum), desc(qs.createdAt)).limit(1) : [];
+
+    const invoiceRows = canViewInvoice ? await db.select({
+      id: ausgangsrechnung.id,
+      nummer: ausgangsrechnung.nummer,
+      status: ausgangsrechnung.status,
+      datum: ausgangsrechnung.datum,
+      brutto: ausgangsrechnung.brutto,
+    }).from(ausgangsrechnung).where(and(
+      eq(ausgangsrechnung.tenantId, authorization.data.tenantId),
+      eq(ausgangsrechnung.orderId, order.id),
+      or(eq(ausgangsrechnung.isDemo, false), isNull(ausgangsrechnung.isDemo)),
+    )).orderBy(desc(ausgangsrechnung.erstelltAm)).limit(1) : [];
 
     const warnings: string[] = [];
     let marketing: OrderConnections["marketing"] = null;
-    if (order.inquiryId) {
+    if (canViewMarketing && order.inquiryId) {
       const [inquiry] = await db.select().from(inquiries).where(and(
         eq(inquiries.tenantId, authorization.data.tenantId),
         eq(inquiries.id, order.inquiryId),
@@ -120,6 +140,11 @@ export async function getOrderConnections(orderIdValue: unknown): Promise<OrderC
     return {
       ok: true,
       data: {
+        capabilities: {
+          quality: canViewQuality ? "available" : "forbidden",
+          invoice: canViewInvoice ? "available" : "forbidden",
+          marketing: canViewMarketing ? "available" : "forbidden",
+        },
         quality: quality ? {
           id: quality.id,
           result: quality.ergebnis,

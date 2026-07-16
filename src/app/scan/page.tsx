@@ -1,13 +1,14 @@
 "use client";
 
 import { usePageView } from "@/hooks/usePageView";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CameraCapture } from "@/components/intake/CameraCapture";
 import { SuggestedItemsPanel } from "@/components/intake/SuggestedItemsPanel";
 import { OcrResult } from "@/lib/ocr/geminiOcr";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { createOrderFromScan } from "@/app/actions/orders.actions";
 import { RefreshCw, CheckCircle2, AlertTriangle, HelpCircle } from "lucide-react";
+import { isRouteTemplateId, ROUTE_TEMPLATES } from "@/lib/orders/routeSnapshot";
 
 export default function ScanPage() {
   usePageView();
@@ -15,6 +16,8 @@ export default function ScanPage() {
   const [confirmMessage, setConfirmMessage] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [routeTemplateId, setRouteTemplateId] = useState("");
+  const createRequestId = useRef(crypto.randomUUID());
 
   const [customerChoices, setCustomerChoices] = useState<Array<{ id: string; name: string; companyName?: string | null }> | null>(null);
   const [lastConfirmedParts, setLastConfirmedParts] = useState<Record<string, unknown>[] | null>(null);
@@ -24,6 +27,10 @@ export default function ScanPage() {
     customParts?: Record<string, unknown>[];
   }) => {
     if (!scan) return;
+    if (!isRouteTemplateId(routeTemplateId)) {
+      setError("Bitte vor der Auftragsbestätigung eine Positionsroute auswählen.");
+      return;
+    }
     setLoading(true);
     setError(null);
     setConfirmMessage("");
@@ -59,6 +66,8 @@ export default function ScanPage() {
       if (!options?.customerId && !customerName) throw new Error("Es wurde kein Kunde erkannt oder ausgewählt.");
 
       const res = await createOrderFromScan({
+        clientRequestId: createRequestId.current,
+        routeTemplateId,
         customerId: options?.customerId,
         ...(!options?.customerId ? { customerName } : {}),
         title,
@@ -71,6 +80,7 @@ export default function ScanPage() {
         setError(null);
         setCustomerChoices(null);
         setLastConfirmedParts(null);
+        setRouteTemplateId("");
       } else {
         if (res.error === "CUSTOMER_AMBIGUOUS") {
           setCustomerChoices(res.details as Array<{ id: string; name: string; companyName?: string | null }> || []);
@@ -148,10 +158,24 @@ export default function ScanPage() {
             <pre className="text-xs bg-gray-100 p-4 rounded-xl overflow-auto whitespace-pre-wrap">
               {scan.rawText}
             </pre>
+            <div className="mt-4 space-y-2">
+              <label className="text-xs font-bold text-navy-900">Bestätigte Positionsroute *</label>
+              <select value={routeTemplateId} onChange={(event) => setRouteTemplateId(event.target.value)} className="w-full rounded-xl border border-neutral-gray-300 bg-white p-3 text-sm">
+                <option value="">Route auswählen …</option>
+                {Object.entries(ROUTE_TEMPLATES).map(([templateId, template]) => (
+                  <option key={templateId} value={templateId}>{template.label}: {template.stations.join(" → ")}</option>
+                ))}
+              </select>
+              <p className="text-xs text-text-muted">Die KI schlägt keine Route vor. Die Auswahl ist eine bewusste fachliche Bestätigung.</p>
+            </div>
             <div className="mt-4 flex gap-4">
               <button 
-                onClick={() => setScan(null)}
-                disabled={loading}
+                onClick={() => {
+                  setScan(null);
+                  setRouteTemplateId("");
+                  createRequestId.current = crypto.randomUUID();
+                }}
+                disabled={loading || !isRouteTemplateId(routeTemplateId)}
                 className="flex-1 bg-neutral-gray-200 p-3 rounded-xl font-bold"
               >
                 Erneut scannen
@@ -178,7 +202,11 @@ export default function ScanPage() {
           />
         </div>
       ) : (
-        <CameraCapture onScanComplete={setScan} />
+        <CameraCapture onScanComplete={(result) => {
+          createRequestId.current = crypto.randomUUID();
+          setRouteTemplateId("");
+          setScan(result);
+        }} />
       )}
     </div>
   );

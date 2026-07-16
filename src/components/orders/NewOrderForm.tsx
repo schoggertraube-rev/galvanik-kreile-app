@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { X, Save, FileText, CheckCircle2 } from "lucide-react";
+import { isRouteTemplateId, ROUTE_TEMPLATES } from "@/lib/orders/routeSnapshot";
 
 interface NewOrderFormProps {
   onClose: () => void;
@@ -22,11 +23,13 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
   const [quantity, setQuantity] = useState(ocrData?.quantity?.trim() || "");
   const [surface, setSurface] = useState(ocrData?.surfaceRequested || "");
   const [task, setTask] = useState("");
+  const [routeTemplateId, setRouteTemplateId] = useState("");
   const [success, setSuccess] = useState(false);
   const [persistedOrderNumber, setPersistedOrderNumber] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const createRequestId = useRef(crypto.randomUUID());
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -53,11 +56,16 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
       setError("Hinweise oder Oberfläche überschreiten das zulässige Größenlimit.");
       return;
     }
+    if (!isRouteTemplateId(routeTemplateId)) {
+      setError("Bitte vor dem Speichern eine bestätigte Positionsroute auswählen.");
+      return;
+    }
 
     try {
       setLoading(true);
       setError(null);
       const created = await ordersRepository.create({
+        clientRequestId: createRequestId.current,
         customerId,
         title: normalizedTitle,
         ...(normalizedTask ? { task: normalizedTask } : {}),
@@ -67,6 +75,7 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
             name: normalizedTitle,
             quantity: parsedQuantity,
             ...(normalizedSurface ? { surfaceRequested: normalizedSurface } : {}),
+            routeTemplateId,
           },
         ],
       });
@@ -172,6 +181,16 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
                 />
               </div>
 
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-navy-900">Bestätigte Positionsroute *</label>
+                <select value={routeTemplateId} onChange={(event) => setRouteTemplateId(event.target.value)} className="w-full rounded-lg border border-neutral-gray-300 bg-white p-3 text-sm">
+                  <option value="">Route auswählen …</option>
+                  {Object.entries(ROUTE_TEMPLATES).map(([templateId, template]) => (
+                    <option key={templateId} value={templateId}>{template.label}: {template.stations.join(" → ")}</option>
+                  ))}
+                </select>
+              </div>
+
               {previewUrl && (
                 <div className="flex items-center gap-2 p-3 bg-amber-50 text-amber-900 rounded-lg border border-amber-200">
                   <FileText className="w-5 h-5" />
@@ -194,7 +213,7 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
             <Button variant="outline" onClick={onClose} disabled={loading} className="font-bold">
               Abbrechen
             </Button>
-            <Button onClick={handleSave} disabled={loading || !title.trim() || !quantity.trim()} className="bg-navy-900 hover:bg-navy-800 text-white font-bold min-w-[140px]">
+            <Button onClick={handleSave} disabled={loading || !title.trim() || !quantity.trim() || !isRouteTemplateId(routeTemplateId)} className="bg-navy-900 hover:bg-navy-800 text-white font-bold min-w-[140px]">
               {loading ? "Speichert..." : (
                 <>
                   <Save className="w-4 h-4 mr-2" />

@@ -12,9 +12,9 @@ import type { StartUserDto } from "@/lib/auth/userDtos";
 
 // Asynchronous weather card fetching directly from Open-Meteo
 function WeatherCard() {
-  const [weatherText, setWeatherText] = useState("");
+  const [weatherText, setWeatherText] = useState<string | null>(null);
   const [temperature, setTemperature] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [weatherState, setWeatherState] = useState<"loading" | "ready" | "error">("loading");
   const [eventText, setEventText] = useState<string | null>(null);
   const timeStr = new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
 
@@ -25,9 +25,11 @@ function WeatherCard() {
         const res = await fetch(
           "https://api.open-meteo.com/v1/forecast?latitude=50.1109&longitude=8.6821&current_weather=true"
         );
+        if (!res.ok) throw new Error("WEATHER_HTTP_ERROR");
         const data = await res.json();
         const temp = data?.current_weather?.temperature;
         const code = data?.current_weather?.weathercode;
+        if (!Number.isFinite(temp) || !Number.isFinite(code)) throw new Error("WEATHER_PAYLOAD_INVALID");
         setTemperature(Math.round(temp));
 
         // Formulate a beautiful greeting string based on weather codes
@@ -53,22 +55,19 @@ function WeatherCard() {
           }
         }
 
-        // Simulating the 600ms skeleton requirement
-        setTimeout(() => {
-          setWeatherText(condition);
-          setLoading(false);
-        }, 600);
-      } catch {
-        setTimeout(() => {
-          setWeatherText("Heute mal kein Wetter — aber bestimmt was zu tun. 💪");
-          setLoading(false);
-        }, 600);
+        setWeatherText(condition);
+        setWeatherState("ready");
+      } catch (error) {
+        console.error("Weather unavailable", error);
+        setTemperature(null);
+        setWeatherText(null);
+        setWeatherState("error");
       }
     };
     fetchWeather();
   }, []);
 
-  if (loading) {
+  if (weatherState === "loading") {
     return (
       <div className="absolute top-6 right-6 w-[320px] bg-white rounded-2xl border border-neutral-gray-100 p-5 shadow-card animate-pulse">
         <div className="flex gap-4">
@@ -89,7 +88,9 @@ function WeatherCard() {
           <Sun className="w-7 h-7 text-accent-orange" strokeWidth={1.5} />
         </div>
         <div className="text-sm leading-relaxed text-navy-900 font-medium">
-          Heute: <strong>{temperature !== null ? `${temperature}°C` : "20°C"}</strong> und noch {weatherText}
+          {weatherState === "error" || temperature === null || weatherText === null
+            ? "Wetterdaten sind derzeit nicht verfügbar."
+            : <>Heute: <strong>{temperature}°C</strong> · {weatherText}</>}
           {eventText && (
             <div className="mt-2 text-xs text-accent-orange font-bold flex items-center gap-1">
               {eventText}
@@ -244,13 +245,16 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
 
 import { Suspense } from "react";
 
-function StartScreenContent({ users }: { users: StartUserDto[] }) {
+function StartScreenContent({ users, usersLoadError }: { users: StartUserDto[]; usersLoadError: string | null }) {
   const [selectedUser, setSelectedUser] = useState<StartUserDto | null>(null);
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [greetingInfo, setGreetingInfo] = useState({ text: "Guten Morgen, Meister!", emoji: "👋" });
-  const [priorityTask, setPriorityTask] = useState<string | null>(null);
-  const [deadlineTime, setDeadlineTime] = useState<string>("11:30");
-  const [isEvening, setIsEvening] = useState(false);
+  const [priority, setPriority] = useState<{
+    state: "loading" | "ready" | "empty" | "unauthorized" | "error";
+    taskText: string | null;
+    dueAt: string | null;
+    dueKind: "customer_promise" | "internal_due" | null;
+  }>({ state: "loading", taskText: null, dueAt: null, dueKind: null });
 
   const searchParams = useSearchParams();
   const errorMessage = searchParams?.get("message");
@@ -266,18 +270,15 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
     const fetchTask = async () => {
       try {
         const res = await getTodayTopPriority();
-        if (res && res.taskText) {
-          setPriorityTask(res.taskText);
-        }
-        // Calculate dynamic deadline (e.g. current hour + 2)
-        const d = new Date();
-        const currentHour = d.getHours();
-        const nextHour = currentHour + 2;
-        const formattedHour = Math.min(nextHour, 23).toString().padStart(2, "0");
-        setDeadlineTime(`${formattedHour}:00`);
-        setIsEvening(currentHour >= 16);
+        setPriority({
+          state: res.kind,
+          taskText: res.taskText,
+          dueAt: res.dueAt,
+          dueKind: res.dueKind,
+        });
       } catch (e) {
         console.error("Failed to fetch priority task", e);
+        setPriority({ state: "error", taskText: null, dueAt: null, dueKind: null });
       }
     };
     fetchTask();
@@ -316,11 +317,19 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
             </div>
             <div>
               <p className="font-bold text-navy-900 text-sm md:text-base leading-snug">
-                Zuerst steht an: <span className="font-extrabold text-navy-900">{priorityTask || "Lade Aufgaben..."}</span>
+                {priority.state === "loading" && "Priorität wird geladen …"}
+                {priority.state === "ready" && <>Zuerst steht an: <span className="font-extrabold text-navy-900">{priority.taskText}</span></>}
+                {priority.state === "empty" && "Keine laufende Auftragspriorität vorhanden."}
+                {priority.state === "unauthorized" && "Nach der Anmeldung werden autorisierte Auftragsprioritäten geladen."}
+                {priority.state === "error" && "Auftragspriorität ist derzeit nicht verfügbar."}
               </p>
-              <p className="text-xs md:text-sm text-text-muted mt-1 leading-relaxed">
-                Wenn das bis <span className="text-accent-orange font-bold">{deadlineTime} Uhr</span> erledigt ist, {isEvening ? "starten wir morgen entspannt in den Tag." : "bleibt der Nachmittag entspannt."}
-              </p>
+              {priority.state === "ready" && (
+                <p className="text-xs md:text-sm text-text-muted mt-1 leading-relaxed">
+                  {priority.dueAt
+                    ? `${priority.dueKind === "customer_promise" ? "Kundenzusage" : "Interner Termin"}: ${new Date(priority.dueAt).toLocaleString("de-DE")}`
+                    : "Kein bestätigter Termin hinterlegt."}
+                </p>
+              )}
             </div>
           </div>
           <svg viewBox="0 0 24 24" fill="none" stroke="#B8923F" strokeWidth="2" className="w-5 h-5 shrink-0 ml-2">
@@ -330,6 +339,16 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
       </div>
 
       {/* User Avatar Kacheln */}
+      {usersLoadError && (
+        <p role="alert" className="mb-4 rounded-xl border border-danger-red/30 bg-danger-red/10 px-4 py-3 text-sm font-bold text-danger-red">
+          {usersLoadError}
+        </p>
+      )}
+      {!usersLoadError && users.length === 0 && (
+        <p className="mb-4 rounded-xl border border-neutral-gray-200 bg-white px-4 py-3 text-sm text-text-muted">
+          Keine aktiven, PIN-berechtigten Benutzer für diesen Mandanten vorhanden. E-Mail-Login bleibt verfügbar.
+        </p>
+      )}
       <div className="flex gap-5 md:gap-7 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-300 fill-mode-both overflow-x-auto pb-4 snap-x">
         {users.map((user) => {
           const Icon = Wrench;
@@ -379,7 +398,7 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
   );
 }
 
-export function StartScreenClient({ users }: { users: StartUserDto[] }) {
+export function StartScreenClient({ users, usersLoadError = null }: { users: StartUserDto[]; usersLoadError?: string | null }) {
   usePageView();
   return (
     <Suspense fallback={
@@ -387,7 +406,7 @@ export function StartScreenClient({ users }: { users: StartUserDto[] }) {
         <div className="text-text-muted font-bold animate-pulse text-lg">Lade Startbildschirm...</div>
       </div>
     }>
-      <StartScreenContent users={users} />
+      <StartScreenContent users={users} usersLoadError={usersLoadError} />
     </Suspense>
   );
 }

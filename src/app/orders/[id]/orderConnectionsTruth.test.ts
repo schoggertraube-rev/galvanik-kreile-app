@@ -15,6 +15,10 @@ describe("order detail connection truth", () => {
     expect(action).toContain("marketingTouchpoints.tenantId");
     expect(action).toContain("ausgangsrechnung.orderId");
     expect(action).toContain("qs.orderId");
+    expect(action).toContain('permissions.includes("perm_op_qa")');
+    expect(action).toContain('permissions.includes("perm_view_prices")');
+    expect(action).toContain('permissions.includes("perm_view_customers")');
+    expect(action).toContain('quality: canViewQuality ? "available" : "forbidden"');
   });
 
   it("does not derive QS, invoice or marketing values from display identifiers", () => {

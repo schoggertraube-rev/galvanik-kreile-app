@@ -64,7 +64,7 @@ Antworte ausschließlich im JSON Format nach folgendem Schema:
   }
 }`
 
-    const payload: any = {
+    const payload = {
       contents: [
         { 
           role: "user", 
@@ -108,7 +108,7 @@ Antworte ausschließlich im JSON Format nach folgendem Schema:
     let result
     try {
       result = JSON.parse(content);
-    } catch (e) {
+    } catch {
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
          result = JSON.parse(match[0]);
@@ -125,7 +125,7 @@ Antworte ausschließlich im JSON Format nach folgendem Schema:
   } catch (error) {
     console.error(error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: error instanceof Error ? error.message : "Scan analysis failed" }),
       { headers: { ...cors, 'Content-Type': 'application/json' }, status: 500 }
     )
   }

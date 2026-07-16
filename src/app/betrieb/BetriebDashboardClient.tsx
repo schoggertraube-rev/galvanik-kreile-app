@@ -51,7 +51,7 @@ export function BetriebDashboardClient({ isAdminOrDev }: { isAdminOrDev: boolean
       label: "Kundenservice",
       description: "Kundenanfragen & Support",
       icon: PhoneCall,
-      href: "/kundenservice",
+      href: "/kommunikation",
       hasAccess: true,
       color: "text-emerald-500",
     },

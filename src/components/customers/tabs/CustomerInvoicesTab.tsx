@@ -2,15 +2,31 @@ import React, { useEffect, useState } from 'react';
 import { getCustomerFinancials } from '@/features/customers/customer-card/customerCard.actions';
 import { Loader2, Receipt, Search, ExternalLink } from 'lucide-react';
 
+type CustomerFinancials = Extract<
+  Awaited<ReturnType<typeof getCustomerFinancials>>,
+  { ok: true }
+>["data"];
+
 export function CustomerInvoicesTab({ customerId }: { customerId: string }) {
-  const [financials, setFinancials] = useState<any>(null);
+  const [financials, setFinancials] = useState<CustomerFinancials | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     getCustomerFinancials(customerId).then(res => {
       if (isMounted) {
         if (res.ok) setFinancials(res.data);
+        else {
+          setFinancials(null);
+          setError("Rechnungsdaten konnten nicht bestätigt werden.");
+        }
+        setIsLoading(false);
+      }
+    }).catch(() => {
+      if (isMounted) {
+        setFinancials(null);
+        setError("Rechnungsdaten konnten nicht bestätigt werden.");
         setIsLoading(false);
       }
     });
@@ -23,7 +39,7 @@ export function CustomerInvoicesTab({ customerId }: { customerId: string }) {
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-bold font-serif text-navy-900">Rechnungen & Zahlungen</h3>
-        <button className="bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors">
+        <button disabled title="Die globale Rechnungssuche ist hier nicht angebunden" className="bg-white border border-gray-200 text-gray-500 px-3 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 opacity-60">
           <Search className="w-4 h-4" /> Alle durchsuchen
         </button>
       </div>
@@ -32,15 +48,17 @@ export function CustomerInvoicesTab({ customerId }: { customerId: string }) {
         <div className="flex items-center justify-center p-12 text-gray-500">
           <Loader2 className="w-8 h-8 animate-spin" />
         </div>
+      ) : error ? (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-6 text-sm font-semibold text-red-800">{error}</div>
       ) : invoices.length === 0 ? (
         <div className="bg-gray-50 border border-gray-200 rounded-xl p-12 text-center text-gray-500 flex flex-col items-center">
           <Receipt className="w-12 h-12 mb-4 opacity-50" />
-          <p className="font-semibold">Keine Rechnungen vorhanden.</p>
-          <p className="text-sm mt-1">Dieser Kunde hat noch keine Rechnungen erhalten.</p>
+          <p className="font-semibold">Keine bestätigten Rechnungen vorhanden.</p>
+          <p className="text-sm mt-1">Der leere Datenstand wurde erfolgreich geladen.</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {invoices.map((inv: any) => {
+          {invoices.map((inv) => {
             const isPaid = inv.status === 'bezahlt';
             const isOverdue = inv.status === 'ueberfaellig';
             
@@ -68,7 +86,7 @@ export function CustomerInvoicesTab({ customerId }: { customerId: string }) {
                     <p className="font-bold text-lg text-gray-900">{Number(inv.brutto).toFixed(2)} €</p>
                     <p className="text-[10px] uppercase font-bold text-gray-500">Brutto</p>
                   </div>
-                  <button className="text-[var(--ci-blue)] hover:bg-blue-50 p-2 rounded transition-colors">
+                  <button disabled title="Rechnungsdetail ist hier nicht angebunden" className="text-gray-400 p-2 rounded opacity-60">
                     <ExternalLink className="w-5 h-5" />
                   </button>
                 </div>

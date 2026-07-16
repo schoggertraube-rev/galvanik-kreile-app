@@ -55,24 +55,24 @@ export const offlineOutbox = {
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
       const req = store.put(item);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || req.error || new Error("Offline outbox write failed"));
+      tx.onabort = () => reject(tx.error || new Error("Offline outbox write aborted"));
     });
   },
 
   async getAllItems(): Promise<OfflineOutboxItem[]> {
-    try {
-      const db = await getDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readonly");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result as OfflineOutboxItem[]);
-        req.onerror = () => reject(req.error);
-      });
-    } catch {
-      return [];
-    }
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.getAll();
+      let result: OfflineOutboxItem[] | null = null;
+      req.onsuccess = () => { result = req.result as OfflineOutboxItem[]; };
+      tx.oncomplete = () => resolve(result ?? []);
+      tx.onerror = () => reject(tx.error || req.error || new Error("Offline outbox read failed"));
+      tx.onabort = () => reject(tx.error || new Error("Offline outbox read aborted"));
+    });
   },
 
   async removeItem(id: string): Promise<void> {
@@ -81,8 +81,9 @@ export const offlineOutbox = {
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
       const req = store.delete(id);
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || req.error || new Error("Offline outbox delete failed"));
+      tx.onabort = () => reject(tx.error || new Error("Offline outbox delete aborted"));
     });
   },
   
@@ -92,8 +93,9 @@ export const offlineOutbox = {
       const tx = db.transaction(STORE_NAME, "readwrite");
       const store = tx.objectStore(STORE_NAME);
       const req = store.clear();
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || req.error || new Error("Offline outbox clear failed"));
+      tx.onabort = () => reject(tx.error || new Error("Offline outbox clear aborted"));
     });
   }
 };

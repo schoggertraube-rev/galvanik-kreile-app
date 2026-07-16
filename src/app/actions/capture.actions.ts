@@ -2,10 +2,12 @@
 
 import { createHash } from "node:crypto";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
   appUsers,
   auditLog,
+  events,
   inventoryItems,
   items,
   orders,
@@ -25,11 +27,21 @@ import {
   parseCaptureEntityId,
   parseCaptureStation,
   parseMaterialCaptureInput,
+  parseStationCompletionCaptureInput,
   parseTemplateCaptureInput,
   parseTimeCaptureInput,
   type MaterialCaptureLine,
 } from "@/lib/erfassung/captureContract";
+import {
+  canTransitionOrderStatus,
+  normalizeStoredOrderStatus,
+  parseOrderStation,
+  type OrderStation,
+  type OrderStatus,
+} from "@/lib/orders/orderMutationContract";
+import { getHomogeneousRouteTransition } from "@/lib/orders/orderRouting";
 import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import { invalidateOperationalOrdersCache } from "@/lib/server/operationalOrders";
 
 export type CaptureErrorCode =
   | "UNAUTHORIZED"
@@ -79,6 +91,11 @@ export type CaptureOverview = {
   currentStation: string | null;
   selectedStation: string | null;
   selectedRate: { valueEurPerHour: number; source: "employee" | "station_default" } | null;
+  routeExecution: {
+    status: "executable" | "blocked";
+    nextStation: OrderStation | null;
+    reason: string | null;
+  };
   template: CaptureTemplate;
   articles: CaptureArticle[];
   timeBookings: {
@@ -102,7 +119,7 @@ export type CaptureOverview = {
 
 export type CaptureMutationReceipt = {
   requestId: string;
-  kind: "time" | "material" | "template";
+  kind: "time" | "material" | "template" | "station_completion";
   orderId: string;
   timeBookingIds: string[];
   movementIds: string[];
@@ -110,6 +127,10 @@ export type CaptureMutationReceipt = {
   materialCostEur: number;
   createdAt: string;
   replayed: boolean;
+  completedStation?: string;
+  newStation?: string;
+  newStatus?: OrderStatus;
+  eventId?: string;
 };
 
 type RawTimeTemplate = {
@@ -144,13 +165,18 @@ function failure<T>(error: CaptureErrorCode, message: string): CaptureResult<T> 
   return { ok: false, error, message };
 }
 
-async function authorizeCapture(mode: "read" | "write"): Promise<CaptureResult<AuthorizationSnapshot>> {
+async function authorizeCapture(mode: "read" | "write" | "status"): Promise<CaptureResult<AuthorizationSnapshot>> {
   const authorization = await resolveAuthorization();
   if (!authorization.ok) return failure("UNAUTHORIZED", "Anmeldung erforderlich.");
   const permissions = authorization.data.permissions;
   const canRead = permissions.includes("perm_view_leitstand") || permissions.includes("perm_data_orders");
   const canWrite = permissions.includes("perm_op_status") || permissions.includes("perm_data_orders");
-  if (authorization.data.tenantId !== CAPTURE_TENANT_ID || (mode === "read" ? !canRead : !canWrite)) {
+  const allowed = mode === "read"
+    ? canRead
+    : mode === "status"
+      ? permissions.includes("perm_op_status")
+      : canWrite;
+  if (authorization.data.tenantId !== CAPTURE_TENANT_ID || !allowed) {
     return failure("FORBIDDEN", "Keine Berechtigung für die Auftragserfassung.");
   }
   return { ok: true, data: authorization.data };
@@ -197,6 +223,36 @@ async function resolveRate(actor: AuthorizationSnapshot, station: string) {
 
   const today = new Date().toISOString().slice(0, 10);
   const [fallback] = await db
+    .select({ rate: kostensatzDefault.eurProStunde })
+    .from(kostensatzDefault)
+    .where(and(
+      eq(kostensatzDefault.tenantId, actor.tenantId),
+      eq(kostensatzDefault.stationKuerzel, station),
+      lte(kostensatzDefault.giltAb, today),
+    ))
+    .orderBy(desc(kostensatzDefault.giltAb))
+    .limit(1);
+  if (!fallback) return null;
+  const rate = finiteNumber(fallback.rate, "RATE_INVALID");
+  if (rate < 0) throw new Error("RATE_INVALID");
+  return { valueEurPerHour: rate, source: "station_default" as const };
+}
+
+async function resolveRateInTransaction(tx: DbTransaction, actor: AuthorizationSnapshot, station: string) {
+  const [user] = await tx
+    .select({ rate: appUsers.kostensatzEurProStunde })
+    .from(appUsers)
+    .where(and(eq(appUsers.id, actor.userId), eq(appUsers.tenantId, actor.tenantId)))
+    .limit(1);
+  if (!user) throw new Error("ACTOR_NOT_FOUND");
+  if (user.rate !== null) {
+    const rate = finiteNumber(user.rate, "RATE_INVALID");
+    if (rate < 0) throw new Error("RATE_INVALID");
+    return { valueEurPerHour: rate, source: "employee" as const };
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const [fallback] = await tx
     .select({ rate: kostensatzDefault.eurProStunde })
     .from(kostensatzDefault)
     .where(and(
@@ -324,22 +380,55 @@ async function resolveTemplate(tenantId: string, orderId: string): Promise<Resol
   };
 }
 
-async function ensureOrder(tx: DbTransaction, tenantId: string, orderId: string) {
+type LockedCaptureOrder = {
+  id: string;
+  station: string;
+  currentStationId: string | null;
+  status: string;
+};
+
+async function lockCaptureOrder(tx: DbTransaction, tenantId: string, orderId: string): Promise<LockedCaptureOrder> {
   const [order] = await tx
-    .select({ id: orders.id })
+    .select({
+      id: orders.id,
+      station: orders.station,
+      currentStationId: orders.currentStationId,
+      status: orders.status,
+    })
     .from(orders)
     .where(and(eq(orders.id, orderId), eq(orders.tenantId, tenantId)))
-    .limit(1);
+    .limit(1)
+    .for("update");
   if (!order) throw new Error("ORDER_NOT_FOUND");
+  return order;
+}
+
+function assertActiveOrderAtStation(order: LockedCaptureOrder, requestedStation: string) {
+  let storedStation: OrderStation;
+  let station: OrderStation;
+  try {
+    storedStation = parseOrderStation(order.currentStationId || order.station);
+    station = parseOrderStation(requestedStation);
+  } catch {
+    throw new Error("UNKNOWN_ORDER_STATION");
+  }
+  if (storedStation !== station) throw new Error("STALE_ORDER_STATION");
+  if (normalizeStoredOrderStatus(order.status) !== "in_progress") throw new Error("ORDER_NOT_IN_PROGRESS");
 }
 
 function replayReceipt(value: Record<string, unknown> | null): CaptureMutationReceipt {
   if (!value || typeof value.requestId !== "string" || typeof value.orderId !== "string" ||
-      !["time", "material", "template"].includes(String(value.kind)) ||
+      !["time", "material", "template", "station_completion"].includes(String(value.kind)) ||
       !Array.isArray(value.timeBookingIds) || !value.timeBookingIds.every((id) => typeof id === "string") ||
       !Array.isArray(value.movementIds) || !value.movementIds.every((id) => typeof id === "string") ||
       typeof value.timeCostEur !== "number" || typeof value.materialCostEur !== "number" ||
-      typeof value.createdAt !== "string") {
+      typeof value.createdAt !== "string" ||
+      (value.kind === "station_completion" && (
+        typeof value.completedStation !== "string" ||
+        typeof value.newStation !== "string" ||
+        typeof value.newStatus !== "string" ||
+        typeof value.eventId !== "string"
+      ))) {
     throw new Error("RECEIPT_INVALID");
   }
   return { ...(value as Omit<CaptureMutationReceipt, "replayed">), replayed: true };
@@ -414,6 +503,10 @@ async function addAudit(tx: DbTransaction, actor: AuthorizationSnapshot, receipt
       movement_ids: receipt.movementIds,
       time_cost_eur: receipt.timeCostEur,
       material_cost_eur: receipt.materialCostEur,
+      completed_station: receipt.completedStation,
+      new_station: receipt.newStation,
+      new_status: receipt.newStatus,
+      event_id: receipt.eventId,
     },
   });
 }
@@ -432,6 +525,23 @@ function mapCaptureError<T>(error: unknown): CaptureResult<T> {
   if (code === "ITEM_NOT_FOUND") return failure("NOT_FOUND", "Ein Lagerartikel gehört nicht zum angemeldeten Mandanten.");
   if (code === "INSUFFICIENT_STOCK") return failure("INSUFFICIENT_STOCK", "Der verfügbare Bestand reicht für diese Buchung nicht aus.");
   if (code === "REQUEST_CONFLICT") return failure("CONFLICT", "Diese Anforderungs-ID wurde bereits mit anderen Daten verwendet.");
+  if (code === "STALE_ORDER_STATION") return failure("CONFLICT", "Der Auftrag befindet sich nicht mehr an der erwarteten Station. Bitte neu laden.");
+  if (code === "ORDER_NOT_IN_PROGRESS") return failure("CONFLICT", "Nur eine laufende Station kann abgeschlossen werden. Bitte neu laden.");
+  if (code === "SHIPPING_RECEIPT_REQUIRED") {
+    return failure("CONFLICT", "Warenausgang kann nicht über den generischen Stationsabschluss als versendet markiert werden. Ein bestätigter Übergabe-/Versandbeleg ist erforderlich.");
+  }
+  if (code === "ORDER_WITHOUT_ITEMS") {
+    return failure("CONFLICT", "Ein Auftrag ohne bestätigte Positionen kann nicht abgeschlossen werden.");
+  }
+  if (code === "ITEM_STATION_DIVERGENCE") {
+    return failure("CONFLICT", "Die Auftragspositionen befinden sich nicht einheitlich an dieser Station. Bitte den Positionszustand klären.");
+  }
+  if (code === "POSITION_ROUTE_REQUIRES_UNIT_ENGINE") {
+    return failure("CONFLICT", "Für diesen Auftrag ist keine sicher ausführbare, versionierte Route belegt. Der Abschluss bleibt gesperrt, bis RouteSnapshot und Handling-Unit-Routing angebunden sind.");
+  }
+  if (["UNKNOWN_ORDER_STATION", "INVALID_ORDER_STATUS_TRANSITION"].includes(code)) {
+    return failure("CONFLICT", "Der gespeicherte Prozesszustand erlaubt keinen sicheren Stationsabschluss.");
+  }
   console.error("Capture operation failed", error);
   return failure("STORAGE_UNAVAILABLE", "Erfassung konnte nicht belastbar aus der Datenbank bestätigt werden.");
 }
@@ -457,7 +567,30 @@ export async function getCaptureOverview(orderIdValue: unknown, stationValue?: u
     if (!order) return failure("NOT_FOUND", "Auftrag wurde im angemeldeten Mandanten nicht gefunden.");
 
     const currentStation = safeStation(order.currentStationId) || safeStation(order.station);
-    const selectedStation = requestedStation || currentStation;
+    const selectedStation = requestedStation && requestedStation === currentStation ? requestedStation : currentStation;
+    const routeItems = await db.select({
+      currentStationId: items.currentStationId,
+      stationSequence: items.stationSequence,
+      currentStep: items.currentStep,
+    }).from(items).where(and(
+      eq(items.orderId, orderId),
+      eq(items.tenantId, actor.data.tenantId),
+    ));
+    let routeExecution: CaptureOverview["routeExecution"] = {
+      status: "blocked",
+      nextStation: null,
+      reason: "UNKNOWN_ORDER_STATION",
+    };
+    if (currentStation) {
+      try {
+        const route = getHomogeneousRouteTransition(routeItems, parseOrderStation(currentStation));
+        routeExecution = route.ok
+          ? { status: "executable", nextStation: route.data.nextStation, reason: null }
+          : { status: "blocked", nextStation: null, reason: route.conflict };
+      } catch {
+        routeExecution = { status: "blocked", nextStation: null, reason: "UNKNOWN_ORDER_STATION" };
+      }
+    }
     const [template, timeRows, materialRows, catalog, recentRows, selectedRate] = await Promise.all([
       resolveTemplate(actor.data.tenantId, orderId),
       db.select().from(arbeitszeitBuchung).where(and(
@@ -510,6 +643,7 @@ export async function getCaptureOverview(orderIdValue: unknown, stationValue?: u
         currentStation,
         selectedStation,
         selectedRate,
+        routeExecution,
         template: template.publicValue,
         articles,
         timeBookings: timeRows.map((row) => {
@@ -558,7 +692,7 @@ export async function recordTimeCapture(value: unknown): Promise<CaptureResult<C
       templateId: input.templateId || null,
     });
     const receipt = await db.transaction(async (tx) => {
-      await ensureOrder(tx, actor.data.tenantId, input.orderId);
+      const order = await lockCaptureOrder(tx, actor.data.tenantId, input.orderId);
       const request = await beginRequest(tx, {
         actor: actor.data,
         orderId: input.orderId,
@@ -568,6 +702,7 @@ export async function recordTimeCapture(value: unknown): Promise<CaptureResult<C
         hash,
       });
       if (request.replay) return request.replay;
+      assertActiveOrderAtStation(order, input.stationKuerzel);
 
       const endedAt = new Date();
       const startedAt = new Date(endedAt.getTime() - input.minutes * 60_000);
@@ -677,7 +812,7 @@ export async function recordMaterialCapture(value: unknown): Promise<CaptureResu
       materials: sortedLines,
     });
     const receipt = await db.transaction(async (tx) => {
-      await ensureOrder(tx, actor.data.tenantId, input.orderId);
+      const order = await lockCaptureOrder(tx, actor.data.tenantId, input.orderId);
       const request = await beginRequest(tx, {
         actor: actor.data,
         orderId: input.orderId,
@@ -687,6 +822,7 @@ export async function recordMaterialCapture(value: unknown): Promise<CaptureResu
         hash,
       });
       if (request.replay) return request.replay;
+      assertActiveOrderAtStation(order, input.stationKuerzel);
       const consumed = await lockAndConsumeMaterials(tx, {
         actor: actor.data,
         orderId: input.orderId,
@@ -716,97 +852,193 @@ export async function recordMaterialCapture(value: unknown): Promise<CaptureResu
   }
 }
 
-export async function applyCaptureTemplate(value: unknown): Promise<CaptureResult<CaptureMutationReceipt>> {
-  const actor = await authorizeCapture("write");
+export async function completeStationCapture(value: unknown): Promise<CaptureResult<CaptureMutationReceipt>> {
+  const actor = await authorizeCapture("status");
   if (!actor.ok) return actor;
   try {
-    const input = parseTemplateCaptureInput(value);
-    const template = await resolveTemplate(actor.data.tenantId, input.orderId);
-    if (!template.publicValue.hat_vorlage || (template.timeRows.length === 0 && template.materialRows.length === 0)) {
-      throw new Error("NO_TEMPLATE");
+    const input = parseStationCompletionCaptureInput(value);
+    let expectedStation: OrderStation;
+    try {
+      expectedStation = parseOrderStation(input.expectedStation);
+    } catch {
+      throw new Error("INVALID_CAPTURE");
     }
-    const stations = [...new Set(template.timeRows.map((row) => row.station))];
-    const rates = new Map<string, NonNullable<Awaited<ReturnType<typeof resolveRate>>>>();
-    for (const station of stations) {
-      const rate = await resolveRate(actor.data, station);
-      if (!rate) throw new Error("RATE_MISSING");
-      rates.set(station, rate);
-    }
-    const descriptor = {
-      kind: "template",
+    const sortedMaterials = [...input.materials].sort((left, right) =>
+      left.inventoryItemId.localeCompare(right.inventoryItemId));
+    const hash = requestHash({
+      kind: "station_completion",
       orderId: input.orderId,
-      templateKey: template.publicValue.schluessel,
-      time: template.timeRows.map((row) => ({ id: row.id, station: row.station, minutes: row.minutes })),
-      material: template.materialRows.map((row) => ({ id: row.id, station: row.station, inventoryItemId: row.inventoryItemId, quantity: row.quantity })),
-    };
-    const hash = requestHash(descriptor);
+      expectedStation,
+      minutes: input.minutes,
+      multiplier: input.multiplier,
+      taskType: input.taskType,
+      note: input.note || null,
+      materials: sortedMaterials,
+    });
+
     const receipt = await db.transaction(async (tx) => {
-      await ensureOrder(tx, actor.data.tenantId, input.orderId);
+      const [order] = await tx
+        .select()
+        .from(orders)
+        .where(and(eq(orders.id, input.orderId), eq(orders.tenantId, actor.data.tenantId)))
+        .limit(1)
+        .for("update");
+      if (!order) throw new Error("ORDER_NOT_FOUND");
+
       const request = await beginRequest(tx, {
         actor: actor.data,
         orderId: input.orderId,
-        station: null,
+        station: expectedStation,
         requestId: input.clientRequestId,
-        kind: "template",
+        kind: "station_completion",
         hash,
       });
       if (request.replay) return request.replay;
+      if (expectedStation === "warenausgang") throw new Error("SHIPPING_RECEIPT_REQUIRED");
+
+      const orderItems = await tx
+        .select({
+          currentStationId: items.currentStationId,
+          stationSequence: items.stationSequence,
+          currentStep: items.currentStep,
+        })
+        .from(items)
+        .where(and(eq(items.orderId, order.id), eq(items.tenantId, actor.data.tenantId)))
+        .for("update");
+
+      let storedStation;
+      try {
+        storedStation = parseOrderStation(order.currentStationId || order.station);
+      } catch {
+        throw new Error("UNKNOWN_ORDER_STATION");
+      }
+      if (storedStation !== expectedStation) throw new Error("STALE_ORDER_STATION");
+      const currentStatus = normalizeStoredOrderStatus(order.status);
+      if (currentStatus !== "in_progress") throw new Error("ORDER_NOT_IN_PROGRESS");
+      const routing = getHomogeneousRouteTransition(orderItems, expectedStation);
+      if (!routing.ok) throw new Error(routing.conflict);
+
+      const rate = input.minutes > 0
+        ? await resolveRateInTransaction(tx, actor.data, expectedStation)
+        : null;
+      if (input.minutes > 0 && !rate) throw new Error("RATE_MISSING");
 
       const timeBookingIds: string[] = [];
-      let timeCost = 0;
-      const now = new Date();
-      for (const row of template.timeRows) {
-        const rate = rates.get(row.station);
-        if (!rate) throw new Error("RATE_MISSING");
+      let timeCostEur = 0;
+      if (input.minutes > 0 && rate) {
+        const endedAt = new Date();
+        const effectiveRate = roundMoney(rate.valueEurPerHour * input.multiplier);
+        const bookingNote = [
+          input.taskType,
+          input.multiplier > 1 ? `Aufwandsfaktor ${input.multiplier}x` : null,
+          input.note || null,
+        ].filter(Boolean).join(" · ");
         const [booking] = await tx.insert(arbeitszeitBuchung).values({
           tenantId: actor.data.tenantId,
           auftragId: input.orderId,
           employeeId: actor.data.userId,
-          kostenstelleKuerzel: row.station,
-          stationKuerzel: row.station,
-          startZeit: new Date(now.getTime() - row.minutes * 60_000),
-          endZeit: now,
-          dauerMinuten: row.minutes,
-          kostensatzEurProStunde: String(rate.valueEurPerHour),
-          erfasstModus: "vorlage_atomar",
-          warAusVorlage: true,
-          vorlageId: row.id,
+          kostenstelleKuerzel: expectedStation,
+          stationKuerzel: expectedStation,
+          startZeit: new Date(endedAt.getTime() - input.minutes * 60_000),
+          endZeit: endedAt,
+          dauerMinuten: input.minutes,
+          kostensatzEurProStunde: String(effectiveRate),
+          erfasstModus: "stationsabschluss_atomar",
+          warAusVorlage: false,
+          bemerkung: bookingNote,
           clientRequestId: input.clientRequestId,
         }).returning({ id: arbeitszeitBuchung.id });
         if (!booking) throw new Error("BOOKING_NOT_STORED");
         timeBookingIds.push(booking.id);
-        timeCost += (row.minutes / 60) * rate.valueEurPerHour;
+        timeCostEur = roundMoney((input.minutes / 60) * effectiveRate);
       }
 
-      const groupedMaterial = new Map<string, MaterialCaptureLine[]>();
-      for (const row of template.materialRows) {
-        const group = groupedMaterial.get(row.station) || [];
-        group.push({ inventoryItemId: row.inventoryItemId, quantity: row.quantity, templateId: row.id });
-        groupedMaterial.set(row.station, group);
+      const consumed = sortedMaterials.length > 0
+        ? await lockAndConsumeMaterials(tx, {
+            actor: actor.data,
+            orderId: input.orderId,
+            station: expectedStation,
+            requestId: input.clientRequestId,
+            lines: sortedMaterials,
+            fromTemplate: sortedMaterials.some((line) => Boolean(line.templateId)),
+          })
+        : { movementIds: [], materialCostEur: 0 };
+
+      const completed = {
+        station: routing.data.nextStation,
+        status: "ready" as const,
+        eventType: "STATION_COMPLETED" as const,
+      };
+      if (!canTransitionOrderStatus(currentStatus, completed.status)) {
+        throw new Error("INVALID_ORDER_STATUS_TRANSITION");
       }
-      const movementIds: string[] = [];
-      let materialCost = 0;
-      for (const station of [...groupedMaterial.keys()].sort()) {
-        const consumed = await lockAndConsumeMaterials(tx, {
-          actor: actor.data,
-          orderId: input.orderId,
-          station,
-          requestId: input.clientRequestId,
-          lines: groupedMaterial.get(station) || [],
-          fromTemplate: true,
-        });
-        movementIds.push(...consumed.movementIds);
-        materialCost += consumed.materialCostEur;
-      }
+      const [persistedOrder] = await tx
+        .update(orders)
+        .set({
+          currentStationId: completed.station,
+          station: completed.station,
+          status: completed.status,
+        })
+        .where(and(eq(orders.id, order.id), eq(orders.tenantId, actor.data.tenantId)))
+        .returning({ id: orders.id });
+      if (!persistedOrder) throw new Error("ORDER_TRANSITION_NOT_CONFIRMED");
+
+      await tx
+        .update(items)
+        .set({ currentStationId: completed.station, currentStep: routing.data.nextStep })
+        .where(and(eq(items.orderId, order.id), eq(items.tenantId, actor.data.tenantId)));
+
+      const [costEvent] = await tx.insert(events).values({
+        id: crypto.randomUUID(),
+        tenantId: actor.data.tenantId,
+        clientEventId: input.clientRequestId,
+        orderId: order.id,
+        eventType: "COSTS_BOOKED",
+        station: expectedStation,
+        description: `Zeit und Material für ${expectedStation} belastbar gebucht`,
+        payload: {
+          durationMinutes: input.minutes,
+          materialCount: sortedMaterials.length,
+          timeCostEur,
+          materialCostEur: consumed.materialCostEur,
+          multiplier: input.multiplier,
+          taskType: input.taskType,
+        },
+        userId: actor.data.userId,
+      }).returning({ id: events.id });
+      if (!costEvent) throw new Error("EVENT_NOT_STORED");
+
+      const [transitionEvent] = await tx.insert(events).values({
+        id: crypto.randomUUID(),
+        tenantId: actor.data.tenantId,
+        orderId: order.id,
+        eventType: completed.eventType,
+        station: completed.station,
+        description: `Station abgeschlossen; Auftrag für ${completed.station} bereit`,
+        payload: {
+          completedStation: expectedStation,
+          nextStation: completed.station,
+          routeContractVersion: routing.data.snapshot.contractVersion,
+          routeTemplateId: routing.data.snapshot.templateId,
+          nextStep: routing.data.nextStep,
+          captureRequestId: input.clientRequestId,
+        },
+        userId: actor.data.userId,
+      }).returning({ id: events.id });
+      if (!transitionEvent) throw new Error("EVENT_NOT_STORED");
 
       const result: CaptureMutationReceipt = {
         requestId: input.clientRequestId,
-        kind: "template",
+        kind: "station_completion",
         orderId: input.orderId,
         timeBookingIds,
-        movementIds,
-        timeCostEur: roundMoney(timeCost),
-        materialCostEur: roundMoney(materialCost),
+        movementIds: consumed.movementIds,
+        timeCostEur,
+        materialCostEur: consumed.materialCostEur,
+        completedStation: expectedStation,
+        newStation: completed.station,
+        newStatus: completed.status,
+        eventId: transitionEvent.id,
         createdAt: new Date().toISOString(),
         replayed: false,
       };
@@ -814,8 +1046,30 @@ export async function applyCaptureTemplate(value: unknown): Promise<CaptureResul
       await completeRequest(tx, request.gateId, result);
       return result;
     });
+    invalidateOperationalOrdersCache();
+    try {
+      revalidatePath("/");
+      revalidatePath("/orders");
+      revalidatePath("/warendurchlauf");
+    } catch {
+      // Revalidation is unavailable in isolated service tests.
+    }
     return { ok: true, data: receipt };
   } catch (error) {
     return mapCaptureError(error);
+  }
+}
+
+export async function applyCaptureTemplate(value: unknown): Promise<CaptureResult<CaptureMutationReceipt>> {
+  const actor = await authorizeCapture("write");
+  if (!actor.ok) return actor;
+  try {
+    parseTemplateCaptureInput(value);
+    return failure(
+      "CONFLICT",
+      "Erfahrungswerte sind nur Vorschläge. Eine Vorlage darf keine stationsübergreifenden Ist-Zeiten oder Materialverbräuche buchen; bitte die aktuelle Station einzeln erfassen.",
+    );
+  } catch {
+    return failure("INVALID_INPUT", "Ungültiger Auftrag oder ungültige Anforderungs-ID.");
   }
 }

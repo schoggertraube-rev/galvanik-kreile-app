@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseMaterialCaptureInput,
+  parseStationCompletionCaptureInput,
   parseTemplateCaptureInput,
   parseTimeCaptureInput,
 } from "./captureContract";
@@ -64,5 +65,49 @@ describe("capture input contract", () => {
       clientRequestId: requestId,
     });
     expect(() => parseTemplateCaptureInput({ orderId: "order_123", clientRequestId: "not-a-uuid" })).toThrow("INVALID_CAPTURE");
+  });
+
+  it("accepts one bounded, idempotent station completion payload", () => {
+    expect(parseStationCompletionCaptureInput({
+      orderId: "order_123",
+      expectedStation: "galvanik",
+      minutes: 45,
+      multiplier: 2,
+      taskType: "Polieren",
+      note: "Zusatzaufwand dokumentiert",
+      materials: [{ inventoryItemId: "chemie_1", quantity: 1.25 }],
+      clientRequestId: requestId,
+    })).toEqual({
+      orderId: "order_123",
+      expectedStation: "galvanik",
+      minutes: 45,
+      multiplier: 2,
+      taskType: "Polieren",
+      note: "Zusatzaufwand dokumentiert",
+      materials: [{ inventoryItemId: "chemie_1", quantity: 1.25, templateId: undefined }],
+      clientRequestId: requestId,
+    });
+  });
+
+  it("rejects empty, duplicate, unbounded or client-controlled station completions", () => {
+    const valid = {
+      orderId: "order_123",
+      expectedStation: "galvanik",
+      minutes: 15,
+      multiplier: 1,
+      taskType: "Polieren",
+      materials: [] as { inventoryItemId: string; quantity: number }[],
+      clientRequestId: requestId,
+    };
+    expect(() => parseStationCompletionCaptureInput({ ...valid, minutes: 0 })).toThrow("INVALID_CAPTURE");
+    expect(() => parseStationCompletionCaptureInput({ ...valid, multiplier: 5 })).toThrow("INVALID_CAPTURE");
+    expect(() => parseStationCompletionCaptureInput({ ...valid, tenantId: "other" })).toThrow("INVALID_CAPTURE");
+    expect(() => parseStationCompletionCaptureInput({
+      ...valid,
+      materials: [
+        { inventoryItemId: "chemie_1", quantity: 1 },
+        { inventoryItemId: "chemie_1", quantity: 2 },
+      ],
+    })).toThrow("INVALID_CAPTURE");
   });
 });

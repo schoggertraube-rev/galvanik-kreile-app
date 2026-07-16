@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ErfassungVariant } from './variants/ErfassungVariant';
-import { VersandVariant } from './variants/VersandVariant';
+import { HandoverVariant } from './variants/HandoverVariant';
 import { WareneingangReadOnly } from './variants/WareneingangReadOnly';
 import { WareneingangActive } from './variants/WareneingangActive';
 import { getStationVariant } from '@/lib/orders/stationContext';
@@ -46,7 +46,7 @@ export const StationContextBlock: React.FC<StationContextBlockProps> = ({
       )}
       
       {variant === 'versand' && (
-        <VersandVariant 
+        <HandoverVariant
           orderId={orderId} 
           customerName={customerName}
         />

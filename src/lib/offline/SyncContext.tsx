@@ -1,14 +1,14 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { offlineOutbox, OfflineOutboxItem } from "./OfflineOutbox";
-import { createId } from "@paralleldrive/cuid2";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { IndexedDBHelper, type OfflineAction } from "./IndexedDBHelper";
+import { OfflineManager, type BrowserNetworkStatus } from "./OfflineManager";
 
 interface SyncContextValue {
-  isOnline: boolean;
-  outboxItems: OfflineOutboxItem[];
-  addToOutbox: (item: Omit<OfflineOutboxItem, "id" | "status" | "retryCount" | "createdAt" | "updatedAt">) => Promise<void>;
-  removeItem: (id: string) => Promise<void>;
+  networkStatus: BrowserNetworkStatus;
+  outboxItems: OfflineAction[];
+  outboxError: string | null;
+  isSyncing: boolean;
   syncNow: () => Promise<void>;
 }
 
@@ -23,92 +23,66 @@ export function useSync() {
 }
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  const [isOnline, setIsOnline] = useState(true);
-  const [outboxItems, setOutboxItems] = useState<OfflineOutboxItem[]>([]);
+  const [networkStatus, setNetworkStatus] = useState<BrowserNetworkStatus>("unknown");
+  const [outboxItems, setOutboxItems] = useState<OfflineAction[]>([]);
+  const [outboxReadError, setOutboxReadError] = useState<string | null>(null);
+  const [syncBlocker, setSyncBlocker] = useState<string | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const outboxError = outboxReadError ?? syncBlocker;
 
   const loadOutbox = useCallback(async () => {
     try {
-      const items = await offlineOutbox.getAllItems();
+      const items = await IndexedDBHelper.getQueue();
       setOutboxItems(items);
+      setOutboxReadError(null);
     } catch (err) {
       console.error("Failed to load outbox", err);
+      setOutboxReadError("Lokale Synchronisationswarteschlange ist nicht lesbar; Bestand unbekannt.");
     }
   }, []);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setIsOnline(navigator.onLine);
-      const handleOnline = () => setIsOnline(true);
-      const handleOffline = () => setIsOnline(false);
-      
-      window.addEventListener("online", handleOnline);
-      window.addEventListener("offline", handleOffline);
-      
-      loadOutbox();
+    const refreshNetwork = () => setNetworkStatus(OfflineManager.getBrowserNetworkStatus());
+    const refreshQueue = () => { void loadOutbox(); };
+    refreshNetwork();
+    void loadOutbox();
 
-      return () => {
-        window.removeEventListener("online", handleOnline);
-        window.removeEventListener("offline", handleOffline);
-      };
-    }
+    window.addEventListener("online", refreshNetwork);
+    window.addEventListener("offline", refreshNetwork);
+    window.addEventListener("kreile-network-change", refreshNetwork);
+    window.addEventListener("kreile-sync-queue-updated", refreshQueue);
+    return () => {
+      window.removeEventListener("online", refreshNetwork);
+      window.removeEventListener("offline", refreshNetwork);
+      window.removeEventListener("kreile-network-change", refreshNetwork);
+      window.removeEventListener("kreile-sync-queue-updated", refreshQueue);
+    };
   }, [loadOutbox]);
 
-  const addToOutbox = async (itemData: Omit<OfflineOutboxItem, "id" | "status" | "retryCount" | "createdAt" | "updatedAt">) => {
-    const newItem: OfflineOutboxItem = {
-      ...itemData,
-      id: createId(),
-      status: isOnline ? "queued" : "draft",
-      retryCount: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    await offlineOutbox.saveItem(newItem);
-    await loadOutbox();
-    
-    if (isOnline) {
-      // Trigger sync
-      syncNow();
-    }
-  };
-
-  const removeItem = async (id: string) => {
-    await offlineOutbox.removeItem(id);
-    await loadOutbox();
-  };
-
-  const syncNow = async () => {
-    if (!isOnline) return;
-    
-    // Detailed Sync logic goes here.
-    // For Phase 2, we just mark as "synced" or remove them if mock successful.
-    const items = await offlineOutbox.getAllItems();
-    for (const item of items) {
-      if (item.status === "draft" || item.status === "queued" || item.status === "failed") {
-        try {
-          // Simulate network delay
-          await new Promise(r => setTimeout(r, 600));
-          // Mock success
-          await offlineOutbox.removeItem(item.id);
-        } catch (e) {
-          item.status = "failed";
-          item.retryCount += 1;
-          await offlineOutbox.saveItem(item);
-        }
+  const syncNow = useCallback(async () => {
+    if (networkStatus !== "available" || isSyncing) return;
+    setIsSyncing(true);
+    try {
+      const result = await OfflineManager.syncQueue();
+      await loadOutbox();
+      if (result.reason === "adapter_missing") {
+        setSyncBlocker("Ausstehende Änderungen bleiben erhalten, weil noch kein idempotenter Backend-Belegvertrag angebunden ist.");
+      } else if (result.reason === "network_unavailable") {
+        setSyncBlocker("Der Browser meldet kein verfügbares Netzwerk; die lokalen Einträge bleiben erhalten.");
+      } else {
+        setSyncBlocker(null);
       }
+    } catch (error) {
+      console.error("Offline sync failed", error);
+      setSyncBlocker("Synchronisation konnte nicht vom Backend bestätigt werden; die Einträge bleiben erhalten.");
+      await loadOutbox().catch(() => undefined);
+    } finally {
+      setIsSyncing(false);
     }
-    await loadOutbox();
-  };
-
-  // Auto sync when coming online
-  useEffect(() => {
-    if (isOnline && outboxItems.length > 0) {
-      syncNow();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOnline]);
+  }, [networkStatus, isSyncing, loadOutbox]);
 
   return (
-    <SyncContext.Provider value={{ isOnline, outboxItems, addToOutbox, removeItem, syncNow }}>
+    <SyncContext.Provider value={{ networkStatus, outboxItems, outboxError, isSyncing, syncNow }}>
       {children}
     </SyncContext.Provider>
   );

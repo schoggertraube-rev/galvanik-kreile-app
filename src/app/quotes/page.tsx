@@ -1,7 +1,7 @@
 "use client";
 
 import { usePageView } from "@/hooks/usePageView";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,12 @@ import { Mail, CheckCircle, Archive, ChevronRight, Flame, Package, Droplets, Clo
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { inquiriesRepository, QuoteRequest } from "@/lib/repositories/inquiriesRepository";
 import { PageHeader } from "@/components/ui/PageHeader";
+import {
+  isRouteTemplateId,
+  ROUTE_TEMPLATE_IDS,
+  ROUTE_TEMPLATES,
+  type RouteTemplateId,
+} from "@/lib/orders/routeSnapshot";
 
 const RUST_BADGE: Record<QuoteRequest["rustLevel"], string> = {
   "Leicht": "bg-gold-100 text-yellow-700 border-yellow-200",
@@ -30,6 +36,8 @@ export default function QuotesPage() {
   const [pricing, setPricing] = useState<Record<string, QuoteRequest["pricing"]>>({});
   const [showEmail, setShowEmail] = useState(false);
   const [dataError, setDataError] = useState<string | null>(null);
+  const [conversionRoutes, setConversionRoutes] = useState<Record<string, RouteTemplateId | "">>({});
+  const conversionRequestIds = useRef(new Map<string, string>());
 
   useEffect(() => {
     const loadRequests = async () => {
@@ -80,14 +88,25 @@ export default function QuotesPage() {
   };
 
   const handleTakeAsOrder = async (req: QuoteRequest) => {
+    const routeTemplateId = conversionRoutes[req.id];
+    if (!isRouteTemplateId(routeTemplateId)) {
+      setDataError("Vor der Übernahme muss die tatsächliche Bearbeitungsroute bestätigt werden.");
+      return;
+    }
+    let clientRequestId = conversionRequestIds.current.get(req.id);
+    if (!clientRequestId) {
+      clientRequestId = crypto.randomUUID();
+      conversionRequestIds.current.set(req.id, clientRequestId);
+    }
     const newOrder = {
+      clientRequestId,
       task: req.subject,
       customerId: req.customerId,
-      dueDate: new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10),
       parts: Array.from({ length: req.partCount }, (_, i) => ({
         name: `${req.subject} – Teil ${i + 1}`,
         quantity: 1,
         material: req.material,
+        routeTemplateId,
       })),
       source: "manual" as const,
     };
@@ -106,6 +125,7 @@ export default function QuotesPage() {
 
     try {
       await handleStatusChange(req.id, "angenommen");
+      conversionRequestIds.current.delete(req.id);
       alert(`Auftrag ${created.orderNumber} wurde im Wareneingang angelegt.`);
     } catch (e) {
       console.error("Auftrag erstellt, Anfrage-Status konnte nicht aktualisiert werden", e);
@@ -132,7 +152,7 @@ Wir freuen uns, Ihnen folgendes Angebot zu unterbreiten:
 Total (Netto):          CHF ${t.toFixed(2)}
 (zzgl. 8.1% MwSt → CHF ${(t * 1.081).toFixed(2)} brutto)
 
-Lieferzeit: ca. 10–14 Werktage nach Auftragserteilung.
+Liefertermin: nach technischer Prüfung und ausdrücklicher Bestätigung.
 
 Wir stehen Ihnen für Rückfragen jederzeit zur Verfügung.
 
@@ -285,10 +305,32 @@ kreile-galvanik.ch`;
             </Card>
 
             {/* Actions */}
-            <div className="flex flex-wrap gap-3">
+            <div className="space-y-3">
+              <label className="block max-w-xl text-sm font-bold text-navy-900">
+                Verbindliche Bearbeitungsroute
+                <select
+                  value={conversionRoutes[selected.id] ?? ""}
+                  onChange={(event) => setConversionRoutes((current) => ({
+                    ...current,
+                    [selected.id]: event.target.value as RouteTemplateId | "",
+                  }))}
+                  className="mt-1 w-full rounded-xl border border-neutral-gray-300 bg-white px-3 py-2 text-sm font-semibold"
+                >
+                  <option value="">Route auswählen …</option>
+                  {ROUTE_TEMPLATE_IDS.map((templateId) => (
+                    <option key={templateId} value={templateId}>
+                      {ROUTE_TEMPLATES[templateId].label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="text-xs text-text-muted">
+                Die Auswahl wird unveränderlich am Auftrag gespeichert; ohne bestätigte Route wird kein Auftrag angelegt.
+              </p>
+              <div className="flex flex-wrap gap-3">
               <Button
                 onClick={() => handleTakeAsOrder(selected)}
-                disabled={selected.status === "archiviert"}
+                disabled={selected.status === "archiviert" || selected.status === "angenommen" || !isRouteTemplateId(conversionRoutes[selected.id])}
                 className="bg-navy-900 hover:bg-navy-700 text-white font-bold rounded-xl shadow-md"
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
@@ -311,6 +353,7 @@ kreile-galvanik.ch`;
                 <Archive className="h-4 w-4 mr-2" />
                 Archivieren
               </Button>
+              </div>
             </div>
           </div>
         ) : (

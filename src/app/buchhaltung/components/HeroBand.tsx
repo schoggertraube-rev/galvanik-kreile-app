@@ -1,14 +1,14 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Sparkles } from "lucide-react";
+import { AlertTriangle, Sparkles } from "lucide-react";
 import { getBuchhaltungProvider } from "@/lib/buchhaltung";
 import type { UstvaWerte, Ersparnis } from "@/lib/buchhaltung/types";
-import { pruefeFristen } from "@/lib/buchhaltung/regeln";
 
 export function HeroBand() {
   const [ustva, setUstva] = useState<UstvaWerte | null>(null);
   const [ersparnis, setErsparnis] = useState<Ersparnis | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -18,17 +18,23 @@ export function HeroBand() {
       const monatsEnde = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()}`;
       const zeitraum = { von: monatsAnfang, bis: monatsEnde };
 
-      const [u, e] = await Promise.all([
-        provider.berechneUstva(zeitraum),
-        provider.getErsparnis(now.getFullYear()),
-      ]);
-      setUstva(u);
-      setErsparnis(e);
+      try {
+        const [u, e] = await Promise.all([
+          provider.berechneUstva(zeitraum),
+          provider.getErsparnis(now.getFullYear()),
+        ]);
+        setUstva(u);
+        setErsparnis(e);
+        setLoadError(null);
+      } catch (error) {
+        console.error("Accounting hero unavailable", error);
+        setUstva(null);
+        setErsparnis(null);
+        setLoadError("Buchhaltungs-Arbeitswerte konnten nicht bestätigt geladen werden.");
+      }
     };
     load();
   }, []);
-
-  const fristen = pruefeFristen();
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-4 mb-2">
@@ -37,59 +43,61 @@ export function HeroBand() {
         
         <div className="flex items-center gap-2 text-emerald-600 text-xs font-bold uppercase tracking-wider mb-3">
           <span className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center">
-            <CheckCircle2 className="w-2.5 h-2.5 text-white" strokeWidth={3} />
+            <AlertTriangle className="w-2.5 h-2.5 text-white" strokeWidth={3} />
           </span>
-          Fertig vorbereitet & geprüft
+          Rechnerischer Arbeitsstand · nicht freigegeben
         </div>
         
         <h2 className="text-lg font-extrabold text-navy-900 mb-1 relative z-10">
-          Umsatzsteuer-Voranmeldung · {new Date().toLocaleDateString("de-DE", { month: "long", year: "numeric" })}
+          UStVA-Arbeitsstand · {new Date().toLocaleDateString("de-DE", { month: "long", year: "numeric" })}
         </h2>
-        <p className="text-sm text-text-muted mb-5">KI-kontiert · Werte berechnet · bereit zur Freigabe</p>
+        <p className="text-sm text-text-muted mb-5">Aus bestätigten Buchungsdaten berechnet; keine steuerliche Prüfung, Freigabe oder ELSTER-Übermittlung.</p>
+
+        {loadError && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{loadError}</p>}
         
         <div className="flex flex-wrap gap-7 mb-5 relative z-10">
           <div>
             <div className="text-2xl font-extrabold text-navy-900 tracking-tight">
               {ustva ? ustva.zahllast.toLocaleString("de-DE") : "—"} <span className="text-base">€</span>
             </div>
-            <div className="text-xs text-text-muted mt-1">Zahllast ans Finanzamt</div>
+            <div className="text-xs text-text-muted mt-1">Rechnerische Zahllast im Arbeitsstand</div>
           </div>
           <div>
             <div className="text-2xl font-extrabold text-navy-900 tracking-tight">
               {ersparnis?.anzahlAutoBelege ?? "—"}
             </div>
-            <div className="text-xs text-text-muted mt-1">Belege · {ersparnis?.prozentAutomatisch ?? 0} % automatisch</div>
+            <div className="text-xs text-text-muted mt-1">Belege über konfigurierter OCR-Schwelle · Quote {ersparnis ? `${ersparnis.prozentAutomatisch} %` : "—"}</div>
           </div>
           <div>
             <div className="text-2xl font-extrabold text-amber-600 tracking-tight">
-              {fristen.length > 0 ? "10. " + new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toLocaleDateString("de-DE", { month: "long" }) : "—"}
+              —
             </div>
-            <div className="text-xs text-text-muted mt-1">Frist · in {Math.max(0, 10 - new Date().getDate())} Tagen</div>
+            <div className="text-xs text-text-muted mt-1">Steuerfrist nicht aus bestätigter Quelle angebunden</div>
           </div>
         </div>
         
         <div className="flex flex-wrap gap-3 relative z-10">
           <Link href="/buchhaltung/steuerprofil?tab=ustva" className="flex items-center gap-2 px-4 py-2.5 bg-navy-900 text-white rounded-xl font-bold text-sm hover:bg-navy-800 transition-colors active:scale-[0.98] min-h-[44px]">
-            <Sparkles className="w-4 h-4" /> Prüfen & freigeben
+            <Sparkles className="w-4 h-4" /> Arbeitsstand prüfen
           </Link>
           <Link href="/buchhaltung/export?format=steuerberater" className="px-4 py-2.5 bg-white text-text-muted rounded-xl font-semibold text-sm border border-neutral-gray-200 hover:text-navy-900 transition-colors active:scale-[0.98] min-h-[44px]">
-            An Steuerberater
+            Export ohne Belegdateien
           </Link>
         </div>
         
         <p className="text-xs text-text-muted mt-4 relative z-10">
-          3 Belege brauchen noch deinen Blick. ELSTER-Direktversand wird scharfgeschaltet, sobald dein Zertifikat hinterlegt ist — bis dahin: Export für den ELSTER-Upload.
+          Diese Ansicht besitzt keinen ELSTER-Sende-, Steuerberater-Freigabe- oder Fristenbeleg. Der Export enthält laut Manifest keine Belegdateien.
         </p>
       </div>
 
       <div className="bg-linear-to-br from-emerald-500 to-emerald-700 text-white rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
         <div className="absolute -right-8 -bottom-8 w-40 h-40 rounded-full bg-white/8 pointer-events-none" />
-        <div className="text-xs font-bold uppercase tracking-widest opacity-85 mb-2">Gespart {new Date().getFullYear()}</div>
+        <div className="text-xs font-bold uppercase tracking-widest opacity-85 mb-2">Modellierter Zeitwert {new Date().getFullYear()}</div>
         <div className="text-4xl font-extrabold tracking-tight">
           {ersparnis ? ersparnis.betrag.toLocaleString("de-DE") : "—"} <span className="text-lg">€</span>
         </div>
         <p className="text-sm opacity-90 mt-3 leading-relaxed relative z-10">
-          weil <strong>{ersparnis?.prozentAutomatisch ?? 0} %</strong> automatisch vorbereitet wird und dein Steuerberater nur noch <strong>freigibt</strong> statt zu sortieren.
+          Annahme aus Konfiguration: {ersparnis ? <><strong>{ersparnis.anzahlAutoBelege} Belege</strong> × <strong>{ersparnis.minutenProBeleg} Minuten</strong> × <strong>{ersparnis.beraterStundensatz.toLocaleString("de-DE")} €/h</strong></> : "nicht verfügbar"}. Kein Nachweis tatsächlich eingesparter Kosten.
         </p>
       </div>
     </div>

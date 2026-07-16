@@ -57,8 +57,9 @@ export const IndexedDBHelper = {
       const store = transaction.objectStore("write_queue");
       const request = store.add(action);
 
-      request.onsuccess = () => resolve(action);
-      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve(action);
+      transaction.onerror = () => reject(transaction.error || request.error || new Error("Offline queue transaction failed"));
+      transaction.onabort = () => reject(transaction.error || new Error("Offline queue transaction aborted"));
     });
   },
 
@@ -68,14 +69,16 @@ export const IndexedDBHelper = {
       const transaction = db.transaction("write_queue", "readonly");
       const store = transaction.objectStore("write_queue");
       const request = store.getAll();
+      let sorted: OfflineAction[] | null = null;
 
       request.onsuccess = () => {
-        const sorted = request.result.sort(
+        sorted = request.result.sort(
           (a: OfflineAction, b: OfflineAction) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
         );
-        resolve(sorted);
       };
-      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve(sorted ?? []);
+      transaction.onerror = () => reject(transaction.error || request.error || new Error("Offline queue read failed"));
+      transaction.onabort = () => reject(transaction.error || new Error("Offline queue read aborted"));
     });
   },
 
@@ -86,8 +89,9 @@ export const IndexedDBHelper = {
       const store = transaction.objectStore("write_queue");
       const request = store.delete(id);
 
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || request.error || new Error("Offline queue delete failed"));
+      transaction.onabort = () => reject(transaction.error || new Error("Offline queue delete aborted"));
     });
   },
 
@@ -98,8 +102,9 @@ export const IndexedDBHelper = {
       const store = transaction.objectStore("write_queue");
       const request = store.clear();
 
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(transaction.error || request.error || new Error("Offline queue clear failed"));
+      transaction.onabort = () => reject(transaction.error || new Error("Offline queue clear aborted"));
     });
   }
 };

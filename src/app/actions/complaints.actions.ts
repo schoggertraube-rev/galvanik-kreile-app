@@ -24,7 +24,13 @@ async function authorizeComplaints(): Promise<ActionResult<ComplaintActor>> {
   ) {
     return { ok: false, error: "FORBIDDEN", message: "Keine Berechtigung für Reklamationen." };
   }
-  return { ok: true, data: { tenantId: authorization.data.tenantId, canWrite: authorization.data.role !== "readonly" } };
+  return {
+    ok: true,
+    data: {
+      tenantId: authorization.data.tenantId,
+      canWrite: authorization.data.permissions.includes("perm_op_qa"),
+    },
+  };
 }
 
 function mapComplaint(row: typeof complaints.$inferSelect): Complaint {

@@ -50,9 +50,9 @@ export function buildFallbackSuggestion(input: string): SearchSuggestion[] {
   const modules = [
     {
       keys: ["rechnung", "abrechnen", "faktur"],
-      route: "/orders?filter=billable",
-      label: "📄 Abrechenbare Aufträge öffnen",
-      secondary: "Aufträge die noch keine Rechnung haben",
+      route: "/buchhaltung/rechnungen/neu",
+      label: "📄 Rechnung anlegen",
+      secondary: "Zum angebundenen Rechnungsformular",
     },
     {
       keys: ["kunde", "anlegen"],
@@ -74,9 +74,9 @@ export function buildFallbackSuggestion(input: string): SearchSuggestion[] {
     },
     {
       keys: ["mahnung", "offen", "überfällig"],
-      route: "/orders?filter=overdue",
+      route: "/buchhaltung/rechnungen?ueberfaellig=1",
       label: "⚠️ Überfällige Rechnungen",
-      secondary: "Alle Aufträge mit offenen Zahlungen",
+      secondary: "Serverseitig gefilterte Rechnungen",
     },
     {
       keys: ["lager", "material", "bad", "bäder"],

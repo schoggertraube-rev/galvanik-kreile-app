@@ -1,7 +1,19 @@
 'use client';
 
 import React, { useState } from 'react';
-import { saveShipmentInfo, sendShippingConfirmation } from '@/features/orders/shipment.actions';
+// Quarantined legacy prototype. The active station context uses HandoverVariant;
+// these fail-closed adapters prevent the former mock mail/provider path from mutating data.
+type LegacyShipmentResult = { success: false; error: string; missingFields?: string[] };
+
+async function saveShipmentInfo(..._args: unknown[]): Promise<LegacyShipmentResult> {
+  void _args;
+  return { success: false, error: 'Legacy-Versandansicht ist deaktiviert.' };
+}
+
+async function sendShippingConfirmation(..._args: unknown[]): Promise<LegacyShipmentResult> {
+  void _args;
+  return { success: false, error: 'Legacy-Versandansicht ist deaktiviert.' };
+}
 
 interface VersandVariantProps {
   orderId: string;
@@ -25,7 +37,6 @@ export const VersandVariant: React.FC<VersandVariantProps> = ({ orderId, custome
     
     if (!resSave.success) {
       setError(resSave.error || 'Fehler beim Speichern der Versanddaten');
-      // @ts-ignore
       if (resSave.missingFields) setMissingFields(resSave.missingFields);
       setSaving(false);
       return;
@@ -121,7 +132,7 @@ export const VersandVariant: React.FC<VersandVariantProps> = ({ orderId, custome
                   <ul style={{ margin: 0, paddingLeft: '20px' }}>
                     {missingFields.map(field => <li key={field}>{field}</li>)}
                   </ul>
-                  <p style={{ margin: '6px 0 0', fontWeight: 500 }}>Bitte wählen Sie "Selbstabholung" oder ergänzen Sie die Stammdaten des Kunden.</p>
+                  <p style={{ margin: '6px 0 0', fontWeight: 500 }}>Bitte wählen Sie &quot;Selbstabholung&quot; oder ergänzen Sie die Stammdaten des Kunden.</p>
                 </div>
               )}
             </div>

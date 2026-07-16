@@ -1,132 +1,106 @@
 "use server";
 
-import { getOperationalOrders, getOperationalOrdersByStation, getOperationalOrdersReadyForStation, startProcessingStationService } from "@/lib/server/operationalOrders";
-import { checkAppAuth } from "@/lib/server/authHelper";
+import {
+  getOperationalOrders,
+  getOperationalOrdersByStation,
+  getOperationalOrdersReadyForStation,
+  type OperationalOrder,
+} from "@/lib/server/operationalOrders";
+import { transitionOrderProcess } from "@/app/actions/orders.actions";
+import { resolveAuthorization } from "@/lib/server/authorization";
+import { parseOrderStation } from "@/lib/orders/orderMutationContract";
+import {
+  calculateWarendurchlaufMetrics,
+  type WarendurchlaufMetrics,
+} from "@/lib/warendurchlauf/kpis";
+import type { PermissionKey } from "@/lib/auth/authorizationContract";
+
+type WarendurchlaufAccess =
+  | { ok: true; data: { tenantId: string; userId: string } }
+  | { ok: false; error: "AUTH_ERROR" | "FORBIDDEN"; message: string };
+
+export type WarendurchlaufKpiData = WarendurchlaufMetrics & {
+  orders: OperationalOrder[];
+};
+
+async function requireWarendurchlaufAccess(permission: PermissionKey): Promise<WarendurchlaufAccess> {
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      error: authorization.reason === "TENANT_SUSPENDED" || authorization.reason === "TENANT_MAINTENANCE"
+        ? "FORBIDDEN"
+        : "AUTH_ERROR",
+      message: authorization.message,
+    };
+  }
+  if (!authorization.data.permissions.includes(permission)) {
+    return { ok: false, error: "FORBIDDEN", message: "Keine Berechtigung für diese Warendurchlauf-Aktion." };
+  }
+  return {
+    ok: true,
+    data: { tenantId: authorization.data.tenantId, userId: authorization.data.userId },
+  };
+}
 
 export async function getStationOrders(stationId: string) {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
+  const auth = await requireWarendurchlaufAccess("perm_view_leitstand");
+  if (!auth.ok) return auth;
   try {
-    const orders = await getOperationalOrdersByStation(stationId);
+    const station = parseOrderStation(stationId);
+    const orders = await getOperationalOrdersByStation(station, auth.data.tenantId);
     return { ok: true, data: orders };
   } catch (error) {
-    return { ok: false, error: "QUERY_ERROR", message: String(error) };
+    console.error("Failed to load station orders", error);
+    return { ok: false, error: "QUERY_ERROR", message: "Stationsaufträge konnten nicht geladen werden." };
   }
 }
 
 export async function getStationReadyOrders(stationId: string) {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
+  const auth = await requireWarendurchlaufAccess("perm_view_leitstand");
+  if (!auth.ok) return auth;
   try {
-    const orders = await getOperationalOrdersReadyForStation(stationId);
+    const station = parseOrderStation(stationId);
+    const orders = await getOperationalOrdersReadyForStation(station, auth.data.tenantId);
     return { ok: true, data: orders };
   } catch (error) {
-    return { ok: false, error: "QUERY_ERROR", message: String(error) };
+    console.error("Failed to load ready station orders", error);
+    return { ok: false, error: "QUERY_ERROR", message: "Bereitstehende Aufträge konnten nicht geladen werden." };
   }
 }
 
-export async function startProcessingStation(orderId: string, stationId: string) {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
-  try {
-    const res = await startProcessingStationService(orderId, stationId);
-    return { ok: true, data: res };
-  } catch (error) {
-    return { ok: false, error: "QUERY_ERROR", message: String(error) };
-  }
+export async function startProcessingStation(
+  orderId: string,
+  expectedStation: string,
+  clientRequestId: string,
+) {
+  const auth = await requireWarendurchlaufAccess("perm_op_status");
+  if (!auth.ok) return auth;
+  return transitionOrderProcess({
+    orderId,
+    action: "start",
+    expectedStation,
+    clientRequestId,
+  });
 }
 
 export async function getWarendurchlaufKPIs() {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
+  const auth = await requireWarendurchlaufAccess("perm_view_leitstand");
+  if (!auth.ok) return auth;
 
   try {
-    const allOrdersQuery = await getOperationalOrders();
-
-    const totalOrders = allOrdersQuery.length;
-    
-    // Termintreue
-    let onTimeCount = 0;
-    let completedCount = 0;
-    allOrdersQuery.forEach(o => {
-      if (o.status === "completed" || o.status === "abgeschlossen" || o.status === "versendet") {
-        completedCount++;
-        // If we don't have a specific completion date, we assume the user wanted a generic Termintreue over all orders?
-        // Wait, the prompt says: COUNT(orders WHERE ist_am <= soll_am) / COUNT(orders) * 100
-        // We don't have ist_am. Let's use intakeDate + 5 days as a proxy or just count if dueDate > intakeDate.
-        // Actually, if we just count how many have risk !== 'red', that's a good proxy for termintreue.
-        onTimeCount++; // simplification for the moment, let's refine:
-      }
-    });
-
-    // Engpass
-    const stations: Record<string, number> = {};
-    allOrdersQuery.forEach(o => {
-      if (o.status !== "completed" && o.status !== "abgeschlossen" && o.status !== "versendet") {
-        const station = o.currentStationId || "wareneingang";
-        stations[station] = (stations[station] || 0) + 1;
-      }
-    });
-    
-    let engpassStation = "Kein Engpass";
-    let maxCount = 0;
-    for (const [station, count] of Object.entries(stations)) {
-      if (count > maxCount) {
-        maxCount = count;
-        engpassStation = station;
-      }
-    }
-
-    // Offene Aufträge
-    const offene = allOrdersQuery.filter(o => o.status !== "completed" && o.status !== "abgeschlossen" && o.status !== "versendet").length;
-
-    let termintreue = 0;
-    let durchlaufzeitTage = 0;
-    
-    if (totalOrders > 0) {
-      let onTime = 0;
-      let totalDays = 0;
-      let countWithDate = 0;
-
-      allOrdersQuery.forEach(o => {
-        // Termintreue: if due date exists, and it's not red risk, or intakeDate + 10 days > now
-        if (o.dueDate && o.intakeDate) {
-          const due = new Date(o.dueDate).getTime();
-          const created = new Date(o.intakeDate).getTime();
-          const now = Date.now();
-          
-          if (o.status === "completed" || o.status === "abgeschlossen") {
-             // For completed, we don't have ist_am, so we just assume on-time if it was completed
-             onTime++;
-          } else {
-             if (now <= due) onTime++;
-          }
-          
-          const diffTime = Math.abs(now - created);
-          totalDays += diffTime / (1000 * 60 * 60 * 24);
-          countWithDate++;
-        } else {
-          // If no dates, we just skip from strict calculation
-        }
-      });
-      
-      termintreue = totalOrders > 0 ? Math.round((onTime / totalOrders) * 100) : 0;
-      durchlaufzeitTage = countWithDate > 0 ? Number((totalDays / countWithDate).toFixed(1)) : 0;
-    }
+    const allOrdersQuery = await getOperationalOrders(auth.data.tenantId);
+    const metrics = calculateWarendurchlaufMetrics(allOrdersQuery);
 
     return {
       ok: true,
       data: {
-        termintreue,
-        durchlaufzeitTage,
-        engpassStation,
-        engpassCount: maxCount,
-        offeneAuftraege: offene,
-        orders: allOrdersQuery
-      }
+        ...metrics,
+        orders: allOrdersQuery,
+      } satisfies WarendurchlaufKpiData,
     };
   } catch (error) {
     console.error("Error in getWarendurchlaufKPIs:", error);
-    return { ok: false, error: "QUERY_ERROR", message: String(error) };
+    return { ok: false, error: "QUERY_ERROR", message: "Warendurchlauf-Kennzahlen konnten nicht geladen werden." };
   }
 }

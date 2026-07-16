@@ -27,10 +27,26 @@ import {
   Mail,
   AlertCircle,
   FileText,
-  TrendingUp,
-  Tag
+  TrendingUp
 } from "lucide-react";
 import { useAppShortcut } from "@/components/ui/AppShortcutContext";
+
+type CustomerInvoice = {
+  id: string;
+  nummer: string;
+  datum: string;
+  faelligAm: string | null;
+  brutto: string;
+  status: string;
+};
+
+type CustomerCapabilities = {
+  canViewPrices: boolean;
+  canViewQa: boolean;
+  communicationProjection: "not_connected";
+  marketingProjection: "not_connected";
+  anonymization: "retention_policy_and_durable_receipt_missing";
+};
 
 export default function CustomerProfilePage({ params }: { params: Promise<{ id: string }> }) {
   usePageView();
@@ -40,6 +56,9 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [invoices, setInvoices] = useState<CustomerInvoice[]>([]);
+  const [capabilities, setCapabilities] = useState<CustomerCapabilities | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { openShortcut } = useAppShortcut();
 
@@ -52,6 +71,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
       }
       
       try {
+        setLoadError(null);
         const { getCustomerDetailsAction } = await import("./actions");
         const res = await getCustomerDetailsAction(id as string);
         
@@ -60,26 +80,25 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
           setAgreements(res.data.agreements as unknown as PriceAgreement[]);
           setOrders(res.data.orders.map((o: Record<string, any>) => ({
              ...o,
-             statusText: o.status === "completed" ? "ERLEDIGT" : "IN ARBEIT",
-             title: o.title || "Auftrag " + o.orderNumber
+             statusText: o.statusText || o.status || undefined,
           })) as Order[]);
           setComplaints(res.data.complaints.map((c: Record<string, any>) => ({
-             id: c.id,
-             orderId: c.orderId,
-             reason: c.ergebnis,
-             description: c.bemerkung || "Qualitätsprüfung",
-             createdAt: c.createdAt,
-             resolvedAt: c.ergebnis === 'bestanden' ? c.datum : null,
-             resolution: c.ergebnis === 'bestanden' ? 'OK' : 'Nacharbeit nötig',
-             customerId: id,
-             photoIds: []
+             ...c,
+             photoIds: Array.isArray(c.photoIds) ? c.photoIds : [],
+             resolvedAt: c.resolvedAt || undefined,
+             resolution: c.resolution || undefined,
           })) as Complaint[]);
+          setInvoices(res.data.rechnungen as CustomerInvoice[]);
+          setCapabilities(res.data.capabilities);
           setTimeline([]);
         } else {
            setCustomer(null);
+           setLoadError(res.message || "Kundendetails konnten nicht geladen werden.");
         }
       } catch (err) {
         console.error("Error loading customer profile:", err);
+        setCustomer(null);
+        setLoadError("Kundendetails konnten nicht geladen werden.");
       } finally {
         setIsLoading(false);
       }
@@ -105,8 +124,8 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
     return (
       <div className="p-8 text-center min-h-screen bg-transparent flex flex-col items-center justify-center space-y-4">
         <AlertCircle className="w-16 h-16 text-danger-red animate-bounce" />
-        <h2 className="text-2xl font-bold text-navy-900">Kunde nicht gefunden</h2>
-        <p className="text-text-muted">Der gesuchte Kunde existiert nicht oder wurde gelöscht.</p>
+        <h2 className="text-2xl font-bold text-navy-900">{loadError ? "Kundendaten nicht verfügbar" : "Kunde nicht gefunden"}</h2>
+        <p className="text-text-muted">{loadError || "Der gesuchte Kunde existiert nicht."}</p>
         <Link href="/customers">
           <Button className="bg-navy-900 text-white rounded-xl">Zurück zur Kundenliste</Button>
         </Link>
@@ -115,7 +134,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
   }
 
   // Segment active orders
-  const activeOrders = orders.filter(o => o.status !== "done" && o.status !== "completed" && o.status !== "closed");
+  const activeOrders = orders.filter(o => o.status === "in_progress");
 
   // Top 5 parts
   const allParts = orders.flatMap(o => o.parts || []);
@@ -188,29 +207,33 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                   <div className={`p-5 rounded-2xl border space-y-3 ${
                     customer.risk === "Hoch" 
                       ? "bg-accent-orange-soft/50 border-danger-red text-danger-red" 
-                      : customer.risk === "Mittel" 
-                        ? "bg-gold-100 border-gold-600 text-gold-600" 
-                        : "bg-success-green-soft/50 border-success-green text-success-green"
+                      : customer.risk === "Mittel"
+                        ? "bg-gold-100 border-gold-600 text-gold-600"
+                        : customer.risk === "Niedrig"
+                          ? "bg-success-green-soft/50 border-success-green text-success-green"
+                          : "bg-bg-app-soft border-neutral-gray-300 text-text-muted"
                   }`}>
                     <div className="flex items-center gap-2">
                       <AlertTriangle className={`w-5 h-5 ${
                         customer.risk === "Hoch" 
                           ? "text-danger-red" 
-                          : customer.risk === "Mittel" 
-                            ? "text-gold-600" 
-                            : "text-success-green"
+                          : customer.risk === "Mittel"
+                            ? "text-gold-600"
+                            : customer.risk === "Niedrig"
+                              ? "text-success-green"
+                              : "text-text-muted"
                       }`} />
-                      <span className="text-[10px] font-black uppercase tracking-wider">Risikobeurteilung: {customer.risk || "Niedrig"}</span>
+                      <span className="text-[10px] font-black uppercase tracking-wider">Risikobeurteilung: {customer.risk || "Nicht bewertet"}</span>
                     </div>
                     <p className="text-xs font-semibold leading-relaxed">
-                      {customer.riskNote || "Zuverlässiger Kunde mit einwandfreier Historie."}
+                      {customer.riskNote || "Keine Begründung zur Risikobeurteilung hinterlegt."}
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-4 text-xs font-bold text-text-muted bg-bg-app-soft/40 p-3 rounded-xl border border-neutral-gray-300">
                   <span className="text-navy-900">Bevorzugter Kommunikationskanal:</span>
-                  <span className="bg-white px-2 py-0.5 rounded-md border text-navy-900 shadow-2xs">{customer.prefComm || "E-Mail"}</span>
+                  <span className="bg-white px-2 py-0.5 rounded-md border text-navy-900 shadow-2xs">{customer.prefComm || "Nicht hinterlegt"}</span>
                 </div>
               </CardContent>
             </Card>
@@ -246,7 +269,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                                   ? "bg-gold-100 text-accent-orange border-accent-orange" 
                                   : "bg-bg-app-soft text-navy-900 border-neutral-gray-300"
                             }`}>
-                              {order.statusText || "IN ARBEIT"}
+                              {order.statusText || "Nicht hinterlegt"}
                             </Badge>
                           </div>
                           <h4 className="font-bold text-navy-900 text-lg font-serif">{order.title}</h4>
@@ -281,7 +304,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                     <div className="p-8 text-center text-text-muted bg-bg-app-soft border rounded-2xl space-y-2 border-dashed">
                       <Clock className="w-8 h-8 mx-auto text-neutral-gray-300" />
                       <p className="font-bold text-text-muted">Keine aktiven Aufträge</p>
-                      <p className="text-xs max-w-md mx-auto">Dieser Kunde hat aktuell alle Werkstattaufträge abgeschlossen oder pausiert.</p>
+                      <p className="text-xs max-w-md mx-auto">Keine bestätigten Aufträge mit dem gespeicherten Status „in_progress“.</p>
                     </div>
                   )}
                 </div>
@@ -289,9 +312,20 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
             </Card>
 
             {/* Preisabsprachen */}
-            <PriceAgreementPanel agreements={agreements} />
+            {capabilities?.canViewPrices ? (
+              <PriceAgreementPanel agreements={agreements} />
+            ) : (
+              <Card className="rounded-3xl border-2 border-neutral-gray-300 bg-white p-6 text-sm text-text-muted">
+                Preisvereinbarungen sind für diese Rolle nicht freigegeben.
+              </Card>
+            )}
 
             {/* Reklamationen & Nacharbeit */}
+            {!capabilities?.canViewQa ? (
+              <Card className="rounded-3xl border-2 border-neutral-gray-300 bg-white p-6 text-sm text-text-muted">
+                Reklamations- und QS-Daten sind für diese Rolle nicht freigegeben.
+              </Card>
+            ) : (
             <Card className="border-2 border-danger-red rounded-3xl overflow-hidden shadow-xs bg-white">
               <div className="bg-linear-to-br from-navy-900 to-black p-6 rounded-[24px] text-white flex flex-col justify-between relative overflow-hidden group">
                 <div className="flex items-center gap-2">
@@ -337,7 +371,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                       ) : (
                         <div className="p-3 bg-gold-100 border border-gold-600 rounded-xl text-gold-600 text-xs font-bold flex items-center gap-2">
                           <Clock className="w-4.5 h-4.5 text-gold-600 shrink-0" />
-                          <span>Fall in Bearbeitung. Nächste Qualitätssicherung ausstehend.</span>
+                          <span>Gespeicherter Status: {c.status || "Nicht hinterlegt"}</span>
                         </div>
                       )}
                     </div>
@@ -345,14 +379,14 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
 
                   {complaints.length === 0 && (
                     <div className="p-6 text-center text-text-muted bg-bg-app-soft border border-neutral-gray-100 rounded-2xl space-y-1">
-                      <CheckCircle2 className="w-8 h-8 mx-auto text-success-green" />
-                      <p className="font-bold text-success-green">Keine Reklamationen verzeichnet</p>
-                      <p className="text-xs">Exzellente Quote! Für diesen Kunden liegen keine ungelösten Qualitätsfälle vor.</p>
+                      <p className="font-bold text-text-muted">Keine bestätigten Reklamationen vorhanden</p>
+                      <p className="text-xs">Der Reklamationsbestand wurde erfolgreich und ohne Treffer geladen.</p>
                     </div>
                   )}
                 </div>
               </CardContent>
             </Card>
+            )}
 
             {/* Wiederkehrende Teile */}
             <Card className="border-2 border-neutral-gray-300 rounded-3xl overflow-hidden shadow-xs bg-white">
@@ -391,13 +425,13 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                       <div className="space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs font-bold text-text-muted">{order.orderNumber}</span>
-                          <span className="text-xs text-text-muted">• Eingang: {order.intakeDate || "Unbekannt"}</span>
+                          <span className="text-xs text-text-muted">• Eingang: {order.intakeDate || "Nicht hinterlegt"}</span>
                         </div>
                         <h4 className="font-bold text-navy-900 text-sm">{order.title}</h4>
                       </div>
                       <div className="text-right">
-                        <span className={`text-xs px-2 py-1 font-black rounded-lg ${order.status === "completed" || order.status === "done" ? "bg-green-100 text-green-800" : "bg-bg-app-soft text-navy-900"}`}>
-                          {order.status === "completed" || order.status === "done" ? "Erledigt" : "Aktiv"}
+                        <span className="rounded-lg bg-bg-app-soft px-2 py-1 text-xs font-black text-navy-900">
+                          {order.status || "Nicht hinterlegt"}
                         </span>
                       </div>
                     </div>
@@ -422,42 +456,31 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                     </h3>
                     <p className="text-xs font-semibold text-text-muted">Letzte Rechnungsaktivitäten dieses Kunden</p>
                   </div>
-                  <Link href={`/buchhaltung/rechnungen?customer=${customer.customerNumber}`}>
-                    <Button variant="outline" className="text-xs font-bold">Alle Rechnungen</Button>
-                  </Link>
+                  {capabilities?.canViewPrices && (
+                    <Link href={`/buchhaltung/rechnungen?customer=${customer.customerNumber}`}>
+                      <Button variant="outline" className="text-xs font-bold">Alle Rechnungen</Button>
+                    </Link>
+                  )}
                 </div>
                 
                 <div className="space-y-3">
-                  <Link href="/buchhaltung/rechnungen/1" className="block group">
-                    <div className="p-4 bg-bg-app-soft border border-neutral-gray-200 rounded-2xl flex items-center justify-between group-hover:border-navy-500 transition-colors">
-                      <div>
-                        <span className="text-[10px] text-text-muted font-bold block mb-0.5">RE-{new Date().getFullYear()}-0042 · Vor 3 Tagen</span>
-                        <span className="text-sm font-black text-navy-900 flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4 text-accent-orange" />
-                          Offen
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-sm font-black text-navy-900 block">4.200,00 €</span>
-                        <span className="text-[10px] text-text-muted font-bold">Zahlungsziel in 4 Tagen</span>
-                      </div>
+                  {!capabilities?.canViewPrices ? (
+                    <div className="rounded-2xl border border-neutral-gray-200 bg-bg-app-soft p-4 text-sm text-text-muted">
+                      Rechnungsdaten sind für diese Rolle nicht freigegeben.
                     </div>
-                  </Link>
-
-                  <Link href="/buchhaltung/rechnungen/2" className="block group">
-                    <div className="p-4 bg-white border border-neutral-gray-100 rounded-2xl flex items-center justify-between group-hover:border-navy-500 transition-colors">
-                      <div>
-                        <span className="text-[10px] text-text-muted font-bold block mb-0.5">RE-{new Date().getFullYear()}-0018 · Letzter Monat</span>
-                        <span className="text-sm font-black text-emerald-700 flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                          Bezahlt
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-sm font-black text-text-muted block">1.840,00 €</span>
-                      </div>
+                  ) : invoices.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-neutral-gray-200 p-4 text-sm text-text-muted">
+                      Keine bestätigten Rechnungen für diesen Kunden vorhanden.
                     </div>
-                  </Link>
+                  ) : invoices.slice(0, 5).map((invoice) => (
+                    <div key={invoice.id} className="flex items-center justify-between rounded-2xl border border-neutral-gray-200 bg-white p-4">
+                      <div>
+                        <span className="block text-[10px] font-bold text-text-muted">{invoice.nummer} · {new Date(invoice.datum).toLocaleDateString("de-DE")}</span>
+                        <span className="text-sm font-black text-navy-900">{invoice.status}</span>
+                      </div>
+                      <span className="text-sm font-black text-navy-900">{Number(invoice.brutto).toLocaleString("de-DE", { style: "currency", currency: "EUR" })}</span>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -474,11 +497,10 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                   <div className="p-5 bg-blue-50 border border-blue-200 rounded-2xl space-y-2">
                     <div className="flex items-center gap-2">
                       <PhoneCall className="w-5 h-5 text-blue-600" />
-                      <h4 className="font-bold text-blue-900">Telefonnotizen (Vorbereitet)</h4>
+                      <h4 className="font-bold text-blue-900">Kommunikationsprojektion nicht eingebettet</h4>
                     </div>
                     <p className="text-sm text-blue-800 leading-relaxed">
-                      Die Anbindung der echten Telefonnotizen aus der Kommunikationszentrale ist für diesen Demo-Kunden vorbereitet. 
-                      Sobald echte Kundendaten verknüpft sind, erscheinen hier alle relevanten Anrufe und Notizen automatisch.
+                      Diese Profilseite zeigt keine erfundenen Kontakte. Bestätigte Telefonnotizen bleiben in der tenantgebundenen Kommunikationszentrale erhalten; eine gefilterte Profilprojektion ist noch nicht verbunden.
                     </p>
                     <Link href="/telefonnotiz?source=kunde">
                       <Button variant="outline" className="mt-2 text-xs bg-white border-blue-300 text-blue-700 hover:bg-blue-100">
@@ -503,24 +525,8 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                   Marketing Profil
                 </h3>
                 
-                <div className="space-y-3">
-                  <div>
-                    <span className="block text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Quelle (Attribution)</span>
-                    <span className="text-sm font-black text-navy-900 flex items-center gap-2">
-                      <Tag className="w-4 h-4 text-blue-500" />
-                      Google Ads (B2B Kampagne)
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Segment</span>
-                    <Link href={`/marketing/segmente/1`} className="text-sm font-black text-navy-900 hover:text-blue-600 underline decoration-blue-300">
-                      Top-Kunden (A-Segment)
-                    </Link>
-                  </div>
-                  <div>
-                    <span className="block text-[10px] font-bold text-blue-700 uppercase tracking-wider mb-1">Feedback-Score</span>
-                    <span className="text-sm font-black text-emerald-700">8.9 / 10 (Sehr zufrieden)</span>
-                  </div>
+                <div className="rounded-xl border border-blue-200 bg-white p-4 text-sm text-blue-900">
+                  Attribution, Segment und Feedback-Score werden hier erst angezeigt, wenn eine bestätigte kundenbezogene Marketingprojektion verbunden ist. Derzeit sind keine Werte belegt.
                 </div>
                 
                 <Link href={`/marketing?customer=${customer.customerNumber}`}>
@@ -571,23 +577,19 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                     </Button>
                   )}
 
-                  {/* DSGVO Anonymisierung */}
+                  {/* DSGVO-Anonymisierung bleibt fail-closed, bis der vollständige Daten- und Belegvertrag steht. */}
                   {customer.name && !customer.name.startsWith("ANONYMISIERT") && (
                     <div className="pt-4 mt-2 border-t border-white/10">
-                      <Button 
-                        variant="outline" 
-                        onClick={async () => {
-                          if (confirm("DSGVO-Anonymisierung wirklich durchführen? Kundendaten werden unwiderruflich überschrieben. Auftragsdaten bleiben erhalten.")) {
-                            const { anonymizeCustomer } = await import("@/lib/privacy/dsgvoAnonymizer");
-                            await anonymizeCustomer(customer.id, "Admin");
-                            window.location.reload();
-                          }
-                        }}
-                        className="w-full h-10 bg-transparent border-danger-red/50 hover:bg-danger-red hover:text-white text-danger-red font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all"
+                      <Button
+                        variant="outline"
+                        disabled
+                        title="Datenumfang, Aufbewahrungsregeln und dauerhafter Auditbeleg sind noch nicht vollständig verbunden."
+                        className="w-full min-h-10 bg-transparent border-white/20 text-white/50 font-bold text-xs rounded-xl flex items-center justify-center gap-2"
                       >
                         <AlertTriangle className="w-4 h-4" />
-                        <span>DSGVO-Löschung / Anonymisieren</span>
+                        <span>Anonymisierung nicht freigegeben</span>
                       </Button>
+                      <p className="mt-2 text-[10px] leading-relaxed text-white/50">Es wurden keine Daten verändert. Aufbewahrungsmatrix, Tenant-Transaktion, Idempotenz und dauerhafter Auditbeleg fehlen noch.</p>
                     </div>
                   )}
                 </div>

@@ -120,7 +120,7 @@ function unavailableTiles(periodLabel: string): AnalyseTileSummary[] {
 async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, now = new Date()): Promise<WorkshopSnapshot> {
   const period = parsePeriod(periodInput, now);
   const normalizedStatus = sql<string>`lower(coalesce(${orders.status}, ''))`;
-  const promisedDueDate = sql<Date | null>`coalesce(${orders.promisedDueDate}, ${orders.dueDate})`;
+  const promisedDueDate = orders.promisedDueDate;
   const productionOrder = and(
     notInArray(sql`coalesce(${orders.source}, 'manual')`, ["seed", "test", "demo", "integration-test"]),
     notIlike(sql`coalesce(${orders.orderNumber}, '')`, "A-SEED-%"),
@@ -173,7 +173,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       promisedDueDate,
       completedDate: orders.completedDate,
       priority: orders.priority,
-    }).from(orders).innerJoin(customers, and(
+    }).from(orders).leftJoin(customers, and(
       eq(customers.id, orders.customerId),
       eq(customers.tenantId, actor.tenantId),
     )).where(and(activeOrder, lt(promisedDueDate, now)))
@@ -188,7 +188,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       promisedDueDate,
       completedDate: orders.completedDate,
       priority: orders.priority,
-    }).from(orders).innerJoin(customers, and(
+    }).from(orders).leftJoin(customers, and(
       eq(customers.id, orders.customerId),
       eq(customers.tenantId, actor.tenantId),
     )).where(and(activeOrder, isNull(promisedDueDate)))
@@ -223,7 +223,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       orderNumber: order.orderNumber,
       title: order.title,
       customerId: order.customerId,
-      customerName: order.customerName,
+      customerName: order.customerName || "Kunde nicht zugeordnet",
       stationName: order.station,
       promisedDueDate: order.promisedDueDate?.toISOString() || null,
       completedDate: null,
@@ -237,7 +237,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       orderNumber: order.orderNumber,
       title: order.title,
       customerId: order.customerId,
-      customerName: order.customerName,
+      customerName: order.customerName || "Kunde nicht zugeordnet",
       stationName: order.station,
       promisedDueDate: null,
       completedDate: null,
@@ -349,7 +349,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       source: overdueCount > 0 ? "rules" : "none",
       observation: overdueCount > 0 ? `${overdueCount} offene Aufträge liegen hinter ihrem gespeicherten Zusagetermin.` : null,
       recommendation: overdueCount > 0 ? "Betroffene Aufträge und gespeicherte Verzögerungsgründe prüfen." : null,
-      actionLinks: overdueCount > 0 ? [{ label: "Betroffene Aufträge öffnen", href: "/orders?risk=overdue" }] : [],
+      actionLinks: overdueCount > 0 ? [{ label: "Auftragsbuch öffnen", href: "/orders" }] : [],
     },
     connectedLinks: [
       { label: "Bäder & Material", value: "Bäder öffnen", href: "/baeder", enabled: true },

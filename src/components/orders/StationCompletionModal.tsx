@@ -2,14 +2,21 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X, Plus, Minus, Search, AlertTriangle } from "lucide-react";
-import { inventoryRepository, InventoryItem } from "@/lib/repositories/inventoryRepository";
-import { eventsRepository } from "@/lib/repositories/eventsRepository";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
-import { getNextStation } from "@/lib/stations/nextStation";
 import { computeStationCost, ConsumableUse } from "@/lib/costs/stationCost";
-import { STATION_CONFIGS } from "@/constants/stations";
-import { DEFAULT_HOURLY_RATE_EUR } from "@/constants/pricing";
-import { parseOrderStation } from "@/lib/orders/orderMutationContract";
+import { completeStationCapture, getCaptureOverview } from "@/app/actions/capture.actions";
+import {
+  getOrderStationLabel,
+  parseOrderStation,
+  type OrderStation,
+} from "@/lib/orders/orderMutationContract";
+
+type CompletionArticle = {
+  id: string;
+  name: string;
+  unit: string;
+  currentStock: number;
+  pricePerUnit?: number;
+};
 
 export function StationCompletionModal({ 
   orderId, 
@@ -27,27 +34,56 @@ export function StationCompletionModal({
   const [note, setNote] = useState("");
   const [multiplier, setMultiplier] = useState(1);
   
-  const [allConsumables, setAllConsumables] = useState<InventoryItem[]>([]);
+  const [allConsumables, setAllConsumables] = useState<CompletionArticle[]>([]);
   const [bookedMaterials, setBookedMaterials] = useState<(ConsumableUse & { name: string, price: number, unit: string })[]>([]);
   
   const [showSearchList, setShowSearchList] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [hourlyRate, setHourlyRate] = useState<number | null>(null);
+  const [nextStation, setNextStation] = useState<OrderStation | null>(null);
+  const [routeBlockedReason, setRouteBlockedReason] = useState<string | null>(null);
+  const [clientRequestId] = useState(() => crypto.randomUUID());
 
-  const currentStationLabel = Object.values(STATION_CONFIGS).find(s => s.key === currentStationId)?.name || currentStationId;
-  const nextStation = getNextStation(currentStationId);
-  const nextStationLabel = nextStation 
-    ? Object.values(STATION_CONFIGS).find(s => s.key === nextStation)?.name || nextStation 
-    : "Warenausgang";
+  let currentStation: OrderStation | null = null;
+  try {
+    currentStation = parseOrderStation(currentStationId);
+  } catch {
+    // Invalid legacy station values remain visible and make submission fail closed.
+  }
+  const currentStationLabel = currentStation ? getOrderStationLabel(currentStation) : "Unbekannte Station";
+  const nextStationLabel = nextStation ? getOrderStationLabel(nextStation) : null;
 
   useEffect(() => {
+    let cancelled = false;
     const load = async () => {
-      const all = await inventoryRepository.getAllItems();
-      setAllConsumables(all.filter(i => i.isConsumable));
+      const result = await getCaptureOverview(orderId, currentStationId);
+      if (cancelled) return;
+      if (!result.ok) {
+        setNextStation(null);
+        setRouteBlockedReason("LOAD_FAILED");
+        setLoadError(result.message);
+        return;
+      }
+      setAllConsumables(result.data.articles.map((article) => ({
+        id: article.id,
+        name: article.name,
+        unit: article.unit,
+        currentStock: article.currentStock,
+        ...(article.unitCostEur === null ? {} : { pricePerUnit: article.unitCostEur }),
+      })));
+      setHourlyRate(result.data.selectedRate?.valueEurPerHour ?? null);
+      setNextStation(result.data.routeExecution.nextStation);
+      setRouteBlockedReason(result.data.routeExecution.reason);
+      setLoadError(null);
     };
-    load();
-  }, []);
+    void load();
+    return () => { cancelled = true; };
+  }, [currentStationId, orderId]);
 
-  const handleAddMaterial = (item: InventoryItem) => {
+  const handleAddMaterial = (item: CompletionArticle) => {
     if (bookedMaterials.some(m => m.inventoryItemId === item.id)) return;
     setBookedMaterials([
       ...bookedMaterials,
@@ -71,57 +107,48 @@ export function StationCompletionModal({
     [{ netMinutes: minutes }],
     bookedMaterials,
     allConsumables,
-    DEFAULT_HOURLY_RATE_EUR,
+    hourlyRate ?? 0,
     multiplier
   );
 
-  const canSubmit = minutes > 0 || bookedMaterials.length > 0;
+  const missingRate = minutes > 0 && hourlyRate === null;
+  const canSubmit = currentStation !== null
+    && currentStation !== "warenausgang"
+    && nextStation !== null
+    && routeBlockedReason === null
+    && loadError === null
+    && (minutes > 0 || bookedMaterials.length > 0)
+    && !missingRate;
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || isSubmitting) return;
+    setIsSubmitting(true);
+    setSubmitError(null);
     try {
-      for (const mat of bookedMaterials) {
-        await inventoryRepository.createMovement({
-          inventoryItemId: mat.inventoryItemId,
-          movementType: "consumption",
-          quantity: mat.quantity,
-          unit: mat.unit,
-          orderId: orderId,
-          reason: `Verbrauchsbuchung in ${currentStationLabel}`,
-        });
-      }
-
-      await eventsRepository.addEvent({
+      const result = await completeStationCapture({
         orderId,
-        eventType: "COSTS_BOOKED",
-        metadata: { durationMinutes: minutes, materialCount: bookedMaterials.length, stationId: currentStationId }
+        expectedStation: currentStationId,
+        minutes,
+        multiplier,
+        taskType,
+        note,
+        materials: bookedMaterials.map((material) => ({
+          inventoryItemId: material.inventoryItemId,
+          quantity: material.quantity,
+        })),
+        clientRequestId,
       });
-
-      await eventsRepository.addEvent({
-        orderId,
-        eventType: "STATION_COMPLETED",
-        metadata: { stationId: currentStationId }
-      });
-
-      if (nextStation) {
-        const persistedNextStation = parseOrderStation(nextStation);
-        await ordersRepository.updateOrder(orderId, { currentStationId: persistedNextStation, status: "ready" });
-        await eventsRepository.addEvent({
-          orderId,
-          eventType: "STATION_READY",
-          metadata: { stationId: persistedNextStation }
-        });
-      } else {
-        await ordersRepository.updateOrder(orderId, { status: "shipped", currentStationId: "warenausgang" });
-      }
+      if (!result.ok) throw new Error(result.message);
 
       if (typeof window !== "undefined") {
         window.dispatchEvent(new Event("storage"));
       }
 
       onClose();
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : "Stationsabschluss konnte nicht bestätigt werden.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -135,7 +162,7 @@ export function StationCompletionModal({
             <h2 className="text-xl font-black text-navy-900">Stationsabschluss · {currentStationLabel}</h2>
             <p className="text-navy-500 text-sm mt-1">Auftrag {orderId}</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-neutral-gray-100 rounded-full"><X className="w-5 h-5" /></button>
+          <button disabled={isSubmitting} onClick={onClose} className="p-2 hover:bg-neutral-gray-100 rounded-full disabled:opacity-50"><X className="w-5 h-5" /></button>
         </div>
 
         {/* Tabs */}
@@ -156,6 +183,12 @@ export function StationCompletionModal({
 
         {/* Content */}
         <div className="p-6 overflow-y-auto flex-1">
+          {loadError && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Erfassungsgrundlage nicht verfügbar: {loadError}. Der Abschluss bleibt gesperrt.</div>}
+          {!currentStation && <div role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">Die gespeicherte Station ist nicht Teil des kanonischen Prozessvertrags. Der Abschluss bleibt gesperrt.</div>}
+          {currentStation === "warenausgang" && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Warenausgang benötigt einen eigenen atomaren Übergabe-/Versandbeleg mit Empfänger, Modus und Zeitpunkt. Der generische Stationsabschluss markiert keinen Auftrag als versendet.</div>}
+          {missingRate && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Für diese Station fehlt ein bestätigter Mitarbeiter- oder Stationskostensatz. Eine EUR-Summe und der Abschluss bleiben gesperrt.</div>}
+          {routeBlockedReason && routeBlockedReason !== "LOAD_FAILED" && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Keine einheitliche ausführbare v1-Positionsroute belegt ({routeBlockedReason}). Der Abschluss bleibt gesperrt.</div>}
+          {submitError && <div role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">{submitError}</div>}
           {activeTab === "erfassung" ? (
             <div className="space-y-8">
               {/* Arbeitszeit */}
@@ -245,7 +278,7 @@ export function StationCompletionModal({
                       {allConsumables.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) && !bookedMaterials.some(m => m.inventoryItemId === c.id)).map(item => (
                         <button key={item.id} onClick={() => handleAddMaterial(item)} className="w-full text-left px-3 py-2 text-sm hover:bg-bg-app-soft rounded-lg flex justify-between">
                           <span className="font-bold">{item.name}</span>
-                          <span className="text-navy-500">{item.pricePerUnit?.toFixed(2) || "0.00"} € / {item.unit}</span>
+                          <span className="text-navy-500">{item.pricePerUnit === undefined ? "Preis fehlt" : `${item.pricePerUnit.toFixed(2)} € / ${item.unit}`}</span>
                         </button>
                       ))}
                     </div>
@@ -258,8 +291,8 @@ export function StationCompletionModal({
               <div className="bg-bg-app-soft rounded-2xl p-6 border border-neutral-gray-100">
                 <div className="space-y-4">
                   <div className="flex justify-between items-center text-sm">
-                    <span className="text-text-muted">Arbeitszeit ({minutes} min × {DEFAULT_HOURLY_RATE_EUR} €/h)</span>
-                    <span className="font-bold">{costs.laborCost.toFixed(2)} €</span>
+                    <span className="text-text-muted">Arbeitszeit ({minutes} min{hourlyRate === null ? " · Kostensatz fehlt" : ` × ${hourlyRate.toFixed(2)} €/h × ${multiplier}`})</span>
+                    <span className="font-bold">{missingRate ? "nicht berechenbar" : `${costs.laborCost.toFixed(2)} €`}</span>
                   </div>
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-text-muted">Material ({bookedMaterials.length} Positionen)</span>
@@ -267,7 +300,7 @@ export function StationCompletionModal({
                   </div>
                   <div className="pt-4 border-t border-neutral-gray-100 flex justify-between items-center text-lg">
                     <span className="font-black text-navy-900">Gesamtkosten Station</span>
-                    <span className="font-black text-navy-700">{costs.total.toFixed(2)} €</span>
+                    <span className="font-black text-navy-700">{missingRate ? "nicht berechenbar" : `${costs.total.toFixed(2)} €`}</span>
                   </div>
                 </div>
               </div>
@@ -277,13 +310,17 @@ export function StationCompletionModal({
 
         {/* Footer */}
         <div className="p-6 border-t border-neutral-gray-100 flex justify-between items-center bg-bg-app-soft">
-          <Button variant="ghost" onClick={onClose}>Abbrechen</Button>
+          <Button variant="ghost" disabled={isSubmitting} onClick={onClose}>Abbrechen</Button>
           <Button 
-            disabled={!canSubmit} 
+            disabled={!canSubmit || isSubmitting}
             className="bg-navy-700 hover:bg-navy-700 text-white font-bold" 
             onClick={handleSubmit}
           >
-            {nextStation ? `Abschließen und zu ${nextStationLabel} ›` : "Auftrag versendet markieren"}
+            {isSubmitting
+              ? "Wird atomar bestätigt..."
+              : nextStation && nextStationLabel
+                ? `Abschließen und zu ${nextStationLabel} ›`
+                : "Stationsabschluss gesperrt"}
           </Button>
         </div>
 

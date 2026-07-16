@@ -2,10 +2,9 @@
 
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, useRef } from "react";
-import { getOrdersDb } from "@/app/actions/orders.actions";
+import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository"; // Will keep this if no actions exist
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Order = any;
+import { parseOrderStation, type OrderStation } from "@/lib/orders/orderMutationContract";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -75,8 +74,11 @@ const IconComponents: Record<string, React.ComponentType<{ className?: string }>
 export default function HomeDashboard() {
   usePageView();
   const router = useRouter();
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<OrderResponse[]>([]);
+  const [ordersState, setOrdersState] = useState<"loading" | "ready" | "error">("loading");
+  const [ordersError, setOrdersError] = useState<string | null>(null);
   const [openQuotes, setOpenQuotes] = useState(0);
+  const [quotesError, setQuotesError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   
   // Drilldown Overlay State
@@ -88,7 +90,8 @@ export default function HomeDashboard() {
   const { openOrder } = useOrderModal();
   const { openErfassung } = useErfassung();
 
-  const { isOnline, outboxItems, syncNow } = useSync();
+  const { networkStatus, outboxItems, outboxError, isSyncing, syncNow } = useSync();
+  const networkAvailable = networkStatus === "available";
 
   // Todo List State (Enriched Task Model)
   const [todos, setTodos] = useState<ChecklistTask[]>([]);
@@ -100,20 +103,29 @@ export default function HomeDashboard() {
 
   useEffect(() => {
     const load = async () => {
-      
+      setOrdersState("loading");
       const dbOrdersRes = await getOrdersDb();
-      const dbOrders = dbOrdersRes.ok ? dbOrdersRes.data : [];
-      
+      if (!dbOrdersRes.ok) {
+        setOrders([]);
+        setTodos([]);
+        setOrdersError(dbOrdersRes.message);
+        setOrdersState("error");
+      } else {
+        const dbOrders = dbOrdersRes.data;
+        setOrders(dbOrders);
+        setOrdersError(null);
+        setOrdersState("ready");
+
       const newTodos: ChecklistTask[] = [];
       const kritisch = dbOrders.filter(o => o.risk === 'red' || o.risk === 'orange');
       if (kritisch.length > 0) {
          newTodos.push({
             id: 1, title: `Kritische Aufträge prüfen (${kritisch.length})`, reason: "Aufträge mit hohem Risiko entdeckt",
-            area: "Warendurchlauf", urgency: "Hoch", action: "Aufträge ansehen", targetHref: "/kontrolle",
+            area: "Warendurchlauf", urgency: "Hoch", action: "Aufträge ansehen", targetHref: "/orders?filter=critical",
             completionType: "live", source: "live", done: false
          });
       }
-      const auslieferungen = dbOrders.filter(o => o.station === 'warenausgang');
+      const auslieferungen = dbOrders.filter(o => (o.currentStationId || o.station) === 'warenausgang');
       if (auslieferungen.length > 0) {
          newTodos.push({
             id: 2, title: `Auslieferungen klären (${auslieferungen.length})`, reason: "Aufträge sind im Warenausgang",
@@ -123,10 +135,16 @@ export default function HomeDashboard() {
       }
       
       setTodos(newTodos);
+      }
 
-      if (dbOrders) setOrders(dbOrders as unknown as Order[]);
-      const qCount = await inquiriesRepository.getOpenCount();
-      setOpenQuotes(qCount);
+      try {
+        const qCount = await inquiriesRepository.getOpenCount();
+        setOpenQuotes(qCount);
+        setQuotesError(null);
+      } catch (error) {
+        setOpenQuotes(0);
+        setQuotesError(error instanceof Error ? error.message : "Anfragen konnten nicht geladen werden.");
+      }
     };
     load();
     const onUpdate = () => load();
@@ -155,7 +173,7 @@ export default function HomeDashboard() {
             return { ...t, done: true, completionHint: "Alle Auslieferungen erledigt" };
           }
           // ID 3: Offene Anfragen
-          if (t.id === 3 && openQuotes === 0) {
+          if (t.id === 3 && openQuotes === 0 && quotesError === null) {
             return { ...t, done: true, completionHint: "Keine offenen Anfragen" };
           }
           
@@ -164,7 +182,7 @@ export default function HomeDashboard() {
       );
     }, 0);
     return () => clearTimeout(timer);
-  }, [orders, openQuotes]);
+  }, [orders, openQuotes, quotesError]);
 
   const toggleTodo = (id: number) => {
     setTodos(prev =>
@@ -185,8 +203,9 @@ export default function HomeDashboard() {
   };
 
   const focusMessage = (() => {
+    if (ordersState === "error") return "Auftragsdaten nicht verfügbar – Verbindung prüfen";
     if (orders.filter(o => o.risk === "red").length > 0) return "Kritische Aufträge zuerst entschärfen";
-    if (openQuotes > 0) return "Kundenrückfragen bündeln";
+    if (quotesError === null && openQuotes > 0) return "Kundenrückfragen bündeln";
     return "Warendurchlauf kurz prüfen und Engpässe vermeiden";
   })();
 
@@ -196,6 +215,33 @@ export default function HomeDashboard() {
   // Animated counts
   const totalCount = useAnimatedCount(orders.length, mounted);
   const critCount = useAnimatedCount(orders.filter(o => o.risk === 'red').length, mounted);
+
+  const stationOf = (order: OrderResponse): OrderStation | null => {
+    try {
+      return parseOrderStation(order.currentStationId || order.station);
+    } catch {
+      return null;
+    }
+  };
+  const stationCounts = orders.reduce<Record<OrderStation | "unknown", number>>((counts, order) => {
+    const station = stationOf(order) || "unknown";
+    counts[station] += 1;
+    return counts;
+  }, {
+    wareneingang: 0,
+    entmetallisierung: 0,
+    schleiferei: 0,
+    galvanik: 0,
+    qualitaetssicherung: 0,
+    warenausgang: 0,
+    unknown: 0,
+  });
+  const distributionTotal = orders.length;
+  const distribution = [
+    { key: "galvanik", count: stationCounts.galvanik, color: "var(--navy-900)" },
+    { key: "warenausgang", count: stationCounts.warenausgang, color: "var(--accent-orange)" },
+    { key: "uebrige", count: distributionTotal - stationCounts.galvanik - stationCounts.warenausgang, color: "var(--neutral-gray-300)" },
+  ];
 
   // Get day info
   const now = new Date();
@@ -249,28 +295,28 @@ export default function HomeDashboard() {
         </div>
 
         {/* ── OUTBOX WARNING ──────────────────────────── */}
-        {outboxItems.length > 0 && (
+        {(outboxItems.length > 0 || outboxError) && (
           <div
             className="bg-gold-50 border-2 border-gold-400 p-4 md:p-6 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm mb-4"
             style={{ animation: 'hm-floatIn .5s ease both' }}
           >
             <div className="flex items-start gap-4">
               <div className="p-3 bg-gold-200 rounded-full shrink-0">
-                <RefreshCw className={`w-6 h-6 text-gold-800 ${isOnline ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-6 h-6 text-gold-800 ${isSyncing ? 'animate-spin' : ''}`} />
               </div>
               <div>
                 <h3 className="font-bold text-navy-900 text-lg">Ausstehende Synchronisation</h3>
                 <p className="text-sm font-medium text-navy-800">
-                  Es {outboxItems.length === 1 ? "befindet sich 1 Änderung" : `befinden sich ${outboxItems.length} Änderungen`} lokal auf diesem Gerät.
+                  {outboxError || `Es ${outboxItems.length === 1 ? "befindet sich 1 Änderung" : `befinden sich ${outboxItems.length} Änderungen`} lokal auf diesem Gerät. Ohne quittierten Backend-Beleg wird nichts gelöscht.`}
                 </p>
               </div>
             </div>
             <button
               onClick={() => syncNow()}
-              disabled={!isOnline}
+              disabled={!networkAvailable || isSyncing || outboxItems.length === 0}
               className="w-full md:w-auto px-6 py-3 bg-navy-900 hover:bg-navy-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-xl whitespace-nowrap transition-colors"
             >
-              {isOnline ? "Jetzt synchronisieren" : "Warte auf Internet..."}
+              {!networkAvailable ? "Browser meldet kein Netz" : isSyncing ? "Prüfe Belegvertrag …" : "Übertragbarkeit prüfen"}
             </button>
           </div>
         )}
@@ -289,8 +335,8 @@ export default function HomeDashboard() {
                 { id: 'telefon', label: 'Telefonnotiz', sub: 'schnell festhalten', grad: 'linear-gradient(135deg,#0E8C8C,#13B0A6)', shadow: 'rgba(14,140,140,.35)', icon: 'phone', href: '/telefonnotiz?source=home', shortcut: undefined as string | undefined },
                 { id: 'kunde', label: 'Neuer Kunde', sub: 'in 30 Sekunden', grad: 'linear-gradient(135deg,#2E9E6B,#46C285)', shadow: 'rgba(46,158,107,.35)', icon: 'userplus', href: undefined as string | undefined, shortcut: 'new_customer' },
                 { id: 'auftrag', label: 'Neuer Auftrag', sub: 'Teil annehmen', grad: 'linear-gradient(135deg,#3A6EA5,#4F8BC9)', shadow: 'rgba(58,110,165,.35)', icon: 'fileplus', href: undefined as string | undefined, shortcut: 'new_order' },
-                { id: 'kritisch', label: 'Kritische Aufträge', sub: kritisch > 0 ? `${kritisch} brauchen dich` : 'Alles im Lot', grad: 'linear-gradient(135deg,#D8453C,#EE6A5A)', shadow: 'rgba(216,69,60,.35)', icon: 'alert', href: undefined as string | undefined, badge: kritisch > 0 ? kritisch.toString() : undefined },
-                { id: 'marketing', label: 'Marketing', sub: 'Keine Aktion', grad: 'linear-gradient(115deg,#7A3FB0,#C2185B 55%,#F2643C)', shadow: 'rgba(194,24,91,.4)', icon: 'sparkles', href: '/marketing', badge: undefined },
+                { id: 'kritisch', label: 'Kritische Aufträge', sub: ordersState !== 'ready' ? 'Daten nicht verfügbar' : kritisch > 0 ? `${kritisch} brauchen dich` : 'Keine bestätigten kritischen Fälle', grad: 'linear-gradient(135deg,#D8453C,#EE6A5A)', shadow: 'rgba(216,69,60,.35)', icon: 'alert', href: undefined as string | undefined, badge: kritisch > 0 ? kritisch.toString() : undefined },
+                { id: 'marketing', label: 'Marketing', sub: 'Bereich öffnen', grad: 'linear-gradient(115deg,#7A3FB0,#C2185B 55%,#F2643C)', shadow: 'rgba(194,24,91,.4)', icon: 'sparkles', href: '/marketing', badge: undefined },
               ];
               return QUICK_CARDS;
             })().map(card => {
@@ -367,7 +413,7 @@ export default function HomeDashboard() {
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-serif text-[19px] font-bold">Deine Checkliste für heute</h2>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted bg-bg-app-soft px-2.5 py-1 rounded-full">Demo-Auswertung</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-text-muted bg-bg-app-soft px-2.5 py-1 rounded-full">{ordersState === "ready" ? "Serverdaten" : "Nicht verfügbar"}</span>
             </div>
 
             {/* Hebel-Hinweis */}
@@ -387,9 +433,17 @@ export default function HomeDashboard() {
 
             {/* Tasks */}
             <div className="space-y-0">
-              {activeTodos.length === 0 && doneTodos.length === 0 ? (
+              {ordersState === "loading" ? (
+                <div className="p-12 text-center text-text-muted"><p className="font-bold text-navy-900">Auftragsdaten werden geladen …</p></div>
+              ) : ordersState === "error" ? (
+                <div role="alert" className="p-8 text-center text-red-800 bg-red-50 border border-red-200 rounded-xl">
+                  <p className="font-bold">Auftragsdaten nicht verfügbar</p>
+                  <p className="text-sm mt-1">{ordersError}</p>
+                </div>
+              ) : activeTodos.length === 0 && doneTodos.length === 0 ? (
                 <div className="p-12 text-center text-text-muted space-y-2">
-                  <p className="font-bold text-navy-900">Noch keine Aufträge erfasst</p>
+                  <p className="font-bold text-navy-900">Keine bestätigten Aufgaben aus den aktuellen Aufträgen</p>
+                  {quotesError && <p role="alert" className="text-xs text-amber-700">Anfragenstatus nicht verfügbar: {quotesError}</p>}
                 </div>
               ) : (
                 [...activeTodos, ...doneTodos].map(todo => (
@@ -464,39 +518,43 @@ export default function HomeDashboard() {
             >
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-serif text-[17px] font-bold">Im Umlauf</h3>
-                <span className="text-[9.5px] font-bold uppercase tracking-wider text-text-muted bg-bg-app-soft px-2 py-1 rounded-full">Live &amp; Demo</span>
+                <span className="text-[9.5px] font-bold uppercase tracking-wider text-text-muted bg-bg-app-soft px-2 py-1 rounded-full">{ordersState === "ready" ? "Serverdaten" : "Nicht verfügbar"}</span>
               </div>
               <div className="flex justify-between items-end mb-3">
                 <div>
                   <div className="text-[10.5px] text-text-muted font-semibold uppercase tracking-wider">Gesamt</div>
-                  <div className="font-serif text-4xl font-bold leading-none">{totalCount}</div>
+                  <div className="font-serif text-4xl font-bold leading-none">{ordersState === "ready" ? totalCount : "—"}</div>
                 </div>
                 <div className="text-right">
                   <div className="text-[10.5px] text-error-red font-semibold uppercase tracking-wider">Kritisch</div>
-                  <div className="font-serif text-xl font-bold text-error-red leading-none">{critCount}</div>
+                  <div className="font-serif text-xl font-bold text-error-red leading-none">{ordersState === "ready" ? critCount : "—"}</div>
                 </div>
               </div>
               <div className="space-y-1.5 border-t pt-2" style={{ borderColor: 'var(--neutral-gray-100)' }}>
                 <div className="flex justify-between text-[13px]">
                   <span className="text-text-muted">In Galvanik</span>
-                  <b>{orders.filter(o => o.station === 'beschichtung').length}</b>
+                  <b>{ordersState === "ready" ? stationCounts.galvanik : "—"}</b>
                 </div>
                 <div className="flex justify-between text-[13px]">
                   <span className="text-text-muted">Warenausgang</span>
-                  <b>{orders.filter(o => o.station === 'warenausgang').length}</b>
+                  <b>{ordersState === "ready" ? stationCounts.warenausgang : "—"}</b>
                 </div>
                 <div className="flex justify-between text-[13px]">
                   <span className="text-text-muted">Warten auf Freigabe</span>
-                  <b>{orders.filter(o => o.risk === 'blocked').length}</b>
+                  <b>{ordersState === "ready" ? orders.filter(o => o.risk === 'blocked').length : "—"}</b>
                 </div>
               </div>
               <div className="mt-3">
-                <div className="text-[9.5px] text-text-muted font-bold uppercase tracking-wider mb-1.5">Volumen-Trend</div>
-                <div className="h-[9px] w-full rounded-md bg-bg-app-soft overflow-hidden flex">
-                  <div className="h-full" style={{ width: '62%', background: 'var(--navy-900)' }} />
-                  <div className="h-full" style={{ width: '24%', background: 'var(--accent-orange)' }} />
-                  <div className="h-full" style={{ width: '14%', background: 'var(--neutral-gray-300)' }} />
-                </div>
+                <div className="text-[9.5px] text-text-muted font-bold uppercase tracking-wider mb-1.5">Aktuelle Stationsverteilung</div>
+                {ordersState === "ready" && distributionTotal > 0 ? (
+                  <div className="h-[9px] w-full rounded-md bg-bg-app-soft overflow-hidden flex" aria-label="Verteilung der aktuell geladenen Aufträge">
+                    {distribution.map((entry) => (
+                      <div key={entry.key} className="h-full" style={{ width: `${(entry.count / distributionTotal) * 100}%`, background: entry.color }} />
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-text-muted">{ordersState === "ready" ? "Keine Verteilungsdaten vorhanden." : "Verteilung nicht verfügbar."}</p>
+                )}
               </div>
             </div>
 
@@ -553,7 +611,7 @@ export default function HomeDashboard() {
                   <div className="flex-1">
                     <div className="flex justify-between items-start">
                       <button onClick={() => { openOrder(o.id); setShowCriticalOrders(false); }} className="font-bold text-navy-900 text-base hover:underline text-left">
-                        {(o as Record<string, unknown>).title || o.task || "Unbekannter Auftrag"}
+                        {o.title || o.task || "Unbekannter Auftrag"}
                       </button>
                       <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${o.risk === 'red' ? 'bg-red-100 text-red-700' : 'bg-gold-200 text-gold-800'}`}>
                         {o.risk === 'red' ? 'Kritisch' : 'Warnung'}

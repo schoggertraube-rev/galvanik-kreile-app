@@ -5,6 +5,7 @@ import { appUsageEvents } from '@/db/schema'
 import { resolveAuthorization } from '@/lib/server/authorization'
 import { consumeDurableRateLimit } from '@/lib/server/durableRateLimit'
 import { parseUsageEventBatch } from '@/lib/telemetry/contract'
+import { readUtf8BodyWithinLimit } from '@/lib/server/boundedRequestBody'
 
 export const runtime = 'nodejs'
 
@@ -54,10 +55,7 @@ export async function POST(request: Request) {
 
   let events: ReturnType<typeof parseUsageEventBatch>
   try {
-    const rawBody = await request.text()
-    if (new TextEncoder().encode(rawBody).byteLength > 64 * 1024) {
-      return response({ ok: false, code: 'INVALID_REQUEST' }, 400)
-    }
+    const rawBody = await readUtf8BodyWithinLimit(request, 64 * 1024)
     events = parseUsageEventBatch(JSON.parse(rawBody))
   } catch {
     return response({ ok: false, code: 'INVALID_REQUEST' }, 400)

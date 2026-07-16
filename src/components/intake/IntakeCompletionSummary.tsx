@@ -1,11 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CheckCircle2, Factory, Printer } from "lucide-react";
 import { AppActionButton } from "@/components/ui/AppActionButton";
 import { intakeService } from "@/lib/services/intakeService";
 import { useRouter } from "next/navigation";
 import { LabelPrintView } from "@/components/orders/LabelPrintView";
 import type { Order } from "@/lib/repositories/ordersRepository";
+import { isRouteTemplateId, ROUTE_TEMPLATES } from "@/lib/orders/routeSnapshot";
 
 export function IntakeCompletionSummary({ 
   customerSelection, items, onBack
@@ -14,6 +15,8 @@ export function IntakeCompletionSummary({
 }) {
   const [saving, setSaving] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
+  const [routeTemplateId, setRouteTemplateId] = useState("");
+  const createRequestId = useRef(crypto.randomUUID());
   const router = useRouter();
 
   const handleFinish = async () => {
@@ -22,10 +25,16 @@ export function IntakeCompletionSummary({
       alert("Bitte mindestens ein Teil mit Bezeichnung erfassen.");
       return;
     }
+    if (!isRouteTemplateId(routeTemplateId)) {
+      alert("Bitte eine bestätigte Positionsroute auswählen.");
+      return;
+    }
     setSaving(true);
     try {
       const order = await intakeService.processIntake({
         customerId: customerSelection.id,
+        clientRequestId: createRequestId.current,
+        routeTemplateId,
         orderTitle: `${firstItemName}${items.length > 1 ? ` + ${items.length - 1} weitere` : ""}`,
         items: items as { name: string; quantity: number; surfaceRequested?: string }[]
       });
@@ -50,7 +59,7 @@ export function IntakeCompletionSummary({
             <CheckCircle2 className="w-10 h-10 animate-bounce" />
           </div>
           <h2 className="text-3xl font-black text-navy-900 tracking-tight">Erfolgreich gespeichert!</h2>
-          <p className="text-navy-500 font-medium">Auftrag {createdOrder.orderNumber} wurde angelegt und steht bereit.</p>
+          <p className="text-navy-500 font-medium">Auftrag {createdOrder.orderNumber}, Positionen und v1-Route wurden atomar bestätigt. Der Wareneingang ist noch nicht abgeschlossen.</p>
         </div>
 
         {/* Embedded Label preview */}
@@ -166,7 +175,7 @@ export function IntakeCompletionSummary({
           <CheckCircle2 className="w-12 h-12" />
         </div>
         <h2 className="text-4xl font-black font-serif text-navy-900 tracking-tight">Zusammenfassung</h2>
-        <p className="text-navy-500 font-medium text-lg">Alles bereit. Auftrag wird jetzt in die Produktion gegeben.</p>
+        <p className="text-navy-500 font-medium text-lg">Prüfe die Daten und bestätige eine Route. Gespeichert wird zunächst im Wareneingang.</p>
       </div>
 
       <div className="bg-white border-2 border-neutral-gray-100 rounded-3xl p-8 shadow-md space-y-6">
@@ -186,9 +195,20 @@ export function IntakeCompletionSummary({
         </div>
       </div>
 
+      <div className="rounded-2xl border-2 border-neutral-gray-100 bg-white p-5 space-y-2">
+        <label className="block text-xs font-extrabold uppercase tracking-wider text-text-muted">Bestätigte Positionsroute *</label>
+        <select value={routeTemplateId} onChange={(event) => setRouteTemplateId(event.target.value)} className="w-full rounded-xl border border-neutral-gray-300 bg-white p-3 text-sm">
+          <option value="">Route auswählen …</option>
+          {Object.entries(ROUTE_TEMPLATES).map(([templateId, template]) => (
+            <option key={templateId} value={templateId}>{template.label}: {template.stations.join(" → ")}</option>
+          ))}
+        </select>
+        <p className="text-xs text-text-muted">Alle Positionen erhalten denselben unveränderlichen v1-Snapshot. Gemischte Routen bleiben bis zur Handling-Unit-Engine gesperrt.</p>
+      </div>
+
       <AppActionButton 
         onClick={handleFinish}
-        disabled={saving}
+        disabled={saving || !isRouteTemplateId(routeTemplateId)}
         variant="primary"
         className="w-full h-16 text-xl"
       >

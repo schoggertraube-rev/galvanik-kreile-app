@@ -8,7 +8,7 @@ export function ScanUpload() {
   const { openErfassung, closeErfassung } = useErfassung();
   const [isUploading, setIsUploading] = useState(false);
   const [statusText, setStatusText] = useState("");
-  const [fallbackState, setFallbackState] = useState<{ type: "ai_failed" | "storage_failed", record?: any } | null>(null);
+  const [fallbackState, setFallbackState] = useState<{ type: "ai_failed" | "storage_failed" | "status_unknown", record?: { id?: string; status?: string } } | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -42,7 +42,7 @@ export function ScanUpload() {
         const statusRes = await fetch(`/api/erfassung/scan-status/${data.id}`);
         if (statusRes.ok) {
           const statusData = await statusRes.json();
-          if (statusData.status === "processed" || statusData.status === "error") {
+          if (["processed", "secured", "error"].includes(statusData.status)) {
             scanRecord = statusData;
             break;
           }
@@ -52,9 +52,14 @@ export function ScanUpload() {
 
       if (scanRecord?.status === "processed") {
         openErfassung({ mode: "scan", prefill: { scanResult: scanRecord } });
-      } else {
-        // Fallback: Uploaded but AI failed
+      } else if (scanRecord?.status === "secured") {
         setFallbackState({ type: "ai_failed", record: scanRecord });
+        setIsUploading(false);
+      } else if (scanRecord?.status === "error") {
+        setFallbackState({ type: "storage_failed", record: scanRecord });
+        setIsUploading(false);
+      } else {
+        setFallbackState({ type: "status_unknown", record: { id: data.id, status: "unknown" } });
         setIsUploading(false);
       }
       
@@ -79,6 +84,10 @@ export function ScanUpload() {
           <p className="text-gray-500 mb-8 max-w-md mx-auto">
             Die Datei wurde erfolgreich gespeichert, aber die KI-Auswertung konnte nicht abgeschlossen werden. Du kannst die Datei nun manuell einem neuen Vorgang zuweisen.
           </p>
+        ) : fallbackState.type === "status_unknown" ? (
+          <p className="text-gray-500 mb-8 max-w-md mx-auto">
+            Der Upload wurde angenommen, sein Verarbeitungsstatus konnte aber nicht bestätigt werden. Die Scan-ID bleibt als Herkunft erhalten; es wird kein KI-Erfolg behauptet.
+          </p>
         ) : (
           <p className="text-gray-500 mb-8 max-w-md mx-auto">
             Es gab ein Problem beim Hochladen der Datei. Du kannst den Vorgang trotzdem manuell ohne Datei fortsetzen.
@@ -87,7 +96,11 @@ export function ScanUpload() {
         
         <div className="flex flex-col gap-3 w-full max-w-xs mx-auto">
           <button 
-            onClick={() => openErfassung({ mode: "order", source: "scan", sourceRef: fallbackState.record?.id })}
+            onClick={() => openErfassung({
+              mode: "order",
+              source: fallbackState.type === "storage_failed" ? "manual" : "scan",
+              ...(fallbackState.type !== "storage_failed" && fallbackState.record?.id ? { sourceRef: fallbackState.record.id } : {}),
+            })}
             className="w-full py-3 px-4 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
           >
             Manuell weiterverarbeiten

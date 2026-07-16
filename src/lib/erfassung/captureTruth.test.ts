@@ -48,14 +48,49 @@ describe("operational capture truth boundary", () => {
     expect(sheet).toContain("currentStock");
   });
 
+  it("completes time, material and the locked process state in one idempotent transaction", () => {
+    const action = source("src/app/actions/capture.actions.ts");
+    const completion = action.slice(
+      action.indexOf("export async function completeStationCapture"),
+      action.indexOf("export async function applyCaptureTemplate"),
+    );
+    const modal = source("src/components/orders/StationCompletionModal.tsx");
+    expect(completion).toContain('authorizeCapture("status")');
+    expect(completion).toContain('.for("update")');
+    expect(completion).toContain('kind: "station_completion"');
+    expect(completion).toContain("if (request.replay) return request.replay");
+    expect(completion).toContain('currentStatus !== "in_progress"');
+    expect(completion).toContain("storedStation !== expectedStation");
+    expect(completion).toContain("lockAndConsumeMaterials");
+    expect(completion).toContain("arbeitszeitBuchung");
+    expect(completion).toContain("ORDER_TRANSITION_NOT_CONFIRMED");
+    expect(completion).toContain("completeRequest");
+    expect(completion.indexOf("db.transaction")).toBeLessThan(completion.indexOf("lockAndConsumeMaterials"));
+    expect(completion.indexOf("lockAndConsumeMaterials")).toBeLessThan(completion.indexOf("completeRequest"));
+    expect(modal).toContain("completeStationCapture");
+    expect(modal).toContain("isSubmitting");
+    expect(modal).toContain("clientRequestId");
+    expect(modal).toContain("selectedRate?.valueEurPerHour");
+    expect(modal).not.toContain("DEFAULT_HOURLY_RATE_EUR");
+    expect(modal).not.toContain("inventoryRepository.createMovement");
+    expect(modal).not.toContain("eventsRepository.addEvent");
+    expect(modal).not.toContain("transitionOrderProcess");
+  });
+
   it("prepares but does not apply the tenant, RLS and receipt migration", () => {
     const migration = source("supabase/migrations/20260715001600_capture_integrity_prepared_unapplied.sql");
     expect(migration).toContain("PREPARED ONLY");
     expect(migration).toContain("capture_request_receipts");
     expect(migration).toContain("capture_request_receipts_tenant_request_kind_uidx");
+    expect(migration).toContain("'station_completion'");
     expect(migration).toContain("ALTER TABLE public.inventory_items");
     expect(migration).toContain("ALTER COLUMN tenant_id SET NOT NULL");
     expect(migration).toContain("ENABLE ROW LEVEL SECURITY");
     expect(migration).toContain("REVOKE ALL PRIVILEGES");
+    const additive = source("supabase/migrations/20260716000100_station_completion_receipt_prepared_unapplied.sql");
+    expect(additive).toContain("PREPARED ONLY");
+    expect(additive).toContain("DROP CONSTRAINT IF EXISTS capture_request_receipts_kind_check");
+    expect(additive).toContain("'station_completion'");
+    expect(additive).toContain("VALIDATE CONSTRAINT capture_request_receipts_kind_check");
   });
 });

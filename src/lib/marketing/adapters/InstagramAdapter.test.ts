@@ -5,6 +5,9 @@ import type { AktionVorschlag } from '@/lib/marketing/marketingTypes'
 function action(assetId?: string): AktionVorschlag {
   return {
     id: '1d019780-d63d-4d0a-92bf-0232a352c7c3',
+    status: 'freigegeben',
+    publishCapability: 'ready',
+    publishReason: 'Test fixture',
     titel: 'Beitrag',
     kanal: 'instagram',
     kanalLabel: 'Instagram',

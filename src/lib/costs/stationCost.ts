@@ -1,5 +1,9 @@
 import { DEFAULT_HOURLY_RATE_EUR } from "../../constants/pricing";
-import { InventoryItem } from "../repositories/inventoryRepository";
+
+export interface CostedInventoryItem {
+  id: string;
+  pricePerUnit?: number;
+}
 
 export interface WorkTimeLog {
   id?: string;
@@ -23,7 +27,7 @@ function round2(num: number): number {
 export function computeStationCost(
   workTimeLogs: WorkTimeLog[],
   consumableUses: ConsumableUse[],
-  inventoryItems: InventoryItem[],
+  inventoryItems: CostedInventoryItem[],
   hourlyRate = DEFAULT_HOURLY_RATE_EUR,
   multiplier = 1
 ): { laborCost: number; materialCost: number; total: number } {

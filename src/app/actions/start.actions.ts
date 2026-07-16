@@ -11,7 +11,10 @@ export async function getTodayTopPriority() {
   const auth = await resolveAuthorization();
   if (!auth.ok) {
     return {
-      taskText: "Bitte anmelden, um die heutige Priorität zu sehen.",
+      kind: "unauthorized" as const,
+      taskText: null,
+      dueAt: null,
+      dueKind: null,
       success: false,
     };
   }
@@ -20,29 +23,44 @@ export async function getTodayTopPriority() {
       id: orders.id,
       orderNumber: orders.orderNumber,
       title: orders.title,
+      promisedDueDate: orders.promisedDueDate,
+      dueDate: orders.dueDate,
     })
     .from(orders)
     .where(and(
       eq(orders.status, 'in_progress'),
       eq(orders.tenantId, auth.data.tenantId),
     ))
-    .orderBy(asc(orders.dueDate))
+    .orderBy(sql`${orders.promisedDueDate} asc nulls last`, sql`${orders.dueDate} asc nulls last`, asc(orders.orderNumber))
     .limit(1);
 
     if (ordersList.length > 0) {
       const o = ordersList[0];
+      const dueAt = o.promisedDueDate || o.dueDate || null;
       return {
+        kind: "ready" as const,
         taskText: `Auftrag ${o.orderNumber} (${o.title}) abschließen.`,
+        dueAt: dueAt?.toISOString() || null,
+        dueKind: o.promisedDueDate ? "customer_promise" as const : o.dueDate ? "internal_due" as const : null,
         success: true
       };
     }
   } catch (error) {
     console.error("Error fetching top priority:", error);
+    return {
+      kind: "error" as const,
+      taskText: null,
+      dueAt: null,
+      dueKind: null,
+      success: false,
+    };
   }
 
-  // Fallback if no order found or error
   return {
-    taskText: "Eilaufträge für den heutigen Versand abschließen.",
+    kind: "empty" as const,
+    taskText: null,
+    dueAt: null,
+    dueKind: null,
     success: false
   };
 }

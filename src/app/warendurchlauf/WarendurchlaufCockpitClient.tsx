@@ -7,8 +7,9 @@ import { TermintreueKachel } from "./components/TermintreueKachel";
 import { DurchlaufzeitKachel } from "./components/DurchlaufzeitKachel";
 import { EngpassKachel } from "./components/EngpassKachel";
 import { OffeneAuftraegeKachel } from "./components/OffeneAuftraegeKachel";
+import type { WarendurchlaufKpiData } from "./actions";
 
-export function WarendurchlaufCockpitClient({ data }: { data: any }) {
+export function WarendurchlaufCockpitClient({ data }: { data: WarendurchlaufKpiData | null }) {
   usePageView();
 
   return (

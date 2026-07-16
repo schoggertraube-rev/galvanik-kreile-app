@@ -53,6 +53,9 @@ vi.mock('@/db', () => ({
 
 import {
   getFunnelAction,
+  getBesteAktionAction,
+  getLernInsightsAction,
+  getSegmenteAction,
   getWirkungMiniAction,
   listVorschlaegeAction,
 } from '@/app/marketing/marketing.actions'
@@ -120,6 +123,47 @@ describe('marketing truth and networking contract', () => {
     expect(state.insert).not.toHaveBeenCalled()
   })
 
+  it('keeps missing proposal evidence unknown instead of inventing zero scores or a channel', async () => {
+    state.suggestionRows = [{
+      id: 'a3',
+      titel: 'Unbewerteter Vorschlag',
+      typ: 'post',
+      status: 'vorschlag',
+      inhalt: { text: 'Entwurf' },
+      score: null,
+      erwarteterOutput: null,
+      aufwandMin: 0,
+      kostenBudget: '0',
+      kanalTyp: 'mystery',
+      kanalName: null,
+      segmentName: null,
+    }]
+
+    await expect(getBesteAktionAction()).resolves.toBeNull()
+    await expect(listVorschlaegeAction()).resolves.toEqual([
+      expect.objectContaining({
+        score: null,
+        kanal: 'unknown',
+        aufwand: 'nicht erfasst',
+        kosten: 'nicht erfasst',
+        publishCapability: 'proposal_only',
+      }),
+    ])
+  })
+
+  it('does not derive segment membership or learned facts from unrelated rows and default zeros', async () => {
+    state.rows.set(segment, [{ id: 's1', name: 'Oldtimer', icon: '🚗' }])
+    state.rows.set(marketingAsset, [{ id: 'm1', segmentId: 's1', kundeId: 'c1' }])
+    state.rows.set(lernMetrik, [{
+      id: 'l1', dimension: 'format', wert: 'Unbelegt', aktionen: 0, anfragen: 0, umsatz: '0', konfidenz: '0', aktualisiertAm: new Date(),
+    }])
+
+    await expect(getSegmenteAction()).resolves.toEqual([
+      expect.objectContaining({ kundenAnzahl: null, weckbar: null, evidence: 'membership_not_connected' }),
+    ])
+    await expect(getLernInsightsAction()).resolves.toEqual([])
+  })
+
   it('uses exact attribution links instead of distributing orders and revenue heuristically', async () => {
     await expect(getAttributionData()).resolves.toEqual([
       expect.objectContaining({ kanal: 'Instagram', plannedBudget: 100, actualSpend: null, leads: 1, auftraege: 1, umsatz: 300, roi: null }),
@@ -153,5 +197,15 @@ describe('marketing truth and networking contract', () => {
     expect(actionServer).toContain("eq(aktion.status, target.status)")
     expect(actionServer).toContain('.returning({')
     expect(actionServer).toContain('MARKETING_ACTION_STATUS_CONFLICT')
+  })
+
+  it('keeps proposal-only Studio controls out of the provider publish path', () => {
+    const studio = readFileSync(resolve(process.cwd(), 'src/app/marketing/components/StudioView.tsx'), 'utf8')
+    const client = readFileSync(resolve(process.cwd(), 'src/app/marketing/MarketingStudioClient.tsx'), 'utf8')
+
+    expect(studio).not.toContain('Jetzt posten')
+    expect(studio).toContain('Zur Prüfung und Freigabe')
+    expect(studio).toContain('Asset-Workflow und Provider-Beleg fehlen')
+    expect(client).not.toContain('instagramAdapter.publish')
   })
 })

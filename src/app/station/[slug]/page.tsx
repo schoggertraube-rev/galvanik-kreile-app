@@ -2,7 +2,7 @@
 
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, use } from "react";
-import { notFound, useRouter } from "next/navigation";
+import { notFound, redirect, useRouter } from "next/navigation";
 import Link from "next/link";
 import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,6 +28,16 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
   if (!VALID_SLUGS.includes(slug)) {
     notFound();
   }
+
+  const canonicalSlug = slug === "beschichtung" ? "galvanik" : slug;
+  const canonicalTargets: Record<string, string> = {
+    wareneingang: "/warendurchlauf/wareneingang",
+    entmetallisierung: "/orders?station=entmetallisierung",
+    schleiferei: "/orders?station=schleiferei",
+    galvanik: "/warendurchlauf/galvanik",
+    warenausgang: "/warendurchlauf/warenausgang",
+  };
+  redirect(canonicalTargets[canonicalSlug]);
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);

@@ -253,8 +253,8 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
                   </div>
                 </Link>
 
-                <Link 
-                  href="/orders?station=beschichtung" 
+                <Link
+                  href="/orders?station=galvanik"
                   onClick={handleClose}
                   className="flex items-center gap-3 p-3 rounded-xl border border-neutral-gray-100 hover:border-navy-700 hover:bg-gold-100/20 text-navy-900 hover:text-navy-900 font-semibold text-xs transition-all shadow-xs"
                 >

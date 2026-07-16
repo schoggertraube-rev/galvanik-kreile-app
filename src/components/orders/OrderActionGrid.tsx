@@ -1,9 +1,11 @@
+"use client";
+
+import { useRef, useState } from "react";
 import { Camera, Phone, Printer, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { eventsRepository } from "@/lib/repositories/eventsRepository";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { StationStatusButton } from "./StationStatusButton";
+import { transitionOrderProcess } from "@/app/actions/orders.actions";
 
 export function OrderActionGrid({ 
   orderId,
@@ -22,24 +24,48 @@ export function OrderActionGrid({
   onCompleteStation?: () => void;
   onPrint?: () => void;
 }) {
-    const confirmAction = async (action: string, status: "completed" | "cancelled" | "rework") => {
-    if (confirm(`Möchten Sie wirklich die Aktion "${action}" ausführen?`)) {
-      if (status === "rework") {
-        await eventsRepository.addEvent({ orderId, eventType: "REWORK_STARTED" });
-      } else if (status === "cancelled") {
-        await ordersRepository.updateOrder(orderId, { status: "cancelled" });
-        await eventsRepository.addEvent({ orderId, eventType: "QUALITY_CHECK_FAILED" });
-      } else {
-        await ordersRepository.updateOrder(orderId, { status: "completed" });
-        await eventsRepository.addEvent({ orderId, eventType: "STATION_COMPLETED" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const cancelRequestId = useRef<string | null>(null);
+
+  const confirmCancellation = async () => {
+    if (isSubmitting) return;
+    if (confirm('Möchten Sie wirklich die Aktion "Auftrag stornieren" ausführen?')) {
+      setIsSubmitting(true);
+      setActionError(null);
+      try {
+        cancelRequestId.current ||= crypto.randomUUID();
+        const result = await transitionOrderProcess({
+          orderId,
+          action: "cancel",
+          expectedStation: currentStationId,
+          clientRequestId: cancelRequestId.current,
+        });
+        if (!result.ok) throw new Error(result.message);
+        cancelRequestId.current = null;
+        if (typeof window !== "undefined") window.dispatchEvent(new Event("storage"));
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : "Auftrag konnte nicht storniert werden.");
+      } finally {
+        setIsSubmitting(false);
       }
-      if (typeof window !== "undefined") window.dispatchEvent(new Event("storage"));
     }
   };
+
+  const openCompletion = () => {
+    if (isSubmitting || !onCompleteStation) return;
+    onCompleteStation();
+  };
+
+  /*
+    Nacharbeit bleibt sichtbar, aber bewusst nicht mutierend: Ohne Zielstation,
+    Grund und Versionsbezug wäre ein Event allein eine fachliche Scheinwirkung.
+  */
  
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-extrabold text-navy-500 uppercase tracking-widest pl-1">Schnellaktionen</h3>
+      {actionError && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{actionError}</div>}
       <div className="grid grid-cols-2 gap-4">
         
         <StationStatusButton 
@@ -81,14 +107,14 @@ export function OrderActionGrid({
             <MoreHorizontal className="w-5 h-5 mr-2" /> Weitere
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => confirmAction("Nacharbeit starten", "rework")} className="cursor-pointer font-bold">
-              Nacharbeit starten
+            <DropdownMenuItem disabled title="Benötigt Zielstation, Grund und Versionsbezug" className="font-bold text-text-muted">
+              Nacharbeit starten · noch nicht sicher angebunden
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => confirmAction("Auftrag schließen", "completed")} className="cursor-pointer font-bold text-navy-700">
-              Auftrag schließen
+            <DropdownMenuItem disabled={!onCompleteStation || isSubmitting} onClick={openCompletion} className="cursor-pointer font-bold text-navy-700">
+              Prozessschritt abschließen
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => confirmAction("Auftrag stornieren", "cancelled")} className="cursor-pointer font-bold text-danger-red">
+            <DropdownMenuItem disabled={isSubmitting} onClick={() => void confirmCancellation()} className="cursor-pointer font-bold text-danger-red">
               Auftrag stornieren
             </DropdownMenuItem>
           </DropdownMenuContent>

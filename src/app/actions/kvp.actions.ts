@@ -1,7 +1,6 @@
 "use server";
 
 import { and, desc, eq } from "drizzle-orm";
-import { createId } from "@paralleldrive/cuid2";
 import { db } from "@/db";
 import { kvpItems } from "@/db/schema";
 import type { ActionResult } from "@/lib/server/authHelper";
@@ -92,7 +91,11 @@ export async function createKvpItemAction(input: unknown): Promise<ActionResult<
   try {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("INVALID_KVP");
     const value = input as Record<string, unknown>;
-    if (Object.keys(value).some((key) => !["title", "category", "benefit", "problemDesc", "hasPhoto", "status"].includes(key))) {
+    if (Object.keys(value).some((key) => !["clientRequestId", "title", "category", "benefit", "problemDesc", "hasPhoto", "status"].includes(key))) {
+      throw new Error("INVALID_KVP");
+    }
+    const clientRequestId = text(value.clientRequestId, 36, true);
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientRequestId)) {
       throw new Error("INVALID_KVP");
     }
     const title = text(value.title, 200, true);
@@ -103,10 +106,11 @@ export async function createKvpItemAction(input: unknown): Promise<ActionResult<
       return { ok: false, error: "UNKNOWN", message: "KVP-Fotos sind noch nicht an den sicheren Uploadpfad angebunden." };
     }
 
+    const itemId = `kvp_${clientRequestId.replaceAll("-", "")}`;
     const [created] = await db
       .insert(kvpItems)
       .values({
-        id: `kvp_${createId()}`,
+        id: itemId,
         tenantId: actor.data.tenantId,
         title,
         category: value.category as string,
@@ -117,8 +121,28 @@ export async function createKvpItemAction(input: unknown): Promise<ActionResult<
         isDemo: false,
         date: null,
       })
+      .onConflictDoNothing({ target: kvpItems.id })
       .returning();
-    return { ok: true, data: mapRow(created) };
+    if (created) return { ok: true, data: mapRow(created) };
+
+    const [existing] = await db
+      .select()
+      .from(kvpItems)
+      .where(and(eq(kvpItems.id, itemId), eq(kvpItems.tenantId, actor.data.tenantId), eq(kvpItems.isDemo, false)))
+      .limit(1);
+    if (!existing) {
+      return { ok: false, error: "CONFLICT", message: "KVP-Anfrage-ID ist bereits anderweitig belegt." };
+    }
+    if (
+      existing.title !== title
+      || existing.category !== value.category
+      || existing.benefit !== value.benefit
+      || (existing.problemDesc || "") !== problemDesc
+      || existing.hasPhoto !== false
+    ) {
+      return { ok: false, error: "CONFLICT", message: "KVP-Anfrage-ID wurde bereits mit anderem Inhalt verwendet." };
+    }
+    return { ok: true, data: mapRow(existing) };
   } catch (error) {
     if (error instanceof Error && error.message === "INVALID_KVP") {
       return { ok: false, error: "UNKNOWN", message: "Ungültige KVP-Eingabe." };

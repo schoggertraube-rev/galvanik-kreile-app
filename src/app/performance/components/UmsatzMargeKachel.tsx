@@ -58,28 +58,7 @@ export function UmsatzMargeKachel({ summary, onClick }: Props) {
           </div>
         )}
         
-        <div className="spk">
-          <svg viewBox="0 0 140 28" width="140" height="28">
-            <defs>
-              <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--pos)" stopOpacity="0.22" />
-                <stop offset="100%" stopColor="var(--pos)" stopOpacity="0" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M0,22 L16,19 L32,20 L48,16 L64,14 L80,13 L96,11 L112,10 L128,7 L140,5 L140,28 L0,28 Z"
-              fill="url(#sg)"
-            />
-            <polyline
-              points="0,22 16,19 32,20 48,16 64,14 80,13 96,11 112,10 128,7 140,5"
-              fill="none"
-              stroke="var(--pos)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
+        <div className="mt-4 text-xs text-gray-500">Eine Zeitreihe wird erst mit gespeicherten Periodenwerten dargestellt.</div>
         <div className="t-arr">Details →</div>
       </div>
     </div>

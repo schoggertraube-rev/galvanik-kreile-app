@@ -79,7 +79,7 @@ const DEMO_ITEMS: KvpItem[] = [
   }
 ];
 
-export function KvpClient() {
+function QuarantinedLegacyKvpClient() {
   usePageView();
 
   const [items, setItems] = useState<KvpItem[]>(DEMO_ITEMS);
@@ -376,6 +376,27 @@ export function KvpClient() {
         )}
       </DetailOverlay>
 
+    </div>
+  );
+}
+
+// Kept only as a source reference while the product ideas are migrated into the
+// real KVP and analytics contracts. The localStorage/demo implementation above
+// is deliberately not exported and therefore cannot be reactivated by a normal
+// route import.
+void QuarantinedLegacyKvpClient;
+
+export function KvpClient() {
+  return (
+    <div className="grid gap-4 md:grid-cols-2">
+      <Link href="/betrieb-kvp" className="rounded-2xl border border-neutral-gray-200 bg-white p-5">
+        <h2 className="font-bold text-navy-900">Betrieblicher KVP</h2>
+        <p className="mt-2 text-sm text-text-muted">Tenantgebundene, serverbestätigte Verbesserungen.</p>
+      </Link>
+      <Link href="/admin/analytics" className="rounded-2xl border border-neutral-gray-200 bg-white p-5">
+        <h2 className="font-bold text-navy-900">Developer Analytics</h2>
+        <p className="mt-2 text-sm text-text-muted">Persistierte Ereignisse und explizite Instrumentierungslücken.</p>
+      </Link>
     </div>
   );
 }

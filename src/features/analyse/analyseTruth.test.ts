@@ -16,6 +16,7 @@ function queryResult(rows: unknown[]) {
   const query = {
     from: () => query,
     innerJoin: () => query,
+    leftJoin: () => query,
     where: () => query,
     groupBy: () => query,
     orderBy: () => query,
@@ -92,6 +93,22 @@ describe('analyse truth boundary', () => {
     expect(actionSource).toContain('status: "unavailable"')
     expect(stationSource).toContain('Kapazitätsauslastung nicht gemessen')
     expect(stationSource).not.toMatch(/auslastungPct\s*\|\|\s*0/)
+  })
+
+  it('uses only explicit customer promises for delivery reliability and removes fabricated tile facts', () => {
+    const actionSource = readFileSync(resolve(process.cwd(), 'src/features/analyse/analyse.actions.ts'), 'utf8')
+    const customerTile = readFileSync(resolve(process.cwd(), 'src/app/performance/components/KundenMarktKachel.tsx'), 'utf8')
+    const revenueTile = readFileSync(resolve(process.cwd(), 'src/app/performance/components/UmsatzMargeKachel.tsx'), 'utf8')
+    const drill = readFileSync(resolve(process.cwd(), 'src/features/analyse/AnalyseDrillOverlay.tsx'), 'utf8')
+
+    expect(actionSource).toContain('const promisedDueDate = orders.promisedDueDate')
+    expect(actionSource).not.toContain('coalesce(${orders.promisedDueDate}, ${orders.dueDate})')
+    expect(actionSource).not.toContain('/orders?risk=overdue')
+    expect(customerTile).not.toContain('82%')
+    expect(customerTile).not.toContain('18%')
+    expect(customerTile).not.toContain('3 Länder')
+    expect(revenueTile).not.toContain('points="0,22')
+    expect(drill).not.toContain('[Chart Placeholder')
   })
 
   it('replaces fabricated legacy performance details with a minimal redirect', () => {

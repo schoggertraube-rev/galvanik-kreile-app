@@ -1,32 +1,50 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Crown, Loader2, Phone, Mail, FileText, ArrowRight, TrendingUp } from "lucide-react";
+import { Crown, Loader2, ArrowRight, TrendingUp } from "lucide-react";
 import { getTopKunden, getKundenDetails, getInaktiveKunden } from "../actions";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+function money(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "nicht erfasst";
+  const numeric = Number(value);
+  return Number.isFinite(numeric)
+    ? `${numeric.toLocaleString('de-DE', { maximumFractionDigits: 0 })} €`
+    : "nicht erfasst";
+}
+
 export function TopKundenKachel() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerDetails, setCustomerDetails] = useState<any>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
   
   const [inaktiveDrawerOpen, setInaktiveDrawerOpen] = useState(false);
   const [inaktiveKunden, setInaktiveKunden] = useState<any[]>([]);
   const [inaktiveLoading, setInaktiveLoading] = useState(false);
+  const [inaktiveError, setInaktiveError] = useState<string | null>(null);
   
   const router = useRouter();
 
   useEffect(() => {
     async function load() {
-      const res = await getTopKunden(10);
-      setData(res);
-      setLoading(false);
+      try {
+        const res = await getTopKunden(10);
+        setData(res);
+        setLoadError(null);
+      } catch (error) {
+        console.error("Top customers unavailable", error);
+        setLoadError("Top-Kunden konnten nicht geladen werden; der Bestand ist unbekannt.");
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
@@ -34,18 +52,33 @@ export function TopKundenKachel() {
   const openCustomerDetails = async (id: string) => {
     setSelectedCustomerId(id);
     setDetailsLoading(true);
-    const details = await getKundenDetails(id);
-    setCustomerDetails(details);
-    setDetailsLoading(false);
+    setDetailsError(null);
+    try {
+      const details = await getKundenDetails(id);
+      setCustomerDetails(details);
+    } catch (error) {
+      console.error("Customer details unavailable", error);
+      setCustomerDetails(null);
+      setDetailsError("Kundendetails konnten nicht bestätigt geladen werden.");
+    } finally {
+      setDetailsLoading(false);
+    }
   };
 
   const openInaktiveDrawer = async () => {
     setInaktiveDrawerOpen(true);
     if (inaktiveKunden.length === 0) {
       setInaktiveLoading(true);
-      const res = await getInaktiveKunden();
-      setInaktiveKunden(res);
-      setInaktiveLoading(false);
+      setInaktiveError(null);
+      try {
+        const res = await getInaktiveKunden();
+        setInaktiveKunden(res);
+      } catch (error) {
+        console.error("Inactive customers unavailable", error);
+        setInaktiveError("Inaktive Kunden konnten nicht geladen werden; der Bestand ist unbekannt.");
+      } finally {
+        setInaktiveLoading(false);
+      }
     }
   };
 
@@ -73,7 +106,11 @@ export function TopKundenKachel() {
           <h3 className="font-bold text-navy-900 text-lg">Top Kunden (nach DB)</h3>
         </div>
         <div className="flex-1 overflow-y-auto">
-          {data.length === 0 ? (
+          {loadError ? (
+            <div role="alert" className="flex h-full items-center justify-center text-red-700 font-medium p-6 text-center">
+              {loadError}
+            </div>
+          ) : data.length === 0 ? (
             <div className="flex h-full items-center justify-center text-neutral-gray-500 font-medium p-6">
               Noch keine Kundendaten
             </div>
@@ -99,8 +136,8 @@ export function TopKundenKachel() {
                         <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-navy-400" />
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">€ {row.umsatz_gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 0 }) || 0}</td>
-                    <td className="px-4 py-3 text-right font-bold text-emerald-600 whitespace-nowrap">€ {row.db_gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 0 }) || 0}</td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">{money(row.umsatz_gesamt)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-emerald-600 whitespace-nowrap">{money(row.db_gesamt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -123,15 +160,18 @@ export function TopKundenKachel() {
         onClose={() => setSelectedCustomerId(null)}
         title={customerDetails?.clv?.name || "Kundenprofil laden..."}
       >
-        {detailsLoading || !customerDetails ? (
+        {detailsLoading ? (
           <div className="flex h-40 items-center justify-center">
             <Loader2 className="w-8 h-8 animate-spin text-navy-500" />
           </div>
+        ) : detailsError || !customerDetails ? (
+          <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            {detailsError || "Kundendetails sind nicht verfügbar."}
+          </p>
         ) : (
           <div className="space-y-8">
             <div className="flex items-center gap-4 text-sm text-neutral-gray-600">
               <span className="bg-navy-50 text-navy-700 px-3 py-1 rounded-full font-medium">{customerDetails.clv.kundentyp || 'Standard'}</span>
-              <span>Institution</span>
               <span>{customerDetails.clv.email || 'Keine E-Mail'}</span>
             </div>
 
@@ -140,19 +180,19 @@ export function TopKundenKachel() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 gap-y-6">
                 <div>
                   <div className="text-xs text-text-muted mb-1">Umsatz gesamt</div>
-                  <div className="font-bold text-lg">€ {customerDetails.clv.umsatz_gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 0 }) || 0}</div>
+                  <div className="font-bold text-lg">{money(customerDetails.clv.umsatz_gesamt)}</div>
                 </div>
                 <div>
                   <div className="text-xs text-text-muted mb-1">Umsatz 12M</div>
-                  <div className="font-bold text-lg text-emerald-600">€ {customerDetails.clv.umsatz_gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 0 }) || 0}</div>
+                  <div className="font-bold text-lg text-text-muted">nicht separat belegt</div>
                 </div>
                 <div>
                   <div className="text-xs text-text-muted mb-1">DB gesamt</div>
-                  <div className="font-bold text-lg">€ {customerDetails.clv.db_gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 0 }) || 0}</div>
+                  <div className="font-bold text-lg">{money(customerDetails.clv.db_gesamt)}</div>
                 </div>
                 <div>
                   <div className="text-xs text-text-muted mb-1">DB-Marge</div>
-                  <div className="font-bold text-lg">{(customerDetails.clv.db_marge_prozent * 100).toFixed(1)} %</div>
+                  <div className="font-bold text-lg">{customerDetails.clv.db_marge_prozent === null || customerDetails.clv.db_marge_prozent === undefined ? "nicht erfasst" : `${(Number(customerDetails.clv.db_marge_prozent) * 100).toFixed(1)} %`}</div>
                 </div>
                 <div>
                   <div className="text-xs text-text-muted mb-1">Aufträge gesamt</div>
@@ -175,7 +215,7 @@ export function TopKundenKachel() {
                         <span className="text-xs text-text-muted">{new Date(o.intake_date).toLocaleDateString()}</span>
                       </div>
                       <div className="flex items-center gap-4">
-                        <span className="font-semibold text-sm">€ {o.umsatz.toLocaleString('de-DE', { maximumFractionDigits: 0 })}</span>
+                        <span className="font-semibold text-sm">{money(o.umsatz)}</span>
                         <ArrowRight className="w-4 h-4 text-neutral-gray-400" />
                       </div>
                     </div>
@@ -192,15 +232,12 @@ export function TopKundenKachel() {
             </div>
 
             <div className="pt-4 border-t border-neutral-gray-100 flex flex-wrap gap-3">
-              <button className="px-4 py-2 bg-navy-600 hover:bg-navy-700 text-white font-semibold rounded-lg transition-colors text-sm flex items-center gap-2">
-                <FileText className="w-4 h-4" /> Neuer Auftrag
-              </button>
-              <button className="px-4 py-2 bg-white border border-neutral-gray-300 hover:bg-neutral-gray-50 text-navy-700 font-semibold rounded-lg transition-colors text-sm flex items-center gap-2">
-                <Phone className="w-4 h-4" /> Anrufen
-              </button>
-              <button className="px-4 py-2 bg-white border border-neutral-gray-300 hover:bg-neutral-gray-50 text-navy-700 font-semibold rounded-lg transition-colors text-sm flex items-center gap-2">
-                <Mail className="w-4 h-4" /> E-Mail
-              </button>
+              <Link href={`/customers/${selectedCustomerId}`} className="px-4 py-2 bg-navy-600 hover:bg-navy-700 text-white font-semibold rounded-lg transition-colors text-sm">
+                Kundenprofil öffnen
+              </Link>
+              <Link href="/kommunikation" className="px-4 py-2 bg-white border border-neutral-gray-300 hover:bg-neutral-gray-50 text-navy-700 font-semibold rounded-lg transition-colors text-sm">
+                Kommunikation öffnen
+              </Link>
             </div>
           </div>
         )}
@@ -215,6 +252,8 @@ export function TopKundenKachel() {
           <div className="flex h-40 items-center justify-center">
             <Loader2 className="w-8 h-8 animate-spin text-navy-500" />
           </div>
+        ) : inaktiveError ? (
+          <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{inaktiveError}</p>
         ) : (
           <div className="space-y-4">
             <p className="text-text-muted text-sm">
@@ -234,17 +273,17 @@ export function TopKundenKachel() {
                         <p className="text-xs text-text-muted">Letzter Auftrag: {new Date(k.letzter_auftrag).toLocaleDateString()}</p>
                       </div>
                       <div className="text-right">
-                        <div className="font-semibold text-sm">€ {k.umsatz_gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 0 })}</div>
+                        <div className="font-semibold text-sm">{money(k.umsatz_gesamt)}</div>
                         <div className="text-xs text-text-muted">Historischer Umsatz</div>
                       </div>
                     </div>
                     <div className="flex gap-2 mt-1">
-                      <button className="px-3 py-1.5 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-700 font-semibold rounded-md transition-colors text-xs flex items-center gap-1">
-                        <Mail className="w-3 h-3" /> Reaktivierungsmail
-                      </button>
-                      <button className="px-3 py-1.5 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-700 font-semibold rounded-md transition-colors text-xs flex items-center gap-1">
-                        <Phone className="w-3 h-3" /> Anrufen
-                      </button>
+                      <Link href={`/customers/${k.customer_id}`} className="px-3 py-1.5 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-700 font-semibold rounded-md transition-colors text-xs">
+                        Kundenprofil öffnen
+                      </Link>
+                      <Link href="/kommunikation" className="px-3 py-1.5 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-700 font-semibold rounded-md transition-colors text-xs">
+                        Kommunikation
+                      </Link>
                     </div>
                   </div>
                 ))}

@@ -15,6 +15,50 @@ export interface OcrResult {
 import { generateGeminiContentWithFallback } from "@/lib/ai/geminiClient";
 import { Type } from "@google/genai";
 
+function optionalText(value: unknown, maximum: number): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  if (typeof value !== "string") throw new Error("OCR_INVALID_RESPONSE");
+  const normalized = value.trim();
+  if (!normalized || normalized.length > maximum || /[\u0000-\u001F\u007F]/.test(normalized)) {
+    throw new Error("OCR_INVALID_RESPONSE");
+  }
+  return normalized;
+}
+
+export function parseOcrResponse(rawTextResponse: string): OcrResult {
+  if (!rawTextResponse.trim() || rawTextResponse.length > 50_000) throw new Error("OCR_EMPTY_RESPONSE");
+  const cleanedJsonText = rawTextResponse.replace(/```json|```/g, "").trim();
+  const parsed: unknown = JSON.parse(cleanedJsonText);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("OCR_INVALID_RESPONSE");
+  const data = parsed as Record<string, unknown>;
+  const rawQuantity = data.Stueckzahl ?? data.quantity;
+  let quantity: number | undefined;
+  if (rawQuantity !== undefined && rawQuantity !== null && rawQuantity !== "") {
+    const parsedQuantity = typeof rawQuantity === "number" ? rawQuantity : Number(rawQuantity);
+    if (!Number.isSafeInteger(parsedQuantity) || parsedQuantity < 1 || parsedQuantity > 1_000_000) {
+      throw new Error("OCR_INVALID_RESPONSE");
+    }
+    quantity = parsedQuantity;
+  }
+
+  const result: OcrResult = {
+    customerName: optionalText(data.Kundenname ?? data.customerName, 200),
+    company: optionalText(data.Firma ?? data.company, 200),
+    address: optionalText(data.Adresse ?? data.address, 500),
+    phone: optionalText(data.Telefon ?? data.phone, 100),
+    email: optionalText(data.Email ?? data.email ?? data["E-Mail"], 320),
+    articleDescription: optionalText(data.Artikelbeschreibung ?? data.articleDescription, 500),
+    material: optionalText(data.Material ?? data.material, 100),
+    surface: optionalText(data.Oberflaeche ?? data.surface ?? data["Oberfläche"], 100),
+    quantity,
+    notes: optionalText(data.Sonderhinweise ?? data.notes, 1_000),
+    rawText: rawTextResponse,
+  };
+  const hasStructuredEvidence = Object.entries(result).some(([key, value]) => key !== "rawText" && value !== undefined);
+  if (!hasStructuredEvidence) throw new Error("OCR_NO_STRUCTURED_DATA");
+  return result;
+}
+
 export async function extractDocumentData(imageBase64: string): Promise<OcrResult> {
   const base64Data = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
 
@@ -53,29 +97,9 @@ export async function extractDocumentData(imageBase64: string): Promise<OcrResul
       }
     });
 
-    const rawTextResponse = response.text || "";
-    if (!rawTextResponse) {
-      return { rawText: "OCR fehlgeschlagen" };
-    }
-
-    const cleanedJsonText = rawTextResponse.replace(/```json|```/g, "").trim();
-    const parsedData = JSON.parse(cleanedJsonText);
-
-    return {
-      customerName: parsedData.Kundenname || parsedData.customerName,
-      company: parsedData.Firma || parsedData.company,
-      address: parsedData.Adresse || parsedData.address,
-      phone: parsedData.Telefon || parsedData.phone,
-      email: parsedData.Email || parsedData.email || parsedData['E-Mail'],
-      articleDescription: parsedData.Artikelbeschreibung || parsedData.articleDescription,
-      material: parsedData.Material || parsedData.material,
-      surface: parsedData.Oberflaeche || parsedData.surface || parsedData.Oberfläche,
-      quantity: parsedData.Stueckzahl ? Number(parsedData.Stueckzahl) : (parsedData.quantity ? Number(parsedData.quantity) : undefined),
-      notes: parsedData.Sonderhinweise || parsedData.notes,
-      rawText: rawTextResponse
-    };
+    return parseOcrResponse(response.text || "");
   } catch (error) {
     console.error("Gemini OCR Request failed:", error);
-    return { rawText: "OCR fehlgeschlagen" };
+    throw new Error("OCR_EXTRACTION_FAILED", { cause: error });
   }
 }

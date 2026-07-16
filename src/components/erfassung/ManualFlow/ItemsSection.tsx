@@ -1,10 +1,11 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
+import { ROUTE_TEMPLATES } from "@/lib/orders/routeSnapshot";
 
 export function ItemsSection({ items, onChange }: { items: any[], onChange: (items: any[]) => void }) {
   const handleAddItem = () => {
-    onChange([...items, { id: `temp_${Date.now()}`, name: "", quantity: 1, material: "", target: "" }]);
+    onChange([...items, { id: `temp_${Date.now()}`, name: "", quantity: 1, material: "", target: "", routeTemplateId: "" }]);
   };
 
   const handleUpdateItem = (index: number, field: string, value: any) => {
@@ -93,6 +94,21 @@ export function ItemsSection({ items, onChange }: { items: any[], onChange: (ite
                   onChange={(e) => handleUpdateItem(index, "quantity", parseInt(e.target.value))}
                 />
               </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Bestätigte Positionsroute</label>
+              <select
+                required
+                className="w-full bg-white border border-[#e5dcd0] rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none"
+                value={item.routeTemplateId || ""}
+                onChange={(event) => handleUpdateItem(index, "routeTemplateId", event.target.value)}
+              >
+                <option value="">Route auswählen …</option>
+                {Object.entries(ROUTE_TEMPLATES).map(([templateId, template]) => (
+                  <option key={templateId} value={templateId}>{template.label}: {template.stations.join(" → ")}</option>
+                ))}
+              </select>
+              <p className="mt-1 text-[11px] text-gray-500">Die Auswahl wird als unveränderlicher v1-Routen-Snapshot an jeder Position gespeichert.</p>
             </div>
           </div>
         </div>

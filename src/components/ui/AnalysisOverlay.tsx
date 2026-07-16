@@ -343,17 +343,33 @@ export function AnalysisOverlay({
           </div>
           {composition.footerLink && (
             <div style={{ marginTop: 14, textAlign: "center" }}>
-              <button 
-                onClick={composition.footerLink.onClick}
-                style={{
-                  background: "var(--surface, #fff)", border: "1px solid var(--line2, rgba(20,18,12,.16))",
-                  borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600,
-                  cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
-                  color: "var(--text, #1B1A16)"
-                }}
-              >
-                {composition.footerLink.label} <ArrowRight style={{ width: 14, height: 14 }} />
-              </button>
+              {composition.footerLink.href ? (
+                <Link
+                  href={composition.footerLink.href}
+                  style={{
+                    background: "var(--surface, #fff)", border: "1px solid var(--line2, rgba(20,18,12,.16))",
+                    borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600,
+                    cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+                    color: "var(--text, #1B1A16)", textDecoration: "none",
+                  }}
+                >
+                  {composition.footerLink.label} <ArrowRight style={{ width: 14, height: 14 }} />
+                </Link>
+              ) : composition.footerLink.onClick ? (
+                <button
+                  onClick={composition.footerLink.onClick}
+                  style={{
+                    background: "var(--surface, #fff)", border: "1px solid var(--line2, rgba(20,18,12,.16))",
+                    borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600,
+                    cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6,
+                    color: "var(--text, #1B1A16)",
+                  }}
+                >
+                  {composition.footerLink.label} <ArrowRight style={{ width: 14, height: 14 }} />
+                </button>
+              ) : (
+                <span className="text-sm text-text-muted">{composition.footerLink.label} · nicht angebunden</span>
+              )}
             </div>
           )}
         </div>
@@ -412,14 +428,14 @@ export function AnalysisOverlay({
             {insight.actions && insight.actions.length > 0 && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 13 }}>
                 {insight.actions.map((a, i) => (
-                  <button key={i} style={{
+                  <span key={i} aria-disabled="true" style={{
                     background: "var(--surface, #fff)", border: "0.5px solid var(--line2, rgba(20,18,12,.16))",
                     borderRadius: 7, padding: "7px 12px", fontSize: 12.5,
-                    display: "inline-flex", alignItems: "center", gap: 7, cursor: "pointer",
+                    display: "inline-flex", alignItems: "center", gap: 7,
                     fontFamily: "inherit",
                   }}>
-                    {a.label}
-                  </button>
+                    {a.label} · Hinweis
+                  </span>
                 ))}
               </div>
             )}
@@ -506,21 +522,26 @@ export function AnalysisOverlay({
             F · Verknüpfte Bereiche
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 11 }}>
-            {linkedAreas.map((link, i) => (
-              <button 
-                key={i} 
-                onClick={() => setPreviewDrawer({ open: true, href: link.href, label: link.label, previewText: link.previewText })}
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px",
-                  background: "var(--surface3, #FAF8F3)", borderRadius: 20, fontSize: 12,
-                  color: "var(--text, #1B1A16)", textDecoration: "none",
-                  border: "0.5px solid var(--line, rgba(20,18,12,.08))",
-                  minHeight: "44px", cursor: "pointer"
-                }}
-              >
-                {link.label}
-              </button>
-            ))}
+            {linkedAreas.map((link, i) => {
+              const style = {
+                display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px",
+                background: "var(--surface3, #FAF8F3)", borderRadius: 20, fontSize: 12,
+                color: "var(--text, #1B1A16)", textDecoration: "none",
+                border: "0.5px solid var(--line, rgba(20,18,12,.08))",
+                minHeight: "44px", cursor: "pointer",
+              };
+              return link.previewText ? (
+                <button
+                  key={i}
+                  onClick={() => setPreviewDrawer({ open: true, href: link.href, label: link.label, previewText: link.previewText })}
+                  style={style}
+                >
+                  {link.label}
+                </button>
+              ) : (
+                <Link key={i} href={link.href} style={style}>{link.label}</Link>
+              );
+            })}
           </div>
         </div>
       )}
@@ -542,19 +563,7 @@ export function AnalysisOverlay({
                 {previewDrawer.previewText}
               </div>
             ) : (
-              <>
-                <p className="text-sm">
-                  Hier sehen Sie eine Vorschau für den Bereich <strong>{previewDrawer.label}</strong>.
-                </p>
-                <div className="p-4 bg-neutral-gray-50 rounded-xl border border-neutral-gray-200">
-                  <div className="text-sm font-semibold mb-2">Schnell-Informationen</div>
-                  <ul className="list-disc list-inside space-y-1 text-sm">
-                    <li>Letzte Aktivität: Heute</li>
-                    <li>Status: Aktiv</li>
-                    <li>Verknüpfungen: 3 Elemente</li>
-                  </ul>
-                </div>
-              </>
+              <p className="text-sm text-text-muted">Für diesen Bereich liegen keine bestätigten Vorschaudaten vor.</p>
             )}
             <p className="text-xs text-text-muted mt-2 border-t pt-4">
               Für tiefere Analysen und Bearbeitungsmöglichkeiten klicken Sie bitte auf "Vollständig öffnen".

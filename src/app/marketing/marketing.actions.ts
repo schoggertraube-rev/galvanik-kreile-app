@@ -4,12 +4,9 @@ import { db } from '@/db'
 import {
   aktion,
   attribution,
-  einwilligung,
-  feedbackMail,
   kampagne,
   kanal,
   lernMetrik,
-  marketingAsset,
   segment,
   touchpoint,
 } from '@/db/schema_marketing'
@@ -41,7 +38,7 @@ function channelId(value: string | null): KanalId {
   const normalized = (value || '').trim().toLowerCase()
   return normalized === 'instagram' || normalized === 'email' || normalized === 'google' || normalized === 'web'
     ? normalized
-    : 'web'
+    : 'unknown'
 }
 
 function campaignStatus(value: string): MarketingCampaign['status'] {
@@ -68,6 +65,7 @@ function campaignProgress(
 async function loadSuggestions(): Promise<AktionVorschlag[]> {
   const rows = await db.select({
     id: aktion.id,
+    status: aktion.status,
     titel: aktion.titel,
     typ: aktion.typ,
     inhalt: aktion.inhalt,
@@ -90,7 +88,8 @@ async function loadSuggestions(): Promise<AktionVorschlag[]> {
     const hashtags = Array.isArray(content.hashtags)
       ? content.hashtags.filter((value): value is string => typeof value === 'string').join(' ')
       : textValue(content.hashtags)
-    const score = Number(row.score) || 0
+    const rawScore = row.score === null ? null : Number(row.score)
+    const score = rawScore !== null && Number.isFinite(rawScore) && rawScore > 0 ? rawScore : null
     const variants = Array.isArray(content.varianten)
       ? content.varianten.flatMap((value) => {
           const variant = objectValue(value)
@@ -98,7 +97,7 @@ async function loadSuggestions(): Promise<AktionVorschlag[]> {
           return title ? [{ titel: title, caption: textValue(variant.caption), hashtags: textValue(variant.hashtags) }] : []
         })
       : []
-    const mappedChannel = channelId(row.kanalTyp || (row.typ === 'post' ? 'instagram' : row.typ === 'mail' ? 'email' : 'web'))
+    const mappedChannel = channelId(row.kanalTyp)
 
     return {
       id: row.id,
@@ -108,17 +107,22 @@ async function loadSuggestions(): Promise<AktionVorschlag[]> {
       score,
       caption,
       hashtags,
-      begruendung: score > 0
+      begruendung: score !== null
         ? `Gespeicherter Prioritätsscore: ${score.toLocaleString('de-DE')}`
         : 'Noch keine belastbare Wirkungsbewertung.',
       erwarteterOutput: row.erwarteterOutput === null ? 'nicht gemessen' : String(Number(row.erwarteterOutput)),
-      aufwand: `${row.aufwandMin || 0} Min`,
-      kosten: `${Number(row.kostenBudget || 0).toLocaleString('de-DE')} €`,
+      aufwand: row.aufwandMin && row.aufwandMin > 0 ? `${row.aufwandMin} Min` : 'nicht erfasst',
+      kosten: row.kostenBudget !== null && Number(row.kostenBudget) > 0
+        ? `${Number(row.kostenBudget).toLocaleString('de-DE')} € Planbudget`
+        : 'nicht erfasst',
       varianten: variants.length > 0 ? variants : [{ titel: row.titel, caption, hashtags }],
       segment: row.segmentName || undefined,
       assetId: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(textValue(content.assetId))
         ? textValue(content.assetId)
         : undefined,
+      status: row.status as AktionVorschlag['status'],
+      publishCapability: 'proposal_only' as const,
+      publishReason: 'Veröffentlichung ist gesperrt, bis Freigabe, Marketing-Asset, Connector und Provider-Beleg vollständig angebunden sind.',
     }
   })
 }
@@ -126,16 +130,23 @@ async function loadSuggestions(): Promise<AktionVorschlag[]> {
 export async function getBesteAktionAction(): Promise<AktionVorschlag | null> {
   await requireMarketingRead()
   const suggestions = await loadSuggestions()
-  return suggestions.sort((a, b) => b.score - a.score)[0] || null
+  return suggestions
+    .filter((suggestion) => suggestion.score !== null)
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1))[0] || null
 }
 
 export async function listVorschlaegeAction(sort: SortMode = 'output'): Promise<AktionVorschlag[]> {
   await requireMarketingRead()
   const suggestions = await loadSuggestions()
   return suggestions.sort((a, b) => {
-    if (sort === 'einfach') return Number.parseInt(a.aufwand) - Number.parseInt(b.aufwand)
+    if (sort === 'einfach') {
+      const aEffort = Number.parseInt(a.aufwand)
+      const bEffort = Number.parseInt(b.aufwand)
+      return (Number.isFinite(aEffort) ? aEffort : Number.MAX_SAFE_INTEGER)
+        - (Number.isFinite(bEffort) ? bEffort : Number.MAX_SAFE_INTEGER)
+    }
     if (sort === 'kanal') return a.kanal.localeCompare(b.kanal)
-    return b.score - a.score
+    return (b.score ?? -1) - (a.score ?? -1)
   })
 }
 
@@ -154,10 +165,11 @@ export async function getKampagnenAction(): Promise<MarketingCampaign[]> {
   return campaigns.map((campaign) => {
     const campaignActions = actions.filter((entry) => entry.kampagneId === campaign.id)
     const actionIds = new Set(campaignActions.map((entry) => entry.id))
-    const revenue = attributions.reduce((sum, entry) => {
+    const campaignAttributions = attributions.filter((entry) => {
       const touch = entry.touchpointId ? touchpointById.get(entry.touchpointId) : undefined
-      return touch?.aktionId && actionIds.has(touch.aktionId) ? sum + (Number(entry.umsatz) || 0) : sum
-    }, 0)
+      return Boolean(touch?.aktionId && actionIds.has(touch.aktionId))
+    })
+    const revenue = campaignAttributions.reduce((sum, entry) => sum + (Number(entry.umsatz) || 0), 0)
     const channelNames = [...new Set(campaignActions.flatMap((entry) =>
       entry.kanalId && channelById.get(entry.kanalId) ? [channelById.get(entry.kanalId)!] : []
     ))]
@@ -174,7 +186,9 @@ export async function getKampagnenAction(): Promise<MarketingCampaign[]> {
         campaignActions.filter((entry) => entry.status === 'ausgefuehrt').length,
         campaignActions.length
       ),
-      ergebnis: `${revenue.toLocaleString('de-DE', { maximumFractionDigits: 2 })} € zugeordnet`,
+      ergebnis: campaignAttributions.length > 0
+        ? `${revenue.toLocaleString('de-DE', { maximumFractionDigits: 2 })} € explizit zugeordnet`
+        : 'kein Umsatzbeleg zugeordnet',
       statusColor: status === 'aktiv' ? 'var(--good)' : status === 'abgeschlossen' ? 'var(--navy)' : 'var(--watch)',
     }
   })
@@ -182,44 +196,39 @@ export async function getKampagnenAction(): Promise<MarketingCampaign[]> {
 
 export async function getSegmenteAction(): Promise<MarketingSegment[]> {
   await requireMarketingRead()
-  const [segments, assets, feedback, consents] = await Promise.all([
-    db.select().from(segment),
-    db.select().from(marketingAsset),
-    db.select().from(feedbackMail),
-    db.select().from(einwilligung),
-  ])
-  const latestConsent = new Map<string, { status: string; at: number }>()
-  for (const consent of consents.filter((entry) => entry.kanal === 'email')) {
-    const at = consent.zeitpunkt.getTime()
-    const current = latestConsent.get(consent.kundeId)
-    if (!current || at > current.at) latestConsent.set(consent.kundeId, { status: consent.status, at })
-  }
-
-  return segments.map((entry) => {
-    const customerIds = new Set([
-      ...assets.filter((asset) => asset.segmentId === entry.id && asset.kundeId).map((asset) => asset.kundeId!),
-      ...feedback.filter((mail) => mail.segmentId === entry.id && mail.kundeId).map((mail) => mail.kundeId!),
-    ])
-    return {
-      id: entry.id,
-      name: entry.name,
-      emoji: entry.icon || '👤',
-      kundenAnzahl: customerIds.size,
-      weckbar: [...customerIds].filter((customerId) => latestConsent.get(customerId)?.status === 'erteilt').length,
-    }
-  })
+  const segments = await db.select().from(segment)
+  return segments.map((entry) => ({
+    id: entry.id,
+    name: entry.name,
+    emoji: entry.icon || '👤',
+    kundenAnzahl: null,
+    weckbar: null,
+    evidence: 'membership_not_connected' as const,
+  }))
 }
 
 export async function getLernInsightsAction(): Promise<LernInsight[]> {
   await requireMarketingRead()
   const metrics = await db.select().from(lernMetrik).orderBy(desc(lernMetrik.aktualisiertAm))
-  return metrics.map((metric) => ({
-    id: metric.id,
-    titel: metric.wert,
-    text: `${metric.aktionen || 0} Aktionen · ${metric.anfragen || 0} Anfragen · ${Number(metric.umsatz || 0).toLocaleString('de-DE')} € Umsatz`,
-    konfidenz: Number(metric.konfidenz || 0),
-    datenbasis: metric.dimension,
-  }))
+  return metrics.flatMap((metric) => {
+    const actions = metric.aktionen || 0
+    const inquiries = metric.anfragen || 0
+    const revenue = Number(metric.umsatz || 0)
+    const confidence = Number(metric.konfidenz || 0)
+    if (actions <= 0 && inquiries <= 0 && revenue <= 0 && confidence <= 0) return []
+    const evidence = [
+      actions > 0 ? `${actions} Aktionen` : null,
+      inquiries > 0 ? `${inquiries} Anfragen` : null,
+      revenue > 0 ? `${revenue.toLocaleString('de-DE')} € attribuierter Umsatz` : null,
+    ].filter((value): value is string => value !== null)
+    return [{
+      id: metric.id,
+      titel: metric.wert,
+      text: evidence.length > 0 ? evidence.join(' · ') : 'Konfidenzwert ohne verknüpfte Wirkungsbasis.',
+      konfidenz: confidence > 0 ? confidence : undefined,
+      datenbasis: metric.dimension,
+    }]
+  })
 }
 
 async function loadFunnelFacts() {
@@ -234,7 +243,10 @@ async function loadFunnelFacts() {
   const touchpointIds = new Set(executedTouchpoints.map((entry) => entry.id))
   const linkedAttributions = attributions.filter((entry) => entry.touchpointId && touchpointIds.has(entry.touchpointId))
   const revenue = linkedAttributions.reduce((sum, entry) => sum + (Number(entry.umsatz) || 0), 0)
-  const plannedBudget = executedActions.reduce((sum, entry) => sum + (Number(entry.kostenBudget) || 0), 0)
+  const budgetedActions = executedActions.filter((entry) => Number(entry.kostenBudget) > 0)
+  const plannedBudget = budgetedActions.length > 0
+    ? budgetedActions.reduce((sum, entry) => sum + Number(entry.kostenBudget), 0)
+    : null
   return {
     actions: executedActions.length,
     reach: executedTouchpoints.reduce((sum, entry) => sum + (entry.reichweite || 0), 0),
@@ -243,6 +255,8 @@ async function loadFunnelFacts() {
     orders: new Set(linkedAttributions.flatMap((entry) => entry.auftragId ? [entry.auftragId] : [])).size,
     revenue,
     plannedBudget,
+    budgetedActions: budgetedActions.length,
+    attributionRows: linkedAttributions.length,
   }
 }
 
@@ -252,12 +266,12 @@ export async function getWirkungMiniAction(): Promise<WirkungMini[]> {
   return [
     { label: 'Anfragen aus Marketing', wert: facts.inquiries, suffix: '', sparkValues: [facts.inquiries] },
     { label: 'Zugeordneter Umsatz', wert: facts.revenue, suffix: ' €', sparkValues: [facts.revenue] },
-    {
+    ...(facts.plannedBudget === null ? [] : [{
       label: 'Planbudget ausgeführter Aktionen',
       wert: facts.plannedBudget,
       suffix: ' €',
       sparkValues: [facts.plannedBudget],
-    },
+    }]),
   ]
 }
 
@@ -284,15 +298,12 @@ export async function getFunnelAction(): Promise<FunnelDaten> {
 export async function getStoryIdeenAction(): Promise<StoryIdee[]> {
   await requireMarketingRead()
   const suggestions = await loadSuggestions()
-  return [
-    ...suggestions.map((suggestion) => ({
-      id: `st-${suggestion.id}`,
-      label: suggestion.titel,
-      caption: suggestion.caption,
-      hashtags: suggestion.hashtags,
-      titel: suggestion.titel,
-      icon: suggestion.kanal === 'instagram' ? 'Star' : suggestion.kanal === 'email' ? 'Landmark' : 'Building2',
-    })),
-    { id: 'st-add', label: 'Eigene Idee', caption: '', hashtags: '', titel: 'Eigene Idee', icon: 'Plus', isAdd: true },
-  ]
+  return suggestions.map((suggestion) => ({
+    id: `st-${suggestion.id}`,
+    label: suggestion.titel,
+    caption: suggestion.caption,
+    hashtags: suggestion.hashtags,
+    titel: suggestion.titel,
+    icon: suggestion.kanal === 'instagram' ? 'Star' : suggestion.kanal === 'email' ? 'Landmark' : 'Building2',
+  }))
 }

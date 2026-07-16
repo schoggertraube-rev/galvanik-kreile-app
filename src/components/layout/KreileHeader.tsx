@@ -5,10 +5,7 @@ import Link from "next/link";
 import { Search, Camera, Bell, Calendar, Menu, Plus } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { useState, useEffect, useRef } from "react";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { getOrderCountDb } from "@/app/actions/orders.actions";
 import { logout } from "@/app/actions/auth";
-import { trackUiEvent } from "@/lib/tracking/tracking";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { getCompanySettings } from "@/app/actions/company.actions";
@@ -25,8 +22,6 @@ interface KreileHeaderProps {
 export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [isOffline, setIsOffline] = useState(false);
-  const [orderCount, setOrderCount] = useState(0);
   const [logoUrl, setLogoUrl] = useState("/assets/logo/kreile-wordmark-skyline.svg");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
@@ -34,8 +29,9 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const { initials, status, name } = usePermissions();
   const { status: realtimeStatus } = useRealtimeStatus();
   const { isRecording } = useTestpilot();
-  const { isOnline, outboxItems, syncNow } = useSync();
+  const { networkStatus, outboxItems, outboxError, isSyncing, syncNow } = useSync();
   const { openErfassung } = useErfassung();
+  const networkAvailable = networkStatus === "available";
 
   // User Dropdown State
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -81,10 +77,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   });
 
   useEffect(() => {
-    const updateState = async () => {
-      setIsOffline(OfflineManager.isOffline());
-      const countResult = await getOrderCountDb();
-      setOrderCount(countResult.ok ? countResult.data.count : 0);
+    const updateCompanySettings = async () => {
       try {
         const settings = await getCompanySettings();
         if (settings.logoUrl) setLogoUrl(settings.logoUrl);
@@ -92,11 +85,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         console.error("Failed to load settings in header", e);
       }
     };
-    updateState();
-
-    const events = ["kreile-network-change", "kreile-sync-queue-updated", "online", "offline"];
-    events.forEach(e => window.addEventListener(e, updateState));
-    return () => events.forEach(e => window.removeEventListener(e, updateState));
+    void updateCompanySettings();
   }, []);
 
   const isAnyDropdownOpen = userDropdownOpen || notificationsOpen;
@@ -192,22 +181,17 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
         {/* Online/Offline Pill mit Zähler */}
         <button
-          onClick={() => {
-            if (isOnline) {
-              syncNow();
-            } else {
-              OfflineManager.toggleSimulatedOffline();
-            }
-          }}
+          onClick={() => { if (networkAvailable) void syncNow(); }}
+          disabled={!networkAvailable || isSyncing}
           className={`hidden sm:flex items-center gap-2 rounded-full px-3 h-9 text-sm font-bold border transition-all duration-300 shadow-sm hover:bg-white hover:border-neutral-gray-200 ${
-            !isOnline || outboxItems.length > 0
+            !networkAvailable || outboxItems.length > 0 || outboxError
               ? "bg-bg-app-soft/50 backdrop-blur-sm border-white/60 text-text-muted"
               : "bg-white/50 backdrop-blur-sm border-white/60 text-navy-900"
           }`}
-          title={!isOnline ? "Offline Modus aktiv" : (outboxItems.length > 0 ? "Klicken zum Synchronisieren" : "Online und synchron")}
+          title={outboxError || (networkStatus === "unknown" ? "Browser-Netzstatus noch unbekannt" : (!networkAvailable ? "Browser meldet kein Netzwerk" : (outboxItems.length > 0 ? "Lokale Änderungen ohne angebundenen Backend-Belegvertrag" : "Browser meldet Netzwerk; Backend-Erreichbarkeit nicht geprüft")))}
         >
-          <span className={`w-2 h-2 rounded-full ${!isOnline ? "bg-accent-orange" : (outboxItems.length > 0 ? "bg-gold-500 animate-pulse" : "bg-success-green")}`} />
-          <span>{!isOnline ? "Offline" : (outboxItems.length > 0 ? "Syncing..." : "Online")}</span>
+          <span className={`w-2 h-2 rounded-full ${!networkAvailable ? "bg-accent-orange" : (outboxItems.length > 0 || outboxError ? "bg-gold-500" : "bg-blue-500")}`} />
+          <span>{networkStatus === "unknown" ? "Netzstatus …" : (!networkAvailable ? "Kein Netz" : (isSyncing ? "Prüfe …" : (outboxItems.length > 0 || outboxError ? "Lokal ausstehend" : "Netz verfügbar")))}</span>
           {outboxItems.length > 0 && (
             <span className="bg-accent-orange text-white text-[10px] font-black rounded-full px-1.5 py-px min-w-[20px] text-center">
               {outboxItems.length > 99 ? "99+" : outboxItems.length}
@@ -236,7 +220,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           </div>
         )}
 
-        {/* Glocke mit rotem Badge */}
+        {/* Benachrichtigungsplatzhalter ohne erfundene Meldungen */}
         <div className="relative hidden md:block" ref={notificationsRef}>
           <button
             onClick={() => setNotificationsOpen(!notificationsOpen)}
@@ -244,32 +228,14 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           >
             <Bell className="w-4 h-4" />
           </button>
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-danger-red rounded-full text-[9px] text-white font-black flex items-center justify-center">
-            3
-          </span>
-
           {notificationsOpen && (
             <div className="absolute right-0 top-12 mt-2 w-72 bg-white border-2 border-neutral-gray-100 rounded-2xl shadow-xl z-50 p-2 animate-in slide-in-from-top-2 fade-in duration-200">
               <div className="px-3 py-2 border-b border-neutral-gray-100 mb-1 flex justify-between items-center">
                 <p className="text-xs font-bold text-navy-900">Benachrichtigungen</p>
-                <span className="text-[10px] bg-bg-app px-2 py-0.5 rounded-full text-text-muted">3 Neu</span>
+                <span className="text-[10px] bg-bg-app px-2 py-0.5 rounded-full text-text-muted">Nicht angebunden</span>
               </div>
-              <div className="max-h-64 overflow-y-auto">
-                <div className="px-3 py-2 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer mb-1 border-l-2 border-accent-orange">
-                  <p className="text-[11px] font-bold text-navy-900">Materialengpass Galvanik</p>
-                  <p className="text-[10px] text-text-muted mt-0.5">Nickel-Bad 3 benötigt zeitnah neues Material für anstehende Großaufträge.</p>
-                  <p className="text-[9px] text-text-muted mt-1 opacity-60">Vor 12 Min</p>
-                </div>
-                <div className="px-3 py-2 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer mb-1 border-l-2 border-success-green">
-                  <p className="text-[11px] font-bold text-navy-900">5 Aufträge fertiggestellt</p>
-                  <p className="text-[10px] text-text-muted mt-0.5">Die QS hat 5 Werkstücke freigegeben. Bereit für den Warenausgang.</p>
-                  <p className="text-[9px] text-text-muted mt-1 opacity-60">Vor 45 Min</p>
-                </div>
-                <div className="px-3 py-2 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer border-l-2 border-danger-red">
-                  <p className="text-[11px] font-bold text-navy-900">Kundenanfrage verzögert</p>
-                  <p className="text-[10px] text-text-muted mt-0.5">Auftrag A-202611 nähert sich dem Abgabetermin (morgen).</p>
-                  <p className="text-[9px] text-text-muted mt-1 opacity-60">Vor 2 Std</p>
-                </div>
+              <div className="px-3 py-4 text-[11px] leading-relaxed text-text-muted">
+                Es liegt noch keine autorisierte Benachrichtigungsprojektion mit serverbestätigten Meldungen vor. Deshalb werden hier keine Material-, QS- oder Terminmeldungen erfunden.
               </div>
             </div>
           )}

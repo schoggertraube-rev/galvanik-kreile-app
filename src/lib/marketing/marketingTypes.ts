@@ -4,7 +4,7 @@
    ═══════════════════════════════════════════════════════════ */
 
 /** Kanal-Identifikator */
-export type KanalId = 'instagram' | 'email' | 'google' | 'web';
+export type KanalId = 'instagram' | 'email' | 'google' | 'web' | 'unknown';
 
 /** Sortier-Modi für Vorschläge (Spec 20 §4) */
 export type SortMode = 'output' | 'einfach' | 'relevanz' | 'kanal';
@@ -22,7 +22,7 @@ export interface AktionVorschlag {
   titel: string;
   kanal: KanalId;
   kanalLabel: string;
-  score: number;
+  score: number | null;
   caption: string;
   hashtags: string;
   begruendung: string;
@@ -34,6 +34,9 @@ export interface AktionVorschlag {
   quelle?: string;              // z.B. "Auftrag #8043"
   /** Persisted, explicitly approved marketing asset. Never inferred in the browser. */
   assetId?: string;
+  status: 'vorschlag' | 'geplant' | 'freigegeben' | 'ausgefuehrt' | 'fehler';
+  publishCapability: 'proposal_only' | 'not_supported' | 'ready';
+  publishReason: string;
 }
 
 /** Kampagne (Bündel von Aktionen) */
@@ -59,7 +62,7 @@ export interface FunnelStufe {
 export interface FunnelDaten {
   stufen: FunnelStufe[];
   umsatz: number;
-  plannedBudget: number;
+  plannedBudget: number | null;
   roi: number | null;
 }
 
@@ -68,8 +71,9 @@ export interface Segment {
   id: string;
   name: string;
   emoji: string;
-  kundenAnzahl: number;
-  weckbar: number;
+  kundenAnzahl: number | null;
+  weckbar: number | null;
+  evidence: 'membership_not_connected';
 }
 
 /** Lern-Insight ("GELERNT"-Karte) */

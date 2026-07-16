@@ -3,7 +3,7 @@ import { test } from 'vitest';
 const integrationDatabaseUrl = process.env.KREILE_INTEGRATION_DATABASE_URL;
 const integrationTest = integrationDatabaseUrl ? test : test.skip;
 
-integrationTest('transitionOrderProcess moves order through chain correctly', async () => {
+integrationTest('transitionOrderProcess starts or cancels but cannot bypass atomic completion', async () => {
   process.env.DATABASE_URL = integrationDatabaseUrl;
   const [{ transitionOrderProcess }, { db }, { orders, customers }, { createId }] = await Promise.all([
     import('@/app/actions/orders.actions'),
@@ -11,7 +11,7 @@ integrationTest('transitionOrderProcess moves order through chain correctly', as
     import('@/db/schema'),
     import('@paralleldrive/cuid2'),
   ]);
-  console.log("TEST: Prozessschritt klicken -> DB-Zustand korrekt");
+  console.log("TEST: Prozessstart/-storno ohne Abschluss-Bypass");
   
   // create dummy order
   const cid = createId();
@@ -24,34 +24,19 @@ integrationTest('transitionOrderProcess moves order through chain correctly', as
     customerId: cid,
     title: "Test Order",
     currentStationId: "wareneingang",
-    status: "in_progress"
+    status: "ready"
   });
 
-  // Wareneingang -> Entmetallisierung
-  let res = await transitionOrderProcess({ orderId: oid, action: "complete" });
-  if (!res.ok || res.data?.newStation !== "entmetallisierung") throw new Error("Failed step 1");
+  let res = await transitionOrderProcess({ orderId: oid, action: "start", expectedStation: "wareneingang", clientRequestId: crypto.randomUUID() });
+  if (!res.ok || res.data?.newStation !== "wareneingang" || res.data?.newStatus !== "in_progress") throw new Error("Start was not confirmed");
 
-  // Entmetallisierung -> Schleiferei
-  res = await transitionOrderProcess({ orderId: oid, action: "complete" });
-  if (!res.ok || res.data?.newStation !== "schleiferei") throw new Error("Failed step 2");
+  const forbiddenCompletion = await transitionOrderProcess({ orderId: oid, action: "complete", expectedStation: "wareneingang", clientRequestId: crypto.randomUUID() });
+  if (forbiddenCompletion.ok) throw new Error("Generic transition unexpectedly completed a station");
 
-  // Schleiferei -> Galvanik
-  res = await transitionOrderProcess({ orderId: oid, action: "complete" });
-  if (!res.ok || res.data?.newStation !== "galvanik") throw new Error("Failed step 3");
+  res = await transitionOrderProcess({ orderId: oid, action: "cancel", expectedStation: "wareneingang", clientRequestId: crypto.randomUUID() });
+  if (!res.ok || res.data?.newStatus !== "cancelled") throw new Error("Cancellation was not confirmed");
 
-  // Galvanik -> QS
-  res = await transitionOrderProcess({ orderId: oid, action: "complete" });
-  if (!res.ok || res.data?.newStation !== "qualitaetssicherung" || res.data?.newStatus !== "ready") throw new Error("Failed step 4");
-  
-  // QS -> Warenausgang
-  res = await transitionOrderProcess({ orderId: oid, action: "complete" });
-  if (!res.ok || res.data?.newStation !== "warenausgang" || res.data?.newStatus !== "ready") throw new Error("Failed step 5");
-
-  // Warenausgang -> Abgeschlossen
-  res = await transitionOrderProcess({ orderId: oid, action: "complete" });
-  if (!res.ok || res.data?.newStatus !== "shipped") throw new Error("Failed step 6");
-
-  console.log("PASS: transitionOrderProcess verified");
+  console.log("PASS: generic completion bypass rejected");
 });
 
 integrationTest('Customer creation works with full payload', async () => {

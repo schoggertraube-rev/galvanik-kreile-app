@@ -10,8 +10,7 @@ import { FeatureToggles } from "@/components/admin/FeatureToggles";
 import { DataImportCenter } from "@/components/admin/DataImportCenter";
 import { CompanySettingsForm } from "@/components/admin/CompanySettingsForm";
 import { BackupRestoreCenter } from "@/components/admin/BackupRestoreCenter";
-import { AdminDevicesClient } from "@/app/admin/devices/AdminDevicesClient";
-import { Server, Users, Shield, Power, Database, Settings, Building2, BarChart2, Lightbulb, Smartphone, MonitorSmartphone } from "lucide-react";
+import { Server, Users, Shield, Power, Database, Settings, Building2, BarChart2, Lightbulb, MonitorSmartphone } from "lucide-react";
 import Link from "next/link";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { TextTemplates } from "@/components/admin/TextTemplates";
@@ -57,7 +56,7 @@ export function SettingsClient() {
       </div>
 
       <div className="flex overflow-x-auto gap-2 pb-2 scrollbar-hide border-b border-neutral-gray-200">
-        <TabButton active={activeTab === "status"} onClick={() => setActiveTab("status")} icon={<Server />} label="Status & Diagnose" />
+        {canSeeDiag && <TabButton active={activeTab === "status"} onClick={() => setActiveTab("status")} icon={<Server />} label="Status & Diagnose" />}
         
         {canManageUsers && (
           <>
@@ -75,14 +74,22 @@ export function SettingsClient() {
       </div>
 
       <div className="pt-2">
-        {activeTab === "status" && <AdminDashboard />}
+        {activeTab === "status" && (canSeeDiag ? <AdminDashboard /> : (
+          <div className="rounded-2xl border border-neutral-gray-200 bg-white p-6 text-sm text-text-muted">Systemdiagnose ist für diese Rolle nicht freigegeben.</div>
+        ))}
         
         {canManageUsers && (
           <>
             {activeTab === "company" && <CompanySettingsForm />}
             {activeTab === "users" && <UserManagement />}
             {activeTab === "roles" && <RoleMatrix />}
-            {activeTab === "devices" && <AdminDevicesClient />}
+            {activeTab === "devices" && (
+              <div className="rounded-2xl border border-neutral-gray-200 bg-white p-6">
+                <h3 className="font-bold text-navy-900">Geräte & Sessions nicht instrumentiert</h3>
+                <p className="mt-2 text-sm text-text-muted">Eindeutige Geräte, Sitzungen, Lizenzplätze und Fernsperren besitzen noch keinen bestätigten Backendvertrag. Deshalb werden keine Geräte, Zählstände oder Sperrerfolge simuliert.</p>
+                {canSeeDiag && <Link href="/admin/analytics" className="mt-4 inline-block text-sm font-bold text-navy-900 underline">Zur bestätigten Telemetrie</Link>}
+              </div>
+            )}
             {activeTab === "textvorlagen" && <TextTemplates />}
             {canManageToggles && activeTab === "features" && <FeatureToggles />}
             {activeTab === "import" && <DataImportCenter />}
