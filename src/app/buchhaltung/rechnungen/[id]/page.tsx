@@ -2,7 +2,7 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 import { getRechnungAction } from "@/app/buchhaltung/actions";
 import Link from "next/link";
-import { ChevronRight, FileText, CheckCircle2, AlertTriangle, Euro, Anchor, Briefcase, User } from "lucide-react";
+import { ChevronRight, FileText, AlertTriangle, Euro, Anchor, Briefcase, User } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
 
@@ -57,9 +57,13 @@ export default async function RechnungDetailPage({ params }: { params: Promise<{
           <div className="flex items-center gap-2 text-sm font-semibold text-neutral-500 mt-1">
             <Briefcase className="w-4 h-4" />
             <span>Auftrag:</span>
-            <OrderModalTrigger orderId={"A-" + rechnung.nummer.replace("RE-", "")} className="text-navy-900 font-bold hover:underline hover:text-navy-600 transition-colors">
-              {"A-" + rechnung.nummer.replace("RE-", "")}
-            </OrderModalTrigger>
+            {rechnung.orderId ? (
+              <OrderModalTrigger orderId={rechnung.orderId} className="text-navy-900 font-bold hover:underline hover:text-navy-600 transition-colors">
+                Auftrag anzeigen
+              </OrderModalTrigger>
+            ) : (
+              <span className="text-neutral-500">Kein Auftrag verknüpft</span>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">

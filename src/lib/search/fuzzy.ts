@@ -79,10 +79,16 @@ export function buildFallbackSuggestion(input: string): SearchSuggestion[] {
       secondary: "Serverseitig gefilterte Rechnungen",
     },
     {
-      keys: ["lager", "material", "bad", "bäder"],
+      keys: ["lager", "material", "bestand", "chemikalien"],
       route: "/items",
-      label: "📦 Lager & Bäder",
-      secondary: "Bestände und Badwerte",
+      label: "📦 Lager & Material",
+      secondary: "Kanonische Bestände und Materialbewegungen",
+    },
+    {
+      keys: ["bad", "bäder", "labor", "badanalyse"],
+      route: "/baeder",
+      label: "🧪 Bäder & Laboranalyse",
+      secondary: "Badwerte und Laboranalysen",
     },
   ];
 

@@ -1,8 +1,11 @@
 import { RechnungForm } from "./RechnungForm";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { readInvoiceCreateCapability } from "@/lib/server/invoiceCreateCapability";
 
-export default function NeueRechnungPage() {
+export default async function NeueRechnungPage({ searchParams }: { searchParams: Promise<{ order?: string }> }) {
+  const [{ order }, writeCapability] = await Promise.all([searchParams, readInvoiceCreateCapability()]);
+  const initialOrderId = typeof order === "string" && /^[A-Za-z0-9_-]{1,100}$/.test(order) ? order : "";
   return (
     <div className="w-full pb-24 px-4 sm:px-6 xl:px-8 min-h-screen">
       {/* Breadcrumb */}
@@ -21,7 +24,7 @@ export default function NeueRechnungPage() {
         <p className="text-sm font-semibold text-neutral-500 mt-2">Erstellen Sie eine neue Ausgangsrechnung.</p>
       </div>
 
-      <RechnungForm />
+      <RechnungForm initialOrderId={initialOrderId} writeCapability={writeCapability} />
     </div>
   );
 }

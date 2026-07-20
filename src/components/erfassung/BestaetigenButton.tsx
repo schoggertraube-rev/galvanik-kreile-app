@@ -9,6 +9,7 @@ interface BestaetigenButtonProps {
   dauerMinuten?: number;
   disabled?: boolean;
   disabledHinweis?: string;
+  disabledHref?: string | null;
   onClick: () => void;
   loading?: boolean;
 }
@@ -20,7 +21,8 @@ export function BestaetigenButton({
   disabled,
   disabledHinweis,
   onClick,
-  loading
+  loading,
+  disabledHref = "/settings",
 }: BestaetigenButtonProps) {
   return (
     <div className="w-full mt-6">
@@ -39,7 +41,7 @@ export function BestaetigenButton({
       </Button>
       {disabled && disabledHinweis && (
         <p className="text-center text-danger-red text-sm font-semibold mt-2">
-          {disabledHinweis} <a href="/settings" className="underline hover:text-danger-red/80">Einstellungen öffnen</a>
+          {disabledHinweis}{disabledHref ? <> <a href={disabledHref} className="underline hover:text-danger-red/80">Einstellungen öffnen</a></> : null}
         </p>
       )}
     </div>

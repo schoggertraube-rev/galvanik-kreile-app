@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   dbSelect: vi.fn(),
   dbTransaction: vi.fn(),
   ocrPost: vi.fn(),
+  readInvoiceCreateCapability: vi.fn(),
 }))
 
 vi.mock('@/lib/server/financeAuthorization', () => ({
@@ -20,6 +21,9 @@ vi.mock('@/lib/server/supabaseService', () => ({
 }))
 vi.mock('@/db', () => ({ db: { select: mocks.dbSelect, transaction: mocks.dbTransaction } }))
 vi.mock('@/app/api/ocr-process/route', () => ({ POST: mocks.ocrPost }))
+vi.mock('@/lib/server/invoiceCreateCapability', () => ({
+  readInvoiceCreateCapability: mocks.readInvoiceCreateCapability,
+}))
 
 import * as actions from '@/app/buchhaltung/actions'
 
@@ -28,6 +32,7 @@ describe('bookkeeping Server Action authorization boundary', () => {
     vi.clearAllMocks()
     mocks.requireFinanceRead.mockRejectedValue(new Error('AUTH_ERROR: Forbidden'))
     mocks.requireFinanceWrite.mockRejectedValue(new Error('AUTH_ERROR: Forbidden'))
+    mocks.readInvoiceCreateCapability.mockResolvedValue({ available: false, reason: 'rollout required' })
   })
 
   it('rejects every public action before service credentials, form parsing or database work', async () => {
@@ -101,22 +106,42 @@ describe('bookkeeping Server Action authorization boundary', () => {
       permissions: ['perm_view_prices'],
       active: true,
     })
+    const requestId = '11111111-1111-4111-8111-111111111111'
+    mocks.readInvoiceCreateCapability.mockResolvedValue({ available: true, reason: null })
     mocks.dbTransaction.mockResolvedValue({
-      id: 'invoice-1',
-      nummer: 'RE-2026-1',
-      kundeId: 'customer-1',
-      datum: '2026-07-01',
-      faelligAm: '2026-07-15',
-      brutto: '119.00',
-      netto: '100.00',
-      ustSatz: '19.00',
-      ustBetrag: '19.00',
-      status: 'offen',
-      mahnstufe: 0,
-      bemerkung: null,
-      leadId: null,
+      invoice: {
+        id: requestId,
+        tenantId: 'galvanik-kreile',
+        nummer: 'RE-2026-1',
+        kundeId: 'customer-1',
+        orderId: null,
+        datum: '2026-07-01',
+        faelligAm: '2026-07-15',
+        brutto: '119.00',
+        netto: '100.00',
+        ustSatz: '19.00',
+        ustBetrag: '19.00',
+        bezahltAm: null,
+        bezahltMethode: null,
+        bezahltBetragEur: null,
+        bezahltPaymentId: null,
+        status: 'offen',
+        mahnstufe: 0,
+        erechnungXml: null,
+        leadId: null,
+        bemerkung: null,
+        periodeId: null,
+        erloesKontoId: null,
+        forderungKontoId: null,
+        agingStatus: null,
+        isDemo: false,
+        erstelltAm: new Date('2026-07-01T00:00:00Z'),
+      },
+      storedPositions: [{ beschreibung: 'Galvanik', menge: 1, einzelpreisNetto: 100 }],
+      replayed: false,
     })
     const formData = new FormData()
+    formData.set('clientRequestId', requestId)
     formData.set('nummer', 'RE-2026-1')
     formData.set('kundeId', 'customer-1')
     formData.set('datum', '2026-07-01')
@@ -125,8 +150,9 @@ describe('bookkeeping Server Action authorization boundary', () => {
 
     await expect(actions.createRechnungAction(formData, [
       { beschreibung: 'Galvanik', menge: 1, einzelpreisNetto: 100 },
-    ])).resolves.toEqual(expect.objectContaining({ id: 'invoice-1', brutto: 119 }))
+    ])).resolves.toEqual(expect.objectContaining({ id: requestId, brutto: 119, replayed: false }))
     expect(mocks.dbTransaction).toHaveBeenCalledTimes(1)
+    expect(mocks.readInvoiceCreateCapability).toHaveBeenCalledTimes(1)
     expect(mocks.createServiceClient).not.toHaveBeenCalled()
   })
 })

@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { BestaetigenButton } from "./BestaetigenButton";
 import { MengenStepper } from "./MengenStepper";
 import { ZeitSlider } from "./ZeitSlider";
+import { publishInventorySync } from "@/lib/inventory/inventorySync";
 
 type CaptureSheetProps = {
   orderId: string;
@@ -76,11 +77,13 @@ export function CaptureSheet({ orderId, stationKuerzel, onSuccess, onClose }: Ca
     article: overview?.articles.find((article) => article.id === line.inventoryItemId) || null,
   }));
   const missingPrice = selectedArticles.some((line) => line.article?.unitCostEur === null || !line.article);
+  const missingUnit = selectedArticles.some((line) => !line.article?.unit?.trim());
   const insufficientStock = selectedArticles.some((line) => !line.article || line.quantity > line.article.currentStock);
   const materialCost = missingPrice
     ? null
     : selectedArticles.reduce((sum, line) => sum + line.quantity * (line.article?.unitCostEur || 0), 0);
   const rate = overview?.selectedRate?.valueEurPerHour ?? null;
+  const writeCapability = overview?.writeCapability || { available: false, reason: "Schreibfähigkeit wurde noch nicht bestätigt." };
   const timeCost = rate === null ? null : (minutes / 60) * rate;
   const suggestedMinutes = overview?.template.zeit?.find((row) => row.station === stationKuerzel)?.median_min;
 
@@ -106,7 +109,11 @@ export function CaptureSheet({ orderId, stationKuerzel, onSuccess, onClose }: Ca
         return;
       }
       timeRequestId.current = null;
-      await onSuccess();
+      try {
+        await onSuccess();
+      } catch {
+        setError("Zeitbuchung ist bestätigt. Nur die Ansicht konnte anschließend nicht aktualisiert werden; bitte nicht erneut buchen.");
+      }
     } catch {
       setError("Zeitbuchung konnte nicht bestätigt werden. Ein erneuter Versuch verwendet dieselbe Anforderungs-ID.");
     } finally {
@@ -131,7 +138,12 @@ export function CaptureSheet({ orderId, stationKuerzel, onSuccess, onClose }: Ca
         return;
       }
       materialRequestId.current = null;
-      await onSuccess();
+      publishInventorySync();
+      try {
+        await onSuccess();
+      } catch {
+        setError("Materialbuchung ist bestätigt. Nur die Ansicht konnte anschließend nicht aktualisiert werden; bitte nicht erneut buchen.");
+      }
     } catch {
       setError("Materialbuchung konnte nicht bestätigt werden. Ein erneuter Versuch verwendet dieselbe Anforderungs-ID.");
     } finally {
@@ -167,6 +179,16 @@ export function CaptureSheet({ orderId, stationKuerzel, onSuccess, onClose }: Ca
 
         <div className="flex-1 overflow-y-auto p-6">
           {error && <div role="alert" className="bg-red-50 border-2 border-red-200 text-red-800 p-4 mb-6 text-sm font-bold rounded-2xl">{error}</div>}
+          {!loadingData && !writeCapability.available && (
+            <div role="status" className="bg-amber-50 border-2 border-amber-200 text-amber-900 p-4 mb-6 text-sm font-bold rounded-2xl">
+              {writeCapability.reason} Es wurde nichts gebucht.
+            </div>
+          )}
+          {!loadingData && overview?.inventoryCatalog.truncated && (
+            <div role="status" className="bg-amber-50 border-2 border-amber-200 text-amber-900 p-4 mb-6 text-sm font-bold rounded-2xl">
+              Der Artikelkatalog enthält mehr als {overview.inventoryCatalog.limit} Einträge. Diese Ansicht zeigt nur den ersten bestätigten Ausschnitt; ein nicht sichtbarer Artikel darf nicht als „nicht vorhanden“ interpretiert werden.
+            </div>
+          )}
           {loadingData ? (
             <div className="animate-pulse h-36 bg-neutral-gray-100 rounded-2xl" />
           ) : activeTab === "zeit" ? (
@@ -200,7 +222,11 @@ export function CaptureSheet({ orderId, stationKuerzel, onSuccess, onClose }: Ca
               </div>
               {articles.length === 0 ? (
                 <div className="text-center py-8 text-text-muted font-bold text-sm bg-neutral-gray-50 rounded-2xl border-2 border-dashed border-neutral-gray-200">
-                  {overview?.articles.length === 0 ? "Keine mandantengebundenen Lagerartikel vorhanden." : "Kein passender Lagerartikel gefunden."}
+                  {overview?.articles.length === 0
+                    ? "Keine mandantengebundenen Lagerartikel vorhanden."
+                    : overview?.inventoryCatalog.truncated
+                      ? `Kein Treffer im bestätigten Ausschnitt der ersten ${overview.inventoryCatalog.limit} Artikel.`
+                      : "Kein passender Lagerartikel gefunden."}
                 </div>
               ) : articles.map((article) => {
                 const quantity = quantities[article.id] || 0;
@@ -211,11 +237,11 @@ export function CaptureSheet({ orderId, stationKuerzel, onSuccess, onClose }: Ca
                       <div>
                         <div className="font-bold text-navy-900">{article.name}</div>
                         <div className="text-xs font-semibold text-text-muted mt-1">
-                          Bestand {article.currentStock.toLocaleString("de-DE")} {article.unit}
+                          Bestand {article.currentStock.toLocaleString("de-DE")} {article.unit || "Einheit nicht erfasst"}
                           {article.frequencyPercent !== null ? ` · Erfahrungswert ${article.frequencyPercent.toLocaleString("de-DE")} %` : ""}
                         </div>
                         <div className={`text-xs font-bold mt-1 ${article.unitCostEur === null ? "text-red-700" : "text-emerald-700"}`}>
-                          {article.unitCostEur === null ? "Einkaufspreis fehlt" : `${money(article.unitCostEur)} je ${article.unit}`}
+                          {article.unitCostEur === null ? "Einkaufspreis fehlt" : `${money(article.unitCostEur)} je ${article.unit || "nicht erfasster Einheit"}`}
                         </div>
                       </div>
                       {quantity <= 0 && (
@@ -224,7 +250,7 @@ export function CaptureSheet({ orderId, stationKuerzel, onSuccess, onClose }: Ca
                     </div>
                     {quantity > 0 && (
                       <>
-                        <MengenStepper value={quantity} onChange={(value) => setQuantity(article.id, value)} einheit={article.unit} step={0.1} />
+                        <MengenStepper value={quantity} onChange={(value) => setQuantity(article.id, value)} einheit={article.unit || "Einheit nicht erfasst"} step={0.1} />
                         {overStock && <p className="text-xs font-bold text-red-700 mt-2">Menge überschreitet den bestätigten Bestand.</p>}
                       </>
                     )}
@@ -242,8 +268,9 @@ export function CaptureSheet({ orderId, stationKuerzel, onSuccess, onClose }: Ca
               euroBetrag={timeCost}
               dauerMinuten={minutes}
               loading={saving}
-              disabled={loadingData || rate === null || minutes <= 0}
-              disabledHinweis={rate === null ? "Kostensatz fehlt" : undefined}
+              disabled={loadingData || !writeCapability.available || rate === null || minutes <= 0}
+              disabledHinweis={!writeCapability.available ? writeCapability.reason || undefined : rate === null ? "Kostensatz fehlt" : undefined}
+              disabledHref={!writeCapability.available ? null : undefined}
               onClick={() => void saveTime()}
             />
           ) : (
@@ -251,8 +278,9 @@ export function CaptureSheet({ orderId, stationKuerzel, onSuccess, onClose }: Ca
               label="Material atomar buchen"
               euroBetrag={materialCost}
               loading={saving}
-              disabled={loadingData || selectedMaterials.length === 0 || missingPrice || insufficientStock}
-              disabledHinweis={missingPrice ? "Einkaufspreis fehlt" : insufficientStock ? "Bestand reicht nicht" : undefined}
+              disabled={loadingData || !writeCapability.available || selectedMaterials.length === 0 || missingPrice || missingUnit || insufficientStock}
+              disabledHinweis={!writeCapability.available ? writeCapability.reason || undefined : missingPrice ? "Einkaufspreis fehlt" : missingUnit ? "Einheit fehlt" : insufficientStock ? "Bestand reicht nicht" : undefined}
+              disabledHref={!writeCapability.available ? null : undefined}
               onClick={() => void saveMaterial()}
             />
           )}

@@ -446,11 +446,11 @@ export function OrderOverlay() {
                     <button className="ci-qa" disabled title="Kostenvoranschlag ist hier noch nicht angebunden"><FileText className="w-[18px] h-[18px]"/><span className="ci-qa-label">KV</span></button>
                     {canViewPrices ? (
                       <button className="ci-qa" onClick={() => setShowPayment(true)}>
-                        <Receipt className="w-[18px] h-[18px]"/><span className="ci-qa-label">Rechnung</span>
+                        <Receipt className="w-[18px] h-[18px]"/><span className="ci-qa-label">Zahlungslink</span>
                       </button>
                     ) : (
                       <button className="ci-qa" disabled title="Finanzdaten sind für diese Rolle nicht freigegeben">
-                        <Receipt className="w-[18px] h-[18px]"/><span className="ci-qa-label">Rechnung</span>
+                        <Receipt className="w-[18px] h-[18px]"/><span className="ci-qa-label">Zahlungslink</span>
                       </button>
                     )}
                     <button

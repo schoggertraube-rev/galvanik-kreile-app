@@ -1,12 +1,13 @@
 'use server'
 
 import { db } from '@/db'
-import { customers } from '@/db/schema'
+import { customers, orders } from '@/db/schema'
 import { ausgangsrechnung, ausgangsrechnungPosition, beleg, bhAuditLog, bhEinstellungen, konto, kostenposten, kostenstelle, kategorie, steuerprofil } from '@/db/schema_buchhaltung'
 import { and, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm'
 import { createSupabaseServiceClient } from '@/lib/server/supabaseService'
 import { assertFinanceDateRange, requireFinanceRead, requireFinanceWrite } from '@/lib/server/financeAuthorization'
 import { calculateOutstandingAmount, normalizeOcrConfidencePercent } from '@/lib/buchhaltung/types'
+import { readInvoiceCreateCapability } from '@/lib/server/invoiceCreateCapability'
 import {
   assertFinalizableReceipt,
   parseCostItemFormData,
@@ -539,6 +540,7 @@ function mapToClientRechnung(dbData: DatabaseRow): Ausgangsrechnung {
     nummer: requiredString(dbData, 'nummer'),
     kundeId: optionalString(dbData, 'kunde_id'),
     kundeName: optionalString(dbData, 'kunde_name'),
+    orderId: optionalString(dbData, 'order_id'),
     datum: requiredString(dbData, 'datum'),
     faelligAm: optionalString(dbData, 'faellig_am'),
     brutto,
@@ -669,14 +671,16 @@ export async function createRechnungAction(formData: FormData, positionen: Ausga
   const actor = await requireFinanceWrite();
 
   const entries = [...formData.entries()];
-  const allowedKeys = new Set(['nummer', 'kundeId', 'datum', 'faelligAm', 'ustSatz', 'bemerkung']);
+  const allowedKeys = new Set(['clientRequestId', 'nummer', 'kundeId', 'orderId', 'datum', 'faelligAm', 'ustSatz', 'bemerkung']);
   if (
     entries.some(([key, value]) => !allowedKeys.has(key) || typeof value !== 'string')
     || new Set(entries.map(([key]) => key)).size !== entries.length
   ) throw new Error('FINANCE_INPUT_INVALID:invoice');
 
+  const clientRequestId = String(formData.get('clientRequestId') || '').trim();
   const nummer = String(formData.get('nummer') || '').trim();
   const kundeId = String(formData.get('kundeId') || '').trim();
+  const orderId = String(formData.get('orderId') || '').trim() || null;
   const datum = String(formData.get('datum') || '').trim();
   const faelligAm = String(formData.get('faelligAm') || '').trim();
   const ustSatz = Number(String(formData.get('ustSatz') || '19').replace(',', '.'));
@@ -686,8 +690,10 @@ export async function createRechnungAction(formData: FormData, positionen: Ausga
     throw new Error('Bitte füllen Sie alle Pflichtfelder aus.');
   }
   if (
-    !/^[\p{L}\p{N}][\p{L}\p{N} ._/-]{0,99}$/u.test(nummer)
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientRequestId)
+    || !/^[\p{L}\p{N}][\p{L}\p{N} ._/-]{0,99}$/u.test(nummer)
     || kundeId.length > 100 || kundeId.includes('\0')
+    || (orderId !== null && (orderId.length > 100 || !/^[A-Za-z0-9_-]+$/.test(orderId)))
     || (bemerkung?.length || 0) > 2_000 || bemerkung?.includes('\0')
   ) {
     throw new Error('Rechnungsdaten überschreiten die zulässige Länge.');
@@ -719,13 +725,85 @@ export async function createRechnungAction(formData: FormData, positionen: Ausga
   const netto = nettoCents / 100;
   const ustBetrag = Math.round(nettoCents * (ustSatz / 100)) / 100;
   const brutto = Math.round((netto + ustBetrag) * 100) / 100;
+  const normalizedPositions = positionen.map((position) => ({
+    beschreibung: position.beschreibung.trim(),
+    menge: position.menge,
+    einzelpreisNetto: position.einzelpreisNetto,
+  }));
+  const requestedPositionKeys = normalizedPositions.map((position) => (
+    `${position.beschreibung}\u0000${Math.round(position.menge * 100)}\u0000${Math.round(position.einzelpreisNetto * 100)}`
+  )).sort();
 
-  const invoice = await db.transaction(async (tx) => {
+  const writeCapability = await readInvoiceCreateCapability();
+  if (!writeCapability.available) {
+    throw new Error(writeCapability.reason || 'Rechnungserstellung ist serverseitig nicht bestätigt verfügbar.');
+  }
+
+  let stored: { invoice: typeof ausgangsrechnung.$inferSelect; storedPositions: AusgangsrechnungPosition[]; replayed: boolean };
+  try {
+    stored = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${clientRequestId}, 0))`);
+    const [existing] = await tx.select().from(ausgangsrechnung).where(eq(ausgangsrechnung.id, clientRequestId)).limit(1);
+    if (existing) {
+      const [existingPositions, auditRows] = await Promise.all([
+        tx.select({
+          id: ausgangsrechnungPosition.id,
+          beschreibung: ausgangsrechnungPosition.beschreibung,
+          menge: ausgangsrechnungPosition.menge,
+          einzelpreisNetto: ausgangsrechnungPosition.einzelpreisNetto,
+        }).from(ausgangsrechnungPosition).where(eq(ausgangsrechnungPosition.ausgangsrechnungId, existing.id)),
+        tx.select({ benutzer: bhAuditLog.benutzer }).from(bhAuditLog).where(and(
+          eq(bhAuditLog.entitaetId, existing.id),
+          eq(bhAuditLog.entitaet, 'ausgangsrechnung'),
+          eq(bhAuditLog.aktion, 'create'),
+        )).limit(1),
+      ]);
+      const existingPositionKeys = existingPositions.map((position) => {
+        const quantity = Number(position.menge);
+        const price = Number(position.einzelpreisNetto);
+        if (!Number.isFinite(quantity) || !Number.isFinite(price)) throw new Error('FINANCE_REQUEST_CONFLICT');
+        return `${position.beschreibung}\u0000${Math.round(quantity * 100)}\u0000${Math.round(price * 100)}`;
+      }).sort();
+      const immutableMatches = existing.tenantId === actor.tenantId
+        && auditRows[0]?.benutzer === actor.userId
+        && existing.nummer === nummer
+        && existing.kundeId === kundeId
+        && (existing.orderId || null) === orderId
+        && existing.datum === datum
+        && existing.faelligAm === faelligAm
+        && Math.round(Number(existing.netto) * 100) === nettoCents
+        && Math.round(Number(existing.ustSatz) * 100) === Math.round(ustSatz * 100)
+        && Math.round(Number(existing.ustBetrag) * 100) === Math.round(ustBetrag * 100)
+        && Math.round(Number(existing.brutto) * 100) === Math.round(brutto * 100)
+        && (existing.bemerkung || null) === bemerkung
+        && existingPositionKeys.length === requestedPositionKeys.length
+        && existingPositionKeys.every((key, index) => key === requestedPositionKeys[index]);
+      if (!immutableMatches) throw new Error('FINANCE_REQUEST_CONFLICT');
+      return {
+        invoice: existing,
+        storedPositions: existingPositions.map((position) => ({
+          id: position.id,
+          beschreibung: position.beschreibung,
+          menge: Number(position.menge),
+          einzelpreisNetto: Number(position.einzelpreisNetto),
+        })),
+        replayed: true,
+      };
+    }
+
     const [customer] = await tx.select({ id: customers.id }).from(customers).where(and(
       eq(customers.id, kundeId),
       eq(customers.tenantId, actor.tenantId),
     )).limit(1);
     if (!customer) throw new Error('FINANCE_CUSTOMER_NOT_FOUND');
+    if (orderId) {
+      const [linkedOrder] = await tx.select({ id: orders.id, customerId: orders.customerId }).from(orders).where(and(
+        eq(orders.id, orderId),
+        eq(orders.tenantId, actor.tenantId),
+      )).limit(1);
+      if (!linkedOrder) throw new Error('FINANCE_ORDER_NOT_FOUND');
+      if (linkedOrder.customerId !== kundeId) throw new Error('FINANCE_ORDER_CUSTOMER_MISMATCH');
+    }
     const [duplicate] = await tx.select({ id: ausgangsrechnung.id }).from(ausgangsrechnung).where(and(
       eq(ausgangsrechnung.tenantId, actor.tenantId),
       eq(ausgangsrechnung.nummer, nummer),
@@ -733,8 +811,10 @@ export async function createRechnungAction(formData: FormData, positionen: Ausga
     if (duplicate) throw new Error('FINANCE_INVOICE_NUMBER_EXISTS');
 
     const [created] = await tx.insert(ausgangsrechnung).values({
+      id: clientRequestId,
       nummer,
       kundeId,
+      orderId,
       datum,
       faelligAm,
       netto: netto.toFixed(2),
@@ -747,12 +827,13 @@ export async function createRechnungAction(formData: FormData, positionen: Ausga
       tenantId: actor.tenantId,
     }).returning();
 
-    await tx.insert(ausgangsrechnungPosition).values(positionen.map((position) => ({
+    const createdPositions = await tx.insert(ausgangsrechnungPosition).values(normalizedPositions.map((position) => ({
       ausgangsrechnungId: created.id,
-      beschreibung: position.beschreibung.trim(),
+      beschreibung: position.beschreibung,
       menge: position.menge.toString(),
       einzelpreisNetto: position.einzelpreisNetto.toFixed(2),
-    })));
+    }))).returning({ id: ausgangsrechnungPosition.id });
+    if (createdPositions.length !== normalizedPositions.length) throw new Error('POSITION_RECEIPT_MISSING');
     const [audit] = await tx.insert(bhAuditLog).values({
       benutzer: actor.userId,
       entitaet: 'ausgangsrechnung',
@@ -761,6 +842,7 @@ export async function createRechnungAction(formData: FormData, positionen: Ausga
       nachher: {
         nummer: created.nummer,
         kundeId: created.kundeId,
+        orderId: created.orderId,
         datum: created.datum,
         faelligAm: created.faelligAm,
         netto: created.netto,
@@ -772,25 +854,43 @@ export async function createRechnungAction(formData: FormData, positionen: Ausga
       },
     }).returning({ id: bhAuditLog.id });
     if (!audit) throw new Error('AUDIT_RECEIPT_MISSING');
-    return created;
-  });
+    return { invoice: created, storedPositions: normalizedPositions, replayed: false };
+    });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    if (code === 'FINANCE_CUSTOMER_NOT_FOUND') throw new Error('Kunde wurde im angemeldeten Mandanten nicht gefunden.');
+    if (code === 'FINANCE_ORDER_NOT_FOUND') throw new Error('Auftrag wurde im angemeldeten Mandanten nicht gefunden.');
+    if (code === 'FINANCE_ORDER_CUSTOMER_MISMATCH') throw new Error('Auftrag und Rechnungskunde stimmen nicht überein.');
+    if (code === 'FINANCE_INVOICE_NUMBER_EXISTS') throw new Error('Diese Rechnungsnummer ist im Mandanten bereits vergeben.');
+    if (code === 'FINANCE_REQUEST_CONFLICT') throw new Error('Diese Anforderungs-ID wurde bereits für eine andere Rechnung verwendet.');
+    console.error('Invoice creation failed', error);
+    throw new Error('Rechnung konnte nicht belastbar gespeichert werden.');
+  }
+
+  const invoice = stored.invoice;
+  const paidAmount = invoice.bezahltBetragEur === null ? 0 : Number(invoice.bezahltBetragEur);
+  const grossAmount = Number(invoice.brutto);
+  const status = invoiceStatus({ status: invoice.status });
+  if (!Number.isFinite(paidAmount) || !Number.isFinite(grossAmount)) throw new Error('Rechnungsdaten sind nach dem Speichern ungültig.');
 
   return {
     id: invoice.id,
     nummer: invoice.nummer,
     kundeId: invoice.kundeId || undefined,
+    orderId: invoice.orderId || undefined,
     datum: invoice.datum,
     faelligAm: invoice.faelligAm || undefined,
     brutto: Number(invoice.brutto),
     netto: invoice.netto === null ? undefined : Number(invoice.netto),
     ustSatz: invoice.ustSatz === null ? undefined : Number(invoice.ustSatz),
     ustBetrag: invoice.ustBetrag === null ? undefined : Number(invoice.ustBetrag),
-    bezahltBetrag: 0,
-    offenerBetrag: Number(invoice.brutto),
-    status: 'offen',
+    bezahltBetrag: paidAmount,
+    offenerBetrag: calculateOutstandingAmount({ brutto: grossAmount, bezahltBetrag: paidAmount, status }),
+    status,
     mahnstufe: invoice.mahnstufe || 0,
     bemerkung: invoice.bemerkung || undefined,
-    positionen,
+    positionen: stored.storedPositions,
+    replayed: stored.replayed,
   };
 }
 

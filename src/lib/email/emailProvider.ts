@@ -1,9 +1,6 @@
 export interface EmailProviderOptions {
-  to: string;
   templateKey: string;
-  variables: Record<string, string>;
-  orderId?: string;
-  customerId?: string;
+  orderId: string;
   idempotencyKey: string;
 }
 

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TrendingUp, Loader2, ArrowRight, Bell, Phone, FileText, X } from "lucide-react";
-import { getAgingDaten, getAgingRechnungen, savePhoneNote } from "../actions";
-import { sendeZahlungserinnerung, sendeMahnung } from "@/app/actions/mahnung.actions";
+import { getAgingDaten, getAgingRechnungen } from "../actions";
+import { erstelleMahnungsEntwurf, erstelleZahlungserinnerungsEntwurf } from "@/app/actions/mahnung.actions";
+import { createPhoneNote } from "@/app/actions/phoneNotes.actions";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import Link from "next/link";
 import { KachelInfo } from "@/components/ui/KachelInfo";
@@ -13,6 +14,18 @@ type AgingData = {
   aging_bucket: string;
   anzahl: number;
   summe: number;
+};
+
+type AgingInvoice = {
+  invoice_id: string;
+  order_id: string | null;
+  customer_id: string;
+  rechnung_nummer: string;
+  kunde_name: string;
+  offener_betrag: number;
+  faellig_seit_tagen: number | null;
+  faellig_am: string | null;
+  mahnstufe: number;
 };
 
 const BUCKET_ORDER = ['nicht_faellig', '1-14', '15-30', '31-60', '61-90', '>90'];
@@ -37,53 +50,102 @@ const LABELS: Record<string, string> = {
   '>90': '> 90 Tage'
 };
 
+function agingBucketFromClick(value: unknown): string | null {
+  if (!value || typeof value !== 'object') return null;
+  const direct = Reflect.get(value, 'bucketId');
+  if (typeof direct === 'string') return direct;
+  const payload = Reflect.get(value, 'payload');
+  if (!payload || typeof payload !== 'object') return null;
+  const nested = Reflect.get(payload, 'bucketId');
+  return typeof nested === 'string' ? nested : null;
+}
+
+function formatAgingTooltip(value: unknown, _name: unknown, item: unknown): [string, string] {
+  const numericValue = Number(value);
+  const payload = item && typeof item === 'object' ? Reflect.get(item, 'payload') : null;
+  const rawCount = payload && typeof payload === 'object' ? Reflect.get(payload, 'anzahl') : null;
+  const count = Number(rawCount);
+  const formattedValue = Number.isFinite(numericValue) ? numericValue.toLocaleString('de-DE') : 'nicht verfuegbar';
+  const formattedCount = Number.isSafeInteger(count) && count >= 0 ? String(count) : 'unbekannt';
+  return [`€ ${formattedValue}`, `Summe (${formattedCount} Rechnungen)`];
+}
+
 export function AgingKachel() {
   const [data, setData] = useState<AgingData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
-  const [rechnungen, setRechnungen] = useState<any[]>([]);
+  const [rechnungen, setRechnungen] = useState<AgingInvoice[]>([]);
   const [rechnungenLoading, setRechnungenLoading] = useState(false);
+  const [rechnungenError, setRechnungenError] = useState<string | null>(null);
+  const [rechnungenTruncated, setRechnungenTruncated] = useState(false);
   const [actionStatus, setActionStatus] = useState<Record<string, 'idle'|'loading'|'done'>>({});
+  const reminderRequestIds = useRef<Record<string, string>>({});
+  const dunningRequestIds = useRef<Record<string, string>>({});
   
   const [phoneModalOpen, setPhoneModalOpen] = useState(false);
   const [phoneNote, setPhoneNote] = useState("");
   const [phoneSaving, setPhoneSaving] = useState(false);
-  const [phoneTargetRechnung, setPhoneTargetRechnung] = useState<any>(null);
+  const [phoneTargetRechnung, setPhoneTargetRechnung] = useState<AgingInvoice | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
-      const result = await getAgingDaten();
-      const filtered = result.filter(r => BUCKET_ORDER.includes(r.aging_bucket));
-      filtered.sort((a, b) => BUCKET_ORDER.indexOf(a.aging_bucket) - BUCKET_ORDER.indexOf(b.aging_bucket));
-      setData(filtered);
-      setLoading(false);
+      try {
+        const result = await getAgingDaten();
+        const filtered = result.filter(r => BUCKET_ORDER.includes(r.aging_bucket));
+        filtered.sort((a, b) => BUCKET_ORDER.indexOf(a.aging_bucket) - BUCKET_ORDER.indexOf(b.aging_bucket));
+        setData(filtered);
+        setLoadError(null);
+      } catch {
+        setData([]);
+        setLoadError("Forderungsdaten sind nicht verfügbar; dies ist kein bestätigter Nullbestand.");
+      } finally {
+        setLoading(false);
+      }
     }
-    load();
+    void load();
   }, []);
 
-  const handleBarClick = async (dataPayload: any) => {
-    const bucket = dataPayload?.payload?.bucketId || dataPayload?.bucketId;
+  const handleBarClick = async (dataPayload: unknown) => {
+    const bucket = agingBucketFromClick(dataPayload);
     if (!bucket) return;
     
     setSelectedBucket(bucket);
     setDrawerOpen(true);
     setRechnungenLoading(true);
-    
-    const result = await getAgingRechnungen(bucket);
-    setRechnungen(result);
-    setRechnungenLoading(false);
+    setRechnungenError(null);
+    try {
+      const result = await getAgingRechnungen(bucket);
+      setRechnungen(result.invoices);
+      setRechnungenTruncated(result.truncated);
+    } catch {
+      setRechnungen([]);
+      setRechnungenTruncated(false);
+      setRechnungenError("Rechnungen konnten nicht bestätigt geladen werden.");
+    } finally {
+      setRechnungenLoading(false);
+    }
   };
 
   const handleErinnerung = async (id: string) => {
     setActionStatus(prev => ({ ...prev, [id]: 'loading' }));
     try {
-      const res = await sendeZahlungserinnerung(id);
-      if (res.modus === 'manuell') {
-        navigator.clipboard.writeText(res.text);
-        alert(`Text in Zwischenablage kopiert. Kein Mail-Provider angebunden.\n\n${res.hinweis}`);
+      const requestId = reminderRequestIds.current[id] || crypto.randomUUID();
+      reminderRequestIds.current[id] = requestId;
+      const res = await erstelleZahlungserinnerungsEntwurf(id, requestId);
+      if (!res.success) throw new Error(res.message);
+      delete reminderRequestIds.current[id];
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(res.text);
+        copied = true;
+      } catch {
+        window.prompt("Entwurf manuell kopieren", res.text);
       }
+      alert(`${res.hinweis}${copied ? "\n\nText wurde in die Zwischenablage kopiert." : ""}`);
       setActionStatus(prev => ({ ...prev, [id]: 'done' }));
       setTimeout(() => setActionStatus(prev => ({ ...prev, [id]: 'idle' })), 3000);
     } catch (e) {
@@ -95,13 +157,20 @@ export function AgingKachel() {
   const handleMahnung = async (id: string) => {
     setActionStatus(prev => ({ ...prev, [id]: 'loading' }));
     try {
-      const res = await sendeMahnung(id);
-      if (res.modus === 'manuell') {
-        navigator.clipboard.writeText(res.text);
-        alert(`Text in Zwischenablage kopiert. Kein Mail-Provider angebunden.\n\n${res.hinweis}`);
+      const requestId = dunningRequestIds.current[id] || crypto.randomUUID();
+      dunningRequestIds.current[id] = requestId;
+      const res = await erstelleMahnungsEntwurf(id, requestId);
+      if (!res.success) throw new Error(res.message);
+      delete dunningRequestIds.current[id];
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(res.text);
+        copied = true;
+      } catch {
+        window.prompt("Entwurf manuell kopieren", res.text);
       }
+      alert(`${res.hinweis}${copied ? "\n\nText wurde in die Zwischenablage kopiert." : ""}`);
       setActionStatus(prev => ({ ...prev, [id]: 'done' }));
-      setRechnungen(prev => prev.map(r => r.invoice_id === id ? { ...r, mahnstufe: res.neueMahnstufe } : r));
       setTimeout(() => setActionStatus(prev => ({ ...prev, [id]: 'idle' })), 3000);
     } catch (e) {
       alert("Fehler: " + (e as Error).message);
@@ -109,27 +178,31 @@ export function AgingKachel() {
     }
   };
 
-  const handlePhoneClick = (rechnung: any) => {
+  const handlePhoneClick = (rechnung: AgingInvoice) => {
     setPhoneTargetRechnung(rechnung);
     setPhoneNote(`Zahlungserinnerung RE-${rechnung.rechnung_nummer}\n\n`);
     setPhoneModalOpen(true);
   };
 
   const handleSavePhoneNote = async () => {
-    if (!phoneNote.trim()) return;
+    if (!phoneNote.trim() || !phoneTargetRechnung) return;
     setPhoneSaving(true);
+    setPhoneError(null);
     try {
-      await savePhoneNote({
-        customer_id: phoneTargetRechnung?.kunde_name, // fallback as we might not have customer_id directly here
-        caller_name: phoneTargetRechnung?.kunde_name,
-        raw_text: phoneNote,
+      const result = await createPhoneNote({
+        customerId: phoneTargetRechnung.customer_id,
+        ...(phoneTargetRechnung.order_id ? { orderId: phoneTargetRechnung.order_id } : {}),
+        callerName: phoneTargetRechnung.kunde_name,
+        rawText: phoneNote,
         category: "Buchhaltung",
-        urgency: "Normal"
+        urgency: "Normal",
+        status: "open",
       });
+      if (!result.success) throw new Error(result.error);
       setPhoneModalOpen(false);
       setPhoneTargetRechnung(null);
     } catch (e) {
-      console.error(e);
+      setPhoneError(e instanceof Error ? e.message : "Telefonnotiz konnte nicht gespeichert werden.");
     } finally {
       setPhoneSaving(false);
     }
@@ -176,7 +249,11 @@ export function AgingKachel() {
         </div>
         
         <div className="flex-1 p-6 flex flex-col">
-          {totalSum === 0 ? (
+          {loadError ? (
+            <div role="alert" className="flex-1 flex items-center justify-center text-danger-red font-medium text-center px-4">
+              {loadError}
+            </div>
+          ) : totalSum === 0 ? (
             <div className="flex-1 flex items-center justify-center text-neutral-gray-500 font-medium">
               Keine offenen Forderungen
             </div>
@@ -188,7 +265,7 @@ export function AgingKachel() {
                     <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
                     <YAxis tickFormatter={(val) => `€${(val / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
                     <Tooltip 
-                      formatter={(value: any, name: any, props: any) => [`€ ${Number(value).toLocaleString('de-DE')}`, `Summe (${props.payload.anzahl} Rechnungen)`]}
+                      formatter={formatAgingTooltip}
                       cursor={{ fill: 'transparent' }}
                     />
                     <Bar dataKey="value" radius={[4, 4, 0, 0]} onClick={handleBarClick}>
@@ -212,14 +289,19 @@ export function AgingKachel() {
       <ResponsiveDetailDrawer
         isOpen={drawerOpen}
         onClose={() => setDrawerOpen(false)}
-        title={selectedBucketData ? `Überfällig ${selectedBucketData.name} (${selectedBucketData.anzahl} Rechnungen, € ${selectedBucketData.value.toLocaleString('de-DE', {maximumFractionDigits:0})})` : 'Rechnungen laden...'}
+        title={selectedBucketData ? `Forderungen ${selectedBucketData.name} (${selectedBucketData.anzahl} Rechnungen, € ${selectedBucketData.value.toLocaleString('de-DE', {maximumFractionDigits:0})})` : 'Rechnungen laden...'}
       >
         {rechnungenLoading ? (
           <div className="flex h-40 items-center justify-center">
             <Loader2 className="w-8 h-8 animate-spin text-navy-500" />
           </div>
+        ) : rechnungenError ? (
+          <div role="alert" className="p-4 text-danger-red">{rechnungenError} Dies ist keine bestätigte leere Liste.</div>
         ) : (
           <div className="space-y-4">
+            {rechnungenTruncated && (
+              <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Es werden nur die ersten 100 bestätigten Rechnungen dieses Bereichs angezeigt.</p>
+            )}
             {rechnungen.length === 0 ? (
               <p className="text-text-muted">Keine Rechnungen in diesem Bereich.</p>
             ) : (
@@ -233,42 +315,48 @@ export function AgingKachel() {
                           <span className="text-navy-600 font-medium">{r.kunde_name}</span>
                         </div>
                         <div className="text-sm text-danger-red font-medium flex items-center gap-1 mt-1">
-                          Überfällig seit {r.faellig_seit_tagen} Tagen
+                          {r.faellig_seit_tagen && r.faellig_seit_tagen > 0
+                            ? `Überfällig seit ${r.faellig_seit_tagen} Tagen`
+                            : r.faellig_am ? "Noch nicht überfällig" : "Keine Fälligkeit bestätigt"}
                         </div>
                       </div>
                       <div className="text-right flex flex-col items-end">
-                        <span className="font-bold text-lg">€ {r.netto?.toLocaleString('de-DE', {maximumFractionDigits:0}) || 0}</span>
-                        <Link href={`/buchhaltung/rechnungen`} className="text-xs text-navy-600 hover:underline flex items-center gap-1">
+                        <span className="font-bold text-lg">€ {r.offener_betrag.toLocaleString('de-DE', {maximumFractionDigits:2})}</span>
+                        <Link href={`/buchhaltung/rechnungen/${encodeURIComponent(r.invoice_id)}`} className="text-xs text-navy-600 hover:underline flex items-center gap-1">
                           Zur Rechnung <ArrowRight className="w-3 h-3" />
                         </Link>
                       </div>
                     </div>
                     
                     <div className="bg-neutral-gray-50 p-2 rounded-lg text-xs text-text-muted mb-3 flex items-center gap-2">
-                      <FileText className="w-3 h-3" /> Keine bisherige Kommunikation dokumentiert.
+                      <FileText className="w-3 h-3" /> Kommunikationsbelege werden an Rechnung und Auftrag geprüft; diese Liste behauptet keine leere Historie.
                     </div>
                     
                     <div className="flex flex-wrap gap-2">
-                      <button 
-                        onClick={() => handleErinnerung(r.invoice_id)}
-                        disabled={actionStatus[r.invoice_id] === 'loading'}
-                        className={`px-3 py-1.5 font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50 ${actionStatus[r.invoice_id] === 'done' ? 'bg-success-green text-white' : 'bg-navy-600 hover:bg-navy-700 text-white'}`}
-                      >
-                        <Bell className="w-3 h-3" /> {actionStatus[r.invoice_id] === 'done' ? 'Kopiert!' : 'Zahlungserinnerung'}
-                      </button>
+                      {r.faellig_seit_tagen !== null && r.faellig_seit_tagen > 0 && (
+                        <button
+                          onClick={() => handleErinnerung(r.invoice_id)}
+                          disabled={actionStatus[r.invoice_id] === 'loading'}
+                          className={`px-3 py-1.5 font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50 ${actionStatus[r.invoice_id] === 'done' ? 'bg-success-green text-white' : 'bg-navy-600 hover:bg-navy-700 text-white'}`}
+                        >
+                          <Bell className="w-3 h-3" /> {actionStatus[r.invoice_id] === 'done' ? 'Entwurf!' : 'Erinnerungsentwurf'}
+                        </button>
+                      )}
                       <button 
                         onClick={() => handlePhoneClick(r)}
                         className="px-3 py-1.5 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-700 font-semibold rounded-md transition-colors text-xs flex items-center gap-1"
                       >
                         <Phone className="w-3 h-3" /> Anrufen
                       </button>
-                      <button 
-                        onClick={() => handleMahnung(r.invoice_id)}
-                        disabled={actionStatus[r.invoice_id] === 'loading'}
-                        className={`px-3 py-1.5 font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50 ${actionStatus[r.invoice_id] === 'done' ? 'bg-success-green text-white' : 'bg-danger-red/10 hover:bg-danger-red/20 text-danger-red'}`}
-                      >
-                        <Bell className="w-3 h-3" /> {actionStatus[r.invoice_id] === 'done' ? 'Kopiert!' : `Mahnung (Stufe ${(r.mahnstufe || 0) + 1})`}
-                      </button>
+                      {r.faellig_seit_tagen !== null && r.faellig_seit_tagen > 0 && (
+                        <button
+                          onClick={() => handleMahnung(r.invoice_id)}
+                          disabled={actionStatus[r.invoice_id] === 'loading'}
+                          className={`px-3 py-1.5 font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50 ${actionStatus[r.invoice_id] === 'done' ? 'bg-success-green text-white' : 'bg-danger-red/10 hover:bg-danger-red/20 text-danger-red'}`}
+                        >
+                          <Bell className="w-3 h-3" /> {actionStatus[r.invoice_id] === 'done' ? 'Entwurf!' : `Mahnungsentwurf Stufe ${(r.mahnstufe || 0) + 1}`}
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -307,6 +395,7 @@ export function AgingKachel() {
                 className="w-full border border-neutral-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-navy-500 outline-none h-32 resize-none"
                 placeholder="Gesprächsnotiz hier eingeben..."
               />
+              {phoneError && <div role="alert" className="mt-3 text-sm font-semibold text-danger-red">{phoneError}</div>}
               
               <div className="mt-6 flex gap-3">
                 <button 

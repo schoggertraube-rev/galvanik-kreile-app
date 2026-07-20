@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Database, ChevronRight } from 'lucide-react';
 import { createPortal } from 'react-dom';
+import Link from 'next/link';
 
 interface DatenherkunftZeileProps {
   belege: number;
@@ -86,7 +87,7 @@ export function DatenherkunftZeile({
               {!hasData ? (
                 <div className="text-center py-12 text-neutral-400 text-sm">
                   Noch keine Daten erfasst. <br /><br />
-                  <a href="/buchhaltung/belege" className="text-blue-600 underline font-medium">Neuen Beleg hinzufügen</a>
+                  <Link href="/buchhaltung/belege" className="text-blue-600 underline font-medium">Neuen Beleg hinzufügen</Link>
                 </div>
               ) : (
                 <div>
@@ -96,36 +97,8 @@ export function DatenherkunftZeile({
                     <strong>{sourceText}</strong>
                   </p>
                   
-                  <div className="border border-neutral-200 rounded-xl overflow-hidden">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-neutral-50 border-b border-neutral-200">
-                        <tr>
-                          <th className="px-4 py-3 font-semibold text-neutral-600">Datum</th>
-                          <th className="px-4 py-3 font-semibold text-neutral-600">Beleg / Datensatz</th>
-                          <th className="px-4 py-3 font-semibold text-neutral-600 text-right">Wert</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b border-neutral-100 hover:bg-neutral-50">
-                          <td className="px-4 py-3 text-neutral-500">Heute</td>
-                          <td className="px-4 py-3 font-medium text-[#1e1b18]">System-Snapshot</td>
-                          <td className="px-4 py-3 text-right">Aggregiert</td>
-                        </tr>
-                        <tr className="hover:bg-neutral-50">
-                          <td className="px-4 py-3 text-neutral-500">Gestern</td>
-                          <td className="px-4 py-3 font-medium text-[#1e1b18]">System-Snapshot</td>
-                          <td className="px-4 py-3 text-right">Aggregiert</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                  
-                  <div className="flex items-center justify-between mt-4 text-xs text-neutral-500">
-                    <span>Zeige aggregierte Werte</span>
-                    <div className="flex gap-1">
-                      <button className="px-2 py-1 border border-neutral-200 rounded hover:bg-neutral-50 disabled:opacity-50" disabled>Zurück</button>
-                      <button className="px-2 py-1 border border-neutral-200 rounded hover:bg-neutral-50 disabled:opacity-50" disabled>Weiter</button>
-                    </div>
+                  <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
+                    Diese Ansicht bestätigt ausschließlich die oben genannten aggregierten Zähler. Eine Einzelbeleg-Liste ist hier nicht angebunden; deshalb werden keine erfundenen Snapshot-Zeilen oder Zeitpunkte dargestellt.
                   </div>
                 </div>
               )}

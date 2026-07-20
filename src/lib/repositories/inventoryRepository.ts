@@ -1,22 +1,52 @@
 import {
   createLagerBewegungAction,
-  getLagerArtikelAction,
   getLagerbestandAction,
   getLagerBewegungenAction,
 } from "@/app/lager/actions";
 
 export interface InventoryItem {
   id: string;
-  sku: string;
+  sku: string | null;
   name: string;
-  category: "chemical" | "consumable" | "tooling" | "packaging" | "other";
-  unit: string;
+  category: "chemical" | "consumable" | "tooling" | "packaging" | "other" | "unknown";
+  unit: string | null;
   currentStock: number;
-  minStock: number;
-  storageLocation?: string;
+  minStock: number | null;
+  lastStockInAt: string | null;
+  storageLocation: string | null;
   isConsumable: boolean;
-  isHazardous?: boolean;
-  pricePerUnit?: number;
+  isHazardous: boolean | null;
+  pricePerUnit: number | null;
+}
+
+export interface InventoryCapabilities {
+  canWrite: boolean;
+  writeReason: string | null;
+  historyLimit: number;
+  quantityDecimals: number;
+  quantityStep: number;
+}
+
+export interface InventorySnapshot {
+  items: InventoryItem[];
+  capabilities: InventoryCapabilities;
+}
+
+export interface InventoryMovementHistory {
+  movements: StockMovement[];
+  truncated: boolean;
+  limit: number;
+  unitContext: "current_inventory_item";
+}
+
+export class InventoryRepositoryError extends Error {
+  constructor(
+    public readonly actionCode: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "InventoryRepositoryError";
+  }
 }
 
 export interface StockMovement {
@@ -24,39 +54,39 @@ export interface StockMovement {
   inventoryItemId: string;
   movementType: "stock_in" | "stock_out" | "consumption" | "correction" | "waste";
   quantity: number;
-  unit: string;
+  unit: string | null;
   orderId?: string;
   reason?: string;
   createdBy: string;
   createdAt: string | null;
+  replayed?: boolean;
 }
 
-function unwrap<T>(result: { ok: true; data: T } | { ok: false; message: string }): T {
-  if (!result.ok) throw new Error(`DATA_ERROR: ${result.message}`);
+function unwrap<T>(result: { ok: true; data: T } | { ok: false; error: string; message: string }): T {
+  if (!result.ok) throw new InventoryRepositoryError(result.error, result.message);
   return result.data;
 }
 
 export const inventoryRepository = {
-  async getAllItems(): Promise<InventoryItem[]> {
+  async getSnapshot(): Promise<InventorySnapshot> {
     return unwrap(await getLagerbestandAction());
   },
 
-  async getAllMovements(): Promise<StockMovement[]> {
-    return unwrap(await getLagerBewegungenAction());
+  async getAllItems(): Promise<InventoryItem[]> {
+    return (await this.getSnapshot()).items;
   },
 
-  async getItemById(id: string): Promise<InventoryItem | null> {
-    return unwrap(await getLagerArtikelAction(id));
-  },
-
-  async getMovementsByItem(inventoryItemId: string): Promise<StockMovement[]> {
+  async getMovementsByItem(inventoryItemId: string): Promise<InventoryMovementHistory> {
     return unwrap(await getLagerBewegungenAction(inventoryItemId));
   },
 
   async createMovement(
-    data: Omit<StockMovement, "id" | "createdAt" | "createdBy" | "unit"> & { unit?: string },
+    data: Omit<StockMovement, "id" | "createdAt" | "createdBy" | "unit" | "replayed"> & {
+      clientRequestId: string;
+    },
   ): Promise<StockMovement> {
     return unwrap(await createLagerBewegungAction({
+      clientRequestId: data.clientRequestId,
       inventoryItemId: data.inventoryItemId,
       movementType: data.movementType,
       quantity: data.quantity,
@@ -67,6 +97,6 @@ export const inventoryRepository = {
 
   async hasCriticalStock(): Promise<boolean> {
     const items = await this.getAllItems();
-    return items.some(item => item.currentStock < item.minStock);
+    return items.some(item => item.minStock !== null && item.currentStock < item.minStock);
   }
 };

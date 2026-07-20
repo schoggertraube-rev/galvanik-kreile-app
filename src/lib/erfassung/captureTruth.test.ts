@@ -27,6 +27,12 @@ describe("operational capture truth boundary", () => {
     expect(action).toContain("INSUFFICIENT_STOCK");
     expect(action).toContain("PRICE_MISSING");
     expect(action).not.toContain("partial:");
+    expect(action).toContain("readCaptureWriteCapability");
+    expect(action).toContain("CAPTURE_ROLLOUT_REQUIRED");
+    expect(action).toContain("('capture_request_receipts', 'station_kuerzel')");
+    expect(action).toContain("pi.indisvalid");
+    expect(action).toContain("pi.indisready");
+    expect(action).toContain("value === null || value === undefined");
   });
 
   it("keeps the active client free of direct database and invented-cost paths", () => {
@@ -46,6 +52,8 @@ describe("operational capture truth boundary", () => {
     expect(combined).not.toContain("stationsSet.add('GAL')");
     expect(sheet).toContain("unitCostEur");
     expect(sheet).toContain("currentStock");
+    expect(sheet).toContain("Zeitbuchung ist bestätigt");
+    expect(sheet).toContain("Materialbuchung ist bestätigt");
   });
 
   it("completes time, material and the locked process state in one idempotent transaction", () => {
@@ -59,6 +67,12 @@ describe("operational capture truth boundary", () => {
     expect(completion).toContain('.for("update")');
     expect(completion).toContain('kind: "station_completion"');
     expect(completion).toContain("if (request.replay) return request.replay");
+    expect(completion).toContain('expectedStation === "galvanik"');
+    expect(completion).toContain("BATH_PARTICIPATION_REQUIRED");
+    expect(completion.indexOf("if (request.replay) return request.replay")).toBeLessThan(completion.indexOf('expectedStation === "galvanik"'));
+    expect(completion).toContain('expectedStation === "qualitaetssicherung"');
+    expect(completion).toContain("QUALITY_RECEIPT_REQUIRED");
+    expect(completion.indexOf("if (request.replay) return request.replay")).toBeLessThan(completion.indexOf('expectedStation === "qualitaetssicherung"'));
     expect(completion).toContain('currentStatus !== "in_progress"');
     expect(completion).toContain("storedStation !== expectedStation");
     expect(completion).toContain("lockAndConsumeMaterials");
@@ -71,10 +85,18 @@ describe("operational capture truth boundary", () => {
     expect(modal).toContain("isSubmitting");
     expect(modal).toContain("clientRequestId");
     expect(modal).toContain("selectedRate?.valueEurPerHour");
+    expect(modal).toContain("catalogTruncated");
+    expect(modal).toContain("nicht als fehlend bestätigt");
+    expect(modal).toContain("matchingConsumables.length === 0");
+    expect(modal).toContain("Gesamtkatalog ist damit nicht leer bestätigt");
     expect(modal).not.toContain("DEFAULT_HOURLY_RATE_EUR");
     expect(modal).not.toContain("inventoryRepository.createMovement");
     expect(modal).not.toContain("eventsRepository.addEvent");
     expect(modal).not.toContain("transitionOrderProcess");
+    const galvanikExtras = source("src/components/orders/variants/GalvanikExtras.tsx");
+    expect(galvanikExtras).toContain("kein Auftrag-zu-Bad-Beleg bestätigt");
+    expect(galvanikExtras).not.toContain("Chrombad 2");
+    expect(galvanikExtras).not.toContain("12 µm");
   });
 
   it("prepares but does not apply the tenant, RLS and receipt migration", () => {

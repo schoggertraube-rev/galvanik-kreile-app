@@ -3,6 +3,7 @@
 
 ALTER TABLE public.communications
   ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES public.app_users(id),
+  ADD COLUMN IF NOT EXISTS invoice_id uuid REFERENCES public.ausgangsrechnung(id) ON DELETE RESTRICT,
   ADD COLUMN IF NOT EXISTS recipient text,
   ADD COLUMN IF NOT EXISTS template_key text,
   ADD COLUMN IF NOT EXISTS idempotency_key text,
@@ -17,7 +18,7 @@ DO $preflight$
 BEGIN
   IF EXISTS (
     SELECT 1 FROM public.communications
-    WHERE status NOT IN ('queued', 'sending', 'sent', 'delivered', 'opened', 'bounced', 'complained', 'failed', 'uncertain')
+    WHERE status NOT IN ('draft', 'queued', 'sending', 'sent', 'delivered', 'opened', 'bounced', 'complained', 'failed', 'uncertain')
   ) THEN
     RAISE EXCEPTION 'Unknown communications.status values must be classified before email hardening';
   END IF;
@@ -42,7 +43,7 @@ ALTER TABLE public.communications
   ALTER COLUMN status SET DEFAULT 'queued',
   ALTER COLUMN status SET NOT NULL,
   ADD CONSTRAINT communications_delivery_status_chk
-    CHECK (status IN ('queued', 'sending', 'sent', 'delivered', 'opened', 'bounced', 'complained', 'failed', 'uncertain')),
+    CHECK (status IN ('draft', 'queued', 'sending', 'sent', 'delivered', 'opened', 'bounced', 'complained', 'failed', 'uncertain')),
   ADD CONSTRAINT communications_attempt_count_chk CHECK (attempt_count >= 0),
   ADD CONSTRAINT communications_idempotency_key_chk CHECK (
     idempotency_key IS NULL OR idempotency_key ~ '^[A-Za-z0-9._:/-]{8,200}$'
@@ -62,6 +63,9 @@ CREATE UNIQUE INDEX communications_resend_message_uidx
   WHERE resend_message_id IS NOT NULL;
 CREATE INDEX communications_delivery_status_idx
   ON public.communications (status, claimed_at);
+CREATE INDEX communications_tenant_invoice_created_idx
+  ON public.communications (tenant_id, invoice_id, created_at DESC)
+  WHERE invoice_id IS NOT NULL;
 
 CREATE TABLE public.email_webhook_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

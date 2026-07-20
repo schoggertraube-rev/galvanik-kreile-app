@@ -158,7 +158,7 @@ export function KommunikationClient() {
               <div>
                 <h1 style={{ margin: 0, fontSize: 28, fontWeight: 750 }}>Kommunikation</h1>
                 <p style={{ margin: "4px 0 0", color: "#746C61", fontSize: 13 }}>
-                  Persistierte Telefonnotizen · E-Mail, Chat und Versand sind noch nicht angebunden.
+                  Persistierte Telefonnotizen · Status-Mail-Belege sind am jeweiligen Auftrag sichtbar; E-Mail-Postfach, Chat und Versand bleiben separat nicht angebunden.
                 </p>
               </div>
             </div>
@@ -282,7 +282,7 @@ export function KommunikationClient() {
                     </div>
                   </div>
                   <div style={{ marginTop: 18, padding: 12, borderRadius: 9, background: "#F1ECE4", color: "#62594F", fontSize: 12 }}>
-                    Versand, E-Mail-Postfach, Chat, Anhänge und Kalender sind in diesem Fundament noch nicht verbunden; deshalb werden hier keine entsprechenden Aktionen angeboten.
+                    Status-Mail-Versand und seine Belege werden am jeweiligen Auftrag geführt. E-Mail-Postfach, Chat, Anhänge, Versand und Kalender sind in dieser Telefonnotiz-Sicht noch nicht verbunden; deshalb werden hier keine entsprechenden Aktionen angeboten.
                   </div>
                 </>
               )}

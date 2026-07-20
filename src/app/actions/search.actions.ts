@@ -16,21 +16,21 @@ export interface SearchResult {
 
 export async function globalSearch(query: unknown): Promise<{ ok: boolean; results?: SearchResult[]; error?: string }> {
   const authorization = await resolveAuthorization();
-  if (!authorization.ok) return { ok: false, error: "Anmeldung erforderlich." };
+  if (!authorization.ok) return { ok: false, error: authorization.message };
   if (
     authorization.data.tenantId !== "galvanik-kreile"
     || (!authorization.data.permissions.includes("perm_view_leitstand") && !authorization.data.permissions.includes("perm_view_customers"))
   ) {
-    return { ok: false, error: "Keine Berechtigung fÃ¼r die globale Suche." };
+    return { ok: false, error: "Keine Berechtigung für die globale Suche." };
   }
 
-  if (typeof query !== "string") return { ok: false, error: "UngÃ¼ltige Suchanfrage." };
+  if (typeof query !== "string") return { ok: false, error: "Ungültige Suchanfrage." };
   const normalized = query.trim();
   if (normalized.length < 2) {
     return { ok: true, results: [] };
   }
   if (normalized.length > 100 || /[\u0000-\u001F\u007F]/.test(normalized)) {
-    return { ok: false, error: "UngÃ¼ltige Suchanfrage." };
+    return { ok: false, error: "Ungültige Suchanfrage." };
   }
 
   const q = `%${normalized.replace(/[\\%_]/g, "\\$&")}%`;
@@ -100,7 +100,7 @@ export async function globalSearch(query: unknown): Promise<{ ok: boolean; resul
         id: item.id,
         type: "item" as const,
         title: item.name,
-        subtitle: `Auftrag ${item.orderNumber}${item.material ? ` Â· ${item.material}` : ""}`,
+        subtitle: `Auftrag ${item.orderNumber}${item.material ? ` · ${item.material}` : ""}`,
         url: `/orders?id=${encodeURIComponent(item.orderId)}`,
       })),
       ...foundBaths.map((bath) => ({
@@ -115,7 +115,7 @@ export async function globalSearch(query: unknown): Promise<{ ok: boolean; resul
         type: "lager" as const,
         title: inventoryItem.name,
         subtitle: inventoryItem.category || "Kategorie nicht erfasst",
-        url: "/lager",
+        url: `/items?item=${encodeURIComponent(inventoryItem.id)}`,
       })),
     );
 
@@ -191,6 +191,6 @@ export async function globalSearch(query: unknown): Promise<{ ok: boolean; resul
     return { ok: true, results };
   } catch (error) {
     console.error("Global search failed:", error);
-    return { ok: false, error: "Suche konnte nicht ausgefÃ¼hrt werden." };
+    return { ok: false, error: "Suche konnte nicht ausgeführt werden." };
   }
 }

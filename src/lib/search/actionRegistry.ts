@@ -60,11 +60,20 @@ export const SEARCH_ACTIONS: SearchAction[] = [
   {
     id: "action-lager",
     code: "ACTION_LAGER",
-    label: "Lager & Badregelkarte",
-    synonyms: ["lager", "material", "bestand", "bad", "bäder", "chemikalien", "säure", "kupfer", "labor", "laboranalyse", "badanalyse"],
+    label: "Lager & Material",
+    synonyms: ["lager", "material", "bestand", "chemikalien", "säure", "kupfer"],
     routeOnSelect: "/items",
     icon: "📦",
-    description: "Lagerbestände und Badwerte",
+    description: "Kanonische Lagerbestände und Materialbewegungen",
+  },
+  {
+    id: "action-baeder",
+    code: "ACTION_BAEDER",
+    label: "Bäder & Laboranalyse",
+    synonyms: ["bad", "bäder", "badregelkarte", "labor", "laboranalyse", "badanalyse"],
+    routeOnSelect: "/baeder",
+    icon: "🧪",
+    description: "Badwerte und Laboranalysen",
   },
   {
     id: "action-settings",

@@ -1,7 +1,7 @@
 "use server";
 
 import { createHash } from "node:crypto";
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
@@ -78,7 +78,7 @@ export type CaptureTemplate = {
 export type CaptureArticle = {
   id: string;
   name: string;
-  unit: string;
+  unit: string | null;
   currentStock: number;
   unitCostEur: number | null;
   suggestedQuantity: number | null;
@@ -91,6 +91,14 @@ export type CaptureOverview = {
   currentStation: string | null;
   selectedStation: string | null;
   selectedRate: { valueEurPerHour: number; source: "employee" | "station_default" } | null;
+  writeCapability: {
+    available: boolean;
+    reason: string | null;
+  };
+  inventoryCatalog: {
+    limit: number;
+    truncated: boolean;
+  };
   routeExecution: {
     status: "executable" | "blocked";
     nextStation: OrderStation | null;
@@ -165,9 +173,162 @@ function failure<T>(error: CaptureErrorCode, message: string): CaptureResult<T> 
   return { ok: false, error, message };
 }
 
+const CAPTURE_ROLLOUT_REQUIRED = "Der atomare Erfassungs-Rollout ist in dieser Datenbank noch nicht vollständig bestätigt. Lesen bleibt möglich; Schreiben bleibt gesperrt.";
+const CAPTURE_INVENTORY_LIMIT = 250;
+
+async function readCaptureWriteCapability(): Promise<CaptureOverview["writeCapability"]> {
+  try {
+    const rows = await db.execute(sql<{ available: boolean }>`
+      select (
+        to_regclass('public.capture_request_receipts') is not null
+        and not exists (
+          select 1
+          from (values
+            ('arbeitszeit_buchung', 'client_request_id'),
+            ('stock_movements', 'client_request_id'),
+            ('audit_log', 'tenant_id'),
+            ('audit_log', 'client_request_id'),
+            ('capture_request_receipts', 'id'),
+            ('capture_request_receipts', 'tenant_id'),
+            ('capture_request_receipts', 'client_request_id'),
+            ('capture_request_receipts', 'kind'),
+            ('capture_request_receipts', 'actor_id'),
+            ('capture_request_receipts', 'order_id'),
+            ('capture_request_receipts', 'station_kuerzel'),
+            ('capture_request_receipts', 'request_hash'),
+            ('capture_request_receipts', 'result'),
+            ('capture_request_receipts', 'created_at'),
+            ('capture_request_receipts', 'completed_at')
+          ) as required(table_name, column_name)
+          where not exists (
+            select 1
+            from information_schema.columns c
+            where c.table_schema = 'public'
+              and c.table_name = required.table_name
+              and c.column_name = required.column_name
+          )
+        )
+        and exists (
+          select 1 from information_schema.columns c
+          where c.table_schema = 'public'
+            and c.table_name = 'inventory_items'
+            and c.column_name = 'tenant_id'
+            and c.is_nullable = 'NO'
+        )
+        and exists (
+          select 1 from information_schema.columns c
+          where c.table_schema = 'public'
+            and c.table_name = 'inventory_items'
+            and c.column_name = 'current_stock'
+            and c.data_type in ('numeric', 'decimal')
+            and c.numeric_scale = 4
+            and c.is_nullable = 'NO'
+        )
+        and not exists (
+          select 1
+          from (values
+            ('inventory_items', 'inventory_items_current_stock_nonnegative'),
+            ('arbeitszeit_buchung', 'arbeitszeit_buchung_duration_nonnegative'),
+            ('arbeitszeit_buchung', 'arbeitszeit_buchung_rate_nonnegative'),
+            ('stock_movements', 'stock_movements_quantity_nonzero')
+          ) as required(table_name, constraint_name)
+          where not exists (
+            select 1
+            from pg_constraint pc
+            join pg_class rel on rel.oid = pc.conrelid
+            join pg_namespace ns on ns.oid = rel.relnamespace
+            where ns.nspname = 'public'
+              and rel.relname = required.table_name
+              and pc.conname = required.constraint_name
+              and pc.convalidated
+          )
+        )
+        and exists (
+          select 1
+          from pg_constraint pc
+          join pg_class rel on rel.oid = pc.conrelid
+          join pg_namespace ns on ns.oid = rel.relnamespace
+          where pc.conname = 'capture_request_receipts_kind_check'
+            and ns.nspname = 'public'
+            and rel.relname = 'capture_request_receipts'
+            and pc.convalidated
+            and pg_get_constraintdef(pc.oid) like '%station_completion%'
+        )
+        and exists (
+          select 1
+          from pg_index pi
+          join pg_class idx on idx.oid = pi.indexrelid
+          join pg_class rel on rel.oid = pi.indrelid
+          join pg_namespace ns on ns.oid = rel.relnamespace
+          where ns.nspname = 'public'
+            and rel.relname = 'capture_request_receipts'
+            and idx.relname = 'capture_request_receipts_tenant_request_kind_uidx'
+            and pi.indisunique
+            and pi.indisvalid
+            and pi.indisready
+            and pi.indpred is null
+            and pg_get_indexdef(pi.indexrelid) like '%(tenant_id, client_request_id, kind)%'
+        )
+      ) as available
+    `);
+    const available = rows[0]?.available;
+    if (typeof available !== "boolean") return { available: false, reason: CAPTURE_ROLLOUT_REQUIRED };
+    return { available, reason: available ? null : CAPTURE_ROLLOUT_REQUIRED };
+  } catch (error) {
+    console.error("Capture capability preflight failed", error);
+    return { available: false, reason: CAPTURE_ROLLOUT_REQUIRED };
+  }
+}
+
+async function requireCaptureWriteCapability(): Promise<CaptureResult<true>> {
+  const capability = await readCaptureWriteCapability();
+  return capability.available
+    ? { ok: true, data: true }
+    : failure("CONFIGURATION_MISSING", capability.reason || CAPTURE_ROLLOUT_REQUIRED);
+}
+
+async function readCaptureInventoryCatalog(tenantId: string) {
+  return db.transaction(async (tx) => {
+    const [rows, tenantHealthRows] = await Promise.all([
+      tx.select({
+        id: inventoryItems.id,
+        name: inventoryItems.name,
+        unit: inventoryItems.unit,
+        einheitNormiert: inventoryItems.einheitNormiert,
+        currentStock: inventoryItems.currentStock,
+        einkaufspreisEur: inventoryItems.einkaufspreisEur,
+      })
+        .from(inventoryItems)
+        .where(eq(inventoryItems.tenantId, tenantId))
+        .orderBy(inventoryItems.name)
+        .limit(CAPTURE_INVENTORY_LIMIT + 1),
+      tx.execute(sql<{ unassigned_count: number | string }>`
+        select count(*)::int as unassigned_count
+        from public.inventory_items
+        where tenant_id is null or btrim(tenant_id) = ''
+      `),
+    ]);
+    const unassignedCount = Number(tenantHealthRows[0]?.unassigned_count);
+    if (!Number.isSafeInteger(unassignedCount) || unassignedCount < 0) throw new Error("INVALID_INVENTORY_TENANT_HEALTH");
+    if (unassignedCount > 0) throw new Error("INVENTORY_TENANT_ASSIGNMENT_INCOMPLETE");
+    return {
+      rows: rows.slice(0, CAPTURE_INVENTORY_LIMIT),
+      truncated: rows.length > CAPTURE_INVENTORY_LIMIT,
+    };
+  }, { isolationLevel: "repeatable read", accessMode: "read only" });
+}
+
 async function authorizeCapture(mode: "read" | "write" | "status"): Promise<CaptureResult<AuthorizationSnapshot>> {
   const authorization = await resolveAuthorization();
-  if (!authorization.ok) return failure("UNAUTHORIZED", "Anmeldung erforderlich.");
+  if (!authorization.ok) {
+    if (authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
+      return failure("STORAGE_UNAVAILABLE", authorization.message);
+    }
+    if (authorization.reason === "TENANT_SUSPENDED" || authorization.reason === "TENANT_MAINTENANCE") {
+      return failure("FORBIDDEN", authorization.message);
+    }
+    return failure("UNAUTHORIZED", authorization.message);
+  }
   const permissions = authorization.data.permissions;
   const canRead = permissions.includes("perm_view_leitstand") || permissions.includes("perm_data_orders");
   const canWrite = permissions.includes("perm_op_status") || permissions.includes("perm_data_orders");
@@ -183,6 +344,9 @@ async function authorizeCapture(mode: "read" | "write" | "status"): Promise<Capt
 }
 
 function finiteNumber(value: string | number | null | undefined, code = "INVALID_NUMBER"): number {
+  if (value === null || value === undefined || (typeof value === "string" && value.trim() === "")) {
+    throw new Error(code);
+  }
   const number = Number(value);
   if (!Number.isFinite(number)) throw new Error(code);
   return number;
@@ -519,8 +683,11 @@ function mapCaptureError<T>(error: unknown): CaptureResult<T> {
   if (["RATE_MISSING", "RATE_INVALID", "ACTOR_NOT_FOUND"].includes(code)) {
     return failure("CONFIGURATION_MISSING", "Für diese Station fehlt ein gültiger Kostensatz.");
   }
-  if (["PRICE_MISSING", "TEMPLATE_INVALID", "INVALID_NUMBER"].includes(code)) {
+  if (["PRICE_MISSING", "UNIT_MISSING", "TEMPLATE_INVALID", "INVALID_NUMBER"].includes(code)) {
     return failure("CONFIGURATION_MISSING", "Bestand, Preis oder Vorlage ist nicht vollständig konfiguriert.");
+  }
+  if (code === "INVENTORY_TENANT_ASSIGNMENT_INCOMPLETE") {
+    return failure("CONFIGURATION_MISSING", "Lagerartikel sind noch nicht vollständig dem Mandanten zugeordnet. Die Erfassung zeigt deshalb keinen unvollständigen Bestand.");
   }
   if (code === "ITEM_NOT_FOUND") return failure("NOT_FOUND", "Ein Lagerartikel gehört nicht zum angemeldeten Mandanten.");
   if (code === "INSUFFICIENT_STOCK") return failure("INSUFFICIENT_STOCK", "Der verfügbare Bestand reicht für diese Buchung nicht aus.");
@@ -529,6 +696,12 @@ function mapCaptureError<T>(error: unknown): CaptureResult<T> {
   if (code === "ORDER_NOT_IN_PROGRESS") return failure("CONFLICT", "Nur eine laufende Station kann abgeschlossen werden. Bitte neu laden.");
   if (code === "SHIPPING_RECEIPT_REQUIRED") {
     return failure("CONFLICT", "Warenausgang kann nicht über den generischen Stationsabschluss als versendet markiert werden. Ein bestätigter Übergabe-/Versandbeleg ist erforderlich.");
+  }
+  if (code === "BATH_PARTICIPATION_REQUIRED") {
+    return failure("CONFLICT", "Galvanik kann erst abgeschlossen werden, wenn Bad, betroffene Positionen und Prozesswerte in einem atomaren Badbeteiligungsbeleg bestätigt sind.");
+  }
+  if (code === "QUALITY_RECEIPT_REQUIRED") {
+    return failure("CONFLICT", "Qualitätssicherung kann erst abgeschlossen werden, wenn Prüfer, Ergebnis, betroffene Positionen und Zeitpunkt in einem atomaren QS-Beleg bestätigt sind.");
   }
   if (code === "ORDER_WITHOUT_ITEMS") {
     return failure("CONFLICT", "Ein Auftrag ohne bestätigte Positionen kann nicht abgeschlossen werden.");
@@ -581,7 +754,11 @@ export async function getCaptureOverview(orderIdValue: unknown, stationValue?: u
       nextStation: null,
       reason: "UNKNOWN_ORDER_STATION",
     };
-    if (currentStation) {
+    if (currentStation === "galvanik") {
+      routeExecution = { status: "blocked", nextStation: null, reason: "BATH_PARTICIPATION_REQUIRED" };
+    } else if (currentStation === "qualitaetssicherung") {
+      routeExecution = { status: "blocked", nextStation: null, reason: "QUALITY_RECEIPT_REQUIRED" };
+    } else if (currentStation) {
       try {
         const route = getHomogeneousRouteTransition(routeItems, parseOrderStation(currentStation));
         routeExecution = route.ok
@@ -591,29 +768,43 @@ export async function getCaptureOverview(orderIdValue: unknown, stationValue?: u
         routeExecution = { status: "blocked", nextStation: null, reason: "UNKNOWN_ORDER_STATION" };
       }
     }
-    const [template, timeRows, materialRows, catalog, recentRows, selectedRate] = await Promise.all([
+    const [template, timeRows, materialRows, catalog, recentRows, selectedRate, writeCapability] = await Promise.all([
       resolveTemplate(actor.data.tenantId, orderId),
-      db.select().from(arbeitszeitBuchung).where(and(
+      db.select({
+        id: arbeitszeitBuchung.id,
+        stationKuerzel: arbeitszeitBuchung.stationKuerzel,
+        dauerMinuten: arbeitszeitBuchung.dauerMinuten,
+        endZeit: arbeitszeitBuchung.endZeit,
+        kostensatzEurProStunde: arbeitszeitBuchung.kostensatzEurProStunde,
+      }).from(arbeitszeitBuchung).where(and(
         eq(arbeitszeitBuchung.tenantId, actor.data.tenantId),
         eq(arbeitszeitBuchung.auftragId, orderId),
       )).orderBy(desc(arbeitszeitBuchung.erstelltAm)),
-      db.select().from(stockMovements).where(and(
+      db.select({
+        id: stockMovements.id,
+        stationKuerzel: stockMovements.stationKuerzel,
+        inventoryItemId: stockMovements.inventoryItemId,
+        quantity: stockMovements.quantity,
+        snapshotEinkaufspreisEur: stockMovements.snapshotEinkaufspreisEur,
+        createdAt: stockMovements.createdAt,
+      }).from(stockMovements).where(and(
         eq(stockMovements.tenantId, actor.data.tenantId),
         eq(stockMovements.orderId, orderId),
         inArray(stockMovements.movementType, ["consumption", "verbrauch"]),
       )).orderBy(desc(stockMovements.createdAt)),
-      db.select().from(inventoryItems).where(eq(inventoryItems.tenantId, actor.data.tenantId)).orderBy(inventoryItems.name).limit(250),
+      readCaptureInventoryCatalog(actor.data.tenantId),
       db.select({ inventoryItemId: stockMovements.inventoryItemId }).from(stockMovements).where(and(
         eq(stockMovements.tenantId, actor.data.tenantId),
         eq(stockMovements.erfasstVon, actor.data.userId),
         inArray(stockMovements.movementType, ["consumption", "verbrauch"]),
       )).orderBy(desc(stockMovements.createdAt)).limit(20),
       selectedStation ? resolveRate(actor.data, selectedStation) : Promise.resolve(null),
+      readCaptureWriteCapability(),
     ]);
 
     const templateByItem = new Map((template.publicValue.verbrauch || []).map((row) => [row.artikel_id, row]));
     const recentIds = new Set(recentRows.map((row) => row.inventoryItemId));
-    const articles: CaptureArticle[] = catalog.map((row) => {
+    const articles: CaptureArticle[] = catalog.rows.map((row) => {
       const suggestion = templateByItem.get(row.id);
       const stock = finiteNumber(row.currentStock);
       const unitCost = row.einkaufspreisEur === null ? null : finiteNumber(row.einkaufspreisEur);
@@ -622,7 +813,7 @@ export async function getCaptureOverview(orderIdValue: unknown, stationValue?: u
       return {
         id: row.id,
         name: row.name,
-        unit: row.unit || row.einheitNormiert || "Einheit",
+        unit: row.unit?.trim() || row.einheitNormiert?.trim() || null,
         currentStock: stock,
         unitCostEur: unitCost,
         suggestedQuantity: suggestion?.median_menge ?? null,
@@ -643,6 +834,11 @@ export async function getCaptureOverview(orderIdValue: unknown, stationValue?: u
         currentStation,
         selectedStation,
         selectedRate,
+        writeCapability,
+        inventoryCatalog: {
+          limit: CAPTURE_INVENTORY_LIMIT,
+          truncated: catalog.truncated,
+        },
         routeExecution,
         template: template.publicValue,
         articles,
@@ -682,6 +878,8 @@ export async function recordTimeCapture(value: unknown): Promise<CaptureResult<C
   if (!actor.ok) return actor;
   try {
     const input = parseTimeCaptureInput(value);
+    const capability = await requireCaptureWriteCapability();
+    if (!capability.ok) return capability;
     const rate = await resolveRate(actor.data, input.stationKuerzel);
     if (!rate) throw new Error("RATE_MISSING");
     const hash = requestHash({
@@ -765,6 +963,7 @@ async function lockAndConsumeMaterials(tx: DbTransaction, input: {
       .for("update");
     if (!item) throw new Error("ITEM_NOT_FOUND");
     if (item.einkaufspreisEur === null) throw new Error("PRICE_MISSING");
+    if (!item.unit?.trim() && !item.einheitNormiert?.trim()) throw new Error("UNIT_MISSING");
     const stock = finiteNumber(item.currentStock);
     const price = finiteNumber(item.einkaufspreisEur);
     if (stock < line.quantity) throw new Error("INSUFFICIENT_STOCK");
@@ -804,6 +1003,8 @@ export async function recordMaterialCapture(value: unknown): Promise<CaptureResu
   if (!actor.ok) return actor;
   try {
     const input = parseMaterialCaptureInput(value);
+    const capability = await requireCaptureWriteCapability();
+    if (!capability.ok) return capability;
     const sortedLines = [...input.materials].sort((left, right) => left.inventoryItemId.localeCompare(right.inventoryItemId));
     const hash = requestHash({
       kind: "material",
@@ -846,6 +1047,12 @@ export async function recordMaterialCapture(value: unknown): Promise<CaptureResu
       await completeRequest(tx, request.gateId, result);
       return result;
     });
+    try {
+      revalidatePath("/items");
+      revalidatePath("/lager");
+    } catch {
+      // Revalidation is unavailable in isolated service tests.
+    }
     return { ok: true, data: receipt };
   } catch (error) {
     return mapCaptureError(error);
@@ -857,6 +1064,8 @@ export async function completeStationCapture(value: unknown): Promise<CaptureRes
   if (!actor.ok) return actor;
   try {
     const input = parseStationCompletionCaptureInput(value);
+    const capability = await requireCaptureWriteCapability();
+    if (!capability.ok) return capability;
     let expectedStation: OrderStation;
     try {
       expectedStation = parseOrderStation(input.expectedStation);
@@ -895,6 +1104,8 @@ export async function completeStationCapture(value: unknown): Promise<CaptureRes
       });
       if (request.replay) return request.replay;
       if (expectedStation === "warenausgang") throw new Error("SHIPPING_RECEIPT_REQUIRED");
+      if (expectedStation === "galvanik") throw new Error("BATH_PARTICIPATION_REQUIRED");
+      if (expectedStation === "qualitaetssicherung") throw new Error("QUALITY_RECEIPT_REQUIRED");
 
       const orderItems = await tx
         .select({
@@ -1051,6 +1262,8 @@ export async function completeStationCapture(value: unknown): Promise<CaptureRes
       revalidatePath("/");
       revalidatePath("/orders");
       revalidatePath("/warendurchlauf");
+      revalidatePath("/items");
+      revalidatePath("/lager");
     } catch {
       // Revalidation is unavailable in isolated service tests.
     }

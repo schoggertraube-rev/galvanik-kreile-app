@@ -541,6 +541,7 @@ export const communications = pgTable("communications", {
   tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   customerId: text("customer_id").references(() => customers.id),
   orderId: text("order_id").references(() => orders.id, { onDelete: "cascade" }),
+  invoiceId: uuid("invoice_id"),
   createdBy: uuid("created_by").references(() => appUsers.id),
   subject: text("subject"),
   body: text("body"),
@@ -562,6 +563,7 @@ export const communications = pgTable("communications", {
 }, (table) => [
   uniqueIndex("communications_tenant_idempotency_uidx").on(table.tenantId, table.idempotencyKey),
   index("communications_delivery_status_idx").on(table.status, table.claimedAt),
+  index("communications_tenant_invoice_created_idx").on(table.tenantId, table.invoiceId, table.createdAt),
 ]);
 
 export const emailTemplates = pgTable("email_templates", {

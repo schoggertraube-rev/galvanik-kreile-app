@@ -23,6 +23,21 @@ describe("OCR fail-closed truth", () => {
     expect(upload).toContain('source: fallbackState.type === "storage_failed" ? "manual" : "scan"');
   });
 
+  it("routes every visible scan entry through original-before-OCR storage", () => {
+    const page = source("src/app/scan/page.tsx");
+    const upload = source("src/components/erfassung/ScanFlow/ScanUpload.tsx");
+    const route = source("src/app/api/erfassung/scan-upload/route.ts");
+
+    expect(page).toContain('import { ScanUpload }');
+    expect(page).toContain("<ScanUpload />");
+    expect(page).not.toContain("CameraCapture");
+    expect(page).not.toContain("createOrderFromScan");
+    expect(page).not.toContain("processImage");
+    expect(upload).toContain('fetch("/api/erfassung/scan-upload"');
+    expect(route.indexOf('.from("scans")')).toBeLessThan(route.indexOf("await extractDocumentData"));
+    expect(route).toContain('fileUrl: storagePath');
+  });
+
   it("requires explicit position data and disables unimplemented scan actions", () => {
     const items = source("src/components/intake/SuggestedItemsPanel.tsx");
     const result = source("src/components/erfassung/ScanFlow/ScanResult.tsx");

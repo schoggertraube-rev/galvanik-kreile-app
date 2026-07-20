@@ -99,6 +99,15 @@ function providerConfiguration(): { apiKey: string; from: string } {
   return { apiKey, from }
 }
 
+export function emailProviderConfigured(): boolean {
+  try {
+    providerConfiguration();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function providerIdempotencyKey(tenantId: string, key: string): string {
   return `kreile/${createHash('sha256').update(`${tenantId}\0${key}`, 'utf8').digest('hex')}`
 }

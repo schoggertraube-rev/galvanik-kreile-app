@@ -92,9 +92,12 @@ export async function getOrderConnections(orderIdValue: unknown): Promise<OrderC
       eq(ausgangsrechnung.tenantId, authorization.data.tenantId),
       eq(ausgangsrechnung.orderId, order.id),
       or(eq(ausgangsrechnung.isDemo, false), isNull(ausgangsrechnung.isDemo)),
-    )).orderBy(desc(ausgangsrechnung.erstelltAm)).limit(1) : [];
+    )).orderBy(desc(ausgangsrechnung.erstelltAm), desc(ausgangsrechnung.id)).limit(2) : [];
 
     const warnings: string[] = [];
+    if (invoiceRows.length > 1) {
+      warnings.push("Mehrere Rechnungen sind mit diesem Auftrag verknüpft; angezeigt wird nur die neueste. Die Rechnungsübersicht bleibt für die vollständige Liste maßgeblich.");
+    }
     let marketing: OrderConnections["marketing"] = null;
     if (canViewMarketing && order.inquiryId) {
       const [inquiry] = await db.select().from(inquiries).where(and(

@@ -9,20 +9,32 @@ import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
 import { ArrowRight } from "lucide-react";
 
 export function KpiKachel() {
-  const [data, setData] = useState<{
-    umsatz: number; db: number; dbMarge: number; offeneForderungen: number;
-    ueberfaelligCount: number; liquiditaet: string; umsatzNachStation?: Record<string, number>;
-  } | null>(null);
+  const [data, setData] = useState<Awaited<ReturnType<typeof getCockpitKpis>> | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   const [umsatzDrawerOpen, setUmsatzDrawerOpen] = useState(false);
 
   useEffect(() => {
     async function load() {
-      const res = await getCockpitKpis();
-      setData(res);
+      try {
+        const res = await getCockpitKpis();
+        setData(res);
+        setLoadError(false);
+      } catch {
+        setData(null);
+        setLoadError(true);
+      }
     }
-    load();
+    void load();
   }, []);
+
+  if (loadError) {
+    return (
+      <div role="alert" className="rounded-2xl border border-amber-300 bg-amber-50 p-6 text-sm text-amber-950">
+        Cockpit-Kennzahlen konnten nicht belastbar aus der Datenbank bestaetigt werden. Es werden keine Nullwerte als Ersatz angezeigt.
+      </div>
+    );
+  }
 
   if (!data) {
     return (
@@ -45,8 +57,8 @@ export function KpiKachel() {
         
         <KpiItem 
           title="Monatsumsatz" 
-          value={`€ ${data.umsatz.toLocaleString('de-DE', { maximumFractionDigits: 0 })}`} 
-          subtext="Aktueller Monat" 
+          value={data.umsatz === null ? "Nicht verfuegbar" : `€ ${data.umsatz.toLocaleString('de-DE', { maximumFractionDigits: 0 })}`}
+          subtext={`Periode ${data.periodLabel}`}
           icon={<Wallet className="w-5 h-5 text-accent-orange" />} 
           onClick={() => setUmsatzDrawerOpen(true)}
           info={{
@@ -56,25 +68,25 @@ export function KpiKachel() {
           }}
         />
         <KpiItem 
-          title="Monats-DB" 
-          value={`€ ${data.db.toLocaleString('de-DE', { maximumFractionDigits: 0 })}`} 
-          subtext="Rohertrag" 
+          title="Erfasster DB"
+          value={data.db === null ? "Nicht verfuegbar" : `€ ${data.db.toLocaleString('de-DE', { maximumFractionDigits: 0 })}`}
+          subtext="Nur Zeit + Material"
           icon={<Scale className="w-5 h-5 text-navy-500" />} 
           info={{
-            wasZeigtDieKachel: "Erlöse minus Material, Zeit, Energie = was übrig bleibt.",
-            wasBedeutetDas: "Zeigt ob der Betrieb profitabel arbeitet.",
-            datenquelle: "Aufträge minus Verbrauch und Arbeitszeit"
+            wasZeigtDieKachel: "Nettoerloese minus bestaetigte Zeit- und Materialkosten.",
+            wasBedeutetDas: "Energie und Sachkosten fehlen noch; dies ist keine vollstaendige Ergebnisrechnung.",
+            datenquelle: data.dbScope
           }}
         />
         <KpiItem 
-          title="DB-Marge" 
-          value={`${(data.dbMarge * 100).toFixed(1)} %`} 
-          subtext="Ziel: 55%" 
+          title="Erfasste DB-Marge"
+          value={data.dbMarge === null ? "Nicht verfuegbar" : `${(data.dbMarge * 100).toFixed(1)} %`}
+          subtext="Nur bestaetigte Direktkosten"
           icon={<Percent className="w-5 h-5 text-navy-500" />} 
           info={{
             wasZeigtDieKachel: "Deckungsbeitrag geteilt durch Umsatz.",
-            wasBedeutetDas: "Unter 30% ist kritisch, über 50% ist sehr gut.",
-            datenquelle: "Berechnet aus Monats-DB und Monatsumsatz"
+            wasBedeutetDas: "Noch nicht als vollstaendige Profitabilitaet bewerten.",
+            datenquelle: data.dbScope
           }}
         />
         <KpiItem 
@@ -91,57 +103,51 @@ export function KpiKachel() {
         />
         <KpiItem 
           title="Liquidität" 
-          value={data.liquiditaet} 
-          subtext="Basierend auf Ford." 
+          value={data.liquiditaet ?? "Nicht angebunden"}
+          subtext="Keine Bankwahrheit"
           icon={<TrendingUp className="w-5 h-5 text-emerald-500" />} 
           info={{
-            wasZeigtDieKachel: "Zahlungseingänge minus Zahlungsausgänge der letzten 30 Tage.",
-            wasBedeutetDas: "Negativ = Sie geben mehr aus als reinkommt.",
-            datenquelle: "Banktransaktionen (sofern angebunden)"
+            wasZeigtDieKachel: "Liquiditaet benoetigt bestaetigte Kontostaende sowie Ein- und Auszahlungen.",
+            wasBedeutetDas: "Bis zur Bankanbindung wird bewusst kein Status geschaetzt.",
+            datenquelle: data.liquiditaetReason
           }}
         />
       </div>
 
       <div className="bg-neutral-gray-50 border-t border-neutral-gray-100 p-3 px-6">
         <DatenherkunftZeile 
-          belege={145} 
-          rechnungen={62} 
-          zeitbuchungen={1240} 
-          verbrauchsbuchungen={310} 
-          periodeLabel="06/2026" 
-          periodeStatus="offen" 
+          belege={0}
+          rechnungen={data.sourceCounts.rechnungen}
+          zeitbuchungen={data.sourceCounts.zeitbuchungen}
+          verbrauchsbuchungen={data.sourceCounts.verbrauchsbuchungen}
+          periodeLabel={data.periodLabel}
+          periodeStatus="laufend"
         />
       </div>
 
       <ResponsiveDetailDrawer
         isOpen={umsatzDrawerOpen}
         onClose={() => setUmsatzDrawerOpen(false)}
-        title="Umsatz-Details (Monat)"
+        title="Erfassungsgrundlage (Monat)"
       >
         <div className="space-y-6">
           <p className="text-text-muted text-sm">
-            Aufschlüsselung des Umsatzes im aktuellen Monat. 
+            Bestätigte Zeitkosten, die in den erfassten Deckungsbeitrag einfließen.
           </p>
           
           <div>
-            <h4 className="font-bold text-navy-900 mb-3 border-b border-neutral-gray-100 pb-2">Umsatz nach Station</h4>
+            <h4 className="font-bold text-navy-900 mb-3 border-b border-neutral-gray-100 pb-2">Zeitkosten nach Station</h4>
             <div className="flex flex-col gap-2">
-              {data.umsatzNachStation && Object.keys(data.umsatzNachStation).length > 0 ? (
-                Object.entries(data.umsatzNachStation).map(([ks, wert]) => (
+              {Object.keys(data.zeitkostenNachStation).length > 0 ? (
+                Object.entries(data.zeitkostenNachStation).map(([ks, wert]) => (
                   <div key={ks} className="flex justify-between text-sm">
                     <span className="text-navy-700">{ks}</span>
                     <span className="font-semibold">€ {(wert as number).toLocaleString('de-DE', {maximumFractionDigits:0})}</span>
                   </div>
                 ))
               ) : (
-                <div className="text-sm text-neutral-gray-500">Noch keine Zeitbuchungen im laufenden Monat</div>
+                <div className="text-sm text-neutral-gray-500">Keine bestätigten Zeitbuchungen im laufenden Monat.</div>
               )}
-            </div>
-          </div>
-
-          <div>
-            <div className="flex flex-col gap-2">
-              <div className="text-sm text-neutral-gray-500">Keine Kundenzuordnung für den aktuellen Monat vorhanden.</div>
             </div>
           </div>
 

@@ -158,6 +158,7 @@ export interface Ausgangsrechnung {
   nummer: string;
   kundeId?: string;
   kundeName?: string; // denormalisiert für Anzeige
+  orderId?: string;
   datum: string;
   faelligAm?: string;
   brutto: number;
@@ -173,6 +174,7 @@ export interface Ausgangsrechnung {
   leadId?: string;
   bemerkung?: string;
   positionen?: AusgangsrechnungPosition[]; // Client-seitig beigefügt
+  replayed?: boolean;
 }
 
 export interface Zahlung {

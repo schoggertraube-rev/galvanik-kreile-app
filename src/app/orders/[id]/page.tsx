@@ -216,7 +216,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                     <Link href={`/buchhaltung/rechnungen/${connections.invoice.id}`} className="text-xs text-navy-600 font-bold hover:underline">Rechnung anzeigen</Link>
                   </div>
                 ) : (
-                  <span className="text-sm font-bold text-text-muted">Keine Rechnung mit diesem Auftrag verknüpft</span>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-sm font-bold text-text-muted">Keine Rechnung mit diesem Auftrag verknüpft</span>
+                    <Link href={`/buchhaltung/rechnungen/neu?order=${encodeURIComponent(order.id)}`} className="text-xs text-navy-600 font-bold hover:underline">Rechnung für diesen Auftrag anlegen</Link>
+                  </div>
                 )}
               </div>
 

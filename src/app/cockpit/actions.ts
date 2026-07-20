@@ -2,6 +2,23 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { resolveAuthorization } from '@/lib/server/authorization';
+import { sql } from 'drizzle-orm';
+import { db } from '@/db';
+
+const AGING_BUCKETS = ['nicht_faellig', 'ohne_faelligkeit', '1-14', '15-30', '31-60', '61-90', '>90'] as const;
+const AGING_DETAIL_LIMIT = 100;
+
+function confirmedNonNegativeNumber(value: unknown, code: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) throw new Error(code);
+  return parsed;
+}
+
+function confirmedCount(value: unknown, code: string): number {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error(code);
+  return parsed;
+}
 
 async function requireCustomerFinanceRead() {
   const authorization = await resolveAuthorization();
@@ -15,69 +32,135 @@ async function requireCustomerFinanceRead() {
 }
 
 export async function getCockpitKpis() {
-  const supabase = await createClient();
-  
-  // v_monatsergebnis for current month
-  const currentMonthStr = new Date().toISOString().substring(0, 7) + '-01'; // 'YYYY-MM-01'
-  const { data: monatsergebnis } = await supabase
-    .from('v_monatsergebnis')
-    .select('erloes_netto, ergebnis, monat')
-    .limit(1)
-    .maybeSingle();
+  const actor = await requireCustomerFinanceRead();
 
-  // v_aging for offene Forderungen
-  const { data: agingData } = await supabase
-    .from('v_aging')
-    .select('netto, tage_ueberfaellig')
-    .neq('aging_bucket', 'bezahlt');
+  try {
+    const [invoiceRows, timeRows, materialRows] = await Promise.all([
+      db.execute(sql<{
+        monthly_revenue: number | string;
+        monthly_invoice_count: number | string;
+        missing_monthly_net: number | string;
+        open_receivables: number | string;
+        overdue_count: number | string;
+        period_label: string;
+      }>`
+        select
+          coalesce(sum(ar.netto) filter (
+            where ar.datum >= date_trunc('month', current_date)::date
+              and ar.datum < (date_trunc('month', current_date) + interval '1 month')::date
+              and ar.status <> 'storniert'
+          ), 0)::numeric(14,2) as monthly_revenue,
+          count(*) filter (
+            where ar.datum >= date_trunc('month', current_date)::date
+              and ar.datum < (date_trunc('month', current_date) + interval '1 month')::date
+              and ar.status <> 'storniert'
+          )::int as monthly_invoice_count,
+          count(*) filter (
+            where ar.datum >= date_trunc('month', current_date)::date
+              and ar.datum < (date_trunc('month', current_date) + interval '1 month')::date
+              and ar.status <> 'storniert'
+              and ar.netto is null
+          )::int as missing_monthly_net,
+          coalesce(sum(greatest(ar.brutto - coalesce(ar.bezahlt_betrag_eur, 0), 0)) filter (
+            where ar.status in ('offen', 'teilbezahlt', 'ueberfaellig', 'gemahnt', 'mahnung')
+          ), 0)::numeric(14,2) as open_receivables,
+          count(*) filter (
+            where ar.status in ('offen', 'teilbezahlt', 'ueberfaellig', 'gemahnt', 'mahnung')
+              and ar.faellig_am < current_date
+              and greatest(ar.brutto - coalesce(ar.bezahlt_betrag_eur, 0), 0) > 0
+          )::int as overdue_count,
+          to_char(current_date, 'MM/YYYY') as period_label
+        from public.ausgangsrechnung ar
+        where ar.tenant_id = ${actor.tenantId}
+          and (ar.is_demo = false or ar.is_demo is null)
+      `),
+      db.execute(sql<{
+        station: string;
+        booking_count: number | string;
+        time_cost: number | string;
+        invalid_count: number | string;
+      }>`
+        select
+          ab.kostenstelle_kuerzel as station,
+          count(*)::int as booking_count,
+          coalesce(sum((ab.dauer_minuten::numeric / 60) * ab.kostensatz_eur_pro_stunde), 0)::numeric(14,2) as time_cost,
+          count(*) filter (where ab.dauer_minuten < 0 or ab.kostensatz_eur_pro_stunde < 0)::int as invalid_count
+        from public.arbeitszeit_buchung ab
+        where ab.tenant_id = ${actor.tenantId}
+          and ab.start_zeit >= date_trunc('month', current_timestamp)
+          and ab.start_zeit < date_trunc('month', current_timestamp) + interval '1 month'
+        group by ab.kostenstelle_kuerzel
+        order by ab.kostenstelle_kuerzel
+      `),
+      db.execute(sql<{
+        movement_count: number | string;
+        material_cost: number | string;
+        missing_price_count: number | string;
+      }>`
+        select
+          count(*)::int as movement_count,
+          coalesce(sum(abs(sm.quantity) * sm.snapshot_einkaufspreis_eur), 0)::numeric(14,2) as material_cost,
+          count(*) filter (where sm.snapshot_einkaufspreis_eur is null or sm.snapshot_einkaufspreis_eur < 0)::int as missing_price_count
+        from public.stock_movements sm
+        where sm.tenant_id = ${actor.tenantId}
+          and sm.movement_type in ('consumption', 'verbrauch')
+          and sm.created_at >= date_trunc('month', current_timestamp)
+          and sm.created_at < date_trunc('month', current_timestamp) + interval '1 month'
+      `),
+    ]);
 
-  let offeneForderungen = 0;
-  let ueberfaelligCount = 0;
-  
-  if (agingData) {
-    offeneForderungen = agingData.reduce((acc, row) => acc + (row.netto || 0), 0);
-    ueberfaelligCount = agingData.filter(row => (row.tage_ueberfaellig || 0) > 0).length;
-  }
+    const invoice = invoiceRows[0];
+    const material = materialRows[0];
+    if (!invoice || !material || typeof invoice.period_label !== 'string') throw new Error('COCKPIT_KPI_DATA_INVALID');
 
-  const umsatz = monatsergebnis?.erloes_netto || 0;
-  const db = monatsergebnis?.ergebnis || 0;
-  const dbMarge = umsatz > 0 ? (db / umsatz) : 0;
-  
-  // Liquidität
-  let liquiditaet = 'Stabil';
-  if (offeneForderungen > (umsatz * 0.5)) {
-    liquiditaet = 'Kritisch';
-  } else if (offeneForderungen > (umsatz * 0.2)) {
-    liquiditaet = 'Warnung';
-  }
+    const umsatz = confirmedNonNegativeNumber(invoice.monthly_revenue, 'COCKPIT_REVENUE_INVALID');
+    const monthlyInvoiceCount = confirmedCount(invoice.monthly_invoice_count, 'COCKPIT_INVOICE_COUNT_INVALID');
+    const missingMonthlyNet = confirmedCount(invoice.missing_monthly_net, 'COCKPIT_REVENUE_INVALID');
+    const offeneForderungen = confirmedNonNegativeNumber(invoice.open_receivables, 'COCKPIT_RECEIVABLES_INVALID');
+    const ueberfaelligCount = confirmedCount(invoice.overdue_count, 'COCKPIT_OVERDUE_COUNT_INVALID');
+    const materialCost = confirmedNonNegativeNumber(material.material_cost, 'COCKPIT_MATERIAL_COST_INVALID');
+    const materialBookingCount = confirmedCount(material.movement_count, 'COCKPIT_MATERIAL_COUNT_INVALID');
+    const missingMaterialPrices = confirmedCount(material.missing_price_count, 'COCKPIT_MATERIAL_COST_INVALID');
 
-  const now = new Date();
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-  const { data: zeiten } = await supabase
-    .from('arbeitszeit_buchung')
-    .select('kostenstelle_kuerzel, dauer_minuten, kostensatz_eur_pro_stunde')
-    .eq('tenant_id', 'galvanik-kreile')
-    .gte('start_zeit', firstDay);
-
-  const umsatzNachStation: Record<string, number> = {};
-  if (zeiten) {
-    for (const z of zeiten) {
-      if (z.kostenstelle_kuerzel) {
-        if (!umsatzNachStation[z.kostenstelle_kuerzel]) umsatzNachStation[z.kostenstelle_kuerzel] = 0;
-        umsatzNachStation[z.kostenstelle_kuerzel] += ((z.dauer_minuten || 0) / 60.0) * (z.kostensatz_eur_pro_stunde || 0);
-      }
+    const zeitkostenNachStation: Record<string, number> = {};
+    let timeCost = 0;
+    let timeBookingCount = 0;
+    for (const row of timeRows) {
+      const station = typeof row.station === 'string' ? row.station.trim() : '';
+      const stationCost = confirmedNonNegativeNumber(row.time_cost, 'COCKPIT_TIME_COST_INVALID');
+      const stationBookings = confirmedCount(row.booking_count, 'COCKPIT_TIME_COUNT_INVALID');
+      const invalidBookings = confirmedCount(row.invalid_count, 'COCKPIT_TIME_COST_INVALID');
+      if (!station || invalidBookings > 0 || Object.hasOwn(zeitkostenNachStation, station)) throw new Error('COCKPIT_TIME_COST_INVALID');
+      zeitkostenNachStation[station] = stationCost;
+      timeCost += stationCost;
+      timeBookingCount += stationBookings;
     }
-  }
 
-  return { 
-    umsatz, 
-    db, 
-    dbMarge, 
-    offeneForderungen, 
-    ueberfaelligCount,
-    liquiditaet,
-    umsatzNachStation
-  };
+    const contributionAvailable = missingMonthlyNet === 0 && missingMaterialPrices === 0;
+    const contribution = contributionAvailable ? Math.round((umsatz - timeCost - materialCost) * 100) / 100 : null;
+    const contributionMargin = contribution !== null && umsatz > 0 ? contribution / umsatz : null;
+
+    return {
+      periodLabel: invoice.period_label,
+      umsatz: missingMonthlyNet === 0 ? umsatz : null,
+      db: contribution,
+      dbMarge: contributionMargin,
+      dbScope: 'Nettoerloes minus bestaetigte Zeit- und Materialkosten; Energie und Sachkosten sind nicht enthalten.',
+      offeneForderungen,
+      ueberfaelligCount,
+      liquiditaet: null,
+      liquiditaetReason: 'Bankkonten und Zahlungsabfluesse sind noch nicht belastbar angebunden.',
+      zeitkostenNachStation,
+      sourceCounts: {
+        rechnungen: monthlyInvoiceCount,
+        zeitbuchungen: timeBookingCount,
+        verbrauchsbuchungen: materialBookingCount,
+      },
+    };
+  } catch (error) {
+    console.error('Cockpit KPI data unavailable', error);
+    throw new Error('COCKPIT_KPI_DATA_UNAVAILABLE');
+  }
 }
 
 export async function getTopKunden(limit = 10) {
@@ -131,41 +214,46 @@ export async function getEngpassDaten() {
 }
 
 export async function getAgingDaten() {
-  const supabase = await createClient();
-  
-  const { data, error } = await supabase
-    .from('v_aging')
-    .select('aging_bucket, netto')
-    .neq('aging_bucket', 'bezahlt');
-
-  if (error) {
-    console.error("Error getAgingDaten:", error.message, error.details, error.hint);
-    return [];
+  const actor = await requireCustomerFinanceRead();
+  try {
+    const rows = await db.execute(sql<{ aging_bucket: string; anzahl: number | string; summe: number | string }>`
+      select aging_bucket, count(*)::int as anzahl, sum(offener_betrag)::numeric(14,2) as summe
+      from (
+        select
+          case
+            when ar.faellig_am is null then 'ohne_faelligkeit'
+            when current_date <= ar.faellig_am then 'nicht_faellig'
+            when current_date - ar.faellig_am <= 14 then '1-14'
+            when current_date - ar.faellig_am <= 30 then '15-30'
+            when current_date - ar.faellig_am <= 60 then '31-60'
+            when current_date - ar.faellig_am <= 90 then '61-90'
+            else '>90'
+          end as aging_bucket,
+          greatest(ar.brutto - coalesce(ar.bezahlt_betrag_eur, 0), 0) as offener_betrag
+        from public.ausgangsrechnung ar
+        where ar.tenant_id = ${actor.tenantId}
+          and (ar.is_demo = false or ar.is_demo is null)
+          and ar.status in ('offen', 'teilbezahlt', 'ueberfaellig', 'gemahnt', 'mahnung')
+          and greatest(ar.brutto - coalesce(ar.bezahlt_betrag_eur, 0), 0) > 0
+      ) confirmed_open_invoices
+      group by aging_bucket
+    `);
+    const byBucket = new Map(rows.map((row) => {
+      if (!AGING_BUCKETS.includes(row.aging_bucket as typeof AGING_BUCKETS[number])) throw new Error('AGING_BUCKET_INVALID');
+      const count = Number(row.anzahl);
+      const total = Number(row.summe);
+      if (!Number.isSafeInteger(count) || count < 0 || !Number.isFinite(total) || total < 0) throw new Error('AGING_DATA_INVALID');
+      return [row.aging_bucket, { anzahl: count, summe: total }] as const;
+    }));
+    return AGING_BUCKETS.map((bucket) => ({
+      aging_bucket: bucket,
+      anzahl: byBucket.get(bucket)?.anzahl || 0,
+      summe: byBucket.get(bucket)?.summe || 0,
+    }));
+  } catch (error) {
+    console.error('Aging aggregation unavailable', error);
+    throw new Error('AGING_DATA_UNAVAILABLE');
   }
-
-  const buckets: Record<string, { anzahl: number, summe: number }> = {
-    'nicht_faellig': { anzahl: 0, summe: 0 },
-    'ohne_faelligkeit': { anzahl: 0, summe: 0 },
-    '1-14': { anzahl: 0, summe: 0 },
-    '15-30': { anzahl: 0, summe: 0 },
-    '31-60': { anzahl: 0, summe: 0 },
-    '61-90': { anzahl: 0, summe: 0 },
-    '>90': { anzahl: 0, summe: 0 }
-  };
-
-  (data || []).forEach(row => {
-    const b = row.aging_bucket as string;
-    if (buckets[b]) {
-      buckets[b].anzahl += 1;
-      buckets[b].summe += (row.netto || 0);
-    }
-  });
-
-  return Object.entries(buckets).map(([bucket, vals]) => ({
-    aging_bucket: bucket,
-    anzahl: vals.anzahl,
-    summe: vals.summe
-  }));
 }
 
 export async function getAuftragDbRanking(limit = 10) {
@@ -184,92 +272,9 @@ export async function getAuftragDbRanking(limit = 10) {
   return data || [];
 }
 
-export async function getWhatIfKontext() {
-  const supabase = await createClient();
-  
-  const kontext: any = {
-    db_marge_je_ks: {},
-    kostensatz_je_ks: {},
-    auslastung_je_ks: {},
-    verfuegbare_stunden_je_ks: {},
-    umsatz_12m_je_kundengruppe: {},
-    db_marge_gesamt: 0,
-    top_kunden_je_gruppe: {},
-    kostenstellen_liste: []
-  };
-
-  const { data: kostenstellen } = await supabase.from('kostenstelle').select('kuerzel, name, verfuegbare_stunden_monatlich').eq('typ', 'produktion');
-  if (kostenstellen) {
-    kontext.kostenstellen_liste = kostenstellen.map(ks => ({ kuerzel: ks.kuerzel, name: ks.name }));
-    kostenstellen.forEach(ks => {
-      if (ks.kuerzel) {
-        kontext.verfuegbare_stunden_je_ks[ks.kuerzel] = ks.verfuegbare_stunden_monatlich;
-      }
-    });
-  }
-
-  const { data: engpass } = await supabase.from('v_engpass').select('*');
-  if (engpass) {
-    engpass.forEach(e => {
-      if (e.kuerzel) {
-        kontext.auslastung_je_ks[e.kuerzel] = e.auslastung_quote || 0;
-        kontext.kostensatz_je_ks[e.kuerzel] = 45; // Default if not found
-      }
-    });
-  }
-
-  const { data: dbData } = await supabase.from('v_auftrag_db').select('current_station, erloes_netto, deckungsbeitrag, status').in('status', ['completed', 'abgeschlossen']);
-  if (dbData) {
-    const ksStats: Record<string, { u: number, db: number, c: number }> = {};
-    let sumU = 0; let sumDb = 0;
-    
-    dbData.forEach(d => {
-      sumU += (d.erloes_netto || 0);
-      sumDb += (d.deckungsbeitrag || 0);
-      
-      const ks = d.current_station;
-      if (ks) {
-        if (!ksStats[ks]) ksStats[ks] = { u: 0, db: 0, c: 0 };
-        ksStats[ks].u += (d.erloes_netto || 0);
-        ksStats[ks].db += (d.deckungsbeitrag || 0);
-        ksStats[ks].c += 1;
-      }
-    });
-    
-    kontext.db_marge_gesamt = sumU > 0 ? sumDb / sumU : 0;
-    
-    Object.keys(ksStats).forEach(ks => {
-      if (ksStats[ks].c >= 3 && ksStats[ks].u > 0) {
-        kontext.db_marge_je_ks[ks] = ksStats[ks].db / ksStats[ks].u;
-      } else {
-        kontext.db_marge_je_ks[ks] = null; // null triggers "Datengrundlage fehlt"
-      }
-    });
-  }
-
-  const { data: clv } = await supabase.from('v_kunde_clv').select('*');
-  if (clv) {
-    clv.forEach(c => {
-      const g = c.kundentyp || 'alle'; // mapped
-      if (!kontext.umsatz_12m_je_kundengruppe[g]) kontext.umsatz_12m_je_kundengruppe[g] = 0;
-      kontext.umsatz_12m_je_kundengruppe[g] += (c.umsatz_gesamt || 0);
-      
-      if (!kontext.top_kunden_je_gruppe[g]) kontext.top_kunden_je_gruppe[g] = [];
-      kontext.top_kunden_je_gruppe[g].push({ name: c.name, umsatz: c.umsatz_gesamt });
-      
-      if (g !== 'alle') {
-        if (!kontext.umsatz_12m_je_kundengruppe['alle']) kontext.umsatz_12m_je_kundengruppe['alle'] = 0;
-        kontext.umsatz_12m_je_kundengruppe['alle'] += (c.umsatz_gesamt || 0);
-        if (!kontext.top_kunden_je_gruppe['alle']) kontext.top_kunden_je_gruppe['alle'] = [];
-        kontext.top_kunden_je_gruppe['alle'].push({ name: c.name, umsatz: c.umsatz_gesamt });
-      }
-    });
-    
-    Object.keys(kontext.top_kunden_je_gruppe).forEach(g => {
-      kontext.top_kunden_je_gruppe[g].sort((a: any, b: any) => b.umsatz - a.umsatz);
-    });
-  }
-  return kontext;
+export async function getWhatIfKontext(): Promise<never> {
+  await requireCustomerFinanceRead();
+  throw new Error('WHAT_IF_CONTEXT_UNAVAILABLE');
 }
 
 export async function getEngpassDetails(station: string) {
@@ -361,18 +366,86 @@ export async function getKundenDetails(customerId: string) {
 
 
 export async function getAgingRechnungen(bucket: string) {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('v_aging')
-    .select('order_id, invoice_id, rechnung_nummer, kunde_name, netto, faellig_seit_tagen, faellig_am')
-    .eq('aging_bucket', bucket)
-    .order('faellig_seit_tagen', { ascending: false });
-
-  if (error) {
-    console.error("Error getAgingRechnungen:", error);
-    return [];
+  const actor = await requireCustomerFinanceRead();
+  if (!AGING_BUCKETS.includes(bucket as typeof AGING_BUCKETS[number])) throw new Error('AGING_BUCKET_INVALID');
+  try {
+    const rows = await db.execute(sql<{
+      invoice_id: string;
+      order_id: string | null;
+      customer_id: string;
+      rechnung_nummer: string;
+      kunde_name: string;
+      offener_betrag: number | string;
+      faellig_seit_tagen: number | string | null;
+      faellig_am: string | null;
+      mahnstufe: number | string | null;
+      aging_bucket: string;
+    }>`
+      select * from (
+        select
+          ar.id as invoice_id,
+          ar.order_id,
+          ar.kunde_id as customer_id,
+          ar.nummer as rechnung_nummer,
+          coalesce(nullif(btrim(c.company_name), ''), c.name) as kunde_name,
+          greatest(ar.brutto - coalesce(ar.bezahlt_betrag_eur, 0), 0) as offener_betrag,
+          case when ar.faellig_am is null then null else greatest(current_date - ar.faellig_am, 0) end as faellig_seit_tagen,
+          ar.faellig_am,
+          coalesce(ar.mahnstufe, 0) as mahnstufe,
+          case
+            when ar.faellig_am is null then 'ohne_faelligkeit'
+            when current_date <= ar.faellig_am then 'nicht_faellig'
+            when current_date - ar.faellig_am <= 14 then '1-14'
+            when current_date - ar.faellig_am <= 30 then '15-30'
+            when current_date - ar.faellig_am <= 60 then '31-60'
+            when current_date - ar.faellig_am <= 90 then '61-90'
+            else '>90'
+          end as aging_bucket
+        from public.ausgangsrechnung ar
+        join public.customers c on c.id = ar.kunde_id and c.tenant_id = ar.tenant_id
+        where ar.tenant_id = ${actor.tenantId}
+          and (ar.is_demo = false or ar.is_demo is null)
+          and ar.status in ('offen', 'teilbezahlt', 'ueberfaellig', 'gemahnt', 'mahnung')
+          and greatest(ar.brutto - coalesce(ar.bezahlt_betrag_eur, 0), 0) > 0
+      ) confirmed_open_invoices
+      where aging_bucket = ${bucket}
+      order by faellig_seit_tagen desc nulls last, invoice_id
+      limit ${AGING_DETAIL_LIMIT + 1}
+    `);
+    const invoices = rows.slice(0, AGING_DETAIL_LIMIT).map((row) => {
+      const invoiceId = typeof row.invoice_id === 'string' ? row.invoice_id : '';
+      const orderId = row.order_id === null || typeof row.order_id === 'string' ? row.order_id : undefined;
+      const customerId = typeof row.customer_id === 'string' ? row.customer_id : '';
+      const invoiceNumber = typeof row.rechnung_nummer === 'string' ? row.rechnung_nummer : '';
+      const customerName = typeof row.kunde_name === 'string' ? row.kunde_name : '';
+      const dueAt = row.faellig_am === null || typeof row.faellig_am === 'string' ? row.faellig_am : undefined;
+      const outstanding = Number(row.offener_betrag);
+      const overdueDays = row.faellig_seit_tagen === null ? null : Number(row.faellig_seit_tagen);
+      const dunningLevel = Number(row.mahnstufe);
+      if (
+        row.aging_bucket !== bucket
+        || !invoiceId || orderId === undefined || !customerId || !invoiceNumber || !customerName || dueAt === undefined
+        || !Number.isFinite(outstanding) || outstanding <= 0
+        || (overdueDays !== null && (!Number.isSafeInteger(overdueDays) || overdueDays < 0))
+        || !Number.isSafeInteger(dunningLevel) || dunningLevel < 0
+      ) throw new Error('AGING_DATA_INVALID');
+      return {
+        invoice_id: invoiceId,
+        order_id: orderId,
+        customer_id: customerId,
+        rechnung_nummer: invoiceNumber,
+        kunde_name: customerName,
+        offener_betrag: outstanding,
+        faellig_seit_tagen: overdueDays,
+        faellig_am: dueAt,
+        mahnstufe: dunningLevel,
+      };
+    });
+    return { invoices, limit: AGING_DETAIL_LIMIT, truncated: rows.length > AGING_DETAIL_LIMIT };
+  } catch (error) {
+    console.error('Aging invoice detail unavailable', error);
+    throw new Error('AGING_DATA_UNAVAILABLE');
   }
-  return data || [];
 }
 
 export async function getAktiveWarnungen() {
@@ -489,18 +562,4 @@ export async function speichereJahresplan(jahr: number, monate: Record<string, n
     throw new Error(error.message);
   }
   return true;
-}
-
-export async function savePhoneNote(data: { customer_id?: string, caller_name?: string, raw_text: string, category: string, urgency: string }) {
-  const supabase = await createClient();
-  const { error } = await supabase.from('phone_notes').insert({
-    tenant_id: 'galvanik-kreile',
-    customer_id: data.customer_id || null,
-    caller_name: data.caller_name || '',
-    raw_text: data.raw_text,
-    category: data.category,
-    urgency: data.urgency,
-    status: 'open'
-  });
-  if (error) throw error;
 }

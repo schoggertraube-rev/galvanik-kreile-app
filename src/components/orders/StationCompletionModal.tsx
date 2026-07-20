@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { X, Plus, Minus, Search, AlertTriangle } from "lucide-react";
 import { computeStationCost, ConsumableUse } from "@/lib/costs/stationCost";
 import { completeStationCapture, getCaptureOverview } from "@/app/actions/capture.actions";
+import { publishInventorySync } from "@/lib/inventory/inventorySync";
 import {
   getOrderStationLabel,
   parseOrderStation,
@@ -13,7 +14,7 @@ import {
 type CompletionArticle = {
   id: string;
   name: string;
-  unit: string;
+  unit: string | null;
   currentStock: number;
   pricePerUnit?: number;
 };
@@ -35,7 +36,7 @@ export function StationCompletionModal({
   const [multiplier, setMultiplier] = useState(1);
   
   const [allConsumables, setAllConsumables] = useState<CompletionArticle[]>([]);
-  const [bookedMaterials, setBookedMaterials] = useState<(ConsumableUse & { name: string, price: number, unit: string })[]>([]);
+  const [bookedMaterials, setBookedMaterials] = useState<(ConsumableUse & { name: string, price: number, priceMissing: boolean, unit: string | null })[]>([]);
   
   const [showSearchList, setShowSearchList] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -45,6 +46,11 @@ export function StationCompletionModal({
   const [hourlyRate, setHourlyRate] = useState<number | null>(null);
   const [nextStation, setNextStation] = useState<OrderStation | null>(null);
   const [routeBlockedReason, setRouteBlockedReason] = useState<string | null>(null);
+  const [writeCapability, setWriteCapability] = useState<{ available: boolean; reason: string | null }>({
+    available: false,
+    reason: "Schreibfähigkeit wurde noch nicht vom Server bestätigt.",
+  });
+  const [catalogTruncated, setCatalogTruncated] = useState(false);
   const [clientRequestId] = useState(() => crypto.randomUUID());
 
   let currentStation: OrderStation | null = null;
@@ -65,6 +71,8 @@ export function StationCompletionModal({
         setNextStation(null);
         setRouteBlockedReason("LOAD_FAILED");
         setLoadError(result.message);
+        setWriteCapability({ available: false, reason: result.message });
+        setCatalogTruncated(false);
         return;
       }
       setAllConsumables(result.data.articles.map((article) => ({
@@ -77,6 +85,8 @@ export function StationCompletionModal({
       setHourlyRate(result.data.selectedRate?.valueEurPerHour ?? null);
       setNextStation(result.data.routeExecution.nextStation);
       setRouteBlockedReason(result.data.routeExecution.reason);
+      setWriteCapability(result.data.writeCapability);
+      setCatalogTruncated(result.data.inventoryCatalog.truncated);
       setLoadError(null);
     };
     void load();
@@ -87,7 +97,7 @@ export function StationCompletionModal({
     if (bookedMaterials.some(m => m.inventoryItemId === item.id)) return;
     setBookedMaterials([
       ...bookedMaterials,
-      { inventoryItemId: item.id, name: item.name, quantity: 1, price: item.pricePerUnit || 0, unit: item.unit }
+      { inventoryItemId: item.id, name: item.name, quantity: 1, price: item.pricePerUnit ?? 0, priceMissing: item.pricePerUnit === undefined, unit: item.unit }
     ]);
     setSearchTerm("");
     setShowSearchList(false);
@@ -112,13 +122,28 @@ export function StationCompletionModal({
   );
 
   const missingRate = minutes > 0 && hourlyRate === null;
+  const missingMaterialPrice = bookedMaterials.some((material) => material.priceMissing);
+  const missingMaterialUnit = bookedMaterials.some((material) => !material.unit?.trim());
+  const insufficientMaterialStock = bookedMaterials.some((material) => {
+    const item = allConsumables.find((entry) => entry.id === material.inventoryItemId);
+    return !item || material.quantity > item.currentStock;
+  });
+  const normalizedMaterialSearch = searchTerm.trim().toLocaleLowerCase("de-DE");
+  const matchingConsumables = allConsumables.filter((item) => (
+    item.name.toLocaleLowerCase("de-DE").includes(normalizedMaterialSearch)
+    && !bookedMaterials.some((material) => material.inventoryItemId === item.id)
+  ));
   const canSubmit = currentStation !== null
     && currentStation !== "warenausgang"
     && nextStation !== null
     && routeBlockedReason === null
     && loadError === null
+    && writeCapability.available
     && (minutes > 0 || bookedMaterials.length > 0)
-    && !missingRate;
+    && !missingRate
+    && !missingMaterialPrice
+    && !missingMaterialUnit
+    && !insufficientMaterialStock;
 
   const handleSubmit = async () => {
     if (!canSubmit || isSubmitting) return;
@@ -140,11 +165,12 @@ export function StationCompletionModal({
       });
       if (!result.ok) throw new Error(result.message);
 
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("storage"));
+      if (bookedMaterials.length > 0) publishInventorySync();
+      try {
+        onClose();
+      } catch {
+        setSubmitError("Stationsabschluss ist bestätigt. Nur die Ansicht konnte anschließend nicht geschlossen werden; bitte nicht erneut abschließen.");
       }
-
-      onClose();
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Stationsabschluss konnte nicht bestätigt werden.");
     } finally {
@@ -184,10 +210,16 @@ export function StationCompletionModal({
         {/* Content */}
         <div className="p-6 overflow-y-auto flex-1">
           {loadError && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Erfassungsgrundlage nicht verfügbar: {loadError}. Der Abschluss bleibt gesperrt.</div>}
+          {!loadError && !writeCapability.available && <div role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">{writeCapability.reason} Der Abschluss bleibt gesperrt; es wurde nichts gebucht.</div>}
           {!currentStation && <div role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">Die gespeicherte Station ist nicht Teil des kanonischen Prozessvertrags. Der Abschluss bleibt gesperrt.</div>}
           {currentStation === "warenausgang" && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Warenausgang benötigt einen eigenen atomaren Übergabe-/Versandbeleg mit Empfänger, Modus und Zeitpunkt. Der generische Stationsabschluss markiert keinen Auftrag als versendet.</div>}
           {missingRate && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Für diese Station fehlt ein bestätigter Mitarbeiter- oder Stationskostensatz. Eine EUR-Summe und der Abschluss bleiben gesperrt.</div>}
-          {routeBlockedReason && routeBlockedReason !== "LOAD_FAILED" && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Keine einheitliche ausführbare v1-Positionsroute belegt ({routeBlockedReason}). Der Abschluss bleibt gesperrt.</div>}
+          {missingMaterialPrice && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Mindestens ein ausgewählter Lagerartikel hat keinen bestätigten Einkaufspreis. Die Kosten und der Abschluss bleiben gesperrt.</div>}
+          {missingMaterialUnit && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Mindestens ein ausgewählter Lagerartikel hat keine bestätigte Einheit. Der Abschluss bleibt gesperrt.</div>}
+          {insufficientMaterialStock && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Mindestens eine Materialmenge überschreitet den bestätigten Bestand. Der Abschluss bleibt gesperrt.</div>}
+          {routeBlockedReason === "BATH_PARTICIPATION_REQUIRED" && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Für Galvanik fehlt ein atomarer Badbeteiligungsbeleg. Dieser Dialog kann den Prozess nicht ersatzweise abschließen.</div>}
+          {routeBlockedReason === "QUALITY_RECEIPT_REQUIRED" && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Für die Qualitätssicherung fehlt ein atomarer Prüfbeleg. Dieser Dialog kann den Prozess nicht ersatzweise abschließen.</div>}
+          {routeBlockedReason && !["LOAD_FAILED", "BATH_PARTICIPATION_REQUIRED", "QUALITY_RECEIPT_REQUIRED"].includes(routeBlockedReason) && <div role="alert" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Keine einheitliche ausführbare v1-Positionsroute belegt ({routeBlockedReason}). Der Abschluss bleibt gesperrt.</div>}
           {submitError && <div role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900">{submitError}</div>}
           {activeTab === "erfassung" ? (
             <div className="space-y-8">
@@ -251,7 +283,7 @@ export function StationCompletionModal({
                 {bookedMaterials.map((mat, idx) => (
                   <div key={mat.inventoryItemId} className="flex items-center justify-between p-3 border border-neutral-gray-100 rounded-xl">
                     <div className="flex items-center gap-3">
-                      {!mat.price && <AlertTriangle className="w-4 h-4 text-accent-orange" />}
+                      {mat.priceMissing && <AlertTriangle className="w-4 h-4 text-accent-orange" />}
                       <span className="font-bold text-sm">{mat.name}</span>
                     </div>
                     <div className="flex items-center gap-4">
@@ -275,12 +307,24 @@ export function StationCompletionModal({
                         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
                         <Input className="pl-9 h-9 text-sm" placeholder="Suchen..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                       </div>
-                      {allConsumables.filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()) && !bookedMaterials.some(m => m.inventoryItemId === c.id)).map(item => (
+                      {catalogTruncated && (
+                        <p role="status" className="px-3 py-2 text-xs font-semibold text-amber-800">
+                          Der Katalog ist auf die ersten 250 Artikel begrenzt. Ein nicht angezeigter Artikel ist damit nicht als fehlend bestätigt.
+                        </p>
+                      )}
+                      {matchingConsumables.map(item => (
                         <button key={item.id} onClick={() => handleAddMaterial(item)} className="w-full text-left px-3 py-2 text-sm hover:bg-bg-app-soft rounded-lg flex justify-between">
                           <span className="font-bold">{item.name}</span>
-                          <span className="text-navy-500">{item.pricePerUnit === undefined ? "Preis fehlt" : `${item.pricePerUnit.toFixed(2)} € / ${item.unit}`}</span>
+                          <span className="text-navy-500">{item.pricePerUnit === undefined ? "Preis fehlt" : `${item.pricePerUnit.toFixed(2)} € / ${item.unit || "Einheit nicht erfasst"}`}</span>
                         </button>
                       ))}
+                      {matchingConsumables.length === 0 && (
+                        <p role="status" className="px-3 py-2 text-xs font-semibold text-text-muted">
+                          {catalogTruncated
+                            ? "Kein Treffer in den ersten 250 geladenen Artikeln; der Gesamtkatalog ist damit nicht leer bestätigt."
+                            : "Keine weiteren passenden Lagerartikel vorhanden."}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
@@ -296,11 +340,11 @@ export function StationCompletionModal({
                   </div>
                   <div className="flex justify-between items-center text-sm">
                     <span className="text-text-muted">Material ({bookedMaterials.length} Positionen)</span>
-                    <span className="font-bold">{costs.materialCost.toFixed(2)} €</span>
+                    <span className="font-bold">{missingMaterialPrice ? "nicht berechenbar" : `${costs.materialCost.toFixed(2)} €`}</span>
                   </div>
                   <div className="pt-4 border-t border-neutral-gray-100 flex justify-between items-center text-lg">
                     <span className="font-black text-navy-900">Gesamtkosten Station</span>
-                    <span className="font-black text-navy-700">{missingRate ? "nicht berechenbar" : `${costs.total.toFixed(2)} €`}</span>
+                    <span className="font-black text-navy-700">{missingRate || missingMaterialPrice ? "nicht berechenbar" : `${costs.total.toFixed(2)} €`}</span>
                   </div>
                 </div>
               </div>

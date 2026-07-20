@@ -59,5 +59,18 @@ describe("global search security and truth", () => {
     expect(hook).not.toContain("search_global");
     expect(compatibility).not.toContain("supabase");
     expect(legacyAction).toContain("return globalSearch(term)");
+    expect(action).toContain('url: `/items?item=${encodeURIComponent(inventoryItem.id)}`');
+    expect(action).not.toMatch(/Ã|Â|â|�/);
+  });
+
+  it("routes inventory and bath intents to their real, separate capabilities", () => {
+    const registry = source("src/lib/search/actionRegistry.ts");
+    const fuzzy = source("src/lib/search/fuzzy.ts");
+    expect(registry).toContain('routeOnSelect: "/items"');
+    expect(registry).toContain('routeOnSelect: "/baeder"');
+    expect(registry).not.toContain("Lagerbestände und Badwerte");
+    expect(fuzzy).toContain('route: "/items"');
+    expect(fuzzy).toContain('route: "/baeder"');
+    expect(fuzzy).not.toContain("Bestände und Badwerte");
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePageView } from "@/hooks/usePageView";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,27 @@ import {
   Minus, 
   FlaskConical, 
   History, 
-  User
+  User,
+  RefreshCw,
 } from "lucide-react";
-import { inventoryRepository, InventoryItem, StockMovement } from "@/lib/repositories/inventoryRepository";
+import {
+  inventoryRepository,
+  InventoryRepositoryError,
+  type InventoryCapabilities,
+  type InventoryItem,
+  type StockMovement,
+} from "@/lib/repositories/inventoryRepository";
+import { publishInventorySync, subscribeInventorySync } from "@/lib/inventory/inventorySync";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { trackUiEvent } from "@/lib/tracking/tracking";
+
+const READ_ONLY_CAPABILITIES: InventoryCapabilities = {
+  canWrite: false,
+  writeReason: "Schreibrechte wurden noch nicht vom Server bestätigt.",
+  historyLimit: 100,
+  quantityDecimals: 0,
+  quantityStep: 1,
+};
 
 export default function ItemsPage() {
   usePageView();
@@ -28,8 +44,21 @@ export default function ItemsPage() {
   // Data States
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
+  const [capabilities, setCapabilities] = useState<InventoryCapabilities>(READ_ONLY_CAPABILITIES);
+  const [loadState, setLoadState] = useState<"loading" | "ready" | "error">("loading");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [historyState, setHistoryState] = useState<"idle" | "loading" | "ready" | "error">("idle");
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyTruncated, setHistoryTruncated] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionPending, setActionPending] = useState(false);
+  const itemLoadGeneration = useRef(0);
+  const historyLoadGeneration = useRef(0);
+  const inventorySyncSourceId = useRef<string | null>(null);
+  const initialRequestedItemConsumed = useRef(false);
+  const quickRequestIds = useRef(new Map<string, string>());
+  const detailedRequest = useRef<{ fingerprint: string; requestId: string } | null>(null);
   
   // Selection States
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -40,54 +69,140 @@ export default function ItemsPage() {
   const [bookingReason, setBookingReason] = useState<string>("");
 
   // Load repositories data
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(() => {
+    const generation = ++itemLoadGeneration.current;
+    return inventoryRepository.getSnapshot()
+      .then(({ items, capabilities: confirmedCapabilities }) => {
+        if (generation !== itemLoadGeneration.current) return;
+        setInventoryItems(items);
+        setCapabilities(confirmedCapabilities);
+        const requestedId = initialRequestedItemConsumed.current || typeof window === "undefined"
+          ? null
+          : new URLSearchParams(window.location.search).get("item");
+        initialRequestedItemConsumed.current = true;
+        setSelectedItemId((previous) => {
+          if (requestedId && items.some((item) => item.id === requestedId)) return requestedId;
+          return previous && items.some((item) => item.id === previous) ? previous : items[0]?.id || null;
+        });
+        setLoadError(null);
+        setLoadState("ready");
+      })
+      .catch((error: unknown) => {
+        if (generation !== itemLoadGeneration.current) return;
+        console.error(error);
+        setInventoryItems([]);
+        setCapabilities(READ_ONLY_CAPABILITIES);
+        setStockMovements([]);
+        setSelectedItemId(null);
+        setLoadError(error instanceof InventoryRepositoryError ? error.message : "Lagerdaten konnten nicht geladen werden.");
+        setLoadState("error");
+      });
+  }, []);
+
+  const loadHistory = useCallback(async (itemId: string, showLoading = true) => {
+    const generation = ++historyLoadGeneration.current;
+    await Promise.resolve();
+    if (generation !== historyLoadGeneration.current) return;
+    if (showLoading) {
+      setHistoryState("loading");
+      setStockMovements([]);
+    }
+    setHistoryError(null);
     try {
-      const [items, movements] = await Promise.all([
-        inventoryRepository.getAllItems(),
-        inventoryRepository.getAllMovements(),
-      ]);
-      setInventoryItems(items);
-      setStockMovements(movements);
-      setSelectedItemId(prev => prev || (items.length > 0 ? items[0].id : null));
-      setLoadError(null);
+      const history = await inventoryRepository.getMovementsByItem(itemId);
+      if (generation !== historyLoadGeneration.current) return;
+      setStockMovements(history.movements);
+      setHistoryTruncated(history.truncated);
+      setHistoryState("ready");
     } catch (error) {
+      if (generation !== historyLoadGeneration.current) return;
       console.error(error);
-      setLoadError("Lagerdaten konnten nicht geladen werden.");
+      setStockMovements([]);
+      setHistoryTruncated(false);
+      setHistoryError(error instanceof InventoryRepositoryError ? error.message : "Die Bewegungshistorie konnte nicht bestätigt werden.");
+      setHistoryState("error");
     }
   }, []);
 
   useEffect(() => {
-    let active = true;
-    const run = async () => {
-      if (active) {
-        await loadData();
-      }
-    };
-    run();
-    return () => {
-      active = false;
-    };
+    void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!selectedItemId) {
+      historyLoadGeneration.current += 1;
+      void Promise.resolve().then(() => {
+        setStockMovements([]);
+        setHistoryState("idle");
+        setHistoryError(null);
+        setHistoryTruncated(false);
+      });
+      return;
+    }
+    void Promise.resolve().then(() => loadHistory(selectedItemId));
+  }, [loadHistory, selectedItemId]);
+
+  useEffect(() => {
+    inventorySyncSourceId.current ||= crypto.randomUUID();
+    const refresh = () => {
+      void loadData();
+      if (selectedItemId) void loadHistory(selectedItemId, false);
+    };
+    const unsubscribe = subscribeInventorySync(refresh, inventorySyncSourceId.current);
+    window.addEventListener("kreile-sync-focus", refresh);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("kreile-sync-focus", refresh);
+    };
+  }, [loadData, loadHistory, selectedItemId]);
+
+  function retryLoad() {
+    setLoadState("loading");
+    setLoadError(null);
+    void loadData();
+  }
 
   // Handlers for Quick Action Stock Increment/Decrement directly in list row
   const handleQuickAdjust = async (itemId: string, direction: "plus" | "minus", event: React.MouseEvent) => {
     event.stopPropagation(); // Avoid selecting row when pressing button
     const targetItem = inventoryItems.find(i => i.id === itemId);
-    if (!targetItem) return;
+    if (!targetItem || actionPending) return;
+    if (!capabilities.canWrite) {
+      setActionError(capabilities.writeReason || "Lagerbuchungen sind für diese Rolle nicht freigegeben.");
+      return;
+    }
+    if (!targetItem.unit?.trim()) {
+      setActionError("Für diesen Artikel ist keine Einheit hinterlegt. Die Buchung wurde nicht ausgeführt.");
+      return;
+    }
+
+    const requestKey = `${itemId}:${direction}`;
+    const requestId = quickRequestIds.current.get(requestKey) || crypto.randomUUID();
+    quickRequestIds.current.set(requestKey, requestId);
+    setActionPending(true);
+    setActionError(null);
+    setActionSuccess(null);
 
     try {
-      await inventoryRepository.createMovement({
+      const receipt = await inventoryRepository.createMovement({
+        clientRequestId: requestId,
         inventoryItemId: itemId,
         movementType: direction === "plus" ? "stock_in" : "stock_out",
         quantity: 1,
-        unit: targetItem.unit,
         reason: direction === "plus" ? "Schnellbuchung Zugang" : "Schnellbuchung Entnahme",
       });
+      setActionSuccess(receipt.replayed
+        ? "Buchung war bereits bestätigt; es wurde kein zweites Mal gebucht."
+        : "Lagerbuchung wurde vom Server bestätigt.");
+      quickRequestIds.current.delete(requestKey);
       setActionError(null);
-      await loadData();
+      await Promise.all([loadData(), loadHistory(itemId, false)]);
+      publishInventorySync(inventorySyncSourceId.current);
     } catch (e) {
       console.error(e);
       setActionError(e instanceof Error ? e.message : "Lagerbuchung fehlgeschlagen.");
+    } finally {
+      setActionPending(false);
     }
   };
 
@@ -96,23 +211,48 @@ export default function ItemsPage() {
     e.preventDefault();
     if (!selectedItemId) return;
     const targetItem = inventoryItems.find(i => i.id === selectedItemId);
-    if (!targetItem) return;
+    if (!targetItem || actionPending) return;
+    if (!capabilities.canWrite) {
+      setActionError(capabilities.writeReason || "Lagerbuchungen sind für diese Rolle nicht freigegeben.");
+      return;
+    }
+    if (!targetItem.unit?.trim()) {
+      setActionError("Für diesen Artikel ist keine Einheit hinterlegt. Die Buchung wurde nicht ausgeführt.");
+      return;
+    }
+
+    const normalizedReason = bookingReason.trim() || (bookingType === "stock_in" ? "Bestandserhöhung" : "Bestandsminderung");
+    const fingerprint = JSON.stringify([selectedItemId, bookingType, bookingQty, normalizedReason]);
+    const requestId = detailedRequest.current?.fingerprint === fingerprint
+      ? detailedRequest.current.requestId
+      : crypto.randomUUID();
+    detailedRequest.current = { fingerprint, requestId };
+    setActionPending(true);
+    setActionError(null);
+    setActionSuccess(null);
 
     try {
-      await inventoryRepository.createMovement({
+      const receipt = await inventoryRepository.createMovement({
+        clientRequestId: requestId,
         inventoryItemId: selectedItemId,
         movementType: bookingType,
         quantity: bookingQty,
-        unit: targetItem.unit,
-        reason: bookingReason || (bookingType === "stock_in" ? "Bestandserhöhung" : "Bestandsminderung"),
+        reason: normalizedReason,
       });
+      setActionSuccess(receipt.replayed
+        ? "Buchung war bereits bestätigt; es wurde kein zweites Mal gebucht."
+        : "Lagerbuchung wurde vom Server bestätigt.");
+      detailedRequest.current = null;
       setBookingQty(5);
       setBookingReason("");
       setActionError(null);
-      await loadData();
+      await Promise.all([loadData(), loadHistory(selectedItemId, false)]);
+      publishInventorySync(inventorySyncSourceId.current);
     } catch (e) {
       console.error(e);
       setActionError(e instanceof Error ? e.message : "Lagerbuchung fehlgeschlagen.");
+    } finally {
+      setActionPending(false);
     }
   };
 
@@ -120,18 +260,22 @@ export default function ItemsPage() {
 
   // Category and Search Filtering for Inventory Items
   const filteredInventoryItems = inventoryItems.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          item.sku.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          (item.storageLocation || "").toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = item.name.toLocaleLowerCase("de-DE").includes(searchTerm.toLocaleLowerCase("de-DE"));
     
     if (!matchesSearch) return false;
     if (filterCategory === "all") return true;
-    if (filterCategory === "critical") return item.currentStock < item.minStock;
+    if (filterCategory === "critical") return item.minStock !== null && item.currentStock < item.minStock;
     return item.category === filterCategory;
   });
 
   const selectedItem = inventoryItems.find(i => i.id === selectedItemId) || null;
-  const selectedItemMovements = selectedItemId ? stockMovements.filter(m => m.inventoryItemId === selectedItemId) : [];
+  const selectedItemMovements = selectedItemId ? stockMovements : [];
+  const selectedItemCritical = selectedItem?.minStock !== null
+    && selectedItem?.minStock !== undefined
+    && selectedItem.currentStock < selectedItem.minStock;
+  const selectedItemBookingDisabled = actionPending
+    || !capabilities.canWrite
+    || !selectedItem?.unit?.trim();
 
   return (
     <div className="space-y-6 pb-12 font-sans antialiased text-navy-900">
@@ -141,11 +285,30 @@ export default function ItemsPage() {
         subtitle="Tablet-Leitstand für Bestände, Materialbewegungen und chemische Beschichtung"
       />
 
-      {loadError && <p className="rounded-xl border border-danger-red bg-accent-orange-soft p-3 text-sm font-bold text-danger-red">{loadError}</p>}
       {actionError && <p className="rounded-xl border border-danger-red bg-accent-orange-soft p-3 text-sm font-bold text-danger-red">{actionError}</p>}
+      {actionSuccess && <p role="status" className="rounded-xl border border-success-green bg-success-green-soft p-3 text-sm font-bold text-success-green">{actionSuccess}</p>}
+      {loadState === "ready" && !capabilities.canWrite && (
+        <div role="status" className="rounded-xl border border-neutral-gray-300 bg-white p-3 text-sm text-text-muted">
+          <span className="font-bold text-navy-900">Nur Lesen:</span>{" "}
+          {capabilities.writeReason || "Lagerbuchungen sind für diese Rolle nicht freigegeben."}
+        </div>
+      )}
 
-
-
+      {loadState === "loading" ? (
+        <div role="status" className="rounded-2xl border border-neutral-gray-300 bg-white p-10 text-center text-text-muted">
+          Lagerartikel und Bewegungen werden geladen …
+        </div>
+      ) : loadState === "error" ? (
+        <div role="alert" className="rounded-2xl border border-danger-red bg-accent-orange-soft p-6 text-danger-red">
+          <p className="font-bold">Lagerdaten nicht verfügbar</p>
+          <p className="mt-1 text-sm">{loadError}</p>
+          <p className="mt-2 text-xs">Ein Ladefehler wird nicht als leerer oder gesunder Bestand dargestellt.</p>
+          <Button type="button" onClick={retryLoad} className="mt-4 gap-2 bg-danger-red text-white">
+            <RefreshCw className="h-4 w-4" /> Erneut laden
+          </Button>
+        </div>
+      ) : (
+      <>
       {/* Main Grid View - 13.5" Optimized Side-by-Side Dual Panels */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
         
@@ -158,7 +321,7 @@ export default function ItemsPage() {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-text-muted" />
               <Input
                 className="pl-10 h-11 bg-bg-app-soft border-neutral-gray-300 rounded-xl w-full text-base font-medium"
-                placeholder="Artikel suchen nach Name, SKU, Lagerort..."
+                placeholder="Artikel nach Name suchen ..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -195,12 +358,13 @@ export default function ItemsPage() {
                 <div className="divide-y divide-neutral-gray-100">
                   {filteredInventoryItems.length > 0 ? (
                     filteredInventoryItems.map((item) => {
-                      const isCritical = item.currentStock < item.minStock;
+                      const isCritical = item.minStock !== null && item.currentStock < item.minStock;
                       const isSelected = selectedItemId === item.id;
                       
                       return (
                         <div
                           key={item.id}
+                          id={`inventory-${item.id}`}
                           onClick={() => { setSelectedItemId(item.id); trackUiEvent("detail_open", { target: "inventory" }); }}
                           className={`p-4 hover:bg-bg-app-soft/50 transition-colors cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
                             isSelected ? "bg-bg-app border-l-4 border-navy-900" : "border-l-4 border-transparent"
@@ -227,9 +391,11 @@ export default function ItemsPage() {
                             <div>
                               <h4 className="font-extrabold text-navy-900 flex items-center gap-2 flex-wrap text-base">
                                 {item.name}
-                                <Badge variant="outline" className="font-mono text-[10px] bg-bg-app-soft py-0 text-text-muted font-bold">
-                                  {item.sku}
-                                </Badge>
+                                {item.sku && (
+                                  <Badge variant="outline" className="font-mono text-[10px] bg-bg-app-soft py-0 text-text-muted font-bold">
+                                    {item.sku}
+                                  </Badge>
+                                )}
                                 {isCritical && (
                                   <Badge className="bg-danger-red text-white text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 border border-danger-red animate-pulse">
                                     Mindestbestand unterschritten
@@ -237,15 +403,25 @@ export default function ItemsPage() {
                                 )}
                               </h4>
                               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted mt-1 font-semibold">
-                                <span className="text-navy-900 flex items-center gap-1">
-                                  <MapPin className="h-3.5 w-3.5 text-accent-orange" /> {item.storageLocation || "Nicht hinterlegt"}
-                                </span>
-                                <span>•</span>
-                                <span>Min-Soll: {item.minStock} {item.unit}</span>
-                                {item.isHazardous && (
+                                {item.storageLocation && (
+                                  <>
+                                    <span className="text-navy-900 flex items-center gap-1">
+                                      <MapPin className="h-3.5 w-3.5 text-accent-orange" /> {item.storageLocation}
+                                    </span>
+                                    <span>•</span>
+                                  </>
+                                )}
+                                <span>Min-Soll: {item.minStock ?? "nicht erfasst"} {item.unit || ""}</span>
+                                {item.isHazardous === true && (
                                   <>
                                     <span>•</span>
                                     <span className="text-danger-red font-bold uppercase text-[9px]">Gefahrstoff ☣️</span>
+                                  </>
+                                )}
+                                {item.isHazardous === null && (
+                                  <>
+                                    <span>•</span>
+                                    <span>Gefahrstoffkennzeichnung nicht erfasst</span>
                                   </>
                                 )}
                               </div>
@@ -257,7 +433,7 @@ export default function ItemsPage() {
                             <div className="text-left sm:text-right">
                               <span className="text-[10px] text-text-muted font-bold uppercase tracking-wider block">Lagerbestand</span>
                               <span className={`text-2xl font-black ${isCritical ? "text-danger-red font-serif" : "text-navy-900"}`}>
-                                {item.currentStock} <span className="text-sm font-bold text-text-muted">{item.unit}</span>
+                                {item.currentStock} <span className="text-sm font-bold text-text-muted">{item.unit || "Einheit nicht erfasst"}</span>
                               </span>
                             </div>
                             
@@ -268,6 +444,7 @@ export default function ItemsPage() {
                                 variant="outline"
                                 className="h-9 w-9 bg-white text-navy-900 rounded-lg shadow-sm hover:bg-bg-app-soft border border-neutral-gray-300 cursor-pointer"
                                 onClick={(e) => handleQuickAdjust(item.id, "minus", e)}
+                                disabled={actionPending || !capabilities.canWrite || !item.unit?.trim() || item.currentStock < 1}
                               >
                                 <Minus className="h-4.5 w-4.5 font-bold" />
                               </Button>
@@ -276,6 +453,7 @@ export default function ItemsPage() {
                                 variant="outline"
                                 className="h-9 w-9 bg-white text-navy-900 rounded-lg shadow-sm hover:bg-bg-app-soft border border-neutral-gray-300 cursor-pointer"
                                 onClick={(e) => handleQuickAdjust(item.id, "plus", e)}
+                                disabled={actionPending || !capabilities.canWrite || !item.unit?.trim()}
                               >
                                 <Plus className="h-4.5 w-4.5 font-bold" />
                               </Button>
@@ -287,8 +465,10 @@ export default function ItemsPage() {
                   ) : (
                     <div className="p-12 text-center text-text-muted">
                       <Package className="h-12 w-12 text-text-muted mx-auto mb-3" />
-                      <p className="font-bold text-lg">Keine Lagerartikel gefunden</p>
-                      <p className="text-sm mt-1">Ändere deine Suchbegriffe oder Filteroptionen.</p>
+                      <p className="font-bold text-lg">{inventoryItems.length === 0 ? "Keine Lagerartikel erfasst" : "Keine Lagerartikel gefunden"}</p>
+                      <p className="text-sm mt-1">{inventoryItems.length === 0
+                        ? "Der Lagerbestand wurde erfolgreich und ohne Artikel geladen."
+                        : "Ändere die Suchbegriffe oder Filteroptionen."}</p>
                     </div>
                   )}
                 </div>
@@ -307,32 +487,36 @@ export default function ItemsPage() {
                 <span className="text-[9px] uppercase font-black text-text-muted tracking-widest font-mono">Lager-Akte</span>
                 <h3 className="font-black text-2xl leading-none mt-1.5 font-serif text-white">{selectedItem.name}</h3>
                 <div className="flex gap-2 items-center mt-2.5">
-                  <Badge variant="outline" className="text-[10px] border-navy-700 bg-navy-900 text-text-muted font-mono font-bold">
-                    SKU: {selectedItem.sku}
-                  </Badge>
+                  {selectedItem.sku && (
+                    <Badge variant="outline" className="text-[10px] border-navy-700 bg-navy-900 text-text-muted font-mono font-bold">
+                      SKU: {selectedItem.sku}
+                    </Badge>
+                  )}
                   <Badge className={`text-[9px] uppercase tracking-wider font-extrabold py-0.5 px-2.5 ${
                     selectedItem.category === "chemical" 
                       ? "bg-navy-700 text-white border-navy-500" 
                       : "bg-gold-600 text-white border-gold-600"
                   }`}>
-                    {selectedItem.category === "chemical" ? "Chemie" : selectedItem.category === "consumable" ? "Verbrauchsmaterial" : selectedItem.category === "tooling" ? "Werkzeuge" : selectedItem.category === "packaging" ? "Verpackung" : "Sonstiges"}
+                    {selectedItem.category === "chemical" ? "Chemie" : selectedItem.category === "consumable" ? "Verbrauchsmaterial" : selectedItem.category === "tooling" ? "Werkzeuge" : selectedItem.category === "packaging" ? "Verpackung" : selectedItem.category === "other" ? "Sonstiges" : "Kategorie nicht erfasst"}
                   </Badge>
                 </div>
               </div>
 
               {/* Main Specification Data */}
               <div className="p-5 border-b border-neutral-gray-100 bg-bg-app-soft/50 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Lagerort</span>
-                    <p className="text-sm font-extrabold text-navy-900 flex items-center gap-1 mt-0.5">
-                      <MapPin className="h-4 w-4 text-accent-orange shrink-0" /> {selectedItem.storageLocation || "Nicht hinterlegt"}
-                    </p>
-                  </div>
+                <div className={`grid gap-4 ${selectedItem.storageLocation ? "grid-cols-2" : "grid-cols-1"}`}>
+                  {selectedItem.storageLocation && (
+                    <div>
+                      <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Lagerort</span>
+                      <p className="text-sm font-extrabold text-navy-900 flex items-center gap-1 mt-0.5">
+                        <MapPin className="h-4 w-4 text-accent-orange shrink-0" /> {selectedItem.storageLocation}
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Mindest-Sollbestand</span>
                     <p className="text-sm font-extrabold text-navy-900 mt-0.5">
-                      {selectedItem.minStock} {selectedItem.unit}
+                      {selectedItem.minStock ?? "nicht erfasst"} {selectedItem.unit || ""}
                     </p>
                   </div>
                 </div>
@@ -341,24 +525,35 @@ export default function ItemsPage() {
                   <div>
                     <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block">Verfügbarer Bestand</span>
                     <span className={`text-2xl font-black block mt-0.5 ${
-                      selectedItem.currentStock < selectedItem.minStock ? "text-danger-red" : "text-navy-900"
+                      selectedItemCritical ? "text-danger-red" : "text-navy-900"
                     }`}>
-                      {selectedItem.currentStock} {selectedItem.unit}
+                      {selectedItem.currentStock} {selectedItem.unit || "Einheit nicht erfasst"}
                     </span>
                   </div>
                   <Badge className={`font-black text-[10px] uppercase py-1 px-3 ${
-                    selectedItem.currentStock < selectedItem.minStock 
-                      ? "bg-accent-orange-soft text-danger-red border-danger-red hover:bg-accent-orange-soft animate-pulse" 
-                      : "bg-success-green-soft text-success-green border-success-green hover:bg-success-green-soft"
+                    selectedItemCritical
+                      ? "bg-accent-orange-soft text-danger-red border-danger-red hover:bg-accent-orange-soft animate-pulse"
+                      : selectedItem.minStock === null
+                        ? "bg-neutral-gray-100 text-text-muted border-neutral-gray-300"
+                        : "bg-success-green-soft text-success-green border-success-green hover:bg-success-green-soft"
                   }`}>
-                    {selectedItem.currentStock < selectedItem.minStock ? "⚠️ NACHBESTELLEN" : "✅ STABIL"}
+                    {selectedItemCritical
+                      ? "⚠️ NACHBESTELLEN"
+                      : selectedItem.minStock === null
+                        ? "MINIMUM NICHT ERFASST"
+                        : "✅ STABIL"}
                   </Badge>
                 </div>
               </div>
 
               {/* Action 1 Form: Book inventory transaction */}
               <CardContent className="p-5 space-y-6">
-                <form onSubmit={handleDetailedBooking} className="space-y-4 bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-300">
+                {!selectedItem.unit?.trim() && (
+                  <div role="status" className="rounded-xl border border-accent-orange bg-accent-orange-soft p-3 text-xs font-bold text-danger-red">
+                    Für diesen Artikel ist keine Einheit hinterlegt. Buchungen bleiben gesperrt, bis die Stammdaten vollständig sind.
+                  </div>
+                )}
+                <form onSubmit={handleDetailedBooking} aria-busy={actionPending} className="space-y-4 bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-300">
                   <span className="text-xs font-black text-navy-900 uppercase tracking-wider block mb-1">
                     Bestand buchen
                   </span>
@@ -367,6 +562,7 @@ export default function ItemsPage() {
                   <div className="grid grid-cols-2 gap-2 bg-neutral-gray-100/50 p-1 rounded-xl border">
                     <button
                       type="button"
+                      disabled={selectedItemBookingDisabled}
                       onClick={() => setBookingType("stock_in")}
                       className={`py-2 rounded-lg font-bold text-xs transition-all ${
                         bookingType === "stock_in"
@@ -378,6 +574,7 @@ export default function ItemsPage() {
                     </button>
                     <button
                       type="button"
+                      disabled={selectedItemBookingDisabled}
                       onClick={() => setBookingType("stock_out")}
                       className={`py-2 rounded-lg font-bold text-xs transition-all ${
                         bookingType === "stock_out"
@@ -391,30 +588,47 @@ export default function ItemsPage() {
 
                   {/* Quantity and reason controls */}
                   <div className="space-y-2">
-                    <label className="block text-[10px] font-bold text-text-muted uppercase tracking-widest pl-0.5">Menge ({selectedItem.unit})</label>
+                    <label className="block text-[10px] font-bold text-text-muted uppercase tracking-widest pl-0.5">Menge ({selectedItem.unit || "Einheit nicht erfasst"})</label>
                     <div className="flex items-center gap-3 bg-white px-3 py-1.5 rounded-xl border border-neutral-gray-300">
                       <Button
                         type="button"
+                        disabled={selectedItemBookingDisabled}
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 rounded-lg shrink-0"
-                        onClick={() => setBookingQty(q => Math.max(1, q - 1))}
+                        onClick={() => setBookingQty(q => {
+                          const factor = 10 ** capabilities.quantityDecimals;
+                          return Math.max(capabilities.quantityStep, Math.round((q - 1) * factor) / factor);
+                        })}
                       >
                         <Minus className="h-3.5 w-3.5" />
                       </Button>
                       <input
                         type="number"
-                        min="1"
+                        min={capabilities.quantityStep}
+                        step={capabilities.quantityStep}
+                        disabled={selectedItemBookingDisabled}
                         value={bookingQty}
-                        onChange={(e) => setBookingQty(Math.max(1, parseInt(e.target.value) || 1))}
+                        onChange={(e) => {
+                          const parsed = Number.parseFloat(e.target.value);
+                          const factor = 10 ** capabilities.quantityDecimals;
+                          setBookingQty(Math.max(
+                            capabilities.quantityStep,
+                            Math.round((Number.isFinite(parsed) ? parsed : capabilities.quantityStep) * factor) / factor,
+                          ));
+                        }}
                         className="w-full text-center font-extrabold text-lg text-navy-900 bg-transparent border-0 outline-none"
                       />
                       <Button
                         type="button"
+                        disabled={selectedItemBookingDisabled}
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 rounded-lg shrink-0"
-                        onClick={() => setBookingQty(q => q + 1)}
+                        onClick={() => setBookingQty(q => {
+                          const factor = 10 ** capabilities.quantityDecimals;
+                          return Math.round((q + 1) * factor) / factor;
+                        })}
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </Button>
@@ -427,6 +641,8 @@ export default function ItemsPage() {
                       type="text"
                       className="bg-white border-neutral-gray-300 rounded-xl font-semibold text-navy-900 text-sm h-10"
                       placeholder="z.B. Lieferung Fa. BASF, Materialbruch etc."
+                      disabled={selectedItemBookingDisabled}
+                      maxLength={500}
                       value={bookingReason}
                       onChange={(e) => setBookingReason(e.target.value)}
                     />
@@ -434,12 +650,13 @@ export default function ItemsPage() {
 
                   <Button
                     type="submit"
+                    disabled={selectedItemBookingDisabled}
                     className={`w-full h-11 text-xs font-black rounded-xl text-white shadow-sm hover:brightness-95 cursor-pointer flex items-center justify-center gap-1.5 ${
                       bookingType === "stock_in" ? "bg-navy-900 border-navy-900" : "bg-danger-red border-danger-red"
                     }`}
                   >
                     {bookingType === "stock_in" ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
-                    <span>Buchung abschließen</span>
+                    <span>{actionPending ? "Buchung wird bestätigt …" : "Buchung abschließen"}</span>
                   </Button>
                 </form>
 
@@ -447,20 +664,38 @@ export default function ItemsPage() {
                 <div className="space-y-3 pt-2">
                   <h4 className="text-xs font-black text-text-muted uppercase tracking-widest flex items-center gap-1 pl-0.5">
                     <History className="h-4 w-4" />
-                    Bewegungshistorie
+                    Letzte {capabilities.historyLimit} Buchungen
                   </h4>
-                  
+                  <p className="text-[10px] text-text-muted">
+                    Die angezeigte Einheit stammt aus dem aktuellen Artikelstamm; historische Einheitensnapshots sind noch nicht ausgerollt.
+                  </p>
                   <div className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
-                    {selectedItemMovements.length > 0 ? (
+                    {historyState === "loading" ? (
+                      <p role="status" className="text-[11px] text-text-muted py-3 text-center">Buchungen werden geladen …</p>
+                    ) : historyState === "error" ? (
+                      <div role="alert" className="rounded-lg border border-danger-red bg-accent-orange-soft p-3 text-[11px] text-danger-red">
+                        <p>{historyError}</p>
+                        <button type="button" className="mt-2 font-bold underline" onClick={() => selectedItemId && void loadHistory(selectedItemId)}>
+                          Historie erneut laden
+                        </button>
+                      </div>
+                    ) : selectedItemMovements.length > 0 ? (
                       selectedItemMovements.map((mov) => {
-                        const isIn = mov.movementType === "stock_in";
                         const isConsumption = mov.movementType === "consumption";
+                        const isPositive = mov.quantity > 0;
+                        const fallbackReason: Record<StockMovement["movementType"], string> = {
+                          stock_in: "Wareneingang",
+                          stock_out: "Warenabgang",
+                          consumption: "Verbrauch",
+                          correction: "Korrektur",
+                          waste: "Ausschuss",
+                        };
                         
                         return (
                           <div key={mov.id} className="p-3 bg-white rounded-xl border border-neutral-gray-100 text-xs flex justify-between gap-3 shadow-xs">
                             <div className="space-y-0.5">
                               <span className="font-bold text-navy-900 block leading-tight">
-                                {mov.reason || (isIn ? "Wareneingang" : "Warenabgang")}
+                                {mov.reason || fallbackReason[mov.movementType]}
                               </span>
                               <div className="flex items-center gap-2 text-[10px] text-text-muted font-semibold mt-0.5">
                                 <span>{mov.createdAt ? new Date(mov.createdAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "Zeit nicht erfasst"}</span>
@@ -472,19 +707,24 @@ export default function ItemsPage() {
                             </div>
                             
                             <span className={`font-black text-sm whitespace-nowrap ${
-                              isIn 
+                              isPositive
                                 ? "text-success-green" 
                                 : isConsumption 
                                   ? "text-accent-orange" 
                                   : "text-danger-red"
                             }`}>
-                              {isIn ? "+" : "-"}{Math.abs(mov.quantity)} {mov.unit}
+                              {isPositive ? "+" : ""}{mov.quantity} {mov.unit || "Einheit nicht erfasst"}
                             </span>
                           </div>
                         );
                       })
                     ) : (
                       <p className="text-[11px] text-text-muted py-3 text-center">Noch keine Buchungen für diesen Artikel vorhanden.</p>
+                    )}
+                    {historyState === "ready" && historyTruncated && (
+                      <p className="text-[10px] font-bold text-text-muted text-center">
+                        Es werden nur die neuesten {capabilities.historyLimit} Buchungen angezeigt.
+                      </p>
                     )}
                   </div>
                 </div>
@@ -495,6 +735,8 @@ export default function ItemsPage() {
         </div>
 
       </div>
+      </>
+      )}
       
     </div>
   );

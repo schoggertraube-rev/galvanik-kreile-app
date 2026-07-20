@@ -40,14 +40,33 @@ describe('email delivery input contract', () => {
 
 describe('email delivery wiring truth', () => {
   const nextRoute = readFileSync(resolve(process.cwd(), 'src/app/api/email/send/route.ts'), 'utf8')
+  const historyRoute = readFileSync(resolve(process.cwd(), 'src/app/api/email/deliveries/route.ts'), 'utf8')
+  const drawer = readFileSync(resolve(process.cwd(), 'src/components/orders/StatusMailDrawer.tsx'), 'utf8')
   const edgeSender = readFileSync(resolve(process.cwd(), 'supabase/functions/email-send/index.ts'), 'utf8')
   const webhook = readFileSync(resolve(process.cwd(), 'supabase/functions/email-webhook/index.ts'), 'utf8')
   const cron = readFileSync(resolve(process.cwd(), 'src/app/api/cron/send-feedback/route.ts'), 'utf8')
 
   it('authorizes before parsing and sends only through the durable server helper', () => {
-    expect(nextRoute.indexOf('resolveAuthorization()')).toBeLessThan(nextRoute.indexOf('request.json()'))
+    expect(nextRoute.indexOf('resolveAuthorization()')).toBeLessThan(nextRoute.indexOf('readUtf8BodyWithinLimit(request'))
     expect(nextRoute).toContain('sendTemplatedEmail')
+    expect(nextRoute).toContain('parseStatusEmailRequest')
+    expect(nextRoute).toContain('readUtf8BodyWithinLimit')
+    expect(nextRoute).toContain('readStatusEmailSendCapability')
+    expect(nextRoute).toContain('customers.email')
+    expect(nextRoute).toContain('orders.tenantId')
+    expect(nextRoute).toContain('perm_data_orders')
+    expect(nextRoute).not.toContain('...input,')
     expect(nextRoute).not.toContain('SUPABASE_SERVICE_ROLE_KEY')
+  })
+
+  it('projects bounded tenant-bound delivery receipts back into the order drawer', () => {
+    expect(historyRoute).toContain('communications.tenantId')
+    expect(historyRoute).toContain('communications.orderId')
+    expect(historyRoute).toContain('HISTORY_LIMIT + 1')
+    expect(historyRoute).toContain('readStatusEmailLedgerCapability')
+    expect(drawer).toContain('/api/email/deliveries?orderId=')
+    expect(drawer).toContain('Dies ist nicht als leere Historie zu verstehen')
+    expect(drawer).toContain('Provider-ID bestätigt')
   })
 
   it('requires provider idempotency and a confirmed message ID', () => {

@@ -6,13 +6,21 @@ import { Plus, Trash2, Save } from "lucide-react";
 import { createRechnungAction } from "@/app/buchhaltung/actions";
 import { AusgangsrechnungPosition } from "@/lib/buchhaltung/types";
 
-export function RechnungForm() {
+export function RechnungForm({
+  initialOrderId,
+  writeCapability,
+}: {
+  initialOrderId: string;
+  writeCapability: { available: boolean; reason: string | null };
+}) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
 
   const [nummer, setNummer] = useState("");
   const [kundeId, setKundeId] = useState("");
+  const [orderId, setOrderId] = useState(initialOrderId);
+  const [clientRequestId] = useState(() => crypto.randomUUID());
   const [datum, setDatum] = useState(new Date().toISOString().substring(0, 10));
   
   const in14Days = new Date();
@@ -50,6 +58,8 @@ export function RechnungForm() {
     e.preventDefault();
     setError("");
 
+    if (!writeCapability.available) return setError(writeCapability.reason || "Rechnungserstellung ist serverseitig nicht bestätigt verfügbar.");
+
     if (!nummer) return setError("Rechnungsnummer fehlt.");
     if (!kundeId) return setError("Kunde fehlt.");
     if (!datum) return setError("Rechnungsdatum fehlt.");
@@ -76,6 +86,8 @@ export function RechnungForm() {
         const fd = new FormData();
         fd.append("nummer", nummer);
         fd.append("kundeId", kundeId);
+        fd.append("clientRequestId", clientRequestId);
+        if (orderId) fd.append("orderId", orderId);
         fd.append("datum", datum);
         fd.append("faelligAm", faelligAm);
         fd.append("ustSatz", ustSatz.toString());
@@ -94,6 +106,11 @@ export function RechnungForm() {
       {error && (
         <div className="bg-rose-50 text-rose-600 p-4 rounded-xl text-sm font-semibold mb-6">
           {error}
+        </div>
+      )}
+      {!error && !writeCapability.available && (
+        <div role="status" className="bg-amber-50 text-amber-900 p-4 rounded-xl text-sm font-semibold mb-6 border border-amber-200">
+          {writeCapability.reason} Es wird keine Rechnung gespeichert.
         </div>
       )}
 
@@ -118,6 +135,17 @@ export function RechnungForm() {
             className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-navy-900"
             required
           />
+        </div>
+        <div>
+          <label className="block text-xs font-bold text-neutral-500 mb-2">Auftrag (ID, optional)</label>
+          <input
+            type="text"
+            value={orderId}
+            onChange={e => setOrderId(e.target.value)}
+            placeholder="Bestehende Auftrags-ID"
+            className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-navy-900"
+          />
+          <p className="mt-1 text-xs text-neutral-500">Wenn gesetzt, prüft der Server Mandant und Kundenübereinstimmung.</p>
         </div>
         <div>
           <label className="block text-xs font-bold text-neutral-500 mb-2">Rechnungsdatum *</label>
@@ -250,7 +278,7 @@ export function RechnungForm() {
         
         <button
           type="submit"
-          disabled={isPending}
+          disabled={isPending || !writeCapability.available}
           className="flex items-center gap-2 bg-navy-900 text-white px-6 py-3 rounded-full text-sm font-bold hover:bg-navy-800 transition-colors disabled:opacity-50"
         >
           {isPending ? "Speichert..." : (
