@@ -15,14 +15,22 @@ describe("prepared AI usage ledger migration", () => {
     expect(migration).toContain("p_user_daily_unit_limit");
     expect(migration).toContain("p_tenant_daily_unit_limit");
     expect(migration).toContain("prior_attempt_terminal");
+    expect(migration).toContain("reclaimed_reserved");
+    expect(migration).toContain("stale_in_flight");
+    expect(migration).toContain("v_existing.updated_at <= v_now - interval '5 minutes'");
     expect(migration).not.toMatch(/CREATE\s+POLICY/i);
   });
 
   it("binds claim and settlement to tenant, user, feature and reservation", () => {
     expect(migration).toMatch(/WHERE r\.id = p_reservation_id[\s\S]*r\.tenant_id = p_tenant_id[\s\S]*r\.user_id = p_user_id[\s\S]*r\.feature = p_feature/);
-    expect(migration).toContain("v_status <> 'reserved'");
+    expect(migration).toContain("r.status = 'reserved'");
+    expect(migration).toContain("r.updated_at > clock_timestamp() - interval '5 minutes'");
     expect(migration).toContain("v_reservation.status <> 'in_flight'");
     expect(migration).toContain("REVOKE ALL ON TABLE public.ai_usage_reservations FROM PUBLIC, anon, authenticated, service_role");
     expect(migration).toContain("GRANT EXECUTE ON FUNCTION public.reserve_ai_usage");
+    expect(migration).not.toMatch(/CREATE TABLE IF NOT EXISTS public\.ai_usage_reservations/i);
+    expect(migration).not.toMatch(/CREATE (?:UNIQUE )?INDEX IF NOT EXISTS/i);
+    expect(migration).not.toMatch(/CREATE OR REPLACE FUNCTION public\.(?:reserve|claim|settle)_ai_usage/i);
+    expect(migration).toContain("ALTER TABLE public.ai_usage_reservations FORCE ROW LEVEL SECURITY");
   });
 });

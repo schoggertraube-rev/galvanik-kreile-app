@@ -71,7 +71,16 @@ export function CaptureSheet({ orderId, stationKuerzel, onSuccess, onClose }: Ca
 
   const selectedMaterials = useMemo(() => Object.entries(quantities)
     .filter(([, quantity]) => quantity > 0)
-    .map(([inventoryItemId, quantity]) => ({ inventoryItemId, quantity })), [quantities]);
+    .map(([inventoryItemId, quantity]) => {
+      const article = overview?.articles.find((candidate) => candidate.id === inventoryItemId);
+      const usesExactSuggestion = article?.suggestedTemplateId
+        && article.suggestedQuantity === quantity;
+      return {
+        inventoryItemId,
+        quantity,
+        ...(usesExactSuggestion ? { templateId: article.suggestedTemplateId } : {}),
+      };
+    }), [overview, quantities]);
   const selectedArticles = selectedMaterials.map((line) => ({
     ...line,
     article: overview?.articles.find((article) => article.id === line.inventoryItemId) || null,
@@ -85,7 +94,8 @@ export function CaptureSheet({ orderId, stationKuerzel, onSuccess, onClose }: Ca
   const rate = overview?.selectedRate?.valueEurPerHour ?? null;
   const writeCapability = overview?.writeCapability || { available: false, reason: "Schreibfähigkeit wurde noch nicht bestätigt." };
   const timeCost = rate === null ? null : (minutes / 60) * rate;
-  const suggestedMinutes = overview?.template.zeit?.find((row) => row.station === stationKuerzel)?.median_min;
+  const suggestedTime = overview?.template.zeit?.find((row) => row.station === stationKuerzel);
+  const suggestedMinutes = suggestedTime?.median_min;
 
   const setQuantity = (id: string, value: number) => {
     materialRequestId.current = null;
@@ -102,6 +112,7 @@ export function CaptureSheet({ orderId, stationKuerzel, onSuccess, onClose }: Ca
         stationKuerzel,
         minutes,
         clientRequestId: timeRequestId.current,
+        ...(suggestedTime?.id && suggestedTime.median_min === minutes ? { templateId: suggestedTime.id } : {}),
       });
       if (!result.ok) {
         setError(result.message);

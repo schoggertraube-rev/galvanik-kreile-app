@@ -8,7 +8,7 @@ const { mockCreateClient, mockRpc, mockFetch } = vi.hoisted(() => ({
 
 vi.mock("@supabase/supabase-js", () => ({ createClient: mockCreateClient }));
 
-import { proxyMeteredAiRequest } from "@/lib/server/aiUsage";
+import { proxyMeteredAiRequest, reserveDirectAiUsage } from "@/lib/server/aiUsage";
 
 const identity = { tenantId: "galvanik-kreile", userId: "user-42" };
 const reservationId = "123e4567-e89b-42d3-a456-426614174000";
@@ -81,6 +81,51 @@ describe("durable AI usage proxy", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("X-AI-Replay")).toBe("1");
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("distinguishes an existing in-flight attempt from a quota rejection", async () => {
+    mockRpc.mockResolvedValue({
+      data: [{
+        allowed: false,
+        reservation_id: reservationId,
+        replay: true,
+        usage_status: "in_flight",
+        replay_result: null,
+        retry_after_seconds: 2,
+        decision_reason: "in_progress",
+      }],
+      error: null,
+    });
+    const response = await call(request("same-request-42"));
+    expect(response.status).toBe(409);
+    expect(response.headers.get("Retry-After")).toBe("2");
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("uses a conservative input-unit floor for direct paid calls", async () => {
+    mockRpc.mockResolvedValue({
+      data: [{
+        allowed: true,
+        reservation_id: reservationId,
+        replay: false,
+        usage_status: "reserved",
+        replay_result: null,
+        retry_after_seconds: 0,
+        decision_reason: "reserved",
+      }],
+      error: null,
+    });
+    await reserveDirectAiUsage({
+      identity,
+      feature: "receipt-ocr",
+      payload: { scanId: "scan", byteLength: 14_680_064 },
+      maxOutputTokens: 4_096,
+      minimumInputUnits: 57_344,
+      idempotencyKey: "scan-ocr:attempt-1",
+    });
+    expect(mockRpc).toHaveBeenCalledWith("reserve_ai_usage", expect.objectContaining({
+      p_estimated_units: 61_440,
+    }));
   });
 
   it("forwards only the identity-bound reservation envelope", async () => {

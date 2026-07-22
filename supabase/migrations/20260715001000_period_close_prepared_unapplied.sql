@@ -16,7 +16,7 @@ CREATE OR REPLACE FUNCTION public.guard_final_finance_period()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, public, pg_temp
 AS $function$
 DECLARE
   old_period_id uuid;
@@ -66,7 +66,7 @@ CREATE OR REPLACE FUNCTION public.finance_close_period(
 RETURNS TABLE (id uuid, status text, closed_at timestamptz, replayed boolean)
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, public, pg_temp
 AS $function$
 DECLARE
   current_period public.periode%ROWTYPE;
@@ -170,7 +170,7 @@ ALTER TABLE public.periode FORCE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.periode FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON TABLE public.periode TO service_role;
 
-REVOKE ALL ON FUNCTION public.finance_close_period(uuid, text, uuid, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.finance_close_period(uuid, text, uuid, uuid) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.finance_close_period(uuid, text, uuid, uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.guard_final_finance_period() FROM PUBLIC, anon, authenticated, service_role;
 

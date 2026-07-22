@@ -28,7 +28,7 @@ CREATE OR REPLACE FUNCTION public.consume_security_rate_limit(
 RETURNS TABLE(allowed boolean, remaining integer, retry_after_seconds integer)
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_counter public.security_rate_limit_counters%ROWTYPE;
@@ -92,7 +92,7 @@ CREATE OR REPLACE FUNCTION public.reset_security_rate_limit(
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_now timestamptz := clock_timestamp();
@@ -116,9 +116,9 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.consume_security_rate_limit(text,text,integer,integer)
-  FROM PUBLIC, anon, authenticated;
+  FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON FUNCTION public.reset_security_rate_limit(text,text)
-  FROM PUBLIC, anon, authenticated;
+  FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.consume_security_rate_limit(text,text,integer,integer)
   TO service_role;
 GRANT EXECUTE ON FUNCTION public.reset_security_rate_limit(text,text)

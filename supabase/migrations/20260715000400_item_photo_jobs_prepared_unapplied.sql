@@ -84,7 +84,7 @@ RETURNS TABLE(
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_now timestamptz := clock_timestamp();
@@ -245,7 +245,7 @@ CREATE OR REPLACE FUNCTION public.bind_item_photo_upload(
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_status text;
@@ -275,7 +275,7 @@ RETURNS TABLE(
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_job public.item_photo_jobs%ROWTYPE;
@@ -310,7 +310,7 @@ CREATE OR REPLACE FUNCTION public.settle_item_photo_analysis(
 RETURNS TABLE(changed boolean, job_status text)
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_job public.item_photo_jobs%ROWTYPE;
@@ -351,7 +351,7 @@ CREATE OR REPLACE FUNCTION public.mark_item_photo_uncertain(
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 BEGIN
   IF p_reason IS NULL OR length(p_reason) NOT BETWEEN 1 AND 80 THEN
@@ -366,11 +366,11 @@ END;
 $$;
 
 REVOKE ALL ON TABLE public.item_photo_jobs FROM PUBLIC, anon, authenticated, service_role;
-REVOKE ALL ON FUNCTION public.reserve_item_photo_job(uuid,text,text,text,text,text,text,text,text,integer,integer,integer,integer,bigint,integer,integer,integer,integer) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.bind_item_photo_upload(uuid,text,text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.claim_item_photo_analysis(uuid) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.settle_item_photo_analysis(uuid,text,integer,text,jsonb) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.mark_item_photo_uncertain(uuid,text,text,text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.reserve_item_photo_job(uuid,text,text,text,text,text,text,text,text,integer,integer,integer,integer,bigint,integer,integer,integer,integer) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.bind_item_photo_upload(uuid,text,text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.claim_item_photo_analysis(uuid) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.settle_item_photo_analysis(uuid,text,integer,text,jsonb) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.mark_item_photo_uncertain(uuid,text,text,text) FROM PUBLIC, anon, authenticated, service_role;
 
 GRANT EXECUTE ON FUNCTION public.reserve_item_photo_job(uuid,text,text,text,text,text,text,text,text,integer,integer,integer,integer,bigint,integer,integer,integer,integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.bind_item_photo_upload(uuid,text,text) TO service_role;

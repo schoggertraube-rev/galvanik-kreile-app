@@ -1,50 +1,17 @@
-'use server';
+"use server";
 
-import { createClient } from '@/lib/supabase/server';
-import { db } from '@/db';
-import { scanUploads, events } from '@/db/schema';
-import { getCurrentAppUser } from '@/lib/auth/permissions';
-import { revalidatePath } from 'next/cache';
-
-export async function uploadOrderPhotoRecord(params: {
+// Preserved compatibility export.  The former implementation accepted an
+// arbitrary URL and wrote an unverifiable `processed` scan row.  Order photos
+// must use the private, receipt-backed item-photo job boundary instead.
+export async function uploadOrderPhotoRecord(_params: {
   orderId: string;
   fileUrl: string;
   fileType: string;
 }) {
-  const { orderId, fileUrl, fileType } = params;
-  
-  const user = await getCurrentAppUser();
-  const userId = user ? user.id : null;
-
-  try {
-    await db.transaction(async (tx) => {
-      // 1. Insert into scan_uploads (reusing existing schema)
-      await tx.insert(scanUploads).values({
-        tenantId: 'galvanik-kreile',
-        linkedOrderId: orderId,
-        fileUrl: fileUrl,
-        fileType: fileType,
-        uploadedBy: userId,
-        status: 'processed',
-        detectedType: 'Foto',
-      });
-
-      // 2. Insert PHOTO_ADDED event
-      await tx.insert(events).values({
-        tenantId: 'galvanik-kreile',
-        orderId: orderId,
-        eventType: 'PHOTO_ADDED',
-        description: 'Foto hinzugefügt',
-        userId: userId,
-      });
-    });
-
-    revalidatePath('/orders');
-    revalidatePath('/warendurchlauf');
-
-    return { success: true };
-  } catch (error: any) {
-    console.error("Failed to insert photo record:", error);
-    return { success: false, error: error.message || 'Database error' };
-  }
+  void _params;
+  return {
+    success: false as const,
+    code: "ORDER_PHOTO_RECEIPT_REQUIRED",
+    error: "Auftragsfotos bleiben gesperrt, bis der private Foto-Belegpfad angebunden ist.",
+  };
 }

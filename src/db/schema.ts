@@ -1,4 +1,19 @@
-import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, varchar, numeric, index, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  check,
+  foreignKey,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 
 // Helper for CUID primary keys
@@ -21,7 +36,9 @@ export const appUsers = pgTable("app_users", {
   urlaubstageProJahr: integer("urlaubstage_pro_jahr"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("app_users_tenant_id_uidx").on(table.tenantId, table.id),
+]);
 
 // 2. Customers
 export const customers = pgTable("customers", {
@@ -81,7 +98,7 @@ export const priceAgreements = pgTable("price_agreements", {
 // 4. Orders
 export const orders = pgTable("orders", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   orderNumber: text("order_number").notNull().unique(),
   customerId: text("customer_id").notNull().references(() => customers.id),
   title: text("title").notNull(),
@@ -113,7 +130,9 @@ export const orders = pgTable("orders", {
   quoteStatus: text("quote_status"),
   quoteConvertedOrderId: text("quote_converted_order_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("orders_tenant_id_uidx").on(table.tenantId, table.id),
+]);
 
 // 4.5 Calendar Events
 export const calendarEvents = pgTable("calendar_events", {
@@ -135,7 +154,7 @@ export const calendarEvents = pgTable("calendar_events", {
 // 4.5 Items (Standalone table for parts, referenced by orders.actions.ts)
 export const items = pgTable("items", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   customerId: text("customer_id").notNull().references(() => customers.id),
   name: text("name").notNull(),
@@ -150,7 +169,17 @@ export const items = pgTable("items", {
   currentStep: integer("current_step").default(0),
   internalNotes: text("internal_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  foreignKey({
+    columns: [table.tenantId, table.orderId],
+    foreignColumns: [orders.tenantId, orders.id],
+    name: "items_tenant_order_fk",
+  }).onDelete("cascade"),
+  check(
+    "items_template_surface_key_chk",
+    sql`${table.surfaceRequested} is null or position('|' in ${table.surfaceRequested}) = 0`,
+  ),
+]);
 
 // 5. Events / Timeline
 export const events = pgTable("events", {
@@ -207,35 +236,114 @@ export const inventoryItems = pgTable("inventory_items", {
   id: cuidPrimaryKey("id"),
   tenantId: text("tenant_id").notNull(),
   name: text("name").notNull(),
-  category: varchar("category", { length: 100 }),
+  category: text("category"),
   currentStock: numeric("current_stock", { precision: 14, scale: 4 }).default("0").notNull(),
-  minStock: integer("min_stock").default(0),
-  unit: varchar("unit", { length: 20 }),
+  minStock: numeric("min_stock", { precision: 14, scale: 4 }).default("0"),
+  unit: text("unit").notNull(),
   einkaufspreisEur: numeric("einkaufspreis_eur", { precision: 10, scale: 4 }),
   einheitNormiert: text("einheit_normiert"),
   kostenstelleDefaultKuerzel: text("kostenstelle_default_kuerzel"),
   letzterPreisAktualisiertAm: timestamp("letzter_preis_aktualisiert_am", { withTimezone: true }),
   letzterPreisQuelleBelegId: uuid("letzter_preis_quelle_beleg_id"),
-});
+}, (table) => [
+  uniqueIndex("inventory_items_tenant_id_uidx").on(table.tenantId, table.id),
+  check(
+    "inventory_items_current_stock_nonnegative",
+    sql`${table.currentStock}::text not in ('NaN', 'Infinity', '-Infinity') and ${table.currentStock} >= 0`,
+  ),
+  check(
+    "inventory_items_min_stock_valid_chk",
+    sql`${table.minStock} is null or (${table.minStock}::text not in ('NaN', 'Infinity', '-Infinity') and ${table.minStock} >= 0)`,
+  ),
+  check(
+    "inventory_items_purchase_price_valid_chk",
+    sql`${table.einkaufspreisEur} is null or (${table.einkaufspreisEur}::text not in ('NaN', 'Infinity', '-Infinity') and ${table.einkaufspreisEur} >= 0)`,
+  ),
+  check("inventory_items_tenant_nonblank_chk", sql`btrim(${table.tenantId}) <> ''`),
+  check("inventory_items_unit_nonblank_chk", sql`btrim(${table.unit}) <> ''`),
+]);
 
 export const stockMovements = pgTable("stock_movements", {
   id: uuid("id").primaryKey().defaultRandom(),
   tenantId: text("tenant_id").notNull(),
   inventoryItemId: text("inventory_item_id").notNull(),
   movementType: text("movement_type").notNull(),
-  quantity: numeric("quantity").notNull(),
+  quantity: numeric("quantity", { precision: 14, scale: 4 }).notNull(),
+  unit: text("unit").notNull(),
   reason: text("reason"),
   orderId: text("order_id"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  createdBy: uuid("created_by").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   kostenstelleKuerzel: text("kostenstelle_kuerzel"),
   stationKuerzel: text("station_kuerzel"),
-  erfasstVon: uuid("erfasst_von").references(() => appUsers.id),
-  warAusVorlage: boolean("war_aus_vorlage").default(false),
+  erfasstVon: uuid("erfasst_von").notNull(),
+  warAusVorlage: boolean("war_aus_vorlage"),
   vorlageId: uuid("vorlage_id"),
   snapshotEinkaufspreisEur: numeric("snapshot_einkaufspreis_eur", { precision: 10, scale: 4 }),
   notiz: text("notiz"),
   clientRequestId: uuid("client_request_id"),
 }, (table) => [
+  foreignKey({
+    columns: [table.tenantId, table.inventoryItemId],
+    foreignColumns: [inventoryItems.tenantId, inventoryItems.id],
+    name: "stock_movements_tenant_inventory_fk",
+  }).onDelete("restrict"),
+  foreignKey({
+    columns: [table.tenantId, table.orderId],
+    foreignColumns: [orders.tenantId, orders.id],
+    name: "stock_movements_tenant_order_fk",
+  }).onDelete("restrict"),
+  foreignKey({
+    columns: [table.tenantId, table.createdBy],
+    foreignColumns: [appUsers.tenantId, appUsers.id],
+    name: "stock_movements_tenant_created_by_fk",
+  }).onDelete("restrict"),
+  foreignKey({
+    columns: [table.tenantId, table.erfasstVon],
+    foreignColumns: [appUsers.tenantId, appUsers.id],
+    name: "stock_movements_tenant_erfasst_von_fk",
+  }).onDelete("restrict"),
+  check(
+    "stock_movements_quantity_nonzero",
+    sql`${table.quantity}::text not in ('NaN', 'Infinity', '-Infinity') and ${table.quantity} <> 0`,
+  ),
+  check(
+    "stock_movements_type_chk",
+    sql`${table.movementType} in ('stock_in', 'stock_out', 'consumption', 'verbrauch', 'correction', 'waste')`,
+  ),
+  check(
+    "stock_movements_quantity_direction_chk",
+    sql`(
+      (${table.movementType} = 'stock_in' and ${table.quantity} > 0)
+      or (${table.movementType} in ('stock_out', 'consumption', 'verbrauch', 'waste') and ${table.quantity} < 0)
+      or (${table.movementType} = 'correction' and ${table.quantity} <> 0)
+    )`,
+  ),
+  check(
+    "stock_movements_reason_required_chk",
+    sql`${table.movementType} not in ('correction', 'waste') or (${table.reason} is not null and btrim(${table.reason}) <> '')`,
+  ),
+  check(
+    "stock_movements_template_provenance_chk",
+    sql`(
+      ${table.vorlageId} is null and ${table.warAusVorlage} is distinct from true
+    ) or (
+      ${table.vorlageId} is not null and ${table.warAusVorlage} is true
+    )`,
+  ),
+  check(
+    "stock_movements_snapshot_price_valid_chk",
+    sql`${table.snapshotEinkaufspreisEur} is null or (${table.snapshotEinkaufspreisEur}::text not in ('NaN', 'Infinity', '-Infinity') and ${table.snapshotEinkaufspreisEur} >= 0)`,
+  ),
+  check("stock_movements_actor_consistency_chk", sql`${table.createdBy} = ${table.erfasstVon}`),
+  check("stock_movements_tenant_nonblank_chk", sql`btrim(${table.tenantId}) <> ''`),
+  check("stock_movements_unit_nonblank_chk", sql`btrim(${table.unit}) <> ''`),
+  index("stock_movements_tenant_inventory_created_id_idx").on(
+    table.tenantId,
+    table.inventoryItemId,
+    table.createdAt,
+    table.id,
+  ),
   index("stock_movements_tenant_order_created_idx").on(table.tenantId, table.orderId, table.createdAt),
   index("stock_movements_tenant_request_idx").on(table.tenantId, table.clientRequestId),
 ]);
@@ -297,7 +405,13 @@ export const scanUploads = pgTable("scan_uploads", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
   tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   fileUrl: text("file_url").notNull(),
+  recordKind: text("record_kind").notNull().default("legacy"),
   fileType: text("file_type"),
+  contentSha256: varchar("content_sha256", { length: 64 }),
+  fileSizeBytes: integer("file_size_bytes"),
+  processingAttemptCount: integer("processing_attempt_count").notNull().default(0),
+  processingClaimedAt: timestamp("processing_claimed_at", { withTimezone: true }),
+  lastProcessingError: text("last_processing_error"),
   uploadedBy: uuid("uploaded_by").references(() => appUsers.id),
   uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull().defaultNow(),
   detectedType: text("detected_type"),
@@ -356,12 +470,20 @@ export const auditLog = pgTable("audit_log", {
   action: text("action").notNull(),
   tableName: text("table_name"),
   recordId: text("record_id"),
-  actorId: uuid("actor_id").references(() => appUsers.id),
+  actorId: uuid("actor_id"),
   payload: jsonb("payload"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
-  uniqueIndex("audit_log_tenant_request_action_uidx").on(table.tenantId, table.clientRequestId, table.action),
+  uniqueIndex("audit_log_tenant_request_action_uidx")
+    .on(table.tenantId, table.clientRequestId, table.action)
+    .where(sql`${table.clientRequestId} is not null`),
   index("audit_log_tenant_created_idx").on(table.tenantId, table.createdAt),
+  foreignKey({
+    columns: [table.tenantId, table.actorId],
+    foreignColumns: [appUsers.tenantId, appUsers.id],
+    name: "audit_log_tenant_actor_fk",
+  }).onDelete("restrict"),
+  check("audit_log_tenant_nonblank_chk", sql`btrim(${table.tenantId}) <> ''`),
 ]);
 
 export const companySettingsTable = pgTable("company_settings", {

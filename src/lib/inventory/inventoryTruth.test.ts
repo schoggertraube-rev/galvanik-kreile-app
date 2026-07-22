@@ -25,7 +25,29 @@ describe("canonical inventory truth and connectivity", () => {
     expect(action).toContain('for("update")');
     expect(action).toContain("fitsInventoryQuantityDecimals");
     expect(action.indexOf("if (existing)")).toBeLessThan(action.indexOf("fitsInventoryQuantityDecimals(quantity"));
+    expect(action.indexOf("if (persisted)")).toBeLessThan(action.indexOf("readInventoryWriteCapability()"));
     expect(action).toContain("UNIT_NOT_CONFIGURED");
+    expect(action).toContain("inventoryReadSessionQuery");
+    expect(action).toContain('current_user = \'service_role\'');
+  });
+
+  it("projects real purchase prices and enforces movement semantics in the database contract", () => {
+    const action = source("src/app/lager/actions.ts");
+    const capability = source("src/lib/server/inventoryWriteCapability.ts");
+    const migration = source("supabase/migrations/20260715001550_inventory_contract_reconciliation_prepared_unapplied.sql");
+    expect(action).toContain("einkaufspreisEur: inventoryItems.einkaufspreisEur");
+    expect(action).toContain("pricePerUnit,");
+    for (const constraint of [
+      "stock_movements_type_chk",
+      "stock_movements_quantity_direction_chk",
+      "stock_movements_reason_required_chk",
+      "stock_movements_template_provenance_chk",
+    ]) {
+      expect(capability).toContain(constraint);
+      expect(migration).toContain(constraint);
+    }
+    expect(migration).toContain("movement_type IN ('stock_out', 'consumption', 'verbrauch', 'waste')");
+    expect(migration).toContain("has_any_column_privilege('service_role', 'public.stock_movements', 'UPDATE')");
   });
 
   it("loads only bounded per-item history with explicit live-schema projections", () => {
@@ -34,7 +56,8 @@ describe("canonical inventory truth and connectivity", () => {
     expect(action).toContain("HISTORY_LIMIT + 1");
     expect(action).toContain("desc(stockMovements.createdAt), desc(stockMovements.id)");
     expect(action).toContain('throw new Error("ITEM_NOT_FOUND")');
-    expect(action).toContain('unitContext: "current_inventory_item"');
+    expect(action).toContain('unit: stockMovements.unit');
+    expect(action).toContain('unitContext: "movement_snapshot"');
     expect(action).not.toContain("movement: stockMovements");
     expect(repository).not.toContain("getAllMovements");
   });
@@ -55,8 +78,7 @@ describe("canonical inventory truth and connectivity", () => {
     expect(captureSheet).toContain("publishInventorySync");
     expect(captureAction).toContain('revalidatePath("/items")');
     expect(captureAction).toContain('revalidatePath("/lager")');
-    expect(captureAction).toContain("pi.indisvalid");
-    expect(captureAction).toContain("pi.indisready");
+    expect(captureAction).toContain("readInventoryWriteCapability");
     expect(drawer).toContain("Buchungspfad stillgelegt");
     expect(drawer).not.toContain("inventoryRepository");
     expect(drawer).not.toContain("createMovement");

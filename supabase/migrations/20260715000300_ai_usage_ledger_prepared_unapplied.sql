@@ -6,7 +6,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
-CREATE TABLE IF NOT EXISTS public.ai_usage_reservations (
+CREATE TABLE public.ai_usage_reservations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id text NOT NULL,
   user_id text NOT NULL,
@@ -33,17 +33,18 @@ CREATE TABLE IF NOT EXISTS public.ai_usage_reservations (
 );
 
 ALTER TABLE public.ai_usage_reservations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.ai_usage_reservations FORCE ROW LEVEL SECURITY;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_ai_usage_request
+CREATE UNIQUE INDEX uq_ai_usage_request
   ON public.ai_usage_reservations(tenant_id, user_id, feature, request_key_hash);
 
-CREATE INDEX IF NOT EXISTS idx_ai_usage_user_window
+CREATE INDEX idx_ai_usage_user_window
   ON public.ai_usage_reservations(tenant_id, user_id, feature, created_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_ai_usage_tenant_window
+CREATE INDEX idx_ai_usage_tenant_window
   ON public.ai_usage_reservations(tenant_id, created_at DESC);
 
-CREATE OR REPLACE FUNCTION public.reserve_ai_usage(
+CREATE FUNCTION public.reserve_ai_usage(
   p_tenant_id text,
   p_user_id text,
   p_feature text,
@@ -66,7 +67,7 @@ RETURNS TABLE(
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_existing public.ai_usage_reservations%ROWTYPE;
@@ -80,6 +81,8 @@ DECLARE
   v_tenant_units bigint;
   v_reason text;
   v_retry integer;
+  v_reclaim boolean := false;
+  v_reclaim_id uuid;
 BEGIN
   IF p_tenant_id IS NULL OR length(p_tenant_id) NOT BETWEEN 1 AND 80
      OR p_user_id IS NULL OR length(p_user_id) NOT BETWEEN 1 AND 128
@@ -110,23 +113,48 @@ BEGIN
   FOR UPDATE;
 
   IF FOUND THEN
-    IF v_existing.status = 'succeeded'
-       AND v_existing.result_json IS NOT NULL
-       AND v_existing.result_expires_at > v_now THEN
-      RETURN QUERY SELECT
-        true, v_existing.id, true, v_existing.status,
-        v_existing.result_json, 0, 'replay_result'::text;
+    IF v_existing.status = 'reserved'
+       AND v_existing.updated_at <= v_now - interval '5 minutes' THEN
+      -- Re-admit below against the current window/day. Excluding this row from
+      -- all counters and moving its admission timestamp prevents old leases
+      -- from borrowing quota from a previous day.
+      v_reclaim := true;
+      v_reclaim_id := v_existing.id;
     ELSE
-      RETURN QUERY SELECT
-        false, v_existing.id, true, v_existing.status, NULL::jsonb,
-        CASE WHEN v_existing.status IN ('reserved', 'in_flight') THEN 2 ELSE 0 END,
-        CASE
-          WHEN v_existing.status IN ('reserved', 'in_flight') THEN 'in_progress'
-          WHEN v_existing.status = 'succeeded' THEN 'result_expired'
-          ELSE 'prior_attempt_terminal'
-        END;
+      IF v_existing.status = 'in_flight'
+         AND v_existing.updated_at <= v_now - interval '5 minutes' THEN
+        UPDATE public.ai_usage_reservations
+        SET status = 'uncertain',
+            reason = 'stale_in_flight',
+            provider_status = coalesce(provider_status, 'stale-in-flight'),
+            completed_at = v_now,
+            updated_at = v_now
+        WHERE id = v_existing.id;
+        v_existing.status := 'uncertain';
+      END IF;
+
+      IF v_existing.status = 'succeeded'
+         AND v_existing.result_json IS NOT NULL
+         AND v_existing.result_expires_at > v_now THEN
+        RETURN QUERY SELECT
+          true, v_existing.id, true, v_existing.status,
+          v_existing.result_json, 0, 'replay_result'::text;
+      ELSE
+        RETURN QUERY SELECT
+          false, v_existing.id, true, v_existing.status, NULL::jsonb,
+          CASE WHEN v_existing.status IN ('reserved', 'in_flight') THEN
+            greatest(1, ceil(extract(epoch FROM (
+              v_existing.updated_at + interval '5 minutes' - v_now
+            )))::integer)
+          ELSE 0 END,
+          CASE
+            WHEN v_existing.status IN ('reserved', 'in_flight') THEN 'in_progress'
+            WHEN v_existing.status = 'succeeded' THEN 'result_expired'
+            ELSE 'prior_attempt_terminal'
+          END;
+      END IF;
+      RETURN;
     END IF;
-    RETURN;
   END IF;
 
   v_window_start := v_now - make_interval(secs => p_window_seconds);
@@ -137,25 +165,29 @@ BEGIN
   WHERE r.tenant_id = p_tenant_id
     AND r.user_id = p_user_id
     AND r.feature = p_feature
-    AND r.created_at >= v_window_start;
+    AND r.created_at >= v_window_start
+    AND (v_reclaim_id IS NULL OR r.id <> v_reclaim_id);
 
   SELECT count(*) INTO v_tenant_count
   FROM public.ai_usage_reservations r
   WHERE r.tenant_id = p_tenant_id
-    AND r.created_at >= v_window_start;
+    AND r.created_at >= v_window_start
+    AND (v_reclaim_id IS NULL OR r.id <> v_reclaim_id);
 
   SELECT coalesce(sum(coalesce(r.actual_units, r.estimated_units)), 0)::bigint
   INTO v_user_units
   FROM public.ai_usage_reservations r
   WHERE r.tenant_id = p_tenant_id
     AND r.user_id = p_user_id
-    AND r.created_at >= v_day_start;
+    AND r.created_at >= v_day_start
+    AND (v_reclaim_id IS NULL OR r.id <> v_reclaim_id);
 
   SELECT coalesce(sum(coalesce(r.actual_units, r.estimated_units)), 0)::bigint
   INTO v_tenant_units
   FROM public.ai_usage_reservations r
   WHERE r.tenant_id = p_tenant_id
-    AND r.created_at >= v_day_start;
+    AND r.created_at >= v_day_start
+    AND (v_reclaim_id IS NULL OR r.id <> v_reclaim_id);
 
   IF v_user_count >= p_user_window_limit THEN
     v_reason := 'user_window';
@@ -172,7 +204,32 @@ BEGIN
   END IF;
 
   IF v_reason IS NOT NULL THEN
-    RETURN QUERY SELECT false, NULL::uuid, false, 'rejected'::text, NULL::jsonb, v_retry, v_reason;
+    RETURN QUERY SELECT
+      false,
+      CASE WHEN v_reclaim THEN v_reclaim_id ELSE NULL::uuid END,
+      v_reclaim,
+      CASE WHEN v_reclaim THEN 'reserved'::text ELSE 'rejected'::text END,
+      NULL::jsonb, v_retry, v_reason;
+    RETURN;
+  END IF;
+
+  IF v_reclaim THEN
+    UPDATE public.ai_usage_reservations
+    SET estimated_units = p_estimated_units,
+        actual_units = NULL,
+        status = 'reserved',
+        reason = 'reclaimed_reserved',
+        provider_status = NULL,
+        result_json = NULL,
+        result_expires_at = NULL,
+        created_at = v_now,
+        started_at = NULL,
+        completed_at = NULL,
+        updated_at = v_now
+    WHERE id = v_reclaim_id;
+    RETURN QUERY SELECT
+      true, v_reclaim_id, false, 'reserved'::text,
+      NULL::jsonb, 0, 'reclaimed_reserved'::text;
     RETURN;
   END IF;
 
@@ -204,7 +261,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.claim_ai_usage_reservation(
+CREATE FUNCTION public.claim_ai_usage_reservation(
   p_reservation_id uuid,
   p_tenant_id text,
   p_user_id text,
@@ -213,28 +270,23 @@ CREATE OR REPLACE FUNCTION public.claim_ai_usage_reservation(
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
-DECLARE
-  v_status text;
 BEGIN
-  SELECT r.status INTO v_status
-  FROM public.ai_usage_reservations r
-  WHERE r.id = p_reservation_id
+  UPDATE public.ai_usage_reservations AS r
+  SET status = 'in_flight', started_at = clock_timestamp(), updated_at = clock_timestamp()
+  WHERE id = p_reservation_id
     AND r.tenant_id = p_tenant_id
     AND r.user_id = p_user_id
     AND r.feature = p_feature
-  FOR UPDATE;
-  IF NOT FOUND OR v_status <> 'reserved' THEN RETURN false; END IF;
-
-  UPDATE public.ai_usage_reservations
-  SET status = 'in_flight', started_at = now(), updated_at = now()
-  WHERE id = p_reservation_id;
+    AND r.status = 'reserved'
+    AND r.updated_at > clock_timestamp() - interval '5 minutes';
+  IF NOT FOUND THEN RETURN false; END IF;
   RETURN true;
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.settle_ai_usage_reservation(
+CREATE FUNCTION public.settle_ai_usage_reservation(
   p_reservation_id uuid,
   p_tenant_id text,
   p_user_id text,
@@ -247,7 +299,7 @@ CREATE OR REPLACE FUNCTION public.settle_ai_usage_reservation(
 RETURNS TABLE(changed boolean, usage_status text)
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_reservation public.ai_usage_reservations%ROWTYPE;
@@ -293,12 +345,243 @@ END;
 $$;
 
 REVOKE ALL ON TABLE public.ai_usage_reservations FROM PUBLIC, anon, authenticated, service_role;
-REVOKE ALL ON FUNCTION public.reserve_ai_usage(text,text,text,text,integer,integer,integer,integer,bigint,bigint) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.claim_ai_usage_reservation(uuid,text,text,text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.settle_ai_usage_reservation(uuid,text,text,text,text,integer,text,jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.reserve_ai_usage(text,text,text,text,integer,integer,integer,integer,bigint,bigint) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.claim_ai_usage_reservation(uuid,text,text,text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.settle_ai_usage_reservation(uuid,text,text,text,text,integer,text,jsonb) FROM PUBLIC, anon, authenticated, service_role;
 
 GRANT EXECUTE ON FUNCTION public.reserve_ai_usage(text,text,text,text,integer,integer,integer,integer,bigint,bigint) TO service_role;
 GRANT EXECUTE ON FUNCTION public.claim_ai_usage_reservation(uuid,text,text,text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.settle_ai_usage_reservation(uuid,text,text,text,text,integer,text,jsonb) TO service_role;
+
+DO $verification$
+DECLARE
+  v_table oid := to_regclass('public.ai_usage_reservations');
+  v_owner oid;
+  v_service_role oid := (SELECT oid FROM pg_roles WHERE rolname = 'service_role');
+  v_function oid;
+  v_expected record;
+BEGIN
+  IF v_table IS NULL OR (
+    SELECT relkind <> 'r' OR relpersistence <> 'p'
+    FROM pg_class
+    WHERE oid = v_table
+  ) THEN
+    RAISE EXCEPTION 'AI_USAGE_VERIFICATION_FAILED: table is not a permanent ordinary relation';
+  END IF;
+
+  SELECT relowner INTO v_owner FROM pg_class WHERE oid = v_table;
+
+  IF (SELECT count(*) FROM pg_attribute WHERE attrelid = v_table AND attnum > 0 AND NOT attisdropped) <> 16
+     OR EXISTS (
+       SELECT 1
+       FROM (VALUES
+         (1,  'id',                'uuid',                     true,  'gen_random_uuid()'),
+         (2,  'tenant_id',         'text',                     true,  NULL),
+         (3,  'user_id',           'text',                     true,  NULL),
+         (4,  'feature',           'text',                     true,  NULL),
+         (5,  'request_key_hash',  'text',                     true,  NULL),
+         (6,  'estimated_units',   'integer',                  true,  NULL),
+         (7,  'actual_units',      'integer',                  false, NULL),
+         (8,  'status',            'text',                     true,  '''reserved''::text'),
+         (9,  'reason',            'text',                     false, NULL),
+         (10, 'provider_status',   'text',                     false, NULL),
+         (11, 'result_json',       'jsonb',                    false, NULL),
+         (12, 'result_expires_at', 'timestamp with time zone', false, NULL),
+         (13, 'created_at',        'timestamp with time zone', true,  'now()'),
+         (14, 'started_at',        'timestamp with time zone', false, NULL),
+         (15, 'completed_at',      'timestamp with time zone', false, NULL),
+         (16, 'updated_at',        'timestamp with time zone', true,  'now()')
+       ) AS expected(attnum, attname, type_name, not_null, default_expression)
+       LEFT JOIN pg_attribute attribute
+         ON attribute.attrelid = v_table
+        AND attribute.attnum = expected.attnum
+        AND NOT attribute.attisdropped
+       LEFT JOIN pg_attrdef attribute_default
+         ON attribute_default.adrelid = attribute.attrelid
+        AND attribute_default.adnum = attribute.attnum
+       WHERE attribute.attname IS DISTINCT FROM expected.attname
+          OR format_type(attribute.atttypid, attribute.atttypmod) IS DISTINCT FROM expected.type_name
+          OR attribute.attnotnull IS DISTINCT FROM expected.not_null
+          OR pg_get_expr(attribute_default.adbin, attribute_default.adrelid) IS DISTINCT FROM expected.default_expression
+     ) THEN
+    RAISE EXCEPTION 'AI_USAGE_VERIFICATION_FAILED: column contract drift';
+  END IF;
+
+  IF (
+    SELECT array_agg(constraint_record.conname::text ORDER BY constraint_record.conname)
+    FROM pg_constraint constraint_record
+    WHERE constraint_record.conrelid = v_table
+  ) IS DISTINCT FROM ARRAY[
+    'ai_usage_actual_units_nonnegative',
+    'ai_usage_estimated_units_positive',
+    'ai_usage_feature_format',
+    'ai_usage_request_hash_format',
+    'ai_usage_reservations_pkey',
+    'ai_usage_status_known'
+  ]::text[] OR EXISTS (
+    SELECT 1
+    FROM pg_constraint constraint_record
+    WHERE constraint_record.conrelid = v_table
+      AND (
+        NOT constraint_record.convalidated
+        OR constraint_record.contype NOT IN ('p', 'c')
+        OR (constraint_record.contype = 'p' AND constraint_record.conname <> 'ai_usage_reservations_pkey')
+        OR (constraint_record.contype = 'c' AND constraint_record.conname = 'ai_usage_reservations_pkey')
+      )
+  ) THEN
+    RAISE EXCEPTION 'AI_USAGE_VERIFICATION_FAILED: constraint contract drift';
+  END IF;
+
+  IF (SELECT count(*) FROM pg_index WHERE indrelid = v_table) <> 4 OR EXISTS (
+    SELECT 1
+    FROM (VALUES
+      ('uq_ai_usage_request', true, ARRAY['tenant_id', 'user_id', 'feature', 'request_key_hash']::text[], ARRAY[0, 0, 0, 0]::smallint[]),
+      ('idx_ai_usage_user_window', false, ARRAY['tenant_id', 'user_id', 'feature', 'created_at']::text[], ARRAY[0, 0, 0, 1]::smallint[]),
+      ('idx_ai_usage_tenant_window', false, ARRAY['tenant_id', 'created_at']::text[], ARRAY[0, 1]::smallint[])
+    ) AS expected(index_name, is_unique, key_expressions, descending_keys)
+    LEFT JOIN pg_class index_relation
+      ON index_relation.relnamespace = 'public'::regnamespace
+     AND index_relation.relname = expected.index_name
+    LEFT JOIN pg_index index_record
+      ON index_record.indexrelid = index_relation.oid
+     AND index_record.indrelid = v_table
+    LEFT JOIN pg_class access_relation ON access_relation.oid = index_record.indexrelid
+    LEFT JOIN pg_am access_method ON access_method.oid = access_relation.relam
+    WHERE index_record.indexrelid IS NULL
+       OR NOT index_record.indisvalid
+       OR NOT index_record.indisready
+       OR index_record.indisunique IS DISTINCT FROM expected.is_unique
+       OR index_record.indnkeyatts <> cardinality(expected.key_expressions)
+       OR index_record.indnatts <> cardinality(expected.key_expressions)
+       OR index_record.indpred IS NOT NULL
+       OR index_record.indexprs IS NOT NULL
+       OR access_method.amname IS DISTINCT FROM 'btree'
+       OR ARRAY(
+         SELECT pg_get_indexdef(index_record.indexrelid, position, true)
+         FROM generate_series(1, index_record.indnkeyatts) AS position
+         ORDER BY position
+       ) IS DISTINCT FROM expected.key_expressions
+       OR ARRAY(
+         SELECT ((option_value & 1)::smallint)
+         FROM unnest(string_to_array(btrim(index_record.indoption::text), ' ')::smallint[])
+           WITH ORDINALITY AS option_record(option_value, position)
+         ORDER BY position
+       ) IS DISTINCT FROM expected.descending_keys
+  ) THEN
+    RAISE EXCEPTION 'AI_USAGE_VERIFICATION_FAILED: index contract drift';
+  END IF;
+
+  IF NOT (SELECT relrowsecurity AND relforcerowsecurity FROM pg_class WHERE oid = v_table)
+     OR EXISTS (SELECT 1 FROM pg_policy WHERE polrelid = v_table) THEN
+    RAISE EXCEPTION 'AI_USAGE_VERIFICATION_FAILED: RLS contract drift';
+  END IF;
+
+  IF v_service_role IS NULL OR EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE oid = v_service_role
+      AND (rolsuper OR NOT rolbypassrls)
+  ) THEN
+    RAISE EXCEPTION 'AI_USAGE_VERIFICATION_FAILED: service_role must be a non-superuser with BYPASSRLS';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_roles role_record
+    WHERE role_record.oid <> v_owner
+      AND NOT role_record.rolsuper
+      AND role_record.rolname NOT IN ('pg_read_all_data', 'pg_write_all_data')
+      AND (
+        has_table_privilege(role_record.oid, v_table, 'SELECT')
+        OR has_table_privilege(role_record.oid, v_table, 'INSERT')
+        OR has_table_privilege(role_record.oid, v_table, 'UPDATE')
+        OR has_table_privilege(role_record.oid, v_table, 'DELETE')
+        OR has_table_privilege(role_record.oid, v_table, 'TRUNCATE')
+        OR has_table_privilege(role_record.oid, v_table, 'REFERENCES')
+        OR has_table_privilege(role_record.oid, v_table, 'TRIGGER')
+        OR has_any_column_privilege(role_record.oid, v_table, 'SELECT')
+        OR has_any_column_privilege(role_record.oid, v_table, 'INSERT')
+        OR has_any_column_privilege(role_record.oid, v_table, 'UPDATE')
+        OR has_any_column_privilege(role_record.oid, v_table, 'REFERENCES')
+      )
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_class relation_record,
+         LATERAL aclexplode(coalesce(relation_record.relacl, acldefault('r', relation_record.relowner))) acl_entry
+    WHERE relation_record.oid = v_table
+      AND acl_entry.grantee <> v_owner
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_attribute attribute,
+         LATERAL aclexplode(attribute.attacl) acl_entry
+    WHERE attribute.attrelid = v_table
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND acl_entry.grantee <> v_owner
+  ) THEN
+    RAISE EXCEPTION 'AI_USAGE_VERIFICATION_FAILED: direct or inherited table access detected';
+  END IF;
+
+  IF (
+    SELECT count(*)
+    FROM pg_proc procedure_record
+    WHERE procedure_record.pronamespace = 'public'::regnamespace
+      AND procedure_record.proname IN (
+        'reserve_ai_usage',
+        'claim_ai_usage_reservation',
+        'settle_ai_usage_reservation'
+      )
+  ) <> 3 THEN
+    RAISE EXCEPTION 'AI_USAGE_VERIFICATION_FAILED: missing or overloaded RPC';
+  END IF;
+
+  FOR v_expected IN
+    SELECT * FROM (VALUES
+      ('public.reserve_ai_usage(text,text,text,text,integer,integer,integer,integer,bigint,bigint)', 'record', true),
+      ('public.claim_ai_usage_reservation(uuid,text,text,text)', 'boolean', false),
+      ('public.settle_ai_usage_reservation(uuid,text,text,text,text,integer,text,jsonb)', 'record', true)
+    ) AS expected(signature, result_type, returns_set)
+  LOOP
+    v_function := to_regprocedure(v_expected.signature);
+    IF v_function IS NULL OR EXISTS (
+      SELECT 1
+      FROM pg_proc procedure_record
+      JOIN pg_language language_record ON language_record.oid = procedure_record.prolang
+      WHERE procedure_record.oid = v_function
+        AND (
+          language_record.lanname <> 'plpgsql'
+          OR NOT procedure_record.prosecdef
+          OR procedure_record.prorettype <> v_expected.result_type::regtype
+          OR procedure_record.proretset IS DISTINCT FROM v_expected.returns_set
+          OR procedure_record.proowner <> v_owner
+          OR procedure_record.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, public, pg_temp']::text[]
+        )
+    ) OR NOT EXISTS (
+      SELECT 1
+      FROM pg_proc procedure_record
+      JOIN pg_roles owner_role ON owner_role.oid = procedure_record.proowner
+      WHERE procedure_record.oid = v_function
+        AND (owner_role.rolsuper OR owner_role.rolbypassrls)
+    ) THEN
+      RAISE EXCEPTION 'AI_USAGE_VERIFICATION_FAILED: RPC contract drift for %', v_expected.signature;
+    END IF;
+
+    IF NOT has_function_privilege(v_service_role, v_function, 'EXECUTE') OR EXISTS (
+      SELECT 1
+      FROM pg_roles role_record
+      WHERE role_record.oid NOT IN (v_owner, v_service_role)
+        AND NOT role_record.rolsuper
+        AND has_function_privilege(role_record.oid, v_function, 'EXECUTE')
+    ) OR EXISTS (
+      SELECT 1
+      FROM pg_proc procedure_record,
+           LATERAL aclexplode(coalesce(procedure_record.proacl, acldefault('f', procedure_record.proowner))) acl_entry
+      WHERE procedure_record.oid = v_function
+        AND acl_entry.grantee NOT IN (v_owner, v_service_role)
+    ) THEN
+      RAISE EXCEPTION 'AI_USAGE_VERIFICATION_FAILED: RPC execute ACL drift for %', v_expected.signature;
+    END IF;
+  END LOOP;
+END;
+$verification$;
 
 COMMIT;

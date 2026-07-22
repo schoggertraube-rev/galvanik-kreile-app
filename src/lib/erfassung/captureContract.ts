@@ -55,7 +55,8 @@ export function parseCaptureEntityId(value: unknown): string {
 
 export function parseCaptureStation(value: unknown): string {
   if (typeof value !== "string" || !STATION_ID.test(value)) throw new Error("INVALID_CAPTURE");
-  return value;
+  const normalized = value.toLowerCase();
+  return normalized === "beschichtung" ? "galvanik" : normalized;
 }
 
 export function parseCaptureRequestId(value: unknown): string {

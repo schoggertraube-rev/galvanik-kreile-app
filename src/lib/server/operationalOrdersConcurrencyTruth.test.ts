@@ -27,4 +27,23 @@ describe("operational order transition exclusivity", () => {
     expect(create).toContain("db.transaction");
     expect(create).toContain("ORDER_ITEMS_NOT_CONFIRMED");
   });
+
+  it("locks and links a confirmed capture receipt in the same order transaction", () => {
+    const create = serviceSection("export async function createOperationalOrderService");
+    expect(create).toContain("isConfirmedCaptureReceipt(scan, actor.tenantId)");
+    expect(create).toContain('scanUploads.recordKind, "capture_scan"');
+    expect(create).toContain('.limit(1).for("update")');
+    expect(create).toContain("tx.update(scanUploads)");
+    expect(create).toContain("SCAN_LINK_RECEIPT_MISSING");
+    expect(create).toContain("scanOriginalReceipt");
+    expect(create.indexOf("tx.update(scanUploads)")).toBeLessThan(create.indexOf("tx.insert(events)"));
+  });
+
+  it("requires the persisted scan relation when replaying a confirmed order receipt", () => {
+    const replay = serviceSection("async function findOrderCreationReplay", "export async function createOperationalOrderService");
+    expect(replay).toContain("isConfirmedCaptureReceipt(scan, tenantId)");
+    expect(replay).toContain("scan.linkedOrderId !== order.id");
+    expect(replay).toContain("scan.linkedCustomerId !== order.customerId");
+    expect(replay).toContain("ORDER_RECEIPT_WITHOUT_SCAN_LINK");
+  });
 });

@@ -65,7 +65,7 @@ CREATE OR REPLACE FUNCTION public.get_mollie_payment_quote(
 RETURNS TABLE(amount_eur numeric, amount_cents bigint, quote_digest text, line_count integer)
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, extensions, pg_temp
+SET search_path = pg_catalog, extensions, public, pg_temp
 AS $$
 DECLARE
   v_amount numeric;
@@ -123,7 +123,7 @@ CREATE OR REPLACE FUNCTION public.guard_active_mollie_payment_quote()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_old_tenant text;
@@ -164,6 +164,9 @@ BEGIN
 END;
 $$;
 
+REVOKE ALL ON FUNCTION public.guard_active_mollie_payment_quote()
+  FROM PUBLIC, anon, authenticated, service_role;
+
 DROP TRIGGER IF EXISTS trg_price_lines_active_mollie_quote ON public.price_lines;
 CREATE TRIGGER trg_price_lines_active_mollie_quote
 BEFORE INSERT OR UPDATE OR DELETE ON public.price_lines
@@ -189,7 +192,7 @@ RETURNS TABLE(
 )
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, extensions, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_payment public.payments%ROWTYPE;
@@ -298,7 +301,7 @@ CREATE OR REPLACE FUNCTION public.bind_mollie_payment_provider(
 RETURNS boolean
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_payment public.payments%ROWTYPE;
@@ -347,7 +350,7 @@ CREATE OR REPLACE FUNCTION public.record_mollie_payment_state(
 RETURNS TABLE(changed boolean, payment_status text)
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_payment public.payments%ROWTYPE;
@@ -429,7 +432,7 @@ CREATE OR REPLACE FUNCTION public.finalize_mollie_payment(
 RETURNS TABLE(created boolean, invoice_id uuid, order_id text, customer_id text, amount_eur numeric)
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, extensions, pg_temp
+SET search_path = pg_catalog, public, pg_temp
 AS $$
 DECLARE
   v_payment public.payments%ROWTYPE;
@@ -534,11 +537,11 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.get_mollie_payment_quote(text,text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.reserve_mollie_payment_attempt(uuid,text,text,bigint,text,text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.bind_mollie_payment_provider(uuid,text,text,bigint,text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.record_mollie_payment_state(uuid,text,text,text) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.finalize_mollie_payment(text,text,text,timestamptz,text,text,bigint,text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_mollie_payment_quote(text,text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.reserve_mollie_payment_attempt(uuid,text,text,bigint,text,text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.bind_mollie_payment_provider(uuid,text,text,bigint,text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.record_mollie_payment_state(uuid,text,text,text) FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON FUNCTION public.finalize_mollie_payment(text,text,text,timestamptz,text,text,bigint,text) FROM PUBLIC, anon, authenticated, service_role;
 
 GRANT EXECUTE ON FUNCTION public.get_mollie_payment_quote(text,text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.reserve_mollie_payment_attempt(uuid,text,text,bigint,text,text) TO service_role;

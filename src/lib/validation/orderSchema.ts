@@ -3,6 +3,7 @@ import { ROUTE_TEMPLATE_IDS } from "@/lib/orders/routeSnapshot";
 
 const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 const ENTITY_ID = /^[A-Za-z0-9_-]{1,100}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 export const VALID_ORDER_SOURCES = [
@@ -95,6 +96,13 @@ export const orderSchema = z
   })
   .strict()
   .superRefine((value, context) => {
+    if (value.source === "scan" && (!value.sourceRef || !UUID.test(value.sourceRef))) {
+      context.addIssue({
+        code: "custom",
+        path: ["sourceRef"],
+        message: "Ein Scan-Auftrag benÃ¶tigt den bestÃ¤tigten UUID-Originalbeleg.",
+      });
+    }
     if (value.calendarSync && !value.dueDate) {
       context.addIssue({
         code: "custom",
@@ -128,6 +136,7 @@ export type OrderInput = z.infer<typeof orderSchema>;
 export const scanOrderRequestSchema = z
   .object({
     clientRequestId: z.string().uuid(),
+    sourceRef: z.string().uuid(),
     routeTemplateId: z.enum(ROUTE_TEMPLATE_IDS),
     customerId: z.string().regex(ENTITY_ID, "Ungültige Kunden-ID.").optional(),
     customerName: optionalText(200),

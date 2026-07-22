@@ -103,7 +103,12 @@ async function persistValidatedOrder(
     if (error instanceof OperationalOrderPersistenceError) {
       return {
         ok: false,
-        error: error.code === "CUSTOMER_NOT_FOUND" ? "EMPTY_RESULT" : "UNKNOWN",
+        error:
+          error.code === "CUSTOMER_NOT_FOUND"
+            ? "EMPTY_RESULT"
+            : error.code === "REQUEST_CONFLICT" || error.code === "SCAN_SOURCE_CONFLICT"
+              ? "CONFLICT"
+              : "UNKNOWN",
         message: error.message,
       };
     }
@@ -489,6 +494,7 @@ export async function createOrderFromScan(params: unknown): Promise<
       customerId: finalCustomerId,
       title: parsedRequest.data.title,
       source: "scan",
+      sourceRef: parsedRequest.data.sourceRef,
       parts: parsedRequest.data.parts.map((part) => ({
         ...part,
         routeTemplateId: parsedRequest.data.routeTemplateId,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   parseMaterialCaptureInput,
+  parseCaptureStation,
   parseStationCompletionCaptureInput,
   parseTemplateCaptureInput,
   parseTimeCaptureInput,
@@ -9,6 +10,12 @@ import {
 const requestId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 
 describe("capture input contract", () => {
+  it("canonicalizes station aliases before capability-backed writes", () => {
+    expect(parseCaptureStation("Beschichtung")).toBe("galvanik");
+    expect(parseCaptureStation("GALVANIK")).toBe("galvanik");
+    expect(parseCaptureStation("Qualitaetssicherung")).toBe("qualitaetssicherung");
+  });
+
   it("accepts a bounded direct time booking without client identity or tenant", () => {
     expect(parseTimeCaptureInput({
       orderId: "order_123",

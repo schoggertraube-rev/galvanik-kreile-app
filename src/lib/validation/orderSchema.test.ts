@@ -48,9 +48,25 @@ describe("orderSchema", () => {
 });
 
 describe("scanOrderRequestSchema", () => {
+  const validScanRequest = {
+    clientRequestId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    sourceRef: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+    routeTemplateId: "direct_galvanik",
+    customerId: "customer_123",
+    title: "Teil",
+    parts: [{ name: "Kotflügel", quantity: 1, material: "Stahl" }],
+  };
+
   it("requires a real customer reference and an explicit title", () => {
     expect(scanOrderRequestSchema.safeParse({ title: "Teil", parts: validOrder.parts }).success).toBe(false);
     expect(scanOrderRequestSchema.safeParse({ customerName: "Kreile", title: "", parts: validOrder.parts }).success).toBe(false);
+  });
+
+  it("requires stable request/source UUIDs and one explicit route", () => {
+    expect(scanOrderRequestSchema.safeParse(validScanRequest).success).toBe(true);
+    expect(scanOrderRequestSchema.safeParse({ ...validScanRequest, clientRequestId: undefined }).success).toBe(false);
+    expect(scanOrderRequestSchema.safeParse({ ...validScanRequest, sourceRef: "legacy-scan" }).success).toBe(false);
+    expect(scanOrderRequestSchema.safeParse({ ...validScanRequest, routeTemplateId: undefined }).success).toBe(false);
   });
 
   it("rejects the removed fake customer-creation switch", () => {

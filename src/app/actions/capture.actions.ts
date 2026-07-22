@@ -1,7 +1,7 @@
 "use server";
 
 import { createHash } from "node:crypto";
-import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
@@ -21,7 +21,7 @@ import {
   vorlageVerbrauch,
   vorlageZeit,
 } from "@/db/schema_erfassung";
-import { bildeSchluessel, klassifiziereTeil } from "@/lib/erfassung/klassifikator";
+import { bildeSchluessel, klassifiziereTeil, normalizeString } from "@/lib/erfassung/klassifikator";
 import {
   CAPTURE_TENANT_ID,
   parseCaptureEntityId,
@@ -41,6 +41,9 @@ import {
 } from "@/lib/orders/orderMutationContract";
 import { getHomogeneousRouteTransition } from "@/lib/orders/orderRouting";
 import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import { readCaptureSchemaCapability } from "@/lib/server/captureWriteCapability";
+import { readInventoryWriteCapability } from "@/lib/server/inventoryWriteCapability";
+import { readOperationalCoreCapability } from "@/lib/server/operationalCoreCapability";
 import { invalidateOperationalOrdersCache } from "@/lib/server/operationalOrders";
 
 export type CaptureErrorCode =
@@ -64,8 +67,9 @@ export type CaptureTemplate = {
   oberflaeche?: string;
   konfidenz?: "aufbauen" | "aktiv" | "stabil";
   n_referenzauftraege?: number;
-  zeit?: { station: string; median_min: number; p25: number; p75: number }[];
+  zeit?: { id: string; station: string; median_min: number; p25: number; p75: number }[];
   verbrauch?: {
+    id: string;
     station: string;
     artikel_id: string;
     artikel_name: string;
@@ -82,6 +86,7 @@ export type CaptureArticle = {
   currentStock: number;
   unitCostEur: number | null;
   suggestedQuantity: number | null;
+  suggestedTemplateId: string | null;
   frequencyPercent: number | null;
   source: "template" | "recent" | "catalog";
 };
@@ -177,107 +182,15 @@ const CAPTURE_ROLLOUT_REQUIRED = "Der atomare Erfassungs-Rollout ist in dieser D
 const CAPTURE_INVENTORY_LIMIT = 250;
 
 async function readCaptureWriteCapability(): Promise<CaptureOverview["writeCapability"]> {
-  try {
-    const rows = await db.execute(sql<{ available: boolean }>`
-      select (
-        to_regclass('public.capture_request_receipts') is not null
-        and not exists (
-          select 1
-          from (values
-            ('arbeitszeit_buchung', 'client_request_id'),
-            ('stock_movements', 'client_request_id'),
-            ('audit_log', 'tenant_id'),
-            ('audit_log', 'client_request_id'),
-            ('capture_request_receipts', 'id'),
-            ('capture_request_receipts', 'tenant_id'),
-            ('capture_request_receipts', 'client_request_id'),
-            ('capture_request_receipts', 'kind'),
-            ('capture_request_receipts', 'actor_id'),
-            ('capture_request_receipts', 'order_id'),
-            ('capture_request_receipts', 'station_kuerzel'),
-            ('capture_request_receipts', 'request_hash'),
-            ('capture_request_receipts', 'result'),
-            ('capture_request_receipts', 'created_at'),
-            ('capture_request_receipts', 'completed_at')
-          ) as required(table_name, column_name)
-          where not exists (
-            select 1
-            from information_schema.columns c
-            where c.table_schema = 'public'
-              and c.table_name = required.table_name
-              and c.column_name = required.column_name
-          )
-        )
-        and exists (
-          select 1 from information_schema.columns c
-          where c.table_schema = 'public'
-            and c.table_name = 'inventory_items'
-            and c.column_name = 'tenant_id'
-            and c.is_nullable = 'NO'
-        )
-        and exists (
-          select 1 from information_schema.columns c
-          where c.table_schema = 'public'
-            and c.table_name = 'inventory_items'
-            and c.column_name = 'current_stock'
-            and c.data_type in ('numeric', 'decimal')
-            and c.numeric_scale = 4
-            and c.is_nullable = 'NO'
-        )
-        and not exists (
-          select 1
-          from (values
-            ('inventory_items', 'inventory_items_current_stock_nonnegative'),
-            ('arbeitszeit_buchung', 'arbeitszeit_buchung_duration_nonnegative'),
-            ('arbeitszeit_buchung', 'arbeitszeit_buchung_rate_nonnegative'),
-            ('stock_movements', 'stock_movements_quantity_nonzero')
-          ) as required(table_name, constraint_name)
-          where not exists (
-            select 1
-            from pg_constraint pc
-            join pg_class rel on rel.oid = pc.conrelid
-            join pg_namespace ns on ns.oid = rel.relnamespace
-            where ns.nspname = 'public'
-              and rel.relname = required.table_name
-              and pc.conname = required.constraint_name
-              and pc.convalidated
-          )
-        )
-        and exists (
-          select 1
-          from pg_constraint pc
-          join pg_class rel on rel.oid = pc.conrelid
-          join pg_namespace ns on ns.oid = rel.relnamespace
-          where pc.conname = 'capture_request_receipts_kind_check'
-            and ns.nspname = 'public'
-            and rel.relname = 'capture_request_receipts'
-            and pc.convalidated
-            and pg_get_constraintdef(pc.oid) like '%station_completion%'
-        )
-        and exists (
-          select 1
-          from pg_index pi
-          join pg_class idx on idx.oid = pi.indexrelid
-          join pg_class rel on rel.oid = pi.indrelid
-          join pg_namespace ns on ns.oid = rel.relnamespace
-          where ns.nspname = 'public'
-            and rel.relname = 'capture_request_receipts'
-            and idx.relname = 'capture_request_receipts_tenant_request_kind_uidx'
-            and pi.indisunique
-            and pi.indisvalid
-            and pi.indisready
-            and pi.indpred is null
-            and pg_get_indexdef(pi.indexrelid) like '%(tenant_id, client_request_id, kind)%'
-        )
-      ) as available
-    `);
-    const available = rows[0]?.available;
-    if (typeof available !== "boolean") return { available: false, reason: CAPTURE_ROLLOUT_REQUIRED };
-    return { available, reason: available ? null : CAPTURE_ROLLOUT_REQUIRED };
-  } catch (error) {
-    console.error("Capture capability preflight failed", error);
+  const [operationalCoreAvailable, inventoryAvailable] = await Promise.all([
+    readOperationalCoreCapability(),
+    readInventoryWriteCapability(),
+  ]);
+  if (!operationalCoreAvailable || !inventoryAvailable) {
     return { available: false, reason: CAPTURE_ROLLOUT_REQUIRED };
   }
+  const available = await readCaptureSchemaCapability();
+  return { available, reason: available ? null : CAPTURE_ROLLOUT_REQUIRED };
 }
 
 async function requireCaptureWriteCapability(): Promise<CaptureResult<true>> {
@@ -438,54 +351,59 @@ function normalizeTemplateNumber(value: string | number | null | undefined, code
   return integer ? Math.round(number) : roundQuantity(number);
 }
 
+function normalizeComparableUnit(value: string | null | undefined): string {
+  const normalized = value?.trim().toLocaleLowerCase("de-DE") || "";
+  if (!normalized) throw new Error("TEMPLATE_INVALID");
+  return normalized;
+}
+
 async function resolveTemplate(tenantId: string, orderId: string): Promise<ResolvedTemplate> {
-  const [orderItem] = await db
+  const orderItems = await db
     .select({ name: items.name, surface: items.surfaceRequested })
     .from(items)
     .where(and(eq(items.tenantId, tenantId), eq(items.orderId, orderId)))
-    .orderBy(items.id)
-    .limit(1);
-  if (!orderItem) return { publicValue: { hat_vorlage: false }, timeRows: [], materialRows: [] };
+    .orderBy(items.id);
+  if (orderItems.length === 0) return { publicValue: { hat_vorlage: false }, timeRows: [], materialRows: [] };
 
   const classifiers = await db
     .select({ klasse: teileKlassifikator.klasse, keywords: teileKlassifikator.keywords })
     .from(teileKlassifikator)
-    .where(eq(teileKlassifikator.tenantId, tenantId));
-  const surface = orderItem.surface || "";
-  const klasse = klassifiziereTeil(orderItem.name, classifiers);
-  let key = bildeSchluessel(klasse, surface);
+    .where(eq(teileKlassifikator.tenantId, tenantId))
+    .orderBy(teileKlassifikator.klasse, teileKlassifikator.id);
+  const projectionKeys = new Map<string, { klasse: string; surface: string }>();
+  for (const orderItem of orderItems) {
+    const surface = normalizeString(orderItem.surface) || "unbekannt";
+    const klasse = klassifiziereTeil(orderItem.name, classifiers);
+    if (surface.includes("|") || normalizeString(klasse).includes("|")) {
+      return { publicValue: { hat_vorlage: false }, timeRows: [], materialRows: [] };
+    }
+    projectionKeys.set(bildeSchluessel(klasse, surface), { klasse, surface });
+  }
+  if (projectionKeys.size !== 1) {
+    return { publicValue: { hat_vorlage: false }, timeRows: [], materialRows: [] };
+  }
+  const [[initialKey, projection]] = [...projectionKeys.entries()];
+  const { klasse, surface } = projection;
+  const key = initialKey;
 
-  let timeRows = await db
+  const timeRows = await db
     .select()
     .from(vorlageZeit)
-    .where(and(eq(vorlageZeit.tenantId, tenantId), eq(vorlageZeit.schluessel, key)))
+    .where(and(
+      eq(vorlageZeit.tenantId, tenantId),
+      eq(vorlageZeit.schluessel, key),
+      eq(vorlageZeit.isActive, true),
+    ))
     .orderBy(vorlageZeit.stationKuerzel, vorlageZeit.id);
-  let materialRows = await db
+  const materialRows = await db
     .select()
     .from(vorlageVerbrauch)
-    .where(and(eq(vorlageVerbrauch.tenantId, tenantId), eq(vorlageVerbrauch.schluessel, key)))
+    .where(and(
+      eq(vorlageVerbrauch.tenantId, tenantId),
+      eq(vorlageVerbrauch.schluessel, key),
+      eq(vorlageVerbrauch.isActive, true),
+    ))
     .orderBy(vorlageVerbrauch.stationKuerzel, vorlageVerbrauch.id);
-
-  if (timeRows.length === 0 && materialRows.length === 0) {
-    const fallbackKey = bildeSchluessel("*", surface);
-    const [fallbackTime, fallbackMaterial] = await Promise.all([
-      db.select().from(vorlageZeit).where(and(
-        eq(vorlageZeit.tenantId, tenantId),
-        eq(vorlageZeit.schluessel, fallbackKey),
-        gte(vorlageZeit.nReferenzauftraege, 5),
-      )).orderBy(vorlageZeit.stationKuerzel, vorlageZeit.id),
-      db.select().from(vorlageVerbrauch).where(and(
-        eq(vorlageVerbrauch.tenantId, tenantId),
-        eq(vorlageVerbrauch.schluessel, fallbackKey),
-        gte(vorlageVerbrauch.nReferenzauftraege, 5),
-      )).orderBy(vorlageVerbrauch.stationKuerzel, vorlageVerbrauch.id),
-    ]);
-    if (fallbackTime.length > 0 || fallbackMaterial.length > 0) {
-      key = fallbackKey;
-      timeRows = fallbackTime;
-      materialRows = fallbackMaterial;
-    }
-  }
 
   if (timeRows.length === 0 && materialRows.length === 0) {
     return { publicValue: { hat_vorlage: false }, timeRows: [], materialRows: [] };
@@ -504,7 +422,7 @@ async function resolveTemplate(tenantId: string, orderId: string): Promise<Resol
     station: parseCaptureStation(row.stationKuerzel),
     inventoryItemId: parseCaptureEntityId(row.inventoryItemId),
     quantity: normalizeTemplateNumber(row.medianMenge, "TEMPLATE_INVALID"),
-    unit: row.einheitNormiert,
+    unit: row.einheitNormiert.trim(),
     frequency: row.haeufigkeitProzent === null ? 0 : finiteNumber(row.haeufigkeitProzent, "TEMPLATE_INVALID"),
     references: row.nReferenzauftraege,
   }));
@@ -513,11 +431,23 @@ async function resolveTemplate(tenantId: string, orderId: string): Promise<Resol
   const inventoryIds = [...new Set(rawMaterial.map((row) => row.inventoryItemId))];
   const names = inventoryIds.length === 0
     ? []
-    : await db.select({ id: inventoryItems.id, name: inventoryItems.name }).from(inventoryItems).where(and(
+    : await db.select({
+        id: inventoryItems.id,
+        name: inventoryItems.name,
+        unit: inventoryItems.unit,
+        einheitNormiert: inventoryItems.einheitNormiert,
+      }).from(inventoryItems).where(and(
         eq(inventoryItems.tenantId, tenantId),
         inArray(inventoryItems.id, inventoryIds),
       ));
-  const namesById = new Map(names.map((row) => [row.id, row.name]));
+  const inventoryById = new Map(names.map((row) => [row.id, row]));
+  for (const row of rawMaterial) {
+    const inventory = inventoryById.get(row.inventoryItemId);
+    const effectiveUnit = inventory?.unit?.trim() || inventory?.einheitNormiert?.trim() || null;
+    if (!inventory || normalizeComparableUnit(row.unit) !== normalizeComparableUnit(effectiveUnit)) {
+      throw new Error("TEMPLATE_INVALID");
+    }
+  }
   const maxReferences = Math.max(0, ...rawTime.map((row) => row.references), ...rawMaterial.map((row) => row.references));
   const confidence: "aufbauen" | "aktiv" | "stabil" = maxReferences < 3 ? "aufbauen" : maxReferences < 10 ? "aktiv" : "stabil";
 
@@ -531,11 +461,12 @@ async function resolveTemplate(tenantId: string, orderId: string): Promise<Resol
       oberflaeche: surface,
       konfidenz: confidence,
       n_referenzauftraege: maxReferences,
-      zeit: rawTime.map((row) => ({ station: row.station, median_min: row.minutes, p25: row.p25, p75: row.p75 })),
+      zeit: rawTime.map((row) => ({ id: row.id, station: row.station, median_min: row.minutes, p25: row.p25, p75: row.p75 })),
       verbrauch: rawMaterial.map((row) => ({
+        id: row.id,
         station: row.station,
         artikel_id: row.inventoryItemId,
-        artikel_name: namesById.get(row.inventoryItemId) || "Artikel nicht im Mandantenbestand",
+        artikel_name: inventoryById.get(row.inventoryItemId)?.name || "Artikel nicht im Mandantenbestand",
         median_menge: row.quantity,
         einheit: row.unit,
         haeufigkeit_prozent: row.frequency,
@@ -585,8 +516,9 @@ function replayReceipt(value: Record<string, unknown> | null): CaptureMutationRe
       !["time", "material", "template", "station_completion"].includes(String(value.kind)) ||
       !Array.isArray(value.timeBookingIds) || !value.timeBookingIds.every((id) => typeof id === "string") ||
       !Array.isArray(value.movementIds) || !value.movementIds.every((id) => typeof id === "string") ||
-      typeof value.timeCostEur !== "number" || typeof value.materialCostEur !== "number" ||
-      typeof value.createdAt !== "string" ||
+      typeof value.timeCostEur !== "number" || !Number.isFinite(value.timeCostEur) || value.timeCostEur < 0 ||
+      typeof value.materialCostEur !== "number" || !Number.isFinite(value.materialCostEur) || value.materialCostEur < 0 ||
+      typeof value.createdAt !== "string" || Number.isNaN(new Date(value.createdAt).getTime()) ||
       (value.kind === "station_completion" && (
         typeof value.completedStation !== "string" ||
         typeof value.newStation !== "string" ||
@@ -596,6 +528,59 @@ function replayReceipt(value: Record<string, unknown> | null): CaptureMutationRe
     throw new Error("RECEIPT_INVALID");
   }
   return { ...(value as Omit<CaptureMutationReceipt, "replayed">), replayed: true };
+}
+
+async function readCompletedCaptureReplay(input: {
+  actor: AuthorizationSnapshot;
+  orderId: string;
+  station: string | null;
+  requestId: string;
+  kind: CaptureKind;
+  hash: string;
+}): Promise<CaptureMutationReceipt | null> {
+  let rows;
+  try {
+    rows = await db
+      .select({
+        actorId: captureRequestReceipts.actorId,
+        orderId: captureRequestReceipts.orderId,
+        stationKuerzel: captureRequestReceipts.stationKuerzel,
+        requestHash: captureRequestReceipts.requestHash,
+        result: captureRequestReceipts.result,
+      })
+      .from(captureRequestReceipts)
+      .where(and(
+        eq(captureRequestReceipts.tenantId, input.actor.tenantId),
+        eq(captureRequestReceipts.clientRequestId, input.requestId),
+        eq(captureRequestReceipts.kind, input.kind),
+      ))
+      .limit(2);
+  } catch (error) {
+    const directCode = typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code?: unknown }).code || "")
+      : "";
+    const cause = typeof error === "object" && error !== null && "cause" in error
+      ? (error as { cause?: unknown }).cause
+      : null;
+    const causeCode = typeof cause === "object" && cause !== null && "code" in cause
+      ? String((cause as { code?: unknown }).code || "")
+      : "";
+    if (["42P01", "42703", "42501"].includes(directCode || causeCode)) return null;
+    throw error;
+  }
+  if (rows.length > 1) throw new Error("REQUEST_CONFLICT");
+  const [existing] = rows;
+  if (!existing) return null;
+  if (
+    existing.actorId !== input.actor.userId
+    || existing.orderId !== input.orderId
+    || existing.stationKuerzel !== input.station
+    || existing.requestHash !== input.hash
+  ) {
+    throw new Error("REQUEST_CONFLICT");
+  }
+  if (existing.result === null) throw new Error("REQUEST_IN_PROGRESS");
+  return replayReceipt(existing.result);
 }
 
 async function beginRequest(tx: DbTransaction, input: {
@@ -616,7 +601,6 @@ async function beginRequest(tx: DbTransaction, input: {
       orderId: input.orderId,
       stationKuerzel: input.station,
       requestHash: input.hash,
-      result: null,
     })
     .onConflictDoNothing({
       target: [captureRequestReceipts.tenantId, captureRequestReceipts.clientRequestId, captureRequestReceipts.kind],
@@ -640,14 +624,24 @@ async function beginRequest(tx: DbTransaction, input: {
   return { gateId: null, replay: replayReceipt(existing.result) };
 }
 
-async function completeRequest(tx: DbTransaction, gateId: string, receipt: CaptureMutationReceipt) {
+async function completeRequest(
+  tx: DbTransaction,
+  tenantId: string,
+  gateId: string,
+  receipt: CaptureMutationReceipt,
+) {
   const [updated] = await tx
     .update(captureRequestReceipts)
     .set({
       result: receipt as unknown as Record<string, unknown>,
-      completedAt: new Date(receipt.createdAt),
+      completedAt: sql`now()`,
     })
-    .where(eq(captureRequestReceipts.id, gateId))
+    .where(and(
+      eq(captureRequestReceipts.id, gateId),
+      eq(captureRequestReceipts.tenantId, tenantId),
+      isNull(captureRequestReceipts.result),
+      isNull(captureRequestReceipts.completedAt),
+    ))
     .returning({ id: captureRequestReceipts.id });
   if (!updated) throw new Error("RECEIPT_NOT_STORED");
 }
@@ -692,6 +686,7 @@ function mapCaptureError<T>(error: unknown): CaptureResult<T> {
   if (code === "ITEM_NOT_FOUND") return failure("NOT_FOUND", "Ein Lagerartikel gehört nicht zum angemeldeten Mandanten.");
   if (code === "INSUFFICIENT_STOCK") return failure("INSUFFICIENT_STOCK", "Der verfügbare Bestand reicht für diese Buchung nicht aus.");
   if (code === "REQUEST_CONFLICT") return failure("CONFLICT", "Diese Anforderungs-ID wurde bereits mit anderen Daten verwendet.");
+  if (code === "REQUEST_IN_PROGRESS") return failure("CONFLICT", "Diese Anforderung wird bereits verarbeitet. Bitte den bestehenden Vorgang erneut abrufen.");
   if (code === "STALE_ORDER_STATION") return failure("CONFLICT", "Der Auftrag befindet sich nicht mehr an der erwarteten Station. Bitte neu laden.");
   if (code === "ORDER_NOT_IN_PROGRESS") return failure("CONFLICT", "Nur eine laufende Station kann abgeschlossen werden. Bitte neu laden.");
   if (code === "SHIPPING_RECEIPT_REQUIRED") {
@@ -802,7 +797,9 @@ export async function getCaptureOverview(orderIdValue: unknown, stationValue?: u
       readCaptureWriteCapability(),
     ]);
 
-    const templateByItem = new Map((template.publicValue.verbrauch || []).map((row) => [row.artikel_id, row]));
+    const templateByItem = new Map((template.publicValue.verbrauch || [])
+      .filter((row) => row.station === selectedStation)
+      .map((row) => [row.artikel_id, row]));
     const recentIds = new Set(recentRows.map((row) => row.inventoryItemId));
     const articles: CaptureArticle[] = catalog.rows.map((row) => {
       const suggestion = templateByItem.get(row.id);
@@ -817,6 +814,7 @@ export async function getCaptureOverview(orderIdValue: unknown, stationValue?: u
         currentStock: stock,
         unitCostEur: unitCost,
         suggestedQuantity: suggestion?.median_menge ?? null,
+        suggestedTemplateId: suggestion?.id ?? null,
         frequencyPercent: suggestion?.haeufigkeit_prozent ?? null,
         source,
       };
@@ -878,10 +876,6 @@ export async function recordTimeCapture(value: unknown): Promise<CaptureResult<C
   if (!actor.ok) return actor;
   try {
     const input = parseTimeCaptureInput(value);
-    const capability = await requireCaptureWriteCapability();
-    if (!capability.ok) return capability;
-    const rate = await resolveRate(actor.data, input.stationKuerzel);
-    if (!rate) throw new Error("RATE_MISSING");
     const hash = requestHash({
       kind: "time",
       orderId: input.orderId,
@@ -889,8 +883,18 @@ export async function recordTimeCapture(value: unknown): Promise<CaptureResult<C
       minutes: input.minutes,
       templateId: input.templateId || null,
     });
+    const replay = await readCompletedCaptureReplay({
+      actor: actor.data,
+      orderId: input.orderId,
+      station: input.stationKuerzel,
+      requestId: input.clientRequestId,
+      kind: "time",
+      hash,
+    });
+    if (replay) return { ok: true, data: replay };
+    const capability = await requireCaptureWriteCapability();
+    if (!capability.ok) return capability;
     const receipt = await db.transaction(async (tx) => {
-      const order = await lockCaptureOrder(tx, actor.data.tenantId, input.orderId);
       const request = await beginRequest(tx, {
         actor: actor.data,
         orderId: input.orderId,
@@ -900,7 +904,25 @@ export async function recordTimeCapture(value: unknown): Promise<CaptureResult<C
         hash,
       });
       if (request.replay) return request.replay;
+      const order = await lockCaptureOrder(tx, actor.data.tenantId, input.orderId);
       assertActiveOrderAtStation(order, input.stationKuerzel);
+      if (input.templateId) {
+        const [template] = await tx
+          .select({ id: vorlageZeit.id, medianMinutes: vorlageZeit.medianMinuten })
+          .from(vorlageZeit)
+          .where(and(
+            eq(vorlageZeit.tenantId, actor.data.tenantId),
+            eq(vorlageZeit.id, input.templateId),
+            eq(vorlageZeit.stationKuerzel, input.stationKuerzel),
+            eq(vorlageZeit.isActive, true),
+          ))
+          .limit(1);
+        if (!template || normalizeTemplateNumber(template.medianMinutes, "TEMPLATE_INVALID", true) !== input.minutes) {
+          throw new Error("TEMPLATE_INVALID");
+        }
+      }
+      const rate = await resolveRateInTransaction(tx, actor.data, input.stationKuerzel);
+      if (!rate) throw new Error("RATE_MISSING");
 
       const endedAt = new Date();
       const startedAt = new Date(endedAt.getTime() - input.minutes * 60_000);
@@ -934,7 +956,7 @@ export async function recordTimeCapture(value: unknown): Promise<CaptureResult<C
         replayed: false,
       };
       await addAudit(tx, actor.data, result);
-      await completeRequest(tx, request.gateId, result);
+      await completeRequest(tx, actor.data.tenantId, request.gateId, result);
       return result;
     });
     return { ok: true, data: receipt };
@@ -949,9 +971,41 @@ async function lockAndConsumeMaterials(tx: DbTransaction, input: {
   station: string;
   requestId: string;
   lines: MaterialCaptureLine[];
-  fromTemplate: boolean;
 }): Promise<{ movementIds: string[]; materialCostEur: number }> {
   const lines = [...input.lines].sort((left, right) => left.inventoryItemId.localeCompare(right.inventoryItemId));
+  for (const line of lines) {
+    if (!line.templateId) continue;
+    const [template] = await tx
+      .select({
+        id: vorlageVerbrauch.id,
+        medianQuantity: vorlageVerbrauch.medianMenge,
+        unit: vorlageVerbrauch.einheitNormiert,
+      })
+      .from(vorlageVerbrauch)
+      .where(and(
+        eq(vorlageVerbrauch.tenantId, input.actor.tenantId),
+        eq(vorlageVerbrauch.id, line.templateId),
+        eq(vorlageVerbrauch.stationKuerzel, input.station),
+        eq(vorlageVerbrauch.inventoryItemId, line.inventoryItemId),
+        eq(vorlageVerbrauch.isActive, true),
+      ))
+      .limit(1);
+    if (!template || normalizeTemplateNumber(template.medianQuantity, "TEMPLATE_INVALID") !== line.quantity) {
+      throw new Error("TEMPLATE_INVALID");
+    }
+    const [inventory] = await tx
+      .select({ unit: inventoryItems.unit, einheitNormiert: inventoryItems.einheitNormiert })
+      .from(inventoryItems)
+      .where(and(
+        eq(inventoryItems.tenantId, input.actor.tenantId),
+        eq(inventoryItems.id, line.inventoryItemId),
+      ))
+      .limit(1);
+    const effectiveUnit = inventory?.unit?.trim() || inventory?.einheitNormiert?.trim() || null;
+    if (!inventory || normalizeComparableUnit(template.unit) !== normalizeComparableUnit(effectiveUnit)) {
+      throw new Error("TEMPLATE_INVALID");
+    }
+  }
   const movementIds: string[] = [];
   let materialCost = 0;
   for (const line of lines) {
@@ -981,12 +1035,14 @@ async function lockAndConsumeMaterials(tx: DbTransaction, input: {
       inventoryItemId: item.id,
       movementType: "consumption",
       quantity: String(-line.quantity),
+      unit: (item.unit || item.einheitNormiert || "").trim(),
       reason: "Auftragserfassung",
       orderId: input.orderId,
+      createdBy: input.actor.userId,
       kostenstelleKuerzel: input.station,
       stationKuerzel: input.station,
       erfasstVon: input.actor.userId,
-      warAusVorlage: input.fromTemplate,
+      warAusVorlage: Boolean(line.templateId),
       vorlageId: line.templateId || null,
       snapshotEinkaufspreisEur: String(price),
       clientRequestId: input.requestId,
@@ -1003,8 +1059,6 @@ export async function recordMaterialCapture(value: unknown): Promise<CaptureResu
   if (!actor.ok) return actor;
   try {
     const input = parseMaterialCaptureInput(value);
-    const capability = await requireCaptureWriteCapability();
-    if (!capability.ok) return capability;
     const sortedLines = [...input.materials].sort((left, right) => left.inventoryItemId.localeCompare(right.inventoryItemId));
     const hash = requestHash({
       kind: "material",
@@ -1012,8 +1066,18 @@ export async function recordMaterialCapture(value: unknown): Promise<CaptureResu
       station: input.stationKuerzel,
       materials: sortedLines,
     });
+    const replay = await readCompletedCaptureReplay({
+      actor: actor.data,
+      orderId: input.orderId,
+      station: input.stationKuerzel,
+      requestId: input.clientRequestId,
+      kind: "material",
+      hash,
+    });
+    if (replay) return { ok: true, data: replay };
+    const capability = await requireCaptureWriteCapability();
+    if (!capability.ok) return capability;
     const receipt = await db.transaction(async (tx) => {
-      const order = await lockCaptureOrder(tx, actor.data.tenantId, input.orderId);
       const request = await beginRequest(tx, {
         actor: actor.data,
         orderId: input.orderId,
@@ -1023,6 +1087,7 @@ export async function recordMaterialCapture(value: unknown): Promise<CaptureResu
         hash,
       });
       if (request.replay) return request.replay;
+      const order = await lockCaptureOrder(tx, actor.data.tenantId, input.orderId);
       assertActiveOrderAtStation(order, input.stationKuerzel);
       const consumed = await lockAndConsumeMaterials(tx, {
         actor: actor.data,
@@ -1030,7 +1095,6 @@ export async function recordMaterialCapture(value: unknown): Promise<CaptureResu
         station: input.stationKuerzel,
         requestId: input.clientRequestId,
         lines: sortedLines,
-        fromTemplate: sortedLines.some((line) => Boolean(line.templateId)),
       });
       const result: CaptureMutationReceipt = {
         requestId: input.clientRequestId,
@@ -1044,7 +1108,7 @@ export async function recordMaterialCapture(value: unknown): Promise<CaptureResu
         replayed: false,
       };
       await addAudit(tx, actor.data, result);
-      await completeRequest(tx, request.gateId, result);
+      await completeRequest(tx, actor.data.tenantId, request.gateId, result);
       return result;
     });
     try {
@@ -1064,8 +1128,6 @@ export async function completeStationCapture(value: unknown): Promise<CaptureRes
   if (!actor.ok) return actor;
   try {
     const input = parseStationCompletionCaptureInput(value);
-    const capability = await requireCaptureWriteCapability();
-    if (!capability.ok) return capability;
     let expectedStation: OrderStation;
     try {
       expectedStation = parseOrderStation(input.expectedStation);
@@ -1085,15 +1147,19 @@ export async function completeStationCapture(value: unknown): Promise<CaptureRes
       materials: sortedMaterials,
     });
 
-    const receipt = await db.transaction(async (tx) => {
-      const [order] = await tx
-        .select()
-        .from(orders)
-        .where(and(eq(orders.id, input.orderId), eq(orders.tenantId, actor.data.tenantId)))
-        .limit(1)
-        .for("update");
-      if (!order) throw new Error("ORDER_NOT_FOUND");
+    const replay = await readCompletedCaptureReplay({
+      actor: actor.data,
+      orderId: input.orderId,
+      station: expectedStation,
+      requestId: input.clientRequestId,
+      kind: "station_completion",
+      hash,
+    });
+    if (replay) return { ok: true, data: replay };
+    const capability = await requireCaptureWriteCapability();
+    if (!capability.ok) return capability;
 
+    const receipt = await db.transaction(async (tx) => {
       const request = await beginRequest(tx, {
         actor: actor.data,
         orderId: input.orderId,
@@ -1103,6 +1169,13 @@ export async function completeStationCapture(value: unknown): Promise<CaptureRes
         hash,
       });
       if (request.replay) return request.replay;
+      const [order] = await tx
+        .select()
+        .from(orders)
+        .where(and(eq(orders.id, input.orderId), eq(orders.tenantId, actor.data.tenantId)))
+        .limit(1)
+        .for("update");
+      if (!order) throw new Error("ORDER_NOT_FOUND");
       if (expectedStation === "warenausgang") throw new Error("SHIPPING_RECEIPT_REQUIRED");
       if (expectedStation === "galvanik") throw new Error("BATH_PARTICIPATION_REQUIRED");
       if (expectedStation === "qualitaetssicherung") throw new Error("QUALITY_RECEIPT_REQUIRED");
@@ -1171,7 +1244,6 @@ export async function completeStationCapture(value: unknown): Promise<CaptureRes
             station: expectedStation,
             requestId: input.clientRequestId,
             lines: sortedMaterials,
-            fromTemplate: sortedMaterials.some((line) => Boolean(line.templateId)),
           })
         : { movementIds: [], materialCostEur: 0 };
 
@@ -1254,7 +1326,7 @@ export async function completeStationCapture(value: unknown): Promise<CaptureRes
         replayed: false,
       };
       await addAudit(tx, actor.data, result);
-      await completeRequest(tx, request.gateId, result);
+      await completeRequest(tx, actor.data.tenantId, request.gateId, result);
       return result;
     });
     invalidateOperationalOrdersCache();

@@ -12,6 +12,24 @@ export interface OcrResult {
   rawText: string;
 }
 
+export type OcrExtraction = {
+  result: OcrResult;
+  actualUnits: number | null;
+  providerStatus: string;
+};
+
+export class OcrResponseError extends Error {
+  readonly actualUnits: number | null;
+  readonly providerStatus: string;
+
+  constructor(actualUnits: number | null, providerStatus: string, cause: unknown) {
+    super("OCR_INVALID_PROVIDER_RESPONSE", { cause });
+    this.name = "OcrResponseError";
+    this.actualUnits = actualUnits;
+    this.providerStatus = providerStatus;
+  }
+}
+
 import { generateGeminiContentWithFallback } from "@/lib/ai/geminiClient";
 import { Type } from "@google/genai";
 
@@ -59,7 +77,13 @@ export function parseOcrResponse(rawTextResponse: string): OcrResult {
   return result;
 }
 
-export async function extractDocumentData(imageBase64: string): Promise<OcrResult> {
+const OCR_MIME_TYPES = new Set(["image/jpeg", "image/png", "application/pdf"]);
+
+export async function extractDocumentDataWithUsage(
+  imageBase64: string,
+  mimeType = "image/jpeg",
+): Promise<OcrExtraction> {
+  if (!OCR_MIME_TYPES.has(mimeType)) throw new Error("OCR_UNSUPPORTED_MIME_TYPE");
   const base64Data = imageBase64.includes(",") ? imageBase64.split(",")[1] : imageBase64;
 
   const schema = {
@@ -82,7 +106,7 @@ export async function extractDocumentData(imageBase64: string): Promise<OcrResul
     { text: "Du bist ein OCR-Assistent fuer eine Galvanik-Werkstatt. Extrahiere aus diesem Dokument/Foto: Kundenname, Firma, Adresse, Telefon, E-Mail, Artikelbeschreibung, Material, Oberflaeche, Stueckzahl, Sonderhinweise. Antworte NUR als JSON ohne Markdown-Backticks." },
     {
       inlineData: {
-        mimeType: "image/jpeg",
+        mimeType,
         data: base64Data
       }
     }
@@ -94,12 +118,39 @@ export async function extractDocumentData(imageBase64: string): Promise<OcrResul
       config: {
         responseMimeType: "application/json",
         responseSchema: schema,
+        maxOutputTokens: 4_096,
+        httpOptions: { timeout: 120_000, retryOptions: { attempts: 1 } },
+        abortSignal: AbortSignal.timeout(120_000),
       }
     });
 
-    return parseOcrResponse(response.text || "");
+    const metadata = response as {
+      usageMetadata?: { totalTokenCount?: unknown };
+      modelVersion?: unknown;
+    };
+    const totalTokenCount = Number(metadata.usageMetadata?.totalTokenCount);
+    const providerStatus = typeof metadata.modelVersion === "string" && metadata.modelVersion.trim()
+      ? metadata.modelVersion.trim().slice(0, 80)
+      : "gemini";
+    const actualUnits = Number.isSafeInteger(totalTokenCount) && totalTokenCount >= 0
+      ? totalTokenCount
+      : null;
+    try {
+      return {
+        result: parseOcrResponse(response.text || ""),
+        actualUnits,
+        providerStatus,
+      };
+    } catch (error) {
+      throw new OcrResponseError(actualUnits, providerStatus, error);
+    }
   } catch (error) {
+    if (error instanceof OcrResponseError) throw error;
     console.error("Gemini OCR Request failed:", error);
     throw new Error("OCR_EXTRACTION_FAILED", { cause: error });
   }
+}
+
+export async function extractDocumentData(imageBase64: string, mimeType = "image/jpeg"): Promise<OcrResult> {
+  return (await extractDocumentDataWithUsage(imageBase64, mimeType)).result;
 }

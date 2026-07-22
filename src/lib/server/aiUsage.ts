@@ -26,10 +26,34 @@ type ReservationRow = {
 export type AiUsageAdmission =
   | { kind: "reserved"; reservationId: string }
   | { kind: "replay"; result: JsonObject }
-  | { kind: "rejected"; retryAfterSeconds: number };
+  | {
+      kind: "rejected";
+      retryAfterSeconds: number;
+      reason: AiUsageRejectionReason;
+      usageStatus: string;
+      reservationId: string | null;
+    };
+
+export type AiUsageRejectionReason =
+  | "user_window"
+  | "tenant_window"
+  | "user_daily_units"
+  | "tenant_daily_units"
+  | "in_progress"
+  | "prior_attempt_terminal"
+  | "result_expired";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const IDEMPOTENCY_PATTERN = /^[A-Za-z0-9._:-]{8,128}$/;
+const AI_USAGE_REJECTION_REASONS = new Set<AiUsageRejectionReason>([
+  "user_window",
+  "tenant_window",
+  "user_daily_units",
+  "tenant_daily_units",
+  "in_progress",
+  "prior_attempt_terminal",
+  "result_expired",
+]);
 
 function isObject(value: unknown): value is JsonObject {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -64,7 +88,9 @@ function configuration() {
     windowSeconds: integerSetting("AI_QUOTA_WINDOW_SECONDS", 60, 10, 3_600),
     userWindowLimit: integerSetting("AI_QUOTA_USER_REQUESTS_PER_WINDOW", 6, 1, 1_000),
     tenantWindowLimit: integerSetting("AI_QUOTA_TENANT_REQUESTS_PER_WINDOW", 30, 1, 10_000),
-    userDailyUnits: integerSetting("AI_QUOTA_USER_DAILY_UNITS", 60_000, 1, 100_000_000),
+    // Covers the declared 14 MiB OCR maximum (57,344 conservative input
+    // units + 4,096 output units) for a fresh user without a quota white wall.
+    userDailyUnits: integerSetting("AI_QUOTA_USER_DAILY_UNITS", 65_536, 1, 100_000_000),
     tenantDailyUnits: integerSetting("AI_QUOTA_TENANT_DAILY_UNITS", 300_000, 1, 1_000_000_000),
     bucketSeconds: integerSetting("AI_IDEMPOTENCY_BUCKET_SECONDS", 300, 60, 3_600),
   };
@@ -94,9 +120,17 @@ function requestKeyHash(
     .digest("hex");
 }
 
-function estimatedUnits(input: JsonObject, maxOutputTokens: number): number {
+function estimatedUnits(input: JsonObject, maxOutputTokens: number, minimumInputUnits = 0): number {
+  if (
+    !Number.isSafeInteger(maxOutputTokens) || maxOutputTokens < 1 || maxOutputTokens > 4_096
+    || !Number.isSafeInteger(minimumInputUnits) || minimumInputUnits < 0 || minimumInputUnits > 100_000
+  ) throw new Error("AI_USAGE_ESTIMATE_INVALID");
   const inputUnits = Math.ceil(Buffer.byteLength(stableJson(input), "utf8") / 3);
-  return Math.min(100_000, Math.max(1, inputUnits + maxOutputTokens));
+  const total = Math.max(inputUnits, minimumInputUnits) + maxOutputTokens;
+  if (!Number.isSafeInteger(total) || total < 1 || total > 100_000) {
+    throw new Error("AI_USAGE_ESTIMATE_INVALID");
+  }
+  return total;
 }
 
 async function reserve(
@@ -105,6 +139,7 @@ async function reserve(
   feature: MeteredAiFeature,
   input: JsonObject,
   maxOutputTokens: number,
+  minimumInputUnits = 0,
 ): Promise<{ admission: AiUsageAdmission; url: string; serviceRoleKey: string }> {
   const config = configuration();
   if (identity.tenantId !== "galvanik-kreile" || !identity.userId || identity.userId.length > 128) {
@@ -125,7 +160,7 @@ async function reserve(
       config.hmacSecret,
       config.bucketSeconds,
     ),
-    p_estimated_units: estimatedUnits(input, maxOutputTokens),
+    p_estimated_units: estimatedUnits(input, maxOutputTokens, minimumInputUnits),
     p_window_seconds: config.windowSeconds,
     p_user_window_limit: config.userWindowLimit,
     p_tenant_window_limit: config.tenantWindowLimit,
@@ -143,13 +178,21 @@ async function reserve(
     return { admission: { kind: "reserved", reservationId: row.reservation_id }, ...config };
   }
   if (row.allowed === false) {
+    if (!AI_USAGE_REJECTION_REASONS.has(row.decision_reason as AiUsageRejectionReason)) {
+      throw new Error("AI_USAGE_RESERVATION_INVALID");
+    }
     const parsedRetry = Number(row.retry_after_seconds);
     return {
       admission: {
         kind: "rejected",
-        retryAfterSeconds: Number.isSafeInteger(parsedRetry) && parsedRetry > 0
+        retryAfterSeconds: Number.isSafeInteger(parsedRetry) && parsedRetry >= 0
           ? Math.min(parsedRetry, 86_400)
           : config.windowSeconds,
+        reason: row.decision_reason as AiUsageRejectionReason,
+        usageStatus: typeof row.usage_status === "string" ? row.usage_status : "unknown",
+        reservationId: typeof row.reservation_id === "string" && UUID_PATTERN.test(row.reservation_id)
+          ? row.reservation_id
+          : null,
       },
       ...config,
     };
@@ -162,10 +205,19 @@ export async function reserveDirectAiUsage(input: {
   feature: MeteredAiFeature;
   payload: JsonObject;
   maxOutputTokens: number;
+  idempotencyKey?: string;
+  minimumInputUnits?: number;
 }): Promise<AiUsageAdmission> {
+  if (
+    input.minimumInputUnits !== undefined
+    && (!Number.isSafeInteger(input.minimumInputUnits) || input.minimumInputUnits < 0 || input.minimumInputUnits > 100_000)
+  ) throw new Error("AI_USAGE_ESTIMATE_INVALID");
   const request = new Request("http://localhost/internal-ai-usage", {
     method: "POST",
-    headers: { "Cache-Control": "no-store" },
+    headers: {
+      "Cache-Control": "no-store",
+      ...(input.idempotencyKey ? { "x-idempotency-key": input.idempotencyKey } : {}),
+    },
   });
   const result = await reserve(
     request,
@@ -173,6 +225,7 @@ export async function reserveDirectAiUsage(input: {
     input.feature,
     input.payload,
     input.maxOutputTokens,
+    input.minimumInputUnits,
   );
   return result.admission;
 }
@@ -266,8 +319,17 @@ export async function proxyMeteredAiRequest(input: {
       });
     }
     if (reserved.admission.kind === "rejected") {
-      return NextResponse.json({ error: "AI usage limit reached" }, {
-        status: 429,
+      const quotaRejected = [
+        "user_window",
+        "tenant_window",
+        "user_daily_units",
+        "tenant_daily_units",
+      ].includes(reserved.admission.reason);
+      return NextResponse.json({
+        error: quotaRejected ? "AI usage limit reached" : "AI request state conflict",
+        code: reserved.admission.reason,
+      }, {
+        status: quotaRejected ? 429 : 409,
         headers: {
           "Cache-Control": "no-store",
           "Retry-After": String(reserved.admission.retryAfterSeconds),

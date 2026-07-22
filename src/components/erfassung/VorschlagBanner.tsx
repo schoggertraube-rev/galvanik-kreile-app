@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 
 export interface VorlageResult {
@@ -10,8 +9,9 @@ export interface VorlageResult {
   oberflaeche?: string;
   konfidenz?: string;
   n_referenzauftraege?: number;
-  zeit?: { station: string; median_min: number; p25: number; p75: number }[];
+  zeit?: { id: string; station: string; median_min: number; p25: number; p75: number }[];
   verbrauch?: {
+    id: string;
     station: string;
     artikel_id: string;
     artikel_name: string;

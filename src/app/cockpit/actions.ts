@@ -20,6 +20,42 @@ function confirmedCount(value: unknown, code: string): number {
   return parsed;
 }
 
+function confirmedNullableNumber(value: unknown, code: string): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error(code);
+  return parsed;
+}
+
+type ContributionTruthRow = Record<string, unknown>;
+
+function confirmedText(value: unknown, code: string, nullable = false): string | null {
+  if (nullable && (value === null || value === undefined)) return null;
+  if (typeof value !== 'string' || value.trim() === '') throw new Error(code);
+  return value;
+}
+
+function contributionTruth(row: ContributionTruthRow) {
+  if (typeof row.db_berechenbar !== 'boolean') throw new Error('CONTRIBUTION_STATE_INVALID');
+  return {
+    order_id: confirmedText(row.order_id, 'CONTRIBUTION_ORDER_INVALID') as string,
+    order_number: confirmedText(row.order_number, 'CONTRIBUTION_ORDER_INVALID') as string,
+    customer_id: confirmedText(row.customer_id, 'CONTRIBUTION_CUSTOMER_INVALID') as string,
+    kunde_name: confirmedText(row.kunde_name, 'CONTRIBUTION_CUSTOMER_INVALID', true),
+    erloes_netto: confirmedNullableNumber(row.erloes_netto, 'CONTRIBUTION_REVENUE_INVALID'),
+    material_kosten: confirmedNullableNumber(row.material_kosten, 'CONTRIBUTION_MATERIAL_INVALID'),
+    arbeitszeit_kosten: confirmedNullableNumber(row.arbeitszeit_kosten, 'CONTRIBUTION_TIME_INVALID'),
+    energie_anteil_kosten: confirmedNullableNumber(row.energie_anteil_kosten, 'CONTRIBUTION_ENERGY_INVALID'),
+    deckungsbeitrag: confirmedNullableNumber(row.deckungsbeitrag, 'CONTRIBUTION_VALUE_INVALID'),
+    db_marge: confirmedNullableNumber(row.db_marge, 'CONTRIBUTION_MARGIN_INVALID'),
+    db_berechenbar: row.db_berechenbar,
+    // Stable bridge names used by the existing detail consumer.
+    kosten_verbrauch: confirmedNullableNumber(row.material_kosten, 'CONTRIBUTION_MATERIAL_INVALID'),
+    kosten_zeit: confirmedNullableNumber(row.arbeitszeit_kosten, 'CONTRIBUTION_TIME_INVALID'),
+    kosten_energie: confirmedNullableNumber(row.energie_anteil_kosten, 'CONTRIBUTION_ENERGY_INVALID'),
+  };
+}
+
 async function requireCustomerFinanceRead() {
   const authorization = await resolveAuthorization();
   if (!authorization.ok) throw new Error('AUTH_ERROR');
@@ -257,19 +293,39 @@ export async function getAgingDaten() {
 }
 
 export async function getAuftragDbRanking(limit = 10) {
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('v_auftrag_db')
-    .select('order_id, order_number, kunde_name, erloes_netto, deckungsbeitrag')
-    .or('erloes_netto.gt.0,deckungsbeitrag.neq.0')
-    .order('deckungsbeitrag', { ascending: false })
-    .limit(limit);
-
-  if (error) {
-    console.error("Error getAuftragDbRanking:", error.message, error.details, error.hint);
-    return [];
-  }
-  return data || [];
+  const actor = await requireCustomerFinanceRead();
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('CONTRIBUTION_LIMIT_INVALID');
+  const rows = await db.execute(sql<ContributionTruthRow>`
+    select
+      order_id,
+      order_number,
+      customer_id,
+      kunde_name,
+      erloes_netto,
+      material_kosten,
+      arbeitszeit_kosten,
+      energie_anteil_kosten,
+      deckungsbeitrag,
+      db_marge,
+      db_berechenbar
+    from public.v_auftrag_db
+    where tenant_id = ${actor.tenantId}
+      and db_berechenbar = true
+      and (erloes_netto > 0 or deckungsbeitrag <> 0)
+    order by deckungsbeitrag desc, order_id
+    limit ${limit}
+  `);
+  return rows.map(contributionTruth).map((row) => {
+    if (!row.db_berechenbar || row.kunde_name === null || row.erloes_netto === null || row.deckungsbeitrag === null) {
+      throw new Error('CONTRIBUTION_RANKING_INCOMPLETE');
+    }
+    return {
+      ...row,
+      kunde_name: row.kunde_name,
+      erloes_netto: row.erloes_netto,
+      deckungsbeitrag: row.deckungsbeitrag,
+    };
+  });
 }
 
 export async function getWhatIfKontext(): Promise<never> {
@@ -293,9 +349,28 @@ export async function getEngpassDetails(station: string) {
 }
 
 export async function getAuftragDbDetails(orderId: string) {
-  const supabase = await createClient();
-  const { data } = await supabase.from('v_auftrag_db').select('*').eq('order_id', orderId).single();
-  return data;
+  const actor = await requireCustomerFinanceRead();
+  if (!/^[A-Za-z0-9_-]{1,100}$/.test(orderId)) throw new Error('ORDER_ID_INVALID');
+  const rows = await db.execute(sql<ContributionTruthRow>`
+    select
+      order_id,
+      order_number,
+      customer_id,
+      kunde_name,
+      erloes_netto,
+      material_kosten,
+      arbeitszeit_kosten,
+      energie_anteil_kosten,
+      deckungsbeitrag,
+      db_marge,
+      db_berechenbar
+    from public.v_auftrag_db
+    where tenant_id = ${actor.tenantId}
+      and order_id = ${orderId}
+    limit 2
+  `);
+  if (rows.length !== 1) throw new Error(rows.length === 0 ? 'CONTRIBUTION_NOT_FOUND' : 'CONTRIBUTION_DUPLICATE');
+  return contributionTruth(rows[0]);
 }
 
 export async function getForecastDaten() {
@@ -326,7 +401,7 @@ export async function getForecastDaten() {
 }
 
 export async function getKundenDetails(customerId: string) {
-  await requireCustomerFinanceRead();
+  const actor = await requireCustomerFinanceRead();
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(customerId)) throw new Error('CUSTOMER_ID_INVALID');
   const supabase = await createClient();
 
@@ -337,18 +412,26 @@ export async function getKundenDetails(customerId: string) {
     .eq('customer_id', customerId)
     .order('intake_date', { ascending: false })
     .limit(5);
-  const contributionQuery = supabase.from('v_auftrag_db')
-    .select('order_id, order_number, deckungsbeitrag, erloes_netto, intake_date')
-    .eq('customer_id', customerId);
+  const contributionQuery = db.execute(sql<{
+    order_id: string;
+    order_number: string;
+    deckungsbeitrag: number | string | null;
+    erloes_netto: number | string | null;
+  }>`
+    select order_id, order_number, deckungsbeitrag, erloes_netto
+    from public.v_auftrag_db
+    where tenant_id = ${actor.tenantId}
+      and customer_id = ${customerId}
+  `);
 
   const [clvResult, ordersResult, contributionResult] = await Promise.all([clvQuery, ordersQuery, contributionQuery]);
-  if (clvResult.error || ordersResult.error || contributionResult.error || !clvResult.data) {
-    console.error('Customer cockpit detail unavailable', clvResult.error, ordersResult.error, contributionResult.error);
+  if (clvResult.error || ordersResult.error || !clvResult.data) {
+    console.error('Customer cockpit detail unavailable', clvResult.error, ordersResult.error);
     throw new Error('CUSTOMER_DETAILS_UNAVAILABLE');
   }
   const clv = clvResult.data;
   const orders = ordersResult.data;
-  const auftraegeDb = contributionResult.data;
+  const auftraegeDb = contributionResult;
 
   const details = orders.map(o => {
     const dbInfo = auftraegeDb?.find(x => x.order_id === o.id);

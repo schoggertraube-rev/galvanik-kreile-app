@@ -52,4 +52,21 @@ describe("cockpit KPI truth", () => {
     expect(action).not.toContain("v_auftrag_db");
     expect(action).not.toContain("v_kunde_clv");
   });
+
+  it("reads contribution truth through the authorized tenant-bound server bridge", () => {
+    const actionFile = source("src/app/cockpit/actions.ts");
+    const ranking = section(actionFile, "export async function getAuftragDbRanking", "export async function getWhatIfKontext");
+    const details = section(actionFile, "export async function getAuftragDbDetails", "export async function getForecastDaten");
+    expect(ranking).toContain("const actor = await requireCustomerFinanceRead()");
+    expect(ranking).toContain("from public.v_auftrag_db");
+    expect(ranking).toContain("tenant_id = ${actor.tenantId}");
+    expect(ranking).toContain("db_berechenbar = true");
+    expect(ranking).not.toContain("return []");
+    expect(details).toContain("const actor = await requireCustomerFinanceRead()");
+    expect(details).toContain("tenant_id = ${actor.tenantId}");
+    expect(details).toContain("CONTRIBUTION_DUPLICATE");
+    expect(actionFile).toContain("kosten_verbrauch:");
+    expect(actionFile).toContain("kosten_zeit:");
+    expect(actionFile).toContain("kosten_energie:");
+  });
 });

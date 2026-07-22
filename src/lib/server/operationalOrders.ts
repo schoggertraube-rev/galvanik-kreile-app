@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { db } from "@/db";
-import { orders, customers, items, events, calendarEvents } from "@/db/schema";
-import { eq, desc, and, notInArray, notIlike, sql, inArray, like } from "drizzle-orm";
+import { orders, customers, items, events, calendarEvents, scanUploads } from "@/db/schema";
+import { eq, desc, and, notInArray, notIlike, sql, inArray, like, isNull } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import type { OrderInput } from "@/lib/validation/orderSchema";
 import { isOrderReadyForStation } from "@/lib/orders/orderRouting";
 import { createRouteSnapshot } from "@/lib/orders/routeSnapshot";
+import { isConfirmedCaptureReceipt } from "@/lib/server/scanOriginalContract";
 
 // Short-lived in-memory cache (5 seconds) — prevents parallel duplicate DB calls
 // during a single page render without blocking real-time updates.
@@ -141,7 +142,7 @@ export async function getOperationalOrdersForCustomer(customerId: string, tenant
 
 export class OperationalOrderPersistenceError extends Error {
   constructor(
-    readonly code: "CUSTOMER_NOT_FOUND" | "CUSTOMER_NOTE_LIMIT" | "REQUEST_CONFLICT",
+    readonly code: "CUSTOMER_NOT_FOUND" | "CUSTOMER_NOTE_LIMIT" | "REQUEST_CONFLICT" | "SCAN_SOURCE_CONFLICT",
     message: string,
   ) {
     super(message);
@@ -207,6 +208,32 @@ async function findOrderCreationReplay(tenantId: string, clientRequestId: string
     eq(orders.tenantId, tenantId),
   )).limit(1);
   if (!order) throw new Error("ORDER_RECEIPT_WITHOUT_ORDER");
+  if (order.source === "scan") {
+    const [scan] = await db.select({
+      id: scanUploads.id,
+      tenantId: scanUploads.tenantId,
+      fileUrl: scanUploads.fileUrl,
+      fileType: scanUploads.fileType,
+      uploadedBy: scanUploads.uploadedBy,
+      linkedOrderId: scanUploads.linkedOrderId,
+      linkedCustomerId: scanUploads.linkedCustomerId,
+      recordKind: scanUploads.recordKind,
+      contentSha256: scanUploads.contentSha256,
+      fileSizeBytes: scanUploads.fileSizeBytes,
+      status: scanUploads.status,
+    }).from(scanUploads).where(and(
+      eq(scanUploads.id, order.sourceRef || ""),
+      eq(scanUploads.tenantId, tenantId),
+    )).limit(1);
+    if (
+      !scan
+      || !isConfirmedCaptureReceipt(scan, tenantId)
+      || scan.linkedOrderId !== order.id
+      || scan.linkedCustomerId !== order.customerId
+      || scan.recordKind !== "capture_scan"
+      || !["secured", "processed"].includes(scan.status)
+    ) throw new Error("ORDER_RECEIPT_WITHOUT_SCAN_LINK");
+  }
   const persistedItems = await db.select().from(items).where(and(
     eq(items.orderId, order.id),
     eq(items.tenantId, tenantId),
@@ -253,6 +280,37 @@ export async function createOperationalOrderService(
         "CUSTOMER_NOT_FOUND",
         "Der ausgewählte Kunde wurde im aktuellen Mandanten nicht gefunden.",
       );
+    }
+
+    let scanReceipt: {
+      id: string;
+      uploadedBy: string;
+      contentSha256: string;
+      fileSizeBytes: number;
+    } | null = null;
+    if (validData.source === "scan") {
+      const [scan] = await tx.select().from(scanUploads).where(and(
+        eq(scanUploads.id, validData.sourceRef || ""),
+        eq(scanUploads.tenantId, actor.tenantId),
+      )).limit(1).for("update");
+      if (
+        !scan
+        || !isConfirmedCaptureReceipt(scan, actor.tenantId)
+        || !["secured", "processed"].includes(scan.status)
+        || scan.linkedOrderId
+        || (scan.linkedCustomerId && scan.linkedCustomerId !== validData.customerId)
+      ) {
+        throw new OperationalOrderPersistenceError(
+          "SCAN_SOURCE_CONFLICT",
+          "Der Scan-Originalbeleg fehlt, ist nicht gesichert oder bereits anders zugeordnet.",
+        );
+      }
+      scanReceipt = {
+        id: scan.id,
+        uploadedBy: scan.uploadedBy,
+        contentSha256: scan.contentSha256,
+        fileSizeBytes: scan.fileSizeBytes,
+      };
     }
 
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${actor.tenantId}), ${year})`);
@@ -313,6 +371,20 @@ export async function createOperationalOrderService(
     const insertedItems = await tx.insert(items).values(itemValues).returning();
     if (insertedItems.length !== itemValues.length) throw new Error("ORDER_ITEMS_NOT_CONFIRMED");
 
+    if (scanReceipt) {
+      const [linked] = await tx.update(scanUploads).set({
+        linkedOrderId: orderId,
+        linkedCustomerId: validData.customerId,
+      }).where(and(
+        eq(scanUploads.id, scanReceipt.id),
+        eq(scanUploads.tenantId, actor.tenantId),
+        eq(scanUploads.recordKind, "capture_scan"),
+        inArray(scanUploads.status, ["secured", "processed"]),
+        isNull(scanUploads.linkedOrderId),
+      )).returning({ id: scanUploads.id });
+      if (!linked) throw new Error("SCAN_LINK_RECEIPT_MISSING");
+    }
+
     if (validData.calendarSync && validData.dueDate) {
       await tx.insert(calendarEvents).values({
         id: createId(),
@@ -358,6 +430,15 @@ export async function createOperationalOrderService(
         orderCreationContract: "kreile-order-create/v1",
         orderCreationHash: requestHash,
         routeTemplates: validData.parts.map((part) => part.routeTemplateId ?? null),
+        ...(scanReceipt ? {
+          scanOriginalReceipt: {
+            scanId: scanReceipt.id,
+            contentSha256: scanReceipt.contentSha256,
+            fileSizeBytes: scanReceipt.fileSizeBytes,
+            uploadedBy: scanReceipt.uploadedBy,
+            assignedBy: actor.userId,
+          },
+        } : {}),
       },
       userId: actor.userId,
     });
@@ -377,7 +458,10 @@ export async function createOperationalOrderService(
       return { order: insertedOrder, items: insertedItems, replayed: false as const };
     });
   } catch (error) {
-    if (isUniqueViolation(error)) {
+    if (
+      isUniqueViolation(error)
+      || (error instanceof OperationalOrderPersistenceError && error.code === "SCAN_SOURCE_CONFLICT")
+    ) {
       const concurrentReplay = await findOrderCreationReplay(actor.tenantId, validData.clientRequestId, requestHash);
       if (concurrentReplay) return concurrentReplay;
     }

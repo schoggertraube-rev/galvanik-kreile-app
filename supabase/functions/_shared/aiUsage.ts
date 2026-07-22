@@ -152,6 +152,9 @@ export async function reserveDirectAiUsage(input: {
   if (!FEATURE_PATTERN.test(input.feature) || input.identity.tenantId !== "galvanik-kreile") {
     throw new Error("INVALID_AI_IDENTITY");
   }
+  if (!Number.isSafeInteger(input.maxOutputTokens) || input.maxOutputTokens < 1 || input.maxOutputTokens > 4_096) {
+    throw new Error("AI_USAGE_ESTIMATE_INVALID");
+  }
   const secret = Deno.env.get("AI_USAGE_HMAC_SECRET");
   if (!secret || new TextEncoder().encode(secret).byteLength < 32) {
     throw new Error("AI_USAGE_MISCONFIGURED");
@@ -169,10 +172,11 @@ export async function reserveDirectAiUsage(input: {
     payload: input.payload,
     idempotencyPart,
   }));
-  const estimatedUnits = Math.min(
-    100_000,
-    Math.max(1, Math.ceil(new TextEncoder().encode(stableJson(input.payload)).byteLength / 3) + input.maxOutputTokens),
-  );
+  const estimatedUnits = Math.ceil(new TextEncoder().encode(stableJson(input.payload)).byteLength / 3)
+    + input.maxOutputTokens;
+  if (!Number.isSafeInteger(estimatedUnits) || estimatedUnits < 1 || estimatedUnits > 100_000) {
+    throw new Error("AI_USAGE_ESTIMATE_INVALID");
+  }
   const { data, error } = await client().rpc("reserve_ai_usage", {
     p_tenant_id: input.identity.tenantId,
     p_user_id: input.identity.userId,
@@ -182,7 +186,7 @@ export async function reserveDirectAiUsage(input: {
     p_window_seconds: integerSetting("AI_QUOTA_WINDOW_SECONDS", 60, 10, 3_600),
     p_user_window_limit: integerSetting("AI_QUOTA_USER_REQUESTS_PER_WINDOW", 6, 1, 1_000),
     p_tenant_window_limit: integerSetting("AI_QUOTA_TENANT_REQUESTS_PER_WINDOW", 30, 1, 10_000),
-    p_user_daily_unit_limit: integerSetting("AI_QUOTA_USER_DAILY_UNITS", 60_000, 1, 100_000_000),
+    p_user_daily_unit_limit: integerSetting("AI_QUOTA_USER_DAILY_UNITS", 65_536, 1, 100_000_000),
     p_tenant_daily_unit_limit: integerSetting("AI_QUOTA_TENANT_DAILY_UNITS", 300_000, 1, 1_000_000_000),
   });
   if (error || !Array.isArray(data) || data.length !== 1 || !isObject(data[0])) {

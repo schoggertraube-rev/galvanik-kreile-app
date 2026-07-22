@@ -1,16 +1,33 @@
 "use client";
 
 import { useErfassung } from "../ErfassungProvider";
-import { FileText, UserPlus, PackagePlus, Link, ArrowRight, Building2, User } from "lucide-react";
+import { FileText, UserPlus, PackagePlus, Link, Building2 } from "lucide-react";
 import { AiBadge } from "../shared/AiBadge";
 import type { OcrResult } from "@/lib/ocr/geminiOcr";
 
-export function ScanResult({ data }: { data: any }) {
+type ScanResultData = {
+  id?: unknown;
+  status?: unknown;
+  contentSha256?: unknown;
+  fileSizeBytes?: unknown;
+  extractedData?: unknown;
+  detectedType?: unknown;
+  detectionConfidence?: unknown;
+};
+
+export function ScanResult({ data }: { data: ScanResultData }) {
   const { openErfassung } = useErfassung();
   const ext: Partial<OcrResult> | null = data?.extractedData && typeof data.extractedData === "object"
     ? data.extractedData as Partial<OcrResult>
     : null;
-  const hasConfirmedExtraction = data?.status === "processed" && ext !== null;
+  const hasConfirmedExtraction = data.status === "processed"
+    && typeof data.id === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(data.id)
+    && typeof data.contentSha256 === "string"
+    && /^[0-9a-f]{64}$/.test(data.contentSha256)
+    && Number.isSafeInteger(data.fileSizeBytes)
+    && Number(data.fileSizeBytes) > 0
+    && ext !== null;
 
   const handleNewOrder = () => {
     if (!hasConfirmedExtraction) return;
@@ -31,7 +48,7 @@ export function ScanResult({ data }: { data: any }) {
         rawText: typeof ext.rawText === "string" ? ext.rawText : "",
       },
       source: "scan",
-      sourceRef: data.id
+      sourceRef: data.id as string,
     });
   };
 

@@ -1,3 +1,5 @@
+import type { ClaimEvidenceV1 } from "@/lib/analytics/evidenceContract";
+
 export type AnalyseTileKey =
   | "better_next"
   | "werkstatt_puls"
@@ -76,6 +78,7 @@ export type AnalyseTileSummary = {
 
 export type AnalyseTileDetail = {
   summary: AnalyseTileSummary;
+  evidence: ClaimEvidenceV1[];
   charts: Array<{
     id: string;
     title: string;

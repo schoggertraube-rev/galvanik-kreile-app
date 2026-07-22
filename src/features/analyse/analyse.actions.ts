@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, eq, gte, inArray, isNull, lt, notIlike, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lt, notIlike, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { customers, orders } from "@/db/schema";
 import type {
@@ -11,6 +11,12 @@ import type {
   AnalyseTileSummary,
   WerkstattPulsData,
 } from "@/lib/analyse/dataContracts";
+import type { ClaimEvidenceV1 } from "@/lib/analytics/evidenceContract";
+import {
+  buildUnavailableAnalysisEvidence,
+  buildWorkshopEvidence,
+  type WorkshopEvidenceOrder,
+} from "@/lib/analytics/workshopEvidence";
 import { resolveAuthorization } from "@/lib/server/authorization";
 
 const TENANT_ID = "galvanik-kreile";
@@ -28,6 +34,7 @@ type WorkshopSnapshot = {
   period: Period;
   summary: AnalyseTileSummary;
   detail: WerkstattPulsData;
+  evidence: ClaimEvidenceV1[];
 };
 
 async function requireAnalyseRead(): Promise<AnalyseActor> {
@@ -141,7 +148,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
   );
   const stationName = sql<string>`coalesce(${orders.currentStationId}, ${orders.station}, 'nicht_zugeordnet')`;
 
-  const [completedRows, openRows, stationRows, delayedOrders, missingDueOrders] = await Promise.all([
+  const [completedRows, openRows, stationRows, delayedOrders, missingDueOrders, evidenceRows] = await Promise.all([
     db.select({
       completedCount: sql<number>`count(*)::int`,
       dueDateMeasurable: sql<number>`count(*) filter (where ${promisedDueDate} is not null)::int`,
@@ -193,6 +200,21 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       eq(customers.tenantId, actor.tenantId),
     )).where(and(activeOrder, isNull(promisedDueDate)))
       .orderBy(asc(orders.createdAt)).limit(10),
+    db.select({
+      id: orders.id,
+      orderNumber: orders.orderNumber,
+      title: orders.title,
+      createdAt: orders.createdAt,
+      intakeDate: orders.intakeDate,
+      completedDate: orders.completedDate,
+      promisedDueDate,
+      station: stationName,
+      active: sql<boolean>`case when ${activeOrder} then true else false end`,
+      completedInPeriod: sql<boolean>`case when ${completedInPeriod} then true else false end`,
+    }).from(orders)
+      .where(or(activeOrder, completedInPeriod))
+      .orderBy(asc(orders.createdAt), asc(orders.id))
+      .limit(501),
   ]);
 
   const completed = completedRows[0];
@@ -216,6 +238,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       : "stable";
   const maxStationCount = stationRows.reduce((maximum, row) => Math.max(maximum, Number(row.count)), 0);
   const returnTo = "/performance?tile=werkstatt_puls";
+  const calculatedAt = new Date();
 
   const mappedAffectedOrders: WerkstattPulsData["affectedOrders"] = [
     ...delayedOrders.map((order) => ({
@@ -294,7 +317,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
     period: period.key,
     dataStatus: {
       isLive: true,
-      lastUpdatedAt: new Date().toISOString(),
+      lastUpdatedAt: calculatedAt.toISOString(),
       maturity: "S1",
       warnings: [
         ...(dueDateMeasurable === 0 ? ["Für abgeschlossene Aufträge fehlen im Zeitraum messbare Zusagetermine."] : []),
@@ -364,7 +387,32 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
     ],
   };
 
-  return { period, summary, detail };
+  const evidence = buildWorkshopEvidence({
+    tenantId: actor.tenantId,
+    period: {
+      start: period.start,
+      end: period.end,
+      grain: period.key === "today" ? "day" : period.key,
+    },
+    calculatedAt,
+    now,
+    returnTo,
+    rows: evidenceRows.slice(0, 500) as WorkshopEvidenceOrder[],
+    totals: {
+      completed: completedCount,
+      completedWithDueDate: dueDateMeasurable,
+      deliveredOnTime,
+      completedWithCycleTime: cycleMeasurable,
+      averageCycleDays,
+      deliveryReliabilityPct: termintreuePct,
+      open: openCount,
+      overdue: overdueCount,
+      openWithoutDueDate: withoutDueDate,
+    },
+    stations: stationRows.map((row) => ({ station: row.station, count: Number(row.count) })),
+  });
+
+  return { period, summary, detail, evidence };
 }
 
 export async function getAnalyseOverview(period: string): Promise<{ data: AnalyseTileSummary[]; error?: { code: string; message: string } }> {
@@ -392,6 +440,20 @@ export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: stri
     return {
       data: {
         summary,
+        evidence: tileKey === "werkstatt_puls"
+          ? workshop.evidence
+          : [buildUnavailableAnalysisEvidence({
+              tileKey,
+              label: summary.title,
+              description: summary.emptyState?.description ?? "Der belegbare Fachdatenpfad ist noch nicht aktiv.",
+              tenantId: actor.tenantId,
+              period: {
+                start: workshop.period.start,
+                end: workshop.period.end,
+                grain: workshop.period.key === "today" ? "day" : workshop.period.key,
+              },
+              calculatedAt: new Date(),
+            })],
         charts: tileKey === "werkstatt_puls" ? [] : [{ id: "empty", title: "Historie", type: "line", dataset: [], emptyState: summary.emptyState }],
         rankings: [],
         affectedEntities: summary.linkedEntities,

@@ -36,7 +36,7 @@ export interface InventoryMovementHistory {
   movements: StockMovement[];
   truncated: boolean;
   limit: number;
-  unitContext: "current_inventory_item";
+  unitContext: "movement_snapshot";
 }
 
 export class InventoryRepositoryError extends Error {

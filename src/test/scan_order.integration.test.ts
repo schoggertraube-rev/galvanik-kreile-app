@@ -1,9 +1,13 @@
-import { test, expect, vi } from "vitest";
+import { randomUUID } from "node:crypto";
+import { createId } from "@paralleldrive/cuid2";
+import { expect, test, vi } from "vitest";
 
 const integrationDatabaseUrl = process.env.KREILE_INTEGRATION_DATABASE_URL;
-const integrationTest = integrationDatabaseUrl ? test : test.skip;
+const writesExplicitlyAllowed = process.env.KREILE_INTEGRATION_ALLOW_WRITES === "true";
+const integrationTest = integrationDatabaseUrl && writesExplicitlyAllowed ? test : test.skip;
+const actorId = "00000000-0000-4000-8000-000000000001";
+const tenantId = "galvanik-kreile";
 
-// Mock authorization to bypass auth guards during testing
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: vi.fn().mockResolvedValue({
     ok: true,
@@ -13,75 +17,85 @@ vi.mock("@/lib/server/authorization", () => ({
       displayName: "Test Admin",
       role: "admin",
       permissions: ["perm_data_orders"],
-      active: true
-    }
-  })
+      active: true,
+    },
+  }),
 }));
 
-integrationTest("createOrderFromScan creates order successfully in the database", async () => {
+integrationTest("scan receipt is tenant-bound and atomically linked to an idempotent order", async () => {
   process.env.DATABASE_URL = integrationDatabaseUrl;
-  const [{ createOrderFromScan }, { db }, { orders, customers }, { sql }] = await Promise.all([
+  const [{ createOrderFromScan }, { db }, schema, { and, eq }] = await Promise.all([
     import("@/app/actions/orders.actions"),
     import("@/db"),
     import("@/db/schema"),
     import("drizzle-orm"),
   ]);
-  console.log("Starting Scan-to-Order Vitest integration test...");
 
-  // 1. Ensure a customer exists to link the order to
-  const customerName = "Testkunde Scan-E2E";
-  let customerId = "";
-  
-  const existingCustomers = await db.select().from(customers).where(sql`${customers.name} = ${customerName}`);
-  if (existingCustomers.length > 0) {
-    customerId = existingCustomers[0].id;
-  } else {
-    // Create new customer for testing
-    const { createCustomerDb } = await import("@/app/actions/customers.actions");
-    const newCust = await createCustomerDb({
-      company: customerName,
-      firstName: "Test",
-      lastName: "Scan-E2E",
-      street: "Hauptstraße 5",
-      houseNumber: "5",
-      city: "Frankfurt",
-      postalCode: "60311",
-      country: "DE",
-      type: "business",
-      email: "testkunde@scan-e2e.de",
-      phone: "0151999999"
-    });
-    if (newCust.ok) {
-      customerId = newCust.data.id;
-    } else {
-      throw new Error("Failed to create test customer: " + JSON.stringify(newCust));
-    }
-  }
+  const customerId = createId();
+  const scanId = randomUUID();
+  const clientRequestId = randomUUID();
+  const email = `scan-integration-${scanId}@example.invalid`;
 
-  // 2. Count orders before the write
-  const countBeforeRes = await db.select({ count: sql<number>`count(*)::int` }).from(orders);
-  const countBefore = countBeforeRes[0].count;
-  console.log("Orders count before:", countBefore);
-
-  // 3. Trigger Server Action createOrderFromScan
-  const actionResult = await createOrderFromScan({
-    customerId,
-    title: "Auftrag per Scan Test E2E",
-    parts: [
-      { name: "Galvanisiertes Blech", quantity: 12, surfaceRequested: "Verzinkt", material: "Stahl" }
-    ]
+  await db.insert(schema.appUsers).values({
+    id: actorId,
+    tenantId,
+    email,
+    fullName: "Scan Integration",
+    role: "admin",
+  }).onConflictDoNothing({ target: schema.appUsers.id });
+  await db.insert(schema.customers).values({
+    id: customerId,
+    tenantId,
+    name: `Scan Integration ${scanId}`,
+    type: "business",
+    source: "manual",
+  });
+  await db.insert(schema.scanUploads).values({
+    id: scanId,
+    tenantId,
+    recordKind: "capture_scan",
+    fileUrl: `${tenantId}/${scanId}/original.pdf`,
+    fileType: "application/pdf",
+    contentSha256: "a".repeat(64),
+    fileSizeBytes: 256,
+    uploadedBy: actorId,
+    status: "secured",
   });
 
-  expect(actionResult.ok).toBe(true);
+  const request = {
+    clientRequestId,
+    sourceRef: scanId,
+    routeTemplateId: "direct_galvanik",
+    customerId,
+    title: "Auftrag per Scan Integration",
+    parts: [{ name: "Galvanisiertes Blech", quantity: 12, surfaceRequested: "Verzinkt", material: "Stahl" }],
+  };
+  const [first, replay] = await Promise.all([
+    createOrderFromScan(request),
+    createOrderFromScan(request),
+  ]);
+  expect(first.ok).toBe(true);
+  expect(replay.ok).toBe(true);
+  if (!first.ok || !replay.ok) return;
+  expect(replay.data.orderId).toBe(first.data.orderId);
 
-  // 4. Count orders after the write
-  const countAfterRes = await db.select({ count: sql<number>`count(*)::int` }).from(orders);
-  const countAfter = countAfterRes[0].count;
-  console.log("Orders count after:", countAfter);
+  const [scan] = await db.select({
+    linkedOrderId: schema.scanUploads.linkedOrderId,
+    linkedCustomerId: schema.scanUploads.linkedCustomerId,
+    status: schema.scanUploads.status,
+  }).from(schema.scanUploads).where(and(
+    eq(schema.scanUploads.tenantId, tenantId),
+    eq(schema.scanUploads.id, scanId),
+  )).limit(1);
+  expect(scan).toEqual({
+    linkedOrderId: first.data.orderId,
+    linkedCustomerId: customerId,
+    status: "secured",
+  });
 
-  const diff = countAfter - countBefore;
-  console.log(`Difference in orders table rows: ${diff}`);
-
-  expect(diff).toBe(1);
-  console.log("✅ Scan-to-Order integration test completed successfully!");
+  const orders = await db.select({ id: schema.orders.id }).from(schema.orders).where(and(
+    eq(schema.orders.tenantId, tenantId),
+    eq(schema.orders.id, first.data.orderId),
+  ));
+  expect(orders).toHaveLength(1);
 });

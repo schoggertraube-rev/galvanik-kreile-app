@@ -7,7 +7,12 @@ const { mockResolveAuthorization } = vi.hoisted(() => ({
 vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: mockResolveAuthorization }));
 vi.mock("@/db", () => ({ db: {} }));
 vi.mock("@/db/schema", () => ({ items: {}, scanUploads: {} }));
-vi.mock("drizzle-orm", () => ({ and: vi.fn(), eq: vi.fn() }));
+vi.mock("drizzle-orm", () => ({
+  and: vi.fn(),
+  eq: vi.fn(),
+  inArray: vi.fn(),
+  sql: Object.assign(vi.fn(), { raw: vi.fn() }),
+}));
 vi.mock("@supabase/supabase-js", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/ocr/geminiOcr", () => ({ extractDocumentData: vi.fn() }));
 

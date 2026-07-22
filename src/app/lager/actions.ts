@@ -18,12 +18,34 @@ import type {
 } from "@/lib/repositories/inventoryRepository";
 import type { ActionResult } from "@/lib/server/authHelper";
 import { resolveAuthorization } from "@/lib/server/authorization";
+import {
+  inventoryWriteCapabilityAvailable,
+  inventoryWriteCapabilityQuery,
+  readInventoryWriteCapability,
+} from "@/lib/server/inventoryWriteCapability";
 
 const TENANT_ID = "galvanik-kreile";
 const ENTITY_ID = /^[A-Za-z0-9_-]{1,100}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MOVEMENT_TYPES = ["stock_in", "stock_out", "consumption", "correction", "waste"] as const;
 const HISTORY_LIMIT = 100;
+
+const inventoryReadSessionQuery = sql<{ available: boolean }>`
+  select (
+    current_user = 'service_role'
+    and exists (
+      select 1 from pg_roles
+      where rolname = current_user and rolbypassrls and not rolsuper
+    )
+    and has_table_privilege(current_user, 'public.inventory_items', 'SELECT')
+    and has_table_privilege(current_user, 'public.stock_movements', 'SELECT')
+    and has_table_privilege(current_user, 'public.app_users', 'SELECT')
+  ) as available
+`;
+
+function inventoryReadSessionAvailable(row: Record<string, unknown> | undefined): boolean {
+  return row?.available === true;
+}
 
 type InventoryActor = { tenantId: string; userId: string; displayName: string; canWrite: boolean };
 
@@ -69,8 +91,9 @@ type InventoryItemRow = {
   name: string;
   category: string | null;
   currentStock: string | null;
-  minStock: number | null;
+  minStock: number | string | null;
   unit: string | null;
+  einkaufspreisEur: number | string | null;
 };
 
 const inventoryItemSelection = {
@@ -80,6 +103,7 @@ const inventoryItemSelection = {
   currentStock: inventoryItems.currentStock,
   minStock: inventoryItems.minStock,
   unit: inventoryItems.unit,
+  einkaufspreisEur: inventoryItems.einkaufspreisEur,
 };
 
 type InventoryStockScaleRow = {
@@ -96,44 +120,6 @@ const inventoryStockScaleQuery = sql<InventoryStockScaleRow>`
   limit 1
 `;
 
-const directInventoryWriteCapabilityQuery = sql<{ available: boolean }>`
-  select (
-    not exists (
-      select 1
-      from (values
-        ('inventory_items', 'tenant_id'),
-        ('inventory_items', 'current_stock'),
-        ('inventory_items', 'unit'),
-        ('stock_movements', 'tenant_id'),
-        ('stock_movements', 'inventory_item_id'),
-        ('stock_movements', 'movement_type'),
-        ('stock_movements', 'quantity'),
-        ('stock_movements', 'reason'),
-        ('stock_movements', 'order_id'),
-        ('stock_movements', 'created_at'),
-        ('stock_movements', 'erfasst_von'),
-        ('app_users', 'tenant_id'),
-        ('app_users', 'full_name')
-      ) as required(table_name, column_name)
-      where not exists (
-        select 1
-        from information_schema.columns c
-        where c.table_schema = 'public'
-          and c.table_name = required.table_name
-          and c.column_name = required.column_name
-      )
-    )
-    and exists (
-      select 1
-      from information_schema.columns c
-      where c.table_schema = 'public'
-        and c.table_name = 'stock_movements'
-        and c.column_name = 'id'
-        and c.data_type = 'uuid'
-    )
-  ) as available
-`;
-
 function inventoryQuantityDecimals(row: Record<string, unknown> | undefined): number {
   if (!row || typeof row.data_type !== "string") throw new Error("INVENTORY_QUANTITY_CAPABILITY_UNAVAILABLE");
   if (["smallint", "integer", "bigint"].includes(row.data_type)) return 0;
@@ -147,16 +133,6 @@ function inventoryQuantityDecimals(row: Record<string, unknown> | undefined): nu
   return decimals;
 }
 
-function directInventoryWriteAvailable(row: Record<string, unknown> | undefined): boolean {
-  if (!row || typeof row.available !== "boolean") throw new Error("INVENTORY_WRITE_CAPABILITY_UNAVAILABLE");
-  return row.available;
-}
-
-async function readDirectInventoryWriteCapability(): Promise<boolean> {
-  const rows = await db.execute(directInventoryWriteCapabilityQuery);
-  return directInventoryWriteAvailable(rows[0]);
-}
-
 function itemResponse(
   row: InventoryItemRow,
   lastStockInAt: Date | string | null = null,
@@ -166,10 +142,12 @@ function itemResponse(
   const normalizedCategory = category(row.category);
   const currentStock = parseStoredInventoryStock(row.currentStock);
   const minStock = row.minStock === null ? null : Number(row.minStock);
+  const pricePerUnit = row.einkaufspreisEur === null ? null : Number(row.einkaufspreisEur);
   if (
     !name
     || currentStock === null
     || (minStock !== null && (!Number.isFinite(minStock) || minStock < 0))
+    || (pricePerUnit !== null && (!Number.isFinite(pricePerUnit) || pricePerUnit < 0))
   ) {
     throw new Error("INVALID_INVENTORY_DATA");
   }
@@ -193,7 +171,7 @@ function itemResponse(
     storageLocation: null,
     isConsumable: ["chemical", "consumable", "packaging"].includes(normalizedCategory),
     isHazardous: null,
-    pricePerUnit: null,
+    pricePerUnit,
   };
 }
 
@@ -208,6 +186,25 @@ type MovementRow = {
   createdAt: Date | string | null;
   unit: string | null;
   actorName: string | null;
+};
+
+type DirectMovementRow = Omit<MovementRow, "actorName"> & {
+  tenantId: string;
+  createdBy: string;
+};
+
+const directMovementSelection = {
+  id: stockMovements.id,
+  tenantId: stockMovements.tenantId,
+  inventoryItemId: stockMovements.inventoryItemId,
+  movementType: stockMovements.movementType,
+  quantity: stockMovements.quantity,
+  orderId: stockMovements.orderId,
+  reason: stockMovements.reason,
+  unit: stockMovements.unit,
+  createdBy: stockMovements.createdBy,
+  erfasstVon: stockMovements.erfasstVon,
+  createdAt: stockMovements.createdAt,
 };
 
 function normalizeMovementType(value: string): StockMovement["movementType"] {
@@ -241,8 +238,38 @@ function movementResponse(row: MovementRow): StockMovement {
   };
 }
 
+function replayDirectMovement(
+  existing: DirectMovementRow,
+  actor: InventoryActor,
+  expected: {
+    inventoryItemId: string;
+    movementType: StockMovement["movementType"];
+    quantity: number;
+    reason: string;
+    orderId: string | undefined;
+  },
+): StockMovement {
+  const existingQuantity = parseInventoryMovementQuantity(Number(existing.quantity));
+  if (
+    existing.tenantId !== actor.tenantId
+    || existing.inventoryItemId !== expected.inventoryItemId
+    || existing.movementType !== expected.movementType
+    || existingQuantity !== expected.quantity
+    || (existing.reason || "") !== expected.reason
+    || (existing.orderId || undefined) !== expected.orderId
+    || existing.createdBy !== actor.userId
+    || existing.erfasstVon !== actor.userId
+  ) {
+    throw new Error("REQUEST_CONFLICT");
+  }
+  return {
+    ...movementResponse({ ...existing, actorName: actor.displayName }),
+    replayed: true,
+  };
+}
+
 async function readMovements(tenantId: string, inventoryItemId: string): Promise<InventoryMovementHistory> {
-  const [itemRows, rows] = await db.transaction(async (tx) => Promise.all([
+  const [itemRows, rows, readCapabilityRows] = await db.transaction(async (tx) => Promise.all([
     tx.select({ id: inventoryItems.id }).from(inventoryItems).where(and(
       eq(inventoryItems.id, inventoryItemId),
       eq(inventoryItems.tenantId, tenantId),
@@ -257,26 +284,26 @@ async function readMovements(tenantId: string, inventoryItemId: string): Promise
         reason: stockMovements.reason,
         erfasstVon: stockMovements.erfasstVon,
         createdAt: stockMovements.createdAt,
-        unit: inventoryItems.unit,
+        unit: stockMovements.unit,
         actorName: appUsers.fullName,
       })
       .from(stockMovements)
-      .leftJoin(
-        inventoryItems,
-        and(eq(stockMovements.inventoryItemId, inventoryItems.id), eq(inventoryItems.tenantId, tenantId)),
-      )
       .leftJoin(appUsers, and(eq(stockMovements.erfasstVon, appUsers.id), eq(appUsers.tenantId, tenantId)))
       .where(and(eq(stockMovements.tenantId, tenantId), eq(stockMovements.inventoryItemId, inventoryItemId)))
       .orderBy(desc(stockMovements.createdAt), desc(stockMovements.id))
       .limit(HISTORY_LIMIT + 1),
+    tx.execute(inventoryReadSessionQuery),
   ]), { isolationLevel: "repeatable read", accessMode: "read only" });
+  if (!inventoryReadSessionAvailable(readCapabilityRows[0])) {
+    throw new Error("INVENTORY_READ_ADAPTER_UNAVAILABLE");
+  }
   if (!itemRows[0]) throw new Error("ITEM_NOT_FOUND");
 
   return {
     movements: rows.slice(0, HISTORY_LIMIT).map(movementResponse),
     truncated: rows.length > HISTORY_LIMIT,
     limit: HISTORY_LIMIT,
-    unitContext: "current_inventory_item",
+    unitContext: "movement_snapshot",
   };
 }
 
@@ -284,7 +311,7 @@ export async function getLagerbestandAction(): Promise<ActionResult<InventorySna
   const actor = await authorizeInventory();
   if (!actor.ok) return actor;
   try {
-    const [rows, stockInRows, tenantHealthRows, stockScaleRows, directWriteRows] = await db.transaction(async (tx) => Promise.all([
+    const [rows, stockInRows, tenantHealthRows, stockScaleRows, directWriteRows, readCapabilityRows] = await db.transaction(async (tx) => Promise.all([
       tx
         .select(inventoryItemSelection)
         .from(inventoryItems)
@@ -307,15 +334,19 @@ export async function getLagerbestandAction(): Promise<ActionResult<InventorySna
         where tenant_id is null or btrim(tenant_id) = ''
       `),
       tx.execute(inventoryStockScaleQuery),
-      tx.execute(directInventoryWriteCapabilityQuery),
+      tx.execute(inventoryWriteCapabilityQuery),
+      tx.execute(inventoryReadSessionQuery),
     ]), { isolationLevel: "repeatable read", accessMode: "read only" });
+    if (!inventoryReadSessionAvailable(readCapabilityRows[0])) {
+      throw new Error("INVENTORY_READ_ADAPTER_UNAVAILABLE");
+    }
     const unassignedCount = Number(tenantHealthRows[0]?.unassigned_count);
     if (!Number.isSafeInteger(unassignedCount) || unassignedCount < 0) {
       throw new Error("INVALID_INVENTORY_TENANT_HEALTH");
     }
     if (unassignedCount > 0) throw new Error("INVENTORY_TENANT_ASSIGNMENT_INCOMPLETE");
     const quantityDecimals = inventoryQuantityDecimals(stockScaleRows[0]);
-    const schemaCanWrite = directInventoryWriteAvailable(directWriteRows[0]);
+    const schemaCanWrite = inventoryWriteCapabilityAvailable(directWriteRows[0]);
     const canWrite = actor.data.canWrite && schemaCanWrite;
     const stockInByItem = new Map(stockInRows.map((row) => [row.inventoryItemId, row.lastStockInAt]));
     return {
@@ -372,7 +403,6 @@ export async function createLagerBewegungAction(input: unknown): Promise<ActionR
 
   try {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("INVALID_MOVEMENT");
-    if (!await readDirectInventoryWriteCapability()) throw new Error("INVENTORY_WRITE_ADAPTER_UNAVAILABLE");
     const value = input as Record<string, unknown>;
     const allowed = ["clientRequestId", "inventoryItemId", "movementType", "quantity", "orderId", "reason"];
     if (Object.keys(value).some((key) => !allowed.includes(key))) throw new Error("INVALID_MOVEMENT");
@@ -401,8 +431,46 @@ export async function createLagerBewegungAction(input: unknown): Promise<ActionR
         ? Math.abs(quantity)
         : quantity;
 
+    // A valid, already persisted receipt remains replayable during a later
+    // rollout/configuration incident. Only new writes depend on the full write
+    // capability.
+    const [persisted] = await db
+      .select(directMovementSelection)
+      .from(stockMovements)
+      .where(eq(stockMovements.id, clientRequestId))
+      .limit(1);
+    if (persisted) {
+      return {
+        ok: true,
+        data: replayDirectMovement(persisted, actor.data, {
+          inventoryItemId: value.inventoryItemId as string,
+          movementType,
+          quantity: delta,
+          reason,
+          orderId: typeof orderId === "string" ? orderId : undefined,
+        }),
+      };
+    }
+
+    if (!await readInventoryWriteCapability()) throw new Error("INVENTORY_WRITE_ADAPTER_UNAVAILABLE");
+
     const result = await db.transaction(async (tx) => {
-      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${clientRequestId}, 0))`);
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${actor.data.tenantId}:inventory:${clientRequestId}`}, 0))`);
+
+      const [existing] = await tx
+        .select(directMovementSelection)
+        .from(stockMovements)
+        .where(eq(stockMovements.id, clientRequestId))
+        .limit(1);
+      if (existing) {
+        return replayDirectMovement(existing, actor.data, {
+          inventoryItemId: value.inventoryItemId as string,
+          movementType,
+          quantity: delta,
+          reason,
+          orderId: typeof orderId === "string" ? orderId : undefined,
+        });
+      }
 
       const [item] = await tx
         .select({
@@ -415,51 +483,6 @@ export async function createLagerBewegungAction(input: unknown): Promise<ActionR
         .limit(1)
         .for("update");
       if (!item) throw new Error("ITEM_NOT_FOUND");
-
-      const [existing] = await tx
-        .select({
-          id: stockMovements.id,
-          tenantId: stockMovements.tenantId,
-          inventoryItemId: stockMovements.inventoryItemId,
-          movementType: stockMovements.movementType,
-          quantity: stockMovements.quantity,
-          orderId: stockMovements.orderId,
-          reason: stockMovements.reason,
-          erfasstVon: stockMovements.erfasstVon,
-          createdAt: stockMovements.createdAt,
-        })
-        .from(stockMovements)
-        .where(eq(stockMovements.id, clientRequestId))
-        .limit(1);
-      if (existing) {
-        const existingQuantity = parseInventoryMovementQuantity(Number(existing.quantity));
-        if (
-          existing.tenantId !== actor.data.tenantId
-          || existing.inventoryItemId !== item.id
-          || existing.movementType !== movementType
-          || existingQuantity !== delta
-          || (existing.reason || "") !== reason
-          || (existing.orderId || undefined) !== orderId
-          || existing.erfasstVon !== actor.data.userId
-        ) {
-          throw new Error("REQUEST_CONFLICT");
-        }
-        return {
-          ...movementResponse({
-            id: existing.id,
-            inventoryItemId: existing.inventoryItemId,
-            movementType: existing.movementType,
-            quantity: existing.quantity,
-            orderId: existing.orderId,
-            reason: existing.reason,
-            erfasstVon: existing.erfasstVon,
-            createdAt: existing.createdAt,
-            unit: item.unit,
-            actorName: actor.data.displayName,
-          }),
-          replayed: true,
-        };
-      }
 
       const stockScaleRows = await tx.execute(inventoryStockScaleQuery);
       const quantityDecimals = inventoryQuantityDecimals(stockScaleRows[0]);
@@ -503,8 +526,10 @@ export async function createLagerBewegungAction(input: unknown): Promise<ActionR
           inventoryItemId: item.id,
           movementType,
           quantity: String(delta),
+          unit: item.unit.trim(),
           reason: reason || null,
           orderId: typeof orderId === "string" ? orderId : null,
+          createdBy: actor.data.userId,
           erfasstVon: actor.data.userId,
           createdAt: occurredAt,
         })
@@ -513,6 +538,7 @@ export async function createLagerBewegungAction(input: unknown): Promise<ActionR
           inventoryItemId: stockMovements.inventoryItemId,
           movementType: stockMovements.movementType,
           quantity: stockMovements.quantity,
+          unit: stockMovements.unit,
           orderId: stockMovements.orderId,
           reason: stockMovements.reason,
           erfasstVon: stockMovements.erfasstVon,
@@ -521,7 +547,7 @@ export async function createLagerBewegungAction(input: unknown): Promise<ActionR
 
       if (!movement) throw new Error("MOVEMENT_NOT_CONFIRMED");
       return {
-        ...movementResponse({ ...movement, unit: item.unit, actorName: actor.data.displayName }),
+        ...movementResponse({ ...movement, actorName: actor.data.displayName }),
         replayed: false,
       };
     });
