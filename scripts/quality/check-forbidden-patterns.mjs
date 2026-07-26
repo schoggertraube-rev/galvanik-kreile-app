@@ -37,17 +37,25 @@ function readLines(filePath) {
   return readFileSync(absolutePath, "utf8").split(/\r?\n/);
 }
 
+function isTestOnlyPath(filePath) {
+  const normalized = filePath.replaceAll("\\", "/");
+  return (
+    /(^|\/)(__tests__|__mocks__|mocks?)\//.test(normalized) ||
+    /\.(test|spec)\.[cm]?[jt]sx?$/.test(normalized)
+  );
+}
+
 function isProductionPath(filePath) {
   const normalized = filePath.replaceAll("\\", "/");
   if (!/^(src|supabase\/functions)\//.test(normalized)) return false;
-  if (/(^|\/)(__tests__|__mocks__|mocks?)\//.test(normalized)) return false;
-  if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(normalized)) return false;
+  if (isTestOnlyPath(filePath)) return false;
   if (/\.(bak|disabled)$/.test(normalized)) return false;
   return true;
 }
 
 function isClientFacingPath(filePath, lines) {
   const normalized = filePath.replaceAll("\\", "/");
+  if (isTestOnlyPath(filePath)) return false;
   if (/^src\/components\//.test(normalized)) return true;
   if (/^src\/app\/.+\.(tsx|jsx)$/.test(normalized)) return true;
   if (normalized.toLowerCase().includes("dto")) return true;

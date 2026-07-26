@@ -124,25 +124,39 @@ Die drei geskippten Tests benötigen eine ausdrücklich konfigurierte Integratio
 
 Alle folgenden Dateien sind absichtlich `prepared_unapplied`. Keine davon wurde remote ausgeführt:
 
-1. `20260714000100_payment_idempotency_prepared_unapplied.sql`
-2. `20260714000200_pin_bcrypt_prepared_unapplied.sql`
-3. `20260715000100_security_rate_limit_index_prepared_unapplied.sql`
-4. `20260715000200_buchhaltung_receipt_storage_prepared_unapplied.sql`
-5. `20260715000300_ai_usage_ledger_prepared_unapplied.sql`
-6. `20260715000400_item_photo_jobs_prepared_unapplied.sql`
-7. `20260715000500_finance_server_boundary_prepared_unapplied.sql`
-8. `20260715000600_marketing_server_boundary_prepared_unapplied.sql`
-9. `20260715000700_marketing_connector_prepared_unapplied.sql`
-10. `20260715000800_email_delivery_ledger_prepared_unapplied.sql`
-11. `20260715000900_usage_telemetry_prepared_unapplied.sql`
-12. `20260715001000_period_close_prepared_unapplied.sql`
-13. `20260715001100_developer_feedback_prepared_unapplied.sql`
-14. `20260715001200_operational_events_prepared_unapplied.sql`
-15. `20260715001300_operational_server_boundary_prepared_unapplied.sql`
-16. `20260715001400_ocr_confidence_percent_prepared_unapplied.sql`
-17. `20260715001500_invoice_number_uniqueness_prepared_unapplied.sql`
-18. `20260715001600_capture_integrity_prepared_unapplied.sql`
-19. `20260715001700_operator_control_plane_prepared_unapplied.sql`
+1. `20260714000050_operational_events_payment_prerequisite_prepared_unapplied.sql`
+2. `20260714000100_payment_idempotency_prepared_unapplied.sql`
+3. `20260714000200_pin_bcrypt_prepared_unapplied.sql`
+4. `20260715000100_security_rate_limit_index_prepared_unapplied.sql`
+5. `20260715000200_buchhaltung_receipt_storage_prepared_unapplied.sql`
+6. `20260715000300_ai_usage_ledger_prepared_unapplied.sql`
+7. `20260715000400_item_photo_jobs_prepared_unapplied.sql`
+8. `20260715000500_finance_server_boundary_prepared_unapplied.sql`
+9. `20260715000550_marketing_source_contract_prepared_unapplied.sql`
+10. `20260715000575_marketing_tenant_relationships_prepared_unapplied.sql`
+11. `20260715000600_marketing_server_boundary_prepared_unapplied.sql`
+12. `20260715000700_marketing_connector_prepared_unapplied.sql`
+13. `20260715000800_email_delivery_ledger_prepared_unapplied.sql`
+14. `20260715000900_usage_telemetry_prepared_unapplied.sql`
+15. `20260715001000_period_close_prepared_unapplied.sql`
+16. `20260715001100_developer_feedback_prepared_unapplied.sql`
+17. `20260715001150_operational_events_source_prepared_unapplied.sql`
+18. `20260715001200_operational_events_prepared_unapplied.sql`
+19. `20260715001300_operational_server_boundary_prepared_unapplied.sql`
+20. `20260715001400_ocr_confidence_percent_prepared_unapplied.sql`
+21. `20260715001500_invoice_number_uniqueness_prepared_unapplied.sql`
+22. `20260715001550_inventory_contract_reconciliation_prepared_unapplied.sql`
+23. `20260715001600_capture_integrity_prepared_unapplied.sql`
+24. `20260715001620_operational_source_contracts_prepared_unapplied.sql`
+25. `20260715001625_operational_core_boundary_prepared_unapplied.sql`
+26. `20260715001650_capture_template_projection_reconciliation_prepared_unapplied.sql`
+27. `20260715001660_analytics_truth_contracts_prepared_unapplied.sql`
+28. `20260715001670_finance_truth_contracts_prepared_unapplied.sql`
+29. `20260715001700_operator_control_plane_prepared_unapplied.sql`
+30. `20260716000100_station_completion_receipt_prepared_unapplied.sql`
+31. `20260716000200_calendar_price_boundary_prepared_unapplied.sql`
+32. `20260720000100_scan_original_receipt_prepared_unapplied.sql`
+33. `20260720000200_phase2_public_rls_remediation_prepared_unapplied.sql`
 
 ## Echte externe Restgrenzen
 

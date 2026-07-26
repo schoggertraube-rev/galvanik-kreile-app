@@ -1,7 +1,7 @@
 # Datenbank-Runtime: Provisionierung und Deployment-Gate
 
-Status: vorbereitet, nicht remote angewendet  
-Ziel-Tenant: `galvanik-kreile`  
+Status: vorbereitet, nicht remote angewendet<br>
+Ziel-Tenant: `galvanik-kreile`<br>
 Mindestversion: PostgreSQL 16
 
 Dieses Dokument beschreibt die Infrastrukturvoraussetzungen fuer die

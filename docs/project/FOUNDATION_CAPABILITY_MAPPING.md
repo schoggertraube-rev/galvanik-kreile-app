@@ -1,6 +1,6 @@
 # Foundation Capability Mapping
 
-Stand: 2026-07-20  
+Stand: 2026-07-20<br>
 Technische Basis: `165d0d68c564198f6e4108c52c8c6b4560f57a53`
 
 Diese Datei ist die lesbare Projektion von `docs/project/FOUNDATION_CAPABILITIES.json`. Das JSON ist die kanonische, testgesicherte Lieferwahrheit. Es verknuepft die erhaltenen Ideen und Nutzer-Twins mit stabilen Capability-IDs, Code-/Testbelegen, ehrlichem Status und dem spaeteren Sichtbarkeitsziel.

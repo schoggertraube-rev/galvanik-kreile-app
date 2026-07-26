@@ -47,7 +47,7 @@ const CONFIRMED_RECEIPT_STATUSES = ['festgeschrieben'] as const
 export async function listBelegeAction(filter?: BelegFilter): Promise<Beleg[]> {
   await requireFinanceRead()
   const supabase = createSupabaseServiceClient()
-  
+
   let query = supabase.from('beleg').select('*').order('erstellt_am', { ascending: false })
   
   if (filter?.status) {
@@ -1314,7 +1314,7 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
     if (!Number.isFinite(taxAmount)) throw new Error('FINANCE_RECEIPT_TAX_INVALID');
     return sum + taxAmount * (percentage / 100);
   }, 0);
-  
+
   const scheduledCosts = kosten.map((cost) => ({
     cost,
     amount: recurringCostInRange(cost, von, bis),

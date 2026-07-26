@@ -141,11 +141,22 @@ CREATE INDEX IF NOT EXISTS idx_payments_intent ON payments(provider_intent_id);
 
 -- 6. Payments RLS
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "payments_all" ON payments FOR ALL TO public USING (true) WITH CHECK (true);
+ALTER TABLE payments FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "payments_all" ON payments;
+REVOKE ALL ON TABLE payments FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT ON TABLE payments TO service_role;
+
 ALTER TABLE price_lines ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "price_lines_all" ON price_lines FOR ALL TO public USING (true) WITH CHECK (true);
+ALTER TABLE price_lines FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "price_lines_all" ON price_lines;
+REVOKE ALL ON TABLE price_lines FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT ON TABLE price_lines TO service_role;
+
 ALTER TABLE email_templates ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "email_templates_all" ON email_templates FOR ALL TO public USING (true) WITH CHECK (true);
+ALTER TABLE email_templates FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "email_templates_all" ON email_templates;
+REVOKE ALL ON TABLE email_templates FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT ON TABLE email_templates TO service_role;
 
 -- 7. Ausgangsrechnung Payment
 ALTER TABLE ausgangsrechnung 

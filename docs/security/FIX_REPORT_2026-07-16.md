@@ -62,4 +62,4 @@ The same reviewer confirmed all four addenda closed and reported no remaining P1
 
 ## External rollout boundary
 
-Live closure of `FIXED_LOCAL_ROLLOUT_REQUIRED` rows requires a separately approved rollout: backups and conflict preflight, migrations `20260714000100` through `20260715001700`, least-privileged runtime roles, RLS verification, required high-entropy secrets, Edge/Next deployment, real provider integration tests and rollback evidence. No such remote mutation was performed in this remediation.
+Live closure of `FIXED_LOCAL_ROLLOUT_REQUIRED` rows requires a separately approved rollout: backups and conflict preflight, all files marked `prepared_unapplied` from `20260714000050` through `20260720000200`, least-privileged runtime roles, RLS verification, required high-entropy secrets, Edge/Next deployment, real provider integration tests and rollback evidence. No such remote mutation was performed in this remediation.

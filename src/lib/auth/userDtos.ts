@@ -18,10 +18,6 @@ export type AdminUserDto = {
   language: string | null;
 };
 
-export type AdminUserSource = AdminUserDto & {
-  pinHash?: string | null;
-};
-
 export function deriveUserInitials(fullName: string): string {
   const normalized = fullName.trim();
   if (!normalized) return "?";
@@ -41,7 +37,7 @@ export function toStartUserDto(user: StartUserSource): StartUserDto {
   };
 }
 
-export function toAdminUserDto(user: AdminUserSource): AdminUserDto {
+export function toAdminUserDto(user: AdminUserDto): AdminUserDto {
   return {
     id: user.id,
     email: user.email,

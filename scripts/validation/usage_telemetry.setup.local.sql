@@ -17,5 +17,9 @@ CREATE TABLE public.ui_events (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.ui_events ENABLE ROW LEVEL SECURITY;
-CREATE POLICY ui_events_open ON public.ui_events FOR ALL TO public USING (true) WITH CHECK (true);
+-- The fixture stays fail-closed even when it is accidentally run outside the
+-- disposable validation database. The remediation still has to remove an
+-- existing policy and all legacy browser grants.
+CREATE POLICY ui_events_legacy_deny ON public.ui_events
+  FOR ALL TO public USING (false) WITH CHECK (false);
 GRANT ALL ON TABLE public.ui_events TO anon, authenticated, service_role;
