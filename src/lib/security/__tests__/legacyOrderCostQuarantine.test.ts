@@ -47,4 +47,20 @@ describe("legacy order-cost quarantine", () => {
     expect(modal).toContain("completeStationCapture");
     expect(modal).not.toContain("bookStationCosts");
   });
+
+  it("keeps the quarantined legacy server actions fail closed and side-effect free", () => {
+    const actions = readFileSync(join(root, "src/features/orders/orderCost.actions.ts"), "utf8");
+    const legacyVariant = readFileSync(
+      join(root, "src/components/orders/variants/ErfassungVariant.tsx"),
+      "utf8",
+    );
+
+    expect(actions).toContain("LEGACY_ORDER_COST_FLOW_RETIRED");
+    expect(actions).toContain("success: false");
+    expect(actions).not.toContain("createClient");
+    expect(actions).not.toContain("db.transaction");
+    expect(actions).not.toContain(".insert(");
+    expect(legacyVariant).toContain("!benchRes.available || !summaryRes.available");
+    expect(legacyVariant).not.toContain("00000000-0000-0000-0000-000000000000");
+  });
 });

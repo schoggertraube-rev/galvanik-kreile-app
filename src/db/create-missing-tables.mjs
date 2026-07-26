@@ -1,6 +1,14 @@
 import postgres from 'postgres';
 import { config } from 'dotenv';
 
+function refuseRetiredBootstrap() {
+  throw new Error(
+    "RETIRED_DESTRUCTIVE_SCHEMA_BOOTSTRAP: use reviewed Supabase migrations; this script must never connect or drop tables.",
+  );
+}
+
+refuseRetiredBootstrap();
+
 config({ path: '.env.local' });
 
 const connectionString = process.env.DATABASE_URL;

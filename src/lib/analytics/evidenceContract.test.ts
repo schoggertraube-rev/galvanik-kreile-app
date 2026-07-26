@@ -167,6 +167,83 @@ describe("ClaimEvidenceV1", () => {
     expect(claimEvidenceV1Schema.safeParse(evidence).success).toBe(false);
   });
 
+  it("reconciles rounded percentages and averages to their exact source contributions", () => {
+    const ratio = readyEvidence();
+    ratio.claim = {
+      ...ratio.claim,
+      id: "workshop.delivery_reliability",
+      value: 100,
+      unit: "percent",
+      formulaId: "workshop.delivery_reliability.v1",
+    };
+    ratio.inputs[0] = {
+      ...ratio.inputs[0],
+      id: "completed_orders_with_promised_due_date",
+      value: 1,
+      unit: "orders",
+    };
+    ratio.sourceRecords[0].contribution = 1;
+    ratio.coverage = { included: 1, excluded: 0, unresolved: 0, notes: [] };
+    ratio.reconciliation = {
+      method: "ratio_percent",
+      tolerance: 1e-9,
+      decimals: 1,
+      denominator: 1,
+    };
+    expect(claimEvidenceV1Schema.safeParse(ratio).success).toBe(true);
+
+    const wrongRatio = structuredClone(ratio);
+    wrongRatio.claim.value = 93.4;
+    expect(claimEvidenceV1Schema.safeParse(wrongRatio).success).toBe(false);
+
+    const invalidRatioContribution = structuredClone(ratio);
+    invalidRatioContribution.sourceRecords[0].contribution = 0.5;
+    expect(claimEvidenceV1Schema.safeParse(invalidRatioContribution).success).toBe(false);
+
+    const average = structuredClone(ratio);
+    average.claim = {
+      ...average.claim,
+      id: "workshop.average_cycle_days",
+      value: 2,
+      unit: "days",
+      formulaId: "workshop.average_cycle_days.v1",
+    };
+    average.sourceRecords[0].contribution = 2;
+    average.reconciliation = {
+      method: "average",
+      tolerance: 1e-9,
+      decimals: 1,
+      denominator: 1,
+    };
+    expect(claimEvidenceV1Schema.safeParse(average).success).toBe(true);
+
+    const impossibleAverage = structuredClone(average);
+    impossibleAverage.sourceRecords[0].contribution = -1;
+    expect(claimEvidenceV1Schema.safeParse(impossibleAverage).success).toBe(false);
+  });
+
+  it("rejects unreconciled ready values while allowing an explicitly partial aggregate", () => {
+    const ready = readyEvidence();
+    ready.reconciliation = { method: "none", tolerance: 0 };
+    expect(claimEvidenceV1Schema.safeParse(ready).success).toBe(false);
+
+    ready.claim.state = "partial";
+    ready.inputs[0].state = "partial";
+    ready.coverage = { included: 2, excluded: 0, unresolved: 1, notes: ["Ein Beleg fehlt."] };
+    ready.missing = [{
+      inputId: ready.inputs[0].id,
+      reasonCode: "detail_limit",
+      description: "Ein Datensatz ist im Aggregat enthalten, aber nicht als Einzelbeleg ausgeliefert.",
+      captureOptions: [{
+        mode: "source_record",
+        status: "blocked",
+        capabilityId: "KI-DECISION-ANALYTICS-001",
+        reason: "Die Detailausgabe ist begrenzt.",
+      }],
+    }];
+    expect(claimEvidenceV1Schema.safeParse(ready).success).toBe(true);
+  });
+
   it("requires a comparison to carry its own period and evidence", () => {
     const evidence = readyEvidence();
     evidence.comparison = {
@@ -199,6 +276,12 @@ describe("ClaimEvidenceV1", () => {
     fakeCapture.missing[0].captureOptions[0].status = "blocked";
     fakeCapture.missing[0].captureOptions[0].reason = "Der Connector ist noch nicht konfiguriert.";
     expect(claimEvidenceV1Schema.safeParse(fakeCapture).success).toBe(false);
+
+    for (const href of ["/%2f%2fevil.example", "/%5cevil.example", "/%00control"]) {
+      const unsafe = readyEvidence();
+      unsafe.linkedEntities[0].href = href;
+      expect(claimEvidenceV1Schema.safeParse(unsafe).success).toBe(false);
+    }
   });
 
   it("requires hypotheses to disclose sources, assumptions, and confidence", () => {

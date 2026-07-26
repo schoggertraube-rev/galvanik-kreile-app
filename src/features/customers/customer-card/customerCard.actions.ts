@@ -186,7 +186,7 @@ export async function getCustomerTimeline(customerId: string) {
         subtitle: entry.events.description,
         timestamp: entry.events.createdAt.toISOString(),
         relatedOrderId: entry.events.orderId,
-        severity: entry.events.status === "error" ? "critical" : "neutral",
+        severity: entry.events.status === "warning" ? "critical" : "neutral",
       });
     }
 

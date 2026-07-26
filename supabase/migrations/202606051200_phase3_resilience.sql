@@ -5,8 +5,14 @@ ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "marketing_opt_out" boolean DEF
 ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "last_reactivated_at" timestamp;
 
 -- 2. Extend Events
-ALTER TABLE "events" ADD COLUMN IF NOT EXISTS "payload" jsonb;
-ALTER TABLE "events" ADD COLUMN IF NOT EXISTS "status" varchar(50) DEFAULT 'success';
+DO $events$
+BEGIN
+  IF to_regclass('public.events') IS NOT NULL THEN
+    ALTER TABLE public.events ADD COLUMN IF NOT EXISTS payload jsonb;
+    ALTER TABLE public.events ADD COLUMN IF NOT EXISTS status varchar(50) DEFAULT 'success';
+  END IF;
+END
+$events$;
 
 -- 3. Offline Outbox
 CREATE TABLE IF NOT EXISTS "offline_outbox" (

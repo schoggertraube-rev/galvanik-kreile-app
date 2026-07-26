@@ -5,8 +5,13 @@ ALTER TABLE orders
   ADD COLUMN IF NOT EXISTS intake_date timestamptz DEFAULT now(), 
   ADD COLUMN IF NOT EXISTS completed_date timestamptz;
 
-ALTER TABLE events 
-  ADD COLUMN IF NOT EXISTS station text;
+DO $events$
+BEGIN
+  IF to_regclass('public.events') IS NOT NULL THEN
+    ALTER TABLE public.events ADD COLUMN IF NOT EXISTS station text;
+  END IF;
+END
+$events$;
 
 CREATE TABLE IF NOT EXISTS communications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

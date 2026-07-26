@@ -131,7 +131,7 @@ function countClaim(snapshot: WorkshopEvidenceSnapshot, definition: CountClaimDe
     claim: {
       id: definition.id,
       label: definition.label,
-      truthClass: "A",
+      truthClass: "B",
       state,
       value: definition.total,
       unit: "orders",
@@ -173,6 +173,7 @@ function missingMetricClaim(
     inputLabel: string;
     reasonCode: string;
     reason: string;
+    captureBlockedReason: string;
     rows: WorkshopEvidenceOrder[];
     fields: string[];
   },
@@ -183,7 +184,7 @@ function missingMetricClaim(
     claim: {
       id: definition.id,
       label: definition.label,
-      truthClass: "A",
+      truthClass: "E",
       state: "missing_input",
       value: null,
       unit: definition.unit,
@@ -214,14 +215,15 @@ function missingMetricClaim(
       description: definition.reason,
       captureOptions: [{
         mode: "source_record",
-        status: "available",
+        status: "blocked",
         capabilityId: ANALYTICS_CAPABILITY,
+        reason: definition.captureBlockedReason,
         action: {
           id: `capture:${definition.inputId}`,
           label: "Betroffene Aufträge prüfen",
           kind: "capture",
-          enabled: true,
-          href: "/orders",
+          enabled: false,
+          disabledReason: definition.captureBlockedReason,
           capabilityId: ANALYTICS_CAPABILITY,
         },
       }],
@@ -248,6 +250,8 @@ function ratioOrAverageClaim(
     contribution: (row: WorkshopEvidenceOrder) => number | null;
     missingReasonCode: string;
     missingReason: string;
+    captureBlockedReason: string;
+    reconciliationMethod: "ratio_percent" | "average";
   },
 ): ClaimEvidenceV1 {
   if (definition.denominator === 0 || definition.value === null) {
@@ -273,7 +277,7 @@ function ratioOrAverageClaim(
     claim: {
       id: definition.id,
       label: definition.label,
-      truthClass: "A",
+      truthClass: "B",
       state,
       value: definition.value,
       unit: definition.unit,
@@ -297,7 +301,14 @@ function ratioOrAverageClaim(
       unresolved,
       notes: unresolved > 0 ? ["Einbezogene Aufträge außerhalb der begrenzten Detailausgabe sind noch nicht einzeln ausgeliefert."] : [],
     },
-    reconciliation: { method: "none", tolerance: 0 },
+    reconciliation: state === "partial"
+      ? { method: "none", tolerance: 0 }
+      : {
+          method: definition.reconciliationMethod,
+          tolerance: 1e-9,
+          decimals: 1,
+          denominator: definition.denominator,
+        },
     missing: unresolved > 0 ? detailLimitMissing(definition.inputId, unresolved) : [],
     linkedEntities: records.map((record) => record.detail),
   });
@@ -307,7 +318,11 @@ export function buildWorkshopEvidence(snapshot: WorkshopEvidenceSnapshot): Claim
   const completedRows = snapshot.rows.filter((row) => row.completedInPeriod);
   const activeRows = snapshot.rows.filter((row) => row.active);
   const completedWithDueDate = completedRows.filter((row) => row.promisedDueDate !== null);
-  const completedWithCycleTime = completedRows.filter((row) => row.intakeDate !== null && row.completedDate !== null);
+  const completedWithCycleTime = completedRows.filter((row) => (
+    row.intakeDate !== null
+    && row.completedDate !== null
+    && new Date(row.completedDate).getTime() >= new Date(row.intakeDate).getTime()
+  ));
   const now = new Date(snapshot.now).getTime();
   const overdueRows = activeRows.filter((row) => row.promisedDueDate !== null && new Date(row.promisedDueDate).getTime() < now);
   const withoutDueDateRows = activeRows.filter((row) => row.promisedDueDate === null);
@@ -330,6 +345,8 @@ export function buildWorkshopEvidence(snapshot: WorkshopEvidenceSnapshot): Claim
         ? (new Date(row.completedDate).getTime() <= new Date(row.promisedDueDate).getTime() ? 1 : 0)
         : null,
       missingReasonCode: "promised_due_date_missing",
+      captureBlockedReason: "Kein direkt erreichbarer und berechtigungsgepruefter Zusagetermin-Editor ist im aktiven Auftragsdetail verbunden.",
+      reconciliationMethod: "ratio_percent",
       missingReason: "Ohne abgeschlossene Aufträge mit explizitem Zusagetermin ist Termintreue nicht berechenbar.",
     }),
     ratioOrAverageClaim(snapshot, {
@@ -349,6 +366,8 @@ export function buildWorkshopEvidence(snapshot: WorkshopEvidenceSnapshot): Claim
         ? (new Date(row.completedDate).getTime() - new Date(row.intakeDate).getTime()) / 86_400_000
         : null,
       missingReasonCode: "intake_date_missing",
+      captureBlockedReason: "Fuer die bestaetigte Eingangszeit existiert noch kein auditierter Korrekturworkflow.",
+      reconciliationMethod: "average",
       missingReason: "Ohne abgeschlossene Aufträge mit bestätigter Eingangszeit ist die Durchlaufzeit nicht berechenbar.",
     }),
     countClaim(snapshot, {

@@ -5,12 +5,13 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { events, items, orders } from "@/db/schema";
 import {
+  DOCUMENTARY_OPERATIONAL_EVENT_TYPES,
+  isPersistedOperationalEventType,
   parseEventLimit,
   parseOperationalEntityId,
   parseOperationalEvent,
   type CreateOperationalEventInput,
-  type OperationalEventMetadata,
-  type OperationalEventType,
+  type PersistedOperationalEventType,
 } from "@/lib/events/operationalEventContract";
 import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 
@@ -18,11 +19,11 @@ const TENANT_ID = "galvanik-kreile";
 
 export type OperationalEventReceipt = {
   id: string;
-  clientEventId: string;
+  clientEventId: string | null;
   orderId: string;
   itemId?: string;
-  eventType: OperationalEventType;
-  metadata?: OperationalEventMetadata;
+  eventType: PersistedOperationalEventType;
+  metadata?: Record<string, unknown>;
   createdAt: string;
   replayed: boolean;
 };
@@ -30,12 +31,6 @@ export type OperationalEventReceipt = {
 export type OperationalEventResult<T> =
   | { ok: true; data: T }
   | { ok: false; error: "UNAUTHORIZED" | "FORBIDDEN" | "INVALID_INPUT" | "NOT_FOUND" | "CONFLICT" | "STORAGE_UNAVAILABLE"; message: string };
-
-const DOCUMENTARY_EVENT_TYPES: readonly OperationalEventType[] = [
-  "LABEL_PREPARED",
-  "PHOTO_CAPTURED",
-  "NOTE_ADDED",
-];
 
 function authorize(snapshot: Awaited<ReturnType<typeof resolveAuthorization>>, permission: "perm_op_status" | "perm_view_leitstand"): OperationalEventResult<AuthorizationSnapshot> {
   if (!snapshot.ok) return { ok: false, error: "UNAUTHORIZED", message: "Anmeldung erforderlich." };
@@ -54,13 +49,16 @@ function receipt(row: {
   payload: Record<string, unknown> | null;
   createdAt: Date;
 }, replayed: boolean): OperationalEventReceipt {
+  if (!isPersistedOperationalEventType(row.eventType)) {
+    throw new Error("UNKNOWN_PERSISTED_OPERATIONAL_EVENT");
+  }
   return {
     id: row.id,
-    clientEventId: row.clientEventId || "",
+    clientEventId: row.clientEventId,
     orderId: row.orderId,
     ...(row.itemId ? { itemId: row.itemId } : {}),
-    eventType: row.eventType as OperationalEventType,
-    ...(row.payload ? { metadata: row.payload as OperationalEventMetadata } : {}),
+    eventType: row.eventType,
+    ...(row.payload ? { metadata: row.payload } : {}),
     createdAt: new Date(row.createdAt).toISOString(),
     replayed,
   };
@@ -86,7 +84,9 @@ export async function createStatusEvent(value: unknown): Promise<OperationalEven
   } catch {
     return { ok: false, error: "INVALID_INPUT", message: "Ungültiges Betriebsereignis." };
   }
-  if (!DOCUMENTARY_EVENT_TYPES.includes(input.eventType)) {
+  if (!DOCUMENTARY_OPERATIONAL_EVENT_TYPES.includes(
+    input.eventType as typeof DOCUMENTARY_OPERATIONAL_EVENT_TYPES[number],
+  )) {
     return {
       ok: false,
       error: "FORBIDDEN",
@@ -158,7 +158,7 @@ async function readEvents(actor: AuthorizationSnapshot, where: ReturnType<typeof
       eq(events.tenantId, actor.tenantId),
       where,
     )).orderBy(desc(events.createdAt)).limit(limit);
-    return { ok: true, data: rows.filter((row) => row.clientEventId !== null).map((row) => receipt(row, false)) };
+    return { ok: true, data: rows.map((row) => receipt(row, false)) };
   } catch {
     return { ok: false, error: "STORAGE_UNAVAILABLE", message: "Ereignisse konnten nicht geladen werden." };
   }

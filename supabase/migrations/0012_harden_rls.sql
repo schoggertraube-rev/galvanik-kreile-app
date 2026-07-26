@@ -19,27 +19,33 @@ CREATE POLICY tenant_isolation_orders ON orders
 -- ==========================================
 -- 2. events
 -- ==========================================
--- Note: schema.ts uses 'events', earlier migrations used 'status_events'. 
--- We apply this to 'events' (assuming the table was renamed or is 'events').
-DROP POLICY IF EXISTS "service_role_all_events" ON events;
-DROP POLICY IF EXISTS "auth_read_events" ON events;
-DROP POLICY IF EXISTS "tenant_isolation_events" ON events;
-
-CREATE POLICY tenant_isolation_events ON events
-  FOR ALL TO public
-  USING (tenant_id = current_setting('app.tenant_id', true))
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
-
--- Try for status_events just in case it wasn't renamed in DB
-DO $$
+-- Legacy migration history did not create public.events. Guard this historical
+-- policy step; the canonical server-only event boundary is established later.
+DO $events$
 BEGIN
-  IF to_regclass('public.status_events') IS NOT NULL THEN
-    EXECUTE 'DROP POLICY IF EXISTS "service_role_all_events" ON status_events';
-    EXECUTE 'DROP POLICY IF EXISTS "auth_read_events" ON status_events';
-    EXECUTE 'DROP POLICY IF EXISTS "tenant_isolation_status_events" ON status_events';
-    EXECUTE 'CREATE POLICY tenant_isolation_status_events ON status_events FOR ALL TO public USING (tenant_id = current_setting(''app.tenant_id'', true)) WITH CHECK (tenant_id = current_setting(''app.tenant_id'', true))';
+  IF to_regclass('public.events') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'events' AND column_name = 'tenant_id'
+     ) THEN
+    EXECUTE 'DROP POLICY IF EXISTS "service_role_all_events" ON public.events';
+    EXECUTE 'DROP POLICY IF EXISTS "auth_read_events" ON public.events';
+    EXECUTE 'DROP POLICY IF EXISTS "tenant_isolation_events" ON public.events';
+    EXECUTE 'CREATE POLICY tenant_isolation_events ON public.events FOR ALL TO public USING (tenant_id = current_setting(''app.tenant_id'', true)) WITH CHECK (tenant_id = current_setting(''app.tenant_id'', true))';
   END IF;
-END $$;
+
+  IF to_regclass('public.status_events') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'status_events' AND column_name = 'tenant_id'
+     ) THEN
+    EXECUTE 'DROP POLICY IF EXISTS "service_role_all_events" ON public.status_events';
+    EXECUTE 'DROP POLICY IF EXISTS "auth_read_events" ON public.status_events';
+    EXECUTE 'DROP POLICY IF EXISTS "tenant_isolation_status_events" ON public.status_events';
+    EXECUTE 'CREATE POLICY tenant_isolation_status_events ON public.status_events FOR ALL TO public USING (tenant_id = current_setting(''app.tenant_id'', true)) WITH CHECK (tenant_id = current_setting(''app.tenant_id'', true))';
+  END IF;
+END
+$events$;
 
 -- ==========================================
 -- 3. inquiries (ensure WITH CHECK exists)

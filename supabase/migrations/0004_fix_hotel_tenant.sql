@@ -16,9 +16,13 @@ BEGIN
     END IF;
 
     -- 3. Tabelle 'events'
-    IF EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'events' AND column_name = 'tenant_id') THEN
-        ALTER TABLE events ALTER COLUMN tenant_id SET DEFAULT 'galvanik-kreile';
-        UPDATE events SET tenant_id = 'galvanik-kreile' WHERE tenant_id = 'hotel-kreile';
+    IF to_regclass('public.events') IS NOT NULL
+       AND EXISTS (
+         SELECT FROM information_schema.columns
+         WHERE table_schema = 'public' AND table_name = 'events' AND column_name = 'tenant_id'
+       ) THEN
+        ALTER TABLE public.events ALTER COLUMN tenant_id SET DEFAULT 'galvanik-kreile';
+        UPDATE public.events SET tenant_id = 'galvanik-kreile' WHERE tenant_id = 'hotel-kreile';
     END IF;
 
 END $$;

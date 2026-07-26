@@ -1,14 +1,17 @@
 import type { ClaimEvidenceV1 } from "@/lib/analytics/evidenceContract";
 
-export type AnalyseTileKey =
-  | "better_next"
-  | "werkstatt_puls"
-  | "umsatz_marge"
-  | "qualitaet_risiko"
-  | "baeder_material"
-  | "kunden_markt"
-  | "marketing_reaktivierung"
-  | "datenqualitaet";
+export const ANALYSE_TILE_KEYS = [
+  "better_next",
+  "werkstatt_puls",
+  "umsatz_marge",
+  "qualitaet_risiko",
+  "baeder_material",
+  "kunden_markt",
+  "marketing_reaktivierung",
+  "datenqualitaet",
+] as const;
+
+export type AnalyseTileKey = (typeof ANALYSE_TILE_KEYS)[number];
 
 export type AnalyseTileStatus =
   | "stable"

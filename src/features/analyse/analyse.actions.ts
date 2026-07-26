@@ -13,6 +13,10 @@ import type {
 } from "@/lib/analyse/dataContracts";
 import type { ClaimEvidenceV1 } from "@/lib/analytics/evidenceContract";
 import {
+  getAnalyseReturnTo,
+  type AnalysePeriod,
+} from "@/lib/analyse/routes";
+import {
   buildUnavailableAnalysisEvidence,
   buildWorkshopEvidence,
   type WorkshopEvidenceOrder,
@@ -25,7 +29,7 @@ const DAY_MS = 24 * 60 * 60 * 1_000;
 type AnalyseActor = { tenantId: string };
 type Period = {
   key: "today" | "week" | "month";
-  label: string;
+  label: AnalysePeriod;
   start: Date;
   end: Date;
 };
@@ -148,29 +152,31 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
   );
   const stationName = sql<string>`coalesce(${orders.currentStationId}, ${orders.station}, 'nicht_zugeordnet')`;
 
-  const [completedRows, openRows, stationRows, delayedOrders, missingDueOrders, evidenceRows] = await Promise.all([
-    db.select({
+  const [completedRows, openRows, stationRows, delayedOrders, missingDueOrders, evidenceRows] = await db.transaction(async (tx) => Promise.all([
+    tx.select({
       completedCount: sql<number>`count(*)::int`,
       dueDateMeasurable: sql<number>`count(*) filter (where ${promisedDueDate} is not null)::int`,
       deliveredOnTime: sql<number>`count(*) filter (
         where ${promisedDueDate} is not null and ${orders.completedDate} <= ${promisedDueDate}
       )::int`,
-      cycleMeasurable: sql<number>`count(*) filter (where ${orders.intakeDate} is not null)::int`,
+      cycleMeasurable: sql<number>`count(*) filter (
+        where ${orders.intakeDate} is not null and ${orders.completedDate} >= ${orders.intakeDate}
+      )::int`,
       averageCycleDays: sql<number | null>`avg(
         extract(epoch from (${orders.completedDate} - ${orders.intakeDate})) / 86400.0
-      ) filter (where ${orders.intakeDate} is not null)`,
+      ) filter (where ${orders.intakeDate} is not null and ${orders.completedDate} >= ${orders.intakeDate})`,
     }).from(orders).where(completedInPeriod),
-    db.select({
+    tx.select({
       openCount: sql<number>`count(*)::int`,
       withoutDueDate: sql<number>`count(*) filter (where ${promisedDueDate} is null)::int`,
       overdueCount: sql<number>`count(*) filter (where ${promisedDueDate} < ${now})::int`,
     }).from(orders).where(activeOrder),
-    db.select({ station: stationName, count: sql<number>`count(*)::int` })
+    tx.select({ station: stationName, count: sql<number>`count(*)::int` })
       .from(orders)
       .where(activeOrder)
       .groupBy(stationName)
       .orderBy(sql`count(*) desc`, stationName),
-    db.select({
+    tx.select({
       id: orders.id,
       orderNumber: orders.orderNumber,
       title: orders.title,
@@ -185,7 +191,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       eq(customers.tenantId, actor.tenantId),
     )).where(and(activeOrder, lt(promisedDueDate, now)))
       .orderBy(asc(promisedDueDate)).limit(10),
-    db.select({
+    tx.select({
       id: orders.id,
       orderNumber: orders.orderNumber,
       title: orders.title,
@@ -200,7 +206,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       eq(customers.tenantId, actor.tenantId),
     )).where(and(activeOrder, isNull(promisedDueDate)))
       .orderBy(asc(orders.createdAt)).limit(10),
-    db.select({
+    tx.select({
       id: orders.id,
       orderNumber: orders.orderNumber,
       title: orders.title,
@@ -215,7 +221,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       .where(or(activeOrder, completedInPeriod))
       .orderBy(asc(orders.createdAt), asc(orders.id))
       .limit(501),
-  ]);
+  ]), { isolationLevel: "repeatable read", accessMode: "read only" });
 
   const completed = completedRows[0];
   const open = openRows[0];
@@ -237,7 +243,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       ? "watch"
       : "stable";
   const maxStationCount = stationRows.reduce((maximum, row) => Math.max(maximum, Number(row.count)), 0);
-  const returnTo = "/performance?tile=werkstatt_puls";
+  const returnTo = getAnalyseReturnTo("werkstatt_puls", period.label);
   const calculatedAt = new Date();
 
   const mappedAffectedOrders: WerkstattPulsData["affectedOrders"] = [
@@ -316,10 +322,11 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
   const detail: WerkstattPulsData = {
     period: period.key,
     dataStatus: {
-      isLive: true,
+      isLive: false,
       lastUpdatedAt: calculatedAt.toISOString(),
       maturity: "S1",
       warnings: [
+        "Die Kennzahlen stammen aus einem konsistenten Datenbank-Snapshot, nicht aus einem Live-Stream.",
         ...(dueDateMeasurable === 0 ? ["Für abgeschlossene Aufträge fehlen im Zeitraum messbare Zusagetermine."] : []),
         ...(cycleMeasurable === 0 ? ["Für abgeschlossene Aufträge fehlen im Zeitraum messbare Eingangszeiten."] : []),
         "Stationswerte zeigen Bestände, keine Kapazitätsauslastung oder Wartezeit.",

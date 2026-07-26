@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { safeReturnTo } from "@/lib/navigation/safeReturnTo";
+import { parseSafeInternalPath, safeReturnTo } from "@/lib/navigation/safeReturnTo";
 import { buildHighlightedHtml } from "@/lib/security/highlightHtml";
 
 describe("safeReturnTo", () => {
@@ -11,8 +11,11 @@ describe("safeReturnTo", () => {
       "/%2f%2fevil.example",
       "/\\evil.example",
       "/%5cevil.example",
+      "/%00evil.example",
+      "/%0aevil.example",
     ]) {
       expect(safeReturnTo(value, "/fallback")).toBe("/fallback");
+      expect(parseSafeInternalPath(value)).toBeNull();
     }
   });
 });

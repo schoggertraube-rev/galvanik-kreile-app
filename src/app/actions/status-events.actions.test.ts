@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/server/authorization', () => ({ resolveAuthorization: mocks.resolveAuthorization }))
 vi.mock('@/db', () => ({ db: { select: mocks.select, insert: mocks.insert } }))
 
-import { createStatusEvent } from './status-events.actions'
+import { createStatusEvent, getRecentStatusEvents } from './status-events.actions'
 
 const valid = {
   clientEventId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
@@ -34,6 +34,16 @@ function insertResult(rows: unknown[]) {
     values: () => query,
     onConflictDoNothing: () => query,
     returning: () => Promise.resolve(rows),
+  }
+  return query
+}
+
+function readResult(rows: unknown[]) {
+  const query = {
+    from: () => query,
+    where: () => query,
+    orderBy: () => query,
+    limit: () => Promise.resolve(rows),
   }
   return query
 }
@@ -87,6 +97,30 @@ describe('operational event actions', () => {
         createdAt: '2026-07-15T12:00:00.000Z',
         replayed: false,
       },
+    })
+  })
+
+  it('retains legacy operational history without fabricating an idempotency key', async () => {
+    mocks.select.mockReturnValue(readResult([{
+      id: 'legacy-event',
+      clientEventId: null,
+      orderId: 'order-a',
+      itemId: null,
+      eventType: 'ORDER_CREATED',
+      payload: null,
+      createdAt: new Date('2026-06-01T08:00:00Z'),
+    }]))
+
+    await expect(getRecentStatusEvents()).resolves.toEqual({
+      ok: true,
+      data: [{
+        id: 'legacy-event',
+        clientEventId: null,
+        orderId: 'order-a',
+        eventType: 'ORDER_CREATED',
+        createdAt: '2026-06-01T08:00:00.000Z',
+        replayed: false,
+      }],
     })
   })
 

@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowLeft } from 'lucide-react';
 import './WerkstattPulsLevel2.css';
 import { WerkstattPulsData } from '@/lib/analyse/dataContracts';
+import type { ClaimEvidenceV1 } from '@/lib/analytics/evidenceContract';
 import { WerkstattPulsHero } from './WerkstattPulsHero';
 import { WerkstattPulsInsightBox } from './WerkstattPulsInsightBox';
 import { WerkstattPulsTrend } from './WerkstattPulsTrend';
@@ -12,13 +13,14 @@ import { WerkstattPulsFooter } from './WerkstattPulsFooter';
 
 interface Props {
   data: WerkstattPulsData;
+  evidence: ClaimEvidenceV1[];
   onClose: () => void;
 }
 
-export function WerkstattPulsLevel2({ data, onClose }: Props) {
+export function WerkstattPulsLevel2({ data, evidence, onClose }: Props) {
   const periodLabel = data.period === 'today' ? 'Heute' : data.period === 'week' ? 'Woche' : data.period === 'month' ? 'Monat' : 'Freier Zeitraum';
   return (
-    <div className="page" style={{ paddingTop: 0 }}>
+    <div className="page" style={{ paddingTop: 0 }} data-evidence-claims={evidence.length}>
       {/* BACK BUTTON */}
       <div style={{ marginBottom: 24, marginTop: 12 }}>
         <button onClick={onClose} className="flex items-center gap-2 text-[var(--ink-2)] hover:text-[var(--magenta)] transition-colors text-sm font-semibold">

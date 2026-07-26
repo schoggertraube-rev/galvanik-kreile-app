@@ -46,4 +46,18 @@ describe("operational order transition exclusivity", () => {
     expect(replay).toContain("scan.linkedCustomerId !== order.customerId");
     expect(replay).toContain("ORDER_RECEIPT_WITHOUT_SCAN_LINK");
   });
+
+  it("stores bounded route evidence instead of one duplicate entry per part", () => {
+    const create = serviceSection("export async function createOperationalOrderService");
+    expect(create).toContain("routeTemplateIds: [...new Set(");
+    expect(create).not.toContain("routeTemplates: validData.parts.map");
+  });
+
+  it("writes canonical creation events while retaining legacy replay compatibility", () => {
+    const create = serviceSection("export async function createOperationalOrderService");
+    const replay = serviceSection("async function findOrderCreationReplay", "export async function createOperationalOrderService");
+    expect(create).toContain('"ORDER_CREATED_FROM_SCAN"');
+    expect(create).toContain('"ORDER_CREATED_MANUAL"');
+    expect(replay).toContain('"ORDER_CREATED"');
+  });
 });

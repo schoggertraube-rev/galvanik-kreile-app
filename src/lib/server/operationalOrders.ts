@@ -193,7 +193,12 @@ async function findOrderCreationReplay(tenantId: string, clientRequestId: string
 
   const payload = receipt.payload;
   if (
-    (receipt.eventType !== "ORDER_CREATED" && receipt.eventType !== "QUOTE_CREATED")
+    ![
+      "ORDER_CREATED",
+      "ORDER_CREATED_FROM_SCAN",
+      "ORDER_CREATED_MANUAL",
+      "QUOTE_CREATED",
+    ].includes(receipt.eventType)
     || payload?.orderCreationContract !== "kreile-order-create/v1"
     || payload?.orderCreationHash !== requestHash
   ) {
@@ -423,13 +428,21 @@ export async function createOperationalOrderService(
       tenantId: actor.tenantId,
       clientEventId: validData.clientRequestId,
       orderId,
-      eventType: validData.isQuote ? "QUOTE_CREATED" : "ORDER_CREATED",
+      eventType: validData.isQuote
+        ? "QUOTE_CREATED"
+        : validData.source === "scan"
+          ? "ORDER_CREATED_FROM_SCAN"
+          : "ORDER_CREATED_MANUAL",
       description: validData.isQuote ? "Kostenvoranschlag erstellt" : "Auftrag erstellt",
       station: stationId,
       payload: {
         orderCreationContract: "kreile-order-create/v1",
         orderCreationHash: requestHash,
-        routeTemplates: validData.parts.map((part) => part.routeTemplateId ?? null),
+        routeTemplateIds: [...new Set(
+          validData.parts
+            .map((part) => part.routeTemplateId)
+            .filter((templateId): templateId is NonNullable<typeof templateId> => Boolean(templateId)),
+        )],
         ...(scanReceipt ? {
           scanOriginalReceipt: {
             scanId: scanReceipt.id,

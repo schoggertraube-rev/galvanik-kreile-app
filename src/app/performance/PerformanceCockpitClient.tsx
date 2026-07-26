@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { AnalyseTileSummary, AnalyseTileKey } from '@/lib/analyse/dataContracts';
 import { AnalyseDrillOverlay } from '@/features/analyse/AnalyseDrillOverlay';
 import { getAnalyseOverview } from '@/features/analyse/analyse.actions';
+import type { AnalysePeriod } from '@/lib/analyse/routes';
 
 import { 
   Moon, Sun, Sparkles
@@ -22,14 +23,20 @@ interface Props {
   initialOverviews: AnalyseTileSummary[];
   initialError?: string;
   initialLoadedAt: string;
+  initialPeriod: AnalysePeriod;
+  initialDrillTile: AnalyseTileKey | null;
 }
 
-type AnalysePeriod = 'Heute' | 'Woche' | 'Monat';
-
-export function PerformanceCockpitClient({ initialOverviews, initialError, initialLoadedAt }: Props) {
-  const [drillTile, setDrillTile] = useState<AnalyseTileKey | null>(null);
+export function PerformanceCockpitClient({
+  initialOverviews,
+  initialError,
+  initialLoadedAt,
+  initialPeriod,
+  initialDrillTile,
+}: Props) {
+  const [drillTile, setDrillTile] = useState<AnalyseTileKey | null>(initialDrillTile);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [tab, setTab] = useState<AnalysePeriod>('Monat');
+  const [tab, setTab] = useState<AnalysePeriod>(initialPeriod);
   const [overviews, setOverviews] = useState(initialOverviews);
   const [loadedAt, setLoadedAt] = useState(initialLoadedAt);
   const [dataError, setDataError] = useState<string | null>(initialError || null);

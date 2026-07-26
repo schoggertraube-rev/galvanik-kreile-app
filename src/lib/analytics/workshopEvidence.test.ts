@@ -47,7 +47,17 @@ describe("workshop evidence adapter", () => {
     const evidence = buildWorkshopEvidence(snapshot());
     const reliability = evidence.find((item) => item.claim.id === "workshop.delivery_reliability");
 
-    expect(reliability?.claim).toMatchObject({ state: "ready", value: 100, formulaVersion: 1 });
+    expect(reliability?.claim).toMatchObject({
+      state: "ready",
+      value: 100,
+      formulaVersion: 1,
+      truthClass: "B",
+    });
+    expect(reliability?.reconciliation).toMatchObject({
+      method: "ratio_percent",
+      decimals: 1,
+      denominator: 1,
+    });
     expect(reliability?.sourceRecords[0]).toMatchObject({
       ref: "order:order-1",
       relation: "public.orders",
@@ -59,7 +69,7 @@ describe("workshop evidence adapter", () => {
     );
   });
 
-  it("keeps an unmeasurable KPI null and exposes the real correction path", () => {
+  it("keeps an unmeasurable KPI null and blocks the not-yet-connected correction path", () => {
     const missing = snapshot({
       rows: [{
         ...snapshot().rows[0],
@@ -86,10 +96,56 @@ describe("workshop evidence adapter", () => {
     const reliability = evidence.find((item) => item.claim.id === "workshop.delivery_reliability");
 
     expect(reliability?.claim).toMatchObject({ state: "missing_input", value: null });
-    expect(reliability?.missing[0].captureOptions[0].action).toMatchObject({
-      enabled: true,
-      href: "/orders",
+    expect(reliability?.claim.truthClass).toBe("E");
+    expect(reliability?.missing[0].captureOptions[0]).toMatchObject({
+      status: "blocked",
+      reason: expect.stringContaining("Zusagetermin-Editor"),
+      action: expect.objectContaining({
+        enabled: false,
+        disabledReason: expect.stringContaining("Zusagetermin-Editor"),
+      }),
     });
+  });
+
+  it("reconciles one-decimal ratio and average rounding to complete source rows", () => {
+    const base = snapshot().rows[0];
+    const rows = [
+      { ...base, id: "order-1", intakeDate: new Date("2026-07-01T08:00:00.000Z"), completedDate: new Date("2026-07-02T08:00:00.000Z"), promisedDueDate: new Date("2026-07-03T08:00:00.000Z") },
+      { ...base, id: "order-2", intakeDate: new Date("2026-07-01T08:00:00.000Z"), completedDate: new Date("2026-07-03T08:00:00.000Z"), promisedDueDate: new Date("2026-07-02T08:00:00.000Z") },
+      { ...base, id: "order-3", intakeDate: new Date("2026-07-02T08:00:00.000Z"), completedDate: new Date("2026-07-04T08:00:00.000Z"), promisedDueDate: new Date("2026-07-04T08:00:00.000Z") },
+    ];
+    const evidence = buildWorkshopEvidence(snapshot({
+      rows,
+      totals: {
+        completed: 3,
+        completedWithDueDate: 3,
+        deliveredOnTime: 2,
+        completedWithCycleTime: 3,
+        averageCycleDays: 1.7,
+        deliveryReliabilityPct: 66.7,
+        open: 0,
+        overdue: 0,
+        openWithoutDueDate: 0,
+      },
+    }));
+
+    expect(evidence.find((item) => item.claim.id === "workshop.delivery_reliability")?.claim.value).toBe(66.7);
+    expect(evidence.find((item) => item.claim.id === "workshop.average_cycle_days")?.reconciliation).toMatchObject({
+      method: "average",
+      decimals: 1,
+      denominator: 3,
+    });
+  });
+
+  it("fails closed when complete snapshot totals contradict their source rows", () => {
+    const inconsistent = snapshot({
+      totals: {
+        ...snapshot().totals,
+        deliveryReliabilityPct: 93.4,
+      },
+    });
+
+    expect(() => buildWorkshopEvidence(inconsistent)).toThrow();
   });
 
   it("marks an aggregate partial when not every counted record has a detail receipt", () => {

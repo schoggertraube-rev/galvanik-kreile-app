@@ -62,7 +62,19 @@ BEGIN
   IF relation_oid IS NOT NULL AND EXISTS (
     SELECT required.column_name
     FROM (VALUES
-      ('id'), ('tenant_id'), ('order_id'), ('event_type'), ('created_at')
+      ('id'),
+      ('tenant_id'),
+      ('order_id'),
+      ('item_id'),
+      ('event_type'),
+      ('description'),
+      ('notes'),
+      ('user_id'),
+      ('worker_id'),
+      ('created_at'),
+      ('payload'),
+      ('status'),
+      ('station')
     ) required(column_name)
     WHERE NOT EXISTS (
       SELECT 1
@@ -73,7 +85,37 @@ BEGIN
         AND NOT attribute_record.attisdropped
     )
   ) THEN
-    RAISE EXCEPTION 'OPERATIONAL_EVENTS_SOURCE_PREFLIGHT_FAILED: existing events core columns are incomplete';
+    RAISE EXCEPTION 'OPERATIONAL_EVENTS_SOURCE_PREFLIGHT_FAILED: existing 13-column events source is incomplete';
+  END IF;
+
+  IF relation_oid IS NOT NULL AND EXISTS (
+    SELECT 1
+    FROM (VALUES
+      ('id', 'text'),
+      ('tenant_id', 'character varying(50)'),
+      ('order_id', 'text'),
+      ('item_id', 'text'),
+      ('event_type', 'character varying(100)'),
+      ('description', 'text'),
+      ('notes', 'text'),
+      ('user_id', 'uuid'),
+      ('worker_id', 'character varying(100)'),
+      ('created_at', 'timestamp without time zone'),
+      ('payload', 'jsonb'),
+      ('status', 'character varying(50)'),
+      ('station', 'text')
+    ) expected(column_name, formatted_type)
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM pg_attribute attribute_record
+      WHERE attribute_record.attrelid = relation_oid
+        AND attribute_record.attname = expected.column_name
+        AND attribute_record.attnum > 0
+        AND NOT attribute_record.attisdropped
+        AND format_type(attribute_record.atttypid, attribute_record.atttypmod) = expected.formatted_type
+    )
+  ) THEN
+    RAISE EXCEPTION 'OPERATIONAL_EVENTS_SOURCE_PREFLIGHT_FAILED: existing events column types are incompatible';
   END IF;
 
   IF relation_oid IS NOT NULL THEN
@@ -85,6 +127,8 @@ BEGIN
            OR btrim(event_record.tenant_id::text) = ''
            OR event_record.order_id IS NULL
            OR event_record.event_type IS NULL
+           OR event_record.status IS NULL
+           OR btrim(event_record.status::text) = ''
            OR event_record.created_at IS NULL
       )
     $query$ INTO invalid_rows;
@@ -105,13 +149,13 @@ CREATE TABLE IF NOT EXISTS public.events (
   description text,
   notes text,
   payload jsonb,
-  status varchar(50) DEFAULT 'success',
+  status varchar(50) NOT NULL DEFAULT 'success',
   user_id uuid,
   worker_id varchar(100),
   station text,
   created_at timestamp without time zone NOT NULL DEFAULT now(),
   CONSTRAINT events_order_id_fkey
-    FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE RESTRICT,
   CONSTRAINT events_user_id_fkey
     FOREIGN KEY (user_id) REFERENCES public.app_users(id)
 );
@@ -127,7 +171,39 @@ ALTER TABLE public.events
   ADD COLUMN IF NOT EXISTS worker_id varchar(100),
   ADD COLUMN IF NOT EXISTS station text;
 
+ALTER TABLE public.events
+  DROP CONSTRAINT IF EXISTS events_source_tenant_not_null_chk,
+  ADD CONSTRAINT events_source_tenant_not_null_chk
+    CHECK (tenant_id IS NOT NULL) NOT VALID,
+  DROP CONSTRAINT IF EXISTS events_source_order_not_null_chk,
+  ADD CONSTRAINT events_source_order_not_null_chk
+    CHECK (order_id IS NOT NULL) NOT VALID,
+  DROP CONSTRAINT IF EXISTS events_source_status_not_null_chk,
+  ADD CONSTRAINT events_source_status_not_null_chk
+    CHECK (status IS NOT NULL) NOT VALID;
+
+ALTER TABLE public.events
+  VALIDATE CONSTRAINT events_source_tenant_not_null_chk,
+  VALIDATE CONSTRAINT events_source_order_not_null_chk,
+  VALIDATE CONSTRAINT events_source_status_not_null_chk;
+
+ALTER TABLE public.events
+  ALTER COLUMN tenant_id SET DEFAULT 'galvanik-kreile',
+  ALTER COLUMN tenant_id SET NOT NULL,
+  ALTER COLUMN order_id SET NOT NULL,
+  ALTER COLUMN status SET DEFAULT 'success',
+  ALTER COLUMN status SET NOT NULL,
+  ALTER COLUMN created_at SET DEFAULT now(),
+  ALTER COLUMN created_at SET NOT NULL;
+
+ALTER TABLE public.events
+  DROP CONSTRAINT events_source_tenant_not_null_chk,
+  DROP CONSTRAINT events_source_order_not_null_chk,
+  DROP CONSTRAINT events_source_status_not_null_chk;
+
 DO $constraints$
+DECLARE
+  constraint_name text;
 BEGIN
   IF NOT EXISTS (
     SELECT 1
@@ -151,8 +227,8 @@ BEGIN
     RAISE EXCEPTION 'OPERATIONAL_EVENTS_SOURCE_FAILED: orphan order reference';
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1
+  FOR constraint_name IN
+    SELECT constraint_record.conname
     FROM pg_constraint constraint_record
     WHERE constraint_record.conrelid = 'public.events'::regclass
       AND constraint_record.contype = 'f'
@@ -161,12 +237,13 @@ BEGIN
         (SELECT attnum FROM pg_attribute
          WHERE attrelid = 'public.events'::regclass AND attname = 'order_id')
       ]::smallint[]
-      AND constraint_record.confdeltype = 'c'
-  ) THEN
-    ALTER TABLE public.events
-      ADD CONSTRAINT events_order_id_fkey
-      FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE;
-  END IF;
+  LOOP
+    EXECUTE format('ALTER TABLE public.events DROP CONSTRAINT %I', constraint_name);
+  END LOOP;
+
+  ALTER TABLE public.events
+    ADD CONSTRAINT events_order_id_fkey
+    FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE RESTRICT;
 
   IF EXISTS (
     SELECT 1
@@ -274,7 +351,7 @@ BEGIN
       ('description', 'text', true),
       ('notes', 'text', true),
       ('payload', 'jsonb', true),
-      ('status', 'character varying', true),
+      ('status', 'character varying', false),
       ('user_id', 'uuid', true),
       ('worker_id', 'character varying', true),
       ('station', 'text', true),
@@ -291,6 +368,61 @@ BEGIN
     )
   ) THEN
     RAISE EXCEPTION 'OPERATIONAL_EVENTS_SOURCE_VERIFICATION_FAILED: column contract drifted';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM (VALUES
+      ('tenant_id', 'character varying(50)'),
+      ('event_type', 'character varying(100)'),
+      ('status', 'character varying(50)'),
+      ('worker_id', 'character varying(100)')
+    ) expected(column_name, formatted_type)
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM pg_attribute attribute_record
+      WHERE attribute_record.attrelid = 'public.events'::regclass
+        AND attribute_record.attname = expected.column_name
+        AND attribute_record.attnum > 0
+        AND NOT attribute_record.attisdropped
+        AND format_type(attribute_record.atttypid, attribute_record.atttypmod) = expected.formatted_type
+    )
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint constraint_record
+    WHERE constraint_record.conrelid = 'public.events'::regclass
+      AND constraint_record.contype = 'f'
+      AND constraint_record.confrelid = 'public.orders'::regclass
+      AND constraint_record.conkey = ARRAY[
+        (SELECT attnum FROM pg_attribute
+         WHERE attrelid = 'public.events'::regclass AND attname = 'order_id')
+      ]::smallint[]
+      AND constraint_record.confdeltype = 'r'
+      AND constraint_record.convalidated
+  ) THEN
+    RAISE EXCEPTION 'OPERATIONAL_EVENTS_SOURCE_VERIFICATION_FAILED: typmod or evidence-retention FK drifted';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_attribute attribute_record
+    JOIN pg_attrdef default_record
+      ON default_record.adrelid = attribute_record.attrelid
+     AND default_record.adnum = attribute_record.attnum
+    WHERE attribute_record.attrelid = 'public.events'::regclass
+      AND attribute_record.attname = 'tenant_id'
+      AND pg_get_expr(default_record.adbin, default_record.adrelid) = '''galvanik-kreile''::character varying'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_attribute attribute_record
+    JOIN pg_attrdef default_record
+      ON default_record.adrelid = attribute_record.attrelid
+     AND default_record.adnum = attribute_record.attnum
+    WHERE attribute_record.attrelid = 'public.events'::regclass
+      AND attribute_record.attname = 'status'
+      AND pg_get_expr(default_record.adbin, default_record.adrelid) = '''success''::character varying'
+  ) THEN
+    RAISE EXCEPTION 'OPERATIONAL_EVENTS_SOURCE_VERIFICATION_FAILED: defaults drifted';
   END IF;
 
   IF NOT EXISTS (

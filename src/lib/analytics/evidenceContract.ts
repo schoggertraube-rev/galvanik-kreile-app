@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { parseSafeInternalPath } from "@/lib/navigation/safeReturnTo";
 
 export const EVIDENCE_STATES = [
   "ready",
@@ -33,7 +34,7 @@ const internalHrefSchema = z
   .trim()
   .max(2_000)
   .refine(
-    (value) => value.startsWith("/") && !value.startsWith("//") && value !== "#" && !value.startsWith("/#"),
+    (value) => parseSafeInternalPath(value) !== null && value !== "#" && !value.startsWith("/#"),
     "Evidence-Links müssen echte interne Ziele besitzen.",
   );
 
@@ -71,12 +72,78 @@ const coverageSchema = z
   })
   .strict();
 
-const reconciliationSchema = z
-  .object({
-    method: z.enum(["count", "sum", "none"]),
-    tolerance: z.number().finite().nonnegative(),
-  })
-  .strict();
+const toleranceSchema = z.number().finite().nonnegative();
+const reconciliationSchema = z.discriminatedUnion("method", [
+  z.object({ method: z.literal("count"), tolerance: toleranceSchema }).strict(),
+  z.object({ method: z.literal("sum"), tolerance: toleranceSchema }).strict(),
+  z.object({ method: z.literal("none"), tolerance: toleranceSchema }).strict(),
+  z.object({
+    method: z.literal("ratio_percent"),
+    tolerance: toleranceSchema,
+    decimals: z.number().int().min(0).max(6),
+    denominator: z.number().int().positive(),
+  }).strict(),
+  z.object({
+    method: z.literal("average"),
+    tolerance: toleranceSchema,
+    decimals: z.number().int().min(0).max(6),
+    denominator: z.number().int().positive(),
+  }).strict(),
+]);
+
+type Reconciliation = z.infer<typeof reconciliationSchema>;
+
+function roundTo(value: number, decimals: number): number {
+  const factor = 10 ** decimals;
+  return Math.round((value + Number.EPSILON) * factor) / factor;
+}
+
+function derivedReconciliationIssue(input: {
+  reconciliation: Reconciliation;
+  value: number;
+  contributions: Array<number | null>;
+  included: number;
+  unresolved: number;
+  partial: boolean;
+}): string | null {
+  const { reconciliation } = input;
+  if (reconciliation.method !== "ratio_percent" && reconciliation.method !== "average") return null;
+  if (reconciliation.denominator !== input.included) {
+    return "Abdeckung und deklarierter Nenner stimmen nicht Ã¼berein.";
+  }
+  if (input.contributions.some((contribution) => contribution === null)) {
+    return "Abgeleitete Claims benÃ¶tigen den Einzelbeitrag jeder ausgelieferten Quelle.";
+  }
+  if (input.contributions.length + input.unresolved !== reconciliation.denominator) {
+    return "Nenner, Einzelquellen und ungelÃ¶ste Abdeckung stimmen nicht Ã¼berein.";
+  }
+  if (
+    reconciliation.method === "ratio_percent"
+    && input.contributions.some((contribution) => contribution !== 0 && contribution !== 1)
+  ) {
+    return "Prozentquoten akzeptieren je Einzelquelle nur die BeitrÃ¤ge 0 oder 1.";
+  }
+  if (
+    reconciliation.method === "average"
+    && input.contributions.some((contribution) => contribution !== null && contribution < 0)
+  ) {
+    return "DurchschnittsbeitrÃ¤ge dÃ¼rfen fÃ¼r diesen Vertrag nicht negativ sein.";
+  }
+  if (input.partial) return null;
+
+  const contributions = input.contributions as number[];
+  const sum = contributions.reduce((total, contribution) => total + contribution, 0);
+  const expected = roundTo(
+    reconciliation.method === "ratio_percent"
+      ? (sum / reconciliation.denominator) * 100
+      : sum / reconciliation.denominator,
+    reconciliation.decimals,
+  );
+  const floatingSlack = Number.EPSILON * Math.max(1, Math.abs(expected), Math.abs(input.value));
+  return Math.abs(expected - input.value) <= reconciliation.tolerance + floatingSlack
+    ? null
+    : "Claim-Wert und abgeleitete EinzelbeitrÃ¤ge reconciliieren nicht.";
+}
 
 const evidenceRecordRefSchema = z
   .object({
@@ -231,6 +298,9 @@ const comparisonSchema = z
     if (comparison.state === "partial" && comparison.coverage.unresolved === 0) {
       context.addIssue({ code: "custom", path: ["coverage", "unresolved"], message: "Ein partieller Vergleich muss seine ungelöste Abdeckung ausweisen." });
     }
+    if (comparison.state === "ready" && comparison.reconciliation.method === "none") {
+      context.addIssue({ code: "custom", path: ["reconciliation"], message: "Ein fertiger numerischer Vergleich benoetigt eine pruefbare Reconciliation." });
+    }
     if (comparison.value !== null && comparison.reconciliation.method === "count") {
       if (!Number.isInteger(comparison.value)
         || comparison.sourceRecords.some((record) => record.contribution !== 1)
@@ -246,6 +316,19 @@ const comparisonSchema = z
         : Number.NaN;
       if (!Number.isFinite(sum) || Math.abs(sum - comparison.value) > comparison.reconciliation.tolerance) {
         context.addIssue({ code: "custom", path: ["reconciliation"], message: "Vergleichswert und Einzelbeiträge reconciliieren nicht." });
+      }
+    }
+    if (comparison.value !== null) {
+      const derivedIssue = derivedReconciliationIssue({
+        reconciliation: comparison.reconciliation,
+        value: comparison.value,
+        contributions: comparison.sourceRecords.map((record) => record.contribution),
+        included: comparison.coverage.included,
+        unresolved: comparison.coverage.unresolved,
+        partial: comparison.state === "partial",
+      });
+      if (derivedIssue) {
+        context.addIssue({ code: "custom", path: ["reconciliation"], message: derivedIssue });
       }
     }
   });
@@ -416,6 +499,9 @@ export const claimEvidenceV1Schema = z
     });
 
     const value = evidence.claim.value;
+    if (claimState === "ready" && evidence.reconciliation.method === "none") {
+      context.addIssue({ code: "custom", path: ["reconciliation"], message: "Ein fertiger numerischer Claim benoetigt eine pruefbare Reconciliation." });
+    }
     if (value !== null && evidence.reconciliation.method === "count") {
       if (!Number.isInteger(value)) {
         context.addIssue({ code: "custom", path: ["claim", "value"], message: "Count-Claims müssen ganzzahlig sein." });
@@ -435,6 +521,39 @@ export const claimEvidenceV1Schema = z
         const sum = (contributions as number[]).reduce((total, contribution) => total + contribution, 0);
         if (Math.abs(sum - value) > evidence.reconciliation.tolerance) {
           context.addIssue({ code: "custom", path: ["reconciliation"], message: "Einzelbeiträge reconciliieren nicht zum Claim-Wert." });
+        }
+      }
+    }
+    if (value !== null) {
+      const derivedIssue = derivedReconciliationIssue({
+        reconciliation: evidence.reconciliation,
+        value,
+        contributions: evidence.sourceRecords.map((record) => record.contribution),
+        included: evidence.coverage.included,
+        unresolved: evidence.coverage.unresolved,
+        partial: claimState === "partial",
+      });
+      if (derivedIssue) {
+        context.addIssue({ code: "custom", path: ["reconciliation"], message: derivedIssue });
+      }
+      if (
+        evidence.reconciliation.method === "ratio_percent"
+        || evidence.reconciliation.method === "average"
+      ) {
+        const denominator = evidence.reconciliation.denominator;
+        const denominatorInput = evidence.inputs.find(
+          (input) => input.value === denominator,
+        );
+        if (!denominatorInput) {
+          context.addIssue({ code: "custom", path: ["inputs"], message: "Der deklarierte Nenner muss als Claim-Input ausgewiesen sein." });
+        } else {
+          const inputSources = new Set(denominatorInput.sourceRefs);
+          if (
+            inputSources.size !== evidence.sourceRecords.length
+            || evidence.sourceRecords.some((record) => !inputSources.has(record.ref))
+          ) {
+            context.addIssue({ code: "custom", path: ["inputs"], message: "Nenner-Input und ausgelieferte Einzelquellen stimmen nicht ueberein." });
+          }
         }
       }
     }

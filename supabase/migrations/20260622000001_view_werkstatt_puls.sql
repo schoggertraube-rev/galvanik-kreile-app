@@ -43,29 +43,36 @@ WHERE tenant_id = 'galvanik-kreile'
 
 
 -- C: Durchlaufzeit pro Station (Events-basiert)
-CREATE OR REPLACE VIEW v_analyse_station_durchlauf AS
-WITH eingang AS (
-  SELECT order_id, station, MIN(created_at) AS ts_ein
-  FROM events
-  WHERE event_type = 'STATION_EINGANG' AND station IS NOT NULL
-  GROUP BY order_id, station
-),
-ausgang AS (
-  SELECT order_id, station, MAX(created_at) AS ts_aus
-  FROM events
-  WHERE event_type = 'STATION_AUSGANG' AND station IS NOT NULL
-  GROUP BY order_id, station
-)
-SELECT
-  e.station,
-  round(avg(EXTRACT(EPOCH FROM (a.ts_aus - e.ts_ein)) / 86400.0)::numeric, 1) AS avg_tage,
-  count(*) AS n,
-  -- Engpass-Info: wie viele aktuell IN dieser Station (kein Ausgang)
-  (SELECT count(*) FROM items WHERE current_station_id = e.station) AS teile_aktuell
-FROM eingang e
-JOIN ausgang a ON a.order_id = e.order_id AND a.station = e.station
-WHERE e.ts_ein >= now() - interval '30 days'
-GROUP BY e.station;
+DO $events_view$
+BEGIN
+  IF to_regclass('public.events') IS NOT NULL THEN
+    EXECUTE $view$
+      CREATE OR REPLACE VIEW v_analyse_station_durchlauf AS
+      WITH eingang AS (
+        SELECT order_id, station, MIN(created_at) AS ts_ein
+        FROM events
+        WHERE event_type = 'STATION_EINGANG' AND station IS NOT NULL
+        GROUP BY order_id, station
+      ),
+      ausgang AS (
+        SELECT order_id, station, MAX(created_at) AS ts_aus
+        FROM events
+        WHERE event_type = 'STATION_AUSGANG' AND station IS NOT NULL
+        GROUP BY order_id, station
+      )
+      SELECT
+        e.station,
+        round(avg(EXTRACT(EPOCH FROM (a.ts_aus - e.ts_ein)) / 86400.0)::numeric, 1) AS avg_tage,
+        count(*) AS n,
+        (SELECT count(*) FROM items WHERE current_station_id = e.station) AS teile_aktuell
+      FROM eingang e
+      JOIN ausgang a ON a.order_id = e.order_id AND a.station = e.station
+      WHERE e.ts_ein >= now() - interval '30 days'
+      GROUP BY e.station
+    $view$;
+  END IF;
+END
+$events_view$;
 
 
 -- D: Wochenziel (abgeschlossene Aufträge diese Woche)

@@ -5,10 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   resolveAuthorization: vi.fn(),
   select: vi.fn(),
+  transaction: vi.fn(),
 }))
 
 vi.mock('@/lib/server/authorization', () => ({ resolveAuthorization: mocks.resolveAuthorization }))
-vi.mock('@/db', () => ({ db: { select: mocks.select } }))
+vi.mock('@/db', () => ({ db: { transaction: mocks.transaction } }))
 
 import { getAnalyseOverview } from '@/features/analyse/analyse.actions'
 
@@ -34,6 +35,7 @@ describe('analyse truth boundary', () => {
       ok: true,
       data: { tenantId: 'galvanik-kreile', permissions: ['perm_view_leitstand'] },
     })
+    mocks.transaction.mockImplementation((callback) => callback({ select: mocks.select }))
   })
 
   it('authorizes before any database read', async () => {
@@ -81,6 +83,8 @@ describe('analyse truth boundary', () => {
     expect(source).not.toContain('v_analyse_')
     expect(source).not.toMatch(/actualDelayCostEur:\s*0/)
     expect(source).not.toMatch(/auslastungPct:\s*Math\./)
+    expect(source).toContain('{ isolationLevel: "repeatable read", accessMode: "read only" }')
+    expect(source).toContain('isLive: false')
   })
 
   it('keeps unmeasured station capacity explicitly unavailable', () => {
@@ -137,5 +141,18 @@ describe('analyse truth boundary', () => {
 
     expect(source).toContain("redirect('/performance')")
     expect(source).not.toContain('AnalysePage')
+  })
+
+  it('keeps evidence and the safe return contract connected at the active UI boundary', () => {
+    const drill = readFileSync(resolve(process.cwd(), 'src/features/analyse/AnalyseDrillOverlay.tsx'), 'utf8')
+    const orderDetail = readFileSync(resolve(process.cwd(), 'src/app/orders/[id]/page.tsx'), 'utf8')
+    const performancePage = readFileSync(resolve(process.cwd(), 'src/app/performance/page.tsx'), 'utf8')
+
+    expect(drill).toContain('evidence={detail.evidence}')
+    expect(orderDetail).toContain('AppBackButton')
+    expect(orderDetail).not.toContain('<BackButton')
+    expect(performancePage).toContain('parseAnalysePeriod')
+    expect(performancePage).toContain('parseAnalyseTile')
+    expect(performancePage).toContain('initialDrillTile')
   })
 })

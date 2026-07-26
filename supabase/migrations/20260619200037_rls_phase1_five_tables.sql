@@ -2,10 +2,16 @@
 -- Skipping table: public.ausgangsrechnung_position (STOP: Missing tenant_id column, reported to Siglinder)
 
 -- 1. Table: events
-ALTER TABLE events ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation ON events;
-CREATE POLICY tenant_isolation ON events
-  USING (tenant_id = current_setting('app.tenant_id', true));
+DO $events$
+BEGIN
+  IF to_regclass('public.events') IS NOT NULL THEN
+    ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS tenant_isolation ON public.events;
+    CREATE POLICY tenant_isolation ON public.events
+      USING (tenant_id = current_setting('app.tenant_id', true));
+  END IF;
+END
+$events$;
 
 -- 2. Table: communications
 ALTER TABLE communications ENABLE ROW LEVEL SECURITY;

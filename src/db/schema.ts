@@ -15,6 +15,10 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
+import type {
+  OperationalEventStatus,
+  PersistedOperationalEventType,
+} from "@/lib/events/operationalEventContract";
 
 // Helper for CUID primary keys
 const cuidPrimaryKey = (name: string) => text(name).primaryKey().$defaultFn(() => createId());
@@ -184,15 +188,15 @@ export const items = pgTable("items", {
 // 5. Events / Timeline
 export const events = pgTable("events", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
+  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
   clientEventId: uuid("client_event_id"),
-  orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
+  orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "restrict" }),
   itemId: text("item_id"),
-  eventType: varchar("event_type", { length: 100 }).notNull(),
+  eventType: varchar("event_type", { length: 100 }).notNull().$type<PersistedOperationalEventType>(),
   description: text("description"),
   notes: text("notes"),
   payload: jsonb("payload").$type<Record<string, unknown>>(),
-  status: varchar("status", { length: 50 }).default("success"),
+  status: varchar("status", { length: 50 }).notNull().default("success").$type<OperationalEventStatus>(),
   userId: uuid("user_id").references(() => appUsers.id),
   workerId: varchar("worker_id", { length: 100 }),
   station: text("station"),

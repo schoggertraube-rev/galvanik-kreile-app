@@ -40,6 +40,8 @@ describe("order action permission truth", () => {
     expect(transition).toContain("getProcessTransitionConflict(currentStatus, storedStation, parsed.data)");
     expect(transition).toContain("STALE_ORDER_STATION");
     expect(transition).toContain("events.clientEventId");
+    expect(transition).toContain("eventType: events.eventType");
+    expect(transition).toContain("existingReceipt.eventType !== expectedEventType");
     expect(transition).toContain("replayed: true");
     expect(transition.indexOf("existingReceipt")).toBeLessThan(transition.indexOf("ORDER_PROCESS_LOCKED"));
     expect(transition.indexOf("getProcessTransitionConflict")).toBeLessThan(transition.indexOf(".update(orders)"));

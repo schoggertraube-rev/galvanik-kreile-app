@@ -65,7 +65,11 @@ export function AnalyseDrillOverlay({ tileKey, period, onClose }: Props) {
         ) : detail ? (
           tileKey === "werkstatt_puls" && detail.werkstattPulsData ? (
             <div className="bg-[#f1e9dc] min-h-screen">
-              <WerkstattPulsLevel2 data={detail.werkstattPulsData} onClose={onClose} />
+              <WerkstattPulsLevel2
+                data={detail.werkstattPulsData}
+                evidence={detail.evidence}
+                onClose={onClose}
+              />
             </div>
           ) : (
             <div className="fixed inset-0 z-[2000] bg-[rgba(26,31,46,0.42)] backdrop-blur-[8px] flex items-start justify-center pt-12 pb-12 overflow-y-auto" onClick={onClose}>

@@ -1,14 +1,15 @@
 import { createStatusEvent, getRecentStatusEvents } from "@/app/actions/status-events.actions";
 import type {
+  DocumentaryOperationalEventType,
   OperationalEventMetadata,
-  OperationalEventType,
+  PersistedOperationalEventType,
 } from "@/lib/events/operationalEventContract";
 
-export type StatusEventType = OperationalEventType;
+export type StatusEventType = PersistedOperationalEventType;
 
 export type StatusEvent = {
   id: string;
-  clientEventId: string;
+  clientEventId: string | null;
   orderId: string;
   itemId?: string;
   eventType: StatusEventType;
@@ -19,7 +20,7 @@ export type StatusEvent = {
 export type NewStatusEvent = {
   orderId: string;
   itemId?: string;
-  eventType: StatusEventType;
+  eventType: DocumentaryOperationalEventType;
   metadata?: OperationalEventMetadata;
 };
 

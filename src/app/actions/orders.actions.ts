@@ -314,7 +314,11 @@ export async function transitionOrderProcess(params: unknown) {
       if (!current) return null;
 
       const [existingReceipt] = await tx
-        .select({ orderId: events.orderId, payload: events.payload })
+        .select({
+          orderId: events.orderId,
+          eventType: events.eventType,
+          payload: events.payload,
+        })
         .from(events)
         .where(and(
           eq(events.tenantId, actor.data.tenantId),
@@ -324,9 +328,13 @@ export async function transitionOrderProcess(params: unknown) {
       if (existingReceipt) {
         const payload = existingReceipt.payload;
         const expectedAction = parsed.data.action;
+        const expectedEventType = expectedAction === "cancel"
+          ? "ORDER_CANCELLED"
+          : "STATION_STARTED";
         if (
           !payload
           || existingReceipt.orderId !== current.id
+          || existingReceipt.eventType !== expectedEventType
           || payload.processAction !== expectedAction
           || payload.expectedStation !== parsed.data.expectedStation
           || typeof payload.newStation !== "string"

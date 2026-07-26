@@ -99,6 +99,12 @@ describe("operational capture truth boundary", () => {
     expect(completion).toContain("lockAndConsumeMaterials");
     expect(completion).toContain("arbeitszeitBuchung");
     expect(completion).toContain("ORDER_TRANSITION_NOT_CONFIRMED");
+    const transitionEvent = completion.slice(
+      completion.indexOf("const [transitionEvent]"),
+      completion.indexOf("if (!transitionEvent)"),
+    );
+    expect(transitionEvent).toContain("station: expectedStation");
+    expect(transitionEvent).toContain("nextStation: completed.station");
     expect(completion).toContain("completeRequest");
     expect(completion.indexOf("db.transaction")).toBeLessThan(completion.indexOf("lockAndConsumeMaterials"));
     expect(completion.indexOf("lockAndConsumeMaterials")).toBeLessThan(completion.indexOf("completeRequest"));

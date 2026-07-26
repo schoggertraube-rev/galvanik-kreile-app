@@ -1296,7 +1296,7 @@ export async function completeStationCapture(value: unknown): Promise<CaptureRes
         tenantId: actor.data.tenantId,
         orderId: order.id,
         eventType: completed.eventType,
-        station: completed.station,
+        station: expectedStation,
         description: `Station abgeschlossen; Auftrag für ${completed.station} bereit`,
         payload: {
           completedStation: expectedStation,

@@ -20,6 +20,22 @@ interface ErfassungVariantProps {
   orderMarginPercent: number;
 }
 
+type BenchmarkWorkEntry = WorkEntry & {
+  benchmark?: number;
+  sampleSize: number;
+};
+
+type BenchmarkMaterialEntry = MaterialEntry & {
+  benchmarkHint: string;
+};
+
+type LegacyStationCost = {
+  zeitMin: number;
+  zeitEur: number;
+  matEur: number;
+  extraEur: number;
+};
+
 export const ErfassungVariant: React.FC<ErfassungVariantProps> = ({ 
   orderId, 
   station,
@@ -32,15 +48,15 @@ export const ErfassungVariant: React.FC<ErfassungVariantProps> = ({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   
-  const [workEntries, setWorkEntries] = useState<WorkEntry[]>([]);
-  const [consumableEntries, setConsumableEntries] = useState<MaterialEntry[]>([]);
+  const [workEntries, setWorkEntries] = useState<BenchmarkWorkEntry[]>([]);
+  const [consumableEntries, setConsumableEntries] = useState<BenchmarkMaterialEntry[]>([]);
   const [extras, setExtras] = useState<ExtraCostEntry[]>([
     { name: 'Richten / Dellen', active: false, minutes: 45, costEur: 53, eventType: 'quality_rework', causedBy: 'quality_issue' },
     { name: 'Löten / Reparatur', active: false, minutes: 30, costEur: 35, eventType: 'quality_rework', causedBy: 'quality_issue' },
     { name: 'Express-Zuschlag', active: false, minutes: 0, costEur: 50, eventType: 'express_surcharge', causedBy: 'customer_change' },
   ]);
 
-  const [stationCosts, setStationCosts] = useState<any>({});
+  const [stationCosts, setStationCosts] = useState<Record<string, LegacyStationCost>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,6 +70,13 @@ export const ErfassungVariant: React.FC<ErfassungVariantProps> = ({
       ]);
 
       if (!mounted) return;
+
+      if (!benchRes.available || !summaryRes.available) {
+        setStationCosts({});
+        setError(benchRes.message || summaryRes.message);
+        setLoading(false);
+        return;
+      }
       
       setStationCosts(summaryRes.stations || {});
       
@@ -85,7 +108,7 @@ export const ErfassungVariant: React.FC<ErfassungVariantProps> = ({
       setConsumableEntries(initialMat);
 
       // Reset extras
-      setExtras(extras.map(e => ({ ...e, active: false })));
+      setExtras(currentExtras => currentExtras.map(e => ({ ...e, active: false })));
       
       setLoading(false);
     }
@@ -102,7 +125,6 @@ export const ErfassungVariant: React.FC<ErfassungVariantProps> = ({
       workEntries,
       consumableEntries,
       extraCostEvents: extras,
-      employeeId: '00000000-0000-0000-0000-000000000000', // Mock UUID for current user since auth is out of scope
       kostenstelleKuerzel: station
     });
     setSaving(false);
@@ -147,8 +169,8 @@ export const ErfassungVariant: React.FC<ErfassungVariantProps> = ({
                 key={i} 
                 name={w.step} 
                 value={w.minutes} 
-                benchmark={(w as any).benchmark}
-                sampleSize={(w as any).sampleSize}
+                benchmark={w.benchmark}
+                sampleSize={w.sampleSize}
                 onChange={(val) => {
                   const newEntries = [...workEntries];
                   newEntries[i].minutes = val;
@@ -174,7 +196,7 @@ export const ErfassungVariant: React.FC<ErfassungVariantProps> = ({
                   name={m.itemName} 
                   count={m.quantity} 
                   unitCostEur={m.unitCostEur} 
-                  benchmarkHint={(m as any).benchmarkHint}
+                  benchmarkHint={m.benchmarkHint}
                   onChange={(val) => {
                     const newMat = [...consumableEntries];
                     newMat[i].quantity = val;

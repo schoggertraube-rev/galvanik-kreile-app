@@ -57,7 +57,7 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
     dbEvents.forEach(e => {
       let severity: TimelineEntry["severity"] = "neutral";
       if (e.eventType.includes("CREATED") || e.eventType.includes("COMPLETED") || e.eventType.includes("PASSED")) severity = "good";
-      if (e.eventType.includes("FAILED") || e.eventType === "COMPLAINT_FILED") severity = "critical";
+      if (e.eventType.includes("FAILED") || e.eventType === "COMPLAINT_OPENED") severity = "critical";
 
       const eventTitleMap: Record<string, string> = {
         "OCR_SCAN_STARTED": "KI-Scan gestartet",

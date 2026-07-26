@@ -26,6 +26,47 @@ export const OPERATIONAL_EVENT_TYPES = [
 ] as const
 
 export type OperationalEventType = typeof OPERATIONAL_EVENT_TYPES[number]
+
+export const DOCUMENTARY_OPERATIONAL_EVENT_TYPES = [
+  'LABEL_PREPARED',
+  'PHOTO_CAPTURED',
+  'NOTE_ADDED',
+] as const satisfies readonly OperationalEventType[]
+
+export type DocumentaryOperationalEventType = typeof DOCUMENTARY_OPERATIONAL_EVENT_TYPES[number]
+
+export const SERVER_AND_LEGACY_OPERATIONAL_EVENT_TYPES = [
+  'ORDER_CREATED',
+  'QUOTE_CREATED',
+  'CUSTOMER_BEHAVIOR_NOTE_ADDED',
+  'ORDER_UPDATED',
+  'ORDER_CANCELLED',
+  'STATION_AUSGANG',
+  'STATION_EINGANG',
+  'STATION_CHANGED',
+  'PROCESSING_STARTED',
+  'PHOTO_ADDED',
+  'STATION_COST_BOOKED',
+  'PAYMENT_FAILED',
+  'PAYMENT_REVIEW_REQUIRED',
+  'PAYMENT_PAID',
+] as const
+
+export const PERSISTED_OPERATIONAL_EVENT_TYPES = [
+  ...OPERATIONAL_EVENT_TYPES,
+  ...SERVER_AND_LEGACY_OPERATIONAL_EVENT_TYPES,
+] as const
+
+export type PersistedOperationalEventType = typeof PERSISTED_OPERATIONAL_EVENT_TYPES[number]
+
+export const OPERATIONAL_EVENT_STATUSES = ['success', 'warning'] as const
+export type OperationalEventStatus = typeof OPERATIONAL_EVENT_STATUSES[number]
+
+export function isPersistedOperationalEventType(value: unknown): value is PersistedOperationalEventType {
+  return typeof value === 'string'
+    && PERSISTED_OPERATIONAL_EVENT_TYPES.includes(value as PersistedOperationalEventType)
+}
+
 export type OperationalEventMetadata = {
   stationId?: string
   nextStationId?: string
