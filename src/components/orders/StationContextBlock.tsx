@@ -29,8 +29,8 @@ export const StationContextBlock: React.FC<StationContextBlockProps> = ({
   customerName,
   isOrderCompleted
 }) => {
-  const currentStationIndex = Math.max(0, STATION_ORDER.indexOf(orderCurrentStation as any));
-  const activeStationIndex = Math.max(0, STATION_ORDER.indexOf(activeStation as any));
+  const currentStationIndex = Math.max(0, STATION_ORDER.findIndex((station) => station === orderCurrentStation));
+  const activeStationIndex = Math.max(0, STATION_ORDER.findIndex((station) => station === activeStation));
 
   const variant = getStationVariant(activeStation, currentStationIndex, activeStationIndex, isOrderCompleted);
 

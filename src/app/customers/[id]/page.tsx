@@ -78,16 +78,26 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
         if (res.ok && res.data) {
           setCustomer(res.data.customer as unknown as Customer);
           setAgreements(res.data.agreements as unknown as PriceAgreement[]);
-          setOrders(res.data.orders.map((o: Record<string, any>) => ({
-             ...o,
-             statusText: o.statusText || o.status || undefined,
-          })) as Order[]);
-          setComplaints(res.data.complaints.map((c: Record<string, any>) => ({
-             ...c,
-             photoIds: Array.isArray(c.photoIds) ? c.photoIds : [],
-             resolvedAt: c.resolvedAt || undefined,
-             resolution: c.resolution || undefined,
-          })) as Complaint[]);
+          setOrders((res.data.orders as Array<Record<string, unknown>>).map((order) => ({
+             ...order,
+             statusText: typeof order.statusText === "string" && order.statusText
+               ? order.statusText
+               : typeof order.status === "string" && order.status
+                 ? order.status
+                 : undefined,
+          })) as unknown as Order[]);
+          setComplaints((res.data.complaints as Array<Record<string, unknown>>).map((complaint) => ({
+             ...complaint,
+             photoIds: Array.isArray(complaint.photoIds)
+               ? complaint.photoIds.filter((photoId): photoId is string => typeof photoId === "string")
+               : [],
+             resolvedAt: typeof complaint.resolvedAt === "string" && complaint.resolvedAt
+               ? complaint.resolvedAt
+               : undefined,
+             resolution: typeof complaint.resolution === "string" && complaint.resolution
+               ? complaint.resolution
+               : undefined,
+          })) as unknown as Complaint[]);
           setInvoices(res.data.rechnungen as CustomerInvoice[]);
           setCapabilities(res.data.capabilities);
           setTimeline([]);

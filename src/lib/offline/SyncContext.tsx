@@ -44,14 +44,17 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const refreshNetwork = () => setNetworkStatus(OfflineManager.getBrowserNetworkStatus());
     const refreshQueue = () => { void loadOutbox(); };
-    refreshNetwork();
-    void loadOutbox();
+    const initialRefresh = window.setTimeout(() => {
+      refreshNetwork();
+      void loadOutbox();
+    }, 0);
 
     window.addEventListener("online", refreshNetwork);
     window.addEventListener("offline", refreshNetwork);
     window.addEventListener("kreile-network-change", refreshNetwork);
     window.addEventListener("kreile-sync-queue-updated", refreshQueue);
     return () => {
+      window.clearTimeout(initialRefresh);
       window.removeEventListener("online", refreshNetwork);
       window.removeEventListener("offline", refreshNetwork);
       window.removeEventListener("kreile-network-change", refreshNetwork);

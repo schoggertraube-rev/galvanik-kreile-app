@@ -12,13 +12,12 @@ import { ChevronRight, Package, ArrowLeft, X } from "lucide-react";
 // Mock data removed
 import { getStationConfig } from "@/constants/stations";
 import { evaluateOrderPriority } from "@/lib/priority";
-import { getOrdersDb } from "@/app/actions/orders.actions";
+import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import { GalvanikQueue } from "@/components/galvanik/GalvanikQueue";
 import { WarenausgangQueue } from "@/components/warenausgang/WarenausgangQueue";
+import type { Order as RepositoryOrder } from "@/lib/repositories/ordersRepository";
 
 const VALID_SLUGS = ["wareneingang", "entmetallisierung", "schleiferei", "beschichtung", "warenausgang"];
-
-type Order = any; // Fallback since it was from repo
 
 export default function StationPage({ params }: { params: Promise<{ slug: string }> }) {
   usePageView();
@@ -39,7 +38,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
   };
   redirect(canonicalTargets[canonicalSlug]);
 
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<OrderResponse[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,7 +50,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
           return;
         }
         if (dbOrdersRes.ok && dbOrdersRes.data && dbOrdersRes.data.length > 0) {
-          setOrders(dbOrdersRes.data as any);
+          setOrders(dbOrdersRes.data);
         }
       } catch (e) {
         console.error("Fehler beim Laden aus dem Repository", e);
@@ -62,6 +61,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
 
   const filteredOrders = orders.filter(o => (o.currentStationId || o.station) === slug);
   const selectedOrder = orders.find(o => o.id === selectedOrderId) || null;
+  const selectedOrderView = selectedOrder;
   const config = getStationConfig(slug);
 
   const getStationHeadline = () => {
@@ -94,9 +94,9 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
       </div>
 
       {slug === "beschichtung" ? (
-        <GalvanikQueue orders={filteredOrders as unknown as Order[]} />
+        <GalvanikQueue orders={filteredOrders as unknown as RepositoryOrder[]} />
       ) : slug === "warenausgang" ? (
-        <WarenausgangQueue allOrders={orders as unknown as Order[]} />
+        <WarenausgangQueue allOrders={orders as unknown as RepositoryOrder[]} />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           <div className="lg:col-span-2 space-y-3">
@@ -184,7 +184,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
           </div>
 
           <div className="lg:col-span-1">
-            {selectedOrder ? (
+            {selectedOrderView ? (
               <Card className="shadow-md border-neutral-gray-100 overflow-hidden sticky top-6">
                 <div className="bg-navy-900 text-white p-5 relative">
                   <button
@@ -194,46 +194,44 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
                     <X className="h-5 w-5" />
                   </button>
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm font-bold text-white/70">{selectedOrder.orderNumber}</span>
+                    <span className="font-mono text-sm font-bold text-white/70">{selectedOrderView!.orderNumber}</span>
                     <Badge className="bg-navy-700 text-white border-0 text-[8px] font-bold uppercase tracking-wider py-0.5">
-                      Station: {getStationConfig(selectedOrder.station).name.toUpperCase()}
+                      Station: {getStationConfig(selectedOrderView!.station).name.toUpperCase()}
                     </Badge>
                   </div>
-                  <h3 className="font-bold text-lg font-serif mt-1 leading-tight">{selectedOrder.task}</h3>
-                  <p className="text-xs text-white/70 mt-1 font-semibold">Kunde: {selectedOrder.customerName}</p>
+                  <h3 className="font-bold text-lg font-serif mt-1 leading-tight">{selectedOrderView!.task}</h3>
+                  <p className="text-xs text-white/70 mt-1 font-semibold">Kunde: {selectedOrderView!.customerName}</p>
                 </div>
 
                 <CardContent className="p-5 space-y-5">
                   <div className="grid grid-cols-2 gap-3 bg-bg-app-soft p-3 rounded-lg border border-neutral-gray-100 text-xs">
                     <div>
                       <span className="text-text-muted block font-semibold text-[10px] uppercase">Eingang</span>
-                      <span className="font-bold text-navy-900">{selectedOrder.intakeDate}</span>
+                      <span className="font-bold text-navy-900">{selectedOrderView!.intakeDate}</span>
                     </div>
                     <div>
                       <span className="text-text-muted block font-semibold text-[10px] uppercase">Teile</span>
-                      <span className="font-bold text-navy-900">{selectedOrder.parts.length} Stück</span>
+                      <span className="font-bold text-navy-900">{selectedOrderView!.parts.length} Stück</span>
                     </div>
                   </div>
 
                   <div className="space-y-2 pt-2">
                     <span className="text-[10px] font-bold uppercase text-text-muted tracking-wider">Erfasste Werkstücke</span>
-                    {(selectedOrder.parts || []).map((p: any, i: number) => {
-                      const part = p as any;
-                      return (
+                    {(selectedOrderView!.parts || []).map((part, i) => (
                     <div key={part.id ?? `part-${i}`} className="p-2.5 bg-bg-app-soft border border-neutral-gray-100 rounded-lg flex items-center justify-between text-xs">
                       <div>
                         <span className="font-bold text-navy-900 block">{part.name}</span>
-                        <span className="text-text-muted text-[10px]">Material: {part.material} | Finish: {part.finish}</span>
+                        <span className="text-text-muted text-[10px]">Material: {part.material ?? "nicht erfasst"} | Oberfläche: {part.surfaceRequested ?? "nicht erfasst"}</span>
                       </div>
                       <Badge variant="outline" className="font-mono text-[9px] bg-white text-text-muted">
                         {part.id ?? `part-${i}`}
                       </Badge>
                     </div>
-                  )})}
+                    ))}
                   </div>
 
                   <div className="pt-4 border-t border-neutral-gray-100">
-                    <OrderModalTrigger orderId={selectedOrder.id} className="w-full">
+                    <OrderModalTrigger orderId={selectedOrderView!.id} className="w-full">
                        <Button className="w-full bg-navy-900 hover:bg-navy-700 text-white shadow-sm font-bold h-11 rounded-xl">
                          Auftrag Details & Bearbeiten
                        </Button>

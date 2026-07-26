@@ -40,7 +40,7 @@ export interface TrendSection {
   children?: ReactNode;       // Chart.js component or custom chart
   readAs?: string;            // "So liest du das: ..."
   chartType?: "line" | "bar";
-  chartData?: any;
+  chartData?: Array<Record<string, unknown>>;
 }
 
 export interface CompositionRow {
@@ -329,7 +329,7 @@ export function AnalysisOverlay({
                 );
               }
               return (
-                <div key={i} style={wrapperStyle} onClick={(e) => {
+                <div key={i} style={wrapperStyle} onClick={() => {
                   if (row.previewText) {
                     setPreviewDrawer({ open: true, href: row.href || "", label: row.name, previewText: row.previewText });
                   } else if (row.onClick) {
@@ -466,7 +466,7 @@ export function AnalysisOverlay({
                 Betroffene Konten
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {l7Data.affectedAccounts.map((acc: any) => (
+                {l7Data.affectedAccounts.map((acc) => (
                   <a key={acc.id} href={`/buchhaltung/belege?konto=${acc.id}`} style={{
                     fontSize: 12, fontWeight: 500, color: "var(--blue, #0C447C)",
                     background: "var(--blue-bg, #E7F1FB)", padding: "2px 8px", borderRadius: 6, textDecoration: "none"
@@ -479,7 +479,7 @@ export function AnalysisOverlay({
                 Kostenstellen
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                {l7Data.affectedCostCenters.map((cc: any) => (
+                {l7Data.affectedCostCenters.map((cc) => (
                   <span key={cc.id} style={{
                     fontSize: 12, fontWeight: 500, color: "var(--text, #1B1A16)",
                     background: "var(--surface, #fff)", border: "1px solid var(--line2, rgba(20,18,12,.16))", padding: "2px 8px", borderRadius: 6,
@@ -566,7 +566,7 @@ export function AnalysisOverlay({
               <p className="text-sm text-text-muted">Für diesen Bereich liegen keine bestätigten Vorschaudaten vor.</p>
             )}
             <p className="text-xs text-text-muted mt-2 border-t pt-4">
-              Für tiefere Analysen und Bearbeitungsmöglichkeiten klicken Sie bitte auf "Vollständig öffnen".
+              Für tiefere Analysen und Bearbeitungsmöglichkeiten klicken Sie bitte auf &quot;Vollständig öffnen&quot;.
             </p>
           </div>
         </PreviewDrawer>

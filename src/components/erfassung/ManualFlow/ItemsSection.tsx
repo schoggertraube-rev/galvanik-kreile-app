@@ -3,14 +3,26 @@
 import { Plus, Trash2 } from "lucide-react";
 import { ROUTE_TEMPLATES } from "@/lib/orders/routeSnapshot";
 
-export function ItemsSection({ items, onChange }: { items: any[], onChange: (items: any[]) => void }) {
+type EditableItem = Record<string, unknown>;
+
+const textValue = (value: unknown) => typeof value === "string" ? value : "";
+export const quantityInputValue = (value: unknown): number | "" => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const quantity = Number(value);
+    if (Number.isFinite(quantity)) return quantity;
+  }
+  return "";
+};
+
+export function ItemsSection({ items, onChange }: { items: EditableItem[], onChange: (items: EditableItem[]) => void }) {
   const handleAddItem = () => {
     onChange([...items, { id: `temp_${Date.now()}`, name: "", quantity: 1, material: "", target: "", routeTemplateId: "" }]);
   };
 
-  const handleUpdateItem = (index: number, field: string, value: any) => {
+  const handleUpdateItem = (index: number, field: string, value: unknown) => {
     const newItems = [...items];
-    newItems[index][field] = value;
+    newItems[index] = { ...newItems[index], [field]: value };
     onChange(newItems);
   };
 
@@ -34,7 +46,7 @@ export function ItemsSection({ items, onChange }: { items: any[], onChange: (ite
   return (
     <div className="space-y-3">
       {items.map((item, index) => (
-        <div key={item.id} className="bg-[#fcfaf6] border border-[#e5dcd0] rounded-xl p-4 relative group">
+        <div key={textValue(item.id) || `item-${index}`} className="bg-[#fcfaf6] border border-[#e5dcd0] rounded-xl p-4 relative group">
           <div className="flex justify-between items-center mb-3">
             <span className="font-bold text-[#1a1c23] text-sm">T-0{(index + 1).toString().padStart(1, '0')}</span>
             <button
@@ -52,7 +64,7 @@ export function ItemsSection({ items, onChange }: { items: any[], onChange: (ite
                 type="text"
                 className="w-full bg-white border border-[#e5dcd0] rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none transition-colors"
                 placeholder="Lampenfassung"
-                value={item.name}
+                value={textValue(item.name)}
                 onChange={(e) => handleUpdateItem(index, "name", e.target.value)}
               />
             </div>
@@ -62,7 +74,7 @@ export function ItemsSection({ items, onChange }: { items: any[], onChange: (ite
                 <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Material</label>
                 <select
                   className="w-full bg-white border border-[#e5dcd0] rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none transition-colors appearance-none"
-                  value={item.material}
+                  value={textValue(item.material)}
                   onChange={(e) => handleUpdateItem(index, "material", e.target.value)}
                 >
                   <option value="">Wählen...</option>
@@ -75,7 +87,7 @@ export function ItemsSection({ items, onChange }: { items: any[], onChange: (ite
                 <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide mb-1.5">Ziel</label>
                 <select
                   className="w-full bg-white border border-[#e5dcd0] rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none transition-colors appearance-none"
-                  value={item.target}
+                  value={textValue(item.target)}
                   onChange={(e) => handleUpdateItem(index, "target", e.target.value)}
                 >
                   <option value="">Wählen...</option>
@@ -90,8 +102,12 @@ export function ItemsSection({ items, onChange }: { items: any[], onChange: (ite
                   type="number"
                   min="1"
                   className="w-full bg-white border border-[#e5dcd0] rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none transition-colors"
-                  value={item.quantity}
-                  onChange={(e) => handleUpdateItem(index, "quantity", parseInt(e.target.value))}
+                  value={quantityInputValue(item.quantity)}
+                  onChange={(e) => handleUpdateItem(
+                    index,
+                    "quantity",
+                    e.target.value === "" ? "" : Number(e.target.value),
+                  )}
                 />
               </div>
             </div>
@@ -100,7 +116,7 @@ export function ItemsSection({ items, onChange }: { items: any[], onChange: (ite
               <select
                 required
                 className="w-full bg-white border border-[#e5dcd0] rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#e5dcd0] focus:outline-none"
-                value={item.routeTemplateId || ""}
+                value={textValue(item.routeTemplateId)}
                 onChange={(event) => handleUpdateItem(index, "routeTemplateId", event.target.value)}
               >
                 <option value="">Route auswählen …</option>

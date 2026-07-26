@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Send } from "lucide-react";
 import Link from "next/link";
 import { floatIn } from "./SubNav";
+import type { TabName } from "./SubNav";
 import type { AktionVorschlag, StoryIdee, WirkungMini } from "@/lib/marketing/marketingTypes";
 
 function useCounter(target: number, divisor = 1, running = true) {
@@ -45,7 +46,7 @@ export function StudioView({
   storyIdeen: StoryIdee[];
   wirkungMini: WirkungMini[];
   onStoryClick: (s: StoryIdee) => void;
-  onEntryClick: (tab: any) => void;
+  onEntryClick: (tab: TabName) => void;
   isVisible: boolean;
 }) {
   return (

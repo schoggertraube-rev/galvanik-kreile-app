@@ -16,18 +16,41 @@ function money(value: unknown): string {
     : "nicht erfasst";
 }
 
+type CustomerRankingRow = {
+  customer_id: string;
+  name: string;
+  umsatz_gesamt: unknown;
+  db_gesamt: unknown;
+  letzter_auftrag: string;
+};
+
+type CustomerDetail = {
+  clv: CustomerRankingRow & {
+    kundentyp?: string | null;
+    email?: string | null;
+    db_marge_prozent?: unknown;
+    auftraege_gesamt: number;
+  };
+  letzeAuftraege: Array<{
+    id: string;
+    order_number: string;
+    intake_date: string;
+    umsatz: unknown;
+  }>;
+};
+
 export function TopKundenKachel() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<CustomerRankingRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const [customerDetails, setCustomerDetails] = useState<any>(null);
+  const [customerDetails, setCustomerDetails] = useState<CustomerDetail | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
   
   const [inaktiveDrawerOpen, setInaktiveDrawerOpen] = useState(false);
-  const [inaktiveKunden, setInaktiveKunden] = useState<any[]>([]);
+  const [inaktiveKunden, setInaktiveKunden] = useState<CustomerRankingRow[]>([]);
   const [inaktiveLoading, setInaktiveLoading] = useState(false);
   const [inaktiveError, setInaktiveError] = useState<string | null>(null);
   
@@ -207,7 +230,7 @@ export function TopKundenKachel() {
                 <p className="text-sm text-text-muted">Keine Aufträge vorhanden.</p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {customerDetails.letzeAuftraege.map((o: any) => (
+                  {customerDetails.letzeAuftraege.map((o) => (
                     <div key={o.id} className="flex justify-between items-center p-3 hover:bg-neutral-gray-50 rounded-lg cursor-pointer border border-transparent hover:border-neutral-gray-200"
                       onClick={() => router.push(`/orders/${o.id}`)}>
                       <div className="flex flex-col">

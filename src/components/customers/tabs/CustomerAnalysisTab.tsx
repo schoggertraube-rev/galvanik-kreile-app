@@ -7,11 +7,26 @@ function metric(value: unknown, suffix: string): string {
   return Number.isFinite(number) ? `${number.toFixed(0)} ${suffix}`.trim() : "Ungültiger Messwert";
 }
 
-export function CustomerAnalysisTab({ customerData }: { customerId: string, customerData: any }) {
+type CustomerAnalysisData = {
+  kpi?: {
+    umsatz_ltv?: unknown;
+    gewinn_ltv?: unknown;
+    puenktlichkeit_pct?: unknown;
+  } | null;
+  tags?: unknown;
+  classification?: unknown;
+};
+
+export function CustomerAnalysisTab({ customerData }: { customerId: string, customerData: CustomerAnalysisData | null }) {
   if (!customerData) return <div className="p-4 text-gray-500">Lade Analyse...</div>;
 
   const kpi = customerData.kpi;
-  const tags = customerData.tags || [];
+  const tags = Array.isArray(customerData.tags)
+    ? customerData.tags.filter((tag): tag is string => typeof tag === "string")
+    : [];
+  const classification = typeof customerData.classification === "string" && customerData.classification
+    ? customerData.classification
+    : "Nicht hinterlegt";
 
   if (!kpi) {
     return <div role="status" className="rounded-xl border border-dashed border-gray-300 p-6 text-sm text-gray-600">Kundenanalyse ist noch nicht belastbar verbunden. Es werden keine Nullwerte abgeleitet.</div>;
@@ -52,7 +67,7 @@ export function CustomerAnalysisTab({ customerData }: { customerId: string, cust
             <Award className="w-4 h-4" />
             <span className="text-xs font-bold uppercase tracking-wider">Klasse</span>
           </div>
-          <span className="text-xl font-bold text-[var(--ci-blue)]">{customerData.classification || "Nicht hinterlegt"}</span>
+          <span className="text-xl font-bold text-[var(--ci-blue)]">{classification}</span>
         </div>
       </div>
 
