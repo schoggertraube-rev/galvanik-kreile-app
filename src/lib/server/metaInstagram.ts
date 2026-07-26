@@ -1,3 +1,5 @@
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+
 const META_SCOPES = [
   'instagram_basic',
   'instagram_content_publish',
@@ -7,6 +9,8 @@ const META_SCOPES = [
 
 const RESPONSE_LIMIT_BYTES = 1_000_000
 const REQUEST_TIMEOUT_MS = 15_000
+const OAUTH_STATE_MAX_AGE_SECONDS = 10 * 60
+const OAUTH_STATE_FUTURE_SKEW_SECONDS = 60
 
 export const META_OAUTH_STATE_COOKIE = 'kreile_meta_oauth_state'
 
@@ -23,6 +27,12 @@ export type MetaInstagramPage = {
   pageName: string
   pageAccessToken: string
   igUserId: string
+}
+
+export type MetaOAuthIdentity = {
+  tenantId: string
+  userId: string
+  channelId: string
 }
 
 export class MetaInstagramError extends Error {
@@ -89,6 +99,67 @@ export function buildMetaAuthorizationUrl(config: MetaInstagramConfig, state: st
   url.searchParams.set('response_type', 'code')
   url.searchParams.set('scope', META_SCOPES.join(','))
   return url.toString()
+}
+
+function validOAuthIdentity(identity: MetaOAuthIdentity): boolean {
+  return /^[A-Za-z0-9_-]{1,128}$/.test(identity.tenantId)
+    && /^[A-Za-z0-9_-]{1,128}$/.test(identity.userId)
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(identity.channelId)
+}
+
+function oauthStateMac(
+  config: MetaInstagramConfig,
+  issuedAt: string,
+  nonce: string,
+  identity: MetaOAuthIdentity
+): string {
+  return createHmac('sha256', config.appSecret)
+    .update('kreile-meta-oauth-state-v1\0', 'utf8')
+    .update(issuedAt, 'utf8')
+    .update('\0', 'utf8')
+    .update(nonce, 'utf8')
+    .update('\0', 'utf8')
+    .update(identity.tenantId, 'utf8')
+    .update('\0', 'utf8')
+    .update(identity.userId, 'utf8')
+    .update('\0', 'utf8')
+    .update(identity.channelId, 'utf8')
+    .digest('hex')
+}
+
+export function createMetaOAuthState(
+  config: MetaInstagramConfig,
+  identity: MetaOAuthIdentity,
+  now = Date.now()
+): string {
+  if (!validOAuthIdentity(identity) || !Number.isFinite(now) || now < 0) {
+    throw new MetaInstagramError('META_OAUTH_STATE_INVALID', 'oauth')
+  }
+  const issuedAt = Math.floor(now / 1_000).toString(10)
+  const nonce = randomBytes(32).toString('hex')
+  const mac = oauthStateMac(config, issuedAt, nonce, identity)
+  return `v1-${issuedAt}-${nonce}-${mac}`
+}
+
+export function verifyMetaOAuthState(
+  config: MetaInstagramConfig,
+  state: string,
+  identity: MetaOAuthIdentity,
+  now = Date.now()
+): boolean {
+  if (!validOAuthIdentity(identity) || !Number.isFinite(now)) return false
+  const match = /^v1-(\d{10,13})-([0-9a-f]{64})-([0-9a-f]{64})$/i.exec(state)
+  if (!match) return false
+  const issuedAt = Number(match[1])
+  const nowSeconds = Math.floor(now / 1_000)
+  if (!Number.isSafeInteger(issuedAt)
+    || issuedAt > nowSeconds + OAUTH_STATE_FUTURE_SKEW_SECONDS
+    || nowSeconds - issuedAt > OAUTH_STATE_MAX_AGE_SECONDS) {
+    return false
+  }
+  const expected = Buffer.from(oauthStateMac(config, match[1], match[2], identity), 'hex')
+  const actual = Buffer.from(match[3], 'hex')
+  return expected.length === actual.length && timingSafeEqual(expected, actual)
 }
 
 function recordValue(value: unknown): Record<string, unknown> {

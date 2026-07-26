@@ -51,17 +51,30 @@ export interface Kampagne {
   statusColor: string;           // CSS color
 }
 
+/** Kanonischer Wahrheitszustand einer gespeicherten Marketing-Messung. */
+export type MarketingMetricState = 'ready' | 'confirmed_empty' | 'partial' | 'not_measured';
+
+export interface MarketingMetricCoverage {
+  sourceCount: number;
+  measuredCount: number;
+  missingCount: number;
+}
+
 /** Funnel-Stufe (Reichweite-View) */
 export interface FunnelStufe {
   label: string;
-  wert: number;
+  wert: number | null;
   breite: number;                // % (0..100)
+  dataState: MarketingMetricState;
+  coverage: MarketingMetricCoverage;
 }
 
 /** Funnel-Daten komplett */
 export interface FunnelDaten {
   stufen: FunnelStufe[];
-  umsatz: number;
+  umsatz: number | null;
+  umsatzState: MarketingMetricState;
+  umsatzCoverage: MarketingMetricCoverage;
   plannedBudget: number | null;
   roi: number | null;
 }
@@ -88,10 +101,12 @@ export interface LernInsight {
 /** Wirkung-Mini-Karte */
 export interface WirkungMini {
   label: string;
-  wert: number;
+  wert: number | null;
   suffix: string;                // z.B. "€", "×", ""
   divisor?: number;              // z.B. 10 für "9,1×"
   sparkValues: number[];         // 7 Werte für Mini-Sparkline
+  dataState: MarketingMetricState;
+  coverage: MarketingMetricCoverage;
 }
 
 /** Story-Idee für das Karussell */

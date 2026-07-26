@@ -55,19 +55,32 @@ type CountClaimDefinition = {
   inputLabel: string;
   rows: WorkshopEvidenceOrder[];
   total: number;
+  scopeMode: "period" | "snapshot";
 };
 
 function iso(value: Date | string): string {
   return value instanceof Date ? value.toISOString() : new Date(value).toISOString();
 }
 
-function scope(snapshot: WorkshopEvidenceSnapshot) {
+function periodScope(snapshot: WorkshopEvidenceSnapshot) {
   return {
     tenantId: snapshot.tenantId,
     from: iso(snapshot.period.start),
     to: iso(snapshot.period.end),
     timezone: "Europe/Berlin",
     grain: snapshot.period.grain,
+    calculatedAt: iso(snapshot.calculatedAt),
+  } as const;
+}
+
+function currentSnapshotScope(snapshot: WorkshopEvidenceSnapshot) {
+  const snapshotAt = iso(snapshot.now);
+  return {
+    tenantId: snapshot.tenantId,
+    from: snapshotAt,
+    to: snapshotAt,
+    timezone: "Europe/Berlin",
+    grain: "snapshot",
     calculatedAt: iso(snapshot.calculatedAt),
   } as const;
 }
@@ -139,7 +152,7 @@ function countClaim(snapshot: WorkshopEvidenceSnapshot, definition: CountClaimDe
       formulaVersion: 1,
       formula: definition.formula,
     },
-    scope: scope(snapshot),
+    scope: definition.scopeMode === "snapshot" ? currentSnapshotScope(snapshot) : periodScope(snapshot),
     inputs: [{
       id: definition.inputId,
       label: definition.inputLabel,
@@ -192,7 +205,7 @@ function missingMetricClaim(
       formulaVersion: 1,
       formula: definition.formula,
     },
-    scope: scope(snapshot),
+    scope: periodScope(snapshot),
     inputs: [{
       id: definition.inputId,
       label: definition.inputLabel,
@@ -285,7 +298,7 @@ function ratioOrAverageClaim(
       formulaVersion: 1,
       formula: definition.formula,
     },
-    scope: scope(snapshot),
+    scope: periodScope(snapshot),
     inputs: [{
       id: definition.inputId,
       label: definition.inputLabel,
@@ -379,6 +392,7 @@ export function buildWorkshopEvidence(snapshot: WorkshopEvidenceSnapshot): Claim
       inputLabel: "Abgeschlossene Aufträge",
       rows: completedRows,
       total: snapshot.totals.completed,
+      scopeMode: "period",
     }),
     countClaim(snapshot, {
       id: "workshop.open_orders",
@@ -389,16 +403,18 @@ export function buildWorkshopEvidence(snapshot: WorkshopEvidenceSnapshot): Claim
       inputLabel: "Offene Aufträge",
       rows: activeRows,
       total: snapshot.totals.open,
+      scopeMode: "snapshot",
     }),
     countClaim(snapshot, {
       id: "workshop.overdue_orders",
-      label: "Kritische offene Aufträge",
+      label: "Überfällige offene Aufträge",
       formulaId: "workshop.overdue_orders.v1",
       formula: "Anzahl offener Aufträge mit explizitem Zusagetermin vor dem Berechnungszeitpunkt.",
       inputId: "overdue_orders",
       inputLabel: "Überfällige offene Aufträge",
       rows: overdueRows,
       total: snapshot.totals.overdue,
+      scopeMode: "snapshot",
     }),
     countClaim(snapshot, {
       id: "workshop.open_orders_without_due_date",
@@ -409,6 +425,7 @@ export function buildWorkshopEvidence(snapshot: WorkshopEvidenceSnapshot): Claim
       inputLabel: "Offene Aufträge ohne Zusagetermin",
       rows: withoutDueDateRows,
       total: snapshot.totals.openWithoutDueDate,
+      scopeMode: "snapshot",
     }),
   ];
 
@@ -428,6 +445,7 @@ export function buildWorkshopEvidence(snapshot: WorkshopEvidenceSnapshot): Claim
       inputLabel: `Offene Aufträge an ${station.station}`,
       rows: stationRows,
       total: station.count,
+      scopeMode: "snapshot",
     }));
   });
 

@@ -50,6 +50,8 @@ export default async function BuchhaltungPage() {
         overdueInvoiceCount: overdueInvoices.length,
         openAmount: openInvoices.reduce((sum, invoice) => sum + invoice.offenerBetrag, 0),
         categories: metrics.kategorien,
+        truthStatus: metrics.dataQuality.truthStatus,
+        missingInputCount: metrics.dataQuality.missingInputCount,
       }}
     />
   );

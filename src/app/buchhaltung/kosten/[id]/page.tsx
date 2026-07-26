@@ -73,7 +73,7 @@ export default async function KostenDetailPage({ params }: { params: Promise<{ i
         <div className="flex flex-col gap-6">
           <div className="bg-linear-to-br from-[#1e1b18] to-navy-900 rounded-3xl shadow-sm p-6 text-white border border-[#1e1b18]">
             <h3 className="text-sm font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" /> Vernetzte Bereiche
+              <TrendingUp className="w-4 h-4" /> Nachweise und Auswertungen
             </h3>
             
             <div className="flex flex-col gap-3">
@@ -83,19 +83,25 @@ export default async function KostenDetailPage({ params }: { params: Promise<{ i
                 </div>
                 <div>
                   <span className="block text-sm font-bold">BWA-Auswertung</span>
-                  <span className="block text-[10px] text-white/60">Laufende Kosten prüfen</span>
+                  <span className="block text-[10px] text-white/60">Gesamtauswertung, kein Einzelnachweis</span>
                 </div>
               </Link>
 
-              <Link href="/buchhaltung/belege" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all flex items-center gap-3 group">
-                <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-                  <TrendingUp className="w-4 h-4" />
+              {kosten.belegId ? (
+                <Link href={`/buchhaltung/belege/${encodeURIComponent(kosten.belegId)}`} className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all flex items-center gap-3 group">
+                  <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
+                    <TrendingUp className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="block text-sm font-bold">Verknüpfter Beleg</span>
+                    <span className="block text-[10px] text-white/60">Gespeicherten Einzelnachweis öffnen</span>
+                  </div>
+                </Link>
+              ) : (
+                <div className="rounded-xl border border-white/20 bg-white/10 p-3 text-xs text-white/70">
+                  Kein Beleg mit diesem Kostenposten verknüpft.
                 </div>
-                <div>
-                  <span className="block text-sm font-bold">Zugehörige Belege</span>
-                  <span className="block text-[10px] text-white/60">Einzelbuchungen ansehen</span>
-                </div>
-              </Link>
+              )}
             </div>
           </div>
         </div>

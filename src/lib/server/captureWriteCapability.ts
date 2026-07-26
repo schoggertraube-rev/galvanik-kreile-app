@@ -254,19 +254,19 @@ export const captureWriteCapabilityQuery = sql<CapabilityRow>`
     source_table, constraint_name, refclassid, refobjid, refobjsubid, deptype
   ) as (
     values
-      ('items', 'items_template_surface_key_chk', 'pg_class'::regclass::oid, 'public.items'::regclass::oid, 5, 'a'),
-      ('items', 'items_template_surface_key_chk', 'pg_class'::regclass::oid, 'public.items'::regclass::oid, 5, 'n'),
+      ('items', 'items_template_surface_key_chk', 'pg_class'::regclass::oid, 'public.items'::regclass::oid, (select attnum from pg_attribute where attrelid = 'public.items'::regclass and attname = 'surface_requested' and not attisdropped), 'a'),
+      ('items', 'items_template_surface_key_chk', 'pg_class'::regclass::oid, 'public.items'::regclass::oid, (select attnum from pg_attribute where attrelid = 'public.items'::regclass and attname = 'surface_requested' and not attisdropped), 'n'),
       ('teile_klassifikator', 'teile_klassifikator_template_key_chk', 'pg_proc'::regclass::oid, to_regprocedure('public.fn_kreile_template_keywords_valid(text[])')::oid, 0, 'n'),
-      ('teile_klassifikator', 'teile_klassifikator_template_key_chk', 'pg_class'::regclass::oid, 'public.teile_klassifikator'::regclass::oid, 3, 'a'),
-      ('teile_klassifikator', 'teile_klassifikator_template_key_chk', 'pg_class'::regclass::oid, 'public.teile_klassifikator'::regclass::oid, 3, 'n'),
-      ('teile_klassifikator', 'teile_klassifikator_template_key_chk', 'pg_class'::regclass::oid, 'public.teile_klassifikator'::regclass::oid, 4, 'a'),
-      ('teile_klassifikator', 'teile_klassifikator_template_key_chk', 'pg_class'::regclass::oid, 'public.teile_klassifikator'::regclass::oid, 4, 'n')
+      ('teile_klassifikator', 'teile_klassifikator_template_key_chk', 'pg_class'::regclass::oid, 'public.teile_klassifikator'::regclass::oid, (select attnum from pg_attribute where attrelid = 'public.teile_klassifikator'::regclass and attname = 'klasse' and not attisdropped), 'a'),
+      ('teile_klassifikator', 'teile_klassifikator_template_key_chk', 'pg_class'::regclass::oid, 'public.teile_klassifikator'::regclass::oid, (select attnum from pg_attribute where attrelid = 'public.teile_klassifikator'::regclass and attname = 'klasse' and not attisdropped), 'n'),
+      ('teile_klassifikator', 'teile_klassifikator_template_key_chk', 'pg_class'::regclass::oid, 'public.teile_klassifikator'::regclass::oid, (select attnum from pg_attribute where attrelid = 'public.teile_klassifikator'::regclass and attname = 'keywords' and not attisdropped), 'a'),
+      ('teile_klassifikator', 'teile_klassifikator_template_key_chk', 'pg_class'::regclass::oid, 'public.teile_klassifikator'::regclass::oid, (select attnum from pg_attribute where attrelid = 'public.teile_klassifikator'::regclass and attname = 'keywords' and not attisdropped), 'n')
   ),
   expected_classifier_index_dependencies(refclassid, refobjid, refobjsubid, deptype) as (
     values
       ('pg_proc'::regclass::oid, to_regprocedure('public.fn_kreile_template_normalize(text)')::oid, 0, 'n'),
-      ('pg_class'::regclass::oid, 'public.teile_klassifikator'::regclass::oid, 2, 'a'),
-      ('pg_class'::regclass::oid, 'public.teile_klassifikator'::regclass::oid, 3, 'a')
+      ('pg_class'::regclass::oid, 'public.teile_klassifikator'::regclass::oid, (select attnum from pg_attribute where attrelid = 'public.teile_klassifikator'::regclass and attname = 'tenant_id' and not attisdropped), 'a'),
+      ('pg_class'::regclass::oid, 'public.teile_klassifikator'::regclass::oid, (select attnum from pg_attribute where attrelid = 'public.teile_klassifikator'::regclass and attname = 'klasse' and not attisdropped), 'a')
   ),
   expected_view_bases(relation_oid) as (
     values
@@ -278,46 +278,46 @@ export const captureWriteCapabilityQuery = sql<CapabilityRow>`
       ('public.kostenstelle'::regclass::oid),
       ('public.kostenstellen_energie_monat'::regclass::oid)
   ),
-  expected_view_dependencies(relation_oid, attribute_num) as (
+  expected_view_dependencies(relation_oid, column_name) as (
     values
-      ('public.orders'::regclass::oid, 1),
-      ('public.orders'::regclass::oid, 2),
-      ('public.orders'::regclass::oid, 3),
-      ('public.orders'::regclass::oid, 4),
-      ('public.orders'::regclass::oid, 5),
-      ('public.orders'::regclass::oid, 6),
-      ('public.orders'::regclass::oid, 7),
-      ('public.orders'::regclass::oid, 8),
-      ('public.orders'::regclass::oid, 9),
-      ('public.orders'::regclass::oid, 10),
-      ('public.stock_movements'::regclass::oid, 2),
-      ('public.stock_movements'::regclass::oid, 4),
-      ('public.stock_movements'::regclass::oid, 5),
-      ('public.stock_movements'::regclass::oid, 7),
-      ('public.stock_movements'::regclass::oid, 17),
-      ('public.arbeitszeit_buchung'::regclass::oid, 2),
-      ('public.arbeitszeit_buchung'::regclass::oid, 3),
-      ('public.arbeitszeit_buchung'::regclass::oid, 5),
-      ('public.arbeitszeit_buchung'::regclass::oid, 6),
-      ('public.arbeitszeit_buchung'::regclass::oid, 10),
-      ('public.arbeitszeit_buchung'::regclass::oid, 12),
-      ('public.arbeitszeit_buchung'::regclass::oid, 13),
-      ('public.customers'::regclass::oid, 1),
-      ('public.customers'::regclass::oid, 2),
-      ('public.customers'::regclass::oid, 3),
-      ('public.customers'::regclass::oid, 4),
-      ('public.ausgangsrechnung'::regclass::oid, 2),
-      ('public.ausgangsrechnung'::regclass::oid, 3),
-      ('public.ausgangsrechnung'::regclass::oid, 4),
-      ('public.ausgangsrechnung'::regclass::oid, 5),
-      ('public.ausgangsrechnung'::regclass::oid, 6),
-      ('public.kostenstelle'::regclass::oid, 1),
-      ('public.kostenstelle'::regclass::oid, 2),
-      ('public.kostenstelle'::regclass::oid, 3),
-      ('public.kostenstellen_energie_monat'::regclass::oid, 2),
-      ('public.kostenstellen_energie_monat'::regclass::oid, 3),
-      ('public.kostenstellen_energie_monat'::regclass::oid, 4),
-      ('public.kostenstellen_energie_monat'::regclass::oid, 5)
+      ('public.orders'::regclass::oid, 'id'),
+      ('public.orders'::regclass::oid, 'order_number'),
+      ('public.orders'::regclass::oid, 'customer_id'),
+      ('public.orders'::regclass::oid, 'intake_date'),
+      ('public.orders'::regclass::oid, 'status'),
+      ('public.orders'::regclass::oid, 'current_station_id'),
+      ('public.orders'::regclass::oid, 'current_station'),
+      ('public.orders'::regclass::oid, 'station'),
+      ('public.orders'::regclass::oid, 'due_date'),
+      ('public.orders'::regclass::oid, 'tenant_id'),
+      ('public.stock_movements'::regclass::oid, 'tenant_id'),
+      ('public.stock_movements'::regclass::oid, 'order_id'),
+      ('public.stock_movements'::regclass::oid, 'movement_type'),
+      ('public.stock_movements'::regclass::oid, 'quantity'),
+      ('public.stock_movements'::regclass::oid, 'snapshot_einkaufspreis_eur'),
+      ('public.arbeitszeit_buchung'::regclass::oid, 'tenant_id'),
+      ('public.arbeitszeit_buchung'::regclass::oid, 'auftrag_id'),
+      ('public.arbeitszeit_buchung'::regclass::oid, 'start_zeit'),
+      ('public.arbeitszeit_buchung'::regclass::oid, 'end_zeit'),
+      ('public.arbeitszeit_buchung'::regclass::oid, 'dauer_minuten'),
+      ('public.arbeitszeit_buchung'::regclass::oid, 'kostensatz_eur_pro_stunde'),
+      ('public.arbeitszeit_buchung'::regclass::oid, 'kostenstelle_kuerzel'),
+      ('public.customers'::regclass::oid, 'id'),
+      ('public.customers'::regclass::oid, 'tenant_id'),
+      ('public.customers'::regclass::oid, 'name'),
+      ('public.customers'::regclass::oid, 'company_name'),
+      ('public.ausgangsrechnung'::regclass::oid, 'order_id'),
+      ('public.ausgangsrechnung'::regclass::oid, 'tenant_id'),
+      ('public.ausgangsrechnung'::regclass::oid, 'netto'),
+      ('public.ausgangsrechnung'::regclass::oid, 'status'),
+      ('public.ausgangsrechnung'::regclass::oid, 'is_demo'),
+      ('public.kostenstelle'::regclass::oid, 'id'),
+      ('public.kostenstelle'::regclass::oid, 'tenant_id'),
+      ('public.kostenstelle'::regclass::oid, 'kuerzel'),
+      ('public.kostenstellen_energie_monat'::regclass::oid, 'kostenstelle_id'),
+      ('public.kostenstellen_energie_monat'::regclass::oid, 'tenant_id'),
+      ('public.kostenstellen_energie_monat'::regclass::oid, 'monat'),
+      ('public.kostenstellen_energie_monat'::regclass::oid, 'energie_eur_pro_stunde')
   )
   select (
     (select count(*) from protected_relations) = ${CAPTURE_TABLES.length}
@@ -1021,7 +1021,8 @@ export const captureWriteCapabilityQuery = sql<CapabilityRow>`
           'UTF8'
         )) in (
           '8d59ab4d53f735d657349f089f300a1f',
-          '88e7ea8c5610a89487080ba27262697c'
+          '88e7ea8c5610a89487080ba27262697c',
+          '6cca82a4d6d6dacf2e9d3cf9f70c7879'
         )
         and (
           select array_agg(
@@ -1034,12 +1035,12 @@ export const captureWriteCapabilityQuery = sql<CapabilityRow>`
             and not attribute.attisdropped
         ) = ARRAY[
           'order_id:text', 'order_number:text', 'customer_id:text',
-          'kunde_name:text', 'company_name:text', 'intake_date:timestamp without time zone',
-          'status:text', 'current_station:text', 'due_date:timestamp without time zone',
+          'kunde_name:text', 'company_name:text', 'intake_date:timestamp with time zone',
+          'status:text', 'current_station:text', 'due_date:timestamp with time zone',
           'erloes_netto:numeric', 'material_kosten:numeric', 'arbeitszeit_kosten:numeric',
           'energie_anteil_kosten:numeric', 'deckungsbeitrag:numeric', 'db_marge:numeric',
           'anz_rechnungen:bigint', 'anz_verbrauch:bigint', 'anz_zeitbuchungen:bigint',
-          'tenant_id:character varying(50)', 'anz_rechnungen_ohne_netto:bigint',
+          'tenant_id:text', 'anz_rechnungen_ohne_netto:bigint',
           'anz_verbrauch_ohne_preis:bigint', 'anz_offene_zeitbuchungen:bigint',
           'anz_zeitbuchungen_ohne_energiepreis:bigint', 'db_berechenbar:boolean'
         ]::text[]
@@ -1072,6 +1073,10 @@ export const captureWriteCapabilityQuery = sql<CapabilityRow>`
         and not exists (
           select 1
           from expected_view_dependencies expected_dependency
+          join pg_attribute expected_attribute
+            on expected_attribute.attrelid = expected_dependency.relation_oid
+           and expected_attribute.attname = expected_dependency.column_name
+           and not expected_attribute.attisdropped
           where not exists (
             select 1
             from pg_rewrite rewrite_record
@@ -1083,7 +1088,7 @@ export const captureWriteCapabilityQuery = sql<CapabilityRow>`
               and rewrite_record.rulename = '_RETURN'
               and dependency.refclassid = 'pg_class'::regclass
               and dependency.refobjid = expected_dependency.relation_oid
-              and dependency.refobjsubid = expected_dependency.attribute_num
+              and dependency.refobjsubid = expected_attribute.attnum
               and dependency.deptype = 'n'
           )
         )

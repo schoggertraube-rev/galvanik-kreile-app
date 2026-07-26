@@ -6,6 +6,11 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+CREATE UNIQUE INDEX IF NOT EXISTS orders_tenant_id_uidx
+  ON public.orders (tenant_id, id);
+CREATE UNIQUE INDEX IF NOT EXISTS items_tenant_order_id_uidx
+  ON public.items (tenant_id, order_id, id);
+
 CREATE TABLE IF NOT EXISTS public.item_photo_jobs (
   id uuid PRIMARY KEY,
   tenant_id text NOT NULL,
@@ -34,7 +39,15 @@ CREATE TABLE IF NOT EXISTS public.item_photo_jobs (
   CONSTRAINT item_photo_actual_units_nonnegative CHECK (actual_units IS NULL OR actual_units >= 0),
   CONSTRAINT item_photo_status_known CHECK (
     status IN ('reserved', 'uploaded', 'in_flight', 'succeeded', 'failed', 'uncertain')
-  )
+  ),
+  CONSTRAINT item_photo_tenant_order_fkey
+    FOREIGN KEY (tenant_id, order_id)
+    REFERENCES public.orders (tenant_id, id)
+    ON DELETE RESTRICT,
+  CONSTRAINT item_photo_tenant_order_item_fkey
+    FOREIGN KEY (tenant_id, order_id, item_id)
+    REFERENCES public.items (tenant_id, order_id, id)
+    ON DELETE RESTRICT
 );
 
 ALTER TABLE public.item_photo_jobs ENABLE ROW LEVEL SECURITY;
@@ -123,6 +136,24 @@ BEGIN
      OR p_user_concurrent_limit IS NULL OR p_user_concurrent_limit NOT BETWEEN 1 AND 100
      OR p_tenant_concurrent_limit IS NULL OR p_tenant_concurrent_limit NOT BETWEEN 1 AND 1000 THEN
     RAISE EXCEPTION 'INVALID_ITEM_PHOTO_POLICY';
+  END IF;
+
+  PERFORM 1
+  FROM public.orders order_record
+  JOIN public.items item_record
+    ON item_record.tenant_id = order_record.tenant_id
+   AND item_record.order_id = order_record.id
+  JOIN public.app_users user_record
+    ON user_record.tenant_id = order_record.tenant_id
+   AND user_record.id::text = p_user_id
+  WHERE order_record.tenant_id = p_tenant_id
+    AND order_record.id = p_order_id
+    AND item_record.id = p_item_id
+    AND user_record.active
+  FOR SHARE OF order_record, item_record, user_record;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ITEM_PHOTO_CONTEXT_NOT_FOUND';
   END IF;
 
   PERFORM pg_advisory_xact_lock(hashtextextended('photo:tenant:' || p_tenant_id, 0));

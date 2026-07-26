@@ -248,7 +248,11 @@ export function PerformanceCockpitClient({
             </div>
           </div>
         </div>
-        <div className="stamp"><b>{overviews[0]?.periodLabel || tab}</b><span>·</span>Abfrage {loadedAtLabel}</div>
+        <div className="stamp">
+          <b>Abschlusszeitraum: {overviews[0]?.periodLabel || tab}</b>
+          <span>·</span>
+          Aktueller Bestand abgefragt: {loadedAtLabel}
+        </div>
         {dataError && (
           <div role="alert" className="mb-4 rounded-lg border border-red-400/40 bg-red-500/10 p-3 text-sm text-red-300">
             {dataError}

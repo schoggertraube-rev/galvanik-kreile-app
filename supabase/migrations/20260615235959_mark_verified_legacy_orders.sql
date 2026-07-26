@@ -2,6 +2,8 @@
 -- Allowed values: seed, test, integration-test
 -- No 'legacy', no patterns, no IS NULL
 
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS source text;
+
 -- seed (alte Mock-/Capture-Aufträge)
 UPDATE orders SET source = 'seed' WHERE id = 'raqbjkqrgs8vrmzlug3nqy6h'; -- A-207018
 UPDATE orders SET source = 'seed' WHERE id = 'n1kv9p8u2r42ls2u43el95rs'; -- A-202650

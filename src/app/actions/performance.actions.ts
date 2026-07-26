@@ -1,4 +1,13 @@
-"use server";
+/**
+ * RETIRED_PERFORMANCE_ACTIONS
+ *
+ * This legacy module is intentionally non-executable. Its former contracts used
+ * tenant-unscoped reads and heuristic metrics. The only active performance
+ * boundary is `src/features/analyse/analyse.actions.ts`.
+ *
+ * Historical source retained below as a comment for migration forensics.
+ */
+/*
 
 import { db } from "@/db";
 import { orders, inquiries, uiEventsTable } from "@/db/schema";
@@ -200,3 +209,6 @@ export async function getUsageStats() {
       lastActive
    };
 }
+*/
+
+export {};

@@ -26,12 +26,11 @@ describe("active finance routes use server truth", () => {
     expect(cockpit).toContain("snapshot.openAmount");
   });
 
-  it("uses persisted processing assumptions in the server metrics", () => {
+  it("does not turn OCR confidence into unevidenced time savings", () => {
     const actions = source("src/app/buchhaltung/actions.ts");
-    expect(actions).toContain(".from(bhEinstellungen)");
-    expect(actions).toContain("settings?.ocrConfidenceSchwelle");
-    expect(actions).toContain("settings?.beraterStundensatz");
-    expect(actions).toContain("settings?.minutenProBeleg");
+    expect(actions).not.toContain(".from(bhEinstellungen)");
+    expect(actions).toContain("ersparnis: null");
+    expect(actions).toContain("ersparnisState: 'not_evidenced'");
     expect(actions).toContain("reviewCount");
   });
 

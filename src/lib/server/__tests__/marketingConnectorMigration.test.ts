@@ -9,10 +9,13 @@ const migration = readFileSync(
 
 describe('marketing connector migration', () => {
   it('creates a forced-RLS idempotency ledger with explicit state constraints', () => {
-    expect(migration).toContain('CREATE TABLE public.marketing_publish_job')
+    expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.marketing_publish_job')
     expect(migration).toContain("'reserved', 'publishing', 'succeeded', 'failed', 'uncertain'")
     expect(migration).toContain('ALTER TABLE public.marketing_publish_job FORCE ROW LEVEL SECURITY')
-    expect(migration).toContain('marketing_publish_job_action_uidx UNIQUE (aktion_id)')
+    expect(migration).toContain('marketing_publish_job_action_uidx UNIQUE (tenant_id, aktion_id)')
+    expect(migration).toContain('FOREIGN KEY (tenant_id, aktion_id)')
+    expect(migration).toContain('FOREIGN KEY (tenant_id, asset_id)')
+    expect(migration).toContain('FOREIGN KEY (tenant_id, kanal_id)')
     expect(migration).toContain("status <> 'succeeded' OR (external_container_id IS NOT NULL AND external_media_id IS NOT NULL)")
   })
 
@@ -24,8 +27,9 @@ describe('marketing connector migration', () => {
   })
 
   it('requires unique provider references and an explicit storage bucket', () => {
-    expect(migration).toContain('ADD COLUMN storage_bucket text')
+    expect(migration).toContain('ADD COLUMN IF NOT EXISTS storage_bucket text')
     expect(migration).toContain('CREATE UNIQUE INDEX touchpoint_externe_ref_uidx')
+    expect(migration).toContain('ON public.touchpoint (tenant_id, externe_ref)')
     expect(migration).toContain('Duplicate touchpoint.externe_ref values must be resolved')
   })
 })

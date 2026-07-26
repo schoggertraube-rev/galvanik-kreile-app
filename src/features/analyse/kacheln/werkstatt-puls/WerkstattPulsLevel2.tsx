@@ -40,20 +40,17 @@ export function WerkstattPulsLevel2({ data, evidence, onClose }: Props) {
           <div>
             <h1 className="wp-h1">Werkstatt-Puls</h1>
             <div className="subtitle">
-              Durchsatz · Stationen · Wochenziel 
+              Abschlüsse im Zeitraum · aktueller Auftragsbestand
               {data.dataStatus.lastUpdatedAt && ` — Datenstand ${new Date(data.dataStatus.lastUpdatedAt).toLocaleString('de-DE')}`}
             </div>
           </div>
         </div>
         <div className="controls">
-          <span className="pill pill-mute">Zeitraum: {periodLabel}</span>
+          <span className="pill pill-mute">Abschlusszeitraum: {periodLabel}</span>
           <span className="pill pill-mute">
             {data.trend.comparison?.available ? 'Vergleichsdaten gespeichert' : 'Kein Vergleichsdatensatz'}
           </span>
-          {data.hero.scoreStatus === 'critical' && <span className="pill pill-bad">HANDLUNGSBEDARF</span>}
-          {data.hero.scoreStatus === 'watch' && <span className="pill pill-warn">BEOBACHTEN</span>}
-          {data.hero.scoreStatus === 'ok' && <span className="pill pill-ok">OK</span>}
-          {data.hero.scoreStatus === 'insufficient_data' && <span className="pill pill-mute">DATEN FEHLEN</span>}
+          {data.hero.overdueOrdersN > 0 && <span className="pill pill-warn">AKTUELL ÜBERFÄLLIG</span>}
         </div>
       </div>
 

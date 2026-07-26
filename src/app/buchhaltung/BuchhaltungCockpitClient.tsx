@@ -35,6 +35,8 @@ export type FinanceCockpitSnapshot = {
   overdueInvoiceCount: number;
   openAmount: number;
   categories: KategorieSumme[];
+  truthStatus: "complete" | "partial";
+  missingInputCount: number;
 };
 
 const currency = new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" });
@@ -69,11 +71,16 @@ export function BuchhaltungCockpitClient({ snapshot }: { snapshot: FinanceCockpi
 
       <section aria-labelledby="month-summary" className="mb-7">
         <h2 id="month-summary" className="mb-3 text-sm font-bold text-navy-900">Monatssicht {snapshot.period.von} bis {snapshot.period.bis}</h2>
+        {snapshot.truthStatus === "partial" ? (
+          <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            Teilstand: {snapshot.missingInputCount} benÃ¶tigte Betrags- oder Steuerfelder fehlen. Die folgenden Summen enthalten nur belegte Werte und sind keine vollstÃ¤ndigen Gesamtsummen.
+          </div>
+        ) : null}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <Metric label="Netto-Einnahmen" value={currency.format(snapshot.income)} />
-          <Metric label="Ausgaben" value={currency.format(snapshot.expenses)} />
-          <Metric label="Rechnerisches Ergebnis" value={currency.format(snapshot.result)} tone={snapshot.result < 0 ? "warning" : "default"} />
-          <Metric label="USt-Zahllast (berechnet)" value={currency.format(snapshot.vatPayable)} />
+          <Metric label={snapshot.truthStatus === "partial" ? "Bekannte Netto-Einnahmen" : "Netto-Einnahmen"} value={currency.format(snapshot.income)} />
+          <Metric label={snapshot.truthStatus === "partial" ? "Bekannte Ausgaben" : "Ausgaben"} value={currency.format(snapshot.expenses)} />
+          <Metric label={snapshot.truthStatus === "partial" ? "Rechnerischer Teilstand" : "Rechnerisches Ergebnis"} value={currency.format(snapshot.result)} tone={snapshot.result < 0 ? "warning" : "default"} />
+          <Metric label={snapshot.truthStatus === "partial" ? "Bekannte USt-Zahllast" : "USt-Zahllast (berechnet)"} value={currency.format(snapshot.vatPayable)} />
           <Metric label="Offene Restbeträge" value={currency.format(snapshot.openAmount)} tone={snapshot.overdueInvoiceCount > 0 ? "warning" : "default"} />
         </div>
         <p className="mt-2 text-xs text-text-muted">Die Werte stammen aus erfassten Rechnungen, Belegen und Kostenposten. Sie sind keine Steuerfreigabe und keine ELSTER-Übermittlung.</p>
@@ -85,12 +92,12 @@ export function BuchhaltungCockpitClient({ snapshot }: { snapshot: FinanceCockpi
           icon={<Receipt className="h-5 w-5 text-rose-600" />}
           href="/buchhaltung/belege"
           primary={`${snapshot.receiptCount} im Zeitraum`}
-          detail={`${snapshot.reviewCount} mit Status „Prüfen“`}
+          detail={`${snapshot.reviewCount} noch nicht festgeschrieben`}
         />
         <TruthCard
           title="Offene Rechnungen"
           icon={<FileCheck className="h-5 w-5 text-emerald-600" />}
-          href="/buchhaltung/rechnungen?filter=offen"
+          href="/buchhaltung/rechnungen?view=open_items"
           primary={`${snapshot.openInvoiceCount} offen oder teilbezahlt`}
           detail={`${snapshot.overdueInvoiceCount} fällig/überfällig`}
         />

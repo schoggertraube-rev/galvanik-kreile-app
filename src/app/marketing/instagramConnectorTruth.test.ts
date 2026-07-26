@@ -36,4 +36,30 @@ describe('Instagram connector truth boundary', () => {
     expect(status).not.toContain('pageAccessToken')
     expect(status).not.toContain('accessTokenEncrypted:')
   })
+
+  it('binds OAuth and token ciphertext to the authorized tenant, user and channel', () => {
+    const connect = source('src/app/api/marketing/instagram/connect/route.ts')
+    const callback = source('src/app/api/marketing/instagram/callback/route.ts')
+    const status = source('src/app/api/marketing/instagram/status/route.ts')
+    const publish = source('src/app/api/marketing/instagram/publish/route.ts')
+
+    expect(connect).toContain('createMetaOAuthState(config, {')
+    expect(connect).toContain('tenantId: actor.tenantId')
+    expect(connect).toContain('userId: actor.userId')
+    expect(connect).toContain('channelId: channels[0].id')
+    expect(callback).toContain('verifyMetaOAuthState(config, state, {')
+    expect(callback).toContain('encryptMarketingToken(selected.pageAccessToken, {')
+    expect(status).toContain('decryptMarketingToken(channel.accessTokenEncrypted, {')
+    expect(publish).toContain('decryptMarketingToken(record.accessTokenEncrypted, {')
+  })
+
+  it('requires tenant-owned item-photo evidence and a CAS receipt around provider publication', () => {
+    const publish = source('src/app/api/marketing/instagram/publish/route.ts')
+
+    expect(publish).toContain("bucket !== 'item-photos'")
+    expect(publish).toContain('path.startsWith(`${tenantId}/${orderId}/`)')
+    expect(publish).toContain("'PUBLISH_EVIDENCE_MISSING'")
+    expect(publish).toContain("eq(aktion.status, 'freigegeben')")
+    expect(publish).toContain('PUBLISH_ACTION_STATE_CONFLICT_AFTER_PROVIDER')
+  })
 })

@@ -14,10 +14,16 @@ END
 $events$;
 
 -- 2. Table: communications
-ALTER TABLE communications ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS tenant_isolation ON communications;
-CREATE POLICY tenant_isolation ON communications
-  USING (tenant_id = current_setting('app.tenant_id', true));
+DO $communications$
+BEGIN
+  IF to_regclass('public.communications') IS NOT NULL THEN
+    ALTER TABLE public.communications ENABLE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS tenant_isolation ON public.communications;
+    CREATE POLICY tenant_isolation ON public.communications
+      USING (tenant_id = current_setting('app.tenant_id', true));
+  END IF;
+END
+$communications$;
 
 -- 3. Table: arbeitszeit_buchung
 ALTER TABLE arbeitszeit_buchung ENABLE ROW LEVEL SECURITY;

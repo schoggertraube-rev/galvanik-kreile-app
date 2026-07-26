@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   auditLog,
@@ -20,6 +20,29 @@ import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/a
 
 const ENTITY_ID = /^[A-Za-z0-9_-]{1,128}$/;
 const CUSTOMER_SOURCE_IS_LIVE = ["seed", "test", "demo", "integration-test"] as const;
+
+type CustomerKpiRow = {
+  customer_id: string;
+  kunde: string;
+  classification: string | null;
+  kunde_seit: Date | string;
+  umsatz_ltv: number | string | null;
+  gewinn_ltv: number | string | null;
+  offene_posten: number | string;
+  aktive_auftraege: number | string;
+  puenktlichkeit_pct: number | string | null;
+  reklamationen: number | string;
+};
+
+function finiteNumber(value: unknown): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error("CUSTOMER_KPI_NUMBER_INVALID");
+  return parsed;
+}
+
+function nullableFiniteNumber(value: unknown): number | null {
+  return value === null ? null : finiteNumber(value);
+}
 
 type CustomerAccess =
   | { ok: true; auth: AuthorizationSnapshot; customer: typeof customers.$inferSelect }
@@ -118,13 +141,51 @@ export async function getCustomerCard(customerId: string) {
     const canViewPrices = access.auth.permissions.includes("perm_view_prices");
     const canCreateOrders = access.auth.permissions.includes("perm_data_orders");
     const canManageQa = access.auth.permissions.includes("perm_op_qa");
+    const kpiRows = canViewPrices
+      ? await db.execute(sql<CustomerKpiRow>`
+          SELECT
+            kpi.customer_id,
+            kpi.kunde,
+            kpi.classification,
+            kpi.kunde_seit,
+            kpi.umsatz_ltv,
+            kpi.gewinn_ltv,
+            kpi.offene_posten,
+            kpi.aktive_auftraege,
+            kpi.puenktlichkeit_pct,
+            kpi.reklamationen
+          FROM public.v_analyse_kunden_kpi kpi
+          JOIN public.customers customer
+            ON customer.id = kpi.customer_id
+          WHERE customer.tenant_id = ${access.auth.tenantId}
+            AND kpi.customer_id = ${customerId}
+          LIMIT 1
+        `)
+      : [];
+    const kpiRow = kpiRows[0];
+    const kpi = kpiRow ? {
+      customer_id: kpiRow.customer_id,
+      kunde: kpiRow.kunde,
+      classification: kpiRow.classification ?? "nicht_klassifiziert",
+      kunde_seit: kpiRow.kunde_seit instanceof Date
+        ? kpiRow.kunde_seit.toISOString()
+        : String(kpiRow.kunde_seit),
+      umsatz_ltv: nullableFiniteNumber(kpiRow.umsatz_ltv),
+      gewinn_ltv: nullableFiniteNumber(kpiRow.gewinn_ltv),
+      offene_posten: finiteNumber(kpiRow.offene_posten),
+      aktive_auftraege: finiteNumber(kpiRow.aktive_auftraege),
+      puenktlichkeit_pct: nullableFiniteNumber(kpiRow.puenktlichkeit_pct),
+      reklamationen: finiteNumber(kpiRow.reklamationen),
+    } : null;
 
     return {
       ok: true as const,
       data: {
         ...projectCustomer(access.customer, canViewPrices),
-        kpi: null,
-        kpiAvailability: "not_connected" as const,
+        kpi,
+        kpiAvailability: canViewPrices
+          ? (kpi ? "available" as const : "not_found" as const)
+          : "forbidden" as const,
         openOrders,
         capabilities: { canViewPrices, canCreateOrders, canManageQa },
       },

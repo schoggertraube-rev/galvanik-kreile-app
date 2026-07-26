@@ -1,7 +1,20 @@
+const RETIRED_SEED_REASON =
+  "RETIRED_MOCK_SEED: production truth must come from captured or explicitly reviewed sources";
+
+export async function seedDatabase(): Promise<never> {
+  throw new Error(RETIRED_SEED_REASON);
+}
+
+/*
+ * Retained below as inert forensic context only. The former implementation
+ * connected to whichever DATABASE_URL was present, deleted complete tables,
+ * and inserted mock users, customers, orders, and evidence.
+ *
 import { db } from "./index";
 import { 
   customers, 
   orders, 
+  items,
   priceAgreements, 
   events, 
   complaints, 
@@ -24,6 +37,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
       console.log("🧹 Lösche alte Daten...");
       await db.delete(complaints);
       await db.delete(events);
+      await db.delete(items);
       await db.delete(orders);
       await db.delete(priceAgreements);
       await db.delete(customers);
@@ -122,7 +136,6 @@ export async function seedDatabase({ safeMode = false } = {}) {
         currentStationId: o.currentStationId,
         status: o.status || "in_progress",
         risk: o.risk || "green",
-        parts: o.parts as unknown as Record<string, unknown>[],
         statusText: o.statusText,
         delayReason: o.delayReason,
         recommendedAction: o.recommendedAction,
@@ -130,6 +143,20 @@ export async function seedDatabase({ safeMode = false } = {}) {
         dueDate,
         source: 'seed',
       });
+
+      if (o.parts.length > 0) {
+        await db.insert(items).values(o.parts.map((part) => ({
+          id: part.id,
+          tenantId: "galvanik-kreile",
+          orderId: o.id,
+          customerId: o.customerId,
+          name: part.name,
+          quantity: part.quantity ?? 1,
+          currentStationId: part.station,
+          material: part.material,
+          surfaceRequested: part.surfaceRequested ?? part.finish,
+        })));
+      }
     }
 
     // 6. Insert Complaints
@@ -159,3 +186,4 @@ export async function seedDatabase({ safeMode = false } = {}) {
 if (require.main === module || process.argv[1]?.includes('seed')) {
   seedDatabase().then(() => process.exit(0)).catch(() => process.exit(1));
 }
+*/

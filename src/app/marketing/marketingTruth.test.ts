@@ -72,10 +72,37 @@ describe('marketing truth and networking contract', () => {
     const at = new Date('2026-07-10T10:00:00.000Z')
     state.rows = new Map<unknown, unknown[]>([
       [aktion, [
-        { id: 'a1', status: 'ausgefuehrt', kostenBudget: '100', ausgefuehrtAm: at },
+        {
+          id: 'a1',
+          status: 'ausgefuehrt',
+          kostenBudget: '100',
+          budgetStatus: 'measured',
+          budgetMeasuredAt: at,
+          budgetSource: 'manual_plan',
+          ausgefuehrtAm: at,
+        },
       ]],
-      [touchpoint, [{ id: 't1', aktionId: 'a1', kanalId: 'k1', reichweite: 100, klicks: 20, ausgefuehrtAm: at }]],
-      [attribution, [{ id: 'at1', touchpointId: 't1', leadId: 'lead-1', auftragId: 'order-1', umsatz: '300' }]],
+      [touchpoint, [{
+        id: 't1',
+        aktionId: 'a1',
+        kanalId: 'k1',
+        reichweite: 100,
+        klicks: 20,
+        metricsStatus: 'measured',
+        metricsMeasuredAt: at,
+        metricsSource: 'provider_insights',
+        ausgefuehrtAm: at,
+      }]],
+      [attribution, [{
+        id: 'at1',
+        touchpointId: 't1',
+        leadId: 'lead-1',
+        auftragId: 'order-1',
+        umsatz: '300',
+        revenueStatus: 'measured',
+        revenueMeasuredAt: at,
+        revenueSource: 'invoice_link',
+      }]],
       [kanal, [{ id: 'k1', name: 'Instagram', typ: 'instagram' }]],
       [kampagne, []],
       [segment, []],
@@ -114,6 +141,58 @@ describe('marketing truth and networking contract', () => {
       expect.objectContaining({ label: 'Zugeordneter Umsatz', wert: 300 }),
       expect.objectContaining({ label: 'Planbudget ausgeführter Aktionen', wert: 100 }),
     ]))
+  })
+
+  it('keeps unmeasured reach, clicks and revenue unknown instead of presenting zero', async () => {
+    const at = new Date('2026-07-10T10:00:00.000Z')
+    state.rows.set(touchpoint, [{
+      id: 't1',
+      aktionId: 'a1',
+      kanalId: 'k1',
+      reichweite: null,
+      klicks: null,
+      metricsStatus: 'not_measured',
+      metricsMeasuredAt: null,
+      metricsSource: null,
+      ausgefuehrtAm: at,
+    }])
+    state.rows.set(attribution, [{
+      id: 'at1',
+      touchpointId: 't1',
+      leadId: 'lead-1',
+      auftragId: 'order-1',
+      umsatz: null,
+      revenueStatus: 'not_measured',
+      revenueMeasuredAt: null,
+      revenueSource: null,
+    }])
+
+    await expect(getFunnelAction()).resolves.toEqual(expect.objectContaining({
+      umsatz: null,
+      umsatzState: 'not_measured',
+      stufen: expect.arrayContaining([
+        expect.objectContaining({ label: 'Reichweite', wert: null, dataState: 'not_measured' }),
+        expect.objectContaining({ label: 'Klicks / Profil', wert: null, dataState: 'not_measured' }),
+      ]),
+    }))
+    await expect(getWirkungMiniAction()).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Zugeordneter Umsatz', wert: null, dataState: 'not_measured' }),
+    ]))
+    await expect(getAttributionData()).resolves.toEqual(expect.objectContaining({
+      state: 'ready',
+      channels: [
+        expect.objectContaining({ kanal: 'Instagram', umsatz: null, revenueState: 'not_measured' }),
+      ],
+      totals: expect.objectContaining({ umsatz: null, revenueState: 'not_measured' }),
+    }))
+    await expect(getMarketingUmsatzAnalysisAction('2026-07-01', '2026-07-31'))
+      .resolves.toEqual(expect.objectContaining({
+        gesamt: null,
+        evidence: expect.objectContaining({
+          revenueState: 'not_measured',
+          revenueCoverage: { sourceCount: 1, measuredCount: 0, missingCount: 1 },
+        }),
+      }))
   })
 
   it('returns stored proposals without auto-seeding production-looking demo records', async () => {
@@ -165,15 +244,63 @@ describe('marketing truth and networking contract', () => {
   })
 
   it('uses exact attribution links instead of distributing orders and revenue heuristically', async () => {
-    await expect(getAttributionData()).resolves.toEqual([
-      expect.objectContaining({ kanal: 'Instagram', plannedBudget: 100, actualSpend: null, leads: 1, auftraege: 1, umsatz: 300, roi: null }),
-    ])
+    await expect(getAttributionData()).resolves.toEqual(expect.objectContaining({
+      channels: [
+        expect.objectContaining({ kanal: 'Instagram', plannedBudget: 100, actualSpend: null, leads: 1, auftraege: 1, umsatz: 300, roi: null }),
+      ],
+      totals: expect.objectContaining({ leads: 1, auftraege: 1, umsatz: 300, plannedBudget: 100 }),
+    }))
     await expect(getMarketingAnfragenAnalysisAction('2026-07-01', '2026-07-31'))
       .resolves.toEqual(expect.objectContaining({ gesamt: 1 }))
     await expect(getMarketingUmsatzAnalysisAction('2026-07-01', '2026-07-31'))
       .resolves.toEqual(expect.objectContaining({ gesamt: 300 }))
     await expect(getMarketingRoiAnalysisAction('2026-07-01', '2026-07-31'))
       .resolves.toEqual(expect.objectContaining({ gesamt: null, revenue: 300, cost: null, plannedBudget: 100 }))
+  })
+
+  it('deduplicates global lead, order and plan-budget totals across channels on the server', async () => {
+    const at = new Date('2026-07-10T10:00:00.000Z')
+    state.rows.set(kanal, [
+      { id: 'k1', name: 'Instagram', typ: 'instagram' },
+      { id: 'k2', name: 'E-Mail', typ: 'email' },
+    ])
+    state.rows.set(touchpoint, [
+      { id: 't1', aktionId: 'a1', kanalId: 'k1', ausgefuehrtAm: at },
+      { id: 't2', aktionId: 'a1', kanalId: 'k2', ausgefuehrtAm: at },
+    ])
+    state.rows.set(attribution, [
+      {
+        id: 'at1',
+        touchpointId: 't1',
+        leadId: 'lead-1',
+        auftragId: 'order-1',
+        umsatz: '300',
+        revenueStatus: 'measured',
+        revenueMeasuredAt: at,
+      },
+      {
+        id: 'at2',
+        touchpointId: 't2',
+        leadId: 'lead-1',
+        auftragId: 'order-1',
+        umsatz: null,
+        revenueStatus: 'not_measured',
+        revenueMeasuredAt: null,
+      },
+    ])
+
+    await expect(getAttributionData()).resolves.toEqual(expect.objectContaining({
+      channels: [
+        expect.objectContaining({ kanal: 'Instagram', leads: 1, auftraege: 1 }),
+        expect.objectContaining({ kanal: 'E-Mail', leads: 1, auftraege: 1 }),
+      ],
+      totals: expect.objectContaining({
+        leads: 1,
+        auftraege: 1,
+        plannedBudget: 100,
+        budgetState: 'ready',
+      }),
+    }))
   })
 
   it('does not present planned budgets as actual spend or a live ROI', () => {
@@ -185,6 +312,9 @@ describe('marketing truth and networking contract', () => {
     expect(actionSource).toContain('kosten_budget ist ein Planwert')
     expect(attributionPage).not.toContain('Live-Auswertung')
     expect(attributionPage).toContain('Ist-Ausgaben')
+    expect(attributionPage).toContain('Erneut laden')
+    expect(attributionPage).toContain('setData(null)')
+    expect(attributionPage).not.toContain('.reduce(')
     expect(consentPage).not.toContain('alert(')
   })
 

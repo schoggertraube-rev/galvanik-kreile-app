@@ -8,10 +8,6 @@ interface Props {
 export function WerkstattPulsHero({ data }: Props) {
   const { hero } = data;
 
-  const wochenzielPct = (hero.wochenzielSoll && hero.wochenzielIst !== null)
-    ? Math.min(100, Math.round((hero.wochenzielIst / hero.wochenzielSoll) * 100))
-    : 0;
-
   return (
     <div className="hero">
       <div className="hero-kpis">
@@ -38,7 +34,7 @@ export function WerkstattPulsHero({ data }: Props) {
             </>
           ) : (
             <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>
-              {(hero.wochenzielIst ?? 0) > 0 ? 'Nicht messbar: abgeschlossene Aufträge ohne Kundenzusage' : 'Nicht messbar: keine abgeschlossenen Aufträge im Zeitraum'}
+              {hero.completedOrdersN > 0 ? 'Nicht messbar: abgeschlossene Aufträge ohne Kundenzusage' : 'Nicht messbar: keine abgeschlossenen Aufträge im Zeitraum'}
             </div>
           )}
         </div>
@@ -59,40 +55,28 @@ export function WerkstattPulsHero({ data }: Props) {
               </div>
             </>
           ) : (
-             <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>Keine fertigen Aufträge</div>
+             <div style={{ fontSize: 13, color: 'var(--ink-3)' }}>
+               {hero.completedOrdersN > 0
+                 ? 'Nicht messbar: bestätigte Eingangszeit fehlt'
+                 : 'Bestätigt leer: keine Abschlüsse im Zeitraum'}
+             </div>
           )}
         </div>
 
-        {/* Wochenziel */}
+        {/* Abschlüsse */}
         <div>
-          <div className="kpi-label">Periodenziel</div>
-          {hero.wochenzielSoll ? (
-            <>
-              <div>
-                <span className="kpi-value">{hero.wochenzielIst}</span>
-                <span className="kpi-unit"> / {hero.wochenzielSoll}</span>
-              </div>
-              <div className="kpi-trend">{hero.wochenzielSoll - (hero.wochenzielIst || 0)} fehlen</div>
-              <div className="progress" style={{ marginTop: 14 }}>
-                <div style={{ width: `${wochenzielPct}%`, background: 'linear-gradient(90deg,#1F8079,#16A34A)' }}></div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <span className="kpi-value">{hero.wochenzielIst}</span>
-              </div>
-              <div className="kpi-trend">Im gewählten Zeitraum abgeschlossen</div>
-              <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 14 }}>Ziel nicht konfiguriert</div>
-            </>
-          )}
+          <div className="kpi-label">Abgeschlossen im Zeitraum</div>
+          <div>
+            <span className="kpi-value">{hero.completedOrdersN}</span>
+          </div>
+          <div className="kpi-trend">Abschlussdatum liegt im gewählten Zeitraum</div>
         </div>
 
         {/* Offene */}
         <div>
-          <div className="kpi-label">Kritische Aufträge</div>
-          <div><span className={`kpi-value ${hero.kritischeAuftraegeN > 0 ? 'bad' : ''}`}>{hero.kritischeAuftraegeN}</span></div>
-          <div className="kpi-trend">davon {hero.kritischeAuftraegeN} verspätet</div>
+          <div className="kpi-label">Aktuell überfällige Aufträge</div>
+          <div><span className={`kpi-value ${hero.overdueOrdersN > 0 ? 'bad' : ''}`}>{hero.overdueOrdersN}</span></div>
+          <div className="kpi-trend">Von {hero.offeneAuftraegeN} aktuell offenen Aufträgen</div>
         </div>
 
         {/* Dokumentation */}
@@ -108,31 +92,6 @@ export function WerkstattPulsHero({ data }: Props) {
         </div>
       </div>
 
-      {/* Score-Ring */}
-      <div className="score-ring">
-        <svg viewBox="0 0 120 120">
-          <defs>
-            <linearGradient id="ringG" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#7A3FB0"/>
-              <stop offset="60%" stopColor="#C2185B"/>
-              <stop offset="100%" stopColor="#F2643C"/>
-            </linearGradient>
-          </defs>
-          <circle cx="60" cy="60" r="50" fill="none" stroke="#F0E6D3" strokeWidth="9"/>
-          {hero.werkstattScore !== null && (
-            <circle cx="60" cy="60" r="50" fill="none" stroke="url(#ringG)" strokeWidth="9"
-              strokeDasharray="314" strokeDashoffset={314 - (314 * hero.werkstattScore) / 100} strokeLinecap="round"/>
-          )}
-        </svg>
-        <div className="score-num">
-          {hero.werkstattScore !== null ? (
-            <>{hero.werkstattScore}<span style={{ fontSize: 14, fontWeight: 500, color: 'var(--ink-3)' }}>/100</span></>
-          ) : (
-            <span style={{ fontSize: 12, color: 'var(--ink-3)' }}>N/A</span>
-          )}
-        </div>
-        <div className="score-label">Werkstatt-Score</div>
-      </div>
     </div>
   );
 }

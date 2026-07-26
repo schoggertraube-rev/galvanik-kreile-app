@@ -2,8 +2,10 @@
 
 import { and, desc, eq, isNull, or } from "drizzle-orm";
 import { db } from "@/db";
-import { inquiries, marketingTouchpoints, orders, qs } from "@/db/schema";
+import { inquiries, orders, qs } from "@/db/schema";
 import { ausgangsrechnung } from "@/db/schema_buchhaltung";
+import { aktion, kanal, touchpoint as marketingTouchpoint } from "@/db/schema_marketing";
+import { projectVerifiedOrderMarketingTouchpoint } from "@/lib/marketing/orderConnectionTruth";
 import { resolveAuthorization } from "@/lib/server/authorization";
 
 const TENANT_ID = "galvanik-kreile";
@@ -109,14 +111,39 @@ export async function getOrderConnections(orderIdValue: unknown): Promise<OrderC
       } else {
         let touchpoint: NonNullable<OrderConnections["marketing"]>["touchpoint"] = null;
         if (inquiry.quelleTouchpointId) {
-          const [row] = await db.select().from(marketingTouchpoints).where(and(
-            eq(marketingTouchpoints.id, inquiry.quelleTouchpointId),
-            eq(marketingTouchpoints.tenantId, authorization.data.tenantId),
-          )).limit(1);
+          const [row] = await db.select({
+            id: marketingTouchpoint.id,
+            actionId: marketingTouchpoint.aktionId,
+            channelId: marketingTouchpoint.kanalId,
+            actionTruthStatus: aktion.truthStatus,
+            actionIsDemo: aktion.isDemo,
+            channelTruthStatus: kanal.truthStatus,
+            channelName: kanal.name,
+            channelType: kanal.typ,
+            utmSource: marketingTouchpoint.utmSource,
+            title: aktion.titel,
+          }).from(marketingTouchpoint)
+            .leftJoin(aktion, and(
+              eq(aktion.id, marketingTouchpoint.aktionId),
+              eq(aktion.tenantId, authorization.data.tenantId),
+              eq(aktion.truthStatus, "verified"),
+              eq(aktion.isDemo, false),
+            ))
+            .leftJoin(kanal, and(
+              eq(kanal.id, marketingTouchpoint.kanalId),
+              eq(kanal.tenantId, authorization.data.tenantId),
+              eq(kanal.truthStatus, "verified"),
+            ))
+            .where(and(
+              eq(marketingTouchpoint.id, inquiry.quelleTouchpointId),
+              eq(marketingTouchpoint.tenantId, authorization.data.tenantId),
+            ))
+            .limit(1);
           if (row) {
-            touchpoint = { id: row.id, channel: row.kanal, title: row.titel };
-          } else {
-            warnings.push("Der gespeicherte Marketing-Touchpoint ist im aktuellen Mandanten nicht vorhanden.");
+            touchpoint = projectVerifiedOrderMarketingTouchpoint(row);
+          }
+          if (!touchpoint) {
+            warnings.push("Der gespeicherte Marketing-Touchpoint ist nicht vorhanden oder nicht als verifizierte Marketingquelle freigegeben.");
           }
         }
         const rawConfidence = inquiry.quelleKonfidenz === null ? null : Number(inquiry.quelleKonfidenz);

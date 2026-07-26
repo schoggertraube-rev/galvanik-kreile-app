@@ -13,6 +13,18 @@ CREATE INDEX IF NOT EXISTS app_users_tenant_id_id_idx ON public.app_users (tenan
 -- Drop old single-column unique constraint on email
 ALTER TABLE public.app_users DROP CONSTRAINT IF EXISTS app_users_email_key;
 ALTER TABLE public.app_users DROP CONSTRAINT IF EXISTS app_users_email_unique;
+ALTER TABLE public.app_users DROP CONSTRAINT IF EXISTS users_email_key;
 
 -- Add new composite unique constraint on (tenant_id, email)
-ALTER TABLE public.app_users ADD CONSTRAINT app_users_tenant_email_unique UNIQUE (tenant_id, email);
+DO $tenant_email_constraint$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'public.app_users'::regclass
+      AND conname = 'app_users_tenant_email_unique'
+  ) THEN
+    ALTER TABLE public.app_users
+      ADD CONSTRAINT app_users_tenant_email_unique UNIQUE (tenant_id, email);
+  END IF;
+END
+$tenant_email_constraint$;

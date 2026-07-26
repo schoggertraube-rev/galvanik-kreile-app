@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeSupplierName, parseOcrResult } from "@/lib/ocr/resultContract";
+import { normalizeSupplierName, parseOcrResult, parseStoredOcrPositions } from "@/lib/ocr/resultContract";
 
 const valid = {
   lieferant: " Lieferant GmbH ",
@@ -40,5 +40,16 @@ describe("OCR result truth contract", () => {
 
   it("builds an exact supplier lookup key without wildcard matching", () => {
     expect(normalizeSupplierName("  Müller & Söhne GmbH  ")).toBe("muller sohne gmbh");
+  });
+
+  it("validates stored OCR positions without promoting them to ledger positions", () => {
+    expect(parseStoredOcrPositions(valid.positionen)).toEqual([{
+      beschreibung: "Teil",
+      menge: 1,
+      einzelpreis: 100,
+      betrag: 100,
+    }]);
+    expect(() => parseStoredOcrPositions([{ beschreibung: "Teil", betrag: "100" }]))
+      .toThrow("OCR_RESULT_INVALID");
   });
 });

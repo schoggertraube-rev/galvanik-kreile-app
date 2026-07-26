@@ -1,6 +1,6 @@
 -- Tabelle: stations (Wird referenziert)
 CREATE TABLE stations (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- Eindeutige ID für die Station
+    id text PRIMARY KEY DEFAULT (gen_random_uuid()::text), -- Eindeutige ID für die Station
     slug text NOT NULL UNIQUE, -- Eindeutiger Slug für URLs und Zuordnungen in der App
     name text NOT NULL, -- Anzeigename der Station in der Werkstatt
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Zeitstempel der Erstellung
@@ -21,12 +21,22 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY; -- RLS aktivieren
 
 -- Tabelle: customers
 CREATE TABLE customers (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- Eindeutige Kunden-ID
+    id text PRIMARY KEY DEFAULT (gen_random_uuid()::text), -- Eindeutige Kunden-ID
+    tenant_id text NOT NULL DEFAULT 'galvanik-kreile', -- Kanonische Mandantengrenze
     name text NOT NULL, -- Name des Kunden oder der Firma
     type text NOT NULL, -- Kundentyp (privat, business etc.)
     contact_person text, -- Ansprechpartner für Rückfragen
     email text, -- E-Mail-Adresse für Rechnungen/Benachrichtigungen
     phone text, -- Telefonnummer für kurzfristige Rückfragen
+    pref_comm text, -- Bevorzugter Kommunikationskanal
+    risk text DEFAULT 'Niedrig', -- Kundenrisiko
+    risk_note text, -- Begründung der Risikoeinstufung
+    notes text, -- Kanonische interne Kundennotiz
+    address text, -- Unstrukturierte Bestandsadresse
+    street text, -- Straße und Hausnummer
+    city text, -- Ort
+    zip_code text, -- Postleitzahl
+    country text, -- Land
     payment_profile jsonb, -- JSONB für Zahlungskonditionen und -historie
     approval_profile jsonb, -- JSONB für Freigabeprozesse und Entscheider
     expectation_profile jsonb, -- JSONB für Qualitäts- und Preiserwartungen
@@ -35,6 +45,8 @@ CREATE TABLE customers (
     internal_warning text, -- Interne Warnhinweise (z.B. Zahlungsausfälle)
     tags jsonb, -- Array von Tags zur Kategorisierung und Suche
     credit_rating text, -- Bonitäts-Einstufung des Kunden
+    marketing_opt_out boolean NOT NULL DEFAULT false, -- Marketing-Widerruf
+    last_reactivated_at TIMESTAMPTZ, -- Letzte Reaktivierung
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Zeitpunkt der Anlage
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL -- Zeitpunkt der letzten Änderung
 );
@@ -42,18 +54,29 @@ ALTER TABLE customers ENABLE ROW LEVEL SECURITY; -- RLS aktivieren
 
 -- Tabelle: orders
 CREATE TABLE orders (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- Eindeutige Auftrags-ID
+    id text PRIMARY KEY DEFAULT (gen_random_uuid()::text), -- Eindeutige Auftrags-ID
+    tenant_id text NOT NULL DEFAULT 'galvanik-kreile', -- Kanonische Mandantengrenze
     order_number text NOT NULL UNIQUE, -- Lesbare, fortlaufende Auftragsnummer
-    customer_id uuid NOT NULL, -- Referenz auf den Kunden
+    customer_id text NOT NULL, -- Referenz auf den Kunden
     title text NOT NULL, -- Kurze Bezeichnung des Auftrags
+    task text, -- Ausführliche operative Aufgabe
+    station text NOT NULL DEFAULT 'wareneingang', -- Kanonische Stationskennung
+    current_station_id text, -- Aktuelle Stationskennung für neue Pfade
     status text NOT NULL, -- Aktueller Gesamtstatus des Auftrags
     risk text, -- Risikoeinstufung (z.B. kritisch wegen Termin)
+    priority text DEFAULT 'normal', -- Manuelle Priorität
+    priority_computed text DEFAULT 'green', -- Deterministisch berechnete Priorität
     status_text text, -- Detailtext zum aktuellen Status
     delay_reason text, -- Grund für eine eventuelle Verzögerung
     recommended_action text, -- Handlungsempfehlung für den Mitarbeiter im Cockpit
     received_at TIMESTAMPTZ, -- Zeitpunkt des physischen Wareneingangs
+    intake_date TIMESTAMPTZ DEFAULT now(), -- Kanonischer Wareneingangszeitpunkt
     due_date TIMESTAMPTZ, -- Vereinbartes Fälligkeitsdatum
     promised_date TIMESTAMPTZ, -- Intern zugesagtes Fertigstellungsdatum
+    promised_due_date TIMESTAMPTZ, -- Kanonischer zugesagter Fertigstellungstermin
+    completed_date TIMESTAMPTZ, -- Tatsächlicher Abschlusszeitpunkt
+    source text, -- Herkunft des Auftrags
+    source_ref text, -- Externe oder interne Quellreferenz
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Erstellungszeitpunkt in der DB
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Letzte Änderung
     -- FK: RESTRICT, da ein Kunde mit aktiven Aufträgen nicht versehentlich gelöscht werden darf
@@ -63,10 +86,13 @@ ALTER TABLE orders ENABLE ROW LEVEL SECURITY; -- RLS aktivieren
 
 -- Tabelle: items
 CREATE TABLE items (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- Eindeutige Teile-ID
-    order_id uuid NOT NULL, -- Zugehöriger Auftrag
+    id text PRIMARY KEY DEFAULT (gen_random_uuid()::text), -- Eindeutige Teile-ID
+    tenant_id text NOT NULL DEFAULT 'galvanik-kreile', -- Kanonische Mandantengrenze
+    order_id text NOT NULL, -- Zugehöriger Auftrag
+    customer_id text NOT NULL, -- Zugehöriger Kunde
     name text NOT NULL, -- Bezeichnung des Werkstücks
     quantity integer NOT NULL DEFAULT 1, -- Anzahl der gleichen Werkstücke im Auftrag
+    current_station_id text DEFAULT 'wareneingang', -- Aktuelle Station
     material text, -- Basismaterial des Teils (z.B. Stahl, Messing)
     surface_requested text, -- Gewünschte Ziel-Oberfläche (z.B. Nickel)
     photo_ids jsonb, -- Referenzen auf hochgeladene Fotos
@@ -76,16 +102,17 @@ CREATE TABLE items (
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Erstellungszeitpunkt
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Letzte Änderung
     -- FK: CASCADE, da Einzelteile fest an einen Auftrag gebunden sind und mit ihm gelöscht werden sollen
-    CONSTRAINT fk_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+    CONSTRAINT fk_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+    CONSTRAINT fk_item_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT
 );
 ALTER TABLE items ENABLE ROW LEVEL SECURITY; -- RLS aktivieren
 
 -- Tabelle: status_events
 CREATE TABLE status_events (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- Eindeutige Event-ID
-    order_id uuid, -- Optionaler Bezug zu einem Auftrag
-    item_id uuid, -- Optionaler Bezug zu einem spezifischen Einzelteil
-    customer_id uuid, -- Bezug zum Kunden für die Historien-Ansicht
+    id text PRIMARY KEY DEFAULT (gen_random_uuid()::text), -- Eindeutige Event-ID
+    order_id text, -- Optionaler Bezug zu einem Auftrag
+    item_id text, -- Optionaler Bezug zu einem spezifischen Einzelteil
+    customer_id text, -- Bezug zum Kunden für die Historien-Ansicht
     event_type text NOT NULL, -- Art des Events (z.B. 'STATION_COMPLETED')
     metadata jsonb, -- Flexible Zusatzdaten zum Event
     timestamp TIMESTAMPTZ DEFAULT now() NOT NULL, -- Logischer Zeitpunkt des Events in der Realität
@@ -102,12 +129,12 @@ ALTER TABLE status_events ENABLE ROW LEVEL SECURITY; -- RLS aktivieren
 
 -- Tabelle: baths
 CREATE TABLE baths (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- Eindeutige Bad-ID
+    id text PRIMARY KEY DEFAULT (gen_random_uuid()::text), -- Eindeutige Bad-ID
     bath_number text NOT NULL UNIQUE, -- Eindeutige, lesbare Bad-Nummer (z.B. B1)
     name text NOT NULL, -- Name des Galvanik-Bads
     process_type text NOT NULL, -- Prozesstyp (z.B. nickel, chrom)
     status text NOT NULL, -- Zustand des Bads (z.B. stable, critical)
-    station_id uuid, -- Physischer Standort (Station) in der Werkstatt
+    station_id text, -- Physischer Standort (Station) in der Werkstatt
     target_values jsonb, -- Zielwerte für Temperatur, pH etc.
     last_measurement_at TIMESTAMPTZ, -- Zeitpunkt der letzten Messung
     next_measurement_due_at TIMESTAMPTZ, -- Fälligkeit der nächsten Routinemessung
@@ -121,8 +148,9 @@ ALTER TABLE baths ENABLE ROW LEVEL SECURITY; -- RLS aktivieren
 
 -- Tabelle: bath_measurements
 CREATE TABLE bath_measurements (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- Eindeutige Messungs-ID
-    bath_id uuid NOT NULL, -- Zugehöriges Bad
+    id text PRIMARY KEY DEFAULT (gen_random_uuid()::text), -- Eindeutige Messungs-ID
+    tenant_id text NOT NULL DEFAULT 'galvanik-kreile', -- Kanonische Mandantengrenze
+    bath_id text NOT NULL, -- Zugehöriges Bad
     temperature real, -- Gemessene Bad-Temperatur
     ph real, -- Gemessener pH-Wert
     concentration real, -- Gemessene Konzentration der Chemie
@@ -142,13 +170,17 @@ ALTER TABLE bath_measurements ENABLE ROW LEVEL SECURITY; -- RLS aktivieren
 
 -- Tabelle: complaints
 CREATE TABLE complaints (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- Eindeutige Reklamations-ID
-    order_id uuid NOT NULL, -- Betroffener Auftrag der Reklamation
-    customer_id uuid NOT NULL, -- Reklamierender Kunde
-    item_id uuid, -- Optional: Direkt betroffenes Einzelteil
-    station_id uuid, -- Optional: Ort des mutmaßlichen Fehlers in der Produktion
+    id text PRIMARY KEY DEFAULT (gen_random_uuid()::text), -- Eindeutige Reklamations-ID
+    tenant_id text NOT NULL DEFAULT 'galvanik-kreile', -- Kanonische Mandantengrenze
+    order_id text NOT NULL, -- Betroffener Auftrag der Reklamation
+    customer_id text NOT NULL, -- Reklamierender Kunde
+    item_id text, -- Optional: Direkt betroffenes Einzelteil
+    station_id text, -- Optional: Ort des mutmaßlichen Fehlers in der Produktion
     reason text NOT NULL, -- Klassifizierungsgrund (z.B. Oberflächenqualität)
-    description text, -- Freitext-Beschreibung des Problems
+    description text NOT NULL DEFAULT '', -- Freitext-Beschreibung des Problems
+    photo_ids jsonb DEFAULT '[]'::jsonb, -- Belegfotos
+    status text NOT NULL DEFAULT 'open', -- Bearbeitungsstatus
+    resolved_at TIMESTAMPTZ, -- Zeitpunkt der Erledigung
     resolution text, -- Vereinbarte Lösung oder Gegenmaßnahme
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Eingangszeitpunkt der Reklamation
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Letzte Änderung
@@ -165,12 +197,13 @@ ALTER TABLE complaints ENABLE ROW LEVEL SECURITY; -- RLS aktivieren
 
 -- Tabelle: inventory_items
 CREATE TABLE inventory_items (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- Eindeutige Artikel-ID
+    id text PRIMARY KEY DEFAULT (gen_random_uuid()::text), -- Eindeutige Artikel-ID
+    tenant_id text NOT NULL DEFAULT 'galvanik-kreile', -- Kanonische Mandantengrenze
     sku text NOT NULL UNIQUE, -- Artikelnummer für Barcodes/Referenzen
     name text NOT NULL, -- Bezeichnung der Chemie oder des Verbrauchsmaterials
-    current_stock real NOT NULL DEFAULT 0, -- Aktueller Lagerbestand
-    min_stock real, -- Meldebestand für Warnungen und Nachbestellungen
-    price_per_unit real, -- Einkaufspreis pro Einheit für Kalkulationen
+    current_stock numeric(14,4) NOT NULL DEFAULT 0, -- Aktueller Lagerbestand
+    min_stock numeric(14,4), -- Meldebestand für Warnungen und Nachbestellungen
+    price_per_unit numeric(10,4), -- Einkaufspreis pro Einheit für Kalkulationen
     unit text NOT NULL, -- Maßeinheit (z.B. Liter, kg, Stück)
     is_consumable boolean DEFAULT true NOT NULL, -- Flag für Verbrauchsmaterial (im Gegensatz zu Werkzeugen)
     is_hazardous boolean DEFAULT false NOT NULL, -- Flag für Gefahrstoff (Sicherheitskennzeichnung)
@@ -182,11 +215,12 @@ ALTER TABLE inventory_items ENABLE ROW LEVEL SECURITY; -- RLS aktivieren
 -- Tabelle: stock_movements
 CREATE TABLE stock_movements (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- Eindeutige Bewegungs-ID
-    inventory_item_id uuid NOT NULL, -- Bewegter Artikel
+    tenant_id text NOT NULL DEFAULT 'galvanik-kreile', -- Kanonische Mandantengrenze
+    inventory_item_id text NOT NULL, -- Bewegter Artikel
     movement_type text NOT NULL, -- Art (z.B. Wareneingang, Ausgang, Verbrauch)
-    quantity real NOT NULL, -- Bewegte Menge (Vorzeichen bestimmt Zu/Abgang logisch)
+    quantity numeric(14,4) NOT NULL, -- Bewegte Menge (Vorzeichen bestimmt Zu/Abgang logisch)
     unit text NOT NULL, -- Einheit der gebuchten Menge
-    order_id uuid, -- Optionaler Projektbezug für auftragsbezogenen Verbrauch
+    order_id text, -- Optionaler Projektbezug für auftragsbezogenen Verbrauch
     reason text, -- Begründung für die Bewegung (z.B. Schwund, Bruch)
     created_by uuid NOT NULL, -- Buchender Mitarbeiter
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Buchungszeitpunkt
@@ -202,15 +236,11 @@ ALTER TABLE stock_movements ENABLE ROW LEVEL SECURITY; -- RLS aktivieren
 
 -- Tabelle: price_agreements
 CREATE TABLE price_agreements (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- Eindeutige Preis-ID
-    customer_id uuid NOT NULL, -- Kunde für die Sonderkondition
-    title text NOT NULL, -- Kurze Bezeichnung der Absprache
-    item_pattern text, -- Suchmuster oder Typ für die automatische Zuordnung
-    price real NOT NULL, -- Ausgehandelter Festpreis oder Rabatt
-    currency text NOT NULL DEFAULT 'EUR', -- Währung der Preisbindung
-    valid_from TIMESTAMPTZ, -- Gültigkeitsbeginn der Absprache
-    valid_until TIMESTAMPTZ, -- Gültigkeitsende (für befristete Aktionen)
-    note text, -- Zusätzliche Bemerkungen oder Bedingungen
+    id text PRIMARY KEY DEFAULT (gen_random_uuid()::text), -- Eindeutige Preis-ID
+    customer_id text NOT NULL, -- Kunde für die Sonderkondition
+    scope text NOT NULL, -- Geltungsbereich der Absprache
+    rate text NOT NULL, -- Vertraglich gespeicherter Satz
+    date TIMESTAMPTZ DEFAULT now() NOT NULL, -- Wirksamkeitsdatum
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Erstellungszeitpunkt
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Letzte Änderung
     -- FK: CASCADE, wenn der Kunde gelöscht wird, entfallen seine spezifischen Sonderpreise
@@ -220,15 +250,26 @@ ALTER TABLE price_agreements ENABLE ROW LEVEL SECURITY; -- RLS aktivieren
 
 -- Tabelle: inquiries (QuoteRequests)
 CREATE TABLE inquiries (
-    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- Eindeutige Anfrage-ID
-    customer_id uuid, -- Optional, falls es ein bereits bekannter Bestandskunde ist
+    id text PRIMARY KEY DEFAULT (gen_random_uuid()::text), -- Eindeutige Anfrage-ID
+    tenant_id text NOT NULL DEFAULT 'galvanik-kreile', -- Kanonische Mandantengrenze
+    customer_id text, -- Optional, falls es ein bereits bekannter Bestandskunde ist
     customer_name text NOT NULL, -- Name des Anfragenden (wichtig für Neukunden ohne Konto)
     subject text NOT NULL, -- Betreff oder Titel der Anfrage
     description text, -- Freitext der Anfrage vom Kunden
     rust_level text, -- Bewerteter Zustand (z.B. Rostgrad) des Bauteils für den Aufwand
+    dirt_level text, -- Verschmutzungsgrad
+    part_count integer NOT NULL DEFAULT 1, -- Anzahl der Teile
+    material text NOT NULL DEFAULT '', -- Materialangabe
     pricing jsonb, -- Kalkulierte Preisstruktur (Grundarbeit, Reinigung, etc.)
     status text NOT NULL, -- Bearbeitungsstatus (z.B. offen, angeboten, abgelehnt)
-    photo_url text, -- Link zum angehängten Schadens- oder Teilefoto
+    photo text, -- Link zum angehängten Schadens- oder Teilefoto
+    quelle_typ text NOT NULL DEFAULT 'unbekannt', -- Marketing-/Anfragequelle
+    quelle_touchpoint_id uuid, -- Zugeordneter Marketing-Touchpoint
+    quelle_manuell text, -- Manuell bestätigte Quelle
+    quelle_konfidenz numeric(5,2), -- Konfidenz 0..1
+    extracted_data jsonb, -- Extraktionsbeleg
+    converted_to_order_id text, -- Erzeugter Auftrag
+    converted_to_customer_id text, -- Erzeugter Kunde
     received_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Tatsächlicher Eingang der Anfrage (E-Mail Datum)
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Anlage in der Datenbank
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Letzte Änderung

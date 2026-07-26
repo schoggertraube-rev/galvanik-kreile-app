@@ -29,14 +29,22 @@ export function WerkstattPulsFooter({ data }: Props) {
         <strong>Datenherkunft & Gültigkeit:</strong>
         {dataSources.map((ds, idx) => {
           let dotClass = 'gray';
-          if (ds.status === 'live') dotClass = 'green';
+          if (ds.status === 'ready') dotClass = 'green';
           else if (ds.status === 'partial') dotClass = 'amber';
-          else if (ds.status === 'missing' || ds.status === 'empty') dotClass = 'red';
+          else if (ds.status === 'missing_input' || ds.status === 'unavailable') dotClass = 'red';
+          const stateLabel = {
+            ready: 'belegt',
+            confirmed_empty: 'bestätigt leer',
+            partial: 'teilweise belegt',
+            missing_input: 'Eingabe fehlt',
+            not_configured: 'nicht eingerichtet',
+            unavailable: 'nicht verfügbar',
+          }[ds.status];
 
           return (
             <span key={idx}>
               <span className={`dot ${dotClass}`}></span>
-              {ds.label} 
+              {ds.label}: {stateLabel}
               {ds.recordCount !== null && ` (${ds.recordCount})`}
             </span>
           );

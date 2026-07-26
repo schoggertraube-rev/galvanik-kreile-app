@@ -31,8 +31,8 @@ function useCounter(target: number, divisor = 1, running = true) {
 }
 
 function AnimatedCounter({ wert, suffix, divisor, running }: WirkungMini & { running: boolean }) {
-  const formatted = useCounter(wert, divisor, running);
-  return <>{formatted}{suffix}</>;
+  const formatted = useCounter(wert ?? 0, divisor, running && wert !== null);
+  return <>{wert === null ? 'nicht gemessen' : `${formatted}${suffix}`}</>;
 }
 
 export function StudioView({
@@ -163,6 +163,11 @@ export function StudioView({
               <div className="mk-imp-value">
                 <AnimatedCounter {...w} running={isVisible} />
               </div>
+              {w.coverage.missingCount > 0 && (
+                <div className="pdesc">
+                  {w.coverage.measuredCount}/{w.coverage.sourceCount} Quellen belegt
+                </div>
+              )}
               <div className="mk-spark">
                 {w.sparkValues.map((v, i) => (
                   <span key={i} style={{ height: `${v}%` }} />

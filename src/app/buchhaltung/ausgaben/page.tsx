@@ -39,6 +39,9 @@ export default function AusgabenPage() {
 
   const gesamt = categories.reduce((s, k) => s + k.sum, 0);
   const receiptCount = categories.reduce((sum, entry) => sum + entry.count, 0);
+  const knownReceiptCount = categories.reduce((sum, entry) => sum + entry.knownCount, 0);
+  const missingInputCount = categories.reduce((sum, entry) => sum + entry.missingInputCount, 0);
+  const hasGaps = missingInputCount > 0;
   const largest = categories[0];
 
   return (
@@ -70,7 +73,7 @@ export default function AusgabenPage() {
           </p>
         </div>
         <div className="text-right">
-          <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-1">Gesamtausgaben</div>
+          <div className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider mb-1">{hasGaps ? "Bekannter Ausgaben-Teilwert" : "Gesamtausgaben"}</div>
           <div className="text-3xl font-extrabold text-rose-600">{loadState === "ready" ? `${gesamt.toLocaleString("de-DE")} €` : "—"}</div>
         </div>
       </div>
@@ -87,6 +90,11 @@ export default function AusgabenPage() {
         </div>
       ) : (
       <>
+      {hasGaps ? (
+        <div role="status" className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Die Summe ist unvollständig: Bei {missingInputCount} von {receiptCount} Belegen fehlt der Nettobetrag. Angezeigt wird ausschließlich der bekannte Teilwert; fehlend ist nicht 0 €.
+        </div>
+      ) : null}
       <h2 className="text-sm font-semibold text-neutral-600 mb-3">Datenbasis</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-10">
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-neutral-100 flex flex-col relative overflow-hidden">
@@ -94,12 +102,12 @@ export default function AusgabenPage() {
           <div className="relative">
             <div className="flex items-center gap-2 mb-2">
               <BarChart3 className="w-5 h-5 text-rose-500" />
-              <h3 className="text-sm font-extrabold text-[#1e1b18]">Größte erfasste Kategorie</h3>
+              <h3 className="text-sm font-extrabold text-[#1e1b18]">{hasGaps ? "Größter bekannter Teilwert" : "Größte erfasste Kategorie"}</h3>
             </div>
             <p className="text-xs text-neutral-600 leading-relaxed">
               {largest
-                ? <><strong className="text-[#1e1b18]">{largest.label}</strong> enthält {largest.count} Belege mit zusammen <strong className="text-rose-600">{largest.sum.toLocaleString("de-DE")} €</strong>.</>
-                : 'Noch keine nicht stornierten Belege erfasst.'}
+                ? <><strong className="text-[#1e1b18]">{largest.label}</strong> enthält {largest.knownCount} Belege mit bekanntem Nettobetrag von zusammen <strong className="text-rose-600">{largest.sum.toLocaleString("de-DE")} €</strong>{largest.missingInputCount > 0 ? `; bei ${largest.missingInputCount} weiteren fehlt der Nettobetrag` : ""}.</>
+                : 'Im bestätigten Datenbestand sind keine Ausgabenbelege vorhanden.'}
             </p>
           </div>
         </div>
@@ -112,7 +120,7 @@ export default function AusgabenPage() {
               <h3 className="text-sm font-extrabold text-[#1e1b18]">Belastbare Grundlage</h3>
             </div>
             <p className="text-xs text-neutral-600 leading-relaxed">
-              {receiptCount} Belege in {categories.length} Kategorien. Budget- und Trendwarnungen erscheinen erst, wenn dafür echte Sollwerte und Vergleichsperioden gespeichert sind.
+              {knownReceiptCount} von {receiptCount} Belegen besitzen einen bekannten Nettobetrag. Budget- und Trendwarnungen erscheinen erst, wenn dafür echte Sollwerte und Vergleichsperioden gespeichert sind.
             </p>
           </div>
         </div>
@@ -120,6 +128,11 @@ export default function AusgabenPage() {
 
       {/* Kategorie-Karten */}
       <h2 className="text-sm font-semibold text-neutral-600 mb-3">Detail-Aufschlüsselung</h2>
+      {categories.length === 0 ? (
+        <div className="rounded-2xl border border-neutral-200 bg-white p-8 text-center text-sm text-neutral-600">
+          Bestätigter Leerstand: Es sind keine festgeschriebenen Ausgabenbelege vorhanden.
+        </div>
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {categories.map(k => {
           const anteilValue = gesamt > 0 ? (k.sum / gesamt) * 100 : 0;
@@ -136,13 +149,15 @@ export default function AusgabenPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-50 text-neutral-500">
-                    Ist-Daten
+                    {k.truthStatus === "partial" ? "Teilwert" : "Vollständig"}
                   </div>
                 </div>
               </div>
               
               <h3 className="text-sm font-extrabold text-[#1e1b18] mb-1 group-hover:text-rose-600 transition-colors">{k.label}</h3>
-              <p className="text-[10px] text-neutral-400 mb-4">{k.count} Belege erfasst</p>
+              <p className="text-[10px] text-neutral-400 mb-4">
+                {k.knownCount} von {k.count} Belegen mit Nettobetrag{k.missingInputCount > 0 ? ` · ${k.missingInputCount} fehlt` : ""}
+              </p>
               
               <div className="mt-auto">
                 <div className="flex items-baseline gap-2 mb-2">
@@ -151,7 +166,7 @@ export default function AusgabenPage() {
                 
                 {/* Anteil-Bar */}
                 <div className="flex items-center justify-between text-[10px] font-bold text-neutral-400 mb-1">
-                  <span>{anteil} % vom Gesamt</span>
+                  <span>{anteil} % vom bekannten Teilwert</span>
                   <span>{k.count} Belege</span>
                 </div>
                 <div className="h-1.5 w-full bg-neutral-100 rounded-full overflow-hidden">
@@ -162,6 +177,7 @@ export default function AusgabenPage() {
           );
         })}
       </div>
+      )}
       </>
       )}
 

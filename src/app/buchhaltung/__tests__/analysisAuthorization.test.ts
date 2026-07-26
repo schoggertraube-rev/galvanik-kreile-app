@@ -44,7 +44,7 @@ const actor = {
   active: true,
 } as const;
 
-function emptyQuery() {
+function queryWithRows(rows: unknown[] = []) {
   const query: Record<string, unknown> = {};
   query.from = vi.fn(() => query);
   query.where = vi.fn(() => query);
@@ -57,7 +57,7 @@ function emptyQuery() {
     minutenProBeleg: 4,
   }]);
   query.then = (resolve: (value: unknown[]) => unknown, reject?: (reason: unknown) => unknown) =>
-    Promise.resolve([]).then(resolve, reject);
+    Promise.resolve(rows).then(resolve, reject);
   return query;
 }
 
@@ -73,7 +73,7 @@ const datedActions = [
 describe("Buchhaltung analysis Server Action boundary", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDbSelect.mockImplementation(() => emptyQuery());
+    mockDbSelect.mockImplementation(() => queryWithRows());
   });
 
   it("rejects every analysis entry point before date parsing or database access", async () => {
@@ -100,5 +100,57 @@ describe("Buchhaltung analysis Server Action boundary", () => {
     expect(mockAssertFinanceDateRange).toHaveBeenCalledTimes(6);
     expect(mockDbSelect).toHaveBeenCalled();
     expect(mockEq.mock.calls.some((call) => call[1] === actor.tenantId)).toBe(true);
+  });
+
+  it("keeps incomplete fuel receipts visible as partial instead of zero-valued tankings", async () => {
+    mockRequireFinanceRead.mockResolvedValue(actor);
+    mockDbSelect
+      .mockImplementationOnce(() => queryWithRows([{
+        belegId: "00000000-0000-4000-8000-000000000001",
+        brutto: "80.00",
+        datum: "2026-07-10",
+        detailId: null,
+        tankstelle: null,
+        ort: null,
+        sorte: null,
+        liter: null,
+        preisProLiter: null,
+      }]))
+      .mockImplementationOnce(() => queryWithRows([]));
+
+    await expect(actions.getKraftstoffAnalysisAction("2026-07-01", "2026-07-31"))
+      .resolves.toMatchObject({
+        dataState: "partial",
+        sourceReceiptCount: 1,
+        includedReceiptCount: 0,
+        missingDetailCount: 1,
+        missingAmountCount: 0,
+        gesamtKosten: 0,
+        gesamtLiter: 0,
+        avgPreis: null,
+        trendProzent: null,
+      });
+  });
+
+  it("marks an all-null expense category as a known partial subtotal", async () => {
+    mockRequireFinanceRead.mockResolvedValue(actor);
+    mockDbSelect.mockImplementationOnce(() => queryWithRows([{
+      categoryId: "00000000-0000-4000-8000-000000000001",
+      catName: "Material",
+      summe: null,
+      anzahl: 1,
+      missingNetCount: 1,
+    }]));
+
+    await expect(actions.getAusgabenKategorien()).resolves.toEqual([
+      expect.objectContaining({
+        label: "Material",
+        sum: 0,
+        count: 1,
+        knownCount: 0,
+        missingInputCount: 1,
+        truthStatus: "partial",
+      }),
+    ]);
   });
 });

@@ -8,11 +8,11 @@ import { ChevronRight, Filter, AlertTriangle, CheckCircle2, FileText, Download }
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { Ausgangsrechnung } from "@/lib/buchhaltung/types";
 
-export function RechnungenClient({ initialRechnungen, offeneSumme, ueberfaelligSumme }: { initialRechnungen: Ausgangsrechnung[], offeneSumme: number, ueberfaelligSumme: number, initialFilter: any }) {
+export function RechnungenClient({ initialRechnungen, offeneSumme, ueberfaelligSumme }: { initialRechnungen: Ausgangsrechnung[], offeneSumme: number, ueberfaelligSumme: number }) {
   usePageView();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const statusFilter = searchParams?.get("status") || "alle";
+  const statusFilter = searchParams?.get("status") || (searchParams?.get("view") === "open_items" || searchParams?.get("filter") === "offen" ? "offen" : "alle");
 
   const setFilter = (newStatus: string) => {
     const params = new URLSearchParams(searchParams?.toString() || "");
@@ -21,6 +21,8 @@ export function RechnungenClient({ initialRechnungen, offeneSumme, ueberfaelligS
     } else {
       params.set("status", newStatus);
     }
+    params.delete("view");
+    params.delete("filter");
     router.push("?" + params.toString());
   };
 
@@ -126,10 +128,10 @@ export function RechnungenClient({ initialRechnungen, offeneSumme, ueberfaelligS
             </button>
           ))}
         </div>
-        <button className="flex items-center gap-2 text-[11px] font-bold text-neutral-500 hover:text-[#1e1b18] px-3 py-1.5 rounded-full hover:bg-white transition-colors border border-transparent hover:border-neutral-200">
+        <span aria-disabled="true" title="Weitere Filter sind technisch noch nicht verfügbar." className="flex items-center gap-2 rounded-full border border-neutral-200 px-3 py-1.5 text-[11px] font-bold text-neutral-400">
           <Filter className="w-3.5 h-3.5" />
-          Mehr Filter
-        </button>
+          Weitere Filter nicht verfügbar
+        </span>
       </div>
 
       {/* List Container */}

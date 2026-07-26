@@ -1,4 +1,5 @@
-import { pgTable, text, timestamp, date, numeric, boolean, integer, jsonb, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, date, numeric, boolean, integer, jsonb, uuid, check, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 
 // ============================================================================
@@ -79,12 +80,17 @@ export const belegPosition = pgTable("beleg_position", {
 export const kraftstoffDetail = pgTable("kraftstoff_detail", {
   id: uuid("id").primaryKey().defaultRandom(),
   belegId: uuid("beleg_id").notNull().references(() => beleg.id),
-  sorte: text("sorte"),
-  liter: numeric("liter", { precision: 8, scale: 2 }),
+  sorte: text("sorte").notNull(),
+  liter: numeric("liter", { precision: 8, scale: 2 }).notNull(),
   preisProLiter: numeric("preis_pro_liter", { precision: 6, scale: 3 }),
   tankstelle: text("tankstelle"),
   ort: text("ort"),
-});
+}, (table) => [
+  uniqueIndex("kraftstoff_detail_beleg_id_uidx").on(table.belegId),
+  check("kraftstoff_detail_sorte_chk", sql`${table.sorte} in ('diesel', 'super', 'superplus', 'adblue', 'unbekannt')`),
+  check("kraftstoff_detail_liter_positive_chk", sql`${table.liter}::text not in ('NaN', 'Infinity', '-Infinity') and ${table.liter} > 0`),
+  check("kraftstoff_detail_preis_positive_chk", sql`${table.preisProLiter} is null or (${table.preisProLiter}::text not in ('NaN', 'Infinity', '-Infinity') and ${table.preisProLiter} > 0)`),
+]);
 
 export const ausgangsrechnung = pgTable("ausgangsrechnung", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -104,7 +110,7 @@ export const ausgangsrechnung = pgTable("ausgangsrechnung", {
   status: text("status").notNull().default("offen"),
   mahnstufe: integer("mahnstufe").default(0),
   erechnungXml: text("erechnung_xml"),
-  leadId: uuid("lead_id"),
+  leadId: text("lead_id"),
   bemerkung: text("bemerkung"),
   periodeId: uuid("periode_id"),
   erloesKontoId: uuid("erloes_konto_id"),
@@ -137,6 +143,7 @@ export const zahlung = pgTable("zahlung", {
 
 export const kostenposten = pgTable("kostenposten", {
   id: uuid("id").primaryKey().defaultRandom(),
+  tenantId: text("tenant_id").notNull().default("galvanik-kreile"),
   bezeichnung: text("bezeichnung").notNull(),
   art: text("art").notNull(),
   kategorie: text("kategorie"),

@@ -41,7 +41,8 @@ const VIEW_FILTERS = [
 ] as const;
 
 function money(value: number | undefined): string {
-  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(value ?? 0);
+  if (value === undefined || !Number.isFinite(value)) return "Nicht erfasst";
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(value);
 }
 
 function date(value: string | undefined): string {
@@ -59,7 +60,10 @@ export function BelegeClient({ initialBelege, activeStatus, activeView }: Props)
   const belege = initialBelege;
 
   const totals = useMemo(() => ({
-    gross: belege.filter((item) => item.status !== "storniert").reduce((sum, item) => sum + (item.brutto ?? 0), 0),
+    gross: belege
+      .filter((item) => item.status !== "storniert" && item.brutto !== undefined)
+      .reduce((sum, item) => sum + (item.brutto as number), 0),
+    missingGross: belege.filter((item) => item.status !== "storniert" && item.brutto === undefined).length,
     review: belege.filter((item) => item.status === "pruefen").length,
   }), [belege]);
 
@@ -95,7 +99,10 @@ export function BelegeClient({ initialBelege, activeStatus, activeView }: Props)
             <ReceiptText className="h-7 w-7 text-rose-500" />
             <h1 className="text-2xl font-extrabold tracking-tight text-navy-900">Belege & Ausgaben</h1>
           </div>
-          <p className="mt-2 text-xs font-semibold text-text-muted">Serverdatenbank · {belege.length} Treffer · Summe ohne Storno {money(totals.gross)}</p>
+          <p className="mt-2 text-xs font-semibold text-text-muted">
+            Serverdatenbank · {belege.length} Treffer · Summe bekannter Bruttobeträge ohne Storno {money(totals.gross)}
+            {totals.missingGross > 0 ? ` · ${totals.missingGross} Beträge nicht erfasst` : ""}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => openOverlay("foto")} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-navy-900 px-4 py-2 text-sm font-bold text-white">

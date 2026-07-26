@@ -93,15 +93,22 @@ const kampagnen: Kampagne[] = [
 ];
 
 /* ── Funnel ────────────────────────────────────────────────── */
+const demoMeasurement = {
+  dataState: 'ready' as const,
+  coverage: { sourceCount: 1, measuredCount: 1, missingCount: 0 },
+};
+
 const funnel: FunnelDaten = {
   stufen: [
-    { label: 'Posts / Mails', wert: 14, breite: 10 },
-    { label: 'Reichweite', wert: 8420, breite: 100 },
-    { label: 'Klicks / Profil', wert: 612, breite: 34 },
-    { label: 'Anfragen', wert: 23, breite: 18 },
-    { label: 'Aufträge', wert: 9, breite: 11 },
+    { label: 'Posts / Mails', wert: 14, breite: 10, ...demoMeasurement },
+    { label: 'Reichweite', wert: 8420, breite: 100, ...demoMeasurement },
+    { label: 'Klicks / Profil', wert: 612, breite: 34, ...demoMeasurement },
+    { label: 'Anfragen', wert: 23, breite: 18, ...demoMeasurement },
+    { label: 'Aufträge', wert: 9, breite: 11, ...demoMeasurement },
   ],
   umsatz: 5760,
+  umsatzState: 'ready',
+  umsatzCoverage: demoMeasurement.coverage,
   plannedBudget: 0,
   roi: null,
 };
@@ -126,9 +133,9 @@ const lernInsights: LernInsight[] = [
 
 /* ── Wirkung-Mini ──────────────────────────────────────────── */
 const wirkungMini: WirkungMini[] = [
-  { label: 'Anfragen aus Marketing', wert: 23, suffix: '', sparkValues: [30, 45, 40, 62, 55, 85, 100] },
-  { label: 'Umsatz daraus', wert: 5760, suffix: ' €', sparkValues: [35, 30, 55, 48, 70, 78, 100] },
-  { label: 'Return on Invest', wert: 91, suffix: '×', divisor: 10, sparkValues: [40, 52, 48, 66, 60, 82, 100] },
+  { label: 'Anfragen aus Marketing', wert: 23, suffix: '', sparkValues: [30, 45, 40, 62, 55, 85, 100], ...demoMeasurement },
+  { label: 'Umsatz daraus', wert: 5760, suffix: ' €', sparkValues: [35, 30, 55, 48, 70, 78, 100], ...demoMeasurement },
+  { label: 'Return on Invest', wert: 91, suffix: '×', divisor: 10, sparkValues: [40, 52, 48, 66, 60, 82, 100], ...demoMeasurement },
 ];
 
 /* ── Story-Ideen ───────────────────────────────────────────── */

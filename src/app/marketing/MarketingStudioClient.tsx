@@ -63,7 +63,7 @@ export default function MarketingStudioClient({
   const [analysisDataMap, setAnalysisDataMap] = useState<Record<string, any>>({});
   const [analysisErrors, setAnalysisErrors] = useState<Record<string, string>>({});
   const [analysisReloadKey, setAnalysisReloadKey] = useState(0);
-  const [igConnected, setIgConnected] = useState(false);
+  const [igConfigured, setIgConfigured] = useState(false);
 
   useEffect(() => {
     const today = new Date();
@@ -102,7 +102,7 @@ export default function MarketingStudioClient({
   }, [analysisOpen, analysisReloadKey]);
 
   useEffect(() => {
-    instagramAdapter.isConnected().then(setIgConnected).catch(() => setIgConnected(false));
+    instagramAdapter.isConnected().then(setIgConfigured).catch(() => setIgConfigured(false));
   }, []);
 
   const handleSort = useCallback(async (sort: SortMode) => {
@@ -124,14 +124,14 @@ export default function MarketingStudioClient({
   }, [besteAktion]);
 
   const handleInstagramConnect = useCallback(() => {
-    if (igConnected) {
-      setToastMsg("Instagram ist bereits verbunden.");
+    if (igConfigured) {
+      setToastMsg("Instagram ist lokal eingerichtet; der Providerstatus wurde nicht live geprüft.");
       setShowToast(true);
       setTimeout(() => setShowToast(false), 3000);
     } else {
       instagramAdapter.connect();
     }
-  }, [igConnected]);
+  }, [igConfigured]);
 
   const handleTabChange = useCallback((tab: TabName) => {
     setActiveTab(tab);
@@ -253,9 +253,16 @@ export default function MarketingStudioClient({
         activeTab: "gesamt",
         hero: {
           kicker: "UMSATZ (LFD. MONAT)",
-          value: data.gesamt === null ? "nicht erfasst" : `${data.gesamt.toLocaleString("de-DE")} €`,
-          changePill: { text: `${data.evidence.attributedOrders} zugeordnete Aufträge`, variant: "gray" as const },
-          meta: "Summe ausschließlich aus gespeicherten marketing.attribution.umsatz-Werten.",
+          value: data.gesamt === null
+            ? "nicht gemessen"
+            : data.evidence.revenueState === "partial"
+              ? `${data.gesamt.toLocaleString("de-DE")} € bekannter Teilbetrag`
+              : `${data.gesamt.toLocaleString("de-DE")} €`,
+          changePill: {
+            text: `${data.evidence.revenueCoverage.measuredCount}/${data.evidence.revenueCoverage.sourceCount} Umsatzbelege`,
+            variant: data.evidence.revenueCoverage.missingCount > 0 ? "amber" as const : "gray" as const,
+          },
+          meta: "Nur Zuordnungen mit Messstatus, Messzeit und gespeicherter Umsatzquelle werden summiert.",
         },
         trend: { title: "Umsatz im Zeitverlauf", chartType: "bar", chartData: data.chartData },
         composition: {
@@ -301,7 +308,17 @@ export default function MarketingStudioClient({
         composition: {
           title: "Berechnungsgrundlage",
           rows: [
-            { avatar: "R", avatarColor: "#10B981", name: "Attribuierter Umsatz", meta: "marketing.attribution.umsatz", amount: data.revenue === null ? "nicht erfasst" : `${data.revenue.toLocaleString("de-DE")} €` },
+            {
+              avatar: "R",
+              avatarColor: "#10B981",
+              name: "Attribuierter Umsatz",
+              meta: `${data.evidence.revenueCoverage.measuredCount}/${data.evidence.revenueCoverage.sourceCount} Umsatzbelege`,
+              amount: data.revenue === null
+                ? "nicht gemessen"
+                : data.evidence.revenueState === "partial"
+                  ? `${data.revenue.toLocaleString("de-DE")} € bekannter Teilbetrag`
+                  : `${data.revenue.toLocaleString("de-DE")} €`,
+            },
             { avatar: "P", avatarColor: "#F59E0B", name: "Planbudget", meta: "marketing.aktion.kosten_budget (Planwert)", amount: data.plannedBudget === null ? "nicht erfasst" : `${data.plannedBudget.toLocaleString("de-DE")} €` },
             { avatar: "K", avatarColor: "#94A3B8", name: "Tatsächliche Ausgaben", meta: "noch nicht mit Kostenledger verknüpft", amount: "nicht erfasst" },
             { avatar: "A", avatarColor: "#3B82F6", name: "Ausgeführte Aktionen", meta: "im gewählten Zeitraum", amount: `${data.actions} Stk.` }
@@ -352,7 +369,7 @@ export default function MarketingStudioClient({
             className="flex items-center gap-2 text-[12px] font-bold bg-bg-app-soft text-navy-900 px-3 py-1.5 rounded-full hover:bg-neutral-gray-200 transition-colors"
           >
             <Settings className="w-3.5 h-3.5" />
-            {igConnected ? "Instagram verbunden" : "Instagram verknüpfen"}
+            {igConfigured ? "Instagram eingerichtet" : "Instagram verknüpfen"}
           </button>
           <div className="mk-live-pill">
             <span className="dot" />

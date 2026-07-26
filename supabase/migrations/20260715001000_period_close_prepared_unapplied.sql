@@ -89,7 +89,7 @@ BEGIN
       RAISE EXCEPTION 'IDEMPOTENCY_KEY_REUSE' USING ERRCODE = '23505';
     END IF;
     RETURN QUERY
-      SELECT p.id, p.status, p.geschlossen_am AT TIME ZONE 'UTC', true
+      SELECT p.id, p.status, p.geschlossen_am, true
       FROM public.periode p
       WHERE p.id = p_period_id AND p.tenant_id = 'galvanik-kreile';
     RETURN;
@@ -112,7 +112,7 @@ BEGIN
       jsonb_build_object('status', current_period.status, 'replayed_existing_state', true)
     );
     RETURN QUERY SELECT current_period.id, current_period.status,
-      current_period.geschlossen_am AT TIME ZONE 'UTC', true;
+      current_period.geschlossen_am, true;
     RETURN;
   END IF;
 
@@ -161,7 +161,7 @@ BEGIN
   );
 
   RETURN QUERY SELECT current_period.id, current_period.status,
-    current_period.geschlossen_am AT TIME ZONE 'UTC', false;
+    current_period.geschlossen_am, false;
 END
 $function$;
 

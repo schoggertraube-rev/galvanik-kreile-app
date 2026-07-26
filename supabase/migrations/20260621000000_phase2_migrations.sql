@@ -81,11 +81,60 @@ CREATE TABLE IF NOT EXISTS payments (
   updated_at timestamptz DEFAULT now()
 );
 
-ALTER TABLE payments 
+ALTER TABLE payments
+  ADD COLUMN IF NOT EXISTS tenant_id text DEFAULT 'galvanik-kreile',
+  ADD COLUMN IF NOT EXISTS order_id text REFERENCES orders(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS amount_eur numeric(10,2),
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now(),
   ADD COLUMN IF NOT EXISTS provider_intent_id text,
   ADD COLUMN IF NOT EXISTS mollie_status text,
   ADD COLUMN IF NOT EXISTS mollie_method text,
   ADD COLUMN IF NOT EXISTS receipt_url text;
+
+UPDATE payments
+SET tenant_id = COALESCE(NULLIF(btrim(tenant_id), ''), 'galvanik-kreile'),
+    status = COALESCE(NULLIF(btrim(status), ''), 'pending'),
+    created_at = COALESCE(created_at, now()),
+    updated_at = COALESCE(updated_at, created_at, now());
+
+DO $legacy_payment_amount$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'payments'
+      AND column_name = 'amount'
+  ) THEN
+    EXECUTE 'UPDATE public.payments
+             SET amount_eur = COALESCE(amount_eur, amount)';
+  END IF;
+END
+$legacy_payment_amount$;
+
+DO $payment_contract$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM payments
+    WHERE amount_eur IS NULL
+       OR provider IS NULL
+       OR btrim(provider) = ''
+  ) THEN
+    RAISE EXCEPTION
+      'PAYMENTS_RECONCILIATION_REQUIRED: amount/provider truth is missing';
+  END IF;
+END
+$payment_contract$;
+
+ALTER TABLE payments
+  ALTER COLUMN tenant_id SET DEFAULT 'galvanik-kreile',
+  ALTER COLUMN tenant_id SET NOT NULL,
+  ALTER COLUMN amount_eur SET NOT NULL,
+  ALTER COLUMN provider SET NOT NULL,
+  ALTER COLUMN status SET DEFAULT 'pending',
+  ALTER COLUMN status SET NOT NULL,
+  ALTER COLUMN created_at SET DEFAULT now(),
+  ALTER COLUMN created_at SET NOT NULL,
+  ALTER COLUMN updated_at SET DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
 CREATE INDEX IF NOT EXISTS idx_payments_intent ON payments(provider_intent_id);

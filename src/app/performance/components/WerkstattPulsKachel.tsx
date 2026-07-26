@@ -1,6 +1,7 @@
 import React from "react";
 import { Activity } from "lucide-react";
 import { AnalyseTileSummary } from "@/lib/analyse/dataContracts";
+import { AnalyseDataStateBadge } from "./AnalyseDataStateBadge";
 
 interface Props {
   summary?: AnalyseTileSummary;
@@ -33,7 +34,7 @@ export function WerkstattPulsKachel({ summary, onClick }: Props) {
           {summary.status === "stable" && <span className="t-pill t-pill-g">STABIL</span>}
           {summary.status === "watch" && <span className="t-pill t-pill-y">BEOBACHTEN</span>}
           {summary.status === "critical" && <span className="t-pill t-pill-r">KRITISCH</span>}
-          {summary.status === "data_missing" && <span className="t-pill bg-gray-200 text-gray-600">KEINE DATEN</span>}
+          <AnalyseDataStateBadge state={summary.dataState} />
         </div>
         
         <div className="hero-body">
@@ -57,7 +58,7 @@ export function WerkstattPulsKachel({ summary, onClick }: Props) {
               )}
             </div>
             
-            {summary.status === "data_missing" && summary.emptyState ? (
+            {summary.dataState === "confirmed_empty" && summary.emptyState ? (
               <div className="mt-4 text-sm text-gray-500">
                 {summary.emptyState.description}
               </div>

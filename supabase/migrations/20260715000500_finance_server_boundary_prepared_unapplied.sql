@@ -2,6 +2,112 @@
 -- Finance data is authorized by the database-backed app session in Server Actions.
 -- Browser roles must not bypass that boundary through the Supabase Data API.
 
+ALTER TABLE public.beleg
+  ADD COLUMN IF NOT EXISTS ocr_rohtext text,
+  ADD COLUMN IF NOT EXISTS ocr_positionen jsonb,
+  ADD COLUMN IF NOT EXISTS rechnungsnummer_extern text;
+
+ALTER TABLE public.ausgangsrechnung
+  ADD COLUMN IF NOT EXISTS lead_id text;
+
+CREATE TABLE IF NOT EXISTS public.ausgangsrechnung_position (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  ausgangsrechnung_id uuid NOT NULL
+    REFERENCES public.ausgangsrechnung(id) ON DELETE RESTRICT,
+  beschreibung text NOT NULL,
+  menge numeric(12,2) NOT NULL DEFAULT 1,
+  einzelpreis_netto numeric(12,2) NOT NULL
+);
+
+DO $payment_contract$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'zahlung' AND column_name = 'typ'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'zahlung' AND column_name = 'richtung'
+  ) THEN
+    ALTER TABLE public.zahlung RENAME COLUMN typ TO richtung;
+  ELSIF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'zahlung' AND column_name = 'typ'
+  ) THEN
+    IF EXISTS (
+      SELECT 1
+      FROM public.zahlung
+      WHERE richtung IS NOT NULL
+        AND typ IS NOT NULL
+        AND richtung IS DISTINCT FROM typ
+    ) THEN
+      RAISE EXCEPTION
+        'FINANCE_SOURCE_RECONCILIATION_REQUIRED: zahlung.typ and zahlung.richtung disagree';
+    END IF;
+    UPDATE public.zahlung SET richtung = typ WHERE richtung IS NULL;
+    ALTER TABLE public.zahlung ALTER COLUMN typ DROP NOT NULL;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'zahlung' AND column_name = 'zahlungsart'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'zahlung' AND column_name = 'art'
+  ) THEN
+    ALTER TABLE public.zahlung RENAME COLUMN zahlungsart TO art;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'zahlung' AND column_name = 'bank_referenz'
+  ) AND NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'zahlung' AND column_name = 'bank_umsatz_ref'
+  ) THEN
+    ALTER TABLE public.zahlung RENAME COLUMN bank_referenz TO bank_umsatz_ref;
+  END IF;
+END
+$payment_contract$;
+
+ALTER TABLE public.zahlung
+  ADD COLUMN IF NOT EXISTS richtung text,
+  ADD COLUMN IF NOT EXISTS art text,
+  ADD COLUMN IF NOT EXISTS bank_umsatz_ref text,
+  ADD COLUMN IF NOT EXISTS is_demo boolean NOT NULL DEFAULT false;
+
+DO $payment_truth$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.zahlung WHERE richtung IS NULL OR btrim(richtung) = '') THEN
+    RAISE EXCEPTION
+      'FINANCE_SOURCE_RECONCILIATION_REQUIRED: payment direction is missing';
+  END IF;
+END
+$payment_truth$;
+
+ALTER TABLE public.zahlung
+  ALTER COLUMN richtung SET NOT NULL;
+
+-- The bookkeeping actions and global search use this canonical source table.
+-- It was present in the TypeScript schema but absent from the SQL history,
+-- which made those paths fail on every fresh database.
+CREATE TABLE IF NOT EXISTS public.kostenposten (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id text NOT NULL DEFAULT 'galvanik-kreile',
+  bezeichnung text NOT NULL,
+  art text NOT NULL,
+  kategorie text,
+  betrag numeric(12,2) NOT NULL,
+  intervall text NOT NULL,
+  beleg_id uuid REFERENCES public.beleg(id),
+  kampagne_id uuid,
+  gilt_ab date,
+  gilt_bis date,
+  is_demo boolean NOT NULL DEFAULT false
+);
+
+ALTER TABLE public.kostenposten
+  ADD COLUMN IF NOT EXISTS tenant_id text NOT NULL DEFAULT 'galvanik-kreile';
+
 DO $migration$
 DECLARE
   table_name text;

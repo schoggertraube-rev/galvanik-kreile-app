@@ -196,4 +196,50 @@ describe("workshop evidence adapter", () => {
     expect(station?.claim.id).toBe("workshop.station.0-bad-2-nickel.open_orders");
     expect(station?.claim.label).toContain("Bad 2 / Nickel");
   });
+
+  it("separates period claims from current snapshot claims", () => {
+    const activeRow = {
+      ...snapshot().rows[0],
+      completedDate: null,
+      promisedDueDate: new Date("2026-08-05T08:00:00.000Z"),
+      active: true,
+      completedInPeriod: false,
+    };
+    const evidence = buildWorkshopEvidence(snapshot({
+      rows: [activeRow],
+      totals: {
+        completed: 0,
+        completedWithDueDate: 0,
+        deliveredOnTime: 0,
+        completedWithCycleTime: 0,
+        averageCycleDays: null,
+        deliveryReliabilityPct: null,
+        open: 1,
+        overdue: 0,
+        openWithoutDueDate: 0,
+      },
+      stations: [{ station: "Bad 2 / Nickel", count: 1 }],
+    }));
+
+    const completed = evidence.find((item) => item.claim.id === "workshop.completed_orders");
+    const snapshotClaimIds = [
+      "workshop.open_orders",
+      "workshop.overdue_orders",
+      "workshop.open_orders_without_due_date",
+    ];
+
+    expect(completed?.scope).toMatchObject({
+      grain: "month",
+      from: PERIOD.start.toISOString(),
+      to: PERIOD.end.toISOString(),
+    });
+    for (const claim of evidence.filter((item) =>
+      snapshotClaimIds.includes(item.claim.id) || item.claim.id.startsWith("workshop.station."))) {
+      expect(claim.scope).toMatchObject({
+        grain: "snapshot",
+        from: "2026-07-22T12:00:00.000Z",
+        to: "2026-07-22T12:00:00.000Z",
+      });
+    }
+  });
 });

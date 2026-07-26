@@ -5,7 +5,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { usePageView } from "@/hooks/usePageView";
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight, ArrowLeft, Save, ShieldCheck, XCircle, FileText, CheckCircle2, AlertTriangle, Clock, Anchor, Euro, Navigation } from "lucide-react";
+import { ChevronRight, ArrowLeft, Save, ShieldCheck, XCircle, FileText, CheckCircle2, AlertTriangle, Clock, Anchor, Navigation } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 import type { BelegDetail } from "@/lib/buchhaltung/types";
@@ -31,7 +31,7 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
     ustBetrag: beleg.ustBetrag?.toString() ?? "",
     kategorie: beleg.kategorie?.name || beleg.kategorieId || "Nicht kategorisiert",
     skrKonto: beleg.skrKonto || "",
-    absetzbar: beleg.absetzbarProzent.toString(),
+    absetzbar: beleg.absetzbarProzent?.toString() ?? "",
     notiz: beleg.absetzbarGrund || "",
   } : null);
 
@@ -217,39 +217,38 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
             </div>
           </div>
           
-          {/* Vernetzte Bereiche */}
+          {/* Persisted relations only */}
           <div className="bg-linear-to-br from-[#1e1b18] to-navy-900 rounded-3xl shadow-sm p-4 sm:p-6 text-white border-2 border-[#1e1b18]">
             <h3 className="text-xs font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Anchor className="w-4 h-4" /> Wo wurde dieser Beleg verwendet?
+              <Anchor className="w-4 h-4" /> Gespeicherte Verknüpfungen
             </h3>
-            
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Link href="/buchhaltung/bwa" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
-                <Euro className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
-                <span className="block text-xs font-bold">BWA</span>
-                <span className="block text-[9px] text-white/60">Kostenanalyse</span>
-              </Link>
-              
-              <Link href="/buchhaltung/kosten/1" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
-                <FileText className="w-6 h-6 text-amber-400 mx-auto mb-1" />
-                <span className="block text-xs font-bold">Kosten</span>
-                <span className="block text-[9px] text-white/60">Detailbuchung</span>
-              </Link>
-
-              <Link href="/buchhaltung/export" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
-                <ShieldCheck className="w-6 h-6 text-blue-400 mx-auto mb-1" />
-                <span className="block text-xs font-bold">DATEV</span>
-                <span className="block text-[9px] text-white/60">Export</span>
-              </Link>
-
-              {form?.kategorie === "KFZ" || form?.kategorie?.toLowerCase().includes("kraftstoff") ? (
-                <Link href="/buchhaltung/kraftstoff" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
+            {beleg.verknuepfteKostenposten.length > 0 || beleg.zugeordneterOrderId || beleg.kraftstoffDetail ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {beleg.verknuepfteKostenposten.map((cost) => (
+                  <Link key={cost.id} href={`/buchhaltung/kosten/${encodeURIComponent(cost.id)}`} className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
+                    <FileText className="w-6 h-6 text-amber-400 mx-auto mb-1" />
+                    <span className="block text-xs font-bold">Kostenposten</span>
+                    <span className="block truncate text-[9px] text-white/60">{cost.bezeichnung}</span>
+                  </Link>
+                ))}
+                {beleg.zugeordneterOrderId ? (
+                  <Link href={`/orders/${encodeURIComponent(beleg.zugeordneterOrderId)}`} className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
+                    <FileText className="w-6 h-6 text-emerald-400 mx-auto mb-1" />
+                    <span className="block text-xs font-bold">Auftrag</span>
+                    <span className="block text-[9px] text-white/60">Gespeicherte Zuordnung</span>
+                  </Link>
+                ) : null}
+                {beleg.kraftstoffDetail ? (
+                  <Link href="/buchhaltung/kraftstoff" className="p-3 bg-white/10 hover:bg-white/20 border border-white/20 rounded-xl transition-all text-center">
                   <Navigation className="w-6 h-6 text-blue-400 mx-auto mb-1" />
-                  <span className="block text-xs font-bold">Kraftstoff</span>
-                  <span className="block text-[9px] text-white/60">Flotte</span>
-                </Link>
-              ) : null}
-            </div>
+                    <span className="block text-xs font-bold">Kraftstoffdetail</span>
+                    <span className="block text-[9px] text-white/60">Für diesen Beleg gespeichert</span>
+                  </Link>
+                ) : null}
+              </div>
+            ) : (
+              <p className="text-xs text-white/70">Für diesen Beleg ist derzeit keine fachliche Verknüpfung gespeichert.</p>
+            )}
           </div>
         </div>
 
@@ -277,13 +276,49 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
             <p className="text-[10px] text-neutral-400 mt-4">Nur vom Server bestätigte Änderungen werden als gespeichert angezeigt.</p>
           </div>
 
+          <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">
+            <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-2">
+              OCR-Positionen · unbestätigte Vorschläge
+            </h3>
+            <p className="text-[10px] text-neutral-400 mb-4">
+              Diese Werte stammen aus der Texterkennung. Sie sind keine bestätigten Buchungspositionen und ihre Netto-/Steuerbasis ist nicht festgelegt.
+            </p>
+            {beleg.ocrPositionenState === "not_run" ? (
+              <p className="text-xs text-neutral-500">Für diesen Beleg wurden keine OCR-Positionen gespeichert.</p>
+            ) : beleg.ocrPositionenState === "empty" ? (
+              <p className="text-xs text-neutral-500">OCR wurde ausgeführt; es wurden keine Positionen erkannt.</p>
+            ) : (
+              <div className="space-y-2">
+                {beleg.ocrPositionen.map((position, index) => (
+                  <div key={`${position.beschreibung}-${index}`} className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-xs font-bold text-amber-950">{position.beschreibung}</span>
+                      <span className="text-xs font-extrabold text-amber-950">
+                        {position.betrag.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €
+                      </span>
+                    </div>
+                    <div className="mt-1 text-[10px] text-amber-800">
+                      {position.menge === null ? "Menge nicht erkannt" : `Menge ${position.menge.toLocaleString("de-DE")}`}
+                      {" · "}
+                      {position.einzelpreis === null
+                        ? "Einzelpreis nicht erkannt"
+                        : `Einzelpreis ${position.einzelpreis.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
         {/* Right: KI + Audit + Actions */}
 
           {/* KI Hinweise */}
           <div className="bg-white rounded-3xl border border-neutral-100 shadow-sm p-4 sm:p-6">
             <h3 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-4">KI-/Regelhinweise</h3>
             <div className="space-y-3">
-              {beleg.kiHinweise?.length > 0 ? beleg.kiHinweise.map((h, i) => (
+              {beleg.kiPruefstatus === "not_run" ? (
+                <p className="text-xs text-neutral-500">Automatische KI-/Regelprüfung wurde für diesen Beleg nicht ausgeführt.</p>
+              ) : beleg.kiHinweise.length > 0 ? beleg.kiHinweise.map((h, i) => (
                 <div key={i} className={`rounded-xl p-3 text-xs ${h.typ === "plausibilitaet" ? "bg-amber-50 border border-amber-200" : h.typ === "absetzbarkeit" ? "bg-emerald-50 border border-emerald-200" : "bg-blue-50 border border-blue-200"}`}>
                   <div className="flex items-center gap-2 mb-1">
                     {h.typ === "plausibilitaet" ? <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> : h.typ === "absetzbarkeit" ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" /> : <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />}
@@ -293,7 +328,7 @@ export function BelegDetailClient({ id, initialBeleg }: BelegDetailClientProps) 
                   {h.paragraf && <p className="text-[10px] text-neutral-400 mt-1">{h.paragraf}</p>}
                 </div>
               )) : (
-                <p className="text-xs text-neutral-400">Keine KI-Hinweise gefunden.</p>
+                <p className="text-xs text-neutral-400">Prüfung ausgeführt; keine Hinweise gespeichert.</p>
               )}
             </div>
           </div>

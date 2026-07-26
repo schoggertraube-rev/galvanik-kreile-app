@@ -1,13 +1,14 @@
 'use server';
 
 import { db } from '@/db';
-import { ausgangsrechnung, beleg, bhEinstellungen, kategorie, kostenposten } from '@/db/schema_buchhaltung';
+import { ausgangsrechnung, beleg, bhEinstellungen, kategorie, kostenposten, kraftstoffDetail } from '@/db/schema_buchhaltung';
 import { and, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm';
 import { generateInsight } from '@/lib/analyse/insights';
 import { assertFinanceDateRange, requireFinanceRead } from '@/lib/server/financeAuthorization';
 import { calculateOutstandingAmount, normalizeOcrConfidencePercent, type AusgangsrechnungStatus } from '@/lib/buchhaltung/types';
+import { parseCostKind, recurringCostInRange } from '@/lib/buchhaltung/costSchedule';
 
-const CONFIRMED_RECEIPT_STATUSES = ['erfasst', 'festgeschrieben'] as const;
+const CONFIRMED_RECEIPT_STATUSES = ['festgeschrieben'] as const;
 
 function normalizedLabel(value: string | null | undefined): string {
   return (value || '')
@@ -15,12 +16,6 @@ function normalizedLabel(value: string | null | undefined): string {
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase();
-}
-
-function monthsInclusive(von: string, bis: string): number {
-  const from = new Date(`${von}T00:00:00Z`);
-  const to = new Date(`${bis}T00:00:00Z`);
-  return Math.max(1, (to.getUTCFullYear() - from.getUTCFullYear()) * 12 + to.getUTCMonth() - from.getUTCMonth() + 1);
 }
 
 function precedingDateRange(von: string, bis: string): { von: string; bis: string } {
@@ -45,29 +40,6 @@ function deductibleInputTax(entry: {
   const percentage = Number(entry.absetzbarProzent ?? 100)
   if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) return 0
   return (Number(entry.ustBetrag) || 0) * (percentage / 100)
-}
-
-function recurringCostInRange(
-  item: { betrag: string; intervall: string; giltAb: string | null; giltBis: string | null },
-  von: string,
-  bis: string
-): number {
-  if (item.giltAb && item.giltAb > bis) return 0;
-  if (item.giltBis && item.giltBis < von) return 0;
-
-  const amount = Number(item.betrag) || 0;
-  const interval = normalizedLabel(item.intervall);
-  if (interval === 'einmalig') {
-    return item.giltAb && item.giltAb >= von && item.giltAb <= bis ? amount : 0;
-  }
-
-  const months = monthsInclusive(
-    item.giltAb && item.giltAb > von ? item.giltAb : von,
-    item.giltBis && item.giltBis < bis ? item.giltBis : bis
-  );
-  if (interval === 'jahrlich') return amount * (months / 12);
-  if (interval === 'vierteljahrlich') return amount * (months / 3);
-  return amount * months;
 }
 
 export async function getUstvaAnalysisAction(von: string, bis: string) {
@@ -110,7 +82,7 @@ export async function getUstvaAnalysisAction(von: string, bis: string) {
   const zahllast = ustTotal - vorsteuerTotal
   const offeneBelegeRows = await db.select({ id: beleg.id }).from(beleg)
     .where(and(
-      eq(beleg.status, 'pruefen'),
+      inArray(beleg.status, ['pruefen', 'erfasst']),
       gte(beleg.erfasstAm, new Date(`${von}T00:00:00.000Z`)),
       lte(beleg.erfasstAm, new Date(`${bis}T23:59:59.999Z`)),
     ))
@@ -172,53 +144,109 @@ export async function getUstvaAnalysisAction(von: string, bis: string) {
 }
 
 export async function getKraftstoffAnalysisAction(von: string, bis: string) {
-  const actor = await requireFinanceRead();
+  await requireFinanceRead();
   assertFinanceDateRange(von, bis);
-  // Wir holen alle Belege, die mit Kraftstoff verknüpft sind (einfacher Join)
-  const { kraftstoffDetail } = await import('@/db/schema_buchhaltung');
-  
+
   const tankungenRaw = await db.select({
     belegId: beleg.id,
-    netto: beleg.netto,
     brutto: beleg.brutto,
     datum: beleg.belegdatum,
+    detailId: kraftstoffDetail.id,
     tankstelle: kraftstoffDetail.tankstelle,
     ort: kraftstoffDetail.ort,
     sorte: kraftstoffDetail.sorte,
     liter: kraftstoffDetail.liter,
-    preisProLiter: kraftstoffDetail.preisProLiter
+    preisProLiter: kraftstoffDetail.preisProLiter,
   })
-  .from(beleg)
-  .leftJoin(kraftstoffDetail, eq(beleg.id, kraftstoffDetail.belegId))
-  .where(and(inArray(beleg.status, CONFIRMED_RECEIPT_STATUSES), gte(beleg.belegdatum, von), lte(beleg.belegdatum, bis), ne(kraftstoffDetail.liter, '0')));
-
-  // Filter out those without kraftstoff details (though inner join would do this, leftJoin is safer if bad data exists, we filter manually here)
-  const tankungen = tankungenRaw.filter(t => t.liter !== null);
-
-  const gesamtKosten = tankungen.reduce((s, t) => s + (Number(t.brutto) || 0), 0);
-  const gesamtLiter = tankungen.reduce((s, t) => s + (Number(t.liter) || 0), 0);
-  const avgPreis = gesamtLiter > 0 ? gesamtKosten / gesamtLiter : 0;
-  
-  // Vormonat
-  const dVon = new Date(von);
-  dVon.setMonth(dVon.getMonth() - 1);
-  const vmVon = dVon.toISOString().substring(0, 10);
-  const vmBis = von;
-
-  const vmTankungen = await db.select({ brutto: beleg.brutto })
     .from(beleg)
-    .innerJoin(kraftstoffDetail, eq(beleg.id, kraftstoffDetail.belegId))
-    .where(and(inArray(beleg.status, CONFIRMED_RECEIPT_STATUSES), gte(beleg.belegdatum, vmVon), lte(beleg.belegdatum, vmBis)));
-    
-  const vmKosten = vmTankungen.reduce((s, t) => s + (Number(t.brutto) || 0), 0);
-  const trendProzent = vmKosten === 0 ? 0 : ((gesamtKosten - vmKosten) / vmKosten) * 100;
+    .leftJoin(kraftstoffDetail, eq(beleg.id, kraftstoffDetail.belegId))
+    .where(and(
+      inArray(beleg.status, CONFIRMED_RECEIPT_STATUSES),
+      eq(beleg.belegart, 'tankbeleg'),
+      gte(beleg.belegdatum, von),
+      lte(beleg.belegdatum, bis),
+    ));
+
+  const normalizedTankungen = tankungenRaw.map((entry) => {
+    const kosten = entry.brutto === null ? null : Number(entry.brutto);
+    const liter = entry.liter === null ? null : Number(entry.liter);
+    if (kosten !== null && (!Number.isFinite(kosten) || kosten < 0)) {
+      throw new Error('FINANCE_FUEL_AMOUNT_INVALID');
+    }
+    if (liter !== null && (!Number.isFinite(liter) || liter <= 0)) {
+      throw new Error('FINANCE_FUEL_VOLUME_INVALID');
+    }
+    return { ...entry, kosten, literWert: liter };
+  });
+  const missingDetailCount = normalizedTankungen.filter((entry) => entry.detailId === null).length;
+  const missingLiterCount = normalizedTankungen.filter((entry) => (
+    entry.detailId !== null && entry.literWert === null
+  )).length;
+  const missingAmountCount = normalizedTankungen.filter((entry) => entry.kosten === null).length;
+  const tankungen = normalizedTankungen.filter((entry) => (
+    entry.detailId !== null && entry.literWert !== null && entry.kosten !== null
+  ));
+  const sourceReceiptCount = normalizedTankungen.length;
+  const includedReceiptCount = tankungen.length;
+  const unresolvedCount = sourceReceiptCount - includedReceiptCount;
+  const missingInputCount = missingDetailCount + missingLiterCount + missingAmountCount;
+  const dataState = sourceReceiptCount === 0
+    ? 'confirmed_empty' as const
+    : unresolvedCount > 0
+      ? 'partial' as const
+      : 'ready' as const;
+  const gesamtKosten = tankungen.reduce((sum, entry) => sum + entry.kosten!, 0);
+  const gesamtLiter = tankungen.reduce((sum, entry) => sum + entry.literWert!, 0);
+  const avgPreis = dataState === 'ready' && gesamtLiter > 0
+    ? gesamtKosten / gesamtLiter
+    : null;
+  
+  const comparisonPeriod = precedingDateRange(von, bis);
+  const vmTankungenRaw = await db.select({
+    brutto: beleg.brutto,
+    detailId: kraftstoffDetail.id,
+    liter: kraftstoffDetail.liter,
+  })
+    .from(beleg)
+    .leftJoin(kraftstoffDetail, eq(beleg.id, kraftstoffDetail.belegId))
+    .where(and(
+      inArray(beleg.status, CONFIRMED_RECEIPT_STATUSES),
+      eq(beleg.belegart, 'tankbeleg'),
+      gte(beleg.belegdatum, comparisonPeriod.von),
+      lte(beleg.belegdatum, comparisonPeriod.bis),
+    ));
+  const vmTankungen = vmTankungenRaw.map((entry) => {
+    const kosten = entry.brutto === null ? null : Number(entry.brutto);
+    const liter = entry.liter === null ? null : Number(entry.liter);
+    if (kosten !== null && (!Number.isFinite(kosten) || kosten < 0)) {
+      throw new Error('FINANCE_FUEL_AMOUNT_INVALID');
+    }
+    if (liter !== null && (!Number.isFinite(liter) || liter <= 0)) {
+      throw new Error('FINANCE_FUEL_VOLUME_INVALID');
+    }
+    return { ...entry, kosten, literWert: liter };
+  });
+  const vmComplete = vmTankungen.filter((entry) => (
+    entry.detailId !== null && entry.literWert !== null && entry.kosten !== null
+  ));
+  const comparisonState = vmTankungen.length === 0
+    ? 'confirmed_empty' as const
+    : vmComplete.length !== vmTankungen.length
+      ? 'partial' as const
+      : 'ready' as const;
+  const vmKosten = vmComplete.reduce((sum, entry) => sum + entry.kosten!, 0);
+  const trendProzent = dataState === 'ready'
+    && comparisonState === 'ready'
+    && vmKosten !== 0
+    ? ((gesamtKosten - vmKosten) / Math.abs(vmKosten)) * 100
+    : null;
 
   const monthMap = new Map<string, { liter: number; kosten: number }>();
   const locationMap = new Map<string, { anzahl: number; kosten: number }>();
   const fuelTypeMap = new Map<string, { liter: number; kosten: number }>();
   for (const tankung of tankungen) {
-    const kosten = Number(tankung.brutto) || 0;
-    const liter = Number(tankung.liter) || 0;
+    const kosten = tankung.kosten!;
+    const liter = tankung.literWert!;
     if (tankung.datum) {
       const monat = tankung.datum.substring(0, 7);
       const current = monthMap.get(monat) || { liter: 0, kosten: 0 };
@@ -245,23 +273,29 @@ export async function getKraftstoffAnalysisAction(von: string, bis: string) {
     .map(([monat, values]) => ({ monat, ...values }));
   const chartData = nachMonat.map((entry) => ({ name: entry.monat, ist: entry.kosten }));
 
-  const umsatzRaw = await db.select({ netto: ausgangsrechnung.netto }).from(ausgangsrechnung)
-    .where(and(eq(ausgangsrechnung.tenantId, actor.tenantId), eq(ausgangsrechnung.isDemo, false), ne(ausgangsrechnung.status, 'storniert'), gte(ausgangsrechnung.datum, von), lte(ausgangsrechnung.datum, bis)));
-  const umsatz = umsatzRaw.reduce((s, u) => s + (Number(u.netto) || 0), 0);
-
-  const insights = generateInsight('kraftstoff', {
-    trend: { prozent: Math.round(trendProzent), positivIstGut: false },
-    tankungenCount: tankungen.length,
-    vormonat: { tankungenCount: vmTankungen.length }
-  });
+  const insights = trendProzent === null
+    ? { beobachtungen: [], vermutungen: [], vorschlaege: [] }
+    : generateInsight('kraftstoff', {
+      trend: { prozent: Math.round(trendProzent), positivIstGut: false },
+      tankungenCount: sourceReceiptCount,
+      vormonat: { tankungenCount: vmTankungen.length },
+    });
 
   return {
     gesamtKosten,
     gesamtLiter,
     avgPreis,
-    tankungenCount: tankungen.length,
-    umsatz,
+    sourceReceiptCount,
+    includedReceiptCount,
+    missingDetailCount,
+    missingLiterCount,
+    missingAmountCount,
+    missingInputCount,
+    unresolvedCount,
+    dataState,
     trendProzent,
+    comparisonState,
+    comparisonPeriod,
     chartData,
     nachMonat,
     nachOrt: [...locationMap.entries()]
@@ -271,7 +305,9 @@ export async function getKraftstoffAnalysisAction(von: string, bis: string) {
       .map(([sorte, values]) => ({ sorte, ...values }))
       .sort((a, b) => b.kosten - a.kosten),
     insights,
-    tankungen: tankungen.slice(0, 5) // Top 5 für Composition
+    tankungen: tankungen.slice(0, 5),
+    dataSource: 'database' as const,
+    deliveryMode: 'request_snapshot' as const,
   };
 }
 
@@ -346,26 +382,42 @@ export async function getBwaAnalysisAction(von: string, bis: string) {
 
   const belege = await db.select({
     netto: beleg.netto,
-    kategorieName: kategorie.name,
   }).from(beleg)
     .leftJoin(kategorie, eq(beleg.kategorieId, kategorie.id))
     .where(and(inArray(beleg.status, CONFIRMED_RECEIPT_STATUSES), gte(beleg.belegdatum, von), lte(beleg.belegdatum, bis)));
 
-  const configuredCosts = await db.select().from(kostenposten).where(eq(kostenposten.isDemo, false));
-  const einnahmen = rechnungen.reduce((s, r) => s + (Number(r.netto) || 0), 0);
+  const configuredCosts = await db.select().from(kostenposten).where(and(
+    eq(kostenposten.tenantId, actor.tenantId),
+    eq(kostenposten.isDemo, false),
+  ));
+  let missingInputCount = 0;
+  const einnahmen = rechnungen.reduce((sum, entry) => {
+    if (entry.netto === null) {
+      missingInputCount += 1;
+      return sum;
+    }
+    const value = Number(entry.netto);
+    if (!Number.isFinite(value)) throw new Error('FINANCE_INVOICE_NET_INVALID');
+    return sum + value;
+  }, 0);
 
-  let material = 0;
-  let fremdleistungen = 0;
-  let personal = 0;
-  let betrieb = 0;
-  for (const b of belege) {
-    const val = Number(b.netto) || 0;
-    const category = normalizedLabel(b.kategorieName);
-    if (/(material|chemie|wareneingang|verbrauch)/.test(category)) material += val;
-    else if (/(fremd|subunternehmer|dienstleistung)/.test(category)) fremdleistungen += val;
-    else if (/(personal|lohn|gehalt)/.test(category)) personal += val;
-    else betrieb += val;
+  const material = 0;
+  const fremdleistungen = 0;
+  const personal = 0;
+  const betrieb = 0;
+  let nichtZugeordnet = 0;
+  for (const entry of belege) {
+    if (entry.netto === null) {
+      missingInputCount += 1;
+      continue;
+    }
+    const value = Number(entry.netto);
+    if (!Number.isFinite(value)) throw new Error('FINANCE_RECEIPT_NET_INVALID');
+    // A versioned SKR mapping is not configured yet. Preserve the amount
+    // explicitly instead of guessing a BWA line from the category name.
+    nichtZugeordnet += value;
   }
+  missingInputCount += belege.length;
 
   let fixkosten = 0;
   let variableKosten = 0;
@@ -373,11 +425,11 @@ export async function getBwaAnalysisAction(von: string, bis: string) {
     // A linked receipt is already included above and must not be counted twice.
     if (cost.belegId) continue;
     const amount = recurringCostInRange(cost, von, bis);
-    if (normalizedLabel(cost.art) === 'fix') fixkosten += amount;
+    if (parseCostKind(cost.art) === 'fix') fixkosten += amount;
     else variableKosten += amount;
   }
 
-  const variableGesamt = material + fremdleistungen + betrieb + variableKosten;
+  const variableGesamt = material + fremdleistungen + betrieb + nichtZugeordnet + variableKosten;
   const deckungsbeitrag = einnahmen - variableGesamt;
   const ausgabenGesamt = variableGesamt + personal + fixkosten;
   const betriebsergebnis = einnahmen - ausgabenGesamt;
@@ -399,23 +451,29 @@ export async function getBwaAnalysisAction(von: string, bis: string) {
     fremdleistungen,
     personal,
     betrieb,
+    nichtZugeordnet,
     fixkosten,
     variableKosten,
     chartData: [],
     insights,
     materialQuote,
     personalQuote,
+    truthStatus: missingInputCount > 0 ? 'partial' as const : 'complete' as const,
+    missingInputCount,
   };
 }
 
 export async function getAusgabenAnalysisAction(von: string, bis: string) {
-  await requireFinanceRead();
+  const actor = await requireFinanceRead();
   assertFinanceDateRange(von, bis);
 
   const belegeRaw = await db.select({ netto: beleg.netto, kategorieId: beleg.kategorieId, belegart: beleg.belegart, status: beleg.status, belegdatum: beleg.belegdatum })
     .from(beleg).where(and(inArray(beleg.status, CONFIRMED_RECEIPT_STATUSES), gte(beleg.belegdatum, von), lte(beleg.belegdatum, bis)));
 
-  const configuredCosts = await db.select().from(kostenposten).where(eq(kostenposten.isDemo, false));
+  const configuredCosts = await db.select().from(kostenposten).where(and(
+    eq(kostenposten.tenantId, actor.tenantId),
+    eq(kostenposten.isDemo, false),
+  ));
   const fixkostenRaw = configuredCosts.filter((item) => normalizedLabel(item.art) === 'fix' && !item.belegId);
   const variableKostenRaw = configuredCosts.filter((item) => normalizedLabel(item.art) !== 'fix' && !item.belegId);
 
@@ -541,8 +599,9 @@ export async function getAusgabenKategorien() {
   const sums = await db.select({
     categoryId: kategorie.id,
     catName: kategorie.name,
-    summe: sql<string>`coalesce(sum(${beleg.netto}), 0)`,
-    anzahl: sql<number>`count(${beleg.id})`,
+    summe: sql<string | null>`sum(${beleg.netto})`,
+    anzahl: sql<number>`count(${beleg.id})::int`,
+    missingNetCount: sql<number>`count(*) filter (where ${beleg.netto} is null)::int`,
   })
   .from(beleg)
   .leftJoin(kategorie, eq(beleg.kategorieId, kategorie.id))
@@ -559,15 +618,30 @@ export async function getAusgabenKategorien() {
   ] as const;
 
   return sums
-    .map((entry, index) => ({
-      id: entry.categoryId || 'unassigned',
-      label: entry.catName || 'Nicht zugeordnet',
-      ...palette[index % palette.length],
-      sum: Number(entry.summe) || 0,
-      count: Number(entry.anzahl) || 0,
-      budget: null,
-      trend: null,
-      warning: false,
-    }))
+    .map((entry, index) => {
+      const sum = entry.summe === null ? 0 : Number(entry.summe);
+      const count = Number(entry.anzahl);
+      const missingInputCount = Number(entry.missingNetCount);
+      if (
+        !Number.isFinite(sum)
+        || !Number.isInteger(count) || count < 0
+        || !Number.isInteger(missingInputCount) || missingInputCount < 0 || missingInputCount > count
+      ) {
+        throw new Error('FINANCE_EXPENSE_CATEGORY_METRIC_INVALID');
+      }
+      return {
+        id: entry.categoryId || 'unassigned',
+        label: entry.catName || 'Nicht zugeordnet',
+        ...palette[index % palette.length],
+        sum,
+        count,
+        knownCount: count - missingInputCount,
+        missingInputCount,
+        truthStatus: missingInputCount > 0 ? 'partial' as const : 'ready' as const,
+        budget: null,
+        trend: null,
+        warning: false,
+      };
+    })
     .sort((a, b) => b.sum - a.sum);
 }

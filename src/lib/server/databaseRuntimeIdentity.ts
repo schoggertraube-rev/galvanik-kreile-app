@@ -292,6 +292,7 @@ export const databaseRuntimeIdentityPredicate = sql`(
         where writable_namespace.nspname in ('public', 'extensions')
           and not candidate.rolsuper
           and candidate.oid <> database_record.datdba
+          and candidate.rolname <> 'pg_database_owner'
           and has_schema_privilege(candidate.oid, writable_namespace.oid, 'CREATE')
       )
       and not exists (
@@ -307,12 +308,12 @@ export const databaseRuntimeIdentityPredicate = sql`(
           ('public.reserve_ai_usage(text,text,text,text,integer,integer,integer,integer,bigint,bigint)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'b532f4ad667ae95ac44d58668daa1219', 'ea941a7b3d8085fdda7a9a647c1f7c98', true, true),
           ('public.claim_ai_usage_reservation(uuid,text,text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'dd3a7c24ffdecbbbb4e1294764129758', '30538ba0c66ff5faca46b42332171f1d', true, false),
           ('public.settle_ai_usage_reservation(uuid,text,text,text,text,integer,text,jsonb)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'a420af6963cf4a4302d53d4c6e384bca', 'ae2ff008ce201376b6a458e3b53bc607', true, true),
-          ('public.reserve_item_photo_job(uuid,text,text,text,text,text,text,text,text,integer,integer,integer,integer,bigint,integer,integer,integer,integer)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'aed2d28d6637729d030327347edf8491', '242f3a6c90e60e503bc38f0cf59abeb6', true, true),
+          ('public.reserve_item_photo_job(uuid,text,text,text,text,text,text,text,text,integer,integer,integer,integer,bigint,integer,integer,integer,integer)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'dea9ba102ae52810c6b4fde3fac9a7b4', '242f3a6c90e60e503bc38f0cf59abeb6', true, true),
           ('public.bind_item_photo_upload(uuid,text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '6a6769e3aabb2652ddf9242f981b909e', '6066a3c2ac90316a14a288158d8b7728', true, false),
           ('public.claim_item_photo_analysis(uuid)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '46ccd33e07c50ef3ed72f5016af6d13f', '9b10957302449264c7274227e3d858ec', true, true),
           ('public.settle_item_photo_analysis(uuid,text,integer,text,jsonb)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '5db9cd477e5ffb6d57d48940fa0d490c', 'c2f84e274e4730064b0301432b9302ea', true, true),
           ('public.mark_item_photo_uncertain(uuid,text,text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'fb75f8f94f65f89937d33d6e73832187', '4d7ae7cc89952db30f7314c13f3513fe', true, false),
-          ('public.finance_close_period(uuid,text,uuid,uuid)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'a20f372e57488c6b5dd699f1688a13c2', 'd2fedd0ff1af53fa994c2f6dcb2ab05f', true, true),
+          ('public.finance_close_period(uuid,text,uuid,uuid)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '278437cfcac19649d064088b7295d628', 'd2fedd0ff1af53fa994c2f6dcb2ab05f', true, true),
           ('public.fn_update_vorlagen()', ARRAY['search_path=pg_catalog, pg_temp']::text[], 'c0a810fd594dd7012e097d2d00be7f50', '2911fbf3f7efd182a3830e31e79eb4e1', false, false),
           ('public.fn_guard_template_projection_source_insert()', ARRAY['search_path=pg_catalog, pg_temp']::text[], '758bf8c0fc6506ad85862f5547a660f2', '2911fbf3f7efd182a3830e31e79eb4e1', false, false),
           ('public.guard_active_mollie_payment_quote()', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '2eaede153b9426c4c7483f538daa8398', '2911fbf3f7efd182a3830e31e79eb4e1', false, false),

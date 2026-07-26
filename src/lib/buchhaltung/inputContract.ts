@@ -2,6 +2,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SKR_ACCOUNT = /^\d{1,9}$/;
 const RECEIPT_TYPES = new Set(["rechnung", "kassenbon", "tankbeleg", "bewirtung", "abo"]);
+const FUEL_TYPES = new Set(["diesel", "super", "superplus", "adblue", "unbekannt"]);
 const CORRECTION_KEYS = new Set([
   "brutto",
   "netto",
@@ -130,8 +131,11 @@ export type FinalizableReceipt = {
   belegdatum: string | null;
   brutto: string | null;
   netto: string | null;
+  ustSatz: string | null;
   ustBetrag: string | null;
   skrKonto: string | null;
+  vorsteuerAbzug: boolean | null;
+  absetzbarProzent: string | null;
 };
 
 export function assertFinalizableReceipt(value: FinalizableReceipt): void {
@@ -143,12 +147,26 @@ export function assertFinalizableReceipt(value: FinalizableReceipt): void {
   if (!value.skrKonto || !SKR_ACCOUNT.test(value.skrKonto)) {
     throw new Error("FINANCE_RECEIPT_INCOMPLETE:account");
   }
+  if (typeof value.vorsteuerAbzug !== "boolean") {
+    throw new Error("FINANCE_RECEIPT_INCOMPLETE:input_tax_decision");
+  }
+  if (value.vorsteuerAbzug) {
+    if (value.absetzbarProzent === null || value.absetzbarProzent.trim() === "") {
+      throw new Error("FINANCE_RECEIPT_INCOMPLETE:deductible_percentage");
+    }
+    const deductiblePercentage = Number(value.absetzbarProzent);
+    if (!Number.isFinite(deductiblePercentage) || deductiblePercentage < 0 || deductiblePercentage > 100) {
+      throw new Error("FINANCE_RECEIPT_AMOUNTS_INCONSISTENT");
+    }
+  }
   const gross = Number(value.brutto);
   const net = Number(value.netto);
+  const taxRate = Number(value.ustSatz);
   const tax = Number(value.ustBetrag);
   if (
     !Number.isFinite(gross) || gross <= 0
     || !Number.isFinite(net) || net < 0
+    || value.ustSatz === null || value.ustSatz.trim() === '' || ![0, 7, 19].includes(taxRate)
     || !Number.isFinite(tax) || tax < 0
     || Math.abs(gross - net - tax) > 0.011
   ) throw new Error("FINANCE_RECEIPT_AMOUNTS_INCONSISTENT");
@@ -174,6 +192,51 @@ export function parseReceiptBatchAssignment(
   if ("kontoId" in input) updates.kontoId = parseFinanceUuid(input.kontoId, "kontoId");
   if ("kostenstelleId" in input) updates.kostenstelleId = parseFinanceUuid(input.kostenstelleId, "kostenstelleId");
   return { ids, updates };
+}
+
+export type FuelDetailInput = {
+  sorte: "diesel" | "super" | "superplus" | "adblue" | "unbekannt";
+  liter: string;
+  preisProLiter: string | null;
+  tankstelle: string | null;
+  ort: string | null;
+};
+
+export function parseFuelDetailInput(value: unknown): FuelDetailInput {
+  const input = record(value, "FINANCE_INPUT_INVALID:fuelDetail");
+  const allowed = new Set(["sorte", "liter", "preisProLiter", "tankstelle", "ort"]);
+  if (
+    Object.keys(input).some((key) => !allowed.has(key))
+    || !Object.hasOwn(input, "sorte")
+    || !Object.hasOwn(input, "liter")
+  ) {
+    throw new Error("FINANCE_INPUT_INVALID:fuelDetail");
+  }
+
+  const sorte = text(input.sorte, "sorte", 20).toLowerCase();
+  if (!FUEL_TYPES.has(sorte)) throw new Error("FINANCE_INPUT_INVALID:sorte");
+
+  const liter = decimal(input.liter, "liter", 1_000_000, 2);
+  if (Number(liter) <= 0) throw new Error("FINANCE_INPUT_INVALID:liter");
+
+  let preisProLiter: string | null = null;
+  if (input.preisProLiter !== null && input.preisProLiter !== undefined && input.preisProLiter !== "") {
+    preisProLiter = decimal(input.preisProLiter, "preisProLiter", 1_000, 3);
+    if (Number(preisProLiter) <= 0) throw new Error("FINANCE_INPUT_INVALID:preisProLiter");
+  }
+
+  const optionalInputText = (field: "tankstelle" | "ort", maximum: number) => {
+    if (input[field] === null || input[field] === undefined || input[field] === "") return null;
+    return text(input[field], field, maximum);
+  };
+
+  return {
+    sorte: sorte as FuelDetailInput["sorte"],
+    liter,
+    preisProLiter,
+    tankstelle: optionalInputText("tankstelle", 200),
+    ort: optionalInputText("ort", 200),
+  };
 }
 
 const COST_KEYS = new Set([

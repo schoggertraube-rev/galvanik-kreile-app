@@ -1,3 +1,10 @@
+throw new Error(
+  'RETIRED_ANALYSIS_SEED: production analysis must be derived from captured operational events',
+);
+
+/*
+ * Former arbitrary-DATABASE_URL seed retained as inert forensic context.
+ *
 import { db } from './index';
 import { sql } from 'drizzle-orm';
 
@@ -85,3 +92,4 @@ seedAnalyse().catch(err => {
   console.error("Error during seed:", err);
   process.exit(1);
 });
+*/

@@ -83,6 +83,10 @@ export class MockBuchhaltungProvider implements BuchhaltungDataProvider {
     return {
       ...beleg,
       positionen: [],
+      ocrPositionen: [],
+      ocrPositionenState: "not_run",
+      verknuepfteKostenposten: [],
+      kiPruefstatus: "not_run",
       kraftstoffDetail: beleg.belegart === "tankbeleg" ? {
         id: "kd-001", belegId: beleg.id,
         sorte: "diesel", liter: 51.2, preisProLiter: 1.709,
@@ -138,6 +142,12 @@ export class MockBuchhaltungProvider implements BuchhaltungDataProvider {
       gesamtLiter: 725.8,
       durchschnittPreisProLiter: 1.71,
       anzahlTankungen: 18,
+      includedReceiptCount: 18,
+      missingDetailCount: 0,
+      missingLiterCount: 0,
+      missingAmountCount: 0,
+      missingInputCount: 0,
+      dataState: "ready",
       nachSorte: [
         { sorte: "diesel", liter: 680.2, kosten: 1162 },
         { sorte: "adblue", liter: 45.6, kosten: 78 },
@@ -161,9 +171,12 @@ export class MockBuchhaltungProvider implements BuchhaltungDataProvider {
       umsatzerloese: 85400,
       materialaufwand: 12200,
       fremdleistungen: 4500,
+      nichtZugeordnet: 0,
       deckungsbeitrag: 68700,
       fixkosten: 45000,
       betriebsergebnis: 23700,
+      truthStatus: "complete",
+      missingInputCount: 0,
       positionen: [
         { bezeichnung: "Umsatzerlöse Galvanik", betrag: 85400, typ: "einnahme" },
         { bezeichnung: "Materialaufwand (Chemie, Metalle)", betrag: 12200, typ: "ausgabe_variabel" },

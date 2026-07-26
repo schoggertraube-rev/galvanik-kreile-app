@@ -93,6 +93,10 @@ function positions(value: unknown): OcrPosition[] {
   });
 }
 
+export function parseStoredOcrPositions(value: unknown): OcrPosition[] {
+  return positions(value);
+}
+
 function confidencePercent(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) {
     throw new Error("OCR_RESULT_INVALID");

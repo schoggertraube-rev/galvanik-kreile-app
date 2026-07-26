@@ -448,16 +448,24 @@ async function assembleKraftstoff(): Promise<DataResult<KpiSnapshot>> {
   if (res.status !== "ok" || !res.data) return { status: res.status, data: null, message: res.message };
 
   const k = res.data;
+  const averageText = k.durchschnittPreisProLiter === null
+    ? "\u00D8 Preis nicht vollst\u00E4ndig berechenbar"
+    : `\u00D8 ${k.durchschnittPreisProLiter.toFixed(2)} \u20AC/l`;
+  const coverageText = k.dataState === "confirmed_empty"
+    ? "Keine festgeschriebenen Tankbelege im Zeitraum"
+    : k.dataState === "partial"
+      ? `${k.includedReceiptCount} von ${k.anzahlTankungen} Belegen vollst\u00E4ndig`
+      : `${k.anzahlTankungen} Tankbelege vollst\u00E4ndig`;
 
   return {
     status: "ok",
     data: {
       value: k.gesamtkosten,
       unit: "EUR",
-      label: "Kraftstoff & Kfz",
+      label: k.dataState === "partial" ? "Kraftstoff & Kfz (bekannter Teilwert)" : "Kraftstoff & Kfz",
       changePct: null,
       changeText: null,
-      meta: `${k.anzahlTankungen} Tankungen \u00B7 \u00D8 ${k.durchschnittPreisProLiter.toFixed(2)} \u20AC/l \u00B7 ${k.gesamtLiter.toFixed(0)} Liter`,
+      meta: `${coverageText} \u00B7 ${averageText} \u00B7 ${k.gesamtLiter.toFixed(0)} bekannte Liter`,
 
       chartType: "bar",
       chartData: {
@@ -486,6 +494,9 @@ async function assembleKraftstoff(): Promise<DataResult<KpiSnapshot>> {
         kraftstoffGesamt: k.gesamtkosten,
         literGesamt: k.gesamtLiter,
         preisProLiter: k.durchschnittPreisProLiter,
+        quellbelege: k.anzahlTankungen,
+        einbezogeneBelege: k.includedReceiptCount,
+        fehlendeEingaben: k.missingInputCount,
       },
     },
   };

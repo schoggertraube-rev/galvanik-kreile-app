@@ -47,7 +47,7 @@ export const appUsers = pgTable("app_users", {
 // 2. Customers
 export const customers = pgTable("customers", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  tenantId: text("tenant_id").notNull().default("galvanik-kreile"),
   customerNumber: varchar("customer_number", { length: 50 }),
   name: text("name").notNull(),
   type: varchar("type", { length: 50 }).notNull(), // business, privat, institution
@@ -88,7 +88,9 @@ export const customers = pgTable("customers", {
   convertedAt: timestamp("converted_at", { withTimezone: true }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("customers_tenant_id_uidx").on(table.tenantId, table.id),
+]);
 
 // 3. Price Agreements (Standalone table linked to Customer)
 export const priceAgreements = pgTable("price_agreements", {
@@ -96,13 +98,13 @@ export const priceAgreements = pgTable("price_agreements", {
   customerId: text("customer_id").notNull().references(() => customers.id, { onDelete: "cascade" }),
   scope: text("scope").notNull(),
   rate: text("rate").notNull(),
-  date: timestamp("date").defaultNow().notNull(),
+  date: timestamp("date", { withTimezone: true }).defaultNow().notNull(),
 });
 
 // 4. Orders
 export const orders = pgTable("orders", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  tenantId: text("tenant_id").notNull().default("galvanik-kreile"),
   orderNumber: text("order_number").notNull().unique(),
   customerId: text("customer_id").notNull().references(() => customers.id),
   title: text("title").notNull(),
@@ -113,7 +115,6 @@ export const orders = pgTable("orders", {
   risk: varchar("risk", { length: 50 }).default("green"),
   priorityComputed: varchar("priority_computed", { length: 50 }).default("green"),
   inquiryId: text("inquiry_id"), // FK to inquiries for attribution
-  parts: jsonb("parts").$type<Record<string, unknown>[]>(), // Legacy / MVP fallback
   statusText: text("status_text"),
   delayReason: text("delay_reason"),
   recommendedAction: text("recommended_action"),
@@ -121,9 +122,9 @@ export const orders = pgTable("orders", {
   dbGeplant: numeric("db_geplant", { precision: 12, scale: 2 }),
   dbIst: numeric("db_ist", { precision: 12, scale: 2 }),
   dbLetzteBerechnung: timestamp("db_letzte_berechnung", { withTimezone: true }),
-  intakeDate: timestamp("intake_date").defaultNow(),
+  intakeDate: timestamp("intake_date", { withTimezone: true }).defaultNow(),
   priority: text("priority").default("normal"),
-  dueDate: timestamp("due_date"),
+  dueDate: timestamp("due_date", { withTimezone: true }),
   promisedDueDate: timestamp("promised_due_date", { withTimezone: true }),
   completedDate: timestamp("completed_date", { withTimezone: true }),
   attachmentUrl: text("attachment_url"),
@@ -158,7 +159,7 @@ export const calendarEvents = pgTable("calendar_events", {
 // 4.5 Items (Standalone table for parts, referenced by orders.actions.ts)
 export const items = pgTable("items", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  tenantId: text("tenant_id").notNull().default("galvanik-kreile"),
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   customerId: text("customer_id").notNull().references(() => customers.id),
   name: text("name").notNull(),
@@ -225,17 +226,6 @@ export const complaints = pgTable("complaints", {
 });
 
 // 7. Inventory & Baths
-export const bathsOld = pgTable("baths", {
-  id: cuidPrimaryKey("id"),
-  name: text("name").notNull(),
-  status: varchar("status", { length: 50 }).default("stable"),
-  lastMeasuredAt: timestamp("last_measured_at"),
-  temperatureMax: integer("temperature_max"),
-  temperatureMin: integer("temperature_min"),
-  phMax: integer("ph_max"),
-  phMin: integer("ph_min"),
-});
-
 export const inventoryItems = pgTable("inventory_items", {
   id: cuidPrimaryKey("id"),
   tenantId: text("tenant_id").notNull(),
@@ -358,7 +348,7 @@ export const statusEvents = events;
 // 8. Inquiries (QuoteRequests)
 export const inquiries = pgTable("inquiries", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: text("tenant_id").notNull(),
   customerId: text("customer_id").references(() => customers.id, { onDelete: "set null" }),
   customerName: text("customer_name").notNull(),
   subject: text("subject").notNull().default(''),
@@ -371,7 +361,7 @@ export const inquiries = pgTable("inquiries", {
   status: text("status").notNull().default('offen'),
   photo: text("photo"),
   quelleTyp: text("quelle_typ").notNull().default('unbekannt'),
-  quelleTouchpointId: uuid("quelle_touchpoint_id"), // Will reference marketing_touchpoints
+  quelleTouchpointId: uuid("quelle_touchpoint_id"), // References the canonical marketing touchpoint.
   quelleManuell: text("quelle_manuell"),
   quelleKonfidenz: numeric("quelle_konfidenz", { precision: 5, scale: 2 }), // 0..1
   pricing: jsonb("pricing").$type<{
@@ -388,7 +378,9 @@ export const inquiries = pgTable("inquiries", {
   convertedToCustomerId: text("converted_to_customer_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("inquiries_tenant_id_uidx").on(table.tenantId, table.id),
+]);
 
 export const kvpItems = pgTable("kvp_items", {
   id: cuidPrimaryKey("id"),
@@ -574,29 +566,6 @@ export const communicationDrafts = pgTable("communication_drafts", {
 });
 
 // 13. Marketing Tracking & Attribution
-export const marketingTouchpoints = pgTable("marketing_touchpoints", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
-  aktionId: text("aktion_id"),
-  kanal: text("kanal").notNull(),
-  titel: text("titel"),
-  ausgefuehrtAm: timestamp("ausgefuehrt_am").defaultNow().notNull(),
-  budget: numeric("budget", { precision: 12, scale: 2 }).default("0"),
-  aufwandMinuten: integer("aufwand_minuten").default(0),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const kostenPosten = pgTable("kosten_posten", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
-  modul: text("modul").notNull().default("marketing"),
-  kanal: text("kanal"),
-  kampagneId: text("kampagne_id"),
-  beschreibung: text("beschreibung"),
-  betrag: numeric("betrag", { precision: 12, scale: 2 }).notNull(),
-  gebuchtAm: timestamp("gebucht_am").defaultNow().notNull(),
-});
-
 // 14. Qualitätskontrolle (QS)
 export const qs = pgTable("qs", {
   id: cuidPrimaryKey("id"),
@@ -626,6 +595,9 @@ export const baeder = pgTable("baths", {
   notes: text("notes"),
 });
 
+// Backward-compatible symbol without a second, divergent table contract.
+export const bathsOld = baeder;
+
 // 16. Bad-Messwerte (Historie)
 export const badMesswerte = pgTable("bath_measurements", {
   id: cuidPrimaryKey("id"),
@@ -635,7 +607,7 @@ export const badMesswerte = pgTable("bath_measurements", {
   phValue: numeric("ph_value", { precision: 10, scale: 2 }),
   notes: text("notes"),
   statusAfterMeasurement: varchar("status_after_measurement", { length: 50 }).notNull().default("not_evaluated"),
-  measuredByUserId: text("measured_by_user_id").references(() => appUsers.id, { onDelete: "restrict" }),
+  measuredByUserId: uuid("measured_by_user_id").references(() => appUsers.id, { onDelete: "restrict" }),
   measuredAt: timestamp("measured_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
 });

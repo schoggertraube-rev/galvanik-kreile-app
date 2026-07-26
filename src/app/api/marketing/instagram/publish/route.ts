@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { and, eq, inArray, isNull, lt, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { db } from '@/db'
 import { aktion, kanal, marketingAsset, marketingPublishJob, touchpoint } from '@/db/schema_marketing'
 import { requireMarketingWrite } from '@/lib/server/marketingAuthorization'
@@ -16,7 +16,7 @@ import {
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const STALE_JOB_BEFORE_MS = 10 * 60 * 1_000
 
 type PublishInput = { actionId: string; assetId: string; expectedCaption: string }
@@ -51,55 +51,98 @@ function buildCaption(title: string, value: unknown): string | null {
   return combined.length > 0 && combined.length <= 2_200 && !combined.includes('\0') ? combined : null
 }
 
-function validStorageLocation(bucket: string | null, path: string): bucket is string {
-  return !!bucket && /^[a-z0-9][a-z0-9._-]{1,62}$/.test(bucket) && path.length > 0 && path.length <= 1_024 &&
-    !path.startsWith('/') && !path.includes('\\') && !path.split('/').includes('..') && !/[\u0000-\u001f\u007f]/.test(path)
+function validStorageLocation(
+  tenantId: string,
+  orderId: string | null,
+  bucket: string | null,
+  path: string
+): bucket is 'item-photos' {
+  if (bucket !== 'item-photos' || !orderId || path.length < 20 || path.length > 1_024) return false
+  return path.startsWith(`${tenantId}/${orderId}/`)
+    && !path.startsWith('/')
+    && !path.includes('\\')
+    && !path.split('/').includes('..')
+    && !/[\u0000-\u001f\u007f]/.test(path)
 }
 
 function jsonError(code: string, status: number) {
   return NextResponse.json({ ok: false, code }, { status, headers: { 'Cache-Control': 'no-store' } })
 }
 
-async function loadJob(actionId: string): Promise<PublishJob | undefined> {
-  return (await db.select().from(marketingPublishJob).where(eq(marketingPublishJob.aktionId, actionId)).limit(1))[0]
+async function loadJob(tenantId: string, actionId: string): Promise<PublishJob | undefined> {
+  return (await db.select().from(marketingPublishJob).where(and(
+    eq(marketingPublishJob.tenantId, tenantId),
+    eq(marketingPublishJob.aktionId, actionId)
+  )).limit(1))[0]
 }
 
-async function reservePublishJob(input: PublishInput, channelId: string): Promise<
+async function loadReplayEvidence(tenantId: string, job: PublishJob): Promise<string | null> {
+  if (job.status !== 'succeeded' || !job.externalMediaId) return null
+  const [evidence] = await db.select({ id: touchpoint.id }).from(touchpoint).where(and(
+    eq(touchpoint.tenantId, tenantId),
+    eq(touchpoint.aktionId, job.aktionId),
+    eq(touchpoint.kanalId, job.kanalId),
+    eq(touchpoint.externeRef, job.externalMediaId)
+  )).limit(1)
+  return evidence?.id ?? null
+}
+
+async function reservePublishJob(tenantId: string, input: PublishInput, channelId: string): Promise<
   | { kind: 'claimed'; job: PublishJob }
   | { kind: 'succeeded'; job: PublishJob }
   | { kind: 'in_progress' }
   | { kind: 'uncertain' }
 > {
   await db.insert(marketingPublishJob).values({
+    tenantId,
     aktionId: input.actionId,
     assetId: input.assetId,
     kanalId: channelId,
     status: 'reserved',
-  }).onConflictDoNothing({ target: marketingPublishJob.aktionId })
+  }).onConflictDoNothing({ target: [marketingPublishJob.tenantId, marketingPublishJob.aktionId] })
 
-  let job = await loadJob(input.actionId)
+  let job = await loadJob(tenantId, input.actionId)
   if (!job || job.assetId !== input.assetId || job.kanalId !== channelId) return { kind: 'uncertain' }
   if (job.status === 'succeeded') return { kind: 'succeeded', job }
   if (job.status === 'uncertain') return { kind: 'uncertain' }
   if (job.externalContainerId) {
-    await db.update(marketingPublishJob).set({
+    const marked = await db.update(marketingPublishJob).set({
       status: 'uncertain',
       errorCode: 'EXTERNAL_CONTAINER_ALREADY_EXISTS',
       aktualisiertAm: new Date(),
-    }).where(eq(marketingPublishJob.id, job.id))
+    }).where(and(
+      eq(marketingPublishJob.tenantId, tenantId),
+      eq(marketingPublishJob.id, job.id),
+      eq(marketingPublishJob.status, job.status),
+      eq(marketingPublishJob.externalContainerId, job.externalContainerId)
+    )).returning({ id: marketingPublishJob.id })
+    if (marked.length !== 1) {
+      const current = await loadJob(tenantId, input.actionId)
+      if (current?.status === 'succeeded' && current.assetId === input.assetId && current.kanalId === channelId) {
+        return { kind: 'succeeded', job: current }
+      }
+    }
     return { kind: 'uncertain' }
   }
   if (job.status === 'publishing') {
     if (job.claimedAt && job.claimedAt.getTime() < Date.now() - STALE_JOB_BEFORE_MS) {
-      await db.update(marketingPublishJob).set({
+      const marked = await db.update(marketingPublishJob).set({
         status: 'uncertain',
         errorCode: 'STALE_PUBLISHING_JOB',
         aktualisiertAm: new Date(),
       }).where(and(
+        eq(marketingPublishJob.tenantId, tenantId),
         eq(marketingPublishJob.id, job.id),
         eq(marketingPublishJob.status, 'publishing'),
         lt(marketingPublishJob.claimedAt, new Date(Date.now() - STALE_JOB_BEFORE_MS))
-      ))
+      )).returning({ id: marketingPublishJob.id })
+      if (marked.length !== 1) {
+        const current = await loadJob(tenantId, input.actionId)
+        if (current?.status === 'succeeded' && current.assetId === input.assetId && current.kanalId === channelId) {
+          return { kind: 'succeeded', job: current }
+        }
+        return current?.status === 'publishing' ? { kind: 'in_progress' } : { kind: 'uncertain' }
+      }
       return { kind: 'uncertain' }
     }
     return { kind: 'in_progress' }
@@ -114,6 +157,7 @@ async function reservePublishJob(input: PublishInput, channelId: string): Promis
     attemptCount: sql`${marketingPublishJob.attemptCount} + 1`,
     aktualisiertAm: new Date(),
   }).where(and(
+    eq(marketingPublishJob.tenantId, tenantId),
     eq(marketingPublishJob.id, job.id),
     inArray(marketingPublishJob.status, ['reserved', 'failed']),
     isNull(marketingPublishJob.externalContainerId)
@@ -123,8 +167,18 @@ async function reservePublishJob(input: PublishInput, channelId: string): Promis
   return { kind: 'claimed', job }
 }
 
-async function settleFailedJob(jobId: string, uncertain: boolean, error: unknown, mediaId?: string): Promise<void> {
-  const errorCode = error instanceof MetaInstagramError ? error.code : 'INSTAGRAM_PUBLISH_INTERNAL_ERROR'
+async function settleFailedJob(
+  tenantId: string,
+  jobId: string,
+  uncertain: boolean,
+  error: unknown,
+  mediaId?: string
+): Promise<void> {
+  const errorCode = error instanceof MetaInstagramError
+    ? error.code
+    : error instanceof Error && /^[A-Z0-9_]{3,120}$/.test(error.message)
+      ? error.message
+      : 'INSTAGRAM_PUBLISH_INTERNAL_ERROR'
   try {
     await db.update(marketingPublishJob).set({
       status: uncertain ? 'uncertain' : 'failed',
@@ -132,15 +186,21 @@ async function settleFailedJob(jobId: string, uncertain: boolean, error: unknown
       completedAt: new Date(),
       errorCode: errorCode.slice(0, 120),
       aktualisiertAm: new Date(),
-    }).where(eq(marketingPublishJob.id, jobId))
+    }).where(and(
+      eq(marketingPublishJob.tenantId, tenantId),
+      eq(marketingPublishJob.id, jobId),
+      eq(marketingPublishJob.status, 'publishing')
+    )).returning({ id: marketingPublishJob.id })
   } catch {
     // The caller still fails closed. A missing settlement must never trigger a blind retry.
   }
 }
 
 export async function POST(request: Request) {
+  let tenantId: string
   try {
-    await requireMarketingWrite()
+    const actor = await requireMarketingWrite()
+    tenantId = actor.tenantId
   } catch {
     return jsonError('FORBIDDEN', 403)
   }
@@ -167,11 +227,21 @@ export async function POST(request: Request) {
     channelConfig: kanal.config,
     accessTokenEncrypted: kanal.accessTokenEncrypted,
   }).from(aktion)
-    .leftJoin(kanal, eq(aktion.kanalId, kanal.id))
-    .where(eq(aktion.id, input.actionId))
+    .leftJoin(kanal, and(
+      eq(aktion.kanalId, kanal.id),
+      eq(kanal.tenantId, tenantId),
+      eq(kanal.truthStatus, 'verified')
+    ))
+    .where(and(
+      eq(aktion.tenantId, tenantId),
+      eq(aktion.truthStatus, 'verified'),
+      eq(aktion.isDemo, false),
+      eq(aktion.id, input.actionId)
+    ))
     .limit(1)
   if (!record || !record.channelId) return jsonError('ACTION_NOT_FOUND', 404)
-  if (record.type !== 'post' || record.actionStatus !== 'freigegeben') return jsonError('ACTION_NOT_APPROVED', 409)
+  const channelId = record.channelId
+  if (record.type !== 'post') return jsonError('ACTION_NOT_APPROVED', 409)
 
   const content = objectValue(record.content)
   if (textValue(content.assetId) !== input.assetId) return jsonError('ASSET_NOT_APPROVED', 409)
@@ -179,8 +249,32 @@ export async function POST(request: Request) {
   if (!caption) return jsonError('ACTION_CONTENT_INVALID', 409)
   if (caption !== input.expectedCaption) return jsonError('ACTION_CONTENT_NOT_APPROVED', 409)
 
-  const [asset] = await db.select().from(marketingAsset).where(eq(marketingAsset.id, input.assetId)).limit(1)
-  if (!asset || asset.freigabeMarketing !== true || !validStorageLocation(asset.storageBucket, asset.storagePfad)) {
+  const priorJob = await loadJob(tenantId, input.actionId)
+  if (priorJob?.status === 'succeeded') {
+    if (priorJob.assetId !== input.assetId || priorJob.kanalId !== channelId) {
+      return jsonError('PUBLISH_EVIDENCE_MISSING', 409)
+    }
+    const evidenceId = await loadReplayEvidence(tenantId, priorJob)
+    if (!evidenceId) return jsonError('PUBLISH_EVIDENCE_MISSING', 409)
+    return NextResponse.json({
+      ok: true,
+      message: 'Instagram-Beitrag wurde bereits veröffentlicht.',
+      touchpointId: evidenceId,
+      replay: true,
+    }, { headers: { 'Cache-Control': 'no-store' } })
+  }
+  if (record.actionStatus !== 'freigegeben') return jsonError('ACTION_NOT_APPROVED', 409)
+
+  const [asset] = await db.select().from(marketingAsset).where(and(
+    eq(marketingAsset.tenantId, tenantId),
+    eq(marketingAsset.id, input.assetId)
+  )).limit(1)
+  if (!asset || asset.freigabeMarketing !== true || !validStorageLocation(
+    tenantId,
+    asset.auftragId,
+    asset.storageBucket,
+    asset.storagePfad
+  )) {
     return jsonError('ASSET_NOT_APPROVED', 409)
   }
   if (record.channelType !== 'instagram' || record.channelConnected !== true || record.channelStatus !== 'verbunden' || !record.accessTokenEncrypted) {
@@ -195,19 +289,22 @@ export async function POST(request: Request) {
   let pageAccessToken: string
   try {
     metaConfig = getMetaInstagramConfig()
-    pageAccessToken = decryptMarketingToken(record.accessTokenEncrypted)
+    pageAccessToken = decryptMarketingToken(record.accessTokenEncrypted, {
+      tenantId,
+      channelId,
+    })
   } catch {
     return jsonError('CONFIGURATION_MISSING', 503)
   }
 
-  const reservation = await reservePublishJob(input, record.channelId)
+  const reservation = await reservePublishJob(tenantId, input, channelId)
   if (reservation.kind === 'succeeded') {
-    const existingTouchpoint = (await db.select({ id: touchpoint.id }).from(touchpoint)
-      .where(eq(touchpoint.aktionId, input.actionId)).limit(1))[0]
+    const evidenceId = await loadReplayEvidence(tenantId, reservation.job)
+    if (!evidenceId) return jsonError('PUBLISH_EVIDENCE_MISSING', 409)
     return NextResponse.json({
       ok: true,
       message: 'Instagram-Beitrag wurde bereits veröffentlicht.',
-      touchpointId: existingTouchpoint?.id,
+      touchpointId: evidenceId,
       replay: true,
     }, { headers: { 'Cache-Control': 'no-store' } })
   }
@@ -227,6 +324,7 @@ export async function POST(request: Request) {
       externalContainerId: containerId,
       aktualisiertAm: new Date(),
     }).where(and(
+      eq(marketingPublishJob.tenantId, tenantId),
       eq(marketingPublishJob.id, reservation.job.id),
       eq(marketingPublishJob.status, 'publishing')
     )).returning({ id: marketingPublishJob.id })
@@ -234,39 +332,68 @@ export async function POST(request: Request) {
 
     await waitForMetaContainer(metaConfig, pageAccessToken, containerId)
     mediaId = await publishMetaMedia(metaConfig, pageAccessToken, igUserId, containerId)
+    const publishedMediaId = mediaId
 
     const completed = await db.transaction(async (tx) => {
       const now = new Date()
-      const existing = await tx.select({ id: touchpoint.id }).from(touchpoint)
-        .where(eq(touchpoint.aktionId, input.actionId)).limit(1)
+      const existing = await tx.select({
+        id: touchpoint.id,
+        kanalId: touchpoint.kanalId,
+        externeRef: touchpoint.externeRef,
+      }).from(touchpoint)
+        .where(and(
+          eq(touchpoint.tenantId, tenantId),
+          eq(touchpoint.aktionId, input.actionId)
+        )).limit(1)
       let touchpointId: string
       if (existing[0]) {
-        touchpointId = existing[0].id
-        await tx.update(touchpoint).set({
-          kanalId: record.channelId,
-          externeRef: mediaId,
+        if (existing[0].kanalId !== channelId
+          || (existing[0].externeRef !== null && existing[0].externeRef !== publishedMediaId)) {
+          throw new Error('PUBLISH_TOUCHPOINT_EVIDENCE_CONFLICT')
+        }
+        const [updatedTouchpoint] = await tx.update(touchpoint).set({
+          kanalId: channelId,
+          externeRef: publishedMediaId,
           ausgefuehrtAm: now,
-        }).where(eq(touchpoint.id, touchpointId))
+        }).where(and(
+          eq(touchpoint.tenantId, tenantId),
+          eq(touchpoint.id, existing[0].id),
+          eq(touchpoint.aktionId, input.actionId),
+          eq(touchpoint.kanalId, channelId),
+          or(isNull(touchpoint.externeRef), eq(touchpoint.externeRef, publishedMediaId))
+        )).returning({ id: touchpoint.id })
+        if (!updatedTouchpoint) throw new Error('PUBLISH_TOUCHPOINT_RECEIPT_MISSING')
+        touchpointId = updatedTouchpoint.id
       } else {
         const [created] = await tx.insert(touchpoint).values({
+          tenantId,
           aktionId: input.actionId,
-          kanalId: record.channelId,
-          externeRef: mediaId,
+          kanalId: channelId,
+          externeRef: publishedMediaId,
           utmCampaign: record.title.substring(0, 80).replace(/[^a-zA-Z0-9]/g, '-').toLowerCase(),
           utmSource: 'instagram',
           utmMedium: 'organic-social',
           ausgefuehrtAm: now,
         }).returning({ id: touchpoint.id })
+        if (!created) throw new Error('PUBLISH_TOUCHPOINT_RECEIPT_MISSING')
         touchpointId = created.id
       }
-      await tx.update(aktion).set({ status: 'ausgefuehrt', ausgefuehrtAm: now }).where(eq(aktion.id, input.actionId))
+      const [executedAction] = await tx.update(aktion).set({ status: 'ausgefuehrt', ausgefuehrtAm: now }).where(and(
+        eq(aktion.tenantId, tenantId),
+        eq(aktion.truthStatus, 'verified'),
+        eq(aktion.isDemo, false),
+        eq(aktion.id, input.actionId),
+        eq(aktion.status, 'freigegeben')
+      )).returning({ id: aktion.id })
+      if (!executedAction) throw new Error('PUBLISH_ACTION_STATE_CONFLICT_AFTER_PROVIDER')
       const settled = await tx.update(marketingPublishJob).set({
         status: 'succeeded',
-        externalMediaId: mediaId,
+        externalMediaId: publishedMediaId,
         completedAt: now,
         errorCode: null,
         aktualisiertAm: now,
       }).where(and(
+        eq(marketingPublishJob.tenantId, tenantId),
         eq(marketingPublishJob.id, reservation.job.id),
         eq(marketingPublishJob.status, 'publishing')
       )).returning({ id: marketingPublishJob.id })
@@ -280,7 +407,7 @@ export async function POST(request: Request) {
       touchpointId: completed,
     }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
-    await settleFailedJob(reservation.job.id, !!containerId, error, mediaId)
+    await settleFailedJob(tenantId, reservation.job.id, !!containerId, error, mediaId)
     return jsonError(containerId ? 'PUBLISH_UNCERTAIN' : 'PUBLISH_FAILED', containerId ? 409 : 502)
   }
 }

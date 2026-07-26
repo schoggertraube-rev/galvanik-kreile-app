@@ -2,15 +2,18 @@
 
 import { db } from '@/db'
 import { customers, orders } from '@/db/schema'
-import { ausgangsrechnung, ausgangsrechnungPosition, beleg, bhAuditLog, bhEinstellungen, konto, kostenposten, kostenstelle, kategorie, steuerprofil } from '@/db/schema_buchhaltung'
+import { ausgangsrechnung, ausgangsrechnungPosition, beleg, bhAuditLog, konto, kostenposten, kostenstelle, kraftstoffDetail, kategorie, steuerprofil } from '@/db/schema_buchhaltung'
 import { and, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm'
 import { createSupabaseServiceClient } from '@/lib/server/supabaseService'
 import { assertFinanceDateRange, requireFinanceRead, requireFinanceWrite } from '@/lib/server/financeAuthorization'
 import { calculateOutstandingAmount, normalizeOcrConfidencePercent } from '@/lib/buchhaltung/types'
+import { parseStoredOcrPositions } from '@/lib/ocr/resultContract'
+import { recurringCostInRange } from '@/lib/buchhaltung/costSchedule'
 import { readInvoiceCreateCapability } from '@/lib/server/invoiceCreateCapability'
 import {
   assertFinalizableReceipt,
   parseCostItemFormData,
+  parseFuelDetailInput,
   parseFinanceUuid,
   parseReceiptBatchAssignment,
   parseReceiptCorrection,
@@ -25,7 +28,6 @@ import type {
   Kostenposten,
   KostenpostenFilter,
   UstvaWerte,
-  Ersparnis,
   KategorieSumme,
   Steuerprofil,
   AusgangsrechnungStatus,
@@ -37,7 +39,7 @@ import type {
   Lieferant,
 } from '@/lib/buchhaltung/types'
 
-const CONFIRMED_RECEIPT_STATUSES = ['erfasst', 'festgeschrieben'] as const
+const CONFIRMED_RECEIPT_STATUSES = ['festgeschrieben'] as const
 
 /**
  * Ruft die Liste der Belege aus der Datenbank ab.
@@ -81,7 +83,8 @@ export async function listBelegeAction(filter?: BelegFilter): Promise<Beleg[]> {
  * Lädt einen einzelnen Beleg anhand der ID.
  */
 export async function getBelegAction(id: string): Promise<BelegDetail> {
-  await requireFinanceRead()
+  const actor = await requireFinanceRead()
+  const receiptId = parseFinanceUuid(id, 'id')
   const supabase = createSupabaseServiceClient()
   
   const { data, error } = await supabase.from('beleg').select(`
@@ -90,7 +93,7 @@ export async function getBelegAction(id: string): Promise<BelegDetail> {
     kraftstoff_detail (*),
     kategorie (*),
     lieferant (*)
-  `).eq('id', id).single()
+  `).eq('id', receiptId).single()
   
   if (error || !data) {
     console.error('Fehler beim Laden des Belegs:', error)
@@ -117,14 +120,34 @@ export async function getBelegAction(id: string): Promise<BelegDetail> {
   const fuelRow = relationRow(data.kraftstoff_detail)
   const categoryRow = relationRow(data.kategorie)
   const supplierRow = relationRow(data.lieferant)
+  const linkedCosts = await db
+    .select({ id: kostenposten.id, bezeichnung: kostenposten.bezeichnung })
+    .from(kostenposten)
+    .where(and(
+      eq(kostenposten.tenantId, actor.tenantId),
+      eq(kostenposten.belegId, receiptId),
+      eq(kostenposten.isDemo, false),
+    ))
+    .limit(50)
+  const ocrPositionen = data.ocr_positionen === null
+    ? []
+    : parseStoredOcrPositions(data.ocr_positionen)
   const detail: BelegDetail = {
     ...mapToClientBeleg(data),
     originalDatei,
     positionen: relationRows(data.beleg_position).map(mapReceiptPosition),
+    ocrPositionen,
+    ocrPositionenState: data.ocr_positionen === null
+      ? 'not_run'
+      : ocrPositionen.length === 0
+        ? 'empty'
+        : 'suggested',
     kraftstoffDetail: fuelRow ? mapFuelDetail(fuelRow) : undefined,
     kategorie: categoryRow ? mapCategory(categoryRow) : undefined,
     lieferant: supplierRow ? mapSupplier(supplierRow) : undefined,
-    kiHinweise: [] // TODO: KI-Logik ggf. serverseitig integrieren
+    verknuepfteKostenposten: linkedCosts,
+    kiPruefstatus: 'not_run',
+    kiHinweise: [],
   }
   
   return detail
@@ -291,7 +314,7 @@ export async function getKraftstoffTankungenAction() {
   const { data, error } = await supabase.from('beleg')
     .select('*, kraftstoff_detail(*)')
     .eq('belegart', 'tankbeleg')
-    .in('status', ['erfasst', 'festgeschrieben'])
+    .eq('status', 'festgeschrieben')
     .order('belegdatum', { ascending: false });
 
   if (error) {
@@ -306,6 +329,74 @@ export async function getKraftstoffTankungenAction() {
       kraftstoffDetail: fuel ? mapFuelDetail(fuel) : undefined,
     }
   });
+}
+
+export async function saveKraftstoffDetailAction(receiptIdValue: string, value: unknown): Promise<KraftstoffDetail> {
+  const actor = await requireFinanceWrite()
+  const receiptId = parseFinanceUuid(receiptIdValue, 'belegId')
+  const input = parseFuelDetailInput(value)
+
+  const saved = await db.transaction(async (tx) => {
+    const [receipt] = await tx.select({
+      id: beleg.id,
+      belegart: beleg.belegart,
+      status: beleg.status,
+    }).from(beleg).where(eq(beleg.id, receiptId)).limit(1).for('update')
+    if (!receipt) throw new Error('FINANCE_RECEIPT_NOT_FOUND')
+    if (receipt.belegart !== 'tankbeleg') throw new Error('FINANCE_FUEL_RECEIPT_TYPE_REQUIRED')
+    if (!['pruefen', 'erfasst'].includes(receipt.status)) {
+      throw new Error('FINANCE_FUEL_RECEIPT_IMMUTABLE')
+    }
+
+    const [existing] = await tx.select().from(kraftstoffDetail)
+      .where(eq(kraftstoffDetail.belegId, receiptId)).limit(1).for('update')
+    const values = {
+      sorte: input.sorte,
+      liter: input.liter,
+      preisProLiter: input.preisProLiter,
+      tankstelle: input.tankstelle,
+      ort: input.ort,
+    }
+    const [detail] = existing
+      ? await tx.update(kraftstoffDetail).set(values).where(and(
+          eq(kraftstoffDetail.id, existing.id),
+          eq(kraftstoffDetail.belegId, receiptId),
+        )).returning()
+      : await tx.insert(kraftstoffDetail).values({ belegId: receiptId, ...values }).returning()
+    if (!detail) throw new Error('FINANCE_FUEL_DETAIL_RECEIPT_MISSING')
+
+    const [audit] = await tx.insert(bhAuditLog).values({
+      benutzer: actor.userId,
+      entitaet: 'kraftstoff_detail',
+      entitaetId: detail.id,
+      aktion: existing ? 'update' : 'create',
+      vorher: existing ? {
+        sorte: existing.sorte,
+        liter: existing.liter,
+        preisProLiter: existing.preisProLiter,
+        tankstelle: existing.tankstelle,
+        ort: existing.ort,
+      } : null,
+      nachher: values,
+    }).returning({ id: bhAuditLog.id })
+    if (!audit) throw new Error('AUDIT_RECEIPT_MISSING')
+    return detail
+  })
+
+  const liter = Number(saved.liter)
+  const preisProLiter = saved.preisProLiter === null ? undefined : Number(saved.preisProLiter)
+  if (!Number.isFinite(liter) || liter <= 0 || (preisProLiter !== undefined && (!Number.isFinite(preisProLiter) || preisProLiter <= 0))) {
+    throw new Error('FINANCE_FUEL_DATA_INVALID')
+  }
+  return {
+    id: saved.id,
+    belegId: saved.belegId,
+    sorte: saved.sorte as KraftstoffDetail['sorte'],
+    liter,
+    preisProLiter,
+    tankstelle: saved.tankstelle ?? undefined,
+    ort: saved.ort ?? undefined,
+  }
 }
 
 export async function exportBelegeAction(
@@ -334,9 +425,17 @@ export async function exportBelegeAction(
 
   const belege = data.map(mapToClientBeleg);
 
-  const rows = belege.map(b => {
-    return `${b.belegdatum || b.erfasstAm};${b.lieferantText || "Unbekannt"};${b.skrKonto || ""};${b.kategorieId};${b.brutto};${b.ustSatz || "19%"};${b.ustBetrag || "0,00"};${b.id};${b.status}`;
-  });
+  const rows = belege.map((entry) => [
+    entry.belegdatum ?? entry.erfasstAm,
+    entry.lieferantText ?? '',
+    entry.skrKonto ?? '',
+    entry.kategorieId ?? '',
+    entry.brutto ?? '',
+    entry.ustSatz ?? '',
+    entry.ustBetrag ?? '',
+    entry.id,
+    entry.status,
+  ].map(csvCell).join(';'));
 
   return {
     format,
@@ -434,6 +533,9 @@ function optionalString(row: DatabaseRow, key: string): string | undefined {
 }
 
 function requiredNumber(row: DatabaseRow, key: string): number {
+  if (row[key] === null || row[key] === undefined || row[key] === '') {
+    throw new Error(`FINANCE_DATA_INVALID:${key}`)
+  }
   const value = Number(row[key])
   if (!Number.isFinite(value)) throw new Error(`FINANCE_DATA_INVALID:${key}`)
   return value
@@ -489,15 +591,15 @@ function mapReceiptPosition(row: DatabaseRow): BelegPosition {
 }
 
 function mapFuelDetail(row: DatabaseRow): KraftstoffDetail {
-  const rawType = optionalString(row, 'sorte')?.trim().toLowerCase()
-  const sorte = rawType && ['diesel', 'super', 'superplus', 'adblue'].includes(rawType)
+  const rawType = requiredString(row, 'sorte').trim().toLowerCase()
+  const sorte = ['diesel', 'super', 'superplus', 'adblue', 'unbekannt'].includes(rawType)
     ? rawType as KraftstoffDetail['sorte']
-    : rawType ? 'unbekannt' : undefined
+    : 'unbekannt'
   return {
     id: requiredString(row, 'id'),
     belegId: requiredString(row, 'beleg_id'),
     sorte,
-    liter: optionalNumber(row, 'liter'),
+    liter: requiredNumber(row, 'liter'),
     preisProLiter: optionalNumber(row, 'preis_pro_liter'),
     tankstelle: optionalString(row, 'tankstelle'),
     ort: optionalString(row, 'ort'),
@@ -570,7 +672,7 @@ function mapToClientBeleg(dbData: DatabaseRow): Beleg {
     vorsteuerAbzug: requiredBoolean(dbData, 'vorsteuer_abzug'),
     kategorieId: optionalString(dbData, 'kategorie_id'),
     skrKonto: optionalString(dbData, 'skr_konto'),
-    absetzbarProzent: requiredNumber(dbData, 'absetzbar_prozent'),
+    absetzbarProzent: optionalNumber(dbData, 'absetzbar_prozent'),
     absetzbarGrund: optionalString(dbData, 'absetzbar_grund'),
     belegart: receiptType(dbData),
     originalDatei: requiredString(dbData, 'original_datei'),
@@ -591,8 +693,8 @@ function mapToClientBeleg(dbData: DatabaseRow): Beleg {
 
 type StoredBeleg = typeof beleg.$inferSelect
 
-function storedNumber(value: string | null, field: string, fallback?: number): number {
-  if (value === null && fallback !== undefined) return fallback
+function storedNumber(value: string | null, field: string): number {
+  if (value === null) throw new Error(`FINANCE_DATA_INVALID:${field}`)
   const parsed = Number(value)
   if (!Number.isFinite(parsed)) throw new Error(`FINANCE_DATA_INVALID:${field}`)
   return parsed
@@ -624,7 +726,9 @@ function mapDrizzleBeleg(row: StoredBeleg): Beleg {
     vorsteuerAbzug: row.vorsteuerAbzug,
     kategorieId: row.kategorieId ?? undefined,
     skrKonto: row.skrKonto ?? undefined,
-    absetzbarProzent: storedNumber(row.absetzbarProzent, 'absetzbar_prozent', 100),
+    absetzbarProzent: row.absetzbarProzent === null
+      ? undefined
+      : storedNumber(row.absetzbarProzent, 'absetzbar_prozent'),
     absetzbarGrund: row.absetzbarGrund ?? undefined,
     belegart: belegart === null ? undefined : belegart as Belegart,
     originalDatei: row.originalDatei,
@@ -683,7 +787,11 @@ export async function createRechnungAction(formData: FormData, positionen: Ausga
   const orderId = String(formData.get('orderId') || '').trim() || null;
   const datum = String(formData.get('datum') || '').trim();
   const faelligAm = String(formData.get('faelligAm') || '').trim();
-  const ustSatz = Number(String(formData.get('ustSatz') || '19').replace(',', '.'));
+  const ustSatzRaw = formData.get('ustSatz');
+  if (typeof ustSatzRaw !== 'string' || ustSatzRaw.trim() === '') {
+    throw new Error('Umsatzsteuersatz muss ausdrücklich angegeben werden.');
+  }
+  const ustSatz = Number(ustSatzRaw.replace(',', '.'));
   const bemerkung = String(formData.get('bemerkung') || '').trim() || null;
 
   if (!nummer || !kundeId || !datum || !faelligAm) {
@@ -930,9 +1038,12 @@ export async function getRechnungAction(id: string): Promise<Ausgangsrechnung> {
 // === KOSTENPOSTEN ===
 
 export async function listKostenpostenAction(filter?: KostenpostenFilter): Promise<Kostenposten[]> {
-  await requireFinanceRead();
+  const actor = await requireFinanceRead();
   const supabase = createSupabaseServiceClient();
-  let query = supabase.from('kostenposten').select('*').eq('is_demo', false).order('betrag', { ascending: false });
+  let query = supabase.from('kostenposten').select('*')
+    .eq('tenant_id', actor.tenantId)
+    .eq('is_demo', false)
+    .order('betrag', { ascending: false });
 
   if (filter?.art) {
     query = query.eq('art', filter.art);
@@ -968,6 +1079,7 @@ export async function createKostenpostenAction(formData: FormData): Promise<Kost
   const data = await db.transaction(async (tx) => {
     const [created] = await tx.insert(kostenposten).values({
       ...input,
+      tenantId: actor.tenantId,
       isDemo: false,
     }).returning();
     if (!created) throw new Error('FINANCE_COST_CREATE_FAILED');
@@ -1008,9 +1120,14 @@ export async function createKostenpostenAction(formData: FormData): Promise<Kost
 }
 
 export async function getKostenpostenAction(id: string): Promise<Kostenposten> {
-  await requireFinanceRead();
+  const actor = await requireFinanceRead();
+  const costId = parseFinanceUuid(id, 'id')
   const supabase = createSupabaseServiceClient();
-  const { data, error } = await supabase.from('kostenposten').select('*').eq('id', id).eq('is_demo', false).single();
+  const { data, error } = await supabase.from('kostenposten').select('*')
+    .eq('tenant_id', actor.tenantId)
+    .eq('id', costId)
+    .eq('is_demo', false)
+    .single();
   if (error) {
     throw new Error('Kostenposten nicht gefunden.');
   }
@@ -1049,13 +1166,27 @@ export async function getSteuerprofilAction(): Promise<Steuerprofil> {
   if (kontenrahmen !== 'SKR03' && kontenrahmen !== 'SKR04') {
     throw new Error('FINANCE_PROFILE_INVALID_LEDGER')
   }
+  if (profile.standardUstSatz === null || profile.reduziertUstSatz === null) {
+    throw new Error('FINANCE_PROFILE_INVALID_TAX_RATE')
+  }
+  const standardUstSatz = Number(profile.standardUstSatz)
+  const reduziertUstSatz = Number(profile.reduziertUstSatz)
+  if (
+    !Number.isFinite(standardUstSatz) || standardUstSatz < 0 || standardUstSatz > 100
+    || !Number.isFinite(reduziertUstSatz) || reduziertUstSatz < 0 || reduziertUstSatz > 100
+  ) {
+    throw new Error('FINANCE_PROFILE_INVALID_TAX_RATE')
+  }
+  if (profile.kleinunternehmer === null) {
+    throw new Error('FINANCE_PROFILE_INVALID_SMALL_BUSINESS_FLAG')
+  }
 
   return {
     id: profile.id,
     bezeichnung: profile.bezeichnung,
-    standardUstSatz: Number(profile.standardUstSatz),
-    reduziertUstSatz: Number(profile.reduziertUstSatz),
-    kleinunternehmer: Boolean(profile.kleinunternehmer),
+    standardUstSatz,
+    reduziertUstSatz,
+    kleinunternehmer: profile.kleinunternehmer,
     voranmeldungRhythmus: rhythmus,
     sachkontenrahmen: kontenrahmen,
     beraterNr: profile.beraterNr || undefined,
@@ -1073,8 +1204,12 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
   // Einnahmen & USt aus Rechnungen grouped by ustSatz
   const rechnungenGrouped = await db.select({
     ustSatz: ausgangsrechnung.ustSatz,
-    nettoSum: sql<number>`sum(CAST(${ausgangsrechnung.netto} AS numeric))`,
-    ustSum: sql<number>`sum(CAST(${ausgangsrechnung.ustBetrag} AS numeric))`
+    nettoSum: sql<string | null>`sum(CAST(${ausgangsrechnung.netto} AS numeric))`,
+    ustSum: sql<string | null>`sum(CAST(${ausgangsrechnung.ustBetrag} AS numeric))`,
+    rowCount: sql<number>`count(*)::int`,
+    missingNetCount: sql<number>`count(*) filter (where ${ausgangsrechnung.netto} is null)::int`,
+    missingTaxRateCount: sql<number>`count(*) filter (where ${ausgangsrechnung.ustSatz} is null)::int`,
+    missingTaxAmountCount: sql<number>`count(*) filter (where ${ausgangsrechnung.ustBetrag} is null)::int`,
   })
     .from(ausgangsrechnung)
     .where(and(
@@ -1106,51 +1241,85 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
   // Fixkosten
   const kosten = await db.select({ betrag: kostenposten.betrag, kategorie: kostenposten.kategorie, art: kostenposten.art, intervall: kostenposten.intervall, giltAb: kostenposten.giltAb, giltBis: kostenposten.giltBis })
     .from(kostenposten)
-    .where(eq(kostenposten.isDemo, false));
+    .where(and(
+      eq(kostenposten.tenantId, actor.tenantId),
+      eq(kostenposten.isDemo, false),
+    ));
 
   let umsatz19 = 0, umsatz7 = 0, umsatz0 = 0;
   let ust19 = 0, ust7 = 0;
+  let einnahmenNetto = 0;
+  let invoiceMissingNetCount = 0;
+  let invoiceMissingTaxRateCount = 0;
+  let invoiceMissingTaxAmountCount = 0;
+  let invoiceUnsupportedTaxRateCount = 0;
   
   for (const r of rechnungenGrouped) {
-    const netto = Number(r.nettoSum) || 0;
-    const ustB = Number(r.ustSum) || 0;
-    const satz = Number(r.ustSatz) || 19;
-    
-    if (satz === 19) { umsatz19 += netto; ust19 += ustB; }
-    else if (satz === 7) { umsatz7 += netto; ust7 += ustB; }
-    else umsatz0 += netto;
+    const netto = r.nettoSum === null ? null : Number(r.nettoSum);
+    const ustB = r.ustSum === null ? null : Number(r.ustSum);
+    const satz = r.ustSatz === null ? null : Number(r.ustSatz);
+    if ((netto !== null && !Number.isFinite(netto)) || (ustB !== null && !Number.isFinite(ustB))
+      || (satz !== null && !Number.isFinite(satz))) {
+      throw new Error('FINANCE_INVOICE_METRIC_INVALID');
+    }
+    invoiceMissingNetCount += Number(r.missingNetCount);
+    invoiceMissingTaxRateCount += Number(r.missingTaxRateCount);
+    invoiceMissingTaxAmountCount += Number(r.missingTaxAmountCount);
+    einnahmenNetto += netto ?? 0;
+
+    if (satz === 19) {
+      umsatz19 += netto ?? 0;
+      ust19 += ustB ?? 0;
+    } else if (satz === 7) {
+      umsatz7 += netto ?? 0;
+      ust7 += ustB ?? 0;
+    } else if (satz === 0) {
+      umsatz0 += netto ?? 0;
+    } else if (satz !== null) {
+      invoiceUnsupportedTaxRateCount += Number(r.rowCount);
+    }
   }
-  const einnahmenNetto = umsatz19 + umsatz7 + umsatz0;
-  
-  const ausgabenBelegeNetto = belege.reduce((sum, b) => sum + (Number(b.netto) || 0), 0);
+  let receiptMissingNetCount = 0;
+  let receiptMissingTaxAmountCount = 0;
+  let receiptMissingTaxDecisionCount = 0;
+  let receiptMissingDeductiblePercentageCount = 0;
+  const ausgabenBelegeNetto = belege.reduce((sum, entry) => {
+    if (entry.netto === null) {
+      receiptMissingNetCount += 1;
+      return sum;
+    }
+    const value = Number(entry.netto);
+    if (!Number.isFinite(value)) throw new Error('FINANCE_RECEIPT_NET_INVALID');
+    return sum + value;
+  }, 0);
   const ausgabenBelegeUst = belege.reduce((sum, entry) => {
-    if (entry.vorsteuerAbzug !== true) return sum;
-    const percentage = Number(entry.absetzbarProzent ?? 100);
+    if (entry.vorsteuerAbzug === null) {
+      receiptMissingTaxDecisionCount += 1;
+      return sum;
+    }
+    if (entry.vorsteuerAbzug === false) return sum;
+    if (entry.ustBetrag === null) {
+      receiptMissingTaxAmountCount += 1;
+      return sum;
+    }
+    if (entry.absetzbarProzent === null) {
+      receiptMissingDeductiblePercentageCount += 1;
+      return sum;
+    }
+    const percentage = Number(entry.absetzbarProzent);
     if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) {
       throw new Error('FINANCE_RECEIPT_TAX_INVALID');
     }
-    return sum + (Number(entry.ustBetrag) || 0) * (percentage / 100);
+    const taxAmount = Number(entry.ustBetrag);
+    if (!Number.isFinite(taxAmount)) throw new Error('FINANCE_RECEIPT_TAX_INVALID');
+    return sum + taxAmount * (percentage / 100);
   }, 0);
   
-  let ausgabenFix = 0;
-  for (const k of kosten) {
-    if (k.giltAb && k.giltAb > bis) continue;
-    if (k.giltBis && k.giltBis < von) continue;
-
-    let betrag = Number(k.betrag) || 0;
-    if (k.intervall === 'vierteljhrlich' || k.intervall === 'vierteljaehrlich') betrag = betrag / 3;
-    else if (k.intervall === 'jhrlich' || k.intervall === 'jaehrlich') betrag = betrag / 12;
-    else if (k.intervall === 'einmalig') {
-       const giltAbMonth = k.giltAb ? k.giltAb.substring(0, 7) : null;
-       const queryMonth = von.substring(0, 7);
-       if (giltAbMonth !== queryMonth) betrag = 0;
-    }
-    
-    // We add the proportion to ausgabenFix, but the original code mapped them later to Kategorien...
-    // Since we overwrote betrag in 'k', we must assign it back so the Kategorien grouping works correctly.
-    k.betrag = betrag.toString();
-    ausgabenFix += betrag;
-  }
+  const scheduledCosts = kosten.map((cost) => ({
+    cost,
+    amount: recurringCostInRange(cost, von, bis),
+  }));
+  const ausgabenFix = scheduledCosts.reduce((sum, entry) => sum + entry.amount, 0);
 
   const zahllast = (ust19 + ust7) - ausgabenBelegeUst;
   const bwaErgebnis = einnahmenNetto - ausgabenBelegeNetto - ausgabenFix;
@@ -1164,15 +1333,19 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
   for (const b of belege) {
     const katName = b.kategorieId ? katIdToName.get(b.kategorieId) || 'Unkategorisiert' : 'Unkategorisiert';
     const entry = kategorienMap.get(katName) || { summe: 0, anzahl: 0 };
-    entry.summe += (Number(b.netto) || 0);
+    if (b.netto !== null) {
+      const value = Number(b.netto);
+      if (!Number.isFinite(value)) throw new Error('FINANCE_RECEIPT_NET_INVALID');
+      entry.summe += value;
+    }
     entry.anzahl += 1;
     kategorienMap.set(katName, entry);
   }
 
-  for (const k of kosten) {
-    const katName = k.kategorie || 'Unkategorisiert';
+  for (const { cost, amount } of scheduledCosts) {
+    const katName = cost.kategorie || 'Unkategorisiert';
     const entry = kategorienMap.get(katName) || { summe: 0, anzahl: 0 };
-    entry.summe += (Number(k.betrag) || 0);
+    entry.summe += amount;
     entry.anzahl += 1;
     kategorienMap.set(katName, entry);
   }
@@ -1184,6 +1357,17 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
     anzahl: data.anzahl
   })).sort((a, b) => b.summe - a.summe);
 
+  const invoiceMetricGaps = invoiceMissingNetCount
+    + invoiceMissingTaxRateCount
+    + invoiceMissingTaxAmountCount
+    + invoiceUnsupportedTaxRateCount;
+  const receiptMetricGaps = receiptMissingNetCount
+    + receiptMissingTaxAmountCount
+    + receiptMissingTaxDecisionCount
+    + receiptMissingDeductiblePercentageCount;
+  const metricMissingInputCount = invoiceMetricGaps + receiptMetricGaps;
+  const truthStatus = metricMissingInputCount > 0 ? 'partial' as const : 'complete' as const;
+
   const ustva: UstvaWerte = {
     zeitraumVon: von,
     zeitraumBis: bis,
@@ -1194,58 +1378,47 @@ export async function getCockpitMetricsAction(von: string, bis: string) {
     umsatz0: umsatz0,
     vorsteuer: ausgabenBelegeUst,
     zahllast: zahllast,
-    status: 'berechnet'
+    status: 'berechnet',
+    truthStatus,
+    missingInputCount: metricMissingInputCount,
   };
 
   const pendingBelege = await db
     .select({ id: beleg.id })
     .from(beleg)
     .where(and(
-      eq(beleg.status, 'pruefen'),
+      inArray(beleg.status, ['pruefen', 'erfasst']),
       gte(beleg.erfasstAm, new Date(`${von}T00:00:00.000Z`)),
       lte(beleg.erfasstAm, new Date(`${bis}T23:59:59.999Z`)),
     ));
-  const [settings] = await db
-    .select()
-    .from(bhEinstellungen)
-    .where(eq(bhEinstellungen.id, 'default'))
-    .limit(1);
-  const schwelle = Number(settings?.ocrConfidenceSchwelle ?? 85);
-  const stundensatz = Number(settings?.beraterStundensatz ?? 120);
-  const minutenProBeleg = settings?.minutenProBeleg ?? 4;
-  if (
-    !Number.isFinite(schwelle) || schwelle < 0 || schwelle > 100
-    || !Number.isFinite(stundensatz) || stundensatz < 0
-    || !Number.isInteger(minutenProBeleg) || minutenProBeleg < 0
-  ) {
-    throw new Error('FINANCE_SETTINGS_INVALID');
-  }
-  const autoBelegeCount = belege.filter((entry) => (
-    (normalizeOcrConfidencePercent(Number(entry.ocrConfidence ?? 0)) ?? 0) >= schwelle
-  )).length;
-  const gespart = autoBelegeCount * minutenProBeleg * (stundensatz / 60);
-  const prozent = belege.length > 0 ? (autoBelegeCount / belege.length) * 100 : 0;
-
-  const ersparnis: Ersparnis = {
-    jahr: new Date(von).getFullYear(),
-    minutenProBeleg,
-    beraterStundensatz: stundensatz,
-    betrag: gespart,
-    anzahlAutoBelege: autoBelegeCount,
-    prozentAutomatisch: Math.round(prozent)
-  };
-
   return {
     ustva,
     bwa: {
       ergebnis: bwaErgebnis,
       einnahmen: einnahmenNetto,
       ausgaben: ausgabenBelegeNetto + ausgabenFix,
+      truthStatus,
     },
     kategorien: kategorienArr,
-    ersparnis,
+    // OCR confidence is not evidence of an automatic posting or actually saved
+    // working time. Keep this unavailable until a persisted processing receipt
+    // and a reviewed savings formula exist.
+    ersparnis: null,
+    ersparnisState: 'not_evidenced' as const,
     belegCount: belege.length,
     reviewCount: pendingBelege.length,
+    dataQuality: {
+      truthStatus,
+      missingInputCount: metricMissingInputCount,
+      invoiceMissingNetCount,
+      invoiceMissingTaxRateCount,
+      invoiceMissingTaxAmountCount,
+      invoiceUnsupportedTaxRateCount,
+      receiptMissingNetCount,
+      receiptMissingTaxAmountCount,
+      receiptMissingTaxDecisionCount,
+      receiptMissingDeductiblePercentageCount,
+    },
   };
 }
 function csvCell(value: unknown): string {

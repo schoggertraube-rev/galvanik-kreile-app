@@ -6,6 +6,12 @@ import { ChevronRight, FileText, AlertTriangle, Euro, Anchor, Briefcase, User } 
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
 
+function moneyOrMissing(value: number | undefined): string {
+  return value === undefined
+    ? "Nicht erfasst"
+    : `${value.toLocaleString("de-DE", { minimumFractionDigits: 2 })} €`;
+}
+
 export default async function RechnungDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const rechnung = await getRechnungAction(id);
@@ -50,9 +56,13 @@ export default async function RechnungDetailPage({ params }: { params: Promise<{
           <div className="flex items-center gap-2 text-sm font-semibold text-neutral-500 mt-2">
             <User className="w-4 h-4" />
             <span>Kunde:</span>
-            <Link href={`/customers/${rechnung.kundeId}`} className="text-navy-900 font-bold hover:underline hover:text-navy-600 transition-colors">
-              {rechnung.kundeName || rechnung.kundeId}
-            </Link>
+            {rechnung.kundeId ? (
+              <Link href={`/customers/${encodeURIComponent(rechnung.kundeId)}`} className="text-navy-900 font-bold hover:underline hover:text-navy-600 transition-colors">
+                {rechnung.kundeName || rechnung.kundeId}
+              </Link>
+            ) : (
+              <span className="font-bold text-neutral-500">Kunde nicht verknüpft</span>
+            )}
           </div>
           <div className="flex items-center gap-2 text-sm font-semibold text-neutral-500 mt-1">
             <Briefcase className="w-4 h-4" />
@@ -124,22 +134,22 @@ export default async function RechnungDetailPage({ params }: { params: Promise<{
             <h3 className="text-sm font-bold text-[#1e1b18] mb-4">Summen</h3>
             <div className="flex justify-between items-center text-sm mb-2">
               <span className="font-semibold text-neutral-500">Netto:</span>
-              <span className="font-bold text-[#1e1b18]">{(rechnung.netto || 0).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</span>
+              <span className="font-bold text-[#1e1b18]">{moneyOrMissing(rechnung.netto)}</span>
             </div>
             <div className="flex justify-between items-center text-sm mb-2">
-              <span className="font-semibold text-neutral-500">USt. ({rechnung.ustSatz}%):</span>
-              <span className="font-bold text-[#1e1b18]">{(rechnung.ustBetrag || 0).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</span>
+              <span className="font-semibold text-neutral-500">USt. ({rechnung.ustSatz === undefined ? "Satz nicht erfasst" : `${rechnung.ustSatz} %`}):</span>
+              <span className="font-bold text-[#1e1b18]">{moneyOrMissing(rechnung.ustBetrag)}</span>
             </div>
             <div className="w-full h-px bg-neutral-200 my-3" />
             <div className="flex justify-between items-center text-lg">
               <span className="font-bold text-[#1e1b18]">Brutto:</span>
-              <span className="font-extrabold text-[#1e1b18]">{(rechnung.brutto || 0).toLocaleString("de-DE", { minimumFractionDigits: 2 })} €</span>
+              <span className="font-extrabold text-[#1e1b18]">{moneyOrMissing(rechnung.brutto)}</span>
             </div>
           </div>
 
           <div className="bg-linear-to-br from-[#1e1b18] to-navy-900 rounded-3xl shadow-sm p-6 text-white border border-[#1e1b18]">
             <h3 className="text-sm font-bold text-white/50 uppercase tracking-wider mb-4 flex items-center gap-2">
-              <Anchor className="w-4 h-4" /> Vernetzte Bereiche
+              <Anchor className="w-4 h-4" /> Weitere Bereiche
             </h3>
             
             <div className="flex flex-col gap-3">
@@ -150,7 +160,7 @@ export default async function RechnungDetailPage({ params }: { params: Promise<{
                   </div>
                   <div>
                     <span className="block text-sm font-bold">Offene Posten (OPOS)</span>
-                    <span className="block text-[10px] text-white/60">Zahlungsabgleich prüfen</span>
+                    <span className="block text-[10px] text-white/60">Übersicht öffnen; kein Einzelabgleich verknüpft</span>
                   </div>
                 </Link>
               )}
@@ -161,7 +171,11 @@ export default async function RechnungDetailPage({ params }: { params: Promise<{
                 </div>
                 <div>
                   <span className="block text-sm font-bold">UStVA & Steuern</span>
-                  <span className="block text-[10px] text-white/60">USt-Betrag {rechnung.ustBetrag?.toLocaleString("de-DE")} € gebucht</span>
+                  <span className="block text-[10px] text-white/60">
+                    {rechnung.ustBetrag === undefined
+                      ? "USt-Betrag nicht erfasst"
+                      : `${moneyOrMissing(rechnung.ustBetrag)} in vorläufiger Auswertung`}
+                  </span>
                 </div>
               </Link>
               
@@ -171,7 +185,7 @@ export default async function RechnungDetailPage({ params }: { params: Promise<{
                 </div>
                 <div>
                   <span className="block text-sm font-bold">BWA-Einnahmen</span>
-                  <span className="block text-[10px] text-white/60">Monatsauswertung</span>
+                  <span className="block text-[10px] text-white/60">Gesamtauswertung, kein Einzelnachweis</span>
                 </div>
               </Link>
             </div>

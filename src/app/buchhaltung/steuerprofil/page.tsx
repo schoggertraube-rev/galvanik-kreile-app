@@ -96,6 +96,11 @@ export default function SteuerprofilPage() {
               ustva.status === "freigegeben" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-amber-50 text-amber-700 border-amber-200"
             }`}>{ustva.status}</span>
           </div>
+          {ustva.truthStatus === "partial" ? (
+            <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              Teilstand: {ustva.missingInputCount ?? 0} benÃ¶tigte Betrags- oder Steuerfelder fehlen. Angezeigt werden nur bekannte Werte; die Zahllast ist noch nicht vollstÃ¤ndig.
+            </div>
+          ) : null}
           <div className="space-y-3">
             <Row label="Umsatz 19 %" value={`${ustva.umsatz19.toLocaleString("de-DE")} €`} sub={`USt: ${ustva.ust19.toLocaleString("de-DE")} €`} />
             <Row label="Umsatz 7 %" value={`${ustva.umsatz7.toLocaleString("de-DE")} €`} sub={`USt: ${ustva.ust7.toLocaleString("de-DE")} €`} />

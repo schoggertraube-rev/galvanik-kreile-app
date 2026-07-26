@@ -38,7 +38,13 @@ describe('SupabaseBuchhaltungProvider truth contract', () => {
       gesamtKosten: 150,
       gesamtLiter: 75,
       avgPreis: 2,
-      tankungenCount: 2,
+      sourceReceiptCount: 2,
+      includedReceiptCount: 2,
+      missingDetailCount: 0,
+      missingLiterCount: 0,
+      missingAmountCount: 0,
+      missingInputCount: 0,
+      dataState: 'ready',
       nachSorte: [
         { sorte: 'Diesel', liter: 50, kosten: 100 },
         { sorte: 'mystery fuel', liter: 25, kosten: 50 },
@@ -88,6 +94,9 @@ describe('SupabaseBuchhaltungProvider truth contract', () => {
     ])
     await expect(provider.getKraftstoffAuswertung(period)).resolves.toEqual(expect.objectContaining({
       gesamtkosten: 150,
+      anzahlTankungen: 2,
+      includedReceiptCount: 2,
+      dataState: 'ready',
       nachSorte: expect.arrayContaining([
         { sorte: 'diesel', liter: 50, kosten: 100 },
         { sorte: 'unbekannt', liter: 25, kosten: 50 },

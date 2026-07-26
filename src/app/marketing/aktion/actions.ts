@@ -6,8 +6,10 @@ import { and, eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { requireMarketingRead, requireMarketingWrite } from '@/lib/server/marketingAuthorization';
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export async function getAktionen() {
-  await requireMarketingRead();
+  const actor = await requireMarketingRead();
   const data = await db
     .select({
       id: aktion.id,
@@ -19,20 +21,39 @@ export async function getAktionen() {
       erstelltAm: aktion.erstelltAm
     })
     .from(aktion)
-    .leftJoin(kanal, eq(aktion.kanalId, kanal.id))
-    .leftJoin(segment, eq(aktion.segmentId, segment.id))
+    .leftJoin(kanal, and(
+      eq(aktion.kanalId, kanal.id),
+      eq(kanal.tenantId, actor.tenantId),
+      eq(kanal.truthStatus, 'verified')
+    ))
+    .leftJoin(segment, and(
+      eq(aktion.segmentId, segment.id),
+      eq(segment.tenantId, actor.tenantId),
+      eq(segment.truthStatus, 'verified')
+    ))
+    .where(and(
+      eq(aktion.tenantId, actor.tenantId),
+      eq(aktion.truthStatus, 'verified'),
+      eq(aktion.isDemo, false)
+    ))
     .orderBy(desc(aktion.erstelltAm));
   return data;
 }
 
 export async function getAktionById(id: string) {
-  await requireMarketingRead();
-  const result = await db.select().from(aktion).where(eq(aktion.id, id)).limit(1);
+  const actor = await requireMarketingRead();
+  if (!UUID_PATTERN.test(id)) throw new Error('MARKETING_ACTION_ID_INVALID');
+  const result = await db.select().from(aktion).where(and(
+    eq(aktion.tenantId, actor.tenantId),
+    eq(aktion.truthStatus, 'verified'),
+    eq(aktion.isDemo, false),
+    eq(aktion.id, id)
+  )).limit(1);
   return result[0] || null;
 }
 
 export async function createAktion(formData: FormData) {
-  await requireMarketingWrite();
+  const actor = await requireMarketingWrite();
   const clientRequestId = formData.get("clientRequestId")?.toString();
   const titel = formData.get("titel")?.toString();
   const typ = formData.get("typ")?.toString(); // post, mail, review_request
@@ -42,15 +63,35 @@ export async function createAktion(formData: FormData) {
 
   if (!clientRequestId || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientRequestId)
     || !titel || titel.length > 200 || !typ || !['post', 'mail', 'review_request', 'ad'].includes(typ)
-    || !kanalId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(kanalId)
-    || (segmentId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(segmentId))
+    || !kanalId || !UUID_PATTERN.test(kanalId)
+    || (segmentId && !UUID_PATTERN.test(segmentId))
     || (inhalt?.length || 0) > 10_000) {
     throw new Error("Pflichtfelder fehlen oder sind ungültig");
   }
 
   const content = inhalt ? { text: inhalt } : null;
+  const [targetChannel] = await db.select({ id: kanal.id }).from(kanal).where(and(
+    eq(kanal.tenantId, actor.tenantId),
+    eq(kanal.truthStatus, 'verified'),
+    eq(kanal.id, kanalId)
+  )).limit(1);
+  if (!targetChannel) throw new Error('MARKETING_CHANNEL_NOT_FOUND');
+
+  if (segmentId) {
+    const [targetSegment] = await db.select({ id: segment.id }).from(segment).where(and(
+    eq(segment.tenantId, actor.tenantId),
+    eq(segment.truthStatus, 'verified'),
+    eq(segment.isDemo, false),
+      eq(segment.id, segmentId)
+    )).limit(1);
+    if (!targetSegment) throw new Error('MARKETING_SEGMENT_NOT_FOUND');
+  }
+
   const result = await db.insert(aktion).values({
     id: clientRequestId,
+    tenantId: actor.tenantId,
+    truthStatus: 'verified',
+    isDemo: false,
     titel,
     typ,
     kanalId,
@@ -60,7 +101,12 @@ export async function createAktion(formData: FormData) {
   }).onConflictDoNothing({ target: aktion.id }).returning();
 
   if (!result[0]) {
-    const [existing] = await db.select().from(aktion).where(eq(aktion.id, clientRequestId)).limit(1);
+    const [existing] = await db.select().from(aktion).where(and(
+      eq(aktion.tenantId, actor.tenantId),
+      eq(aktion.truthStatus, 'verified'),
+      eq(aktion.isDemo, false),
+      eq(aktion.id, clientRequestId)
+    )).limit(1);
     const existingText = existing?.inhalt && typeof existing.inhalt === 'object' && !Array.isArray(existing.inhalt)
       ? (existing.inhalt as Record<string, unknown>).text
       : null;
@@ -83,10 +129,15 @@ export async function createAktion(formData: FormData) {
 
 export async function changeAktionStatus(id: string, newStatus: string) {
   const actor = await requireMarketingWrite();
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)) {
+  if (!UUID_PATTERN.test(id)) {
     throw new Error('MARKETING_ACTION_ID_INVALID');
   }
-  const [target] = await db.select().from(aktion).where(eq(aktion.id, id)).limit(1);
+  const [target] = await db.select().from(aktion).where(and(
+    eq(aktion.tenantId, actor.tenantId),
+    eq(aktion.truthStatus, 'verified'),
+    eq(aktion.isDemo, false),
+    eq(aktion.id, id)
+  )).limit(1);
   if (!target) throw new Error("Aktion nicht gefunden");
 
   const transitions: Record<string, readonly string[]> = {
@@ -103,7 +154,13 @@ export async function changeAktionStatus(id: string, newStatus: string) {
   const [updated] = await db.update(aktion).set({
     status: newStatus,
     freigegebenVon: newStatus === 'freigegeben' ? actor.userId : target.freigegebenVon,
-  }).where(and(eq(aktion.id, id), eq(aktion.status, target.status))).returning({
+  }).where(and(
+    eq(aktion.tenantId, actor.tenantId),
+    eq(aktion.truthStatus, 'verified'),
+    eq(aktion.isDemo, false),
+    eq(aktion.id, id),
+    eq(aktion.status, target.status)
+  )).returning({
     id: aktion.id,
     status: aktion.status,
   });

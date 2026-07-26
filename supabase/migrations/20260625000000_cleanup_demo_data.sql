@@ -1,4 +1,9 @@
--- Bereinigung von Demo-Kunden und Demo-Aufträgen
+-- RETIRED_DESTRUCTIVE_DEMO_CLEANUP
+-- This historical migration is intentionally a no-op for fresh chains.
+-- Name patterns and mock-like identifiers are not ownership evidence and must
+-- never authorize deletion of production records.
+/*
+-- Former destructive implementation retained as inert forensic context.
 
 -- 1. Demo-Aufträge löschen (Löscht cascade-mäßig auch items, phone_notes etc., falls FKs korrekt konfiguriert sind, ansonsten manuell)
 DELETE FROM complaints WHERE order_id IN (SELECT id FROM orders WHERE id LIKE 'ord_%' OR order_number IN ('A-2026-0030', 'A-2026-0035', 'A-2026-0038', 'A-2026-0040', 'A-2026-0042'));
@@ -35,4 +40,4 @@ WHERE name IN (
 -- Dummy-Telefonnotizen und Anfragen löschen, die mock ids haben
 DELETE FROM phone_notes WHERE customer_id LIKE 'inst_%' OR customer_id LIKE 'cust_%';
 DELETE FROM inquiries WHERE id LIKE 'inq_%';
-
+*/

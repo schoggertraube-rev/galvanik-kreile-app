@@ -2,7 +2,7 @@
 
 import React, { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { X, Camera, Edit3, Upload, Phone, UserPlus, Send, Copy, FileText } from "lucide-react";
+import { X, Camera, Edit3, Upload, Phone, UserPlus, Send, Copy } from "lucide-react";
 import { AppActionTile } from "./AppActionTile";
 import { ShortcutType } from "./AppShortcutContext";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
@@ -60,8 +60,9 @@ export function AppShortcutOverlay({ type, onClose }: AppShortcutOverlayProps) {
           <AppActionTile
             icon={<Upload className="w-6 h-6" />}
             title="Datei hochladen"
-            description="PDF-Lieferschein oder Excel-Liste importieren."
-            onClick={() => alert("Upload wird später angebunden (Demo).")}
+            description="PDF- und Excel-Import sind noch nicht technisch angebunden."
+            contextChip="Nicht eingerichtet"
+            disabled
           />
           <AppActionTile
             icon={<Phone className="w-6 h-6" />}
@@ -97,8 +98,9 @@ export function AppShortcutOverlay({ type, onClose }: AppShortcutOverlayProps) {
           <AppActionTile
             icon={<Copy className="w-6 h-6" />}
             title="Aus Auftrag übernehmen"
-            description="Einen bestehenden Gast-Auftrag zu einem festen Kunden wandeln."
-            onClick={() => alert("Wandlung wird angebunden.")}
+            description="Die Umwandlung eines Gast-Auftrags ist noch nicht technisch angebunden."
+            contextChip="Nicht eingerichtet"
+            disabled
           />
           <AppActionTile
             icon={<Send className="w-6 h-6" />}

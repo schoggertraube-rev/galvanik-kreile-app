@@ -60,6 +60,46 @@ describe('analyse truth boundary', () => {
     expect(result.data[0].secondaryValue).toBe('0 Tage')
   })
 
+  it('keeps current overdue risk visible when period KPI inputs are missing', async () => {
+    const results = [
+      [{ completedCount: 1, dueDateMeasurable: 0, deliveredOnTime: 0, cycleMeasurable: 0, averageCycleDays: null }],
+      [{ openCount: 1, withoutDueDate: 0, overdueCount: 1 }],
+      [{ station: 'Bad 2', count: 1 }],
+      [],
+      [],
+      [],
+    ]
+    mocks.select.mockImplementation(() => queryResult(results.shift() || []))
+
+    const result = await getAnalyseOverview('Monat')
+
+    expect(result.data[0]).toMatchObject({
+      status: 'watch',
+      dataState: 'missing_input',
+      chips: [{ label: 'Aktuell überfällig', value: '1', status: 'watch' }],
+    })
+    expect(result.data[0].primaryValue).toBeNull()
+  })
+
+  it('distinguishes a confirmed empty scope from missing input and not-configured domains', async () => {
+    const results = [
+      [{ completedCount: 0, dueDateMeasurable: 0, deliveredOnTime: 0, cycleMeasurable: 0, averageCycleDays: null }],
+      [{ openCount: 0, withoutDueDate: 0, overdueCount: 0 }],
+      [],
+      [],
+      [],
+      [],
+    ]
+    mocks.select.mockImplementation(() => queryResult(results.shift() || []))
+
+    const result = await getAnalyseOverview('Monat')
+
+    expect(result.data[0]).toMatchObject({ status: 'stable', dataState: 'confirmed_empty' })
+    expect(result.data.slice(1)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ status: 'disabled', dataState: 'not_configured' }),
+    ]))
+  })
+
   it('returns an unavailable state instead of fabricated zeroes on query failure', async () => {
     mocks.select.mockImplementation(() => {
       throw new Error('database unavailable')
@@ -84,7 +124,8 @@ describe('analyse truth boundary', () => {
     expect(source).not.toMatch(/actualDelayCostEur:\s*0/)
     expect(source).not.toMatch(/auslastungPct:\s*Math\./)
     expect(source).toContain('{ isolationLevel: "repeatable read", accessMode: "read only" }')
-    expect(source).toContain('isLive: false')
+    expect(source).toContain('deliveryMode: "request_snapshot"')
+    expect(source).not.toContain('status: completedCount > 0 ? "live"')
   })
 
   it('keeps unmeasured station capacity explicitly unavailable', () => {
@@ -96,7 +137,20 @@ describe('analyse truth boundary', () => {
 
     expect(actionSource).toContain('status: "unavailable"')
     expect(stationSource).toContain('Kapazitätsauslastung nicht gemessen')
+    expect(stationSource).toContain('openOrdersN')
+    expect(stationSource).not.toContain('wartendN')
+    expect(stationSource).not.toMatch(/\bwartend\b/i)
     expect(stationSource).not.toMatch(/auslastungPct\s*\|\|\s*0/)
+  })
+
+  it('quarantines the tenant-unscoped legacy action modules', async () => {
+    const directLegacy = await import('@/app/performance/actions')
+    const broadLegacy = await import('@/app/actions/performance.actions')
+    const activePage = readFileSync(resolve(process.cwd(), 'src/app/performance/page.tsx'), 'utf8')
+
+    expect(Object.keys(directLegacy)).toEqual([])
+    expect(Object.keys(broadLegacy)).toEqual([])
+    expect(activePage).toContain('getAnalyseOverview')
   })
 
   it('uses only explicit customer promises for delivery reliability and removes fabricated tile facts', () => {

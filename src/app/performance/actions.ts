@@ -1,4 +1,13 @@
-"use server";
+/**
+ * RETIRED_PERFORMANCE_ACTIONS
+ *
+ * This legacy module is intentionally non-executable. Its former contracts read
+ * unscoped tables and fabricated missing metrics. The only active performance
+ * boundary is `src/features/analyse/analyse.actions.ts`.
+ *
+ * Historical source retained below as a comment for migration forensics.
+ */
+/*
 
 import { db } from "@/db";
 import { orders, ausgangsrechnung, qs, baeder } from "@/db/schema";
@@ -50,3 +59,6 @@ export async function getPerformanceKPIsAction() {
     return { ok: false, error: "QUERY_ERROR", message: String(error) };
   }
 }
+*/
+
+export {};

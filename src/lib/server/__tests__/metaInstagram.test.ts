@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   buildMetaAuthorizationUrl,
+  createMetaOAuthState,
   createMetaMediaContainer,
   exchangeLongLivedMetaToken,
   exchangeMetaAuthorizationCode,
@@ -8,6 +9,7 @@ import {
   listMetaInstagramPages,
   publishMetaMedia,
   selectMetaInstagramPage,
+  verifyMetaOAuthState,
   waitForMetaContainer,
 } from '@/lib/server/metaInstagram'
 
@@ -33,12 +35,28 @@ describe('Meta Instagram server connector', () => {
   })
 
   it('uses an authorization-code flow with a caller-bound state', () => {
-    const url = new URL(buildMetaAuthorizationUrl(getMetaInstagramConfig(), 'x'.repeat(43)))
+    const config = getMetaInstagramConfig()
+    const identity = {
+      tenantId: 'galvanik-kreile',
+      userId: 'office-user',
+      channelId: '018f62ea-3d58-7a3f-91dc-ae957a22a054',
+    }
+    const now = Date.UTC(2026, 6, 26, 12)
+    const state = createMetaOAuthState(config, identity, now)
+    const url = new URL(buildMetaAuthorizationUrl(config, state))
     expect(url.origin).toBe('https://www.facebook.com')
     expect(url.searchParams.get('response_type')).toBe('code')
-    expect(url.searchParams.get('state')).toBe('x'.repeat(43))
+    expect(url.searchParams.get('state')).toBe(state)
     expect(url.searchParams.get('scope')).toContain('instagram_content_publish')
     expect(url.searchParams.has('access_token')).toBe(false)
+    expect(verifyMetaOAuthState(config, state, identity, now + 60_000)).toBe(true)
+    expect(verifyMetaOAuthState(config, state, { ...identity, userId: 'other-user' }, now + 60_000)).toBe(false)
+    expect(verifyMetaOAuthState(config, state, { ...identity, tenantId: 'other-tenant' }, now + 60_000)).toBe(false)
+    expect(verifyMetaOAuthState(config, state, {
+      ...identity,
+      channelId: '018f62ea-3d58-7a3f-91dc-ae957a22a055',
+    }, now + 60_000)).toBe(false)
+    expect(verifyMetaOAuthState(config, state, identity, now + 11 * 60_000)).toBe(false)
   })
 
   it('keeps app secrets and access tokens out of request URLs', async () => {

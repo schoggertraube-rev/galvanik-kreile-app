@@ -61,6 +61,11 @@ export default function BwaPage() {
         {new Date(bwa.zeitraum.von).toLocaleDateString("de-DE", { month: "long", year: "numeric" })}
         <span className="ml-2 text-[10px] font-bold uppercase tracking-wider text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-100">Datenbank-Auswertung · vorläufig</span>
       </p>
+      {bwa.truthStatus === "partial" ? (
+        <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Teilstand: Eine versionierte SKR-zu-BWA-Zuordnung ist noch nicht konfiguriert. {bwa.nichtZugeordnet.toLocaleString("de-DE")} € bleiben deshalb ausdrücklich „nicht fachlich zugeordnet“; es wird keine Kategorie aus Namen geraten.
+        </div>
+      ) : null}
 
       {/* KPI-Band */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

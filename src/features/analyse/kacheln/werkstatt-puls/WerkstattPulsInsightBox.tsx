@@ -9,13 +9,15 @@ export function WerkstattPulsInsightBox({ data }: Props) {
   const { insight } = data;
 
   if (!insight.available) {
+    const missingDueDates = data.hero.ohneZusageterminN;
     return (
       <div className="ki-card">
         <div className="ki-head">
-          <span className="ki-title" style={{ color: 'var(--ink-2)' }}>Keine belastbare Engpass-Einschätzung</span>
+          <span className="ki-title" style={{ color: 'var(--ink-2)' }}>Aktueller Auftragsbestand</span>
         </div>
         <div className="ki-text">
-          Es liegen keine Stationsereignisse oder wartenden Teile vor.
+          Zum Datenstand sind keine überfälligen offenen Aufträge belegt.
+          {missingDueDates > 0 && ` Für ${missingDueDates} offene Aufträge fehlt ein Zusagetermin; ihre Überfälligkeit ist nicht prüfbar.`}
         </div>
       </div>
     );

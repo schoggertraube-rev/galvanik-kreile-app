@@ -1,3 +1,10 @@
+throw new Error(
+  'RETIRED_MARKETING_CHANNEL_SEED: connector state requires verified tenant-bound provider evidence',
+);
+
+/*
+ * Former arbitrary-DATABASE_URL seed retained as inert forensic context.
+ *
 const { drizzle } = require('drizzle-orm/postgres-js');
 const postgres = require('postgres');
 require('dotenv').config({ path: '.env.local' });
@@ -31,3 +38,4 @@ async function seedChannels() {
   }
 }
 seedChannels();
+*/

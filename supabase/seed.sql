@@ -1,0 +1,4 @@
+-- Intentionally empty.
+-- Production truth must come from captured or explicitly reviewed source data;
+-- a fresh reset must not manufacture demo customers, orders, finance, or
+-- marketing evidence.

@@ -44,6 +44,7 @@ describe('bookkeeping Server Action authorization boundary', () => {
       () => actions.stornoBelegAction('00000000-0000-0000-0000-000000000000', 'Korrektur'),
       () => actions.assignBelegeBatchAction([], {}),
       () => actions.getKraftstoffTankungenAction(),
+      () => actions.saveKraftstoffDetailAction('00000000-0000-4000-8000-000000000001', {}),
       () => actions.exportBelegeAction('CSV'),
       () => actions.listRechnungenAction(),
       () => actions.listOffenePostenAction(),
@@ -154,5 +155,101 @@ describe('bookkeeping Server Action authorization boundary', () => {
     expect(mocks.dbTransaction).toHaveBeenCalledTimes(1)
     expect(mocks.readInvoiceCreateCapability).toHaveBeenCalledTimes(1)
     expect(mocks.createServiceClient).not.toHaveBeenCalled()
+  })
+
+  it('stores reviewed fuel detail and audit atomically before finalization', async () => {
+    const actor = {
+      userId: '00000000-0000-4000-8000-000000000099',
+      tenantId: 'galvanik-kreile',
+      role: 'buero',
+      permissions: ['perm_view_prices'],
+      active: true,
+    }
+    mocks.requireFinanceWrite.mockResolvedValue(actor)
+    const receiptId = '00000000-0000-4000-8000-000000000001'
+    const detailId = '00000000-0000-4000-8000-000000000002'
+    const selectResults = [
+      [{ id: receiptId, belegart: 'tankbeleg', status: 'erfasst' }],
+      [{ id: detailId, belegId: receiptId, sorte: 'diesel', liter: '40.00', preisProLiter: null, tankstelle: null, ort: null }],
+    ]
+    const updateSet = vi.fn()
+    const tx = {
+      select: vi.fn(() => {
+        const result = selectResults.shift() ?? []
+        const query = {
+          from: () => query,
+          where: () => query,
+          limit: () => query,
+          for: async () => result,
+        }
+        return query
+      }),
+      update: vi.fn(() => ({
+        set: (value: unknown) => {
+          updateSet(value)
+          return {
+            where: () => ({
+              returning: async () => [{
+                id: detailId,
+                belegId: receiptId,
+                sorte: 'diesel',
+                liter: '42.50',
+                preisProLiter: '1.729',
+                tankstelle: 'Mainova',
+                ort: 'Frankfurt',
+              }],
+            }),
+          }
+        },
+      })),
+      insert: vi.fn(() => ({
+        values: () => ({ returning: async () => [{ id: '00000000-0000-4000-8000-000000000003' }] }),
+      })),
+    }
+    mocks.dbTransaction.mockImplementation(async (callback: (transaction: typeof tx) => unknown) => callback(tx))
+
+    await expect(actions.saveKraftstoffDetailAction(receiptId, {
+      sorte: 'diesel',
+      liter: 42.5,
+      preisProLiter: 1.729,
+      tankstelle: 'Mainova',
+      ort: 'Frankfurt',
+    })).resolves.toMatchObject({
+      id: detailId,
+      belegId: receiptId,
+      sorte: 'diesel',
+      liter: 42.5,
+      preisProLiter: 1.729,
+    })
+    expect(updateSet).toHaveBeenCalledWith(expect.objectContaining({ liter: '42.50', preisProLiter: '1.729' }))
+    expect(tx.insert).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps finalized fuel evidence immutable', async () => {
+    mocks.requireFinanceWrite.mockResolvedValue({
+      userId: '00000000-0000-4000-8000-000000000099',
+      tenantId: 'galvanik-kreile',
+      role: 'buero',
+      permissions: ['perm_view_prices'],
+      active: true,
+    })
+    const receiptId = '00000000-0000-4000-8000-000000000001'
+    const tx = {
+      select: vi.fn(() => {
+        const query = {
+          from: () => query,
+          where: () => query,
+          limit: () => query,
+          for: async () => [{ id: receiptId, belegart: 'tankbeleg', status: 'festgeschrieben' }],
+        }
+        return query
+      }),
+    }
+    mocks.dbTransaction.mockImplementation(async (callback: (transaction: typeof tx) => unknown) => callback(tx))
+
+    await expect(actions.saveKraftstoffDetailAction(receiptId, {
+      sorte: 'diesel',
+      liter: 42.5,
+    })).rejects.toThrow('FINANCE_FUEL_RECEIPT_IMMUTABLE')
   })
 })

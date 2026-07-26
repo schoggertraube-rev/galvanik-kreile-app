@@ -29,12 +29,12 @@ VALUES
   ('public.reserve_ai_usage(text,text,text,text,integer,integer,integer,integer,bigint,bigint)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'b532f4ad667ae95ac44d58668daa1219', 'ea941a7b3d8085fdda7a9a647c1f7c98', true, true),
   ('public.claim_ai_usage_reservation(uuid,text,text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'dd3a7c24ffdecbbbb4e1294764129758', '30538ba0c66ff5faca46b42332171f1d', true, false),
   ('public.settle_ai_usage_reservation(uuid,text,text,text,text,integer,text,jsonb)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'a420af6963cf4a4302d53d4c6e384bca', 'ae2ff008ce201376b6a458e3b53bc607', true, true),
-  ('public.reserve_item_photo_job(uuid,text,text,text,text,text,text,text,text,integer,integer,integer,integer,bigint,integer,integer,integer,integer)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'aed2d28d6637729d030327347edf8491', '242f3a6c90e60e503bc38f0cf59abeb6', true, true),
+  ('public.reserve_item_photo_job(uuid,text,text,text,text,text,text,text,text,integer,integer,integer,integer,bigint,integer,integer,integer,integer)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'dea9ba102ae52810c6b4fde3fac9a7b4', '242f3a6c90e60e503bc38f0cf59abeb6', true, true),
   ('public.bind_item_photo_upload(uuid,text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '6a6769e3aabb2652ddf9242f981b909e', '6066a3c2ac90316a14a288158d8b7728', true, false),
   ('public.claim_item_photo_analysis(uuid)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '46ccd33e07c50ef3ed72f5016af6d13f', '9b10957302449264c7274227e3d858ec', true, true),
   ('public.settle_item_photo_analysis(uuid,text,integer,text,jsonb)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '5db9cd477e5ffb6d57d48940fa0d490c', 'c2f84e274e4730064b0301432b9302ea', true, true),
   ('public.mark_item_photo_uncertain(uuid,text,text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'fb75f8f94f65f89937d33d6e73832187', '4d7ae7cc89952db30f7314c13f3513fe', true, false),
-  ('public.finance_close_period(uuid,text,uuid,uuid)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'a20f372e57488c6b5dd699f1688a13c2', 'd2fedd0ff1af53fa994c2f6dcb2ab05f', true, true),
+  ('public.finance_close_period(uuid,text,uuid,uuid)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '278437cfcac19649d064088b7295d628', 'd2fedd0ff1af53fa994c2f6dcb2ab05f', true, true),
   ('public.fn_update_vorlagen()', ARRAY['search_path=pg_catalog, pg_temp']::text[], 'c0a810fd594dd7012e097d2d00be7f50', '2911fbf3f7efd182a3830e31e79eb4e1', false, false),
   ('public.fn_guard_template_projection_source_insert()', ARRAY['search_path=pg_catalog, pg_temp']::text[], '758bf8c0fc6506ad85862f5547a660f2', '2911fbf3f7efd182a3830e31e79eb4e1', false, false),
   ('public.guard_active_mollie_payment_quote()', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '2eaede153b9426c4c7483f538daa8398', '2911fbf3f7efd182a3830e31e79eb4e1', false, false),
@@ -559,6 +559,7 @@ BEGIN
         WHERE writable_namespace.nspname IN ('public', 'extensions')
           AND NOT candidate.rolsuper
           AND candidate.oid <> migration_owner
+          AND candidate.rolname <> 'pg_database_owner'
           AND has_schema_privilege(candidate.oid, writable_namespace.oid, 'CREATE')
       )
       AND NOT EXISTS (
@@ -2206,7 +2207,13 @@ BEGIN
           AND dependency.objsubid = 0
           AND dependency.refclassid = 'pg_class'::regclass
           AND dependency.refobjid = 'public.teile_klassifikator'::regclass
-          AND dependency.refobjsubid = 2
+          AND dependency.refobjsubid = (
+            SELECT attnum
+            FROM pg_attribute
+            WHERE attrelid = 'public.teile_klassifikator'::regclass
+              AND attname = 'tenant_id'
+              AND NOT attisdropped
+          )
           AND dependency.deptype = 'a'
       )
       AND 1 = (
@@ -2217,7 +2224,13 @@ BEGIN
           AND dependency.objsubid = 0
           AND dependency.refclassid = 'pg_class'::regclass
           AND dependency.refobjid = 'public.teile_klassifikator'::regclass
-          AND dependency.refobjsubid = 3
+          AND dependency.refobjsubid = (
+            SELECT attnum
+            FROM pg_attribute
+            WHERE attrelid = 'public.teile_klassifikator'::regclass
+              AND attname = 'klasse'
+              AND NOT attisdropped
+          )
           AND dependency.deptype = 'a'
       )
   ) THEN
@@ -2253,7 +2266,13 @@ BEGIN
           AND dependency.objsubid = 0
           AND dependency.refclassid = 'pg_class'::regclass
           AND dependency.refobjid = 'public.items'::regclass
-          AND dependency.refobjsubid = 5
+          AND dependency.refobjsubid = (
+            SELECT attnum
+            FROM pg_attribute
+            WHERE attrelid = 'public.items'::regclass
+              AND attname = 'surface_requested'
+              AND NOT attisdropped
+          )
           AND dependency.deptype = 'a'
       )
       AND 1 = (
@@ -2264,7 +2283,13 @@ BEGIN
           AND dependency.objsubid = 0
           AND dependency.refclassid = 'pg_class'::regclass
           AND dependency.refobjid = 'public.items'::regclass
-          AND dependency.refobjsubid = 5
+          AND dependency.refobjsubid = (
+            SELECT attnum
+            FROM pg_attribute
+            WHERE attrelid = 'public.items'::regclass
+              AND attname = 'surface_requested'
+              AND NOT attisdropped
+          )
           AND dependency.deptype = 'n'
       )
   ) OR NOT EXISTS (
@@ -2309,7 +2334,13 @@ BEGIN
           AND dependency.objsubid = 0
           AND dependency.refclassid = 'pg_class'::regclass
           AND dependency.refobjid = 'public.teile_klassifikator'::regclass
-          AND dependency.refobjsubid = 3
+          AND dependency.refobjsubid = (
+            SELECT attnum
+            FROM pg_attribute
+            WHERE attrelid = 'public.teile_klassifikator'::regclass
+              AND attname = 'klasse'
+              AND NOT attisdropped
+          )
           AND dependency.deptype = 'a'
       )
       AND 1 = (
@@ -2320,7 +2351,13 @@ BEGIN
           AND dependency.objsubid = 0
           AND dependency.refclassid = 'pg_class'::regclass
           AND dependency.refobjid = 'public.teile_klassifikator'::regclass
-          AND dependency.refobjsubid = 3
+          AND dependency.refobjsubid = (
+            SELECT attnum
+            FROM pg_attribute
+            WHERE attrelid = 'public.teile_klassifikator'::regclass
+              AND attname = 'klasse'
+              AND NOT attisdropped
+          )
           AND dependency.deptype = 'n'
       )
       AND 1 = (
@@ -2331,7 +2368,13 @@ BEGIN
           AND dependency.objsubid = 0
           AND dependency.refclassid = 'pg_class'::regclass
           AND dependency.refobjid = 'public.teile_klassifikator'::regclass
-          AND dependency.refobjsubid = 4
+          AND dependency.refobjsubid = (
+            SELECT attnum
+            FROM pg_attribute
+            WHERE attrelid = 'public.teile_klassifikator'::regclass
+              AND attname = 'keywords'
+              AND NOT attisdropped
+          )
           AND dependency.deptype = 'a'
       )
       AND 1 = (
@@ -2342,7 +2385,13 @@ BEGIN
           AND dependency.objsubid = 0
           AND dependency.refclassid = 'pg_class'::regclass
           AND dependency.refobjid = 'public.teile_klassifikator'::regclass
-          AND dependency.refobjsubid = 4
+          AND dependency.refobjsubid = (
+            SELECT attnum
+            FROM pg_attribute
+            WHERE attrelid = 'public.teile_klassifikator'::regclass
+              AND attname = 'keywords'
+              AND NOT attisdropped
+          )
           AND dependency.deptype = 'n'
       )
   ) OR NOT EXISTS (
@@ -2717,6 +2766,7 @@ BEGIN
         WHERE writable_namespace.nspname IN ('public', 'extensions')
           AND NOT candidate.rolsuper
           AND candidate.oid <> migration_owner
+          AND candidate.rolname <> 'pg_database_owner'
           AND has_schema_privilege(candidate.oid, writable_namespace.oid, 'CREATE')
       )
       AND NOT EXISTS (
@@ -3323,7 +3373,8 @@ BEGIN
         'UTF8'
       )) IN (
         '8d59ab4d53f735d657349f089f300a1f',
-        '88e7ea8c5610a89487080ba27262697c'
+        '88e7ea8c5610a89487080ba27262697c',
+        '6cca82a4d6d6dacf2e9d3cf9f70c7879'
       )
       AND (
         SELECT array_agg(
@@ -3336,12 +3387,12 @@ BEGIN
           AND NOT attribute_record.attisdropped
       ) = ARRAY[
         'order_id:text', 'order_number:text', 'customer_id:text',
-        'kunde_name:text', 'company_name:text', 'intake_date:timestamp without time zone',
-        'status:text', 'current_station:text', 'due_date:timestamp without time zone',
+        'kunde_name:text', 'company_name:text', 'intake_date:timestamp with time zone',
+        'status:text', 'current_station:text', 'due_date:timestamp with time zone',
         'erloes_netto:numeric', 'material_kosten:numeric', 'arbeitszeit_kosten:numeric',
         'energie_anteil_kosten:numeric', 'deckungsbeitrag:numeric', 'db_marge:numeric',
         'anz_rechnungen:bigint', 'anz_verbrauch:bigint', 'anz_zeitbuchungen:bigint',
-        'tenant_id:character varying(50)', 'anz_rechnungen_ohne_netto:bigint',
+        'tenant_id:text', 'anz_rechnungen_ohne_netto:bigint',
         'anz_verbrauch_ohne_preis:bigint', 'anz_offene_zeitbuchungen:bigint',
         'anz_zeitbuchungen_ohne_energiepreis:bigint', 'db_berechenbar:boolean'
       ]::text[]
@@ -3357,45 +3408,49 @@ BEGIN
       AND 38 = (
         SELECT count(*)
         FROM (VALUES
-          ('public.orders'::regclass::oid, 1),
-          ('public.orders'::regclass::oid, 2),
-          ('public.orders'::regclass::oid, 3),
-          ('public.orders'::regclass::oid, 4),
-          ('public.orders'::regclass::oid, 5),
-          ('public.orders'::regclass::oid, 6),
-          ('public.orders'::regclass::oid, 7),
-          ('public.orders'::regclass::oid, 8),
-          ('public.orders'::regclass::oid, 9),
-          ('public.orders'::regclass::oid, 10),
-          ('public.stock_movements'::regclass::oid, 2),
-          ('public.stock_movements'::regclass::oid, 4),
-          ('public.stock_movements'::regclass::oid, 5),
-          ('public.stock_movements'::regclass::oid, 7),
-          ('public.stock_movements'::regclass::oid, 17),
-          ('public.arbeitszeit_buchung'::regclass::oid, 2),
-          ('public.arbeitszeit_buchung'::regclass::oid, 3),
-          ('public.arbeitszeit_buchung'::regclass::oid, 5),
-          ('public.arbeitszeit_buchung'::regclass::oid, 6),
-          ('public.arbeitszeit_buchung'::regclass::oid, 10),
-          ('public.arbeitszeit_buchung'::regclass::oid, 12),
-          ('public.arbeitszeit_buchung'::regclass::oid, 13),
-          ('public.customers'::regclass::oid, 1),
-          ('public.customers'::regclass::oid, 2),
-          ('public.customers'::regclass::oid, 3),
-          ('public.customers'::regclass::oid, 4),
-          ('public.ausgangsrechnung'::regclass::oid, 2),
-          ('public.ausgangsrechnung'::regclass::oid, 3),
-          ('public.ausgangsrechnung'::regclass::oid, 4),
-          ('public.ausgangsrechnung'::regclass::oid, 5),
-          ('public.ausgangsrechnung'::regclass::oid, 6),
-          ('public.kostenstelle'::regclass::oid, 1),
-          ('public.kostenstelle'::regclass::oid, 2),
-          ('public.kostenstelle'::regclass::oid, 3),
-          ('public.kostenstellen_energie_monat'::regclass::oid, 2),
-          ('public.kostenstellen_energie_monat'::regclass::oid, 3),
-          ('public.kostenstellen_energie_monat'::regclass::oid, 4),
-          ('public.kostenstellen_energie_monat'::regclass::oid, 5)
-        ) expected_dependency(relation_oid, attribute_num)
+          ('public.orders'::regclass::oid, 'id'),
+          ('public.orders'::regclass::oid, 'order_number'),
+          ('public.orders'::regclass::oid, 'customer_id'),
+          ('public.orders'::regclass::oid, 'intake_date'),
+          ('public.orders'::regclass::oid, 'status'),
+          ('public.orders'::regclass::oid, 'current_station_id'),
+          ('public.orders'::regclass::oid, 'current_station'),
+          ('public.orders'::regclass::oid, 'station'),
+          ('public.orders'::regclass::oid, 'due_date'),
+          ('public.orders'::regclass::oid, 'tenant_id'),
+          ('public.stock_movements'::regclass::oid, 'tenant_id'),
+          ('public.stock_movements'::regclass::oid, 'order_id'),
+          ('public.stock_movements'::regclass::oid, 'movement_type'),
+          ('public.stock_movements'::regclass::oid, 'quantity'),
+          ('public.stock_movements'::regclass::oid, 'snapshot_einkaufspreis_eur'),
+          ('public.arbeitszeit_buchung'::regclass::oid, 'tenant_id'),
+          ('public.arbeitszeit_buchung'::regclass::oid, 'auftrag_id'),
+          ('public.arbeitszeit_buchung'::regclass::oid, 'start_zeit'),
+          ('public.arbeitszeit_buchung'::regclass::oid, 'end_zeit'),
+          ('public.arbeitszeit_buchung'::regclass::oid, 'dauer_minuten'),
+          ('public.arbeitszeit_buchung'::regclass::oid, 'kostensatz_eur_pro_stunde'),
+          ('public.arbeitszeit_buchung'::regclass::oid, 'kostenstelle_kuerzel'),
+          ('public.customers'::regclass::oid, 'id'),
+          ('public.customers'::regclass::oid, 'tenant_id'),
+          ('public.customers'::regclass::oid, 'name'),
+          ('public.customers'::regclass::oid, 'company_name'),
+          ('public.ausgangsrechnung'::regclass::oid, 'order_id'),
+          ('public.ausgangsrechnung'::regclass::oid, 'tenant_id'),
+          ('public.ausgangsrechnung'::regclass::oid, 'netto'),
+          ('public.ausgangsrechnung'::regclass::oid, 'status'),
+          ('public.ausgangsrechnung'::regclass::oid, 'is_demo'),
+          ('public.kostenstelle'::regclass::oid, 'id'),
+          ('public.kostenstelle'::regclass::oid, 'tenant_id'),
+          ('public.kostenstelle'::regclass::oid, 'kuerzel'),
+          ('public.kostenstellen_energie_monat'::regclass::oid, 'kostenstelle_id'),
+          ('public.kostenstellen_energie_monat'::regclass::oid, 'tenant_id'),
+          ('public.kostenstellen_energie_monat'::regclass::oid, 'monat'),
+          ('public.kostenstellen_energie_monat'::regclass::oid, 'energie_eur_pro_stunde')
+        ) expected_dependency(relation_oid, column_name)
+        JOIN pg_attribute expected_attribute
+          ON expected_attribute.attrelid = expected_dependency.relation_oid
+         AND expected_attribute.attname = expected_dependency.column_name
+         AND NOT expected_attribute.attisdropped
         JOIN pg_rewrite rewrite_record
           ON rewrite_record.ev_class = view_record.oid
          AND rewrite_record.rulename = '_RETURN'
@@ -3405,7 +3460,7 @@ BEGIN
          AND dependency.objsubid = 0
          AND dependency.refclassid = 'pg_class'::regclass
          AND dependency.refobjid = expected_dependency.relation_oid
-         AND dependency.refobjsubid = expected_dependency.attribute_num
+         AND dependency.refobjsubid = expected_attribute.attnum
          AND dependency.deptype = 'n'
       )
       AND 1 = (

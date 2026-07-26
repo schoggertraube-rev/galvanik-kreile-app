@@ -1,3 +1,10 @@
+throw new Error(
+  'RETIRED_MARKETING_SEGMENT_SEED: production segments require an authorized tenant-bound writer',
+);
+
+/*
+ * Former arbitrary-DATABASE_URL seed retained as inert forensic context.
+ *
 const { drizzle } = require('drizzle-orm/postgres-js');
 const postgres = require('postgres');
 require('dotenv').config({ path: '.env.local' });
@@ -35,3 +42,4 @@ async function seedSegments() {
   }
 }
 seedSegments();
+*/

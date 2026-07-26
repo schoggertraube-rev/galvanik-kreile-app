@@ -226,19 +226,60 @@ BEGIN
 END
 $drop_conflicting_fks$;
 
+-- ALTER TYPE acquires a dependency-sensitive rewrite even when the source and
+-- target types are already identical. Fresh databases already use the
+-- canonical types, so only execute a conversion for genuine legacy drift.
+DO $type_reconciliation$
+DECLARE
+  change_record record;
+  actual_type text;
+BEGIN
+  FOR change_record IN
+    SELECT * FROM (VALUES
+      ('inventory_items', 'tenant_id', 'text', 'tenant_id::text'),
+      ('inventory_items', 'category', 'text', 'category::text'),
+      ('inventory_items', 'current_stock', 'numeric(14,4)', 'current_stock::numeric'),
+      ('inventory_items', 'min_stock', 'numeric(14,4)', 'min_stock::numeric'),
+      ('inventory_items', 'unit', 'text', 'unit::text'),
+      ('inventory_items', 'einkaufspreis_eur', 'numeric(10,4)', 'einkaufspreis_eur::numeric'),
+      ('stock_movements', 'tenant_id', 'text', 'tenant_id::text'),
+      ('stock_movements', 'inventory_item_id', 'text', 'inventory_item_id::text'),
+      ('stock_movements', 'movement_type', 'text', 'movement_type::text'),
+      ('stock_movements', 'quantity', 'numeric(14,4)', 'quantity::numeric'),
+      ('stock_movements', 'unit', 'text', 'unit::text'),
+      ('stock_movements', 'order_id', 'text', 'order_id::text'),
+      ('stock_movements', 'snapshot_einkaufspreis_eur', 'numeric(10,4)', 'snapshot_einkaufspreis_eur::numeric')
+    ) AS changes(table_name, column_name, target_type, using_expression)
+  LOOP
+    SELECT format_type(attribute.atttypid, attribute.atttypmod)
+    INTO actual_type
+    FROM pg_attribute attribute
+    WHERE attribute.attrelid = format(
+      'public.%I', change_record.table_name
+    )::regclass
+      AND attribute.attname = change_record.column_name
+      AND NOT attribute.attisdropped;
+
+    IF actual_type IS DISTINCT FROM change_record.target_type THEN
+      EXECUTE format(
+        'ALTER TABLE public.%I ALTER COLUMN %I TYPE %s USING %s',
+        change_record.table_name,
+        change_record.column_name,
+        change_record.target_type,
+        change_record.using_expression
+      );
+    END IF;
+  END LOOP;
+END
+$type_reconciliation$;
+
 ALTER TABLE public.inventory_items
-  ALTER COLUMN tenant_id TYPE text USING tenant_id::text,
   ALTER COLUMN tenant_id DROP DEFAULT,
   ALTER COLUMN tenant_id SET NOT NULL,
-  ALTER COLUMN category TYPE text USING category::text,
-  ALTER COLUMN current_stock TYPE numeric(14,4) USING current_stock::numeric,
   ALTER COLUMN current_stock SET DEFAULT 0,
   ALTER COLUMN current_stock SET NOT NULL,
-  ALTER COLUMN min_stock TYPE numeric(14,4) USING min_stock::numeric,
   ALTER COLUMN min_stock SET DEFAULT 0,
-  ALTER COLUMN unit TYPE text USING unit::text,
-  ALTER COLUMN unit SET NOT NULL,
-  ALTER COLUMN einkaufspreis_eur TYPE numeric(10,4) USING einkaufspreis_eur::numeric;
+  ALTER COLUMN unit SET NOT NULL;
 
 -- The preflight above proved these parent tenant values. Making the columns
 -- mandatory is therefore a constraint reconciliation, not a tenant backfill.
@@ -249,23 +290,16 @@ ALTER TABLE public.app_users
 
 ALTER TABLE public.stock_movements
   ALTER COLUMN id SET DEFAULT gen_random_uuid(),
-  ALTER COLUMN tenant_id TYPE text USING tenant_id::text,
   ALTER COLUMN tenant_id DROP DEFAULT,
   ALTER COLUMN tenant_id SET NOT NULL,
-  ALTER COLUMN inventory_item_id TYPE text USING inventory_item_id::text,
   ALTER COLUMN inventory_item_id SET NOT NULL,
-  ALTER COLUMN movement_type TYPE text USING movement_type::text,
   ALTER COLUMN movement_type SET NOT NULL,
-  ALTER COLUMN quantity TYPE numeric(14,4) USING quantity::numeric,
   ALTER COLUMN quantity SET NOT NULL,
-  ALTER COLUMN unit TYPE text USING unit::text,
   ALTER COLUMN unit SET NOT NULL,
-  ALTER COLUMN order_id TYPE text USING order_id::text,
   ALTER COLUMN created_by SET NOT NULL,
   ALTER COLUMN erfasst_von SET NOT NULL,
   ALTER COLUMN created_at SET DEFAULT now(),
-  ALTER COLUMN created_at SET NOT NULL,
-  ALTER COLUMN snapshot_einkaufspreis_eur TYPE numeric(10,4) USING snapshot_einkaufspreis_eur::numeric;
+  ALTER COLUMN created_at SET NOT NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS inventory_items_tenant_id_uidx
   ON public.inventory_items (tenant_id, id);

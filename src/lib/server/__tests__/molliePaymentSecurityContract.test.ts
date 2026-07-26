@@ -28,9 +28,16 @@ describe("Mollie payment security contracts", () => {
   });
 
   it("bounds callback bodies and provider response bodies", () => {
-    expect(webhookSource).toContain("declaredLength > 2_048");
-    expect(webhookSource).toContain("raw.length > 2_048");
+    expect(webhookSource).toContain("readBoundedUtf8Body(req, 2_048)");
+    expect(webhookSource).not.toContain("await req.text()");
     expect(webhookSource).toContain("text.length > 1_000_000");
+  });
+
+  it("validates the high-entropy admission token before reading any request body", () => {
+    const admissionGate = webhookSource.indexOf("if (!isValidWebhookAdmissionToken(admission)) return ok()");
+    const bodyRead = webhookSource.indexOf("const id = await paymentId(req)");
+    expect(admissionGate).toBeGreaterThan(0);
+    expect(bodyRead).toBeGreaterThan(admissionGate);
   });
 
   it("reserves before provider creation and uses the database attempt as idempotency key", () => {

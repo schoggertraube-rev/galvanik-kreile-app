@@ -36,18 +36,25 @@ describe('Instagram browser adapter', () => {
   })
 
   it('sends persisted identifiers plus a preview equality guard to the server endpoint', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, touchpointId: 'tp-1' }), { status: 200 }))
+    const touchpointId = '018f62ea-3d58-7a3f-91dc-ae957a22a054'
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ ok: true, touchpointId }), { status: 200 }))
     vi.stubGlobal('fetch', fetchMock)
     const assetId = '72eb6a7f-d73a-4f56-aa4b-686148aef151'
     const result = await new InstagramAdapter().publish(action(assetId))
-    expect(result).toEqual(expect.objectContaining({ success: true, touchpointId: 'tp-1' }))
+    expect(result).toEqual(expect.objectContaining({ success: true, touchpointId }))
     expect(fetchMock).toHaveBeenCalledWith('/api/marketing/instagram/publish', expect.objectContaining({
       body: JSON.stringify({ actionId: action().id, assetId, expectedCaption: 'Text\n\n#galvanik' }),
     }))
   })
 
   it('reads connection state from the authenticated server endpoint', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ connected: true }), { status: 200 })))
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ state: 'configured_local' }), { status: 200 })))
     await expect(new InstagramAdapter().isConnected()).resolves.toBe(true)
+  })
+
+  it('rejects browser success without a valid durable touchpoint receipt', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ok: true, touchpointId: 'tp-1' }), { status: 200 })))
+    await expect(new InstagramAdapter().publish(action('72eb6a7f-d73a-4f56-aa4b-686148aef151')))
+      .resolves.toEqual(expect.objectContaining({ success: false }))
   })
 })

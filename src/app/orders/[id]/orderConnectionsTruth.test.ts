@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { projectVerifiedOrderMarketingTouchpoint } from "@/lib/marketing/orderConnectionTruth";
 
 const source = (path: string) => readFileSync(join(process.cwd(), path), "utf8");
 
@@ -12,13 +13,45 @@ describe("order detail connection truth", () => {
     expect(action).toContain("qs.tenantId");
     expect(action).toContain("ausgangsrechnung.tenantId");
     expect(action).toContain("inquiries.tenantId");
-    expect(action).toContain("marketingTouchpoints.tenantId");
+    expect(action).toContain("marketingTouchpoint.tenantId");
     expect(action).toContain("ausgangsrechnung.orderId");
     expect(action).toContain("qs.orderId");
     expect(action).toContain('permissions.includes("perm_op_qa")');
     expect(action).toContain('permissions.includes("perm_view_prices")');
     expect(action).toContain('permissions.includes("perm_view_customers")');
     expect(action).toContain('quality: canViewQuality ? "available" : "forbidden"');
+    expect(action).toContain('eq(aktion.truthStatus, "verified")');
+    expect(action).toContain("eq(aktion.isDemo, false)");
+    expect(action).toContain('eq(kanal.truthStatus, "verified")');
+  });
+
+  it("quarantines legacy action and channel records from order connections", () => {
+    const verified = {
+      id: "tp-1",
+      actionId: "action-1",
+      channelId: "channel-1",
+      actionTruthStatus: "verified",
+      actionIsDemo: false,
+      channelTruthStatus: "verified",
+      channelName: "Empfehlung",
+      channelType: "referral",
+      utmSource: "referral",
+      title: "Kundenempfehlung",
+    };
+
+    expect(projectVerifiedOrderMarketingTouchpoint(verified)).toEqual({
+      id: "tp-1",
+      channel: "Empfehlung",
+      title: "Kundenempfehlung",
+    });
+    expect(projectVerifiedOrderMarketingTouchpoint({
+      ...verified,
+      actionTruthStatus: "legacy_unverified",
+    })).toBeNull();
+    expect(projectVerifiedOrderMarketingTouchpoint({
+      ...verified,
+      channelTruthStatus: "legacy_unverified",
+    })).toBeNull();
   });
 
   it("does not derive QS, invoice or marketing values from display identifiers", () => {

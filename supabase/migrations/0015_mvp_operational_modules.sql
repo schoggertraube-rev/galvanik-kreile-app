@@ -1,6 +1,28 @@
 -- Migration: 0015_mvp_operational_modules
 -- Description: MVP tables for Communication, KVP, Finance, Devices
 
+-- The historical users -> app_users rename was originally scheduled after
+-- this migration even though every module below already references app_users.
+-- Establish the canonical identity relation before creating those FKs.
+DO $identity_relation$
+BEGIN
+    IF to_regclass('public.app_users') IS NULL
+       AND to_regclass('public.users') IS NOT NULL THEN
+        ALTER TABLE public.users RENAME TO app_users;
+    END IF;
+END
+$identity_relation$;
+
+CREATE TABLE IF NOT EXISTS app_users (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    email text NOT NULL UNIQUE,
+    full_name text NOT NULL,
+    role text NOT NULL DEFAULT 'werkstatt',
+    active boolean NOT NULL DEFAULT true,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 -- 1. communication_threads
 CREATE TABLE IF NOT EXISTS communication_threads (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

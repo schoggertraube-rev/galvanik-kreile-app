@@ -7,6 +7,7 @@ import {
   verifyMolliePayment,
   webhookTokenHash,
 } from "../_shared/molliePaymentState.ts";
+import { readBoundedUtf8Body } from "../_shared/boundedRequestBody.ts";
 
 type SupabaseClient = ReturnType<typeof createClient>;
 
@@ -25,12 +26,10 @@ function ok(message = "OK"): Response {
 }
 
 async function paymentId(req: Request): Promise<string | null> {
-  const declaredLength = Number(req.headers.get("content-length") ?? "0");
-  if (Number.isFinite(declaredLength) && declaredLength > 2_048) return null;
-
   try {
-    const raw = await req.text();
-    if (raw.length > 2_048) return null;
+    const body = await readBoundedUtf8Body(req, 2_048);
+    if (!body.ok) return null;
+    const raw = body.text;
     const contentType = req.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
       const body = JSON.parse(raw);
@@ -83,9 +82,10 @@ serve(async (req) => {
   if (req.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
 
   try {
-    const id = await paymentId(req);
     const admission = new URL(req.url).searchParams.get("admission");
-    if (!id || !isValidWebhookAdmissionToken(admission)) return ok();
+    if (!isValidWebhookAdmissionToken(admission)) return ok();
+    const id = await paymentId(req);
+    if (!id) return ok();
 
     const mollieKey = Deno.env.get("MOLLIE_API_KEY");
     const url = Deno.env.get("SUPABASE_URL");

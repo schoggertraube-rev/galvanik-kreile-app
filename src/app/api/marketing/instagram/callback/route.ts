@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { db } from '@/db'
 import { kanal } from '@/db/schema_marketing'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { requireMarketingWrite } from '@/lib/server/marketingAuthorization'
 import { encryptMarketingToken } from '@/lib/server/marketingTokenVault'
 import {
@@ -14,6 +14,7 @@ import {
   META_OAUTH_STATE_COOKIE,
   MetaInstagramError,
   selectMetaInstagramPage,
+  verifyMetaOAuthState,
 } from '@/lib/server/metaInstagram'
 
 export const runtime = 'nodejs'
@@ -39,8 +40,9 @@ function errorResult(error: unknown): string {
 
 export async function GET(request: NextRequest) {
   let config: ReturnType<typeof getMetaInstagramConfig>
+  let actor: Awaited<ReturnType<typeof requireMarketingWrite>>
   try {
-    await requireMarketingWrite()
+    actor = await requireMarketingWrite()
     config = getMetaInstagramConfig()
   } catch (error) {
     const configurationError = error instanceof MetaInstagramError && error.stage === 'configuration'
@@ -62,25 +64,46 @@ export async function GET(request: NextRequest) {
     return response
   }
 
-  if (request.nextUrl.searchParams.has('error')) {
-    return clearState(NextResponse.redirect(marketingRedirect(config.redirectUri, 'authorization_declined')))
-  }
   if (!stateMatches(request.cookies.get(META_OAUTH_STATE_COOKIE)?.value, request.nextUrl.searchParams.get('state'))) {
     return clearState(NextResponse.redirect(marketingRedirect(config.redirectUri, 'invalid_state')))
   }
 
   const code = request.nextUrl.searchParams.get('code') || ''
   try {
+    // The callback may reconcile one quarantined channel shell, but only after
+    // the signed state and provider exchange below succeed. No other active
+    // read path treats that shell as verified.
+    const channels = await db.select().from(kanal).where(and(
+      eq(kanal.tenantId, actor.tenantId),
+      eq(kanal.typ, 'instagram')
+    )).limit(2)
+    if (channels.length !== 1) throw new MetaInstagramError('META_CHANNEL_CONFIGURATION_INVALID', 'configuration')
+    const state = request.nextUrl.searchParams.get('state') || ''
+    if (!verifyMetaOAuthState(config, state, {
+      tenantId: actor.tenantId,
+      userId: actor.userId,
+      channelId: channels[0].id,
+    })) {
+      return clearState(NextResponse.redirect(marketingRedirect(config.redirectUri, 'invalid_state')))
+    }
+    if (request.nextUrl.searchParams.has('error')) {
+      return clearState(NextResponse.redirect(marketingRedirect(config.redirectUri, 'authorization_declined')))
+    }
+
     const shortToken = await exchangeMetaAuthorizationCode(config, code)
     const userToken = await exchangeLongLivedMetaToken(config, shortToken)
     const selected = selectMetaInstagramPage(config, await listMetaInstagramPages(config, userToken))
-    const channels = await db.select().from(kanal).where(eq(kanal.typ, 'instagram')).limit(2)
-    if (channels.length !== 1) throw new MetaInstagramError('META_CHANNEL_CONFIGURATION_INVALID', 'configuration')
 
-    await db.update(kanal).set({
+    const updated = await db.update(kanal).set({
+      // Provider page ownership plus a stored encrypted token is the receipt
+      // that promotes this source into the active marketing graph.
+      truthStatus: 'verified',
       verbunden: true,
       status: 'verbunden',
-      accessTokenEncrypted: encryptMarketingToken(selected.pageAccessToken),
+      accessTokenEncrypted: encryptMarketingToken(selected.pageAccessToken, {
+        tenantId: actor.tenantId,
+        channelId: channels[0].id,
+      }),
       config: {
         provider: 'meta',
         pageId: selected.pageId,
@@ -89,7 +112,11 @@ export async function GET(request: NextRequest) {
         graphVersion: config.graphVersion,
         connectedAt: new Date().toISOString(),
       },
-    }).where(eq(kanal.id, channels[0].id))
+    }).where(and(
+      eq(kanal.tenantId, actor.tenantId),
+      eq(kanal.id, channels[0].id)
+    )).returning({ id: kanal.id })
+    if (updated.length !== 1) throw new Error('META_CHANNEL_UPDATE_RECEIPT_MISSING')
 
     return clearState(NextResponse.redirect(marketingRedirect(config.redirectUri, 'connected')))
   } catch (error) {

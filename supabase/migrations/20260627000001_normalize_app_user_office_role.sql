@@ -10,9 +10,9 @@ begin
   where tenant_id = 'galvanik-kreile'
     and role = 'office';
 
-  if affected_count <> 1 then
+  if affected_count > 1 then
     raise exception
-      'Expected exactly 1 office user for galvanik-kreile, found %',
+      'Expected at most 1 office user for galvanik-kreile, found %',
       affected_count;
   end if;
 

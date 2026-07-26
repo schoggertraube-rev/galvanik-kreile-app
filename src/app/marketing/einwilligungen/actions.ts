@@ -20,7 +20,12 @@ export async function getEinwilligungen() {
       zeitpunkt: einwilligung.zeitpunkt,
     })
     .from(einwilligung)
-    .innerJoin(customers, and(eq(einwilligung.kundeId, customers.id), eq(customers.tenantId, actor.tenantId)))
+    .innerJoin(customers, and(
+      eq(einwilligung.kundeId, customers.id),
+      eq(einwilligung.tenantId, customers.tenantId),
+      eq(customers.tenantId, actor.tenantId)
+    ))
+    .where(eq(einwilligung.tenantId, actor.tenantId))
     .orderBy(desc(einwilligung.zeitpunkt));
   return data;
 }
@@ -31,9 +36,14 @@ export async function checkEinwilligung(kundeId: string, kanalTyp: string): Prom
   const result = await db
     .select({ status: einwilligung.status })
     .from(einwilligung)
-    .innerJoin(customers, and(eq(einwilligung.kundeId, customers.id), eq(customers.tenantId, actor.tenantId)))
+    .innerJoin(customers, and(
+      eq(einwilligung.kundeId, customers.id),
+      eq(einwilligung.tenantId, customers.tenantId),
+      eq(customers.tenantId, actor.tenantId)
+    ))
     .where(
       and(
+        eq(einwilligung.tenantId, actor.tenantId),
         eq(einwilligung.kundeId, kundeId),
         eq(einwilligung.kanal, kanalTyp)
       )

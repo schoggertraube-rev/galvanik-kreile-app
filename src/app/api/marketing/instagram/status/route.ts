@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/db'
 import { kanal } from '@/db/schema_marketing'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { requireMarketingRead } from '@/lib/server/marketingAuthorization'
 import { decryptMarketingToken } from '@/lib/server/marketingTokenVault'
 import { metaInstagramIsConfigured } from '@/lib/server/metaInstagram'
@@ -15,27 +15,58 @@ function objectValue(value: unknown): Record<string, unknown> {
 }
 
 export async function GET() {
+  let actor: Awaited<ReturnType<typeof requireMarketingRead>>
   try {
-    await requireMarketingRead()
-    const channels = await db.select().from(kanal).where(eq(kanal.typ, 'instagram')).limit(2)
+    actor = await requireMarketingRead()
+  } catch {
+    return NextResponse.json({ state: 'unavailable', configured: false, providerVerified: false }, {
+      status: 403,
+      headers: { 'Cache-Control': 'no-store' },
+    })
+  }
+
+  try {
+    const channels = await db.select().from(kanal).where(and(
+      eq(kanal.tenantId, actor.tenantId),
+      eq(kanal.truthStatus, 'verified'),
+      eq(kanal.typ, 'instagram')
+    )).limit(2)
     const configured = metaInstagramIsConfigured()
+    if (channels.length === 0) {
+      return NextResponse.json({ state: configured ? 'not_connected' : 'not_configured', configured, providerVerified: false }, {
+        headers: { 'Cache-Control': 'no-store' },
+      })
+    }
     if (channels.length !== 1) {
-      return NextResponse.json({ connected: false, configured }, { headers: { 'Cache-Control': 'no-store' } })
+      return NextResponse.json({ state: 'unavailable', configured, providerVerified: false }, {
+        status: 503,
+        headers: { 'Cache-Control': 'no-store' },
+      })
     }
     const channel = channels[0]
     const config = objectValue(channel.config)
     let tokenValid = false
     try {
-      tokenValid = !!channel.accessTokenEncrypted && decryptMarketingToken(channel.accessTokenEncrypted).length > 0
+      tokenValid = !!channel.accessTokenEncrypted && decryptMarketingToken(channel.accessTokenEncrypted, {
+        tenantId: actor.tenantId,
+        channelId: channel.id,
+      }).length > 0
     } catch {
-      tokenValid = false
+      return NextResponse.json({ state: 'unavailable', configured, providerVerified: false }, {
+        status: 503,
+        headers: { 'Cache-Control': 'no-store' },
+      })
     }
-    const connected = configured && channel.verbunden === true && channel.status === 'verbunden' && tokenValid &&
+    const locallyConfigured = configured && channel.verbunden === true && channel.status === 'verbunden' && tokenValid &&
       typeof config.igUserId === 'string' && /^\d{5,32}$/.test(config.igUserId)
-    return NextResponse.json({ connected, configured }, { headers: { 'Cache-Control': 'no-store' } })
+    return NextResponse.json({
+      state: locallyConfigured ? 'configured_local' : configured ? 'not_connected' : 'not_configured',
+      configured,
+      providerVerified: false,
+    }, { headers: { 'Cache-Control': 'no-store' } })
   } catch {
-    return NextResponse.json({ connected: false, configured: false }, {
-      status: 403,
+    return NextResponse.json({ state: 'unavailable', configured: false, providerVerified: false }, {
+      status: 503,
       headers: { 'Cache-Control': 'no-store' },
     })
   }

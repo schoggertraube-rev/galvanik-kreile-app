@@ -64,7 +64,7 @@ describe("capture write capability", () => {
       "security_barrier=true",
       "view_record.relowner",
       "pg_get_viewdef(view_record.oid, false)",
-      "tenant_id:character varying(50)",
+      "tenant_id:text",
       "kostenstellen_energie_monat",
     ]) expect(capability).toContain(evidence);
     expect(capability).toContain("con.confdeltype::text = required.delete_type");
@@ -127,7 +127,7 @@ describe("capture write capability", () => {
     expect(migration).toContain("has_table_privilege(role_record.oid, 'public.v_auftrag_db', 'SELECT')");
     expect(migration).toContain("role_record.rolname !~ '^pg_'");
     expect(migration).toContain("pg_get_viewdef(view_record.oid, false)");
-    expect(migration).toContain("tenant_id:character varying(50)");
+    expect(migration).toContain("tenant_id:text");
     expect(migration).toContain("index_record.indimmediate");
     expect(migration).toContain("index_record.indoption::text = '0 0 0'");
     expect(migration).toContain("constraint_record.conparentid = 0");

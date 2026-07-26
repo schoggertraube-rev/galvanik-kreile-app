@@ -8,22 +8,20 @@ interface Props {
 export function WerkstattPulsOrdersTable({ data }: Props) {
   const { affectedOrders } = data;
 
-  const criticalCount = affectedOrders.filter(o => o.status === 'critical').length;
+  const overdueExcerptCount = affectedOrders.filter(o => o.status === 'overdue').length;
   const missingCount = affectedOrders.filter(o => o.status === 'missing_due_date').length;
-  const watchCount = affectedOrders.filter(o => o.status === 'watch').length;
-  const totalCritical = data.hero.kritischeAuftraegeN;
+  const totalOverdue = data.hero.overdueOrdersN;
   const totalMissing = data.hero.ohneZusageterminN;
-  const expectedAffected = totalCritical + totalMissing;
+  const expectedAffected = totalOverdue + totalMissing;
 
   return (
     <section>
       <div className="card">
         <div className="card-h">
-          <h3>Verzögerte und gefährdete Aufträge</h3>
+          <h3>Aktuell überfällige Aufträge und fehlende Zusagetermine</h3>
           <div style={{ display: 'flex', gap: 8 }}>
-            {totalCritical > 0 && <span className="pill pill-bad" style={{ fontSize: 10 }}>{totalCritical} kritisch · {criticalCount} im Auszug</span>}
+            {totalOverdue > 0 && <span className="pill pill-bad" style={{ fontSize: 10 }}>{totalOverdue} überfällig · {overdueExcerptCount} im Auszug</span>}
             {totalMissing > 0 && <span className="pill pill-warn" style={{ fontSize: 10 }}>{totalMissing} ohne Zusage · {missingCount} im Auszug</span>}
-            {watchCount > 0 && <span className="pill pill-warn" style={{ fontSize: 10 }}>{watchCount} gefährdet</span>}
             {expectedAffected === 0 && <span className="pill pill-mute" style={{ fontSize: 10 }}>Keine gespeicherten Betroffenen</span>}
           </div>
         </div>
@@ -32,7 +30,7 @@ export function WerkstattPulsOrdersTable({ data }: Props) {
           <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13 }}>
             {expectedAffected > 0
               ? `Die Zusammenfassung weist ${expectedAffected} betroffene Aufträge aus; der begrenzte Detailauszug konnte dazu keinen Datensatz liefern.`
-              : 'Im gewählten Zeitraum wurden keine verspäteten Aufträge oder fehlenden Kundenzusagen ermittelt.'}
+              : 'Zum Datenstand wurden keine überfälligen offenen Aufträge oder fehlenden Kundenzusagen ermittelt.'}
           </div>
         ) : (
           <div style={{ overflowX: 'auto' }}>
@@ -55,12 +53,9 @@ export function WerkstattPulsOrdersTable({ data }: Props) {
                   if (o.status === 'missing_due_date') {
                     verzugClass = 'info';
                     verzugText = 'Nicht messbar: kein Termin';
-                  } else if (o.status === 'critical') {
+                  } else if (o.status === 'overdue') {
                     verzugClass = 'bad';
                     verzugText = o.delayDays ? `${o.delayDays} Tage überfällig` : 'Überfällig';
-                  } else if (o.status === 'watch') {
-                    verzugClass = 'warn';
-                    verzugText = 'Gefährdet';
                   } else {
                     verzugClass = 'ok';
                     verzugText = 'Im Plan';

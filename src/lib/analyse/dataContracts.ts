@@ -17,8 +17,15 @@ export type AnalyseTileStatus =
   | "stable"
   | "watch"
   | "critical"
-  | "data_missing"
   | "disabled";
+
+export type AnalyseDataState =
+  | "ready"
+  | "confirmed_empty"
+  | "partial"
+  | "missing_input"
+  | "not_configured"
+  | "unavailable";
 
 export type AnalyseEntityLink = {
   id: string;
@@ -53,6 +60,7 @@ export type AnalyseTileSummary = {
   title: string;
   subtitle: string;
   status: AnalyseTileStatus;
+  dataState: AnalyseDataState;
   primaryLabel: string;
   primaryValue: string | null;
   secondaryLabel?: string;
@@ -111,7 +119,7 @@ export type WerkstattPulsData = {
   period: "today" | "week" | "month" | "custom";
 
   dataStatus: {
-    isLive: boolean;
+    deliveryMode: "request_snapshot";
     lastUpdatedAt: string | null;
     maturity: "S0" | "S1" | "S2" | "S3" | "S4";
     warnings: string[];
@@ -125,18 +133,14 @@ export type WerkstattPulsData = {
     avgDurchlaufzeitTage: number | null;
     avgDurchlaufzeitMessbarN: number;
 
-    wochenzielIst: number | null;
-    wochenzielSoll: number | null;
-    wochenzielQuelle: "company_settings" | "kpi_targets" | "view_default" | "missing";
+    completedOrdersN: number;
 
     offeneAuftraegeN: number;
-    kritischeAuftraegeN: number;
+    overdueOrdersN: number;
 
     dokumentationsquotePct: number | null;
     dokumentationsquoteMessbarN: number;
 
-    werkstattScore: number | null;
-    scoreStatus: "ok" | "watch" | "critical" | "insufficient_data";
   };
 
   trend: {
@@ -164,7 +168,7 @@ export type WerkstattPulsData = {
     stationName: string;
     status: "free" | "ok" | "watch" | "critical" | "unavailable";
     auslastungPct: number | null;
-    wartendN: number;
+    openOrdersN: number;
     avgWartezeitTage: number | null;
     engpassScore: number | null;
     hauptursache: string | null;
@@ -181,7 +185,7 @@ export type WerkstattPulsData = {
     promisedDueDate: string | null;
     completedDate: string | null;
     delayDays: number | null;
-    status: "critical" | "watch" | "ok" | "missing_due_date";
+    status: "overdue" | "missing_due_date";
     priority: string | null;
     openUrl: string;
   }>;
@@ -219,6 +223,6 @@ export type WerkstattPulsData = {
     label: string;
     sourceName: string;
     recordCount: number | null;
-    status: "live" | "empty" | "missing" | "partial";
+    status: AnalyseDataState;
   }>;
 };

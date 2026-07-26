@@ -13,7 +13,7 @@ export interface ChannelAdapter {
 }
 
 type StatusResponse = {
-  connected?: boolean
+  state?: 'configured_local' | 'not_connected' | 'not_configured' | 'unavailable'
 }
 
 type PublishResponse = {
@@ -31,8 +31,10 @@ const PUBLISH_MESSAGES: Record<string, string> = {
   CHANNEL_NOT_CONNECTED: 'Instagram ist nicht verknüpft.',
   PUBLISH_IN_PROGRESS: 'Die Veröffentlichung wird bereits verarbeitet.',
   PUBLISH_UNCERTAIN: 'Der Veröffentlichungsstatus ist unklar. Bitte prüfen Sie Instagram, bevor erneut veröffentlicht wird.',
+  PUBLISH_EVIDENCE_MISSING: 'Für die Veröffentlichung fehlt der gespeicherte Provider-Beleg. Der Status muss geprüft werden.',
   CONFIGURATION_MISSING: 'Die Instagram-Verbindung ist serverseitig noch nicht vollständig konfiguriert.',
 }
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export class InstagramAdapter implements ChannelAdapter {
   id = 'instagram'
@@ -46,7 +48,7 @@ export class InstagramAdapter implements ChannelAdapter {
       })
       if (!response.ok) return false
       const body = await response.json() as StatusResponse
-      return body.connected === true
+      return body.state === 'configured_local'
     } catch {
       return false
     }
@@ -81,12 +83,15 @@ export class InstagramAdapter implements ChannelAdapter {
         body: JSON.stringify({ actionId: aktion.id, assetId: aktion.assetId, expectedCaption }),
       })
       const body = await response.json() as PublishResponse
-      if (response.ok && body.ok) {
+      if (response.ok && body.ok && typeof body.touchpointId === 'string' && UUID_PATTERN.test(body.touchpointId)) {
         return {
           success: true,
           message: body.message || 'Erfolgreich auf Instagram veröffentlicht.',
           touchpointId: body.touchpointId,
         }
+      }
+      if (response.ok && body.ok) {
+        return { success: false, message: PUBLISH_MESSAGES.PUBLISH_EVIDENCE_MISSING }
       }
       return {
         success: false,

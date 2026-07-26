@@ -15,14 +15,14 @@ export const WerkstattPulsStationArena = {
       }
       if (a.engpassScore !== null) return -1;
       if (b.engpassScore !== null) return 1;
-      return b.wartendN - a.wartendN;
+      return b.openOrdersN - a.openOrdersN;
     }).slice(0, 5);
     const hasMeasuredEngpass = ranked.some((station) => station.engpassScore !== null);
 
     return (
       <div className="card">
         <div className="card-h">
-          <h3>{hasMeasuredEngpass ? 'Engpass-Ranking' : 'Stationsbestände'}</h3>
+          <h3>{hasMeasuredEngpass ? 'Engpass-Ranking' : 'Aktuelle Aufträge je Station'}</h3>
           <span className="pill pill-mute" style={{ fontSize: 10 }}>
             {hasMeasuredEngpass ? 'Engpass-Score' : 'Kapazität nicht gemessen'}
           </span>
@@ -54,7 +54,7 @@ export const WerkstattPulsStationArena = {
                     </div>
                     <div className="rank-meta">
                       {st.auslastungPct === null ? 'Auslastung nicht gemessen' : `${st.auslastungPct}% Auslastung`}
-                      {' · '}{st.wartendN} wartend{' · '}
+                      {' · '}{st.openOrdersN} offene Aufträge{' · '}
                       {st.avgWartezeitTage === null ? 'Wartezeit nicht gemessen' : `Ø ${st.avgWartezeitTage} T`}
                     </div>
                   </div>
@@ -80,7 +80,7 @@ export const WerkstattPulsStationArena = {
         
         {stations.length === 0 ? (
           <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--ink-3)', fontSize: 13, background: 'var(--paper)', borderRadius: 'var(--radius)', border: '1px solid var(--cream-line)' }}>
-            Keine Stationen mit wartenden Teilen erfasst.
+            Keine offenen Aufträge mit Stationszuordnung erfasst.
           </div>
         ) : (
           <div className="grid-5">
@@ -113,8 +113,8 @@ export const WerkstattPulsStationArena = {
                   </div>
                   <div className="station-metrics">
                     <div className="stat-block">
-                      <div className={`stat-num ${numClass}`}>{st.wartendN}</div>
-                      <div className="stat-key">Wartend</div>
+                      <div className={`stat-num ${numClass}`}>{st.openOrdersN}</div>
+                      <div className="stat-key">Offene Aufträge</div>
                     </div>
                     <div className="stat-block">
                       <div className="stat-num">
@@ -136,7 +136,7 @@ export const WerkstattPulsStationArena = {
                     <div className="station-cause" style={{ marginTop: 12 }}>{st.hauptursache}</div>
                   )}
                   <div className="station-link" style={{ marginTop: st.hauptursache ? 0 : 12 }}>
-                    {st.wartendN} Aufträge öffnen →
+                    {st.openOrdersN} Aufträge öffnen →
                   </div>
                 </a>
               );

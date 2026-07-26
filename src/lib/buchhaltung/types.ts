@@ -99,7 +99,7 @@ export interface Beleg {
   vorsteuerAbzug: boolean;
   kategorieId?: string;
   skrKonto?: string;
-  absetzbarProzent: number;
+  absetzbarProzent?: number;
   absetzbarGrund?: string;
   belegart?: Belegart;
   originalDatei: string;
@@ -119,9 +119,18 @@ export interface Beleg {
 
 export interface BelegDetail extends Beleg {
   positionen: BelegPosition[];
+  ocrPositionen: Array<{
+    beschreibung: string;
+    menge: number | null;
+    einzelpreis: number | null;
+    betrag: number;
+  }>;
+  ocrPositionenState: "not_run" | "empty" | "suggested";
   kraftstoffDetail?: KraftstoffDetail;
   kategorie?: Kategorie;
   lieferant?: Lieferant;
+  verknuepfteKostenposten: Array<{ id: string; bezeichnung: string }>;
+  kiPruefstatus: "not_run" | "completed";
   kiHinweise: KiHinweis[];
 }
 
@@ -139,8 +148,8 @@ export interface BelegPosition {
 export interface KraftstoffDetail {
   id: string;
   belegId: string;
-  sorte?: KraftstoffSorte;
-  liter?: number;
+  sorte: KraftstoffSorte;
+  liter: number;
   preisProLiter?: number;
   tankstelle?: string;
   ort?: string;
@@ -213,6 +222,8 @@ export interface UstvaWerte {
   vorsteuer: number;
   zahllast: number;
   status: UstvaPeriodeStatus;
+  truthStatus?: "complete" | "partial";
+  missingInputCount?: number;
   freigegebenAm?: string;
 }
 
@@ -230,8 +241,14 @@ export interface KategorieSumme {
 export interface KraftstoffReport {
   gesamtkosten: number;
   gesamtLiter: number;
-  durchschnittPreisProLiter: number;
+  durchschnittPreisProLiter: number | null;
   anzahlTankungen: number;
+  includedReceiptCount: number;
+  missingDetailCount: number;
+  missingLiterCount: number;
+  missingAmountCount: number;
+  missingInputCount: number;
+  dataState: "ready" | "confirmed_empty" | "partial";
   nachSorte: { sorte: KraftstoffSorte; liter: number; kosten: number }[];
   nachOrt: { ort: string; anzahl: number; kosten: number }[];
   nachMonat: { monat: string; liter: number; kosten: number }[];
@@ -242,9 +259,12 @@ export interface Bwa {
   umsatzerloese: number;
   materialaufwand: number;
   fremdleistungen: number;
+  nichtZugeordnet: number;
   deckungsbeitrag: number;
   fixkosten: number;
   betriebsergebnis: number;
+  truthStatus: "complete" | "partial";
+  missingInputCount: number;
   positionen: BwaPosition[];
 }
 

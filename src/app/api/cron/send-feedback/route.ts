@@ -77,7 +77,11 @@ export async function GET(request: Request) {
       }
       const currentConsent = await db.select({ status: einwilligung.status })
         .from(einwilligung)
-        .where(and(eq(einwilligung.kundeId, mail.customerId), eq(einwilligung.kanal, 'email')))
+        .where(and(
+          eq(einwilligung.tenantId, TENANT_ID),
+          eq(einwilligung.kundeId, mail.customerId),
+          eq(einwilligung.kanal, 'email')
+        ))
         .orderBy(desc(einwilligung.zeitpunkt))
         .limit(1)
 

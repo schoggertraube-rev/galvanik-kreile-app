@@ -27,9 +27,9 @@ describe("OCR drafts cannot become accounting truth automatically", () => {
     const actions = source("src/app/buchhaltung/actions.ts");
     const analysis = source("src/app/buchhaltung/analysis.actions.ts");
     expect(actions).toContain("inArray(beleg.status, CONFIRMED_RECEIPT_STATUSES)");
-    expect(actions).toContain("eq(beleg.status, 'pruefen')");
+    expect(actions).toContain("inArray(beleg.status, ['pruefen', 'erfasst'])");
     expect(analysis.match(/inArray\(beleg\.status, CONFIRMED_RECEIPT_STATUSES\)/g)?.length).toBeGreaterThanOrEqual(6);
-    expect(analysis).toContain("eq(beleg.status, 'pruefen')");
+    expect(analysis).toContain("inArray(beleg.status, ['pruefen', 'erfasst'])");
   });
 
   it("prepares but does not apply the percentage backfill and range constraint", () => {

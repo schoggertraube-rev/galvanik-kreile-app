@@ -7,6 +7,11 @@ import type { FunnelDaten } from "@/lib/marketing/marketingTypes";
 
 export function ReichweiteView({ funnel, funnelKey }: { funnel: FunnelDaten | null; funnelKey: number }) {
   if (!funnel) return null;
+  const metricText = (value: number | null, state: string) => {
+    if (value === null) return 'nicht gemessen';
+    const formatted = value.toLocaleString('de-DE');
+    return state === 'partial' ? `${formatted} bekannt` : formatted;
+  };
   return (
     <motion.div key="reichweite" initial="hidden" animate="visible" exit="exit">
       <motion.div custom={0} variants={floatIn} className="mk-panel">
@@ -24,17 +29,33 @@ export function ReichweiteView({ funnel, funnelKey }: { funnel: FunnelDaten | nu
                   animate={{ width: `${s.breite}%` }}
                   transition={{ duration: 1, delay: i * 0.1, ease: [0.4, 0, 0.2, 1] }}
                 >
-                  {s.wert.toLocaleString('de-DE')}
+                  {s.wert === null ? '' : metricText(s.wert, s.dataState)}
                 </motion.div>
               </div>
-              <span className="mk-fbar-val">{s.wert.toLocaleString('de-DE')}</span>
+              <span className="mk-fbar-val">
+                {metricText(s.wert, s.dataState)}
+                {s.coverage.missingCount > 0 && (
+                  <small style={{ display: 'block', fontWeight: 400 }}>
+                    {s.coverage.measuredCount}/{s.coverage.sourceCount} Quellen belegt
+                  </small>
+                )}
+              </span>
             </div>
           ))}
         </div>
         <div className="mk-roi-big mk-animated">
           <div>
             <div className="mk-roi-label">Explizit attribuierter Umsatz</div>
-            <div className="mk-roi-value">{funnel.umsatz.toLocaleString('de-DE')} €</div>
+            <div className="mk-roi-value">
+              {funnel.umsatz === null
+                ? 'nicht gemessen'
+                : `${metricText(funnel.umsatz, funnel.umsatzState)} €`}
+            </div>
+            {funnel.umsatzCoverage.missingCount > 0 && (
+              <div className="pdesc">
+                {funnel.umsatzCoverage.measuredCount}/{funnel.umsatzCoverage.sourceCount} Zuordnungen mit Umsatzbeleg
+              </div>
+            )}
           </div>
           <div style={{ textAlign: 'right' }}>
             <div className="mk-roi-label">Planbudget</div>

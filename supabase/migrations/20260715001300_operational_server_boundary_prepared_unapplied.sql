@@ -22,17 +22,75 @@ BEGIN
   END IF;
 
   IF to_regclass('public.bath_measurements') IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'bath_measurements'
+        AND column_name = 'ph_value'
+    ) AND EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'bath_measurements'
+        AND column_name = 'ph'
+    ) THEN
+      ALTER TABLE public.bath_measurements RENAME COLUMN ph TO ph_value;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'bath_measurements'
+        AND column_name = 'notes'
+    ) AND EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'bath_measurements'
+        AND column_name = 'note'
+    ) THEN
+      ALTER TABLE public.bath_measurements RENAME COLUMN note TO notes;
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'bath_measurements'
+        AND column_name = 'measured_by_user_id'
+    ) AND EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'bath_measurements'
+        AND column_name = 'measured_by'
+    ) THEN
+      ALTER TABLE public.bath_measurements
+        RENAME COLUMN measured_by TO measured_by_user_id;
+    END IF;
+
     ALTER TABLE public.bath_measurements
+      ADD COLUMN IF NOT EXISTS tenant_id varchar(50),
       ADD COLUMN IF NOT EXISTS status_after_measurement varchar(50),
-      ADD COLUMN IF NOT EXISTS measured_by_user_id text;
+      ADD COLUMN IF NOT EXISTS ph_value numeric(10,2),
+      ADD COLUMN IF NOT EXISTS notes text,
+      ADD COLUMN IF NOT EXISTS measured_by_user_id uuid;
+
+    UPDATE public.bath_measurements
+    SET tenant_id = 'galvanik-kreile'
+    WHERE tenant_id IS NULL OR btrim(tenant_id) = '';
 
     UPDATE public.bath_measurements
     SET status_after_measurement = 'not_evaluated'
     WHERE status_after_measurement IS NULL OR btrim(status_after_measurement) = '';
 
     ALTER TABLE public.bath_measurements
+      ALTER COLUMN tenant_id SET DEFAULT 'galvanik-kreile',
+      ALTER COLUMN tenant_id SET NOT NULL,
       ALTER COLUMN status_after_measurement SET DEFAULT 'not_evaluated',
       ALTER COLUMN status_after_measurement SET NOT NULL;
+
+    ALTER TABLE public.bath_measurements
+      ALTER COLUMN temperature TYPE numeric(10,2)
+        USING temperature::numeric,
+      ALTER COLUMN ph_value TYPE numeric(10,2)
+        USING ph_value::numeric;
   END IF;
 END
 $bath_columns$;
@@ -41,11 +99,25 @@ DO $migration$
 BEGIN
   IF to_regclass('public.bath_measurements') IS NOT NULL
      AND to_regclass('public.app_users') IS NOT NULL
+     AND (
+       SELECT data_type = 'uuid'
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'bath_measurements'
+         AND column_name = 'measured_by_user_id'
+     )
      AND NOT EXISTS (
-       SELECT 1
-       FROM pg_constraint
-       WHERE conname = 'bath_measurements_measured_by_user_id_fkey'
-         AND conrelid = to_regclass('public.bath_measurements')
+       SELECT 1 FROM pg_constraint constraint_record
+       WHERE constraint_record.conrelid = 'public.bath_measurements'::regclass
+         AND constraint_record.confrelid = 'public.app_users'::regclass
+         AND constraint_record.contype = 'f'
+         AND (
+           SELECT attribute.attnum = ANY (constraint_record.conkey)
+           FROM pg_attribute attribute
+           WHERE attribute.attrelid = 'public.bath_measurements'::regclass
+             AND attribute.attname = 'measured_by_user_id'
+             AND NOT attribute.attisdropped
+         )
      ) THEN
     ALTER TABLE public.bath_measurements
       ADD CONSTRAINT bath_measurements_measured_by_user_id_fkey

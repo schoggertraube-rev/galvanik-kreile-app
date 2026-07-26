@@ -1,4 +1,22 @@
 -- Migration: 20260610_customers_kundenkarte.sql
+-- Customer KPI setup seeds templates before the later Phase-2 migration.
+-- Create the canonical relation here so fresh installs do not depend on an
+-- object that only appears eleven days later.
+CREATE TABLE IF NOT EXISTS email_templates (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id text NOT NULL DEFAULT 'galvanik-kreile',
+  template_key text NOT NULL UNIQUE,
+  name text NOT NULL,
+  subject_template text NOT NULL,
+  body_html_template text NOT NULL,
+  body_text_template text,
+  variables jsonb DEFAULT '[]'::jsonb,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+ALTER TABLE email_templates ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_email_templates_tenant ON email_templates(tenant_id);
+
 ALTER TABLE customers
   ADD COLUMN IF NOT EXISTS shipping_preference text DEFAULT 'abholung',
   ADD COLUMN IF NOT EXISTS payment_preference text DEFAULT 'rechnung_14',
@@ -16,6 +34,11 @@ INSERT INTO email_templates (tenant_id, template_key, name, subject_template, bo
    'Sehr geehrte/r {kunde_name}, trotz unserer Erinnerung ist die Rechnung {rechnungsnummer} weiterhin offen.')
 ON CONFLICT (template_key) DO NOTHING;
 
+/*
+ * Historical draft retained for migration provenance. It referenced finance,
+ * material, labour and schedule columns before those sources existed, and
+ * therefore could never be applied to an empty database.
+ *
 CREATE OR REPLACE VIEW v_analyse_kunden_kpi AS
 SELECT
   c.id AS customer_id,
@@ -60,4 +83,28 @@ SELECT
   END AS puenktlichkeit_pct,
   -- Reklamationen
   coalesce((SELECT count(*) FROM complaints co JOIN orders o ON o.id = co.order_id WHERE o.customer_id = c.id), 0) AS reklamationen
+FROM customers c;
+*/
+
+CREATE OR REPLACE VIEW v_analyse_kunden_kpi AS
+SELECT
+  c.id AS customer_id,
+  coalesce(c.company_name, c.name) AS kunde,
+  c.classification,
+  c.created_at AS kunde_seit,
+  NULL::numeric AS umsatz_ltv,
+  NULL::numeric AS gewinn_ltv,
+  NULL::numeric AS offene_posten,
+  (
+    SELECT count(*)
+    FROM orders order_record
+    WHERE order_record.customer_id = c.id
+      AND order_record.status NOT IN ('abgeschlossen', 'storniert')
+  ) AS aktive_auftraege,
+  NULL::numeric AS puenktlichkeit_pct,
+  (
+    SELECT count(*)
+    FROM complaints complaint
+    WHERE complaint.customer_id = c.id
+  ) AS reklamationen
 FROM customers c;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertFinalizableReceipt,
   parseCostItemFormData,
+  parseFuelDetailInput,
   parseFinanceDate,
   parseReceiptBatchAssignment,
   parseReceiptCorrection,
@@ -33,8 +34,11 @@ describe("finance write input contract", () => {
       belegdatum: "2026-07-15",
       brutto: "120.00",
       netto: "100.00",
+      ustSatz: "19.00",
       ustBetrag: "19.00",
       skrKonto: "4930",
+      vorsteuerAbzug: true,
+      absetzbarProzent: "100.00",
     })).toThrow("AMOUNTS_INCONSISTENT");
   });
 
@@ -45,8 +49,11 @@ describe("finance write input contract", () => {
       belegdatum: "2026-07-15",
       brutto: "119.00",
       netto: "100.00",
+      ustSatz: "19.00",
       ustBetrag: "19.00",
       skrKonto: "4930",
+      vorsteuerAbzug: true,
+      absetzbarProzent: "100.00",
     })).toThrow("REVIEW_REQUIRED");
     expect(() => assertFinalizableReceipt({
       status: "erfasst",
@@ -54,8 +61,11 @@ describe("finance write input contract", () => {
       belegdatum: "2026-07-15",
       brutto: "119.00",
       netto: "100.00",
+      ustSatz: "19.00",
       ustBetrag: "19.00",
       skrKonto: null,
+      vorsteuerAbzug: true,
+      absetzbarProzent: "100.00",
     })).toThrow("INCOMPLETE:account");
   });
 
@@ -66,6 +76,25 @@ describe("finance write input contract", () => {
     });
     expect(() => parseReceiptBatchAssignment([id, id], { kontoId: id })).toThrow("belegIds");
     expect(() => parseReceiptBatchAssignment([id], {})).toThrow("assignment");
+  });
+
+  it("accepts only explicit, positive reviewed fuel inputs", () => {
+    expect(parseFuelDetailInput({
+      sorte: "diesel",
+      liter: 42.5,
+      preisProLiter: 1.729,
+      tankstelle: "Mainova",
+      ort: "Frankfurt",
+    })).toEqual({
+      sorte: "diesel",
+      liter: "42.50",
+      preisProLiter: "1.729",
+      tankstelle: "Mainova",
+      ort: "Frankfurt",
+    });
+    expect(() => parseFuelDetailInput({ sorte: "diesel", liter: 0 })).toThrow("liter");
+    expect(() => parseFuelDetailInput({ sorte: "frei erfunden", liter: 42 })).toThrow("sorte");
+    expect(() => parseFuelDetailInput({ sorte: "diesel", liter: 42, confirmed: true })).toThrow("fuelDetail");
   });
 
   it("parses cost items without accepting demo flags or numeric suffixes", () => {

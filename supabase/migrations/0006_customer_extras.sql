@@ -1,5 +1,5 @@
 -- Add image_urls and customer_number to customers
-ALTER TABLE customers ADD COLUMN IF NOT EXISTS image_urls text[] DEFAULT '{}';
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS image_urls jsonb DEFAULT '[]'::jsonb;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS customer_number text UNIQUE;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS zip_code text;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS company_name text;

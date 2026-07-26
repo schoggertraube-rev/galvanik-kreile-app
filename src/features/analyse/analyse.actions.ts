@@ -118,7 +118,8 @@ function unavailableTiles(periodLabel: string): AnalyseTileSummary[] {
     key: tile.key,
     title: tile.title,
     subtitle: tile.subtitle,
-    status: "data_missing",
+    status: "disabled",
+    dataState: "not_configured",
     primaryLabel: tile.primaryLabel,
     primaryValue: null,
     periodLabel,
@@ -237,11 +238,16 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
     ? null
     : Math.round(Number(completed.averageCycleDays) * 10) / 10;
   const hasData = completedCount > 0 || openCount > 0;
-  const status: AnalyseTileStatus = !hasData || dueDateMeasurable === 0
-    ? "data_missing"
-    : overdueCount > 0
-      ? "watch"
-      : "stable";
+  const status: AnalyseTileStatus = overdueCount > 0 ? "watch" : "stable";
+  const dataState: AnalyseTileSummary["dataState"] = !hasData
+    ? "confirmed_empty"
+    : completedCount === 0
+      ? "partial"
+      : dueDateMeasurable === 0 && cycleMeasurable === 0
+        ? "missing_input"
+        : dueDateMeasurable < completedCount || cycleMeasurable < completedCount || withoutDueDate > 0
+          ? "partial"
+          : "ready";
   const maxStationCount = stationRows.reduce((maximum, row) => Math.max(maximum, Number(row.count)), 0);
   const returnTo = getAnalyseReturnTo("werkstatt_puls", period.label);
   const calculatedAt = new Date();
@@ -257,7 +263,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       promisedDueDate: order.promisedDueDate?.toISOString() || null,
       completedDate: null,
       delayDays: order.promisedDueDate ? Math.max(1, Math.floor((now.getTime() - order.promisedDueDate.getTime()) / DAY_MS)) : null,
-      status: "critical" as const,
+      status: "overdue" as const,
       priority: order.priority,
       openUrl: `/orders/${encodeURIComponent(order.id)}?returnTo=${encodeURIComponent(returnTo)}`,
     })),
@@ -291,6 +297,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
     title: "Werkstatt-Puls",
     subtitle: "Termintreue & Durchlaufzeit",
     status,
+    dataState,
     primaryLabel: "Termintreue",
     primaryValue: termintreuePct === null ? null : `${termintreuePct.toLocaleString("de-DE")}%`,
     secondaryLabel: "Ø Durchlaufzeit",
@@ -305,6 +312,11 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       fillRatio: maxStationCount > 0 ? Number(row.count) / maxStationCount * 100 : 0,
       colorClass: "bg-blue-500",
     })),
+    chips: overdueCount > 0 ? [{
+      label: "Aktuell überfällig",
+      value: overdueCount.toLocaleString("de-DE"),
+      status: "watch",
+    }] : [],
     dataSources: [{
       tableOrView: "orders",
       fields: ["tenant_id", "completed_date", "promised_due_date", "intake_date", "current_station_id"],
@@ -322,7 +334,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
   const detail: WerkstattPulsData = {
     period: period.key,
     dataStatus: {
-      isLive: false,
+      deliveryMode: "request_snapshot",
       lastUpdatedAt: calculatedAt.toISOString(),
       maturity: "S1",
       warnings: [
@@ -338,15 +350,11 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       ohneZusageterminN: withoutDueDate,
       avgDurchlaufzeitTage: averageCycleDays,
       avgDurchlaufzeitMessbarN: cycleMeasurable,
-      wochenzielIst: completedCount,
-      wochenzielSoll: null,
-      wochenzielQuelle: "missing",
+      completedOrdersN: completedCount,
       offeneAuftraegeN: openCount,
-      kritischeAuftraegeN: overdueCount,
+      overdueOrdersN: overdueCount,
       dokumentationsquotePct: null,
       dokumentationsquoteMessbarN: 0,
-      werkstattScore: null,
-      scoreStatus: "insufficient_data",
     },
     trend: {
       termintreue: [],
@@ -358,7 +366,7 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       stationName: row.station,
       status: "unavailable",
       auslastungPct: null,
-      wartendN: Number(row.count),
+      openOrdersN: Number(row.count),
       avgWartezeitTage: null,
       engpassScore: null,
       hauptursache: null,
@@ -387,10 +395,19 @@ async function loadWorkshopSnapshot(actor: AnalyseActor, periodInput: string, no
       { label: "Warendurchlauf", value: "Stationen öffnen", href: "/warendurchlauf", enabled: true },
     ],
     dataSources: [
-      { label: "Aufträge im Zeitraum", sourceName: "orders", recordCount: completedCount, status: completedCount > 0 ? "live" : "empty" },
-      { label: "Offene Aufträge", sourceName: "orders", recordCount: openCount, status: openCount > 0 ? "live" : "empty" },
-      { label: "Verlauf", sourceName: "nicht_instrumentiert", recordCount: null, status: "missing" },
-      { label: "Wirtschaftlichkeit", sourceName: "nicht_instrumentiert", recordCount: null, status: "missing" },
+      {
+        label: "Abschlüsse im Zeitraum",
+        sourceName: "orders",
+        recordCount: completedCount,
+        status: completedCount === 0
+          ? "confirmed_empty"
+          : dueDateMeasurable < completedCount || cycleMeasurable < completedCount
+            ? "partial"
+            : "ready",
+      },
+      { label: "Aktueller Auftragsbestand", sourceName: "orders", recordCount: openCount, status: openCount > 0 ? "ready" : "confirmed_empty" },
+      { label: "Historischer Verlauf", sourceName: "nicht_instrumentiert", recordCount: null, status: "not_configured" },
+      { label: "Wirtschaftlichkeit", sourceName: "nicht_instrumentiert", recordCount: null, status: "not_configured" },
     ],
   };
 

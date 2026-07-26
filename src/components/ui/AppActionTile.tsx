@@ -17,18 +17,20 @@ export function AppActionTile({
   description,
   contextChip,
   isActive,
+  disabled,
   className,
   ...props
 }: AppActionTileProps) {
   return (
     <button
       className={cn(
-        "bg-white border rounded-2xl p-6 flex flex-col items-start text-left w-full cursor-pointer transition-all active:scale-[0.98]",
+        "bg-white border rounded-2xl p-6 flex flex-col items-start text-left w-full cursor-pointer transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100",
         isActive
           ? "border-navy-900 shadow-md ring-1 ring-navy-900"
-          : "border-neutral-gray-200 hover:border-navy-900 hover:shadow-md",
+          : "border-neutral-gray-200 enabled:hover:border-navy-900 enabled:hover:shadow-md",
         className
       )}
+      disabled={disabled}
       {...props}
     >
       <div className="flex justify-between items-start w-full mb-4">
