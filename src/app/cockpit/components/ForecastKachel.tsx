@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Area, ComposedChart, Bar, Legend } from "recharts";
+import { Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart, Bar, Legend, type TooltipProps } from "recharts";
 import { getForecastDaten, type ForecastData } from "../actions";
 import { Calendar, Loader2, ArrowRight } from "lucide-react";
 import Link from "next/link";
@@ -14,6 +14,17 @@ type ForecastChartPoint = {
   pipelineGewichtet: number;
   pipelineUngewichtet: number;
   plan: number | null;
+};
+
+const formatForecastTooltip: NonNullable<TooltipProps["formatter"]> = (value, name) => {
+  const label = typeof name === "string" ? name : String(name ?? "Wert");
+  if (
+    (label === "Umsatz (Ist)" || label === "Pipeline (Gewichtet)")
+    && typeof value === "number"
+  ) {
+    return [`€ ${value.toLocaleString("de-DE")}`, label];
+  }
+  return [value ?? "—", label];
 };
 
 export function ForecastKachel() {
@@ -147,13 +158,7 @@ export function ForecastKachel() {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
                 <XAxis dataKey="monat" tick={{ fontSize: 11 }} tickMargin={10} />
                 <YAxis tickFormatter={(val) => `€${(val / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
-                <Tooltip 
-                  formatter={(value: any, name: any) => {
-                    if (name === "Umsatz (Ist)") return [`€ ${Number(value).toLocaleString('de-DE')}`, name];
-                    if (name === "Pipeline (Gewichtet)") return [`€ ${Number(value).toLocaleString('de-DE')}`, name];
-                    return [value, name];
-                  }}
-                />
+                <Tooltip formatter={formatForecastTooltip} />
                 <Legend wrapperStyle={{ fontSize: '12px' }} />
                 <Bar dataKey="umsatz" name="Umsatz (Ist)" fill="#1E3A8A" radius={[4, 4, 0, 0]} maxBarSize={40} />
                 <Bar dataKey="pipelineGewichtet" name="Pipeline (Gewichtet)" fill="#F59E0B" radius={[4, 4, 0, 0]} maxBarSize={40} />

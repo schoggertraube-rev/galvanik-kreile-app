@@ -3,12 +3,21 @@
 import { useState, useEffect } from "react";
 import { AlertCircle, CheckCircle2, ArrowRight, Loader2, X } from "lucide-react";
 import { getAktiveWarnungen, refreshWarnungen, dismissWarnung } from "../actions";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 
+type Warnung = {
+  id: string;
+  typ: string;
+  titel: string;
+  beschreibung: string;
+  schwere: string;
+  link: string | null;
+  erzeugt_am: string | null;
+};
+
 export function FruehwarnungenKachel() {
-  const [warnungen, setWarnungen] = useState<any[]>([]);
+  const [warnungen, setWarnungen] = useState<Warnung[]>([]);
   const [loading, setLoading] = useState(true);
   const [dismissModalOpen, setDismissModalOpen] = useState(false);
   const [selectedWarnungId, setSelectedWarnungId] = useState<string | null>(null);
@@ -17,8 +26,6 @@ export function FruehwarnungenKachel() {
   const [error, setError] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   
-  const router = useRouter();
-
   const loadData = async () => {
     setLoading(true);
     try {
@@ -35,7 +42,27 @@ export function FruehwarnungenKachel() {
   };
 
   useEffect(() => {
-    loadData();
+    let cancelled = false;
+
+    void refreshWarnungen()
+      .then(() => getAktiveWarnungen())
+      .then((data) => {
+        if (cancelled) return;
+        setWarnungen(data);
+        setLoadError(null);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWarnungen([]);
+        setLoadError("Frühwarnungen sind nicht konfiguriert; vorhandene Daten werden nicht als aktuelle Warnung ausgegeben.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleDismissClick = (id: string) => {
@@ -60,8 +87,8 @@ export function FruehwarnungenKachel() {
       await dismissWarnung(selectedWarnungId, begruendung);
       setDismissModalOpen(false);
       await loadData();
-    } catch (err: any) {
-      setError(err.message || "Fehler beim Bestätigen.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Fehler beim Bestätigen.");
     } finally {
       setSubmitting(false);
     }
@@ -179,7 +206,7 @@ export function FruehwarnungenKachel() {
   );
 }
 
-function WarnungCard({ warnung, onDismiss }: { warnung: any, onDismiss: () => void }) {
+function WarnungCard({ warnung, onDismiss }: { warnung: Warnung, onDismiss: () => void }) {
   let bgColor = 'bg-blue-50 border-blue-200';
   let dotColor = 'bg-blue-500';
   
@@ -199,7 +226,7 @@ function WarnungCard({ warnung, onDismiss }: { warnung: any, onDismiss: () => vo
           <h4 className="font-bold text-navy-900 text-sm">{warnung.titel}</h4>
         </div>
         <span className="text-xs text-neutral-gray-500 whitespace-nowrap">
-          {new Date(warnung.erzeugt_am).toLocaleDateString('de-DE')}
+          {warnung.erzeugt_am ? new Date(warnung.erzeugt_am).toLocaleDateString('de-DE') : "—"}
         </span>
       </div>
       
