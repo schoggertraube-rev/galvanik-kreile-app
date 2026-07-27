@@ -2,8 +2,8 @@
 -- Productive invoice numbers are business identities and must be unique inside
 -- the tenant. Historical is_demo fixtures are not accounting identities.
 
-SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '5min';
+SET lock_timeout = '5s';
+SET statement_timeout = '5min';
 
 DO $validation$
 BEGIN

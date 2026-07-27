@@ -1,9 +1,9 @@
 -- REMOTE WAVE 1: explicitly approved 2026-07-26; use only the reviewed atomic runner.
 -- Explicit user feedback for the future operator control plane; separate from usage telemetry and marketing feedback.
 
-SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '5min';
-SET LOCAL search_path = pg_catalog, public, pg_temp;
+SET lock_timeout = '5s';
+SET statement_timeout = '5min';
+SET search_path = pg_catalog, public, pg_temp;
 
 CREATE TABLE public.developer_feedback (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),

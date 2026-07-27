@@ -2,9 +2,9 @@
 -- Expand only: the legacy sink is sealed by the later ui_events contract after
 -- every executable dependency has moved to a typed, truthful server ledger.
 
-SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '5min';
-SET LOCAL search_path = pg_catalog, public, pg_temp;
+SET lock_timeout = '5s';
+SET statement_timeout = '5min';
+SET search_path = pg_catalog, public, pg_temp;
 
 CREATE TABLE public.app_usage_events (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),

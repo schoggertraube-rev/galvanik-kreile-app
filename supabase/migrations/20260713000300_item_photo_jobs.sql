@@ -2,8 +2,8 @@
 -- Durable item-photo allocation and exactly-once analysis jobs.
 -- Creates a new service-only table and RPCs; no existing policy is modified.
 
-SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '5min';
+SET lock_timeout = '5s';
+SET statement_timeout = '5min';
 
 CREATE UNIQUE INDEX IF NOT EXISTS orders_tenant_id_uidx
   ON public.orders (tenant_id, id);

@@ -31,7 +31,17 @@ describe("prepared security rate-limit migration", () => {
     expect(sql).toContain("pg_has_role(candidate.oid, target.target_oid, 'MEMBER')");
     expect(sql).toContain("membership.set_option");
     expect(sql).toContain("'authenticator', 'kreile_app_runtime'");
+    expect(sql).toContain("candidate.rolname = 'supabase_storage_admin'");
+    expect(sql).toContain("'session_preload_libraries=supautils, safeupdate'");
+    expect(sql).toContain("'statement_timeout=8s'");
+    expect(sql).toContain("'lock_timeout=8s'");
+    expect(sql).toContain("'search_path=storage'");
+    expect(sql).toContain("'log_statement=none'");
     expect(sql).toContain("candidate.rolname = 'cli_login_postgres'");
+    expect(sql).toContain("target.target_name = 'pg_read_all_data'");
+    expect(sql).toContain("grantor_role.rolname = 'supabase_admin'");
+    expect(sql).toContain("NOT pg_has_role(candidate.oid, 'pg_write_all_data', 'MEMBER')");
+    expect(sql).toContain("NOT pg_has_role(candidate.oid, 'pg_maintain', 'MEMBER')");
     expect(sql).toContain("membership.member = migration_owner");
     expect(sql).not.toMatch(/^\s*BEGIN\s*;/m);
     expect(sql).not.toMatch(/^\s*COMMIT\s*;/m);

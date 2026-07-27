@@ -41,6 +41,24 @@ export const databaseRuntimeSupabasePlatformReceiptPredicate = sql`(
     join pg_roles grantor_role on grantor_role.oid = membership.grantor
     where membership.roleid = service_role.oid
       and member_role.rolname = 'authenticator'
+      and member_role.rolcanlogin
+      and not member_role.rolinherit
+      and not member_role.rolsuper
+      and not member_role.rolbypassrls
+      and not member_role.rolcreaterole
+      and not member_role.rolcreatedb
+      and not member_role.rolreplication
+      and pg_catalog.cardinality(member_role.rolconfig) = 3
+      and member_role.rolconfig @> array[
+        'session_preload_libraries=supautils, safeupdate',
+        'statement_timeout=8s',
+        'lock_timeout=8s'
+      ]::text[]
+      and member_role.rolconfig <@ array[
+        'session_preload_libraries=supautils, safeupdate',
+        'statement_timeout=8s',
+        'lock_timeout=8s'
+      ]::text[]
       and not membership.admin_option
       and not membership.inherit_option
       and membership.set_option
@@ -70,6 +88,81 @@ export const databaseRuntimeSupabasePlatformReceiptPredicate = sql`(
         join pg_roles grantor_role on grantor_role.oid = membership.grantor
         where membership.roleid = database_record.datdba
           and membership.member = cli_role.oid
+          and not membership.admin_option
+          and not membership.inherit_option
+          and membership.set_option
+          and grantor_role.rolname = 'supabase_admin'
+          and grantor_role.rolsuper
+      )
+      and pg_has_role(cli_role.oid, database_record.datdba, 'MEMBER')
+      and pg_has_role(cli_role.oid, service_role.oid, 'MEMBER')
+      and pg_has_role(cli_role.oid, 'pg_read_all_data', 'MEMBER')
+      and not pg_has_role(cli_role.oid, 'pg_write_all_data', 'MEMBER')
+      and not pg_has_role(cli_role.oid, 'pg_maintain', 'MEMBER')
+      and exists (
+        select 1
+        from pg_roles read_all_role
+        where read_all_role.rolname = 'pg_read_all_data'
+          and not read_all_role.rolcanlogin
+          and read_all_role.rolinherit
+          and not read_all_role.rolsuper
+          and not read_all_role.rolcreaterole
+          and not read_all_role.rolcreatedb
+          and not read_all_role.rolbypassrls
+          and not read_all_role.rolreplication
+          and read_all_role.rolconfig is null
+          and 1 = (
+            select count(*)
+            from pg_auth_members membership
+            join pg_roles grantor_role on grantor_role.oid = membership.grantor
+            where membership.roleid = read_all_role.oid
+              and membership.member = database_record.datdba
+              and membership.admin_option
+              and membership.inherit_option
+              and membership.set_option
+              and grantor_role.rolname = 'supabase_admin'
+              and grantor_role.rolsuper
+          )
+      )
+  )
+  and exists (
+    select 1
+    from pg_roles storage_role
+    join pg_roles authenticator_role on authenticator_role.rolname = 'authenticator'
+    where storage_role.rolname = 'supabase_storage_admin'
+      and storage_role.rolcanlogin
+      and not storage_role.rolinherit
+      and not storage_role.rolsuper
+      and not storage_role.rolbypassrls
+      and storage_role.rolcreaterole
+      and not storage_role.rolcreatedb
+      and not storage_role.rolreplication
+      and pg_catalog.cardinality(storage_role.rolconfig) = 2
+      and storage_role.rolconfig @> array[
+        'search_path=storage',
+        'log_statement=none'
+      ]::text[]
+      and storage_role.rolconfig <@ array[
+        'search_path=storage',
+        'log_statement=none'
+      ]::text[]
+      and pg_has_role(storage_role.oid, authenticator_role.oid, 'MEMBER')
+      and pg_has_role(storage_role.oid, service_role.oid, 'MEMBER')
+      and not pg_has_role(storage_role.oid, database_record.datdba, 'MEMBER')
+      and not pg_has_role(storage_role.oid, 'pg_read_all_data', 'MEMBER')
+      and not pg_has_role(storage_role.oid, 'pg_write_all_data', 'MEMBER')
+      and not pg_has_role(storage_role.oid, 'pg_maintain', 'MEMBER')
+      and 1 = (
+        select count(*)
+        from pg_auth_members membership
+        where membership.member = storage_role.oid
+      )
+      and 1 = (
+        select count(*)
+        from pg_auth_members membership
+        join pg_roles grantor_role on grantor_role.oid = membership.grantor
+        where membership.roleid = authenticator_role.oid
+          and membership.member = storage_role.oid
           and not membership.admin_option
           and not membership.inherit_option
           and membership.set_option
@@ -359,7 +452,12 @@ export const databaseRuntimeSupabasePlatformReceiptPredicate = sql`(
     where not candidate.rolsuper
       and candidate.oid <> service_role.oid
       and candidate.oid <> database_record.datdba
-      and candidate.rolname not in ('authenticator', 'kreile_app_runtime')
+      and candidate.rolname not in (
+        'authenticator',
+        'kreile_app_runtime',
+        'cli_login_postgres',
+        'supabase_storage_admin'
+      )
       and pg_has_role(candidate.oid, service_role.oid, 'MEMBER')
   )
   and not exists (
@@ -932,7 +1030,12 @@ export const databaseRuntimeIdentityPredicate = sql`(
     where not candidate.rolsuper
       and candidate.oid <> service_role.oid
       and candidate.oid <> database_record.datdba
-      and candidate.rolname not in ('authenticator', 'kreile_app_runtime')
+      and candidate.rolname not in (
+        'authenticator',
+        'kreile_app_runtime',
+        'cli_login_postgres',
+        'supabase_storage_admin'
+      )
       and pg_has_role(candidate.oid, service_role.oid, 'MEMBER')
   )
 )`;

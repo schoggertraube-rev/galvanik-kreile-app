@@ -2,8 +2,8 @@
 -- Durable, atomic and fail-closed AI usage admission for paid provider calls.
 -- Creates a new service-only table and RPCs; no existing policy is modified.
 
-SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '5min';
+SET lock_timeout = '5s';
+SET statement_timeout = '5min';
 
 CREATE TABLE public.ai_usage_reservations (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),

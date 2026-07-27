@@ -2,10 +2,10 @@
 -- Durable atomic security counters. The Supabase migration runner owns the
 -- transaction and records the ledger entry in that same transaction.
 
-SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '60s';
-SET LOCAL idle_in_transaction_session_timeout = '60s';
-SET LOCAL search_path = pg_catalog, pg_temp;
+SET lock_timeout = '5s';
+SET statement_timeout = '60s';
+SET idle_in_transaction_session_timeout = '60s';
+SET search_path = pg_catalog, pg_temp;
 
 DO $preflight$
 DECLARE
@@ -73,14 +73,33 @@ BEGIN
         (
           target.target_name = 'service_role'
           AND candidate.rolname IN ('authenticator', 'kreile_app_runtime')
+          AND candidate.rolcanlogin
           AND NOT candidate.rolinherit
           AND NOT candidate.rolsuper
           AND NOT candidate.rolbypassrls
           AND NOT candidate.rolcreaterole
           AND NOT candidate.rolcreatedb
           AND NOT candidate.rolreplication
-          AND candidate.rolconfig IS NULL
-          AND (candidate.rolname <> 'kreile_app_runtime' OR candidate.rolcanlogin)
+          AND (
+            (
+              candidate.rolname = 'authenticator'
+              AND pg_catalog.cardinality(candidate.rolconfig) = 3
+              AND candidate.rolconfig @> ARRAY[
+                'session_preload_libraries=supautils, safeupdate',
+                'statement_timeout=8s',
+                'lock_timeout=8s'
+              ]::text[]
+              AND candidate.rolconfig <@ ARRAY[
+                'session_preload_libraries=supautils, safeupdate',
+                'statement_timeout=8s',
+                'lock_timeout=8s'
+              ]::text[]
+            )
+            OR (
+              candidate.rolname = 'kreile_app_runtime'
+              AND candidate.rolconfig IS NULL
+            )
+          )
           AND 1 = (
             SELECT count(*)
             FROM pg_auth_members membership
@@ -90,12 +109,90 @@ BEGIN
               AND NOT membership.admin_option
               AND NOT membership.inherit_option
               AND membership.set_option
+              AND (
+                candidate.rolname <> 'authenticator'
+                OR grantor_role.rolname = 'supabase_admin'
+              )
+              AND grantor_role.rolsuper
+          )
+        )
+        OR (
+          target.target_name = 'service_role'
+          AND candidate.rolname = 'supabase_storage_admin'
+          AND candidate.rolcanlogin
+          AND NOT candidate.rolinherit
+          AND NOT candidate.rolsuper
+          AND NOT candidate.rolbypassrls
+          AND candidate.rolcreaterole
+          AND NOT candidate.rolcreatedb
+          AND NOT candidate.rolreplication
+          AND pg_catalog.cardinality(candidate.rolconfig) = 2
+          AND candidate.rolconfig @> ARRAY[
+            'search_path=storage',
+            'log_statement=none'
+          ]::text[]
+          AND candidate.rolconfig <@ ARRAY[
+            'search_path=storage',
+            'log_statement=none'
+          ]::text[]
+          AND 1 = (
+            SELECT count(*)
+            FROM pg_auth_members membership
+            WHERE membership.member = candidate.oid
+          )
+          AND 1 = (
+            SELECT count(*)
+            FROM pg_auth_members membership
+            JOIN pg_roles authenticator_role
+              ON authenticator_role.oid = membership.roleid
+            JOIN pg_roles grantor_role
+              ON grantor_role.oid = membership.grantor
+            WHERE membership.member = candidate.oid
+              AND authenticator_role.rolname = 'authenticator'
+              AND authenticator_role.rolcanlogin
+              AND NOT authenticator_role.rolinherit
+              AND NOT authenticator_role.rolsuper
+              AND NOT authenticator_role.rolbypassrls
+              AND NOT authenticator_role.rolcreaterole
+              AND NOT authenticator_role.rolcreatedb
+              AND NOT authenticator_role.rolreplication
+              AND pg_catalog.cardinality(authenticator_role.rolconfig) = 3
+              AND authenticator_role.rolconfig @> ARRAY[
+                'session_preload_libraries=supautils, safeupdate',
+                'statement_timeout=8s',
+                'lock_timeout=8s'
+              ]::text[]
+              AND authenticator_role.rolconfig <@ ARRAY[
+                'session_preload_libraries=supautils, safeupdate',
+                'statement_timeout=8s',
+                'lock_timeout=8s'
+              ]::text[]
+              AND NOT membership.admin_option
+              AND NOT membership.inherit_option
+              AND membership.set_option
+              AND grantor_role.rolname = 'supabase_admin'
+              AND grantor_role.rolsuper
+          )
+          AND 1 = (
+            SELECT count(*)
+            FROM pg_auth_members membership
+            JOIN pg_roles authenticator_role
+              ON authenticator_role.oid = membership.member
+            JOIN pg_roles grantor_role
+              ON grantor_role.oid = membership.grantor
+            WHERE membership.roleid = service_role_oid
+              AND authenticator_role.rolname = 'authenticator'
+              AND NOT membership.admin_option
+              AND NOT membership.inherit_option
+              AND membership.set_option
+              AND grantor_role.rolname = 'supabase_admin'
               AND grantor_role.rolsuper
           )
         )
         OR (
           target.target_name = 'service_role'
           AND candidate.rolname = 'cli_login_postgres'
+          AND candidate.rolcanlogin
           AND NOT candidate.rolinherit
           AND NOT candidate.rolsuper
           AND NOT candidate.rolbypassrls
@@ -117,6 +214,7 @@ BEGIN
               AND NOT membership.admin_option
               AND NOT membership.inherit_option
               AND membership.set_option
+              AND grantor_role.rolname = 'supabase_admin'
               AND grantor_role.rolsuper
           )
           AND 1 = (
@@ -128,12 +226,14 @@ BEGIN
               AND membership.admin_option
               AND membership.inherit_option
               AND membership.set_option
+              AND grantor_role.rolname = 'supabase_admin'
               AND grantor_role.rolsuper
           )
         )
         OR (
           target.target_name = '__database_owner__'
           AND candidate.rolname = 'cli_login_postgres'
+          AND candidate.rolcanlogin
           AND NOT candidate.rolinherit
           AND NOT candidate.rolsuper
           AND NOT candidate.rolbypassrls
@@ -155,8 +255,52 @@ BEGIN
               AND NOT membership.admin_option
               AND NOT membership.inherit_option
               AND membership.set_option
+              AND grantor_role.rolname = 'supabase_admin'
               AND grantor_role.rolsuper
           )
+        )
+        OR (
+          target.target_name = 'pg_read_all_data'
+          AND candidate.rolname = 'cli_login_postgres'
+          AND candidate.rolcanlogin
+          AND NOT candidate.rolinherit
+          AND NOT candidate.rolsuper
+          AND NOT candidate.rolbypassrls
+          AND NOT candidate.rolcreaterole
+          AND NOT candidate.rolcreatedb
+          AND NOT candidate.rolreplication
+          AND candidate.rolconfig IS NULL
+          AND 1 = (
+            SELECT count(*)
+            FROM pg_auth_members membership
+            WHERE membership.member = candidate.oid
+          )
+          AND 1 = (
+            SELECT count(*)
+            FROM pg_auth_members membership
+            JOIN pg_roles grantor_role ON grantor_role.oid = membership.grantor
+            WHERE membership.roleid = migration_owner
+              AND membership.member = candidate.oid
+              AND NOT membership.admin_option
+              AND NOT membership.inherit_option
+              AND membership.set_option
+              AND grantor_role.rolname = 'supabase_admin'
+              AND grantor_role.rolsuper
+          )
+          AND 1 = (
+            SELECT count(*)
+            FROM pg_auth_members membership
+            JOIN pg_roles grantor_role ON grantor_role.oid = membership.grantor
+            WHERE membership.roleid = target.target_oid
+              AND membership.member = migration_owner
+              AND membership.admin_option
+              AND membership.inherit_option
+              AND membership.set_option
+              AND grantor_role.rolname = 'supabase_admin'
+              AND grantor_role.rolsuper
+          )
+          AND NOT pg_has_role(candidate.oid, 'pg_write_all_data', 'MEMBER')
+          AND NOT pg_has_role(candidate.oid, 'pg_maintain', 'MEMBER')
         )
         OR (
           target.target_name = 'pg_read_all_data'

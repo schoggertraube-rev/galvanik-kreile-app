@@ -1,9 +1,9 @@
 -- REMOTE WAVE 1: explicitly approved 2026-07-26; use only the reviewed atomic runner.
 -- Signed, transparent tenant control state. No remote code execution and no covert slowdown mode.
 
-SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '5min';
-SET LOCAL search_path = pg_catalog, public, pg_temp;
+SET lock_timeout = '5s';
+SET statement_timeout = '5min';
+SET search_path = pg_catalog, public, pg_temp;
 
 CREATE TABLE public.tenant_operator_controls (
   tenant_id text PRIMARY KEY,

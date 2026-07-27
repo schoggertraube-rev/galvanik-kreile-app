@@ -145,6 +145,10 @@ describe("database runtime identity contract", () => {
       expect(contract).toContain("rolcreaterole");
       expect(contract).toContain("rolcreatedb");
       expect(contract).toContain("rolreplication");
+      expect(contract).toContain("pg_catalog.cardinality");
+      expect(contract).toContain("session_preload_libraries=supautils, safeupdate");
+      expect(contract).toContain("statement_timeout=8s");
+      expect(contract).toContain("lock_timeout=8s");
       expect(contract).toContain("has_schema_privilege");
       expect(contract).toContain("has_database_privilege");
     }
@@ -170,11 +174,23 @@ describe("database runtime identity contract", () => {
         "7a0154016b7e8dc996bbf197a013a8fc",
         "bbde5a9f320e09f68d30d51782d0727a",
         "cli_login_postgres",
+        "supabase_storage_admin",
+        "pg_read_all_data",
+        "pg_write_all_data",
+        "pg_maintain",
+        "search_path=storage",
+        "log_statement=none",
         "dashboard_user",
         "pg_stat_statements_info",
         "template1",
       ]) expect(contract).toContain(receipt);
 
+      expect(contract).toContain("membership.admin_option");
+      expect(contract).toContain("membership.inherit_option");
+      expect(contract).toContain("membership.set_option");
+      expect(contract).toMatch(
+        /candidate\.rolname NOT IN \(\s*'authenticator',\s*'kreile_app_runtime',\s*'cli_login_postgres',\s*'supabase_storage_admin'\s*\)/i,
+      );
       expect(contract).not.toContain("nspname IN ('public', 'extensions')");
       expect(contract).not.toContain("nspname in ('public', 'extensions')");
       expect(contract).not.toContain("search_path=pg_catalog, extensions, public, pg_temp");

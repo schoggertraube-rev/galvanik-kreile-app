@@ -3,9 +3,9 @@
 -- fractional; its numeric values stay unchanged until the bridge application
 -- is deployed and all old writers are drained.
 
-SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '5min';
-SET LOCAL search_path = pg_catalog, public, pg_temp;
+SET lock_timeout = '5s';
+SET statement_timeout = '5min';
+SET search_path = pg_catalog, public, pg_temp;
 
 DO $migration$
 BEGIN
@@ -55,7 +55,10 @@ $migration$;
 ALTER TABLE public.beleg
   ADD COLUMN ocr_confidence_scale text;
 
-LOCK TABLE public.beleg IN SHARE ROW EXCLUSIVE MODE;
+-- The preceding ALTER TABLE retains its stronger ACCESS EXCLUSIVE lock until
+-- the Supabase CLI's implicit migration batch (including the ledger insert)
+-- commits. A separate LOCK TABLE would require an explicit transaction block
+-- and would split or strand the runner-owned ledger transaction.
 
 DO $legacy_provenance$
 DECLARE
