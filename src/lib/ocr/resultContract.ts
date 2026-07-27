@@ -17,6 +17,7 @@ const RESULT_KEYS = [
   "providerStatus",
 ] as const;
 const POSITION_KEYS = ["beschreibung", "menge", "einzelpreis", "betrag"] as const;
+const LEDGER_KEYS = [...RESULT_KEYS, "contractVersion", "confidenceScale"] as const;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function record(value: unknown, keys: readonly string[], code: string): Record<string, unknown> {
@@ -97,15 +98,19 @@ export function parseStoredOcrPositions(value: unknown): OcrPosition[] {
   return positions(value);
 }
 
-function confidencePercent(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) {
+type ConfidenceScale = "fraction" | "percent";
+
+function confidencePercent(value: unknown, scale: ConfidenceScale): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const maximum = scale === "fraction" ? 1 : 100;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > maximum) {
     throw new Error("OCR_RESULT_INVALID");
   }
-  const percent = value <= 1 ? value * 100 : value;
+  const percent = scale === "fraction" ? value * 100 : value;
   return Math.round(percent * 100) / 100;
 }
 
-export function parseOcrResult(value: unknown): OcrErgebnis {
+function parseResult(value: unknown, confidenceScale: ConfidenceScale): OcrErgebnis {
   const result = record(value, RESULT_KEYS, "OCR_RESULT_INVALID");
   const rawText = optionalText(result.rohtext, 100_000) ?? "";
   const actualUnits = result.actualUnits === null || result.actualUnits === undefined
@@ -127,11 +132,27 @@ export function parseOcrResult(value: unknown): OcrErgebnis {
     belegart: receiptType(result.belegart),
     zahlungsart: paymentType(result.zahlungsart),
     rechnungsnummer: optionalText(result.rechnungsnummer, 200),
-    confidence: confidencePercent(result.confidence),
+    confidence: confidencePercent(result.confidence, confidenceScale),
     rohtext: rawText,
     actualUnits: actualUnits as number | null,
     providerStatus,
   };
+}
+
+export function parseOcrResult(value: unknown): OcrErgebnis {
+  return parseResult(value, "percent");
+}
+
+export function parseFractionalProviderOcrResult(value: unknown): OcrErgebnis {
+  return parseResult(value, "fraction");
+}
+
+export function parseOcrReplayResult(value: unknown): OcrErgebnis {
+  const ledger = record(value, LEDGER_KEYS, "OCR_REPLAY_RESULT_INVALID");
+  if (ledger.contractVersion !== 1 || ledger.confidenceScale !== "percent") {
+    throw new Error("OCR_REPLAY_RESULT_INVALID");
+  }
+  return parseOcrResult(Object.fromEntries(RESULT_KEYS.map((key) => [key, ledger[key]])));
 }
 
 export function normalizeSupplierName(value: string): string {
@@ -148,6 +169,8 @@ export function normalizeSupplierName(value: string): string {
 
 export function ocrResultForLedger(result: OcrErgebnis): Record<string, unknown> {
   return {
+    contractVersion: 1,
+    confidenceScale: "percent",
     lieferant: result.lieferant,
     datum: result.datum,
     brutto: result.brutto,

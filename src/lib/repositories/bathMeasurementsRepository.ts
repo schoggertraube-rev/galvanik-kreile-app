@@ -33,9 +33,7 @@ function mapMeasurement(row: BathMeasurementRecord): BathMeasurement {
     conductivity: null,
     statusAfterMeasurement: row.statusAfterMeasurement,
     note: row.notes || undefined,
-    measuredAt: row.measuredAt
-      ? new Date(row.measuredAt).toISOString()
-      : new Date(0).toISOString(),
+    measuredAt: new Date(row.measuredAt).toISOString(),
     measuredBy: row.measuredByDisplayName || undefined,
   };
 }

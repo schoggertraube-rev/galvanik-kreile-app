@@ -63,7 +63,10 @@ export class KlippaProvider implements OcrProvider {
       belegart: text(parsed.document_type),
       zahlungsart: text(parsed.payment_method),
       rechnungsnummer: text(parsed.invoice_number),
-      confidence: number(parsed.confidence) ?? 0,
+      // Klippa's configured template has no locally verified magnitude
+      // contract for this field. Keep it unavailable instead of guessing from
+      // whether the number happens to be <= 1.
+      confidence: null,
       rohtext: text(data.text) ?? "",
       positionen: positions(parsed.lines),
       actualUnits: null,

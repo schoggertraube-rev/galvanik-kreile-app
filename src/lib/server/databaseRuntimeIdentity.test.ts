@@ -55,6 +55,8 @@ describe("database runtime identity contract", () => {
       "acl_entry.privilege_type = 'CONNECT'",
       "acl_entry.privilege_type in ('CONNECT', 'TEMPORARY')",
       "other_database_record.datallowconn",
+      "other_database_record.datname <> 'template1'",
+      "has_database_privilege(session_role.oid, other_database_record.oid, 'CREATE')",
       "dependency.deptype in ('o', 'a', 'r')",
       "function_record.prosecdef",
       "has_function_privilege(session_role.oid, function_record.oid, 'EXECUTE')",
@@ -81,6 +83,9 @@ describe("database runtime identity contract", () => {
     expect(migration).toContain("SET LOCAL search_path = pg_catalog, pg_temp");
     expect(migration).toContain("PostgreSQL 16 or newer is required");
     expect(migration).toContain("rolname = 'kreile_app_runtime'");
+    expect(migration).toContain("member_role.oid <> migration_owner");
+    expect(migration).toContain("candidate.oid <> migration_owner");
+    expect(migration).toContain("database_record.datname <> 'template1'");
     expect(migration).toContain("official platform graph may also let it SET");
     expect(migration).toContain("session_user = kreile_app_runtime");
     expect(migration).toContain("membership.admin_option");
@@ -149,5 +154,59 @@ describe("database runtime identity contract", () => {
     expect(predicate).toContain("membership.set_option");
     expect(predicate).not.toContain("candidate.rolbypassrls and namespace_record.nspname in ('public', 'extensions')");
     expect(migration).not.toContain("candidate.rolbypassrls AND namespace_record.nspname IN ('public', 'extensions')");
+  });
+
+  it("separates strict public application ownership from the versioned Supabase platform receipt", () => {
+    const predicate = source("src/lib/server/databaseRuntimeIdentity.ts");
+    const migration = source(
+      "supabase/migrations/20260715001650_capture_template_projection_reconciliation_prepared_unapplied.sql",
+    );
+
+    for (const contract of [predicate, migration]) {
+      for (const receipt of [
+        "71ec9b62961e2fc5d13e4d6ee008ad4f",
+        "e18f1837546257d1ab9732ac78ba82be",
+        "037460eda240285faef9153187753c27",
+        "7a0154016b7e8dc996bbf197a013a8fc",
+        "bbde5a9f320e09f68d30d51782d0727a",
+        "cli_login_postgres",
+        "dashboard_user",
+        "pg_stat_statements_info",
+        "template1",
+      ]) expect(contract).toContain(receipt);
+
+      expect(contract).not.toContain("nspname IN ('public', 'extensions')");
+      expect(contract).not.toContain("nspname in ('public', 'extensions')");
+      expect(contract).not.toContain("search_path=pg_catalog, extensions, public, pg_temp");
+    }
+
+    expect(predicate).toContain("databaseRuntimeSupabasePlatformReceiptPredicate");
+    expect(predicate).toContain("${databaseRuntimeSupabasePlatformReceiptPredicate}");
+    expect(predicate).toContain("managed_default_acl.entry_count = 252");
+    expect(predicate).toContain("managed_secdef.entry_count = 2");
+    expect(predicate).toContain("extension_runtime_relation_acl.entry_count = 2");
+    expect(predicate).toContain("pg_get_viewdef(relation_record.oid, false)");
+    expect(predicate).toContain("md5(convert_to(function_record.prosrc, 'UTF8'))");
+    expect(predicate).toContain("function_record.prosqlbody::text");
+    expect(predicate).toContain("acl_entry.grantee = session_role.oid");
+
+    expect(migration).toContain("CREATE FUNCTION pg_temp.capture_supabase_platform_receipt_valid");
+    expect(migration).toContain("IF NOT pg_temp.capture_supabase_platform_receipt_valid(");
+    expect(migration.match(/IF NOT pg_temp\.capture_supabase_platform_receipt_valid\(/g)).toHaveLength(2);
+    expect(
+      migration.match(
+        /FROM pg_default_acl default_acl\s+CROSS JOIN LATERAL aclexplode\(default_acl\.defaclacl\) acl_entry\s+WHERE acl_entry\.grantee = runtime_role\.oid/g,
+      ),
+    ).toHaveLength(2);
+    expect(migration).not.toContain(
+      "WHERE acl_entry.grantee IN (0, runtime_role.oid, service_role_oid)",
+    );
+    expect(migration).toContain("managed_default_acl.entry_count = 252");
+    expect(migration).toContain("managed_secdef.entry_count = 2");
+    expect(migration).toContain("extension_runtime_relation_acl.entry_count = 2");
+    expect(migration).toContain("pg_get_viewdef(relation_record.oid, false)");
+    expect(migration).toContain("md5(convert_to(function_record.prosrc, 'UTF8'))");
+    expect(migration).toContain("function_record.prosqlbody::text");
+    expect(migration).toContain("WHERE acl_entry.grantee = runtime_role.oid");
   });
 });

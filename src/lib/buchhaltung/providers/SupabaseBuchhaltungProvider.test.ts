@@ -77,11 +77,9 @@ describe('SupabaseBuchhaltungProvider truth contract', () => {
     actionMocks.generateDatevExportAction.mockResolvedValue('DATEV-HEADER\nCOLUMNS\nBOOKING')
     actionMocks.generateLexwareExportAction.mockResolvedValue('LEXWARE-HEADER\nBOOKING')
     analysisMocks.getSparzaehlerAnalysisAction.mockResolvedValue({
-      ersparnisBetrag: 48,
-      anzahlAutoBelege: 6,
-      minutenProBeleg: 4,
-      stundensatz: 120,
-      prozentAutomatisch: 75,
+      state: 'not_evidenced',
+      data: null,
+      reason: 'FINANCE_SAVINGS_NOT_EVIDENCED',
     })
   })
 
@@ -140,15 +138,12 @@ describe('SupabaseBuchhaltungProvider truth contract', () => {
     expect(visibleText).toContain('"receiptsIncluded": false')
   })
 
-  it('uses configured savings assumptions returned by the data action', async () => {
+  it('preserves the explicit missing-evidence state without inventing savings', async () => {
     const provider = new SupabaseBuchhaltungProvider()
     await expect(provider.getErsparnis(2026)).resolves.toEqual({
-      jahr: 2026,
-      betrag: 48,
-      anzahlAutoBelege: 6,
-      minutenProBeleg: 4,
-      beraterStundensatz: 120,
-      prozentAutomatisch: 75,
+      state: 'not_evidenced',
+      data: null,
+      reason: 'FINANCE_SAVINGS_NOT_EVIDENCED',
     })
   })
 })

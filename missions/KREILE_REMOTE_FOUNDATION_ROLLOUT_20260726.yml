@@ -1,0 +1,81 @@
+mission_id: "KREILE-REMOTE-FOUNDATION-ROLLOUT-20260726"
+title: "Remote Foundation Rollout mit verifizierbarer Recovery"
+product_goal: "Das lokal gehärtete Fundament sicher, datenwahr und ohne Schein-Cutover in die freigegebene Supabase-Umgebung überführen."
+user_value: "Die Werkstatt-App erhält belastbare Auth-, Vernetzungs-, Buchhaltungs-, Analyse-, Marketing-, Capture- und Betreiberverträge auf der echten Datenbank."
+risk_class: "critical"
+allowed_paths:
+  - "missions/KREILE_REMOTE_FOUNDATION_ROLLOUT_20260726.yml"
+  - "supabase/migrations/**"
+  - "supabase/functions/mollie-create-payment/index.ts"
+  - "src/app/**"
+  - "src/features/customers/customer-card/customerCard.actions.ts"
+  - "src/db/**"
+  - "src/lib/**"
+  - "src/components/**"
+  - "src/hooks/**"
+  - "src/repositories/**"
+  - "tests/**"
+  - "src/**/*.test.ts"
+  - "src/**/*.test.tsx"
+  - "docs/security/**"
+  - "docs/project/**"
+  - "scripts/**"
+  - "package.json"
+  - "package-lock.json"
+  - "migrate.mjs"
+forbidden_paths:
+  - "02_app/**"
+  - ".env*"
+  - "supabase/seed.sql"
+data_contracts:
+  - name: "remote_delivery_truth"
+    source: "origin/main plus supabase_migrations.schema_migrations"
+    contract: "Jede Remote-Migration ist im Repository rekonstruierbar, geordnet und auf dem wiederhergestellten Live-Snapshot geprüft."
+  - name: "backup_restore"
+    source: "pg_dump 17 custom archive plus Supabase Storage object backup"
+    contract: "Archiv und Storage-Dateien sind gehasht; public-Schema und aggregierte Kernzeilen sind lokal erfolgreich wiederhergestellt."
+  - name: "rolling_cutover"
+    source: "origin/main, Rollout-Bridge und vorbereitete Migrationen"
+    contract: "Kein DB-Schritt sperrt gleichzeitig alte und neue App; irreversible Backfills erfolgen nur hinter kompatiblen Readern/Writern."
+acceptance_criteria:
+  - "Die live angewendete Migration 20260712154103 ist mit exakt rekonstruierter SQL-Anweisung im Repository vorhanden."
+  - "Alle vorbereiteten Migrationen besitzen eine geprüfte Expand-, Reconcile- oder Contract-Klasse und eine ausführbare Reihenfolge."
+  - "Bekannte Payment-, PIN-, Marketing-, Telemetrie-, Perioden-, Operational-, OCR- und Analytics-Cutoverfehler sind behoben und negativ getestet."
+  - "Ein PostgreSQL-17-Backup und alle Storage-Objekte sind lokal vorhanden, gehasht und der Application-Schema-Restore stimmt aggregiert mit Live überein."
+  - "Der vollständige Upgradepfad läuft auf einem wiederhergestellten Live-Snapshot ohne PII-Ausgabe und ohne offene Datenkonflikte."
+  - "Remote-Rollen, RLS, Grants, Funktionen, Constraints, Views und Migrationledger werden nach jeder angewendeten Welle geprüft."
+  - "Remote-Rollout erfolgt nur aus einem GitHub-gereviewten Lieferstand; main-Merge und Production-App-Promotion bleiben bis zur separaten Freigabe gesperrt."
+required_checks:
+  - "targeted unit and contract tests"
+  - "typescript"
+  - "strict changed-file eslint"
+  - "git diff --check"
+  - "restored-live-snapshot migration test"
+  - "Supabase security and performance advisors"
+  - "independent read-only review"
+preview_required: true
+database_change:
+  allowed: true
+  description: "Der Nutzer hat den Remote-Rollout am 2026-07-26 ausdrücklich freigegeben; Anwendung erst nach bestandenem Restore-/Upgrade-Gate."
+production_change:
+  allowed: false
+  description: "Kein Merge nach main und keine Vercel-Production-Promotion ohne separate ausdrückliche Freigabe."
+approval_gates:
+  - gate: "remote_database_and_rls"
+    required_before: "erste Supabase-Migration oder Rollen-/ACL-Mutation"
+    approver: "Traube — erteilt 2026-07-26"
+  - gate: "main_merge"
+    required_before: "Merge von PR 19 oder Nachfolge-PR"
+    approver: "Traube — noch nicht erteilt"
+  - gate: "production_app_promotion"
+    required_before: "Vercel Production Deployment oder Promotion"
+    approver: "Traube — noch nicht erteilt"
+final_evidence:
+  - branch_sha
+  - diff_file_list
+  - local_checks
+  - restored_snapshot_checks
+  - remote_preflight_and_postflight
+  - github_checks
+  - vercel_preview
+  - scope_guard

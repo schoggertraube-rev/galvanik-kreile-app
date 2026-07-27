@@ -1,7 +1,8 @@
 -- PREPARED ONLY: do not apply remotely without explicit approval.
 -- Reconciles the canonical inventory ledger without inventing historical stock,
 -- units or actors. Ambiguous legacy rows intentionally abort this migration.
-BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 
 DO $required_relations$
 BEGIN
@@ -150,6 +151,7 @@ BEGIN
        OR quantity::text IN ('NaN', 'Infinity', '-Infinity')
        OR quantity::numeric = 0
        OR quantity::numeric <> round(quantity::numeric, 4)
+       OR abs(quantity::numeric) >= 10000000000
        OR (movement_type = 'stock_in' AND quantity::numeric <= 0)
        OR (movement_type IN ('stock_out', 'consumption', 'verbrauch', 'waste') AND quantity::numeric >= 0)
        OR (movement_type IN ('correction', 'waste') AND (reason IS NULL OR btrim(reason) = ''))
@@ -227,13 +229,111 @@ END
 $drop_conflicting_fks$;
 
 -- ALTER TYPE acquires a dependency-sensitive rewrite even when the source and
--- target types are already identical. Fresh databases already use the
--- canonical types, so only execute a conversion for genuine legacy drift.
+-- target types are already identical. Production's v_auftrag_db references the
+-- legacy unconstrained quantity column and has two downstream evidence views.
+-- CREATE OR REPLACE keeps the view OID and its dependants intact while a
+-- transaction-local, empty bridge temporarily removes only the base-column
+-- dependency. All captured metadata is verified before commit.
 DO $type_reconciliation$
 DECLARE
   change_record record;
   actual_type text;
+  quantity_attribute_number smallint;
+  quantity_type text;
+  bridge_required boolean := false;
+  original_view_oid oid;
+  original_view_definition text;
+  original_view_owner oid;
+  original_view_acl aclitem[];
+  original_view_options text[];
+  original_view_signature text[];
+  restored_view_signature text[];
 BEGIN
+  SELECT
+    attribute.attnum,
+    format_type(attribute.atttypid, attribute.atttypmod)
+  INTO quantity_attribute_number, quantity_type
+  FROM pg_attribute attribute
+  WHERE attribute.attrelid = 'public.stock_movements'::regclass
+    AND attribute.attname = 'quantity'
+    AND NOT attribute.attisdropped;
+
+  bridge_required := quantity_type IS DISTINCT FROM 'numeric(14,4)';
+
+  IF bridge_required THEN
+    IF to_regclass('public.v_auftrag_db') IS NULL THEN
+      RAISE EXCEPTION
+        'v_auftrag_db is required to reconcile stock_movements.quantity without evidence-view loss';
+    END IF;
+
+    IF to_regclass('public.__inventory_quantity_view_bridge_01550') IS NOT NULL THEN
+      RAISE EXCEPTION 'Reserved inventory quantity view bridge relation already exists';
+    END IF;
+
+    SELECT
+      relation.oid,
+      pg_get_viewdef(relation.oid, false),
+      relation.relowner,
+      relation.relacl,
+      relation.reloptions,
+      ARRAY(
+        SELECT format(
+          '%s:%s:%s:%s',
+          attribute.attnum,
+          attribute.attname,
+          format_type(attribute.atttypid, attribute.atttypmod),
+          attribute.attcollation
+        )
+        FROM pg_attribute attribute
+        WHERE attribute.attrelid = relation.oid
+          AND attribute.attnum > 0
+          AND NOT attribute.attisdropped
+        ORDER BY attribute.attnum
+      )
+    INTO
+      original_view_oid,
+      original_view_definition,
+      original_view_owner,
+      original_view_acl,
+      original_view_options,
+      original_view_signature
+    FROM pg_class relation
+    JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+    WHERE namespace.nspname = 'public'
+      AND relation.relname = 'v_auftrag_db'
+      AND relation.relkind = 'v';
+
+    IF original_view_oid IS NULL THEN
+      RAISE EXCEPTION 'v_auftrag_db is not a regular view';
+    END IF;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_depend dependency
+      JOIN pg_rewrite rewrite_rule ON rewrite_rule.oid = dependency.objid
+      WHERE dependency.refobjid = 'public.stock_movements'::regclass
+        AND dependency.refobjsubid = quantity_attribute_number
+        AND rewrite_rule.ev_class = original_view_oid
+    ) OR EXISTS (
+      SELECT 1
+      FROM pg_depend dependency
+      JOIN pg_rewrite rewrite_rule ON rewrite_rule.oid = dependency.objid
+      WHERE dependency.refobjid = 'public.stock_movements'::regclass
+        AND dependency.refobjsubid = quantity_attribute_number
+        AND rewrite_rule.ev_class <> original_view_oid
+    ) THEN
+      RAISE EXCEPTION
+        'Unexpected direct view dependency on stock_movements.quantity';
+    END IF;
+
+    EXECUTE
+      'CREATE TABLE public.__inventory_quantity_view_bridge_01550 AS '
+      'SELECT * FROM public.v_auftrag_db WITH NO DATA';
+    EXECUTE
+      'CREATE OR REPLACE VIEW public.v_auftrag_db AS '
+      'SELECT * FROM public.__inventory_quantity_view_bridge_01550';
+  END IF;
+
   FOR change_record IN
     SELECT * FROM (VALUES
       ('inventory_items', 'tenant_id', 'text', 'tenant_id::text'),
@@ -270,6 +370,57 @@ BEGIN
       );
     END IF;
   END LOOP;
+
+  IF bridge_required THEN
+    EXECUTE format(
+      'CREATE OR REPLACE VIEW public.v_auftrag_db AS %s',
+      original_view_definition
+    );
+    EXECUTE 'DROP TABLE public.__inventory_quantity_view_bridge_01550 RESTRICT';
+
+    SELECT ARRAY(
+      SELECT format(
+        '%s:%s:%s:%s',
+        attribute.attnum,
+        attribute.attname,
+        format_type(attribute.atttypid, attribute.atttypmod),
+        attribute.attcollation
+      )
+      FROM pg_attribute attribute
+      WHERE attribute.attrelid = original_view_oid
+        AND attribute.attnum > 0
+        AND NOT attribute.attisdropped
+      ORDER BY attribute.attnum
+    )
+    INTO restored_view_signature;
+
+    IF to_regclass('public.__inventory_quantity_view_bridge_01550') IS NOT NULL
+       OR (SELECT relation.oid FROM pg_class relation WHERE relation.oid = original_view_oid) IS NULL
+       OR pg_get_viewdef(original_view_oid, false) IS DISTINCT FROM original_view_definition
+       OR (SELECT relation.relowner FROM pg_class relation WHERE relation.oid = original_view_oid)
+         IS DISTINCT FROM original_view_owner
+       OR (SELECT relation.relacl FROM pg_class relation WHERE relation.oid = original_view_oid)
+         IS DISTINCT FROM original_view_acl
+       OR (SELECT relation.reloptions FROM pg_class relation WHERE relation.oid = original_view_oid)
+         IS DISTINCT FROM original_view_options
+       OR restored_view_signature IS DISTINCT FROM original_view_signature THEN
+      RAISE EXCEPTION
+        'v_auftrag_db metadata changed during inventory quantity reconciliation';
+    END IF;
+  END IF;
+
+  SELECT format_type(attribute.atttypid, attribute.atttypmod)
+  INTO quantity_type
+  FROM pg_attribute attribute
+  WHERE attribute.attrelid = 'public.stock_movements'::regclass
+    AND attribute.attname = 'quantity'
+    AND NOT attribute.attisdropped;
+
+  IF quantity_type IS DISTINCT FROM 'numeric(14,4)' THEN
+    RAISE EXCEPTION
+      'stock_movements.quantity type reconciliation failed; found %',
+      quantity_type;
+  END IF;
 END
 $type_reconciliation$;
 
@@ -327,6 +478,7 @@ ALTER TABLE public.inventory_items
 
 ALTER TABLE public.stock_movements
   DROP CONSTRAINT IF EXISTS stock_movements_quantity_nonzero,
+  DROP CONSTRAINT IF EXISTS stock_movements_quantity_domain_chk,
   DROP CONSTRAINT IF EXISTS stock_movements_type_chk,
   DROP CONSTRAINT IF EXISTS stock_movements_quantity_direction_chk,
   DROP CONSTRAINT IF EXISTS stock_movements_reason_required_chk,
@@ -359,6 +511,12 @@ ALTER TABLE public.inventory_items
 ALTER TABLE public.stock_movements
   ADD CONSTRAINT stock_movements_quantity_nonzero
     CHECK (quantity::text NOT IN ('NaN', 'Infinity', '-Infinity') AND quantity <> 0) NOT VALID,
+  ADD CONSTRAINT stock_movements_quantity_domain_chk
+    CHECK (
+      quantity::text NOT IN ('NaN', 'Infinity', '-Infinity')
+      AND abs(quantity) < 10000000000
+      AND quantity = round(quantity, 4)
+    ) NOT VALID,
   ADD CONSTRAINT stock_movements_type_chk
     CHECK (movement_type IN ('stock_in', 'stock_out', 'consumption', 'verbrauch', 'correction', 'waste')) NOT VALID,
   ADD CONSTRAINT stock_movements_quantity_direction_chk
@@ -407,6 +565,7 @@ ALTER TABLE public.inventory_items VALIDATE CONSTRAINT inventory_items_purchase_
 ALTER TABLE public.inventory_items VALIDATE CONSTRAINT inventory_items_tenant_nonblank_chk;
 ALTER TABLE public.inventory_items VALIDATE CONSTRAINT inventory_items_unit_nonblank_chk;
 ALTER TABLE public.stock_movements VALIDATE CONSTRAINT stock_movements_quantity_nonzero;
+ALTER TABLE public.stock_movements VALIDATE CONSTRAINT stock_movements_quantity_domain_chk;
 ALTER TABLE public.stock_movements VALIDATE CONSTRAINT stock_movements_type_chk;
 ALTER TABLE public.stock_movements VALIDATE CONSTRAINT stock_movements_quantity_direction_chk;
 ALTER TABLE public.stock_movements VALIDATE CONSTRAINT stock_movements_reason_required_chk;
@@ -555,5 +714,3 @@ BEGIN
   END IF;
 END
 $verification$;
-
-COMMIT;

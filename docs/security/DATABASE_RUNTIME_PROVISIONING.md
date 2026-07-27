@@ -1,14 +1,15 @@
 # Datenbank-Runtime: Provisionierung und Deployment-Gate
 
-Status: vorbereitet, nicht remote angewendet<br>
+Status: Remote-Rollout freigegeben; Broker-/ACL-Cutover weiterhin vorbereitet und nicht angewendet<br>
 Ziel-Tenant: `galvanik-kreile`<br>
 Mindestversion: PostgreSQL 16
 
 Dieses Dokument beschreibt die Infrastrukturvoraussetzungen fuer die
-fail-closed Datenbank-Capability-Gates. Es ist kein Freibrief fuer Aenderungen
-an einer gehosteten Supabase-Instanz. Rollen-, Datenbank-ACL-, RLS- oder
-Migrationsaenderungen duerfen remote erst nach separater Freigabe und nach dem
-unten beschriebenen Plattforminventar erfolgen.
+fail-closed Datenbank-Capability-Gates. Der Remote-Datenbank-Rollout wurde am
+2026-07-26 freigegeben. Der Broker-/ACL-Cutover bleibt trotzdem gesperrt, bis
+das unten beschriebene Plattforminventar, direkte Ersatzberechtigungen und der
+zugehoerige App-Cutover gemeinsam nachgewiesen sind. Die Freigabe umfasst
+weder einen Merge nach `main` noch eine Vercel-Production-Promotion.
 
 ## Verbindlicher Runtime-Vertrag
 
@@ -26,8 +27,10 @@ Die Anwendung meldet sich als unprivilegierter Broker
 - der Broker besitzt direkt ausschliesslich ein nicht weitergebbares
   `CONNECT` auf die App-Datenbank, keine Objekt-, Schema-, Tablespace-,
   Parameter-, Default- oder Owner-Rechte;
-- der Broker kann keine andere verbindbare Datenbank im Cluster betreten und
-  weder dort noch in der App-Datenbank temporaere Objekte erzeugen;
+- der Broker kann keine andere verbindbare Nicht-Template-Datenbank im Cluster
+  betreten und in keiner anderen Datenbank temporaere oder dauerhafte Objekte
+  erzeugen; ein reines `CONNECT` auf ein anbieterverwaltetes Template ohne
+  `TEMPORARY` oder `CREATE` ist kein Pfad zu App-Daten oder Privilegien;
 - `PUBLIC` besitzt auf der App-Datenbank weder `CONNECT` noch `TEMPORARY` und
   auf normalen Anwendungsobjekten keine ACL-Eintraege;
 - alle normalen `SECURITY DEFINER`-Funktionen entsprechen dem kataloggenauen
@@ -93,6 +96,33 @@ from pg_catalog.pg_namespace namespace_record
 order by namespace_record.nspname;
 ```
 
+Die vollstaendige, reproduzierbare Receipt-Abfrage liegt in
+`scripts/validation/database_runtime_platform_receipt.sql`. Sie gibt die
+kanonischen Datenbank-ACL-, Providerrollen-, Membership-, Extension-View- und
+anbieterinternen `SECURITY DEFINER`-Receipts aus. Ein geaenderter Digest ist
+kein Anlass, den Sollwert blind zu aktualisieren; zuerst sind die zugrunde
+liegenden kanonischen Zeilen zu pruefen.
+
+Das read-only Inventar vom 2026-07-26 ergab:
+
+| Receipt | Anzahl | MD5 |
+| --- | ---: | --- |
+| direkte ACLs der App-Datenbank | 10 | `60254db2d786eb5d9472962740435b2d` |
+| Login-/privilegierte Providerrollen | 12 | `0afe2eb2b1848c0bf39eb53521c901b6` |
+| Superuser-Namen | 1 | `a468f0e091a23006e68f2991c1e449e4` |
+| `template1`-ACL | 4 | `71ec9b62961e2fc5d13e4d6ee008ad4f` |
+| `extensions`-Schema-ACL | 7 | `e18f1837546257d1ab9732ac78ba82be` |
+| `extensions`-Runtime-Views und ACLs | 2 | `037460eda240285faef9153187753c27` |
+| verwaltete Default-ACL-Eintraege | 252 | `7a0154016b7e8dc996bbf197a013a8fc` |
+| verwaltete non-public `SECURITY DEFINER`-Funktionen | 2 | `bbde5a9f320e09f68d30f1c7a3767b4f` |
+
+Aktuell besitzen `PUBLIC` auf der App-Datenbank noch `CONNECT` und
+`TEMPORARY`. Neun der zehn inventarisierten Plattform-Logins beziehen diese
+Rechte nicht direkt. Ein vorgezogener Revoke wuerde daher legitime
+Supabase-/Pooler-/Storage-Zugaenge veraendern. Das Runtime-Gate bleibt bis zum
+Ersatz-Grant und erneuten Post-Provision-Receipt absichtlich rot. Simulierte
+Post-Provision-Hashes gelten nicht als Abnahmebeleg.
+
 Das Inventar wird zusammen mit einem Backup-/Rollback-Nachweis abgelegt. Jede
 unbekannte Plattformrolle, die von `PUBLIC CONNECT` oder `PUBLIC TEMPORARY`
 abhaengt, ist ein externer Deployment-Blocker, bis ihr Zweck geklaert ist.
@@ -124,7 +154,9 @@ wenn die Plattform es benoetigt und auch diese Kante `ADMIN FALSE`,
 ## 3. Datenbank-ACL-Delta planen
 
 Zuerst erhalten alle bestaetigten Plattform-Logins ihr minimales explizites
-`CONNECT`. Erst danach darf `PUBLIC` auf der App-Datenbank entzogen werden.
+`CONNECT`. Ob einzelne verwaltete Logins weiterhin `TEMPORARY` benoetigen,
+muss vor dem Delta durch den Plattformvertrag bestaetigt werden. Erst danach
+darf `PUBLIC` auf der App-Datenbank entzogen werden.
 
 ```sql
 grant connect on database <app_database> to <required_platform_login>;
@@ -135,13 +167,19 @@ revoke create, temporary on database <app_database> from kreile_app_runtime;
 revoke create, temporary on database <app_database> from service_role;
 ```
 
-Fuer jede andere Datenbank mit `datallowconn = true` muss der Broker weder
-direkt noch ueber `PUBLIC` oder eine Membership `CONNECT` beziehungsweise
-`TEMPORARY` besitzen. Das kann Rechte auf `postgres`, `template1` oder
-anbieterinterne Datenbanken betreffen und daher Superuser-/Providerrechte
-erfordern. Wenn die Plattform dieses Delta nicht zulaesst, bleibt das Runtime-
-Gate absichtlich rot; der Vertrag wird nicht durch eine Code-Ausnahme
-aufgeweicht.
+Fuer jede andere Nicht-Template-Datenbank mit `datallowconn = true` darf der
+Broker weder direkt noch ueber `PUBLIC` oder eine Membership `CONNECT`,
+`TEMPORARY` oder `CREATE` besitzen. Auf Template-Datenbanken bleiben
+`TEMPORARY` und `CREATE` ebenfalls verboten; das plattformseitige reine
+`CONNECT` auf `template1` ist zulässig. Anbieterinterne Datenbanken koennen
+Superuser-/Providerrechte erfordern. Wenn die Plattform das fachlich
+notwendige Delta nicht zulaesst, bleibt das Runtime-Gate absichtlich rot; der
+Vertrag wird nicht durch eine Code-Ausnahme aufgeweicht.
+
+Der Datenbankowner darf als vertrauenswuerdiger Migrationsprincipal Mitglied
+von `service_role` sein. Diese Kante erweitert den Broker nicht: Der Broker
+besitzt weiterhin genau seine einzelne nicht-administrative `SET`-Kante und
+kann den Owner weder direkt noch transitiv annehmen.
 
 Auch die App-Datenbank darf keinen durch `kreile_app_runtime` selbst erteilten
 ACL-Eintrag enthalten. Der einzelne Broker-`CONNECT` muss durch den
@@ -158,8 +196,9 @@ Driftklassen zu bereinigen:
 - `CREATE` auf `public`, `extensions` oder anderen Schemas fuer untrusted
   Rollen;
 - Parameterrechte fuer `PUBLIC`, Broker oder `service_role`;
-- Default-ACLs, die spaetere Objekte fuer `PUBLIC`, Broker oder
-  `service_role` automatisch freigeben;
+- Default-ACLs des App-Owners im Schema `public`, die spaetere Objekte fuer
+  `PUBLIC`, Broker oder `service_role` automatisch freigeben; getrennt davon
+  wird das verwaltete Supabase-Default-ACL-Inventar kataloggenau gepinnt;
 - nicht inventarisierte `SECURITY DEFINER`-Funktionen oder falsche Owner,
   Sprachen, `search_path`-Werte und Grant Options.
 
@@ -168,6 +207,18 @@ Die Migrationen
 `20260715001650_capture_template_projection_reconciliation_prepared_unapplied.sql`
 sind weiterhin **prepared/unapplied**. Ihr Remote-Einsatz benoetigt eine
 eigene Freigabe, einen Katalog-Snapshot und einen getesteten Rollbackpfad.
+
+Die Freigabe ist inzwischen vorhanden; die Migration `20260715001650` bleibt
+dennoch technisch vorbereitet/unapplied, weil `kreile_app_runtime`, die
+Plattform-Ersatz-ACLs und die Production-Verbindung noch nicht gemeinsam
+provisioniert wurden.
+
+Die Inventur weist ausserdem einen verwalteten Residualpfad aus:
+`service_role` kann ueber anbieterverwaltete `vault`-Funktionen weiterhin
+Secrets anlegen oder aktualisieren. Das ist kein Beweis vollstaendiger
+Least-Privilege-Isolation. Bis eine von Supabase unterstuetzte engere
+Capability-Rolle existiert, wird dieser Providerpfad als vertrauenswuerdige
+Betriebsgrenze dokumentiert und nicht als beseitigt behauptet.
 
 ## 5. Verbindungs- und Capability-Abnahme
 
@@ -212,11 +263,11 @@ Rollback stellt ausschliesslich bestaetigte Plattformverbindungen wieder her;
 es vergibt keine pauschalen App-Objektrechte und aktiviert keine alte offene
 RLS-Policy.
 
-Ohne ausdrueckliche Freigabe werden nicht ausgefuehrt:
+Trotz erteilter Remote-Datenbankfreigabe werden nicht ausgefuehrt:
 
-- Remote-Rollen- oder Datenbank-ACL-Aenderungen;
-- Supabase-Migrationen oder RLS-Aenderungen;
-- Production-Promotion;
+- Broker-/Plattform-ACL-Aenderungen ohne bestaetigte Ersatzrechte und
+  App-Cutover;
+- Production-Promotion oder Merge nach `main`;
 - Loeschung oder irreversible Bereinigung von Datenbankobjekten.
 
 Ist eine benoetigte Cluster-ACL in der verwalteten Umgebung nicht aenderbar,

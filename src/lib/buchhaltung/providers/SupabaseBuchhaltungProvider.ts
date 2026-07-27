@@ -3,7 +3,7 @@ import type {
   Beleg, BelegDetail, BelegFilter, BelegFile,
   Ausgangsrechnung, RechnungFilter,
   Zeitraum, KategorieSumme, KraftstoffReport, Bwa,
-  CostItem, UstvaWerte, Steuerprofil, Ersparnis,
+  CostItem, UstvaWerte, Steuerprofil, ErsparnisResult,
   ExportDatei
 } from '../types'
 
@@ -247,15 +247,7 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
     }
   }
 
-  async getErsparnis(jahr: number): Promise<Ersparnis> {
-    const data = await getSparzaehlerAnalysisAction(`${jahr}-01-01`, `${jahr}-12-31`)
-    return {
-      jahr,
-      betrag: data.ersparnisBetrag,
-      anzahlAutoBelege: data.anzahlAutoBelege,
-      minutenProBeleg: data.minutenProBeleg,
-      beraterStundensatz: data.stundensatz,
-      prozentAutomatisch: data.prozentAutomatisch
-    }
+  async getErsparnis(jahr: number): Promise<ErsparnisResult> {
+    return getSparzaehlerAnalysisAction(`${jahr}-01-01`, `${jahr}-12-31`)
   }
 }

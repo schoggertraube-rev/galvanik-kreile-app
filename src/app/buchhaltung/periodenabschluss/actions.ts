@@ -15,6 +15,8 @@ export interface PeriodenabschlussStatus {
   belege_ohne_konto: number
   belege_ohne_kostenstelle: number
   rechnungen_ohne_auftrag: number
+  belege_ohne_periode: number
+  rechnungen_ohne_periode: number
   rechnungen_offen: number
   auftraege_ohne_db: number
 }
@@ -30,9 +32,12 @@ function validUuid(value: string): boolean {
   return UUID_V4.test(value)
 }
 
-function safeNumber(value: unknown): number {
+function confirmedCount(value: unknown, field: string): number {
   const parsed = Number(value)
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`INVALID_PERIOD_COUNT:${field}`)
+  }
+  return parsed
 }
 
 export async function getPeriodenabschlussStatusAction(): Promise<PeriodenabschlussStatus | null> {
@@ -50,15 +55,34 @@ export async function getPeriodenabschlussStatusAction(): Promise<Periodenabschl
         (SELECT count(*)::int FROM public.beleg b
           WHERE b.periode_id = p.id AND b.kostenstelle_id IS NULL AND b.status <> 'storniert') AS belege_ohne_kostenstelle,
         (SELECT count(*)::int FROM public.ausgangsrechnung r
-          WHERE r.periode_id = p.id AND r.order_id IS NULL AND r.status <> 'storniert') AS rechnungen_ohne_auftrag,
+          WHERE r.tenant_id = p.tenant_id
+            AND r.periode_id = p.id
+            AND r.order_id IS NULL
+            AND r.status <> 'storniert') AS rechnungen_ohne_auftrag,
+        (SELECT count(*)::int FROM public.beleg b
+          WHERE b.periode_id IS NULL
+            AND b.belegdatum >= make_date(p.jahr, p.monat, 1)
+            AND b.belegdatum < (make_date(p.jahr, p.monat, 1) + interval '1 month')
+            AND b.status <> 'storniert') AS belege_ohne_periode,
         (SELECT count(*)::int FROM public.ausgangsrechnung r
-          WHERE r.periode_id = p.id AND r.status IN ('offen', 'ueberfaellig', 'teilbezahlt')) AS rechnungen_offen,
+          WHERE r.tenant_id = p.tenant_id
+            AND r.periode_id IS NULL
+            AND r.datum >= make_date(p.jahr, p.monat, 1)
+            AND r.datum < (make_date(p.jahr, p.monat, 1) + interval '1 month')
+            AND r.status <> 'storniert') AS rechnungen_ohne_periode,
+        (SELECT count(*)::int FROM public.ausgangsrechnung r
+          WHERE r.tenant_id = p.tenant_id
+            AND r.periode_id = p.id
+            AND r.status IN ('offen', 'teilbezahlt', 'ueberfaellig', 'gemahnt', 'mahnung')
+            AND greatest(r.brutto - coalesce(r.bezahlt_betrag_eur, 0), 0) > 0) AS rechnungen_offen,
         (SELECT count(*)::int FROM public.orders o
           WHERE o.tenant_id = ${actor.tenantId}
-            AND o.completed_date >= make_date(p.jahr, p.monat, 1)
-            AND o.completed_date < (make_date(p.jahr, p.monat, 1) + interval '1 month')
+            AND date_trunc(
+              'month',
+              o.completed_date AT TIME ZONE 'Europe/Berlin'
+            )::date = make_date(p.jahr, p.monat, 1)
             AND o.db_ist IS NULL
-            AND o.status <> 'storniert') AS auftraege_ohne_db
+            AND o.status IN ('completed', 'abgeschlossen')) AS auftraege_ohne_db
       FROM public.periode p
       WHERE p.tenant_id = ${actor.tenantId}
         AND p.status IN ('offen', 'vorlaeufig_geschlossen')
@@ -70,17 +94,24 @@ export async function getPeriodenabschlussStatusAction(): Promise<Periodenabschl
     if (!['offen', 'vorlaeufig_geschlossen', 'final_geschlossen'].includes(row.status)) {
       throw new Error('INVALID_PERIOD_STATUS')
     }
+    const jahr = confirmedCount(row.jahr, 'jahr')
+    const monat = confirmedCount(row.monat, 'monat')
+    if (!validUuid(row.id) || jahr < 2000 || jahr > 2200 || monat < 1 || monat > 12) {
+      throw new Error('INVALID_PERIOD_IDENTITY')
+    }
     return {
       id: row.id,
-      jahr: safeNumber(row.jahr),
-      monat: safeNumber(row.monat),
+      jahr,
+      monat,
       status: row.status,
       geschlossen_am: row.geschlossen_am ? new Date(row.geschlossen_am).toISOString() : null,
-      belege_ohne_konto: safeNumber(row.belege_ohne_konto),
-      belege_ohne_kostenstelle: safeNumber(row.belege_ohne_kostenstelle),
-      rechnungen_ohne_auftrag: safeNumber(row.rechnungen_ohne_auftrag),
-      rechnungen_offen: safeNumber(row.rechnungen_offen),
-      auftraege_ohne_db: safeNumber(row.auftraege_ohne_db),
+      belege_ohne_konto: confirmedCount(row.belege_ohne_konto, 'belege_ohne_konto'),
+      belege_ohne_kostenstelle: confirmedCount(row.belege_ohne_kostenstelle, 'belege_ohne_kostenstelle'),
+      rechnungen_ohne_auftrag: confirmedCount(row.rechnungen_ohne_auftrag, 'rechnungen_ohne_auftrag'),
+      belege_ohne_periode: confirmedCount(row.belege_ohne_periode, 'belege_ohne_periode'),
+      rechnungen_ohne_periode: confirmedCount(row.rechnungen_ohne_periode, 'rechnungen_ohne_periode'),
+      rechnungen_offen: confirmedCount(row.rechnungen_offen, 'rechnungen_offen'),
+      auftraege_ohne_db: confirmedCount(row.auftraege_ohne_db, 'auftraege_ohne_db'),
     }
   } catch {
     throw new Error('Periodenstatus konnte nicht geladen werden.')

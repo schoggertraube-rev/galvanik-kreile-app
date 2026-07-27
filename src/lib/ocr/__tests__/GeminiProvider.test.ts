@@ -56,6 +56,6 @@ describe("GeminiProvider fail-closed behavior", () => {
     });
 
     await expect(new GeminiProvider().extractBeleg("https://example.test/receipt.jpg"))
-      .resolves.toMatchObject({ lieferant: "Lieferant GmbH", confidence: 0 });
+      .resolves.toMatchObject({ lieferant: "Lieferant GmbH", confidence: null });
   });
 });

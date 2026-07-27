@@ -48,6 +48,7 @@ export const beleg = pgTable("beleg", {
   originalDatei: text("original_datei").notNull(),
   originalFormat: text("original_format"),
   ocrConfidence: numeric("ocr_confidence", { precision: 5, scale: 2 }),
+  ocrConfidenceScale: text("ocr_confidence_scale"),
   ocrRohtext: text("ocr_rohtext"),
   ocrPositionen: jsonb("ocr_positionen"),
   ocrProvider: text("ocr_provider"),
@@ -119,7 +120,11 @@ export const ausgangsrechnung = pgTable("ausgangsrechnung", {
   isDemo: boolean("is_demo").default(false),
   erstelltAm: timestamp("erstellt_am").defaultNow().notNull(),
   tenantId: text("tenant_id").notNull().default("galvanik-kreile"),
-});
+}, (table) => [
+  uniqueIndex("uq_ausgangsrechnung_tenant_nummer")
+    .on(table.tenantId, table.nummer)
+    .where(sql`${table.isDemo} is distinct from true`),
+]);
 
 export const ausgangsrechnungPosition = pgTable("ausgangsrechnung_position", {
   id: uuid("id").primaryKey().defaultRandom(),

@@ -13,18 +13,18 @@
 
 ## Verification summary
 
-- Full Vitest: 99 files / 403 tests passed; 2 files / 3 explicitly integration-gated tests skipped.
+- Full unit Vitest: 142 files / 639 tests passed; integration tests remain separately gated.
 - TypeScript: `npx tsc --noEmit` passed.
-- Production build: Next.js 16.2.6 Webpack build passed; 86/86 static pages generated.
-- ESLint ratchet: passed at the reviewed ceiling of 265 historical errors and 193 warnings; new file/rule/severity debt is rejected.
-- Dependency audit: high-severity gate passed after compatible lockfile updates; two moderate Next-internal PostCSS advisories remain documented.
-- Independent read-only review: no confirmed P0; two P1 and two P2 addenda were fixed, tested and confirmed closed.
+- Production build: Next.js 16.2.12 Webpack build passed; 86/86 static pages generated.
+- ESLint ratchet: passed at the reviewed ceiling of 107 historical errors and 144 warnings; new file/rule/severity debt is rejected.
+- Dependency audit: the installed production tree passes `npm audit --omit=dev --audit-level=high` with 0 vulnerabilities. The full development tree retains 9 high notices from `brace-expansion@1.1.16` in the ESLint-only `minimatch@3` path (no compatible 5.x API for that upstream stack) and 4 moderate esbuild notices through `drizzle-kit`; neither path is shipped in the application runtime.
+- Independent read-only review: no confirmed P0 or P1 remained; rollout-specific role, concurrency, truth-state and dependency addenda were fixed or explicitly bounded and reverified.
 
 ## Finding remediation ledger
 
 | Finding ID / slug | Status | Remediation evidence | Verification evidence |
 |---|---|---|---|
-| `csf_a97bb04fb0ecf77a23e97f7a` / `pin-online-bruteforce` | FIXED_LOCAL_ROLLOUT_REQUIRED | `auth.actions.ts`, `pinLoginAttempts.ts`, `durableRateLimit.ts`; bcrypt cost 12, selector/user-bound atomic budget before bcrypt, uniform failure response; migrations `20260714000200` and `20260715000100` | login/PIN selector, durable-rate-limit and migration contract tests; full suite PASS |
+| `csf_a97bb04fb0ecf77a23e97f7a` / `pin-online-bruteforce` | FIXED_LOCAL_ROLLOUT_REQUIRED | `auth.actions.ts`, `pinLoginAttempts.ts`, `durableRateLimit.ts`; bcrypt cost 12, selector/user-bound atomic budget before bcrypt, uniform failure response; migrations `20260714000200` and `20260713000100` | login/PIN selector, durable-rate-limit and migration contract tests; full suite PASS |
 | `csf_b1d2a6f11f8a94d1e06c9598` / `ocr-finance-authorization-bypass` | FIXED_LOCAL_ROLLOUT_REQUIRED | `api/ocr-process/route.ts`, `financeAuthorization.ts`; finance authorization before multipart/provider/storage/DB, server-derived tenant, private storage path; migration `20260715000200` | OCR authorization/storage negative tests, receipt-storage contract test; full suite PASS |
 | `csf_02a167d93690021cd51c9aac` / `finance-open-items-action-authorization` | FIXED_LOCAL | `buchhaltung/analysis.actions.ts`; action-local `perm_view_prices`, tenant predicates on invoice/revenue reads | finance authorization and active-finance truth tests; full suite PASS |
 | `csf_142bc2e6197356546fe359b4` / `finance-bwa-action-authorization` | FIXED_LOCAL | `buchhaltung/analysis.actions.ts`; finance guard and tenant-scoped BWA inputs | finance authorization and BWA truth coverage; full suite PASS |
@@ -35,13 +35,13 @@
 | `csf_1d89cf2ab085eb264acdccd7` / `mollie-stale-amount-reuse` | FIXED_LOCAL_ROLLOUT_REQUIRED | canonical DB quote, quote digest/lock, attempt reservation and stale-link handling in Mollie route/Edge code; migration `20260714000100` | payment security contract plus local PostgreSQL quote/attempt validation |
 | `csf_8ce59adfa2fe178d5b0bb55e` / `mollie-terminal-state-lock` | FIXED_LOCAL_ROLLOUT_REQUIRED | monotone `completed`/`failed`/`review_required` RPC transitions and idempotent invoice finalization in migration `20260714000100` | payment tests and local PostgreSQL terminal-state validation |
 | `csf_37945787789a77458b22ab0d` / `mollie-webhook-provider-amplification` | FIXED_LOCAL_ROLLOUT_REQUIRED | callback-token hash and local intent admission before provider I/O, bounded IDs/body, provider truth recheck | Mollie webhook/security tests; new secret, migration and Edge deploy still required |
-| `csf_f47b364e0d25539197d48c5e` / `ai-customer-enrich-unmetered` | FIXED_LOCAL_ROLLOUT_REQUIRED | `aiUsage.ts`, HMAC request identity, reserve/claim/settle before Gemini, bounded input/output/timeout; migration `20260715000300` | AI usage/input/migration tests and local PostgreSQL ledger validation |
+| `csf_f47b364e0d25539197d48c5e` / `ai-customer-enrich-unmetered` | FIXED_LOCAL_ROLLOUT_REQUIRED | `aiUsage.ts`, HMAC request identity, reserve/claim/settle before Gemini, bounded input/output/timeout; migration `20260713000200` | AI usage/input/migration tests and local PostgreSQL ledger validation |
 | `csf_b34e0b8570e39146fee7a686` / `ai-freetext-unmetered` | FIXED_LOCAL_ROLLOUT_REQUIRED | same durable identity-bound AI ledger and replay protection in proxy/Edge path | AI usage/input tests; remote ledger, secret and Edge deploy required |
 | `csf_b1d5c396e25f3bb32633385e` / `ai-inquiry-unmetered` | FIXED_LOCAL_ROLLOUT_REQUIRED | bounded inquiry input and durable quota claim before delegation | AI usage/input tests; remote rollout required |
 | `csf_ba6bae2507c35ebb90386223` / `ai-notes-unmetered` | FIXED_LOCAL_ROLLOUT_REQUIRED | bounded notes input, identity-bound claim and monotone settlement | AI usage/input tests; remote rollout required |
 | `csf_87b0ea60983486e512eba7e6` / `kpi-insight-unmetered` | FIXED_LOCAL_ROLLOUT_REQUIRED | shared ledger for direct/service calls, KPI allowlist, field/byte/output/time limits | AI usage/input tests; remote rollout required |
 | `csf_3b2e96fad00b4e98e0f1c77e` / `item-photo-permission-bypass` | FIXED_LOCAL | `api/erfassung/item-photo-upload/route.ts`; fixed tenant, `perm_op_photos` and item ownership before multipart/storage/provider | item-photo permission negative tests; full suite PASS |
-| `csf_666c23bca743bd4a24e95251` / `item-photo-unmetered` | FIXED_LOCAL_ROLLOUT_REQUIRED | quota before allocation, content hash dedupe, private object, durable job and one-time vision claim; migration `20260715000400` | item-photo job/migration tests and local PostgreSQL validation |
+| `csf_666c23bca743bd4a24e95251` / `item-photo-unmetered` | FIXED_LOCAL_ROLLOUT_REQUIRED | quota before allocation, content hash dedupe, private object, durable job and one-time vision claim; migration `20260713000300` | item-photo job/migration tests and local PostgreSQL validation |
 | `csf_409f90bcdd445a958f7a975e` / `scan-upload-permission-bypass` | FIXED_LOCAL | `api/erfassung/scan-upload/route.ts`; `perm_data_orders` before multipart and all storage/DB/AI sinks | scan-upload readonly negative test; full suite PASS |
 | `csf_c0318dda81e41a30da01cb7d` / `session-revocation-gap` | FIXED_LOCAL | signed session is revalidated against current tenant/user/role/active state in proxy and canonical authorization resolver | app-session, proxy-session-state and auth-helper negative tests; full suite PASS |
 | `csf_3dddd52d6f27462d66a2abcd` / `ai-customer-enrich-readonly` | FIXED_LOCAL | `perm_data_customers` before body, quota and provider | readonly zero-delegation tests; full suite PASS |

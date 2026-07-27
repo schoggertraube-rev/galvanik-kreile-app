@@ -3,11 +3,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AlertTriangle, Sparkles } from "lucide-react";
 import { getBuchhaltungProvider } from "@/lib/buchhaltung";
-import type { UstvaWerte, Ersparnis } from "@/lib/buchhaltung/types";
+import type { UstvaWerte } from "@/lib/buchhaltung/types";
 
 export function HeroBand() {
   const [ustva, setUstva] = useState<UstvaWerte | null>(null);
-  const [ersparnis, setErsparnis] = useState<Ersparnis | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -19,17 +18,12 @@ export function HeroBand() {
       const zeitraum = { von: monatsAnfang, bis: monatsEnde };
 
       try {
-        const [u, e] = await Promise.all([
-          provider.berechneUstva(zeitraum),
-          provider.getErsparnis(now.getFullYear()),
-        ]);
-        setUstva(u);
-        setErsparnis(e);
+        const result = await provider.berechneUstva(zeitraum);
+        setUstva(result);
         setLoadError(null);
       } catch (error) {
-        console.error("Accounting hero unavailable", error);
+        console.error("Accounting VAT work state unavailable", error);
         setUstva(null);
-        setErsparnis(null);
         setLoadError("Buchhaltungs-Arbeitswerte konnten nicht bestätigt geladen werden.");
       }
     };
@@ -64,9 +58,9 @@ export function HeroBand() {
           </div>
           <div>
             <div className="text-2xl font-extrabold text-navy-900 tracking-tight">
-              {ersparnis?.anzahlAutoBelege ?? "—"}
+              —
             </div>
-            <div className="text-xs text-text-muted mt-1">Belege über konfigurierter OCR-Schwelle · Quote {ersparnis ? `${ersparnis.prozentAutomatisch} %` : "—"}</div>
+            <div className="text-xs text-text-muted mt-1">Zeitersparnis nicht durch gespeicherte Arbeitszeitbelege nachgewiesen</div>
           </div>
           <div>
             <div className="text-2xl font-extrabold text-amber-600 tracking-tight">
@@ -92,12 +86,12 @@ export function HeroBand() {
 
       <div className="bg-linear-to-br from-emerald-500 to-emerald-700 text-white rounded-2xl p-6 flex flex-col justify-center relative overflow-hidden">
         <div className="absolute -right-8 -bottom-8 w-40 h-40 rounded-full bg-white/8 pointer-events-none" />
-        <div className="text-xs font-bold uppercase tracking-widest opacity-85 mb-2">Modellierter Zeitwert {new Date().getFullYear()}</div>
+        <div className="text-xs font-bold uppercase tracking-widest opacity-85 mb-2">Zeitersparnis {new Date().getFullYear()}</div>
         <div className="text-4xl font-extrabold tracking-tight">
-          {ersparnis ? ersparnis.betrag.toLocaleString("de-DE") : "—"} <span className="text-lg">€</span>
+          —
         </div>
         <p className="text-sm opacity-90 mt-3 leading-relaxed relative z-10">
-          Annahme aus Konfiguration: {ersparnis ? <><strong>{ersparnis.anzahlAutoBelege} Belege</strong> × <strong>{ersparnis.minutenProBeleg} Minuten</strong> × <strong>{ersparnis.beraterStundensatz.toLocaleString("de-DE")} €/h</strong></> : "nicht verfügbar"}. Kein Nachweis tatsächlich eingesparter Kosten.
+          Nicht belegt. OCR-Confidence und konfigurierte Minuten- oder Stundensätze weisen weder Automatisierung noch tatsächlich eingesparte Arbeitszeit oder Kosten nach.
         </p>
       </div>
     </div>

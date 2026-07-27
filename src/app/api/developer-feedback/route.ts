@@ -65,7 +65,6 @@ export async function POST(request: Request) {
       route: input.route,
       message: input.message,
       buildId,
-      status: 'new',
     }).onConflictDoNothing({
       target: [developerFeedback.tenantId, developerFeedback.actorPseudonym, developerFeedback.clientRequestId],
     }).returning({ id: developerFeedback.id, createdAt: developerFeedback.createdAt })

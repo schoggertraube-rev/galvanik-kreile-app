@@ -3,7 +3,8 @@
 -- operational server boundary. Existing rows are only backfilled from their
 -- already-proven parent order; ambiguous attribution aborts.
 
-BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 
 ALTER TABLE public.customers
   ADD COLUMN IF NOT EXISTS address text,
@@ -279,5 +280,3 @@ ALTER TABLE public.qs FORCE ROW LEVEL SECURITY;
 REVOKE ALL PRIVILEGES ON TABLE public.qs
   FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON TABLE public.qs TO service_role;
-
-COMMIT;

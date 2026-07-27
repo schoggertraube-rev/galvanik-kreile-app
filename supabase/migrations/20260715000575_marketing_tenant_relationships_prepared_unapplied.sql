@@ -7,7 +7,8 @@
 -- their storage tenant here is required for referential integrity and does not
 -- promote them into verified application reads.
 
-BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 
 DO $tenant_columns$
 DECLARE
@@ -287,5 +288,3 @@ ALTER TABLE public.feedback_eingang
   ADD CONSTRAINT feedback_eingang_tenant_feedback_mail_fkey
     FOREIGN KEY (tenant_id, feedback_mail_id)
     REFERENCES public.feedback_mail (tenant_id, id) ON DELETE RESTRICT;
-
-COMMIT;

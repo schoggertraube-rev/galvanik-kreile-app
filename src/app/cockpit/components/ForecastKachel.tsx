@@ -2,20 +2,46 @@
 
 import { useEffect, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Area, ComposedChart, Bar, Legend } from "recharts";
-import { getForecastDaten } from "../actions";
+import { getForecastDaten, type ForecastData } from "../actions";
 import { Calendar, Loader2, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 
+type ForecastChartPoint = {
+  monat: string;
+  umsatz: number | null;
+  istWert: boolean;
+  pipelineGewichtet: number;
+  pipelineUngewichtet: number;
+  plan: number | null;
+};
+
 export function ForecastKachel() {
-  const [data, setData] = useState<{ monate: any[], pipeline: any[], plan?: Record<string, number> | null } | null>(null);
+  const [data, setData] = useState<ForecastData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notConfigured, setNotConfigured] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
-      const res = await getForecastDaten();
-      setData(res);
-      setLoading(false);
+      try {
+        const res = await getForecastDaten();
+        if (res.status === "not_configured") {
+          setData(null);
+          setNotConfigured(true);
+          setLoadError(null);
+        } else {
+          setData(res.data);
+          setNotConfigured(false);
+          setLoadError(null);
+        }
+      } catch {
+        setData(null);
+        setNotConfigured(false);
+        setLoadError("Der Forecast-Status konnte nicht geladen werden.");
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
@@ -28,9 +54,31 @@ export function ForecastKachel() {
     );
   }
 
+  if (notConfigured) {
+    return (
+      <div className="bg-white rounded-2xl border border-neutral-gray-200 shadow-sm flex flex-col h-[350px] items-center justify-center p-8 text-center">
+        <Calendar className="w-8 h-8 text-neutral-gray-400 mb-3" />
+        <h3 className="font-bold text-navy-900">Forecast nicht konfiguriert</h3>
+        <p role="status" className="mt-2 text-sm text-neutral-gray-600">
+          Es werden keine Pipeline-Werte geschätzt.
+        </p>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="bg-white rounded-2xl border border-red-200 shadow-sm flex flex-col h-[350px] items-center justify-center p-8 text-center">
+        <Calendar className="w-8 h-8 text-red-500 mb-3" />
+        <h3 className="font-bold text-navy-900">Forecast nicht geladen</h3>
+        <p role="alert" className="mt-2 text-sm text-red-700">{loadError}</p>
+      </div>
+    );
+  }
+
   // Combine historical and pipeline data
   // Pipeline months start from current month and go forward
-  const chartData = [...(data?.monate || [])].map(m => {
+  const chartData: ForecastChartPoint[] = [...(data?.monate || [])].map(m => {
     const monatDate = new Date(m.monat);
     const monatIdx = monatDate.getMonth() + 1;
     return {
@@ -39,7 +87,7 @@ export function ForecastKachel() {
       istWert: true,
       pipelineGewichtet: 0,
       pipelineUngewichtet: 0,
-      plan: data?.plan ? (data.plan[String(monatIdx)] || 0) : 0
+      plan: data?.plan ? (data.plan[String(monatIdx)] ?? null) : null
     };
   });
 
@@ -51,15 +99,15 @@ export function ForecastKachel() {
     if (existing) {
       existing.pipelineGewichtet += p.pipeline_wert_gewichtet;
       existing.pipelineUngewichtet += p.pipeline_wert_ungewichtet;
-      existing.plan = data?.plan ? (data.plan[String(pDate.getMonth() + 1)] || 0) : 0;
+      existing.plan = data?.plan ? (data.plan[String(pDate.getMonth() + 1)] ?? null) : null;
     } else {
       chartData.push({
         monat: mStr,
-        umsatz: 0,
+        umsatz: null,
         istWert: false,
         pipelineGewichtet: p.pipeline_wert_gewichtet,
         pipelineUngewichtet: p.pipeline_wert_ungewichtet,
-        plan: data?.plan ? (data.plan[String(pDate.getMonth() + 1)] || 0) : 0
+        plan: data?.plan ? (data.plan[String(pDate.getMonth() + 1)] ?? null) : null
       });
     }
   });
@@ -94,13 +142,6 @@ export function ForecastKachel() {
           </div>
         ) : (
           <div className="flex-1 min-h-0 w-full relative">
-            <div className="absolute top-0 right-0 bg-white/90 px-3 py-2 rounded-lg text-xs border border-neutral-gray-200 shadow-sm z-10 mb-4 max-w-[200px]">
-              <div className="font-bold mb-1">Wahrscheinlichkeiten (Annahmen):</div>
-              <div>• {"<"} 7 Tage: 80%</div>
-              <div>• {"<"} 21 Tage: 60%</div>
-              <div>• {"<"} 45 Tage: 30%</div>
-              <div>• {">"} 45 Tage: 10%</div>
-            </div>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />

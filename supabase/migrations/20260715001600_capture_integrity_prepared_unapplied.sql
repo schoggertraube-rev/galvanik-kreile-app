@@ -1,7 +1,8 @@
 -- PREPARED ONLY: do not apply remotely without explicit approval.
 -- Makes operational time/material capture tenant-bound, atomic and idempotent.
 
-BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 
 DO $required_contracts$
 BEGIN
@@ -51,10 +52,39 @@ ALTER TABLE public.audit_log
   ADD COLUMN IF NOT EXISTS tenant_id text,
   ADD COLUMN IF NOT EXISTS client_request_id uuid;
 
-UPDATE public.audit_log
-SET tenant_id = 'galvanik-kreile'
-WHERE (tenant_id IS NULL OR btrim(tenant_id) = '')
-  AND payload->>'tenant_id' = 'galvanik-kreile';
+DO $audit_tenant_source_consistency$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.audit_log audit
+    JOIN public.app_users actor ON actor.id = audit.actor_id
+    WHERE actor.tenant_id IS NULL
+       OR btrim(actor.tenant_id) = ''
+       OR (
+         audit.tenant_id IS NOT NULL
+         AND btrim(audit.tenant_id) <> ''
+         AND audit.tenant_id <> actor.tenant_id
+       )
+       OR (
+         audit.payload->>'tenant_id' IS NOT NULL
+         AND btrim(audit.payload->>'tenant_id') <> ''
+         AND audit.payload->>'tenant_id' <> actor.tenant_id
+       )
+  ) THEN
+    RAISE EXCEPTION 'Legacy audit tenant sources conflict with their actor';
+  END IF;
+END
+$audit_tenant_source_consistency$;
+
+-- An actor is a relational tenant proof: app_users.id is unique and the later
+-- composite FK validates the inferred tenant/actor pair.
+UPDATE public.audit_log audit
+SET tenant_id = actor.tenant_id
+FROM public.app_users actor
+WHERE audit.actor_id = actor.id
+  AND actor.tenant_id IS NOT NULL
+  AND btrim(actor.tenant_id) <> ''
+  AND (audit.tenant_id IS NULL OR btrim(audit.tenant_id) = '');
 
 DO $audit_tenant_truth$
 BEGIN
@@ -189,16 +219,23 @@ BEGIN
     RAISE EXCEPTION 'Capture writer columns do not match the canonical write contract';
   END IF;
 
-  IF EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'public.arbeitszeit_buchung'::regclass AND contype = 'p'
+	  IF EXISTS (
+	    SELECT 1 FROM pg_constraint
+	    WHERE conrelid = 'public.arbeitszeit_buchung'::regclass AND contype = 'p'
       AND conkey <> ARRAY[
         (SELECT attnum FROM pg_attribute
          WHERE attrelid = 'public.arbeitszeit_buchung'::regclass AND attname = 'id')
       ]::smallint[]
-  ) OR EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'public.capture_request_receipts'::regclass AND contype = 'p'
+	  ) OR EXISTS (
+	    SELECT 1 FROM pg_constraint
+	    WHERE conrelid = 'public.audit_log'::regclass AND contype = 'p'
+	      AND conkey <> ARRAY[
+	        (SELECT attnum FROM pg_attribute
+	         WHERE attrelid = 'public.audit_log'::regclass AND attname = 'id')
+	      ]::smallint[]
+	  ) OR EXISTS (
+	    SELECT 1 FROM pg_constraint
+	    WHERE conrelid = 'public.capture_request_receipts'::regclass AND contype = 'p'
       AND conkey <> ARRAY[
         (SELECT attnum FROM pg_attribute
          WHERE attrelid = 'public.capture_request_receipts'::regclass AND attname = 'id')
@@ -215,7 +252,10 @@ ALTER TABLE public.arbeitszeit_buchung
   ALTER COLUMN erstellt_am SET DEFAULT now(),
   ALTER COLUMN aktualisiert_am SET DEFAULT now();
 ALTER TABLE public.audit_log
-  ALTER COLUMN created_at SET DEFAULT now();
+  ALTER COLUMN id SET DEFAULT (gen_random_uuid())::text,
+  ALTER COLUMN id SET NOT NULL,
+  ALTER COLUMN created_at SET DEFAULT now(),
+  ALTER COLUMN created_at SET NOT NULL;
 ALTER TABLE public.capture_request_receipts
   ALTER COLUMN id SET DEFAULT gen_random_uuid(),
   ALTER COLUMN id SET NOT NULL,
@@ -224,15 +264,22 @@ ALTER TABLE public.capture_request_receipts
 
 DO $capture_writer_primary_keys$
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conrelid = 'public.arbeitszeit_buchung'::regclass AND contype = 'p'
+	  IF NOT EXISTS (
+	    SELECT 1 FROM pg_constraint
+	    WHERE conrelid = 'public.arbeitszeit_buchung'::regclass AND contype = 'p'
   ) THEN
     ALTER TABLE public.arbeitszeit_buchung
-      ADD CONSTRAINT arbeitszeit_buchung_pkey PRIMARY KEY (id);
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
+	      ADD CONSTRAINT arbeitszeit_buchung_pkey PRIMARY KEY (id);
+	  END IF;
+	  IF NOT EXISTS (
+	    SELECT 1 FROM pg_constraint
+	    WHERE conrelid = 'public.audit_log'::regclass AND contype = 'p'
+	  ) THEN
+	    ALTER TABLE public.audit_log
+	      ADD CONSTRAINT audit_log_pkey PRIMARY KEY (id);
+	  END IF;
+	  IF NOT EXISTS (
+	    SELECT 1 FROM pg_constraint
     WHERE conrelid = 'public.capture_request_receipts'::regclass AND contype = 'p'
   ) THEN
     ALTER TABLE public.capture_request_receipts
@@ -671,7 +718,9 @@ BEGIN
     RAISE EXCEPTION 'A non-superuser service_role with BYPASSRLS is required';
   END IF;
   GRANT SELECT, INSERT ON TABLE public.arbeitszeit_buchung TO service_role;
-  GRANT INSERT ON TABLE public.audit_log TO service_role;
+	  GRANT INSERT (
+	    tenant_id, client_request_id, action, table_name, record_id, actor_id, payload
+	  ) ON TABLE public.audit_log TO service_role;
   GRANT SELECT ON TABLE public.vorlage_zeit TO service_role;
   GRANT SELECT ON TABLE public.vorlage_verbrauch TO service_role;
   GRANT SELECT ON TABLE public.kostensatz_default TO service_role;
@@ -702,9 +751,17 @@ BEGIN
         (SELECT attnum FROM pg_attribute
          WHERE attrelid = 'public.arbeitszeit_buchung'::regclass AND attname = 'id')
       ]::smallint[]
-  ) OR NOT EXISTS (
-    SELECT 1 FROM pg_constraint constraint_row
-    WHERE constraint_row.conrelid = 'public.capture_request_receipts'::regclass
+	  ) OR NOT EXISTS (
+	    SELECT 1 FROM pg_constraint constraint_row
+	    WHERE constraint_row.conrelid = 'public.audit_log'::regclass
+	      AND constraint_row.contype = 'p' AND constraint_row.convalidated
+	      AND constraint_row.conkey = ARRAY[
+	        (SELECT attnum FROM pg_attribute
+	         WHERE attrelid = 'public.audit_log'::regclass AND attname = 'id')
+	      ]::smallint[]
+	  ) OR NOT EXISTS (
+	    SELECT 1 FROM pg_constraint constraint_row
+	    WHERE constraint_row.conrelid = 'public.capture_request_receipts'::regclass
       AND constraint_row.contype = 'p' AND constraint_row.convalidated
       AND constraint_row.conkey = ARRAY[
         (SELECT attnum FROM pg_attribute
@@ -714,9 +771,17 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'arbeitszeit_buchung'
       AND column_name = 'id' AND column_default ILIKE '%gen_random_uuid()%'
-  ) OR NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'capture_request_receipts'
+	  ) OR NOT EXISTS (
+	    SELECT 1 FROM information_schema.columns
+	    WHERE table_schema = 'public' AND table_name = 'audit_log'
+	      AND column_name = 'id' AND column_default ILIKE '%gen_random_uuid()%'
+	  ) OR NOT EXISTS (
+	    SELECT 1 FROM information_schema.columns
+	    WHERE table_schema = 'public' AND table_name = 'audit_log'
+	      AND column_name = 'created_at' AND column_default ILIKE '%now()%'
+	  ) OR NOT EXISTS (
+	    SELECT 1 FROM information_schema.columns
+	    WHERE table_schema = 'public' AND table_name = 'capture_request_receipts'
       AND column_name = 'id' AND column_default ILIKE '%gen_random_uuid()%'
   ) OR NOT EXISTS (
     SELECT 1 FROM information_schema.columns
@@ -793,8 +858,8 @@ BEGIN
   IF NOT has_table_privilege('service_role', 'public.arbeitszeit_buchung', 'SELECT')
      OR NOT has_table_privilege('service_role', 'public.arbeitszeit_buchung', 'INSERT')
      OR has_table_privilege('service_role', 'public.arbeitszeit_buchung', 'UPDATE')
-     OR NOT has_table_privilege('service_role', 'public.audit_log', 'INSERT')
-     OR has_table_privilege('service_role', 'public.audit_log', 'SELECT')
+	     OR has_table_privilege('service_role', 'public.audit_log', 'INSERT')
+	     OR has_table_privilege('service_role', 'public.audit_log', 'SELECT')
      OR NOT has_table_privilege('service_role', 'public.capture_request_receipts', 'SELECT')
      OR has_table_privilege('service_role', 'public.capture_request_receipts', 'INSERT')
      OR has_table_privilege('service_role', 'public.capture_request_receipts', 'UPDATE')
@@ -814,9 +879,34 @@ BEGIN
     END IF;
   END LOOP;
 
-  IF EXISTS (
-    SELECT 1
-    FROM pg_attribute attribute
+	  IF EXISTS (
+	    SELECT 1
+	    FROM pg_attribute attribute
+	    WHERE attribute.attrelid = 'public.audit_log'::regclass
+	      AND attribute.attnum > 0 AND NOT attribute.attisdropped
+	      AND attribute.attname NOT IN (
+	        'tenant_id', 'client_request_id', 'action', 'table_name',
+	        'record_id', 'actor_id', 'payload'
+	      )
+	      AND has_column_privilege(
+	        'service_role', 'public.audit_log', attribute.attnum, 'INSERT'
+	      )
+	  ) OR EXISTS (
+	    SELECT 1
+	    FROM unnest(ARRAY[
+	      'tenant_id', 'client_request_id', 'action', 'table_name',
+	      'record_id', 'actor_id', 'payload'
+	    ]) column_name
+	    WHERE NOT has_column_privilege(
+	      'service_role', 'public.audit_log', column_name, 'INSERT'
+	    )
+	  ) THEN
+	    RAISE EXCEPTION 'Audit INSERT columns are missing or overprivileged';
+	  END IF;
+
+	  IF EXISTS (
+	    SELECT 1
+	    FROM pg_attribute attribute
     WHERE attribute.attrelid = 'public.capture_request_receipts'::regclass
       AND attribute.attnum > 0 AND NOT attribute.attisdropped
       AND attribute.attname NOT IN ('result', 'completed_at')
@@ -905,5 +995,3 @@ BEGIN
   END IF;
 END
 $verification$;
-
-COMMIT;

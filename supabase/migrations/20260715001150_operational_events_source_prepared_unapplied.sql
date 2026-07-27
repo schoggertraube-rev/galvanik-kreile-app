@@ -3,8 +3,8 @@
 -- previously assumed out-of-band. Applying only this migration leaves event
 -- access closed; 01200 grants the exact service_role read/append contract.
 
-BEGIN;
-
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 SET LOCAL search_path = pg_catalog, pg_temp;
 
 DO $preflight$
@@ -455,5 +455,3 @@ BEGIN
   END IF;
 END;
 $verification$;
-
-COMMIT;

@@ -16,6 +16,24 @@ describe('period close migration', () => {
     expect(migration).toContain('FINAL_PERIOD_IMMUTABLE')
     expect(migration).toContain('beleg_final_period_guard')
     expect(migration).toContain('ausgangsrechnung_final_period_guard')
+    expect(migration).toContain('beleg_position_final_period_guard')
+    expect(migration).toContain('kraftstoff_detail_final_period_guard')
+    expect(migration).toContain('ausgangsrechnung_position_final_period_guard')
+    expect(migration).toContain('orders_final_finance_period_guard')
+    expect(migration).toContain('FOR SHARE')
+  })
+
+  it('binds replays to actor, action, entity, and the persisted result', () => {
+    expect(migration).toContain('existing_actor <> p_actor')
+    expect(migration).toContain("existing_entity_type <> 'periode'")
+    expect(migration).toContain("existing_after->>'geschlossen_am'")
+    expect(migration).toContain('existing_state_confirmed')
+  })
+
+  it('blocks unassigned monthly evidence instead of silently excluding it', () => {
+    expect(migration).toMatch(/public\.beleg b[\s\S]*b\.periode_id IS NULL/)
+    expect(migration).toMatch(/public\.ausgangsrechnung r[\s\S]*r\.periode_id IS NULL/)
+    expect(migration).toContain("AT TIME ZONE 'Europe/Berlin'")
   })
 
   it('keeps period mutation behind the server-only function', () => {

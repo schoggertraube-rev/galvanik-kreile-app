@@ -144,6 +144,7 @@ export const captureWriteCapabilityQuery = sql<CapabilityRow>`
   required_primary_keys(table_name, columns) as (
     values
       ('arbeitszeit_buchung', ARRAY['id']),
+      ('audit_log', ARRAY['id']),
       ('capture_request_receipts', ARRAY['id'])
   ),
   required_defaults(table_name, column_name, fragment) as (
@@ -151,6 +152,7 @@ export const captureWriteCapabilityQuery = sql<CapabilityRow>`
       ('arbeitszeit_buchung', 'id', 'gen_random_uuid()'),
       ('arbeitszeit_buchung', 'erstellt_am', 'now()'),
       ('arbeitszeit_buchung', 'aktualisiert_am', 'now()'),
+      ('audit_log', 'id', 'gen_random_uuid()'),
       ('audit_log', 'created_at', 'now()'),
       ('vorlage_zeit', 'is_active', 'false'),
       ('vorlage_verbrauch', 'is_active', 'false'),
@@ -918,7 +920,7 @@ export const captureWriteCapabilityQuery = sql<CapabilityRow>`
     and exists (
       select 1 from protected_relations protected join pg_roles role on role.rolname = 'service_role'
       where protected.relname = 'audit_log'
-        and has_table_privilege(role.oid, protected.oid, 'INSERT')
+        and not has_table_privilege(role.oid, protected.oid, 'INSERT')
         and not has_table_privilege(role.oid, protected.oid, 'SELECT')
         and not has_table_privilege(role.oid, protected.oid, 'UPDATE')
     )
@@ -964,7 +966,26 @@ export const captureWriteCapabilityQuery = sql<CapabilityRow>`
       join pg_roles role on role.rolname = 'service_role'
       join pg_attribute att on att.attrelid = protected.oid and att.attnum > 0 and not att.attisdropped
       where protected.relname = 'audit_log'
-        and has_column_privilege(role.oid, protected.oid, att.attnum, 'SELECT')
+        and (
+          has_column_privilege(role.oid, protected.oid, att.attnum, 'SELECT')
+          or (
+            att.attname not in (
+              'tenant_id', 'client_request_id', 'action', 'table_name',
+              'record_id', 'actor_id', 'payload'
+            )
+            and has_column_privilege(role.oid, protected.oid, att.attnum, 'INSERT')
+          )
+        )
+    )
+    and not exists (
+      select 1
+      from (values
+        ('tenant_id'), ('client_request_id'), ('action'), ('table_name'),
+        ('record_id'), ('actor_id'), ('payload')
+      ) required(column_name)
+      where not has_column_privilege(
+        'service_role', 'public.audit_log', required.column_name, 'INSERT'
+      )
     )
     and not exists (
       select 1 from protected_relations protected

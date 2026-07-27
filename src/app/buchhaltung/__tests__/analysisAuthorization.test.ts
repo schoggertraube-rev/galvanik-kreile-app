@@ -132,6 +132,18 @@ describe("Buchhaltung analysis Server Action boundary", () => {
       });
   });
 
+  it("returns the canonical missing-evidence state instead of a modeled savings value", async () => {
+    mockRequireFinanceRead.mockResolvedValue(actor);
+
+    await expect(actions.getSparzaehlerAnalysisAction("2026-01-01", "2026-12-31"))
+      .resolves.toEqual({
+        state: "not_evidenced",
+        data: null,
+        reason: "FINANCE_SAVINGS_NOT_EVIDENCED",
+      });
+    expect(mockDbSelect).not.toHaveBeenCalled();
+  });
+
   it("marks an all-null expense category as a known partial subtotal", async () => {
     mockRequireFinanceRead.mockResolvedValue(actor);
     mockDbSelect.mockImplementationOnce(() => queryWithRows([{

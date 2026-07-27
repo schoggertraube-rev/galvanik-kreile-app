@@ -2,7 +2,8 @@
 -- Closes legacy public Data API policies for calendar_events and price_lines.
 -- App authorization and tenant ownership remain enforced in Server Actions.
 
-BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 
 DO $boundary$
 DECLARE
@@ -76,5 +77,3 @@ BEGIN
   END IF;
 END
 $verification$;
-
-COMMIT;

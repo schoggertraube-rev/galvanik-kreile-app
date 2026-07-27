@@ -128,6 +128,7 @@ describe("operational capture truth boundary", () => {
 
   it("prepares but does not apply the tenant, RLS and receipt migration", () => {
     const migration = source("supabase/migrations/20260715001600_capture_integrity_prepared_unapplied.sql");
+    const capability = source("src/lib/server/captureWriteCapability.ts");
     expect(migration).toContain("PREPARED ONLY");
     expect(migration).toContain("capture_request_receipts");
     expect(migration).toContain("capture_request_receipts_tenant_request_kind_uidx");
@@ -137,6 +138,15 @@ describe("operational capture truth boundary", () => {
     expect(migration).not.toContain("SET current_stock = 0");
     expect(migration).toContain("capture_request_receipts_tenant_order_fk");
     expect(migration).toContain("capture_request_receipts_tenant_actor_fk");
+    expect(migration).toContain("UPDATE public.audit_log audit");
+    expect(migration).toContain("audit.tenant_id <> actor.tenant_id");
+    expect(migration).not.toContain("SET tenant_id = 'galvanik-kreile'");
+    expect(migration).toContain("ADD CONSTRAINT audit_log_pkey PRIMARY KEY (id)");
+    expect(migration).toContain("ALTER COLUMN id SET DEFAULT (gen_random_uuid())::text");
+    expect(migration).toContain("GRANT INSERT (");
+    expect(capability).toContain("('audit_log', 'id', 'gen_random_uuid()')");
+    expect(capability).toContain("('audit_log', ARRAY['id'])");
+    expect(capability).toContain("'service_role', 'public.audit_log', required.column_name, 'INSERT'");
     expect(migration).toContain("ENABLE ROW LEVEL SECURITY");
     expect(migration).toContain("FORCE ROW LEVEL SECURITY");
     expect(migration).toContain("REVOKE ALL PRIVILEGES");
@@ -154,7 +164,7 @@ describe("operational capture truth boundary", () => {
     expect(projection).toContain("PREPARED, NOT APPLIED");
     expect(projection).toContain("migration_owner oid := (SELECT oid FROM pg_roles WHERE rolname = current_user)");
     expect(projection).toContain("legacy function owner differs from migration owner");
-    expect(projection).toContain("migration owner must bypass RLS");
+    expect(projection).toContain("migration owner, service_role or database privilege contract is unsafe");
     expect(projection).toContain("DO $function_acl_reset$");
     expect(projection).toContain("FROM PUBLIC CASCADE");
     expect(projection).not.toContain("CREATE ROLE kreile_template_writer");

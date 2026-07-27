@@ -69,7 +69,7 @@ describe('marketing tenant graph contract', () => {
   it('mirrors the database tenant keys and foreign keys in the Drizzle schema', () => {
     const schema = source('src/db/schema_marketing.ts')
     expect(schema).not.toMatch(/\.references\(\(\) => (kampagne|kanal|segment|aktion|touchpoint|marketingAsset|feedbackMail)\.id/)
-    expect(schema.match(/columns: \[table\.tenantId, table\./g)).toHaveLength(19)
+    expect(schema.match(/columns: \[table\.tenantId, table\./g)).toHaveLength(20)
     expect(schema).toContain('uniqueIndex("touchpoint_externe_ref_uidx").on(table.tenantId, table.externeRef)')
     expect(schema).toContain('uniqueIndex("marketing_publish_job_action_uidx").on(table.tenantId, table.aktionId)')
   })

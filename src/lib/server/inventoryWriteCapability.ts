@@ -60,6 +60,7 @@ export const inventoryWriteCapabilityQuery = sql<CapabilityRow>`
       ('inventory_items', 'inventory_items_tenant_nonblank_chk', ARRAY['CHECK', 'btrim', 'tenant_id', '<>', '''''']),
       ('inventory_items', 'inventory_items_unit_nonblank_chk', ARRAY['CHECK', 'btrim', 'unit', '<>', '''''']),
       ('stock_movements', 'stock_movements_quantity_nonzero', ARRAY['CHECK', 'quantity', '::text', 'NaN', 'Infinity', '<>', '0']),
+      ('stock_movements', 'stock_movements_quantity_domain_chk', ARRAY['CHECK', 'quantity', '::text', 'NaN', 'Infinity', 'abs', '10000000000', 'round', '4']),
       ('stock_movements', 'stock_movements_type_chk', ARRAY['CHECK', 'movement_type', 'stock_in', 'stock_out', 'consumption', 'verbrauch', 'correction', 'waste']),
       ('stock_movements', 'stock_movements_quantity_direction_chk', ARRAY['CHECK', 'movement_type', 'stock_in', 'quantity', '>', '0', 'stock_out', 'consumption', 'verbrauch', 'waste', '<', 'correction', '<>']),
       ('stock_movements', 'stock_movements_reason_required_chk', ARRAY['CHECK', 'movement_type', 'correction', 'waste', 'reason', 'IS NOT NULL', 'btrim', '<>', '''''']),

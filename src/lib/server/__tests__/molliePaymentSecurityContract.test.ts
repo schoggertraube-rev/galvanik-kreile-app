@@ -15,6 +15,17 @@ const migration = fs.readFileSync(
   path.join(root, "supabase/migrations/20260714000100_payment_idempotency_prepared_unapplied.sql"),
   "utf8",
 );
+const runtimeMigration = fs.readFileSync(
+  path.join(
+    root,
+    "supabase/migrations/20260715001650_capture_template_projection_reconciliation_prepared_unapplied.sql",
+  ),
+  "utf8",
+);
+const runtimePredicate = fs.readFileSync(
+  path.join(root, "src/lib/server/databaseRuntimeIdentity.ts"),
+  "utf8",
+);
 
 describe("Mollie payment security contracts", () => {
   it("admits callbacks locally before the first provider request", () => {
@@ -52,9 +63,43 @@ describe("Mollie payment security contracts", () => {
   it("locks active quotes and rechecks current quote inside atomic finalization", () => {
     expect(migration).toContain("CREATE UNIQUE INDEX IF NOT EXISTS uq_payments_active_order");
     expect(migration).toContain("ACTIVE_PAYMENT_LOCKS_QUOTE");
+    expect(migration).toContain("PAYMENT_ACTIVE_PROVIDER_CONFLICT");
+    expect(migration).toContain("PAYMENT_RESERVATION_TRUTH_MISMATCH");
     expect(migration).toContain("get_mollie_payment_quote(v_payment.tenant_id, v_payment.order_id)");
     expect(migration).toContain("PAYMENT_QUOTE_STALE");
     expect(migration).toContain("'PAYMENT_PAID'");
+  });
+
+  it("uses the order row as the canonical quote mutex and maps reconciliation conflicts honestly", () => {
+    expect(migration).not.toContain("pg_advisory_xact_lock(hashtextextended(p_tenant_id || ':' || p_order_id");
+    expect(migration).toContain("FOR NO KEY UPDATE");
+    expect(createSource).toContain("PAYMENT_ACTIVE_PROVIDER_CONFLICT");
+    expect(createSource).toContain("PAYMENT_RESERVATION_TRUTH_MISMATCH");
+    expect(createSource).toContain("Existing payment requires manual review");
+  });
+
+  it("pins pgcrypto outside every SECURITY DEFINER search path", () => {
+    expect(migration).toContain("CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions");
+    expect(migration).toContain("to_regprocedure('extensions.digest(bytea,text)')");
+    expect(migration).toContain("extensions.digest(");
+    expect(migration).toContain("SET search_path = pg_catalog, public, pg_temp");
+    expect(migration).not.toContain("SET search_path = pg_catalog, extensions, public, pg_temp");
+    expect(migration).not.toContain("encode(digest(");
+
+    const expectedReceipt =
+      "('public.get_mollie_payment_quote(text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'e1387b5f181cf370a9134565723908a0', '25fcd431d639b3f1d67c0f218290871e', true, true)";
+    for (const contract of [runtimeMigration, runtimePredicate]) {
+      expect(contract).toContain(expectedReceipt);
+      expect(contract).not.toContain("64323e588243eb11d29f2e27270c0104");
+      expect(contract).not.toContain("search_path=pg_catalog, extensions, public, pg_temp");
+    }
+  });
+
+  it("owns a bounded invoice sequence without exposing direct sequence privileges", () => {
+    expect(migration).toContain("MAXVALUE 999999 NO CYCLE");
+    expect(migration).toContain("invoice sequence suffix exceeds the six-digit contract");
+    expect(migration).toContain("REVOKE ALL ON SEQUENCE public.ausgangsrechnung_nummer_seq");
+    expect(migration).toContain("INVOICE_NUMBER_SEQUENCE_EXHAUSTED");
   });
 
   it("keeps all payment RPCs service-role-only", () => {

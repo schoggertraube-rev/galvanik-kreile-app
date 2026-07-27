@@ -2,7 +2,8 @@
 -- Additive upgrade for databases that already created capture_request_receipts
 -- before station_completion became an atomic capture kind.
 
-BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 
 DO $constraint$
 BEGIN
@@ -19,5 +20,3 @@ BEGIN
     VALIDATE CONSTRAINT capture_request_receipts_kind_check;
 END
 $constraint$;
-
-COMMIT;

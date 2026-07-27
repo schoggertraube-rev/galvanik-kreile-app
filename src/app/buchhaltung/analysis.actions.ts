@@ -1,11 +1,11 @@
 'use server';
 
 import { db } from '@/db';
-import { ausgangsrechnung, beleg, bhEinstellungen, kategorie, kostenposten, kraftstoffDetail } from '@/db/schema_buchhaltung';
+import { ausgangsrechnung, beleg, kategorie, kostenposten, kraftstoffDetail } from '@/db/schema_buchhaltung';
 import { and, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm';
 import { generateInsight } from '@/lib/analyse/insights';
 import { assertFinanceDateRange, requireFinanceRead } from '@/lib/server/financeAuthorization';
-import { calculateOutstandingAmount, normalizeOcrConfidencePercent, type AusgangsrechnungStatus } from '@/lib/buchhaltung/types';
+import { calculateOutstandingAmount, type AusgangsrechnungStatus } from '@/lib/buchhaltung/types';
 import { parseCostKind, recurringCostInRange } from '@/lib/buchhaltung/costSchedule';
 
 const CONFIRMED_RECEIPT_STATUSES = ['festgeschrieben'] as const;
@@ -328,7 +328,7 @@ export async function getOffenePostenAnalysisAction(von: string, bis: string) {
   .where(and(eq(ausgangsrechnung.tenantId, actor.tenantId), eq(ausgangsrechnung.isDemo, false), ne(ausgangsrechnung.status, 'storniert')));
 
   const offene = raw
-    .filter(r => ['offen', 'teilbezahlt', 'ueberfaellig', 'gemahnt'].includes(r.status))
+    .filter(r => ['offen', 'teilbezahlt', 'ueberfaellig', 'gemahnt', 'mahnung'].includes(r.status))
     .map((r) => ({
       ...r,
       offenerBetrag: calculateOutstandingAmount({
@@ -338,7 +338,7 @@ export async function getOffenePostenAnalysisAction(von: string, bis: string) {
       }),
     }));
   const today = new Date().toISOString().slice(0, 10);
-  const ueberfaellig = offene.filter(r => r.status === 'ueberfaellig' || r.status === 'gemahnt' || Boolean(r.faelligAm && r.faelligAm < today));
+  const ueberfaellig = offene.filter(r => r.status === 'ueberfaellig' || r.status === 'gemahnt' || r.status === 'mahnung' || Boolean(r.faelligAm && r.faelligAm < today));
   
   const offeneSumme = offene.reduce((s, r) => s + r.offenerBetrag, 0);
   const ueberfaelligSumme = ueberfaellig.reduce((s, r) => s + r.offenerBetrag, 0);
@@ -522,75 +522,22 @@ export async function getAusgabenAnalysisAction(von: string, bis: string) {
   };
 }
 
-export async function getSparzaehlerAnalysisAction(von: string, bis: string) {
+export type FinanceSavingsAnalysisResult = {
+  state: 'not_evidenced';
+  data: null;
+  reason: 'FINANCE_SAVINGS_NOT_EVIDENCED';
+};
+
+export async function getSparzaehlerAnalysisAction(
+  von: string,
+  bis: string,
+): Promise<FinanceSavingsAnalysisResult> {
   await requireFinanceRead();
   assertFinanceDateRange(von, bis);
-
-  const rawBelege = await db.select({
-    id: beleg.id,
-    brutto: beleg.brutto,
-    belegdatum: beleg.belegdatum,
-    ocrConfidence: beleg.ocrConfidence,
-    kategorieId: beleg.kategorieId
-  }).from(beleg).where(and(
-    inArray(beleg.status, CONFIRMED_RECEIPT_STATUSES),
-    gte(beleg.belegdatum, von),
-    lte(beleg.belegdatum, bis),
-  ));
-
-  const [settings] = await db.select().from(bhEinstellungen).where(eq(bhEinstellungen.id, 'default')).limit(1);
-  if (!settings) throw new Error('FINANCE_SAVINGS_SETTINGS_NOT_CONFIGURED');
-
-  const schwelle = Number(settings.ocrConfidenceSchwelle);
-  const stundensatz = Number(settings.beraterStundensatz);
-  const minutenProBeleg = Number(settings.minutenProBeleg);
-  if (![schwelle, stundensatz, minutenProBeleg].every(Number.isFinite) || minutenProBeleg <= 0 || stundensatz < 0) {
-    throw new Error('FINANCE_SAVINGS_SETTINGS_INVALID');
-  }
-  
-  const autoBelege = rawBelege.filter((entry) => (
-    (normalizeOcrConfidencePercent(Number(entry.ocrConfidence ?? 0)) ?? 0) >= schwelle
-  ));
-  const anzahlAutoBelege = autoBelege.length;
-  const anzahlGesamt = rawBelege.length;
-  const prozentAutomatisch = anzahlGesamt > 0 ? Math.round((anzahlAutoBelege / anzahlGesamt) * 100) : 0;
-  
-  const ersparnisBetrag = Math.round(anzahlAutoBelege * minutenProBeleg * (stundensatz / 60));
-
-  // ChartData (kumulativ über Monate im Jahr)
-  const monthKeys = [...new Set(autoBelege.flatMap((entry) => entry.belegdatum ? [entry.belegdatum.substring(0, 7)] : []))].sort();
-  const chartData = monthKeys.map((month) => {
-    const autoInMonth = autoBelege.filter(b => b.belegdatum?.startsWith(month)).length;
-    return {
-      name: month,
-      ist: Math.round(autoInMonth * minutenProBeleg * (stundensatz / 60)),
-    };
-  });
-
-  // Calculate cumulative for chartist
-  let kumuliert = 0;
-  const chartDataKumuliert = chartData.map(d => {
-    kumuliert += d.ist;
-    return { ...d, istKumuliert: kumuliert };
-  });
-
-  const insights = generateInsight('sparzaehler', {
-    quoteAutomatisch: prozentAutomatisch,
-    fehlendeLieferantenMappings: rawBelege.filter((entry) => !entry.kategorieId).length,
-  });
-
   return {
-    ersparnisBetrag,
-    anzahlAutoBelege,
-    anzahlGesamt,
-    prozentAutomatisch,
-    stundensatz,
-    minutenProBeleg,
-    schwelle,
-    dataSource: 'database' as const,
-    chartData: chartDataKumuliert,
-    topBelege: autoBelege.sort((a, b) => (Number(b.ocrConfidence) || 0) - (Number(a.ocrConfidence) || 0)).slice(0, 5),
-    insights
+    state: 'not_evidenced',
+    data: null,
+    reason: 'FINANCE_SAVINGS_NOT_EVIDENCED',
   };
 }
 

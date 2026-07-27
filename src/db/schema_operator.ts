@@ -36,5 +36,5 @@ export const operatorControlEvents = pgTable("operator_control_events", {
   receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("operator_control_events_tenant_version_uidx").on(table.tenantId, table.policyVersion),
-  index("operator_control_events_tenant_received_idx").on(table.tenantId, table.receivedAt),
+  index("operator_control_events_tenant_received_idx").on(table.tenantId, table.receivedAt.desc()),
 ]);

@@ -6,7 +6,7 @@ import { ausgangsrechnung, ausgangsrechnungPosition, beleg, bhAuditLog, konto, k
 import { and, eq, gte, inArray, lte, ne, sql } from 'drizzle-orm'
 import { createSupabaseServiceClient } from '@/lib/server/supabaseService'
 import { assertFinanceDateRange, requireFinanceRead, requireFinanceWrite } from '@/lib/server/financeAuthorization'
-import { calculateOutstandingAmount, normalizeOcrConfidencePercent } from '@/lib/buchhaltung/types'
+import { calculateOutstandingAmount, readStoredOcrConfidencePercent } from '@/lib/buchhaltung/types'
 import { parseStoredOcrPositions } from '@/lib/ocr/resultContract'
 import { recurringCostInRange } from '@/lib/buchhaltung/costSchedule'
 import { readInvoiceCreateCapability } from '@/lib/server/invoiceCreateCapability'
@@ -677,7 +677,10 @@ function mapToClientBeleg(dbData: DatabaseRow): Beleg {
     belegart: receiptType(dbData),
     originalDatei: requiredString(dbData, 'original_datei'),
     originalFormat: optionalString(dbData, 'original_format'),
-    ocrConfidence: normalizeOcrConfidencePercent(optionalNumber(dbData, 'ocr_confidence')),
+    ocrConfidence: readStoredOcrConfidencePercent(
+      optionalNumber(dbData, 'ocr_confidence'),
+      optionalString(dbData, 'ocr_confidence_scale'),
+    ),
     status: receiptStatus(dbData),
     rechnungsnummerExtern: optionalString(dbData, 'rechnungsnummer_extern'),
     storniertVon: optionalString(dbData, 'storniert_von'),
@@ -733,8 +736,9 @@ function mapDrizzleBeleg(row: StoredBeleg): Beleg {
     belegart: belegart === null ? undefined : belegart as Belegart,
     originalDatei: row.originalDatei,
     originalFormat: row.originalFormat ?? undefined,
-    ocrConfidence: normalizeOcrConfidencePercent(
+    ocrConfidence: readStoredOcrConfidencePercent(
       row.ocrConfidence === null ? undefined : storedNumber(row.ocrConfidence, 'ocr_confidence'),
+      row.ocrConfidenceScale,
     ),
     status: status as BelegStatus,
     rechnungsnummerExtern: row.rechnungsnummerExtern ?? undefined,
@@ -915,6 +919,7 @@ export async function createRechnungAction(formData: FormData, positionen: Ausga
     const [duplicate] = await tx.select({ id: ausgangsrechnung.id }).from(ausgangsrechnung).where(and(
       eq(ausgangsrechnung.tenantId, actor.tenantId),
       eq(ausgangsrechnung.nummer, nummer),
+      sql`${ausgangsrechnung.isDemo} is distinct from true`,
     )).limit(1);
     if (duplicate) throw new Error('FINANCE_INVOICE_NUMBER_EXISTS');
 
@@ -1508,65 +1513,6 @@ export async function generateLexwareExportAction(von: string, bis: string): Pro
 
 export async function getL7Daten(filter: { belegart?: string, kategorieId?: string }) {
   await requireFinanceRead()
-  const supabase = createSupabaseServiceClient()
-  
-  let query = supabase.from('beleg').select('konto_id, kostenstelle_id, ust_betrag, konto(nummer, bezeichnung), kostenstelle(kuerzel, name)');
-  
-  if (filter?.belegart) {
-    query = query.eq('belegart', filter.belegart);
-  }
-  if (filter?.kategorieId) {
-    query = query.eq('kategorie_id', filter.kategorieId);
-  }
-
-  const { data: belege, error } = await query;
-
-  if (error) {
-    console.error('Fehler bei getL7Daten:', error);
-    throw new Error('Kontierungsdaten konnten nicht geladen werden.');
-  }
-
-  const kontenMap = new Map();
-  const ksMap = new Map();
-  let ustEffekt = 0;
-
-  for (const b of belege || []) {
-    ustEffekt += Number(b.ust_betrag || 0);
-    const account = relationRow(b.konto)
-    if (account) {
-      const nummer = requiredString(account, 'nummer')
-      kontenMap.set(nummer, { id: nummer, label: `${nummer} - ${requiredString(account, 'bezeichnung')}` });
-    }
-    const costCenter = relationRow(b.kostenstelle)
-    if (costCenter) {
-      const kuerzel = requiredString(costCenter, 'kuerzel')
-      ksMap.set(kuerzel, { id: kuerzel, label: `${kuerzel} - ${requiredString(costCenter, 'name')}` });
-    }
-  }
-
-  const konten = Array.from(kontenMap.values());
-  const kostenstellen = Array.from(ksMap.values());
-  
-  const hasKontierung = konten.length > 0 || ksMap.size > 0;
-  if (!hasKontierung && (belege || []).length > 0) {
-    return {
-      affectedAccounts: [{ id: 'massenzuordnung', label: 'Noch keine Kontierung vorhanden (Link zur Massenzuordnung)' }],
-      affectedCostCenters: [],
-      periodImpact: 'Aktueller Monat (offen)',
-      liquidityImpact: filter?.belegart === 'ausgangsrechnung' ? 'verzögert ~30 Tage' : 'zahlungswirksam',
-      taxImpactEur: ustEffekt
-    };
-  }
-
-  const liquiditaet = filter?.belegart === 'ausgangsrechnung' ? 'verzögert ~30 Tage' : 'zahlungswirksam';
-  
-  const { data: periodeData } = await supabase.from('v_periodenabschluss_status').select('periode, status').limit(1).maybeSingle();
-
-  return {
-    affectedAccounts: konten.length > 0 ? konten : [{ id: 'missing', label: 'Keine spezifischen Konten' }],
-    affectedCostCenters: kostenstellen.length > 0 ? kostenstellen : [{ id: 'gesamt', label: 'Gesamtbetrieb' }],
-    periodImpact: periodeData ? `${periodeData.periode} (${periodeData.status})` : 'Aktueller Monat (offen)',
-    liquidityImpact: liquiditaet,
-    taxImpactEur: ustEffekt
-  };
+  void filter
+  throw new Error('FINANCE_PROVENANCE_NOT_CONFIGURED')
 }

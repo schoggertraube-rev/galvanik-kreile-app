@@ -21,7 +21,7 @@ type CustomerRankingRow = {
   name: string;
   umsatz_gesamt: unknown;
   db_gesamt: unknown;
-  letzter_auftrag: string;
+  letzter_auftrag: string | null;
 };
 
 type CustomerDetail = {
@@ -195,7 +195,7 @@ export function TopKundenKachel() {
           <div className="space-y-8">
             <div className="flex items-center gap-4 text-sm text-neutral-gray-600">
               <span className="bg-navy-50 text-navy-700 px-3 py-1 rounded-full font-medium">{customerDetails.clv.kundentyp || 'Standard'}</span>
-              <span>{customerDetails.clv.email || 'Keine E-Mail'}</span>
+              <span>{customerDetails.clv.email || 'E-Mail nicht erfasst'}</span>
             </div>
 
             <div className="bg-neutral-gray-50 rounded-xl p-5 border border-neutral-gray-200">
@@ -293,7 +293,7 @@ export function TopKundenKachel() {
                     <div className="flex justify-between items-start">
                       <div>
                         <h4 className="font-bold text-navy-900">{k.name}</h4>
-                        <p className="text-xs text-text-muted">Letzter Auftrag: {new Date(k.letzter_auftrag).toLocaleDateString()}</p>
+                        <p className="text-xs text-text-muted">Letzter Auftrag: {k.letzter_auftrag ? new Date(k.letzter_auftrag).toLocaleDateString() : 'nicht belegt'}</p>
                       </div>
                       <div className="text-right">
                         <div className="font-semibold text-sm">{money(k.umsatz_gesamt)}</div>

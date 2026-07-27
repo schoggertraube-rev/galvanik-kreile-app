@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { pgTable, text, timestamp, boolean, integer, jsonb, uuid, numeric, date, check, foreignKey, index, uniqueIndex } from "drizzle-orm/pg-core";
-import { customers } from "./schema";
-import { orders, inquiries } from "./schema";
+import { customers, inquiries, itemPhotoJobs, orders } from "./schema";
 
 export const kampagne = pgTable("kampagne", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -237,8 +236,10 @@ export const marketingAsset = pgTable("marketing_asset", {
   segmentId: uuid("segment_id"),
   storagePfad: text("storage_pfad").notNull(),
   storageBucket: text("storage_bucket"),
+  sourceItemPhotoJobId: uuid("source_item_photo_job_id"),
+  sourceItemPhotoUploadedAt: timestamp("source_item_photo_uploaded_at", { withTimezone: true }),
   typ: text("typ").notNull(),
-  freigabeMarketing: boolean("freigabe_marketing").default(false),
+  freigabeMarketing: boolean("freigabe_marketing").notNull().default(false),
   qualitaetScore: numeric("qualitaet_score", { precision: 4, scale: 2 }).default("0"),
   erstelltAm: timestamp("erstellt_am").defaultNow().notNull(),
 }, (table) => [
@@ -258,13 +259,32 @@ export const marketingAsset = pgTable("marketing_asset", {
     foreignColumns: [segment.tenantId, segment.id],
     name: "marketing_asset_tenant_segment_fkey",
   }).onDelete("restrict"),
+  foreignKey({
+    columns: [table.tenantId, table.auftragId,
+      table.storagePfad,
+      table.sourceItemPhotoJobId,
+      table.sourceItemPhotoUploadedAt,
+    ],
+    foreignColumns: [
+      itemPhotoJobs.tenantId,
+      itemPhotoJobs.orderId,
+      itemPhotoJobs.storagePath,
+      itemPhotoJobs.id,
+      itemPhotoJobs.uploadedAt,
+    ],
+    name: "marketing_asset_item_photo_source_fkey",
+  }).onUpdate("restrict").onDelete("restrict"),
   check(
     "marketing_asset_storage_bucket_format_chk",
     sql`${table.storageBucket} is null or ${table.storageBucket} = 'item-photos'`,
   ),
   check(
+    "marketing_asset_source_pair_chk",
+    sql`(${table.sourceItemPhotoJobId} is null) = (${table.sourceItemPhotoUploadedAt} is null)`,
+  ),
+  check(
     "marketing_asset_storage_publish_path_chk",
-    sql`${table.freigabeMarketing} is not true or (
+    sql`${table.freigabeMarketing} is not true or ((
       ${table.storageBucket} = 'item-photos'
       and ${table.auftragId} is not null
       and length(${table.storagePfad}) between 20 and 1024
@@ -276,7 +296,9 @@ export const marketingAsset = pgTable("marketing_asset", {
       and position(E'\\' in ${table.storagePfad}) = 0
       and position('/../' in '/' || ${table.storagePfad} || '/') = 0
       and ${table.storagePfad} !~ '[[:cntrl:]]'
-    )`,
+      and ${table.sourceItemPhotoJobId} is not null
+      and ${table.sourceItemPhotoUploadedAt} is not null
+    ) is true)`,
   ),
 ]);
 
@@ -297,7 +319,7 @@ export const marketingPublishJob = pgTable("marketing_publish_job", {
   aktualisiertAm: timestamp("aktualisiert_am").defaultNow().notNull(),
 }, (table) => [
   uniqueIndex("marketing_publish_job_action_uidx").on(table.tenantId, table.aktionId),
-  index("marketing_publish_job_status_idx").on(table.tenantId, table.status, table.claimedAt),
+  index("marketing_publish_job_tenant_status_idx").on(table.tenantId, table.status, table.claimedAt),
   foreignKey({
     columns: [table.tenantId, table.aktionId],
     foreignColumns: [aktion.tenantId, aktion.id],
@@ -313,6 +335,25 @@ export const marketingPublishJob = pgTable("marketing_publish_job", {
     foreignColumns: [kanal.tenantId, kanal.id],
     name: "marketing_publish_job_tenant_kanal_fkey",
   }).onDelete("restrict"),
+  check(
+    "marketing_publish_job_status_chk",
+    sql`${table.status} in ('reserved', 'publishing', 'succeeded', 'failed', 'uncertain')`,
+  ),
+  check(
+    "marketing_publish_job_attempt_count_chk",
+    sql`${table.attemptCount} >= 0`,
+  ),
+  check(
+    "marketing_publish_job_error_code_chk",
+    sql`${table.errorCode} is null or length(${table.errorCode}) <= 120`,
+  ),
+  check(
+    "marketing_publish_job_succeeded_external_refs_chk",
+    sql`${table.status} <> 'succeeded' or (
+      ${table.externalContainerId} is not null
+      and ${table.externalMediaId} is not null
+    )`,
+  ),
 ]);
 
 export const feedbackMail = pgTable("feedback_mail", {

@@ -28,11 +28,41 @@ function confirmedNullableNumber(value: unknown, code: string): number | null {
 }
 
 type ContributionTruthRow = Record<string, unknown>;
+type CustomerClvTruthRow = Record<string, unknown>;
 
 function confirmedText(value: unknown, code: string, nullable = false): string | null {
   if (nullable && (value === null || value === undefined)) return null;
   if (typeof value !== 'string' || value.trim() === '') throw new Error(code);
   return value;
+}
+
+function confirmedTimestampText(value: unknown, code: string, nullable = false): string | null {
+  if (nullable && (value === null || value === undefined)) return null;
+  const parsed = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) throw new Error(code);
+  return parsed.toISOString();
+}
+
+function customerClvTruth(row: CustomerClvTruthRow) {
+  const margin = confirmedNullableNumber(row.db_marge, 'CUSTOMER_CLV_MARGIN_INVALID');
+  return {
+    customer_id: confirmedText(row.customer_id, 'CUSTOMER_CLV_ID_INVALID') as string,
+    name: confirmedText(row.name, 'CUSTOMER_CLV_NAME_INVALID') as string,
+    company_name: confirmedText(row.company_name, 'CUSTOMER_CLV_COMPANY_INVALID', true),
+    kundentyp: confirmedText(row.kundentyp, 'CUSTOMER_CLV_TYPE_INVALID', true),
+    erstkontakt: confirmedTimestampText(row.erstkontakt, 'CUSTOMER_CLV_CREATED_INVALID') as string,
+    auftraege_gesamt: confirmedCount(row.auftraege_gesamt, 'CUSTOMER_CLV_ORDER_COUNT_INVALID'),
+    auftraege_12m: confirmedCount(row.auftraege_12m, 'CUSTOMER_CLV_ORDER_COUNT_INVALID'),
+    umsatz_gesamt: confirmedNullableNumber(row.umsatz_gesamt, 'CUSTOMER_CLV_REVENUE_INVALID'),
+    db_gesamt: confirmedNullableNumber(row.db_gesamt, 'CUSTOMER_CLV_CONTRIBUTION_INVALID'),
+    db_marge: margin,
+    db_marge_prozent: margin,
+    letzter_auftrag: confirmedTimestampText(row.letzter_auftrag, 'CUSTOMER_CLV_LAST_ORDER_INVALID', true),
+    reklamationen: confirmedCount(row.reklamationen, 'CUSTOMER_CLV_COMPLAINT_COUNT_INVALID'),
+    avg_durchlauf_tage: confirmedNullableNumber(row.avg_durchlauf_tage, 'CUSTOMER_CLV_DURATION_INVALID'),
+    avg_zahlungsverzug_tage: confirmedNullableNumber(row.avg_zahlungsverzug_tage, 'CUSTOMER_CLV_PAYMENT_DELAY_INVALID'),
+    email: confirmedText(row.email, 'CUSTOMER_CLV_EMAIL_INVALID', true),
+  };
 }
 
 function contributionTruth(row: ContributionTruthRow) {
@@ -200,39 +230,60 @@ export async function getCockpitKpis() {
 }
 
 export async function getTopKunden(limit = 10) {
-  await requireCustomerFinanceRead();
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('v_kunde_clv')
-    .select('*')
-    .order('db_gesamt', { ascending: false })
-    .limit(limit);
-
-  if (error) {
-    console.error("Error getTopKunden:", error.message, error.details, error.hint);
-    throw new Error('TOP_CUSTOMERS_UNAVAILABLE');
+  const actor = await requireCustomerFinanceRead();
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
+    throw new Error('TOP_CUSTOMERS_LIMIT_INVALID');
   }
-  return data || [];
+  const rows = await db.execute(sql<CustomerClvTruthRow>`
+    select
+      customer_id,
+      name,
+      company_name,
+      kundentyp,
+      erstkontakt,
+      auftraege_gesamt,
+      auftraege_12m,
+      umsatz_gesamt,
+      db_gesamt,
+      db_marge,
+      letzter_auftrag,
+      reklamationen,
+      avg_durchlauf_tage,
+      avg_zahlungsverzug_tage
+    from public.v_kunde_clv
+    where tenant_id = ${actor.tenantId}
+      and db_gesamt is not null
+    order by db_gesamt desc nulls last, customer_id
+    limit ${limit}
+  `);
+  return rows.map(customerClvTruth);
 }
 
 export async function getInaktiveKunden() {
-  await requireCustomerFinanceRead();
-  const supabase = await createClient();
-  
-  const nineMonthsAgo = new Date();
-  nineMonthsAgo.setMonth(nineMonthsAgo.getMonth() - 9);
-  
-  const { data, error } = await supabase
-    .from('v_kunde_clv')
-    .select('*')
-    .lt('letzter_auftrag', nineMonthsAgo.toISOString())
-    .gte('auftraege_gesamt', 3);
-
-  if (error) {
-    console.error("Error getInaktiveKunden:", error.message, error.details, error.hint);
-    throw new Error('INACTIVE_CUSTOMERS_UNAVAILABLE');
-  }
-  return data || [];
+  const actor = await requireCustomerFinanceRead();
+  const rows = await db.execute(sql<CustomerClvTruthRow>`
+    select
+      customer_id,
+      name,
+      company_name,
+      kundentyp,
+      erstkontakt,
+      auftraege_gesamt,
+      auftraege_12m,
+      umsatz_gesamt,
+      db_gesamt,
+      db_marge,
+      letzter_auftrag,
+      reklamationen,
+      avg_durchlauf_tage,
+      avg_zahlungsverzug_tage
+    from public.v_kunde_clv
+    where tenant_id = ${actor.tenantId}
+      and letzter_auftrag < current_timestamp - interval '9 months'
+      and auftraege_gesamt >= 3
+    order by letzter_auftrag, customer_id
+  `);
+  return rows.map(customerClvTruth);
 }
 
 export async function getEngpassDaten() {
@@ -373,45 +424,64 @@ export async function getAuftragDbDetails(orderId: string) {
   return contributionTruth(rows[0]);
 }
 
-export async function getForecastDaten() {
-  const supabase = await createClient();
-  const { data: results, error } = await supabase.from('v_monatsergebnis')
-    .select('monat, umsatz, db, db_marge_prozent')
-    .order('monat', { ascending: true })
-    .limit(12);
-    
-  const { data: pipeline } = await supabase.from('v_pipeline_forecast')
-    .select('*')
-    .order('erwarteter_monat', { ascending: true });
+export type ForecastData = {
+  monate: Array<{
+    monat: string;
+    umsatz: number;
+  }>;
+  pipeline: Array<{
+    erwarteter_monat: string;
+    pipeline_wert_gewichtet: number;
+    pipeline_wert_ungewichtet: number;
+  }>;
+  plan?: Record<string, number> | null;
+};
 
-  const currentYear = new Date().getFullYear();
-  const { data: plan } = await supabase.from('forecast_version')
-    .select('werte')
-    .eq('tenant_id', 'galvanik-kreile')
-    .eq('jahr', currentYear)
-    .eq('version_typ', 'plan')
-    .eq('ist_aktiv', true)
-    .single();
+export type ForecastResult =
+  | { status: 'available'; data: ForecastData }
+  | { status: 'not_configured'; reason: 'FORECAST_NOT_CONFIGURED' };
 
-  if (error) {
-    console.error("Error getForecastDaten:", error);
-    return { monate: [], pipeline: [], plan: null };
-  }
-  return { monate: results || [], pipeline: pipeline || [], plan: plan?.werte || null };
+export async function getForecastDaten(): Promise<ForecastResult> {
+  await requireCustomerFinanceRead();
+  return { status: 'not_configured', reason: 'FORECAST_NOT_CONFIGURED' };
 }
 
 export async function getKundenDetails(customerId: string) {
   const actor = await requireCustomerFinanceRead();
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(customerId)) throw new Error('CUSTOMER_ID_INVALID');
-  const supabase = await createClient();
-
-  const clvQuery = supabase.from('v_kunde_clv').select('*').eq('customer_id', customerId).single();
-  const ordersQuery = supabase.from('orders')
-    .select('id, order_number, intake_date, due_date, status')
-    .eq('tenant_id', 'galvanik-kreile')
-    .eq('customer_id', customerId)
-    .order('intake_date', { ascending: false })
-    .limit(5);
+  const clvQuery = db.execute(sql<CustomerClvTruthRow>`
+    select
+      clv.customer_id,
+      clv.name,
+      clv.company_name,
+      clv.kundentyp,
+      clv.erstkontakt,
+      clv.auftraege_gesamt,
+      clv.auftraege_12m,
+      clv.umsatz_gesamt,
+      clv.db_gesamt,
+      clv.db_marge,
+      clv.letzter_auftrag,
+      clv.reklamationen,
+      clv.avg_durchlauf_tage,
+      clv.avg_zahlungsverzug_tage,
+      customer.email
+    from public.v_kunde_clv clv
+    join public.customers customer
+      on customer.tenant_id = clv.tenant_id
+     and customer.id = clv.customer_id
+    where clv.tenant_id = ${actor.tenantId}
+      and clv.customer_id = ${customerId}
+    limit 2
+  `);
+  const ordersQuery = db.execute(sql<Record<string, unknown>>`
+    select id, order_number, intake_date, due_date, status
+    from public.orders
+    where tenant_id = ${actor.tenantId}
+      and customer_id = ${customerId}
+    order by intake_date desc nulls last, id
+    limit 5
+  `);
   const contributionQuery = db.execute(sql<{
     order_id: string;
     order_number: string;
@@ -424,13 +494,18 @@ export async function getKundenDetails(customerId: string) {
       and customer_id = ${customerId}
   `);
 
-  const [clvResult, ordersResult, contributionResult] = await Promise.all([clvQuery, ordersQuery, contributionQuery]);
-  if (clvResult.error || ordersResult.error || !clvResult.data) {
-    console.error('Customer cockpit detail unavailable', clvResult.error, ordersResult.error);
-    throw new Error('CUSTOMER_DETAILS_UNAVAILABLE');
+  const [clvRows, ordersRows, contributionResult] = await Promise.all([clvQuery, ordersQuery, contributionQuery]);
+  if (clvRows.length !== 1) {
+    throw new Error(clvRows.length === 0 ? 'CUSTOMER_DETAILS_NOT_FOUND' : 'CUSTOMER_DETAILS_DUPLICATE');
   }
-  const clv = clvResult.data;
-  const orders = ordersResult.data;
+  const clv = customerClvTruth(clvRows[0]);
+  const orders = ordersRows.map((order) => ({
+    id: confirmedText(order.id, 'CUSTOMER_ORDER_ID_INVALID') as string,
+    order_number: confirmedText(order.order_number, 'CUSTOMER_ORDER_NUMBER_INVALID') as string,
+    intake_date: confirmedTimestampText(order.intake_date, 'CUSTOMER_ORDER_DATE_INVALID') as string,
+    due_date: confirmedTimestampText(order.due_date, 'CUSTOMER_ORDER_DUE_DATE_INVALID', true),
+    status: confirmedText(order.status, 'CUSTOMER_ORDER_STATUS_INVALID') as string,
+  }));
   const auftraegeDb = contributionResult;
 
   const details = orders.map(o => {
@@ -588,13 +663,8 @@ export async function dismissWarnung(id: string, begruendung: string) {
 }
 
 export async function refreshWarnungen() {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('fn_compute_warnings', { p_tenant: 'galvanik-kreile' });
-  if (error) {
-    console.error("Error refreshWarnungen:", error.message, error.details, error.hint);
-    return false;
-  }
-  return true;
+  await requireCustomerFinanceRead();
+  throw new Error('WARNING_RECOMPUTE_NOT_CONFIGURED');
 }
 
 export async function getAktiverJahresplan(jahr: number) {

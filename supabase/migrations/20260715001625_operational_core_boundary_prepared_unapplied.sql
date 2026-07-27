@@ -3,7 +3,8 @@
 -- application connects with `SET ROLE service_role`; RLS policies alone do not
 -- grant relation privileges and therefore cannot make these paths executable.
 
-BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 
 DO $preflight$
 DECLARE
@@ -307,5 +308,3 @@ BEGIN
   END IF;
 END
 $verification$;
-
-COMMIT;

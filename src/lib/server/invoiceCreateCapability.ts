@@ -57,16 +57,35 @@ const capabilityQuery = sql<{ available: boolean }>`
       select 1
       from pg_index pi
       join pg_class idx on idx.oid = pi.indexrelid
+      join pg_am access_method on access_method.oid = idx.relam
       join pg_class rel on rel.oid = pi.indrelid
       join pg_namespace ns on ns.oid = rel.relnamespace
       where ns.nspname = 'public'
         and rel.relname = 'ausgangsrechnung'
         and idx.relname = 'uq_ausgangsrechnung_tenant_nummer'
+        and access_method.amname = 'btree'
         and pi.indisunique
         and pi.indisvalid
         and pi.indisready
-        and pi.indpred is null
-        and pg_get_indexdef(pi.indexrelid) like '%(tenant_id, nummer)%'
+        and pi.indnkeyatts = 2
+        and pi.indnatts = 2
+        and pi.indexprs is null
+        and not pi.indnullsnotdistinct
+        and not exists (
+          select 1
+          from unnest(pi.indoption) as option_value
+          where option_value <> 0
+        )
+        and pi.indpred is not null
+        and pg_catalog.pg_get_expr(pi.indpred, pi.indrelid)
+          = '(is_demo IS DISTINCT FROM true)'
+        and (
+          select array_agg(attribute.attname::text order by key.ordinality)
+          from unnest(pi.indkey) with ordinality as key(attnum, ordinality)
+          join pg_catalog.pg_attribute attribute
+            on attribute.attrelid = pi.indrelid
+           and attribute.attnum = key.attnum
+        ) = array['tenant_id', 'nummer']::text[]
     )
   ) as available
 `;

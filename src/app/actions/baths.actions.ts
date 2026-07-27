@@ -135,7 +135,7 @@ export async function getBathMeasurementsDb(bathId?: unknown): Promise<ActionRes
         appUsers,
         and(
           eq(badMesswerte.measuredByUserId, appUsers.id),
-          eq(appUsers.tenantId, actor.data.tenantId),
+          eq(badMesswerte.tenantId, appUsers.tenantId),
         ),
       );
     const rows = typeof bathId === "string"

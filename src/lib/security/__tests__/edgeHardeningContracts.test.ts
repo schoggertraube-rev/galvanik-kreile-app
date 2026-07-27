@@ -151,5 +151,9 @@ describe("Edge Function hardening contracts", () => {
       expect(migration).not.toMatch(/CREATE\s+POLICY/i);
       expect(migration).not.toMatch(/ENABLE\s+ROW\s+LEVEL\s+SECURITY/i);
     }
+    expect(migrations[1]).toContain("pg_extension");
+    expect(migrations[1]).toContain("to_regprocedure");
+    expect(migrations[1]).toContain("%1$I.crypt");
+    expect(migrations[1]).toContain("%1$I.gen_salt");
   });
 });

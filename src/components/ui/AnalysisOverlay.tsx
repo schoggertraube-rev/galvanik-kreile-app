@@ -76,7 +76,7 @@ export interface InsightSection {
 export interface EmptyState {
   title: string;
   description: string;
-  actionLabel: string;
+  actionLabel?: string;
   actionHref?: string;
   onAction?: () => void;
 }
@@ -148,6 +148,7 @@ function MiniSparkline({ values }: { values: number[] }) {
 export function AnalysisOverlay({
   open, onClose, icon, title, subtitle, accentBg,
   tabs, activeTab, onTabChange,
+  isEmpty, emptyState,
   hero, trend, composition, crossKpi, insight, l7Data, linkedAreas,
 }: AnalysisOverlayProps) {
   const [previewDrawer, setPreviewDrawer] = useState<{ open: boolean; href: string; label: string; previewText?: string }>({ open: false, href: "", label: "" });
@@ -214,8 +215,67 @@ export function AnalysisOverlay({
         </div>
       )}
 
+      {isEmpty && emptyState && (
+        <section
+          aria-live="polite"
+          style={{
+            margin: "18px 0",
+            padding: "28px 22px",
+            border: "1px dashed var(--line2, rgba(20,18,12,.16))",
+            borderRadius: 12,
+            background: "var(--surface3, #FAF8F3)",
+            textAlign: "center",
+          }}
+        >
+          <h3 style={{ fontSize: 17, fontWeight: 650 }}>{emptyState.title}</h3>
+          <p style={{ margin: "8px auto 0", maxWidth: 560, fontSize: 13.5, lineHeight: 1.6, color: "var(--text2, #615F58)" }}>
+            {emptyState.description}
+          </p>
+          {emptyState.actionLabel && emptyState.actionHref && (
+            <Link
+              href={emptyState.actionHref}
+              style={{
+                display: "inline-flex",
+                minHeight: 44,
+                alignItems: "center",
+                marginTop: 16,
+                padding: "9px 16px",
+                borderRadius: 8,
+                background: "var(--text, #1B1A16)",
+                color: "var(--surface, #fff)",
+                fontSize: 13,
+                fontWeight: 600,
+                textDecoration: "none",
+              }}
+            >
+              {emptyState.actionLabel}
+            </Link>
+          )}
+          {emptyState.actionLabel && !emptyState.actionHref && emptyState.onAction && (
+            <button
+              type="button"
+              onClick={emptyState.onAction}
+              style={{
+                minHeight: 44,
+                marginTop: 16,
+                padding: "9px 16px",
+                border: 0,
+                borderRadius: 8,
+                background: "var(--text, #1B1A16)",
+                color: "var(--surface, #fff)",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {emptyState.actionLabel}
+            </button>
+          )}
+        </section>
+      )}
+
       {/* ── A · Hero Section ── */}
-      {hero && (
+      {!isEmpty && hero && (
         <div style={{ padding: "18px 0", borderBottom: "0.5px solid var(--line, rgba(20,18,12,.08))" }}>
           <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 0.7, textTransform: "uppercase", color: "var(--text3, #928F86)" }}>
             {hero.kicker}
@@ -251,7 +311,7 @@ export function AnalysisOverlay({
       )}
 
       {/* 🔴 B · Trend / Chart Section 🔴 */}
-      {trend && (
+      {!isEmpty && trend && (
         <div style={{ padding: "18px 0", borderBottom: "0.5px solid var(--line, rgba(20,18,12,.08))" }}>
           <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 0.7, textTransform: "uppercase", color: "var(--text3, #928F86)" }}>
             {trend.title || "B · So entwickelt es sich"}
@@ -277,7 +337,7 @@ export function AnalysisOverlay({
       )}
 
       {/* 🔴 C · Composition Section 🔴 */}
-      {composition && composition.rows.length > 0 && (
+      {!isEmpty && composition && composition.rows.length > 0 && (
         <div style={{ padding: "18px 0", borderBottom: "0.5px solid var(--line, rgba(20,18,12,.08))" }}>
           <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 0.7, textTransform: "uppercase", color: "var(--text3, #928F86)" }}>
             {composition.title || `C · Woraus besteht der Betrag · ${composition.rows.length} Posten`}
@@ -376,7 +436,7 @@ export function AnalysisOverlay({
       )}
 
       {/* ── D · Cross-KPI Cards ── */}
-      {crossKpi && crossKpi.length > 0 && (
+      {!isEmpty && crossKpi && crossKpi.length > 0 && (
         <div style={{ padding: "18px 0", borderBottom: "0.5px solid var(--line, rgba(20,18,12,.08))" }}>
           <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 0.7, textTransform: "uppercase", color: "var(--blue, #0C447C)" }}>
             D · Was die Zahl im Verhältnis bedeutet
@@ -410,7 +470,7 @@ export function AnalysisOverlay({
       )}
 
       {/* ── E · Insight ── */}
-      {insight && (
+      {!isEmpty && insight && (
         <div style={{ padding: "18px 0", borderBottom: "0.5px solid var(--line, rgba(20,18,12,.08))" }}>
           <div style={{
             background: "linear-gradient(180deg, var(--violet-bg, #EEEDFD), var(--surface3, #FAF8F3))",
@@ -444,7 +504,7 @@ export function AnalysisOverlay({
       )}
 
       {/* ── G · Wirtschaftliche Wirkung (L7) ── */}
-      {l7Data && (
+      {!isEmpty && l7Data && (
         <div style={{ padding: "18px 0", borderBottom: "0.5px solid var(--line, rgba(20,18,12,.08))" }}>
           <div style={{
             display: "flex", alignItems: "center", gap: 8,
@@ -516,7 +576,7 @@ export function AnalysisOverlay({
       )}
 
       {/* ── F · Linked Areas ── */}
-      {linkedAreas && linkedAreas.length > 0 && (
+      {!isEmpty && linkedAreas && linkedAreas.length > 0 && (
         <div style={{ padding: "18px 0" }}>
           <div style={{ fontSize: 10.5, fontWeight: 600, letterSpacing: 0.7, textTransform: "uppercase", color: "var(--text3, #928F86)" }}>
             F · Verknüpfte Bereiche

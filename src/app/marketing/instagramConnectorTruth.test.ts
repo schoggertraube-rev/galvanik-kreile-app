@@ -58,6 +58,11 @@ describe('Instagram connector truth boundary', () => {
 
     expect(publish).toContain("bucket !== 'item-photos'")
     expect(publish).toContain('path.startsWith(`${tenantId}/${orderId}/`)')
+    expect(publish).toContain('!asset.sourceItemPhotoJobId')
+    expect(publish).toContain('asset.sourceItemPhotoUploadedAt instanceof Date')
+    expect(publish.indexOf('!asset.sourceItemPhotoJobId')).toBeLessThan(
+      publish.indexOf('createSignedUrl(asset.storagePfad'),
+    )
     expect(publish).toContain("'PUBLISH_EVIDENCE_MISSING'")
     expect(publish).toContain("eq(aktion.status, 'freigegeben')")
     expect(publish).toContain('PUBLISH_ACTION_STATE_CONFLICT_AFTER_PROVIDER')

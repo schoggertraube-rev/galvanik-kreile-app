@@ -166,8 +166,12 @@ export async function fetchComplaints(): Promise<DataResult<Complaint[]>> {
 export async function fetchErsparnis(): Promise<DataResult<Ersparnis>> {
   try {
     const provider = getBuchhaltungProvider();
-    const data = await provider.getErsparnis(new Date().getFullYear());
-    return { status: "ok", data };
+    const result = await provider.getErsparnis(new Date().getFullYear());
+    return {
+      status: "missing",
+      data: result.data,
+      message: "Zeitersparnis ist nicht durch gespeicherte Arbeitszeitbelege nachgewiesen.",
+    };
   } catch (e) {
     return { status: "error", data: null, message: e instanceof Error ? e.message : "Unbekannter Fehler" };
   }
@@ -298,7 +302,7 @@ async function assembleOffenePosten(): Promise<DataResult<KpiSnapshot>> {
   if (res.status !== "ok" || !res.data) return { status: res.status, data: null, message: res.message };
 
   const posten = res.data;
-  const total = posten.reduce((s, p) => s + p.brutto, 0);
+  const total = posten.reduce((s, p) => s + p.offenerBetrag, 0);
   const ueberfaellig = posten.filter((p) => p.status === "ueberfaellig");
 
   return {
@@ -314,7 +318,7 @@ async function assembleOffenePosten(): Promise<DataResult<KpiSnapshot>> {
       chartType: "horizontal-bar",
       chartData: {
         labels: posten.map((p) => p.kundeName || p.nummer),
-        values: posten.map((p) => p.brutto),
+        values: posten.map((p) => p.offenerBetrag),
         statuses: posten.map((p) => p.status),
       },
 
@@ -324,7 +328,7 @@ async function assembleOffenePosten(): Promise<DataResult<KpiSnapshot>> {
         date: p.datum,
         label: p.kundeName || p.nummer,
         sublabel: `${p.nummer} \u00B7 F\u00E4llig: ${p.faelligAm || "\u2013"} \u00B7 Mahnstufe ${p.mahnstufe}`,
-        amount: p.brutto,
+        amount: p.offenerBetrag,
         href: `/buchhaltung/rechnungen?id=${p.id}`,
         avatarInitial: (p.kundeName || "?").charAt(0),
         avatarColor: p.status === "ueberfaellig" ? "#D14F3D" : "#E8943C",

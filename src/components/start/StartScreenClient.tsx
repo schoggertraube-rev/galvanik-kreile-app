@@ -6,7 +6,7 @@ import { Delete, Clock, Wrench, Sun } from "lucide-react";
 import { getGreeting } from "@/lib/greeting";
 import { EmailLoginDialog } from "@/components/start/EmailLoginDialog";
 import { useSearchParams } from "next/navigation";
-import { getTodayTopPriority, getFeierabendEvents, notifyAdminPinReset } from "@/app/actions/start.actions";
+import { getTodayTopPriority, getFeierabendEvents, requestAdminPinReset } from "@/app/actions/start.actions";
 import { loginWithPin } from "@/app/actions/auth.actions";
 import type { StartUserDto } from "@/lib/auth/userDtos";
 
@@ -199,13 +199,15 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
         {error && (
           <p className="text-center text-danger-red text-xs font-semibold -mt-4 mb-3">
             Falscher PIN. <button onClick={async () => {
-              const res = await notifyAdminPinReset(user.selector);
-              if (res.success) {
-                alert("Der Administrator wurde benachrichtigt und wird sich bei Ihnen melden.");
+              const res = await requestAdminPinReset(user.selector);
+              if (res.success && res.kind === "recorded") {
+                alert("Die PIN-Hilfe wurde sicher gespeichert. Eine automatische Benachrichtigung ist noch nicht angebunden; bitte informieren Sie den Administrator zusätzlich persönlich.");
+              } else if (res.success && res.kind === "cooldown") {
+                alert("Für diesen Zugang ist bereits eine PIN-Hilfe gespeichert. Eine automatische Benachrichtigung ist noch nicht angebunden; bitte informieren Sie den Administrator zusätzlich persönlich.");
               } else {
-                alert("Fehler beim Benachrichtigen des Administrators. Bitte sprechen Sie ihn direkt an.");
+                alert("Die PIN-Hilfe konnte nicht gespeichert werden. Bitte sprechen Sie den Administrator direkt an.");
               }
-            }} className="underline hover:text-danger-red/80">Administrator kontaktieren</button>
+            }} className="underline hover:text-danger-red/80">PIN-Hilfe speichern</button>
           </p>
         )}
 

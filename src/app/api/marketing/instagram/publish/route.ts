@@ -269,7 +269,12 @@ export async function POST(request: Request) {
     eq(marketingAsset.tenantId, tenantId),
     eq(marketingAsset.id, input.assetId)
   )).limit(1)
-  if (!asset || asset.freigabeMarketing !== true || !validStorageLocation(
+  if (!asset
+    || asset.freigabeMarketing !== true
+    || !asset.sourceItemPhotoJobId
+    || !(asset.sourceItemPhotoUploadedAt instanceof Date)
+    || Number.isNaN(asset.sourceItemPhotoUploadedAt.getTime())
+    || !validStorageLocation(
     tenantId,
     asset.auftragId,
     asset.storageBucket,

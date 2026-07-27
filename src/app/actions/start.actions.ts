@@ -1,11 +1,13 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { db } from "@/db";
-import { appUsers, orders, uiEventsTable } from "@/db/schema";
-import { eq, asc, and, gte, sql } from "drizzle-orm";
+import { appUsers, orders } from "@/db/schema";
+import { eq, asc, and, sql } from "drizzle-orm";
 import { verifyPinLoginSelector } from "@/lib/server/pinLoginSelector";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { canUsePinLoginRole, isAppRole } from "@/lib/auth/authorizationContract";
+import { securityRateLimitSubjectHash } from "@/lib/server/durableRateLimit";
 
 export async function getTodayTopPriority() {
   const auth = await resolveAuthorization();
@@ -92,32 +94,85 @@ export async function getFeierabendEvents() {
   };
 }
 
-export async function notifyAdminPinReset(selector: string) {
+type PinResetRequestState = {
+  allowed: boolean;
+  retry_after_seconds: number | string | null;
+  recorded: boolean;
+};
+
+export async function requestAdminPinReset(selector: string) {
   try {
     const selected = await verifyPinLoginSelector(selector);
-    if (!selected.ok) return { success: false };
+    if (!selected.ok) return { success: false as const, kind: "unavailable" as const };
     const [user] = await db.select({ id: appUsers.id, role: appUsers.role }).from(appUsers).where(and(
       eq(appUsers.id, selected.userId),
       eq(appUsers.tenantId, "galvanik-kreile"),
       eq(appUsers.active, true),
     ));
-    if (!user || !isAppRole(user.role) || !canUsePinLoginRole(user.role)) return { success: false };
-    const cooldownStart = new Date(Date.now() - 15 * 60 * 1000);
-    const [existing] = await db.select({ id: uiEventsTable.id }).from(uiEventsTable).where(and(
-      eq(uiEventsTable.tenantId, "galvanik-kreile"),
-      eq(uiEventsTable.eventType, "pin_reset_requested"),
-      gte(uiEventsTable.createdAt, cooldownStart),
-      sql`${uiEventsTable.payload}->>'userId' = ${user.id}`,
-    )).limit(1);
-    if (existing) return { success: true, reason: "cooldown" };
-    await db.insert(uiEventsTable).values({
-      tenantId: "galvanik-kreile",
-      eventType: "pin_reset_requested",
-      payload: { userId: user.id, requestedAt: new Date().toISOString() },
-    });
-    return { success: true };
+    if (!user || !isAppRole(user.role) || !canUsePinLoginRole(user.role)) {
+      return { success: false as const, kind: "unavailable" as const };
+    }
+
+    const tenantId = "galvanik-kreile";
+    const namespace = "pin-reset-request";
+    const subjectHash = securityRateLimitSubjectHash(namespace, `${tenantId}:${user.id}`);
+    const requestId = randomUUID();
+    const rows = await db.execute(sql<PinResetRequestState>`
+      with decision as (
+        select allowed, retry_after_seconds
+        from public.consume_security_rate_limit(
+          ${namespace},
+          ${subjectHash},
+          1,
+          900
+        )
+      ),
+      recorded as (
+        insert into public.audit_log (
+          tenant_id,
+          client_request_id,
+          action,
+          table_name,
+          record_id,
+          actor_id,
+          payload
+        )
+        select
+          ${tenantId},
+          ${requestId}::uuid,
+          'pin_reset_request_recorded',
+          'app_users',
+          ${user.id}::text,
+          null::uuid,
+          null::jsonb
+        from decision
+        where decision.allowed
+        returning 1
+      )
+      select
+        decision.allowed,
+        decision.retry_after_seconds,
+        exists(select 1 from recorded) as recorded
+      from decision
+    `);
+    const state = rows[0];
+    if (!state || typeof state.allowed !== "boolean" || typeof state.recorded !== "boolean") {
+      throw new Error("PIN_RESET_REQUEST_STATE_INVALID");
+    }
+    if (!state.allowed) {
+      const retryAfterSeconds = Number(state.retry_after_seconds);
+      return {
+        success: true as const,
+        kind: "cooldown" as const,
+        retryAfterSeconds: Number.isSafeInteger(retryAfterSeconds) && retryAfterSeconds > 0
+          ? retryAfterSeconds
+          : 900,
+      };
+    }
+    if (!state.recorded) throw new Error("PIN_RESET_REQUEST_NOT_RECORDED");
+    return { success: true as const, kind: "recorded" as const };
   } catch (error) {
-    console.error("Error notifying admin:", error);
-    return { success: false };
+    console.error("Error recording PIN reset request:", error);
+    return { success: false as const, kind: "unavailable" as const };
   }
 }

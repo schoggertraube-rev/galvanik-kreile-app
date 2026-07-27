@@ -8,7 +8,7 @@ import { KlippaProvider } from "@/lib/ocr/KlippaProvider";
 import {
   normalizeSupplierName,
   ocrResultForLedger,
-  parseOcrResult,
+  parseOcrReplayResult,
 } from "@/lib/ocr/resultContract";
 import type { OcrErgebnis, OcrProvider } from "@/lib/ocr/types";
 import { resolveAuthorization } from "@/lib/server/authorization";
@@ -84,7 +84,7 @@ async function extractWithMeter(input: {
   provider: OcrProvider;
   signedUrl: string;
 }): Promise<OcrErgebnis> {
-  if (input.admission.kind === "replay") return parseOcrResult(input.admission.result);
+  if (input.admission.kind === "replay") return parseOcrReplayResult(input.admission.result);
   if (input.admission.kind === "rejected") throw new Error(`AI_LIMIT:${input.admission.retryAfterSeconds}`);
 
   await claimDirectAiUsage({
@@ -93,7 +93,7 @@ async function extractWithMeter(input: {
     feature: "receipt-ocr",
   });
   try {
-    const result = parseOcrResult(await input.provider.extractBeleg(input.signedUrl));
+    const result = await input.provider.extractBeleg(input.signedUrl);
     await settleDirectAiUsage({
       reservationId: input.admission.reservationId,
       identity: input.identity,
@@ -176,7 +176,7 @@ export async function POST(request: Request) {
 
     const extracted = provider.name === "gemini"
       ? await extractWithMeter({ admission: admission!, identity, provider: provider.provider, signedUrl: signed.data.signedUrl })
-      : parseOcrResult(await provider.provider.extractBeleg(signed.data.signedUrl));
+      : await provider.provider.extractBeleg(signed.data.signedUrl);
     const supplierName = extracted.lieferant ? normalizeSupplierName(extracted.lieferant) : null;
     const supplierRows = supplierName
       ? await db.select({ id: lieferant.id, standardKategorieId: lieferant.standardKategorieId })
@@ -203,7 +203,8 @@ export async function POST(request: Request) {
         belegart: extracted.belegart,
         zahlungsart: extracted.zahlungsart,
         rechnungsnummerExtern: extracted.rechnungsnummer,
-        ocrConfidence: String(extracted.confidence),
+        ocrConfidence: extracted.confidence === null ? null : String(extracted.confidence),
+        ocrConfidenceScale: extracted.confidence === null ? null : "percent",
         ocrRohtext: extracted.rohtext,
         ocrPositionen: extracted.positionen,
         ocrProvider: provider.name,

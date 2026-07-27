@@ -53,7 +53,11 @@ function validatePolicy(input: ConsumeRateLimitInput): void {
   }
 }
 
-function recordIdFor(namespace: string, subject: string): string {
+export function securityRateLimitSubjectHash(namespace: string, subject: string): string {
+  validateIdentifier(namespace, "namespace");
+  if (!subject || subject.length > 500) {
+    throw new Error("subject must contain between 1 and 500 characters");
+  }
   return createHmac("sha256", getSessionSecret())
     .update(`${namespace}\u0000${subject}`, "utf8")
     .digest("hex");
@@ -70,7 +74,7 @@ export async function consumeDurableRateLimit(
   input: ConsumeRateLimitInput,
 ): Promise<DurableRateLimitResult> {
   validatePolicy(input);
-  const recordId = recordIdFor(input.namespace, input.subject);
+  const recordId = securityRateLimitSubjectHash(input.namespace, input.subject);
   const rows = await db.execute(sql<AttemptState>`
     select allowed, remaining, retry_after_seconds
     from public.consume_security_rate_limit(
@@ -105,7 +109,7 @@ export async function resetDurableRateLimit(input: ResetRateLimitInput): Promise
     throw new Error("subject must contain between 1 and 500 characters");
   }
 
-  const recordId = recordIdFor(input.namespace, input.subject);
+  const recordId = securityRateLimitSubjectHash(input.namespace, input.subject);
   const rows = await db.execute(sql<{ reset: boolean }>`
     select public.reset_security_rate_limit(${input.namespace}, ${recordId}) as reset
   `);

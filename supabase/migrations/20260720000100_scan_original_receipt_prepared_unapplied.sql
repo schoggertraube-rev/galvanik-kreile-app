@@ -2,7 +2,8 @@
 -- Reconciles the legacy scan/photo table with a typed, server-only original
 -- receipt. Existing rows remain `legacy`; only explicit `capture_scan` rows
 -- may drive OCR or create an order.
-BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 
 DO $required_relations$
 BEGIN
@@ -472,5 +473,3 @@ BEGIN
   END IF;
 END
 $verification$;
-
-COMMIT;

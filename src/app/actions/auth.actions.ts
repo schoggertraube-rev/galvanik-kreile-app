@@ -112,8 +112,9 @@ export async function loginWithPin(
       return invalidResult();
     }
 
-    // A session is issued only after the append-only reset marker commits.
-    // Any ledger error therefore fails closed without a PIN-validity oracle.
+    // A session is issued only after the durable mutable counter reset commits.
+    // This reset is not an audit receipt. Any counter error fails closed
+    // without exposing a PIN-validity oracle.
     await resetPinLoginAttempts({
       tenantId: user.tenantId,
       userId: user.id,

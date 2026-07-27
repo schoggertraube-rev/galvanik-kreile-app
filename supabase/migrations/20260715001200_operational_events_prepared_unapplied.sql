@@ -3,8 +3,8 @@
 -- migration reconciles the validated 13-column remote source without deleting
 -- or fabricating legacy history.
 
-BEGIN;
-
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 SET LOCAL search_path = pg_catalog, pg_temp;
 
 ALTER TABLE public.events
@@ -224,5 +224,3 @@ BEGIN
   END IF;
 END
 $verification$;
-
-COMMIT;

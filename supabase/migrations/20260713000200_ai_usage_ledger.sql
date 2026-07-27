@@ -1,13 +1,12 @@
--- APPROVAL REQUIRED - PREPARED, NOT APPLIED BY THIS MISSION.
+-- REMOTE WAVE 1: explicitly approved 2026-07-26; use only the reviewed atomic runner.
 -- Durable, atomic and fail-closed AI usage admission for paid provider calls.
 -- Creates a new service-only table and RPCs; no existing policy is modified.
 
-BEGIN;
-
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 
 CREATE TABLE public.ai_usage_reservations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
   tenant_id text NOT NULL,
   user_id text NOT NULL,
   feature text NOT NULL,
@@ -479,7 +478,14 @@ BEGIN
   IF v_service_role IS NULL OR EXISTS (
     SELECT 1 FROM pg_roles
     WHERE oid = v_service_role
-      AND (rolsuper OR NOT rolbypassrls)
+      AND (
+        rolsuper
+        OR NOT rolbypassrls
+        OR rolcanlogin
+        OR rolcreaterole
+        OR rolcreatedb
+        OR rolreplication
+      )
   ) THEN
     RAISE EXCEPTION 'AI_USAGE_VERIFICATION_FAILED: service_role must be a non-superuser with BYPASSRLS';
   END IF;
@@ -489,7 +495,33 @@ BEGIN
     FROM pg_roles role_record
     WHERE role_record.oid <> v_owner
       AND NOT role_record.rolsuper
-      AND role_record.rolname NOT IN ('pg_read_all_data', 'pg_write_all_data')
+      AND role_record.rolname NOT IN ('pg_read_all_data', 'pg_write_all_data', 'pg_maintain')
+      AND NOT (
+        pg_has_role(role_record.oid, 'pg_read_all_data', 'USAGE')
+        AND NOT pg_has_role(role_record.oid, 'pg_write_all_data', 'USAGE')
+        AND (
+          (
+            role_record.rolname = 'supabase_etl_admin'
+            AND role_record.rolcanlogin
+            AND role_record.rolinherit
+            AND role_record.rolbypassrls
+            AND role_record.rolreplication
+            AND NOT role_record.rolcreaterole
+            AND NOT role_record.rolcreatedb
+            AND role_record.rolconfig IS NULL
+          )
+          OR (
+            role_record.rolname = 'supabase_read_only_user'
+            AND role_record.rolcanlogin
+            AND role_record.rolinherit
+            AND role_record.rolbypassrls
+            AND NOT role_record.rolreplication
+            AND NOT role_record.rolcreaterole
+            AND NOT role_record.rolcreatedb
+            AND role_record.rolconfig = ARRAY['default_transaction_read_only=on']
+          )
+        )
+      )
       AND (
         has_table_privilege(role_record.oid, v_table, 'SELECT')
         OR has_table_privilege(role_record.oid, v_table, 'INSERT')
@@ -498,6 +530,7 @@ BEGIN
         OR has_table_privilege(role_record.oid, v_table, 'TRUNCATE')
         OR has_table_privilege(role_record.oid, v_table, 'REFERENCES')
         OR has_table_privilege(role_record.oid, v_table, 'TRIGGER')
+        OR has_table_privilege(role_record.oid, v_table, 'MAINTAIN')
         OR has_any_column_privilege(role_record.oid, v_table, 'SELECT')
         OR has_any_column_privilege(role_record.oid, v_table, 'INSERT')
         OR has_any_column_privilege(role_record.oid, v_table, 'UPDATE')
@@ -583,5 +616,3 @@ BEGIN
   END LOOP;
 END;
 $verification$;
-
-COMMIT;

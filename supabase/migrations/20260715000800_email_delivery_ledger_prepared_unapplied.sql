@@ -1,6 +1,9 @@
 -- PREPARED ONLY: do not apply remotely without explicit approval.
 -- Durable, server-only email delivery and verified webhook audit boundary.
 
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
+
 ALTER TABLE public.communications
   ADD COLUMN IF NOT EXISTS created_by uuid REFERENCES public.app_users(id),
   ADD COLUMN IF NOT EXISTS invoice_id uuid REFERENCES public.ausgangsrechnung(id) ON DELETE RESTRICT,

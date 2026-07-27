@@ -38,6 +38,7 @@ describe("canonical inventory truth and connectivity", () => {
     expect(action).toContain("einkaufspreisEur: inventoryItems.einkaufspreisEur");
     expect(action).toContain("pricePerUnit,");
     for (const constraint of [
+      "stock_movements_quantity_domain_chk",
       "stock_movements_type_chk",
       "stock_movements_quantity_direction_chk",
       "stock_movements_reason_required_chk",
@@ -46,6 +47,11 @@ describe("canonical inventory truth and connectivity", () => {
       expect(capability).toContain(constraint);
       expect(migration).toContain(constraint);
     }
+    expect(migration).toContain("CREATE OR REPLACE VIEW public.v_auftrag_db");
+    expect(migration).toContain("__inventory_quantity_view_bridge_01550");
+    expect(migration).toContain("pg_get_viewdef(original_view_oid, false)");
+    expect(migration).toContain("quantity_type IS DISTINCT FROM 'numeric(14,4)'");
+    expect(migration).toContain("abs(quantity) < 10000000000");
     expect(migration).toContain("movement_type IN ('stock_out', 'consumption', 'verbrauch', 'waste')");
     expect(migration).toContain("has_any_column_privilege('service_role', 'public.stock_movements', 'UPDATE')");
   });

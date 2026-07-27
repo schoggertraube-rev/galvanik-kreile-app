@@ -57,20 +57,6 @@ export function pruefePlausibilitaet(
 }
 
 /**
- * Berechnet den Sparzähler.
- * Formel: ersparnis = anzahl_auto_belege × minuten_pro_beleg × (berater_stundensatz/60)
- */
-export function berechneErsparnis(
-  anzahlAutoBelege: number,
-  minutenProBeleg: number,
-  beraterStundensatz: number,
-): number {
-  if (![anzahlAutoBelege, minutenProBeleg, beraterStundensatz].every(Number.isFinite)
-    || anzahlAutoBelege < 0 || minutenProBeleg < 0 || beraterStundensatz < 0) return 0;
-  return anzahlAutoBelege * minutenProBeleg * (beraterStundensatz / 60);
-}
-
-/**
  * Prüft Fristen und gibt Erinnerungen zurück.
  */
 export function pruefeFristen(_heute: Date = new Date()): KiHinweis[] {

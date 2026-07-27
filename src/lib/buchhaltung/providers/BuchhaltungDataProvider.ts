@@ -8,7 +8,7 @@ import type {
   Beleg, BelegDetail, BelegFilter, BelegFile,
   Ausgangsrechnung, RechnungFilter,
   Zeitraum, KategorieSumme, KraftstoffReport, Bwa,
-  CostItem, UstvaWerte, Steuerprofil, Ersparnis,
+  CostItem, UstvaWerte, Steuerprofil, ErsparnisResult,
   ExportDatei,
 } from "../types";
 
@@ -39,5 +39,5 @@ export interface BuchhaltungDataProvider {
   exportSteuerberaterPaket(zeitraum: Zeitraum): Promise<ExportDatei>;
 
   // ── Sparzähler ─────────────────────────────────────────────────────────
-  getErsparnis(jahr: number): Promise<Ersparnis>;
+  getErsparnis(jahr: number): Promise<ErsparnisResult>;
 }

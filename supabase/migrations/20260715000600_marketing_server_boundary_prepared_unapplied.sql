@@ -1,6 +1,9 @@
 -- PREPARED ONLY: do not apply remotely without explicit approval.
 -- Marketing/CRM data is exposed only through database-backed, permission-checked Server Actions.
 
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
+
 DO $migration$
 DECLARE
   table_name text;

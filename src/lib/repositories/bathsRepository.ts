@@ -53,7 +53,7 @@ function mapMeasurement(row: BathMeasurementRecord): BathMeasurementLog {
   return {
     id: row.id,
     bathId: row.badId,
-    measuredAt: row.measuredAt ? new Date(row.measuredAt).toISOString() : new Date(0).toISOString(),
+    measuredAt: new Date(row.measuredAt).toISOString(),
     ...(row.measuredByDisplayName ? { measuredBy: row.measuredByDisplayName } : {}),
     statusAfterMeasurement: bathStatus(row.statusAfterMeasurement),
     temperature: row.temperature != null ? Number(row.temperature) : null,

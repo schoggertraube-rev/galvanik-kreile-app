@@ -152,12 +152,13 @@ export async function getCustomerCard(customerId: string) {
             kpi.gewinn_ltv,
             kpi.offene_posten,
             kpi.aktive_auftraege,
-            kpi.puenktlichkeit_pct,
+            kpi.puenklichkeit_pct AS puenktlichkeit_pct,
             kpi.reklamationen
           FROM public.v_analyse_kunden_kpi kpi
           JOIN public.customers customer
-            ON customer.id = kpi.customer_id
-          WHERE customer.tenant_id = ${access.auth.tenantId}
+            ON customer.tenant_id = kpi.tenant_id
+           AND customer.id = kpi.customer_id
+          WHERE kpi.tenant_id = ${access.auth.tenantId}
             AND kpi.customer_id = ${customerId}
           LIMIT 1
         `)

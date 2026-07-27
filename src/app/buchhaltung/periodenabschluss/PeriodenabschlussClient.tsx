@@ -52,7 +52,12 @@ export function PeriodenabschlussClient({
     : "";
   const periodTitle = status ? `${monthName} ${status.jahr}` : "Keine offene Periode";
   const blockerCount = status
-    ? status.belege_ohne_konto + status.belege_ohne_kostenstelle + status.rechnungen_ohne_auftrag + status.auftraege_ohne_db
+    ? status.belege_ohne_konto
+      + status.belege_ohne_kostenstelle
+      + status.rechnungen_ohne_auftrag
+      + status.belege_ohne_periode
+      + status.rechnungen_ohne_periode
+      + status.auftraege_ohne_db
     : 0;
   const canClose = userRole === "admin" || userRole === "developer";
 
@@ -116,6 +121,8 @@ export function PeriodenabschlussClient({
               <CountRow label="Belege ohne Konto" count={status.belege_ohne_konto} href="/buchhaltung/belege?view=missingKonto" />
               <CountRow label="Belege ohne Kostenstelle" count={status.belege_ohne_kostenstelle} href="/buchhaltung/belege?view=missingKostenstelle" />
               <CountRow label="Rechnungen ohne Auftrag" count={status.rechnungen_ohne_auftrag} href="/buchhaltung/rechnungen" />
+              <CountRow label="Belege ohne Periodenzuordnung" count={status.belege_ohne_periode} href="/buchhaltung/belege" />
+              <CountRow label="Rechnungen ohne Periodenzuordnung" count={status.rechnungen_ohne_periode} href="/buchhaltung/rechnungen" />
               <CountRow label="Abgeschlossene Aufträge ohne DB" count={status.auftraege_ohne_db} href="/orders" />
             </div>
             <p className="mt-4 text-xs text-neutral-500">Offene Rechnungen: {status.rechnungen_offen}. Sie werden angezeigt, sind aber nicht automatisch ein Abschlussblocker.</p>

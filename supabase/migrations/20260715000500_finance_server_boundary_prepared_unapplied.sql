@@ -2,6 +2,9 @@
 -- Finance data is authorized by the database-backed app session in Server Actions.
 -- Browser roles must not bypass that boundary through the Supabase Data API.
 
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
+
 ALTER TABLE public.beleg
   ADD COLUMN IF NOT EXISTS ocr_rohtext text,
   ADD COLUMN IF NOT EXISTS ocr_positionen jsonb,

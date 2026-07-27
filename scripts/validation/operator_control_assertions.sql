@@ -1,5 +1,7 @@
 \set ON_ERROR_STOP on
 
+BEGIN;
+
 DO $assertions$
 DECLARE
   protected_count integer;
@@ -74,7 +76,7 @@ BEGIN
 END
 $constraint_checks$;
 
-SET ROLE service_role;
+SET LOCAL ROLE service_role;
 
 UPDATE public.tenant_operator_controls
 SET policy_version = 2,
@@ -127,3 +129,5 @@ END
 $final_state$;
 
 SELECT 'operator_control_validation_ok' AS result;
+
+ROLLBACK;

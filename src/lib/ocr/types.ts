@@ -13,7 +13,7 @@ export interface OcrErgebnis {
   belegart: string | null;      // rechnung, quittung, tankbeleg, kassenbon
   zahlungsart: string | null;   // bar, karte, überweisung
   rechnungsnummer: string | null;
-  confidence: number;           // Prozentwert 0..100; 0 = keine belastbare Anbieter-Confidence
+  confidence: number | null;    // kanonischer Prozentwert 0..100; null = keine belastbare Anbieter-Confidence
   rohtext: string;              // extrahierter OCR-Text für Suche
   actualUnits?: number | null;  // echte Provider-Nutzung, sofern verfügbar
   providerStatus?: string | null;

@@ -15,15 +15,23 @@ export function FruehwarnungenKachel() {
   const [begruendung, setBegruendung] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
   
   const router = useRouter();
 
   const loadData = async () => {
     setLoading(true);
-    await refreshWarnungen();
-    const data = await getAktiveWarnungen();
-    setWarnungen(data);
-    setLoading(false);
+    try {
+      await refreshWarnungen();
+      const data = await getAktiveWarnungen();
+      setWarnungen(data);
+      setLoadError(null);
+    } catch {
+      setWarnungen([]);
+      setLoadError("Frühwarnungen sind nicht konfiguriert; vorhandene Daten werden nicht als aktuelle Warnung ausgegeben.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -63,6 +71,16 @@ export function FruehwarnungenKachel() {
     return (
       <div className="bg-white rounded-2xl border border-neutral-gray-200 shadow-sm flex items-center justify-center p-12">
         <Loader2 className="w-8 h-8 animate-spin text-navy-500" />
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="bg-white rounded-2xl border border-neutral-gray-200 shadow-sm flex min-h-[260px] flex-col items-center justify-center p-8 text-center">
+        <AlertCircle className="w-8 h-8 text-neutral-gray-400 mb-3" />
+        <h3 className="font-bold text-navy-900">Frühwarnungen nicht konfiguriert</h3>
+        <p role="status" className="mt-2 max-w-lg text-sm text-neutral-gray-600">{loadError}</p>
       </div>
     );
   }

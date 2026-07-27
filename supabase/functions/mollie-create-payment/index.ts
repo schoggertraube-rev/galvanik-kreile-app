@@ -462,6 +462,12 @@ serve(async (req) => {
     if (message.includes("PAYMENT_ALREADY_COMPLETED")) {
       return json(cors, { error: "Order is already paid" }, 409);
     }
+    if (message.includes("PAYMENT_ACTIVE_PROVIDER_CONFLICT")) {
+      return json(cors, { error: "Another payment is already active for this order" }, 409);
+    }
+    if (message.includes("PAYMENT_RESERVATION_TRUTH_MISMATCH")) {
+      return json(cors, { error: "Existing payment requires manual review" }, 409);
+    }
     if (message.includes("PAYMENT_QUOTE_CHANGED") || message.includes("ACTIVE_PAYMENT_LOCKS_QUOTE")) {
       return json(cors, { error: "Payment quote changed; retry" }, 409);
     }

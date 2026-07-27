@@ -1,6 +1,6 @@
 # Hardening 2026-07-14 – Lieferwahrheit
 
-Stand: 2026-07-16, Branch `codex/foundation-security-remediation-20260715`, Basis `6e1d1831be823b7655130f0f46ba964d45c4b8dc` (`origin/main`).
+Stand: 2026-07-27, Branch `codex/foundation-security-remediation-20260715`, Basis `6e1d1831be823b7655130f0f46ba964d45c4b8dc` (`origin/main`).
 
 Dieses Dokument beschreibt die lokal implementierte und geprüfte Remediation. Es behauptet weder einen Merge noch einen Production-Deploy, eine Remote-Migration, eine Remote-RLS-Änderung oder eine reale Providerfreigabe.
 
@@ -16,23 +16,23 @@ Das lokale Fundament ist für den Draft-PR abnahmefähig:
 - Nutzungsanalyse ist datenminimiert und aggregierbar. Freitext, geheime Payloads, Signaturen und Inhaltsdaten werden nicht als Telemetrie gespeichert;
 - die öffentliche Feedback-Token-Seite ist bis zu einem sicheren, persistenten Single-use-Vertrag ehrlich deaktiviert und behauptet keine Speicherung oder Übermittlung.
 
-Die Live-Betriebsreife bleibt bis zur ausdrücklich freigegebenen Remote-Rollout-Mission `BLOCKED_EXTERNAL_PERMISSION`.
+Der additive Remote-Datenbank-Rollout ist seit 2026-07-26 ausdrücklich freigegeben, in diesem vor dem Cutover erstellten Lieferstand aber noch nicht als ausgeführt behauptet.
 
 ## Abschlussnachweise
 
 | Gate | Ergebnis | Nachweis |
 |---|---|---|
-| Vollständige Tests | PASS | 99 Testdateien PASS, 2 SKIP; 403 Tests PASS, 3 klar markierte Integrations-SKIP |
+| Vollständige Unit-Tests | PASS | 142/142 Testdateien und 639/639 Tests PASS; Integrationsprüfungen bleiben separat gegated |
 | TypeScript | PASS | `npx tsc --noEmit`, Exit 0 |
-| Produktionsbuild | PASS | Next.js 16.2.6 mit Webpack; Compile und TypeScript PASS; 86/86 statische Seiten generiert |
-| Lint-Ratchet | PASS | 265 historische Errors und 193 Warnungen als per-file/rule/severity Ceiling erfasst; frischer Ratchet-Lauf Exit 0 |
+| Produktionsbuild | PASS | Next.js 16.2.12 mit Webpack; Compile und TypeScript PASS; 86/86 statische Seiten generiert |
+| Lint-Ratchet | PASS | 107 historische Errors und 144 Warnungen als per-file/rule/severity Ceiling erfasst; frischer Ratchet-Lauf Exit 0 |
 | Vollständiges ESLint | Bestandslast sichtbar | Repository ist nicht lint-clean. Der Ratchet verbietet jede neue oder erhöhte Verletzung und erlaubt nur Reduktion. |
-| Dependency-Audit | PASS für High-Gate | kompatible Lockfile-Fixes entfernen das High-Advisory und weitere transitive Advisories; `npm audit --omit=dev --audit-level=high` Exit 0 |
-| Verbleibender Audit-Rest | 2 × Moderate | Next 16.2.6 pinnt intern PostCSS 8.4.31. npm bietet nur einen sachlich falschen Force-Downgrade auf Next 9.3.3; bewusst nicht angewendet. |
+| Dependency-Audit | PASS für den Produktionsbaum | installierter Produktionsbaum: `npm audit --omit=dev --audit-level=high`, Exit 0, 0 Vulnerabilities |
+| Verbleibender Audit-Rest | dev-only, nicht verschwiegen | 9 High-Hinweise betreffen `brace-expansion@1.1.16` im ESLint-/`minimatch@3`-Pfad; die gepatchte 5.x-API ist dort inkompatibel. 4 Moderate-Hinweise betreffen esbuild via `drizzle-kit`. Beide Pfade werden nicht in die App-Runtime ausgeliefert. |
 | Diff-Hygiene | PASS | `git diff --check`, Exit 0 |
-| Unabhängiger Review | PASS | kein bestätigtes P0; zwei P1 und zwei P2 gefunden, behoben, negativ getestet und im Fix-Review als geschlossen bestätigt |
+| Unabhängiger Review | PASS | kein offenes P0/P1; Rollen-, Concurrency-, Wahrheitszustands- und Dependency-Addenda behoben oder explizit begrenzt und revalidiert |
 
-Die drei geskippten Tests benötigen eine ausdrücklich konfigurierte Integrationsdatenbank. Sie werden nicht als ausgeführt dargestellt. Zusätzlich wurden die migrationskritischen Verträge während der Mission in isolierten lokalen PostgreSQL-Datenbanken funktional geprüft, unter anderem Payment/Quote, AI-Ledger, Item-Photo-Jobs, Finance-/Marketing-Grenzen, Mail-Ledger, Telemetrie, Periodenabschluss, Developer-Feedback, operative Events, Capture-Integrität und Operator-Control.
+Die drei Integrationsprüfungen in zwei Dateien benötigen eine ausdrücklich konfigurierte Integrationsdatenbank und werden im Unit-Gate bewusst nicht als ausgeführt dargestellt. Zusätzlich wurden die migrationskritischen Verträge während der Mission in isolierten lokalen PostgreSQL-Datenbanken funktional geprüft, unter anderem Payment/Quote, AI-Ledger, Item-Photo-Jobs, Finance-/Marketing-Grenzen, Mail-Ledger, Telemetrie, Periodenabschluss, Developer-Feedback, operative Events, Capture-Integrität und Operator-Control.
 
 ## Fundamentbereiche
 
@@ -127,24 +127,24 @@ Alle folgenden Dateien sind absichtlich `prepared_unapplied`. Keine davon wurde 
 1. `20260714000050_operational_events_payment_prerequisite_prepared_unapplied.sql`
 2. `20260714000100_payment_idempotency_prepared_unapplied.sql`
 3. `20260714000200_pin_bcrypt_prepared_unapplied.sql`
-4. `20260715000100_security_rate_limit_index_prepared_unapplied.sql`
+4. `20260713000100_security_rate_limit_index.sql`
 5. `20260715000200_buchhaltung_receipt_storage_prepared_unapplied.sql`
-6. `20260715000300_ai_usage_ledger_prepared_unapplied.sql`
-7. `20260715000400_item_photo_jobs_prepared_unapplied.sql`
+6. `20260713000200_ai_usage_ledger.sql`
+7. `20260713000300_item_photo_jobs.sql`
 8. `20260715000500_finance_server_boundary_prepared_unapplied.sql`
 9. `20260715000550_marketing_source_contract_prepared_unapplied.sql`
 10. `20260715000575_marketing_tenant_relationships_prepared_unapplied.sql`
 11. `20260715000600_marketing_server_boundary_prepared_unapplied.sql`
 12. `20260715000700_marketing_connector_prepared_unapplied.sql`
 13. `20260715000800_email_delivery_ledger_prepared_unapplied.sql`
-14. `20260715000900_usage_telemetry_prepared_unapplied.sql`
+14. `20260713000400_usage_telemetry.sql`
 15. `20260715001000_period_close_prepared_unapplied.sql`
-16. `20260715001100_developer_feedback_prepared_unapplied.sql`
+16. `20260713000500_developer_feedback.sql`
 17. `20260715001150_operational_events_source_prepared_unapplied.sql`
 18. `20260715001200_operational_events_prepared_unapplied.sql`
 19. `20260715001300_operational_server_boundary_prepared_unapplied.sql`
-20. `20260715001400_ocr_confidence_percent_prepared_unapplied.sql`
-21. `20260715001500_invoice_number_uniqueness_prepared_unapplied.sql`
+20. `20260713000600_ocr_confidence_scale_expand.sql`
+21. `20260713000700_invoice_number_uniqueness.sql`
 22. `20260715001550_inventory_contract_reconciliation_prepared_unapplied.sql`
 23. `20260715001600_capture_integrity_prepared_unapplied.sql`
 24. `20260715001620_operational_source_contracts_prepared_unapplied.sql`
@@ -152,7 +152,7 @@ Alle folgenden Dateien sind absichtlich `prepared_unapplied`. Keine davon wurde 
 26. `20260715001650_capture_template_projection_reconciliation_prepared_unapplied.sql`
 27. `20260715001660_analytics_truth_contracts_prepared_unapplied.sql`
 28. `20260715001670_finance_truth_contracts_prepared_unapplied.sql`
-29. `20260715001700_operator_control_plane_prepared_unapplied.sql`
+29. `20260713000800_operator_control_plane.sql`
 30. `20260716000100_station_completion_receipt_prepared_unapplied.sql`
 31. `20260716000200_calendar_price_boundary_prepared_unapplied.sql`
 32. `20260720000100_scan_original_receipt_prepared_unapplied.sql`

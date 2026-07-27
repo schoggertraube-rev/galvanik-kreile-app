@@ -55,12 +55,22 @@ export function calculateOutstandingAmount(input: {
   return Math.max(0, Math.round((input.brutto - paid) * 100) / 100);
 }
 
-export function normalizeOcrConfidencePercent(value: number | null | undefined): number | undefined {
-  if (value === null || value === undefined) return undefined;
-  if (!Number.isFinite(value) || value < 0 || value > 100) {
+export function readStoredOcrConfidencePercent(
+  value: number | null | undefined,
+  scale: string | null | undefined,
+): number | undefined {
+  if (value === null || value === undefined) {
+    if (scale !== null && scale !== undefined) {
+      throw new Error("FINANCE_DATA_INVALID:ocr_confidence_scale");
+    }
+    return undefined;
+  }
+  if (scale !== "fraction" && scale !== "percent") return undefined;
+  const maximum = scale === "fraction" ? 1 : 100;
+  if (!Number.isFinite(value) || value < 0 || value > maximum) {
     throw new Error("FINANCE_DATA_INVALID:ocr_confidence");
   }
-  const percent = value <= 1 ? value * 100 : value;
+  const percent = scale === "fraction" ? value * 100 : value;
   return Math.round(percent * 100) / 100;
 }
 
@@ -291,6 +301,12 @@ export interface Ersparnis {
   beraterStundensatz: number;
   prozentAutomatisch: number;
 }
+
+export type ErsparnisResult = {
+  state: "not_evidenced";
+  data: null;
+  reason: "FINANCE_SAVINGS_NOT_EVIDENCED";
+};
 
 // ── KI-Hinweise ──────────────────────────────────────────────────────────
 

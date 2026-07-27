@@ -4,7 +4,8 @@
 -- relation that does not exist yet. The full append-only boundary follows in
 -- 20260715001150 and 20260715001200.
 
-BEGIN;
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 
 CREATE TABLE IF NOT EXISTS public.events (
   id text PRIMARY KEY,
@@ -31,5 +32,3 @@ ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.events FORCE ROW LEVEL SECURITY;
 REVOKE ALL PRIVILEGES ON TABLE public.events
   FROM PUBLIC, anon, authenticated, service_role;
-
-COMMIT;

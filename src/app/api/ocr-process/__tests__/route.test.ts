@@ -74,7 +74,7 @@ const ocrResult = {
   belegart: "rechnung",
   zahlungsart: "karte",
   rechnungsnummer: "R-42",
-  confidence: 0,
+  confidence: 0.5,
   rohtext: "Lieferant GmbH Rechnung 119 EUR",
   positionen: [],
   actualUnits: 321,
@@ -172,7 +172,7 @@ describe("OCR receipt draft boundary", () => {
       belegId: "receipt-1",
       status: "pruefen",
       requiresReview: true,
-      confidence: 0,
+      confidence: 0.5,
       auditId: "audit-1",
     });
     expect(mockReserveUsage).toHaveBeenCalledWith(expect.objectContaining({ feature: "receipt-ocr" }));
@@ -187,6 +187,8 @@ describe("OCR receipt draft boundary", () => {
       lieferantId: "supplier-1",
       kategorieId: "category-1",
       ocrProvider: "gemini",
+      ocrConfidence: "0.5",
+      ocrConfidenceScale: "percent",
     });
     expect(mockStorageUpload).toHaveBeenCalledWith(
       expect.stringMatching(/^galvanik-kreile\/123e4567-e89b-42d3-a456-426614174001\/[0-9a-f-]+\.jpg$/),

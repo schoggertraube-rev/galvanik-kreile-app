@@ -9,6 +9,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
   varchar,
@@ -175,6 +176,7 @@ export const items = pgTable("items", {
   internalNotes: text("internal_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
+  uniqueIndex("items_tenant_order_id_uidx").on(table.tenantId, table.orderId, table.id),
   foreignKey({
     columns: [table.tenantId, table.orderId],
     foreignColumns: [orders.tenantId, orders.id],
@@ -184,6 +186,64 @@ export const items = pgTable("items", {
     "items_template_surface_key_chk",
     sql`${table.surfaceRequested} is null or position('|' in ${table.surfaceRequested}) = 0`,
   ),
+]);
+
+export const itemPhotoJobs = pgTable("item_photo_jobs", {
+  id: uuid("id").primaryKey(),
+  tenantId: text("tenant_id").notNull(),
+  userId: text("user_id").notNull(),
+  orderId: text("order_id").notNull(),
+  itemId: text("item_id").notNull(),
+  requestKeyHash: text("request_key_hash").notNull(),
+  contentSha256: text("content_sha256").notNull(),
+  storagePath: text("storage_path").notNull(),
+  mimeType: text("mime_type").notNull(),
+  fileBytes: integer("file_bytes").notNull(),
+  status: text("status").notNull().default("reserved"),
+  providerStatus: text("provider_status"),
+  actualUnits: integer("actual_units"),
+  analysisResult: jsonb("analysis_result"),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  check("item_photo_tenant_fixed", sql`${table.tenantId} = 'galvanik-kreile'`),
+  check("item_photo_request_hash", sql`${table.requestKeyHash} ~ '^[a-f0-9]{64}$'`),
+  check("item_photo_content_hash", sql`${table.contentSha256} ~ '^[a-f0-9]{64}$'`),
+  check(
+    "item_photo_mime_known",
+    sql`${table.mimeType} in ('image/jpeg', 'image/png', 'image/webp')`,
+  ),
+  check(
+    "item_photo_file_bytes_bounded",
+    sql`${table.fileBytes} between 1 and 12582912`,
+  ),
+  check(
+    "item_photo_actual_units_nonnegative",
+    sql`${table.actualUnits} is null or ${table.actualUnits} >= 0`,
+  ),
+  check(
+    "item_photo_status_known",
+    sql`${table.status} in ('reserved', 'uploaded', 'in_flight', 'succeeded', 'failed', 'uncertain')`,
+  ),
+  foreignKey({
+    columns: [table.tenantId, table.orderId],
+    foreignColumns: [orders.tenantId, orders.id],
+    name: "item_photo_tenant_order_fkey",
+  }).onDelete("restrict"),
+  foreignKey({
+    columns: [table.tenantId, table.orderId, table.itemId],
+    foreignColumns: [items.tenantId, items.orderId, items.id],
+    name: "item_photo_tenant_order_item_fkey",
+  }).onDelete("restrict"),
+  uniqueIndex("uq_item_photo_request").on(table.tenantId, table.userId, table.requestKeyHash),
+  uniqueIndex("uq_item_photo_content").on(table.tenantId, table.itemId, table.contentSha256),
+  uniqueIndex("item_photo_jobs_marketing_source_uidx")
+    .on(table.tenantId, table.orderId, table.storagePath, table.id, table.uploadedAt),
+  index("idx_item_photo_item_created").on(table.tenantId, table.itemId, table.createdAt),
+  index("idx_item_photo_user_created").on(table.tenantId, table.userId, table.createdAt),
 ]);
 
 // 5. Events / Timeline
@@ -300,6 +360,10 @@ export const stockMovements = pgTable("stock_movements", {
   check(
     "stock_movements_quantity_nonzero",
     sql`${table.quantity}::text not in ('NaN', 'Infinity', '-Infinity') and ${table.quantity} <> 0`,
+  ),
+  check(
+    "stock_movements_quantity_domain_chk",
+    sql`${table.quantity}::text not in ('NaN', 'Infinity', '-Infinity') and abs(${table.quantity}) < 10000000000 and ${table.quantity} = round(${table.quantity}, 4)`,
   ),
   check(
     "stock_movements_type_chk",
@@ -581,19 +645,21 @@ export const qs = pgTable("qs", {
 // 15. Bäder (Galvanik)
 export const baeder = pgTable("baths", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
+  tenantId: text("tenant_id").notNull().default("galvanik-kreile"),
   name: varchar("name", { length: 100 }).notNull(),
   status: varchar("status", { length: 50 }).notNull().default("not_evaluated"),
   temperatureMin: numeric("temperature_min", { precision: 5, scale: 2 }),
   temperatureMax: numeric("temperature_max", { precision: 5, scale: 2 }),
   phMin: numeric("ph_min", { precision: 4, scale: 2 }),
   phMax: numeric("ph_max", { precision: 4, scale: 2 }),
-  letzteWartung: timestamp("last_measured_at"),
+  letzteWartung: timestamp("last_measured_at", { withTimezone: true }),
   targetValues: jsonb("target_values").notNull().default({}),
   processType: text("process_type").notNull().default("unknown"),
   stationId: text("station_id"),
   notes: text("notes"),
-});
+}, (table) => [
+  uniqueIndex("baths_tenant_id_uidx").on(table.tenantId, table.id),
+]);
 
 // Backward-compatible symbol without a second, divergent table contract.
 export const bathsOld = baeder;
@@ -601,16 +667,31 @@ export const bathsOld = baeder;
 // 16. Bad-Messwerte (Historie)
 export const badMesswerte = pgTable("bath_measurements", {
   id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
-  badId: text("bath_id").notNull().references(() => baeder.id, { onDelete: "cascade" }),
-  temperature: numeric("temperature", { precision: 10, scale: 2 }),
-  phValue: numeric("ph_value", { precision: 10, scale: 2 }),
+  tenantId: text("tenant_id").notNull().default("galvanik-kreile"),
+  badId: text("bath_id").notNull(),
+  temperature: numeric("temperature"),
+  phValue: numeric("ph_value"),
   notes: text("notes"),
   statusAfterMeasurement: varchar("status_after_measurement", { length: 50 }).notNull().default("not_evaluated"),
-  measuredByUserId: uuid("measured_by_user_id").references(() => appUsers.id, { onDelete: "restrict" }),
-  measuredAt: timestamp("measured_at").defaultNow(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
+  measuredByUserId: uuid("measured_by_user_id"),
+  measuredAt: timestamp("measured_at", { withTimezone: true }).defaultNow().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  foreignKey({
+    name: "bath_measurements_tenant_bath_fkey",
+    columns: [table.tenantId, table.badId],
+    foreignColumns: [baeder.tenantId, baeder.id],
+  }).onDelete("cascade"),
+  foreignKey({
+    name: "bath_measurements_tenant_actor_fkey",
+    columns: [table.tenantId, table.measuredByUserId],
+    foreignColumns: [appUsers.tenantId, appUsers.id],
+  }).onDelete("restrict"),
+  index("bath_measurements_tenant_bath_measured_idx")
+    .on(table.tenantId, table.badId, table.measuredAt),
+  index("bath_measurements_tenant_actor_measured_idx")
+    .on(table.tenantId, table.measuredByUserId, table.measuredAt),
+]);
 
 // 17. Lager & Chemie
 export const lagerArtikel = pgTable("lager_artikel", {
@@ -694,7 +775,7 @@ export const emailWebhookEvents = pgTable("email_webhook_events", {
 
 export const appUsageEvents = pgTable("app_usage_events", {
   id: uuid("id").primaryKey().defaultRandom(),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull(),
+  tenantId: text("tenant_id").notNull(),
   clientEventId: uuid("client_event_id").notNull(),
   actorPseudonym: varchar("actor_pseudonym", { length: 64 }).notNull(),
   actorRole: varchar("actor_role", { length: 50 }).notNull(),
@@ -712,9 +793,10 @@ export const appUsageEvents = pgTable("app_usage_events", {
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
-  uniqueIndex("app_usage_events_tenant_client_uidx").on(table.tenantId, table.clientEventId),
-  index("app_usage_events_tenant_occurred_idx").on(table.tenantId, table.occurredAt),
-  index("app_usage_events_tenant_type_idx").on(table.tenantId, table.eventType, table.occurredAt),
+  check("app_usage_events_tenant_fixed", sql`${table.tenantId} = 'galvanik-kreile'`),
+  unique("app_usage_events_tenant_client_uidx").on(table.tenantId, table.clientEventId),
+  index("app_usage_events_tenant_occurred_idx").on(table.tenantId, table.occurredAt.desc()),
+  index("app_usage_events_tenant_type_idx").on(table.tenantId, table.eventType, table.occurredAt.desc()),
 ]);
 
 export const developerFeedback = pgTable("developer_feedback", {
@@ -729,9 +811,10 @@ export const developerFeedback = pgTable("developer_feedback", {
   status: varchar("status", { length: 20 }).notNull().default("new"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 }, (table) => [
-  uniqueIndex("developer_feedback_actor_request_uidx").on(table.tenantId, table.actorPseudonym, table.clientRequestId),
-  index("developer_feedback_tenant_created_idx").on(table.tenantId, table.createdAt),
-  index("developer_feedback_tenant_status_idx").on(table.tenantId, table.status, table.createdAt),
+  check("developer_feedback_tenant_fixed", sql`${table.tenantId} = 'galvanik-kreile'`),
+  unique("developer_feedback_actor_request_uidx").on(table.tenantId, table.actorPseudonym, table.clientRequestId),
+  index("developer_feedback_tenant_created_idx").on(table.tenantId, table.createdAt.desc()),
+  index("developer_feedback_tenant_status_idx").on(table.tenantId, table.status, table.createdAt.desc()),
 ]);
 
 export const priceLines = pgTable("price_lines", {

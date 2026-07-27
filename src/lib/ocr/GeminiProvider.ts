@@ -89,7 +89,7 @@ export class GeminiProvider implements OcrProvider {
       belegart: parsed.belegart ?? null,
       zahlungsart: parsed.zahlungsart ?? null,
       rechnungsnummer: parsed.rechnungsnummer ?? null,
-      confidence: 0,
+      confidence: null,
       rohtext: parsed.rohtext ?? "",
       actualUnits,
       providerStatus,

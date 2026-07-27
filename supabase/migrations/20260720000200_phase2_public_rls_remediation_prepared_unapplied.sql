@@ -1,6 +1,9 @@
 -- PREPARED ONLY: do not apply remotely without explicit approval.
 -- Removes the legacy public USING(true) policies from Phase 2 installations.
 
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
+
 DO $policy_cleanup$
 DECLARE
   target_table text;

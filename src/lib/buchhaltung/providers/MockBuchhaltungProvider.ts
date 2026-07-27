@@ -8,7 +8,7 @@ import type {
   Beleg, BelegDetail, BelegFilter, BelegFile,
   Ausgangsrechnung, RechnungFilter,
   Zeitraum, KategorieSumme, KraftstoffReport, Bwa,
-  CostItem, UstvaWerte, Steuerprofil, Ersparnis,
+  CostItem, UstvaWerte, Steuerprofil, ErsparnisResult,
   ExportDatei,
 } from "../types";
 
@@ -268,14 +268,12 @@ export class MockBuchhaltungProvider implements BuchhaltungDataProvider {
     };
   }
 
-  async getErsparnis(jahr: number): Promise<Ersparnis> {
+  async getErsparnis(_jahr: number): Promise<ErsparnisResult> {
+    void _jahr;
     return {
-      jahr,
-      betrag: 2840,
-      anzahlAutoBelege: 142,
-      minutenProBeleg: 4,
-      beraterStundensatz: 120,
-      prozentAutomatisch: 94,
+      state: "not_evidenced",
+      data: null,
+      reason: "FINANCE_SAVINGS_NOT_EVIDENCED",
     };
   }
 }

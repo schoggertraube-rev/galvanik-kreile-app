@@ -3,8 +3,8 @@
 -- This migration preserves historical template rows: obsolete projections are
 -- marked inactive instead of being deleted.
 
-BEGIN;
-
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 SET LOCAL search_path = pg_catalog, pg_temp;
 
 CREATE TEMP TABLE capture_expected_secdef_contract (
@@ -19,13 +19,13 @@ CREATE TEMP TABLE capture_expected_secdef_contract (
 INSERT INTO pg_temp.capture_expected_secdef_contract
   (signature, proconfig, body_md5, io_md5, service_executable, returns_set)
 VALUES
-  ('public.get_mollie_payment_quote(text,text)', ARRAY['search_path=pg_catalog, extensions, public, pg_temp']::text[], '64323e588243eb11d29f2e27270c0104', '25fcd431d639b3f1d67c0f218290871e', true, true),
+  ('public.get_mollie_payment_quote(text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'e1387b5f181cf370a9134565723908a0', '25fcd431d639b3f1d67c0f218290871e', true, true),
   ('public.reserve_mollie_payment_attempt(uuid,text,text,bigint,text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'e9cd92c3720b8295b3699092f1906a3b', 'e87baa2c03b88d61b9c0714aa691e208', true, true),
   ('public.bind_mollie_payment_provider(uuid,text,text,bigint,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '9196af65db96c0bc7b17597e7bcfe075', '6ec4078fc3ffce3c68b2d973f000e671', true, false),
   ('public.record_mollie_payment_state(uuid,text,text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '12e8cf72079be8fbbe5ed43f494e0d0c', '494a983c2f837f44a9c30bfaaeb09ccf', true, true),
   ('public.finalize_mollie_payment(text,text,text,timestamptz,text,text,bigint,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'd8b71dd4335661376fec5d592c15e060', 'ef9825dad89d19b778cbb4f31cc78cd4', true, true),
-  ('public.consume_security_rate_limit(text,text,integer,integer)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '311596f0313c11fb4a51ef90f3241584', '9382ddc772176c42f64cc35a766466e3', true, true),
-  ('public.reset_security_rate_limit(text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '9e79bdd85c9336c2e748cfbb55ff55d9', 'c70eb964d535689f84f0369c683ca57b', true, false),
+  ('public.consume_security_rate_limit(text,text,integer,integer)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], '848e071be3cdbed49e1115459d8eb6c7', '9382ddc772176c42f64cc35a766466e3', true, true),
+  ('public.reset_security_rate_limit(text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'c29a5d3da2b0dbe3419e2da389d0dfc3', 'c70eb964d535689f84f0369c683ca57b', true, false),
   ('public.reserve_ai_usage(text,text,text,text,integer,integer,integer,integer,bigint,bigint)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'b532f4ad667ae95ac44d58668daa1219', 'ea941a7b3d8085fdda7a9a647c1f7c98', true, true),
   ('public.claim_ai_usage_reservation(uuid,text,text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'dd3a7c24ffdecbbbb4e1294764129758', '30538ba0c66ff5faca46b42332171f1d', true, false),
   ('public.settle_ai_usage_reservation(uuid,text,text,text,text,integer,text,jsonb)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[], 'a420af6963cf4a4302d53d4c6e384bca', 'ae2ff008ce201376b6a458e3b53bc607', true, true),
@@ -235,6 +235,392 @@ AS $contract$
     );
 $contract$;
 
+CREATE FUNCTION pg_temp.capture_supabase_platform_receipt_valid(
+  p_runtime_role_oid oid,
+  p_service_role_oid oid,
+  p_migration_owner oid
+)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SET search_path = pg_catalog, pg_temp
+AS $contract$
+  SELECT
+    p_runtime_role_oid IS NOT NULL
+    AND p_service_role_oid IS NOT NULL
+    AND p_migration_owner IS NOT NULL
+    AND EXISTS (
+      SELECT 1
+      FROM pg_roles runtime_role
+      JOIN pg_roles service_role ON service_role.oid = p_service_role_oid
+      JOIN pg_database database_record ON database_record.datname = current_database()
+      WHERE runtime_role.oid = p_runtime_role_oid
+        AND database_record.datdba = p_migration_owner
+        AND EXISTS (
+          SELECT 1
+          FROM pg_roles owner_role
+          WHERE owner_role.oid = database_record.datdba
+            AND owner_role.rolname = 'postgres'
+            AND owner_role.rolbypassrls
+            AND NOT owner_role.rolsuper
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM pg_roles platform_admin
+          WHERE platform_admin.rolname = 'supabase_admin'
+            AND platform_admin.rolsuper
+        )
+        AND 1 = (
+          SELECT count(*)
+          FROM pg_auth_members membership
+          JOIN pg_roles grantor_role ON grantor_role.oid = membership.grantor
+          WHERE membership.roleid = service_role.oid
+            AND membership.member = database_record.datdba
+            AND membership.admin_option
+            AND membership.inherit_option
+            AND membership.set_option
+            AND grantor_role.rolname = 'supabase_admin'
+            AND grantor_role.rolsuper
+        )
+        AND 1 = (
+          SELECT count(*)
+          FROM pg_auth_members membership
+          JOIN pg_roles member_role ON member_role.oid = membership.member
+          JOIN pg_roles grantor_role ON grantor_role.oid = membership.grantor
+          WHERE membership.roleid = service_role.oid
+            AND member_role.rolname = 'authenticator'
+            AND NOT membership.admin_option
+            AND NOT membership.inherit_option
+            AND membership.set_option
+            AND grantor_role.rolname = 'supabase_admin'
+            AND grantor_role.rolsuper
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM pg_roles cli_role
+          WHERE cli_role.rolname = 'cli_login_postgres'
+            AND cli_role.rolcanlogin
+            AND NOT cli_role.rolinherit
+            AND NOT cli_role.rolsuper
+            AND NOT cli_role.rolbypassrls
+            AND NOT cli_role.rolcreaterole
+            AND NOT cli_role.rolcreatedb
+            AND NOT cli_role.rolreplication
+            AND cli_role.rolconfig IS NULL
+            AND 1 = (
+              SELECT count(*)
+              FROM pg_auth_members membership
+              WHERE membership.member = cli_role.oid
+            )
+            AND 1 = (
+              SELECT count(*)
+              FROM pg_auth_members membership
+              JOIN pg_roles grantor_role ON grantor_role.oid = membership.grantor
+              WHERE membership.roleid = database_record.datdba
+                AND membership.member = cli_role.oid
+                AND NOT membership.admin_option
+                AND NOT membership.inherit_option
+                AND membership.set_option
+                AND grantor_role.rolname = 'supabase_admin'
+                AND grantor_role.rolsuper
+            )
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM pg_database template_database
+          JOIN pg_roles template_owner ON template_owner.oid = template_database.datdba
+          CROSS JOIN LATERAL (
+            SELECT
+              count(*) AS entry_count,
+              md5(string_agg(
+                concat_ws(
+                  '|',
+                  CASE WHEN acl_entry.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl_entry.grantee) END,
+                  pg_get_userbyid(acl_entry.grantor),
+                  acl_entry.privilege_type,
+                  acl_entry.is_grantable::text
+                ),
+                E'\n'
+                ORDER BY
+                  CASE WHEN acl_entry.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl_entry.grantee) END,
+                  pg_get_userbyid(acl_entry.grantor),
+                  acl_entry.privilege_type
+              )) AS receipt_md5
+            FROM aclexplode(
+              coalesce(template_database.datacl, acldefault('d', template_database.datdba))
+            ) acl_entry
+          ) template_acl
+          WHERE template_database.datname = 'template1'
+            AND template_database.datistemplate
+            AND template_database.datallowconn
+            AND template_owner.rolname = 'supabase_admin'
+            AND template_acl.entry_count = 4
+            AND template_acl.receipt_md5 = '71ec9b62961e2fc5d13e4d6ee008ad4f'
+            AND has_database_privilege(runtime_role.oid, template_database.oid, 'CONNECT')
+            AND NOT has_database_privilege(runtime_role.oid, template_database.oid, 'TEMP')
+            AND NOT has_database_privilege(runtime_role.oid, template_database.oid, 'CREATE')
+            AND NOT EXISTS (
+              SELECT 1
+              FROM aclexplode(
+                coalesce(template_database.datacl, acldefault('d', template_database.datdba))
+              ) acl_entry
+              WHERE acl_entry.grantee = runtime_role.oid
+            )
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM pg_namespace extension_namespace
+          CROSS JOIN LATERAL (
+            SELECT
+              count(*) AS entry_count,
+              md5(string_agg(
+                concat_ws(
+                  '|',
+                  CASE WHEN acl_entry.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl_entry.grantee) END,
+                  pg_get_userbyid(acl_entry.grantor),
+                  acl_entry.privilege_type,
+                  acl_entry.is_grantable::text
+                ),
+                E'\n'
+                ORDER BY
+                  CASE WHEN acl_entry.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl_entry.grantee) END,
+                  pg_get_userbyid(acl_entry.grantor),
+                  acl_entry.privilege_type
+              )) AS receipt_md5
+            FROM aclexplode(
+              coalesce(extension_namespace.nspacl, acldefault('n', extension_namespace.nspowner))
+            ) acl_entry
+          ) extension_acl
+          WHERE extension_namespace.nspname = 'extensions'
+            AND extension_namespace.nspowner = database_record.datdba
+            AND extension_acl.entry_count = 7
+            AND extension_acl.receipt_md5 = 'e18f1837546257d1ab9732ac78ba82be'
+            AND EXISTS (
+              SELECT 1
+              FROM pg_roles dashboard_role
+              WHERE dashboard_role.rolname = 'dashboard_user'
+                AND has_schema_privilege(dashboard_role.oid, extension_namespace.oid, 'CREATE')
+            )
+            AND NOT EXISTS (
+              SELECT 1
+              FROM pg_roles candidate
+              WHERE NOT candidate.rolsuper
+                AND candidate.oid <> database_record.datdba
+                AND candidate.rolname <> 'dashboard_user'
+                AND has_schema_privilege(candidate.oid, extension_namespace.oid, 'CREATE')
+            )
+            AND NOT has_schema_privilege(runtime_role.oid, extension_namespace.oid, 'CREATE')
+            AND NOT has_schema_privilege(service_role.oid, extension_namespace.oid, 'CREATE')
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM (
+            SELECT
+              count(*) AS entry_count,
+              md5(string_agg(
+                concat_ws(
+                  '|',
+                  namespace_record.nspname,
+                  relation_record.relname,
+                  relation_record.relkind::text,
+                  pg_get_userbyid(relation_record.relowner),
+                  coalesce(array_to_string(relation_record.reloptions, ','), '<null>'),
+                  CASE
+                    WHEN relation_record.relkind = 'v'
+                      THEN md5(convert_to(pg_get_viewdef(relation_record.oid, false), 'UTF8'))
+                    ELSE '<not-view>'
+                  END,
+                  CASE WHEN acl_entry.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl_entry.grantee) END,
+                  pg_get_userbyid(acl_entry.grantor),
+                  acl_entry.privilege_type,
+                  acl_entry.is_grantable::text
+                ),
+                E'\n'
+                ORDER BY
+                  namespace_record.nspname,
+                  relation_record.relname,
+                  CASE WHEN acl_entry.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl_entry.grantee) END,
+                  pg_get_userbyid(acl_entry.grantor),
+                  acl_entry.privilege_type,
+                  acl_entry.is_grantable
+              )) AS receipt_md5
+            FROM pg_class relation_record
+            JOIN pg_namespace namespace_record ON namespace_record.oid = relation_record.relnamespace
+            CROSS JOIN LATERAL aclexplode(
+              coalesce(
+                relation_record.relacl,
+                CASE
+                  WHEN relation_record.relkind = 'S' THEN acldefault('s', relation_record.relowner)
+                  ELSE acldefault('r', relation_record.relowner)
+                END
+              )
+            ) acl_entry
+            WHERE namespace_record.nspname = 'extensions'
+              AND acl_entry.grantee IN (0, service_role.oid)
+          ) extension_runtime_relation_acl
+          WHERE extension_runtime_relation_acl.entry_count = 2
+            AND extension_runtime_relation_acl.receipt_md5 = '037460eda240285faef9153187753c27'
+            AND to_regclass('extensions.pg_stat_statements') IS NOT NULL
+            AND to_regclass('extensions.pg_stat_statements_info') IS NOT NULL
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pg_default_acl default_acl
+          CROSS JOIN LATERAL aclexplode(default_acl.defaclacl) acl_entry
+          WHERE default_acl.defaclrole = database_record.datdba
+            AND default_acl.defaclnamespace = to_regnamespace('public')
+            AND acl_entry.grantee <> database_record.datdba
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM (
+            SELECT
+              count(*) AS entry_count,
+              md5(string_agg(
+                concat_ws(
+                  '|',
+                  pg_get_userbyid(default_acl.defaclrole),
+                  coalesce(namespace_record.nspname, '<all>'),
+                  default_acl.defaclobjtype::text,
+                  CASE WHEN acl_entry.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl_entry.grantee) END,
+                  pg_get_userbyid(acl_entry.grantor),
+                  acl_entry.privilege_type,
+                  acl_entry.is_grantable::text
+                ),
+                E'\n'
+                ORDER BY
+                  pg_get_userbyid(default_acl.defaclrole),
+                  coalesce(namespace_record.nspname, '<all>'),
+                  default_acl.defaclobjtype,
+                  CASE WHEN acl_entry.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl_entry.grantee) END,
+                  pg_get_userbyid(acl_entry.grantor),
+                  acl_entry.privilege_type,
+                  acl_entry.is_grantable
+              )) AS receipt_md5
+            FROM pg_default_acl default_acl
+            LEFT JOIN pg_namespace namespace_record ON namespace_record.oid = default_acl.defaclnamespace
+            CROSS JOIN LATERAL aclexplode(default_acl.defaclacl) acl_entry
+            WHERE NOT (
+              default_acl.defaclrole = database_record.datdba
+              AND default_acl.defaclnamespace = to_regnamespace('public')
+            )
+          ) managed_default_acl
+          WHERE managed_default_acl.entry_count = 252
+            AND managed_default_acl.receipt_md5 = '7a0154016b7e8dc996bbf197a013a8fc'
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM (
+            SELECT
+              count(*) AS entry_count,
+              md5(string_agg(
+                concat_ws(
+                  '|',
+                  function_contract.schema_name,
+                  function_contract.signature,
+                  function_contract.owner_name,
+                  function_contract.language_name,
+                  function_contract.proconfig,
+                  function_contract.raw_body_md5,
+                  function_contract.io_md5,
+                  function_contract.prokind,
+                  function_contract.provolatile,
+                  function_contract.proparallel,
+                  function_contract.proisstrict,
+                  function_contract.proleakproof,
+                  function_contract.proretset,
+                  function_contract.procost,
+                  function_contract.prorows,
+                  function_contract.pronargdefaults,
+                  function_contract.provariadic,
+                  function_contract.prosupport,
+                  function_contract.prosqlbody,
+                  function_contract.probin,
+                  function_contract.acl_receipt
+                ),
+                E'\n'
+                ORDER BY function_contract.schema_name, function_contract.signature
+              )) AS receipt_md5
+            FROM (
+              SELECT
+                namespace_record.nspname AS schema_name,
+                function_record.oid::regprocedure::text AS signature,
+                pg_get_userbyid(function_record.proowner) AS owner_name,
+                language_record.lanname AS language_name,
+                coalesce(array_to_string(function_record.proconfig, ','), '<null>') AS proconfig,
+                md5(convert_to(function_record.prosrc, 'UTF8')) AS raw_body_md5,
+                md5(convert_to(
+                  pg_get_function_arguments(function_record.oid)
+                    || ' -> '
+                    || pg_get_function_result(function_record.oid),
+                  'UTF8'
+                )) AS io_md5,
+                function_record.prokind::text AS prokind,
+                function_record.provolatile::text AS provolatile,
+                function_record.proparallel::text AS proparallel,
+                function_record.proisstrict::text AS proisstrict,
+                function_record.proleakproof::text AS proleakproof,
+                function_record.proretset::text AS proretset,
+                function_record.procost::text AS procost,
+                function_record.prorows::text AS prorows,
+                function_record.pronargdefaults::text AS pronargdefaults,
+                function_record.provariadic::text AS provariadic,
+                function_record.prosupport::text AS prosupport,
+                coalesce(function_record.prosqlbody::text, '<null>') AS prosqlbody,
+                coalesce(function_record.probin, '<null>') AS probin,
+                (
+                  SELECT string_agg(
+                    concat_ws(
+                      ':',
+                      CASE WHEN acl_entry.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl_entry.grantee) END,
+                      pg_get_userbyid(acl_entry.grantor),
+                      acl_entry.privilege_type,
+                      acl_entry.is_grantable::text
+                    ),
+                    ','
+                    ORDER BY
+                      CASE WHEN acl_entry.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(acl_entry.grantee) END,
+                      pg_get_userbyid(acl_entry.grantor),
+                      acl_entry.privilege_type,
+                      acl_entry.is_grantable
+                  )
+                  FROM aclexplode(
+                    coalesce(function_record.proacl, acldefault('f', function_record.proowner))
+                  ) acl_entry
+                ) AS acl_receipt
+              FROM pg_proc function_record
+              JOIN pg_namespace namespace_record ON namespace_record.oid = function_record.pronamespace
+              JOIN pg_language language_record ON language_record.oid = function_record.prolang
+              WHERE function_record.prosecdef
+                AND function_record.oid >= 16384
+                AND namespace_record.nspname <> 'public'
+                AND namespace_record.nspname !~ '^pg_(toast_)?temp_[0-9]+$'
+                AND has_function_privilege(service_role.oid, function_record.oid, 'EXECUTE')
+            ) function_contract
+          ) managed_secdef
+          WHERE managed_secdef.entry_count = 2
+            AND managed_secdef.receipt_md5 = 'bbde5a9f320e09f68d30d51782d0727a'
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pg_roles candidate
+          WHERE NOT candidate.rolsuper
+            AND candidate.oid <> service_role.oid
+            AND candidate.oid <> database_record.datdba
+            AND candidate.rolname NOT IN ('authenticator', 'kreile_app_runtime')
+            AND pg_has_role(candidate.oid, service_role.oid, 'MEMBER')
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM pg_roles candidate
+          WHERE NOT candidate.rolsuper
+            AND candidate.oid <> database_record.datdba
+            AND candidate.rolname <> 'cli_login_postgres'
+            AND pg_has_role(candidate.oid, database_record.datdba, 'MEMBER')
+        )
+    );
+$contract$;
+
 DO $preflight$
 DECLARE
   relation_name text;
@@ -264,6 +650,10 @@ BEGIN
 
   IF legacy_function IS NULL THEN
     RAISE EXCEPTION 'TEMPLATE_PROJECTION_PREFLIGHT_FAILED: legacy fn_update_vorlagen() is missing';
+  END IF;
+
+  IF runtime_role_oid IS NULL THEN
+    RAISE EXCEPTION 'TEMPLATE_PROJECTION_PREFLIGHT_FAILED: kreile_app_runtime is missing; provision the approved LOGIN NOINHERIT broker before this boundary';
   END IF;
 
   IF migration_owner IS NULL OR service_role_oid IS NULL OR runtime_role_oid IS NULL OR NOT EXISTS (
@@ -310,6 +700,7 @@ BEGIN
         JOIN pg_roles member_role ON member_role.oid = membership.member
         JOIN pg_roles grantor_role ON grantor_role.oid = membership.grantor
         WHERE membership.roleid = service_role_oid
+          AND member_role.oid <> migration_owner
           AND (
             member_role.rolname NOT IN ('kreile_app_runtime', 'authenticator')
             OR membership.admin_option
@@ -327,7 +718,7 @@ BEGIN
   ) OR migration_owner IS DISTINCT FROM (
     SELECT datdba FROM pg_database WHERE datname = current_database()
   ) OR current_user IN ('anon', 'authenticated', 'service_role', 'authenticator') THEN
-    RAISE EXCEPTION 'TEMPLATE_PROJECTION_PREFLIGHT_FAILED: migration owner must bypass RLS';
+    RAISE EXCEPTION 'TEMPLATE_PROJECTION_PREFLIGHT_FAILED: migration owner, service_role or database privilege contract is unsafe';
   END IF;
 
   IF EXISTS (
@@ -516,8 +907,12 @@ BEGIN
         WHERE database_record.datallowconn
           AND database_record.datname <> current_database()
           AND (
-            has_database_privilege(runtime_role.oid, database_record.oid, 'CONNECT')
+            (
+              database_record.datname <> 'template1'
+              AND has_database_privilege(runtime_role.oid, database_record.oid, 'CONNECT')
+            )
             OR has_database_privilege(runtime_role.oid, database_record.oid, 'TEMP')
+            OR has_database_privilege(runtime_role.oid, database_record.oid, 'CREATE')
           )
       )
       AND NOT EXISTS (
@@ -548,7 +943,7 @@ BEGIN
         CROSS JOIN LATERAL aclexplode(
           coalesce(writable_namespace.nspacl, acldefault('n', writable_namespace.nspowner))
         ) acl_entry
-        WHERE writable_namespace.nspname IN ('public', 'extensions')
+        WHERE writable_namespace.nspname = 'public'
           AND acl_entry.grantee = 0
           AND acl_entry.privilege_type = 'CREATE'
       )
@@ -556,7 +951,7 @@ BEGIN
         SELECT 1
         FROM pg_roles candidate
         CROSS JOIN pg_namespace writable_namespace
-        WHERE writable_namespace.nspname IN ('public', 'extensions')
+        WHERE writable_namespace.nspname = 'public'
           AND NOT candidate.rolsuper
           AND candidate.oid <> migration_owner
           AND candidate.rolname <> 'pg_database_owner'
@@ -576,7 +971,7 @@ BEGIN
               AND function_record.proconfig IS NOT DISTINCT FROM approved.proconfig
             ), false) AS contract_approved
           FROM (VALUES
-            ('public.get_mollie_payment_quote(text,text)', ARRAY['search_path=pg_catalog, extensions, public, pg_temp']::text[]),
+            ('public.get_mollie_payment_quote(text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[]),
             ('public.reserve_mollie_payment_attempt(uuid,text,text,bigint,text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[]),
             ('public.bind_mollie_payment_provider(uuid,text,text,bigint,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[]),
             ('public.record_mollie_payment_state(uuid,text,text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[]),
@@ -615,7 +1010,7 @@ BEGIN
         ) acl_contract
         WHERE function_record.prosecdef
           AND function_record.oid >= 16384
-          AND namespace_record.nspname !~ '^pg_(toast_)?temp_[0-9]+$'
+          AND namespace_record.nspname = 'public'
           AND (
             function_record.prokind <> 'f'
             OR language_record.lanname <> 'plpgsql'
@@ -635,7 +1030,6 @@ BEGIN
                 (
                   function_record.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, pg_temp']::text[]
                   AND function_record.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, public, pg_temp']::text[]
-                  AND function_record.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, extensions, public, pg_temp']::text[]
                 )
                 OR acl_contract.entry_count <> 1
                 OR acl_contract.owner_entry_count <> 1
@@ -658,7 +1052,7 @@ BEGIN
         ) acl_entry
         WHERE relation_record.oid >= 16384
           AND relation_record.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
-          AND namespace_record.nspname !~ '^pg_(toast_)?temp_[0-9]+$'
+          AND namespace_record.nspname = 'public'
           AND acl_entry.grantee = 0
       )
       AND NOT EXISTS (
@@ -673,7 +1067,7 @@ BEGIN
           AND relation_record.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
           AND attribute_record.attnum > 0
           AND NOT attribute_record.attisdropped
-          AND namespace_record.nspname !~ '^pg_(toast_)?temp_[0-9]+$'
+          AND namespace_record.nspname = 'public'
           AND acl_entry.grantee = 0
       )
       AND NOT EXISTS (
@@ -690,13 +1084,13 @@ BEGIN
         CROSS JOIN LATERAL aclexplode(
           coalesce(parameter_acl.paracl, '{}'::aclitem[])
         ) acl_entry
-        WHERE acl_entry.grantee IN (0, runtime_role.oid, service_role_oid)
+        WHERE acl_entry.grantee = runtime_role.oid
       )
       AND NOT EXISTS (
         SELECT 1
         FROM pg_default_acl default_acl
         CROSS JOIN LATERAL aclexplode(default_acl.defaclacl) acl_entry
-        WHERE acl_entry.grantee IN (0, runtime_role.oid, service_role_oid)
+        WHERE acl_entry.grantee = runtime_role.oid
       )
       AND NOT EXISTS (
         SELECT 1
@@ -707,7 +1101,7 @@ BEGIN
         ) acl_entry
         WHERE function_record.prosecdef
           AND function_record.oid >= 16384
-          AND namespace_record.nspname !~ '^pg_(toast_)?temp_[0-9]+$'
+          AND namespace_record.nspname = 'public'
           AND acl_entry.grantee = 0
       )
 
@@ -745,6 +1139,14 @@ BEGIN
 
   IF NOT pg_temp.capture_secdef_contract_valid(service_role_oid, migration_owner, 'pre') THEN
     RAISE EXCEPTION 'TEMPLATE_PROJECTION_PREFLIGHT_FAILED: SECURITY DEFINER function or trigger inventory drifted';
+  END IF;
+
+  IF NOT pg_temp.capture_supabase_platform_receipt_valid(
+    runtime_role_oid,
+    service_role_oid,
+    migration_owner
+  ) THEN
+    RAISE EXCEPTION 'TEMPLATE_PROJECTION_PREFLIGHT_FAILED: Supabase platform receipt drifted';
   END IF;
 
   -- Supabase's platform-owned authenticator is deliberately not an application
@@ -791,6 +1193,7 @@ BEGIN
     FROM pg_roles candidate
     WHERE NOT candidate.rolsuper
       AND candidate.oid <> service_role_oid
+      AND candidate.oid <> migration_owner
       AND candidate.rolname NOT IN ('authenticator', 'kreile_app_runtime')
       AND pg_has_role(candidate.oid, service_role_oid, 'MEMBER')
   ) THEN
@@ -802,6 +1205,7 @@ BEGIN
     FROM pg_roles candidate
     WHERE NOT candidate.rolsuper
       AND candidate.oid <> migration_owner
+      AND candidate.rolname <> 'cli_login_postgres'
       AND pg_has_role(candidate.oid, migration_owner, 'MEMBER')
   ) THEN
     RAISE EXCEPTION 'TEMPLATE_PROJECTION_PREFLIGHT_FAILED: non-superuser can assume migration owner';
@@ -2588,6 +2992,7 @@ BEGIN
         JOIN pg_roles member_role ON member_role.oid = membership.member
         JOIN pg_roles grantor_role ON grantor_role.oid = membership.grantor
         WHERE membership.roleid = service_role_oid
+          AND member_role.oid <> migration_owner
           AND (
             member_role.rolname NOT IN ('kreile_app_runtime', 'authenticator')
             OR membership.admin_option
@@ -2723,8 +3128,12 @@ BEGIN
         WHERE database_record.datallowconn
           AND database_record.datname <> current_database()
           AND (
-            has_database_privilege(runtime_role.oid, database_record.oid, 'CONNECT')
+            (
+              database_record.datname <> 'template1'
+              AND has_database_privilege(runtime_role.oid, database_record.oid, 'CONNECT')
+            )
             OR has_database_privilege(runtime_role.oid, database_record.oid, 'TEMP')
+            OR has_database_privilege(runtime_role.oid, database_record.oid, 'CREATE')
           )
       )
       AND NOT EXISTS (
@@ -2755,7 +3164,7 @@ BEGIN
         CROSS JOIN LATERAL aclexplode(
           coalesce(writable_namespace.nspacl, acldefault('n', writable_namespace.nspowner))
         ) acl_entry
-        WHERE writable_namespace.nspname IN ('public', 'extensions')
+        WHERE writable_namespace.nspname = 'public'
           AND acl_entry.grantee = 0
           AND acl_entry.privilege_type = 'CREATE'
       )
@@ -2763,7 +3172,7 @@ BEGIN
         SELECT 1
         FROM pg_roles candidate
         CROSS JOIN pg_namespace writable_namespace
-        WHERE writable_namespace.nspname IN ('public', 'extensions')
+        WHERE writable_namespace.nspname = 'public'
           AND NOT candidate.rolsuper
           AND candidate.oid <> migration_owner
           AND candidate.rolname <> 'pg_database_owner'
@@ -2783,7 +3192,7 @@ BEGIN
               AND function_record.proconfig IS NOT DISTINCT FROM approved.proconfig
             ), false) AS contract_approved
           FROM (VALUES
-            ('public.get_mollie_payment_quote(text,text)', ARRAY['search_path=pg_catalog, extensions, public, pg_temp']::text[]),
+            ('public.get_mollie_payment_quote(text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[]),
             ('public.reserve_mollie_payment_attempt(uuid,text,text,bigint,text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[]),
             ('public.bind_mollie_payment_provider(uuid,text,text,bigint,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[]),
             ('public.record_mollie_payment_state(uuid,text,text,text)', ARRAY['search_path=pg_catalog, public, pg_temp']::text[]),
@@ -2822,7 +3231,7 @@ BEGIN
         ) acl_contract
         WHERE function_record.prosecdef
           AND function_record.oid >= 16384
-          AND namespace_record.nspname !~ '^pg_(toast_)?temp_[0-9]+$'
+          AND namespace_record.nspname = 'public'
           AND (
             function_record.prokind <> 'f'
             OR language_record.lanname <> 'plpgsql'
@@ -2842,7 +3251,6 @@ BEGIN
                 (
                   function_record.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, pg_temp']::text[]
                   AND function_record.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, public, pg_temp']::text[]
-                  AND function_record.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, extensions, public, pg_temp']::text[]
                 )
                 OR acl_contract.entry_count <> 1
                 OR acl_contract.owner_entry_count <> 1
@@ -2865,7 +3273,7 @@ BEGIN
         ) acl_entry
         WHERE relation_record.oid >= 16384
           AND relation_record.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
-          AND namespace_record.nspname !~ '^pg_(toast_)?temp_[0-9]+$'
+          AND namespace_record.nspname = 'public'
           AND acl_entry.grantee = 0
       )
       AND NOT EXISTS (
@@ -2880,7 +3288,7 @@ BEGIN
           AND relation_record.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
           AND attribute_record.attnum > 0
           AND NOT attribute_record.attisdropped
-          AND namespace_record.nspname !~ '^pg_(toast_)?temp_[0-9]+$'
+          AND namespace_record.nspname = 'public'
           AND acl_entry.grantee = 0
       )
       AND NOT EXISTS (
@@ -2897,13 +3305,13 @@ BEGIN
         CROSS JOIN LATERAL aclexplode(
           coalesce(parameter_acl.paracl, '{}'::aclitem[])
         ) acl_entry
-        WHERE acl_entry.grantee IN (0, runtime_role.oid, service_role_oid)
+        WHERE acl_entry.grantee = runtime_role.oid
       )
       AND NOT EXISTS (
         SELECT 1
         FROM pg_default_acl default_acl
         CROSS JOIN LATERAL aclexplode(default_acl.defaclacl) acl_entry
-        WHERE acl_entry.grantee IN (0, runtime_role.oid, service_role_oid)
+        WHERE acl_entry.grantee = runtime_role.oid
       )
       AND NOT EXISTS (
         SELECT 1
@@ -2914,7 +3322,7 @@ BEGIN
         ) acl_entry
         WHERE function_record.prosecdef
           AND function_record.oid >= 16384
-          AND namespace_record.nspname !~ '^pg_(toast_)?temp_[0-9]+$'
+          AND namespace_record.nspname = 'public'
           AND acl_entry.grantee = 0
       )
       AND NOT has_schema_privilege(runtime_role.oid, 'public', 'CREATE')
@@ -2953,6 +3361,14 @@ BEGIN
     RAISE EXCEPTION 'TEMPLATE_PROJECTION_VERIFICATION_FAILED: SECURITY DEFINER function or trigger inventory drifted';
   END IF;
 
+  IF NOT pg_temp.capture_supabase_platform_receipt_valid(
+    runtime_role_oid,
+    service_role_oid,
+    migration_owner
+  ) THEN
+    RAISE EXCEPTION 'TEMPLATE_PROJECTION_VERIFICATION_FAILED: Supabase platform receipt drifted';
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM pg_roles candidate
@@ -2988,6 +3404,7 @@ BEGIN
     FROM pg_roles candidate
     WHERE NOT candidate.rolsuper
       AND candidate.oid <> service_role_oid
+      AND candidate.oid <> migration_owner
       AND candidate.rolname NOT IN ('authenticator', 'kreile_app_runtime')
       AND pg_has_role(candidate.oid, service_role_oid, 'MEMBER')
   ) OR EXISTS (
@@ -2995,6 +3412,7 @@ BEGIN
     FROM pg_roles candidate
     WHERE NOT candidate.rolsuper
       AND candidate.oid <> migration_owner
+      AND candidate.rolname <> 'cli_login_postgres'
       AND pg_has_role(candidate.oid, migration_owner, 'MEMBER')
   ) THEN
     RAISE EXCEPTION 'TEMPLATE_PROJECTION_VERIFICATION_FAILED: role reachability drift';
@@ -3546,5 +3964,3 @@ BEGIN
 
 END;
 $verification$;
-
-COMMIT;

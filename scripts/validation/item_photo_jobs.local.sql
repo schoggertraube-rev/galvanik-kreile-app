@@ -2,6 +2,52 @@
 
 BEGIN;
 
+INSERT INTO public.customers (id, tenant_id, name, type)
+VALUES ('customer-validation', 'galvanik-kreile', 'Validation Customer', 'company');
+
+INSERT INTO public.app_users (id, tenant_id, email, full_name, role, active)
+VALUES (
+  '10000000-0000-4000-8000-000000000009',
+  'galvanik-kreile',
+  'item-photo-validation@example.invalid',
+  'Item Photo Validation',
+  'workshop',
+  true
+), (
+  '10000000-0000-4000-8000-000000000008',
+  'galvanik-kreile',
+  'item-photo-other@example.invalid',
+  'Item Photo Validation Other',
+  'workshop',
+  true
+);
+
+INSERT INTO public.orders (id, tenant_id, order_number, customer_id, title)
+VALUES (
+  'order-validation',
+  'galvanik-kreile',
+  'VALIDATION-ITEM-PHOTO',
+  'customer-validation',
+  'Item photo validation'
+);
+
+INSERT INTO public.items (id, tenant_id, order_id, customer_id, name)
+VALUES
+  (
+    'item-validation',
+    'galvanik-kreile',
+    'order-validation',
+    'customer-validation',
+    'Validation item'
+  ),
+  (
+    'item-other',
+    'galvanik-kreile',
+    'order-validation',
+    'customer-validation',
+    'Validation item other'
+  );
+
 DO $$
 DECLARE
   v_job_id uuid := '11111111-1111-4111-8111-111111111111';
@@ -18,7 +64,7 @@ BEGIN
   FROM public.reserve_item_photo_job(
     v_job_id,
     'galvanik-kreile',
-    'validation-user',
+    '10000000-0000-4000-8000-000000000009',
     'order-validation',
     'item-validation',
     repeat('a', 64),
@@ -42,7 +88,11 @@ BEGIN
   IF public.bind_item_photo_upload(v_job_id, 'galvanik-kreile', 'wrong-user') THEN
     RAISE EXCEPTION 'identity-mismatched upload bind was accepted';
   END IF;
-  IF NOT public.bind_item_photo_upload(v_job_id, 'galvanik-kreile', 'validation-user') THEN
+  IF NOT public.bind_item_photo_upload(
+    v_job_id,
+    'galvanik-kreile',
+    '10000000-0000-4000-8000-000000000009'
+  ) THEN
     RAISE EXCEPTION 'bound upload was rejected';
   END IF;
 
@@ -76,7 +126,7 @@ BEGIN
   FROM public.reserve_item_photo_job(
     '33333333-3333-4333-8333-333333333333',
     'galvanik-kreile',
-    'validation-user',
+    '10000000-0000-4000-8000-000000000009',
     'order-validation',
     'item-validation',
     repeat('a', 64),
@@ -92,7 +142,7 @@ BEGIN
   FROM public.reserve_item_photo_job(
     '44444444-4444-4444-8444-444444444444',
     'galvanik-kreile',
-    'other-user',
+    '10000000-0000-4000-8000-000000000008',
     'order-validation',
     'item-validation',
     repeat('c', 64),
@@ -108,7 +158,7 @@ BEGIN
   FROM public.reserve_item_photo_job(
     v_other_job_id,
     'galvanik-kreile',
-    'validation-user',
+    '10000000-0000-4000-8000-000000000009',
     'order-validation',
     'item-validation',
     repeat('d', 64),
@@ -124,7 +174,7 @@ BEGIN
     PERFORM * FROM public.reserve_item_photo_job(
       '55555555-5555-4555-8555-555555555555',
       'galvanik-kreile',
-      'validation-user',
+      '10000000-0000-4000-8000-000000000009',
       'order-validation',
       'item-other',
       repeat('f', 64),

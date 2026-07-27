@@ -3,8 +3,8 @@
 -- single, auditable source row. Existing contradictory rows must be reconciled
 -- explicitly; this migration never guesses or backfills accounting values.
 
-BEGIN;
-
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '5min';
 SET LOCAL search_path = pg_catalog, pg_temp;
 
 DO $truth_preflight$
@@ -201,5 +201,3 @@ BEGIN
   END IF;
 END
 $truth_verification$;
-
-COMMIT;
