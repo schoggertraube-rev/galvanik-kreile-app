@@ -61,7 +61,7 @@ serve(async (req) => {
       const { data: invData, error: invError } = await supabase
         .from('ausgangsrechnung')
         .insert({
-          nummer: `RE-${new Date().getFullYear()}-${Math.floor(Math.random() * 10000)}`,
+          nummer: `RE-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8)}`,
           order_id: orderId,
           datum: new Date().toISOString().split('T')[0],
           brutto: amountEur,
