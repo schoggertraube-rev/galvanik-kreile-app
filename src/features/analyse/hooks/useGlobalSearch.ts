@@ -13,6 +13,7 @@ export interface GlobalSearchResult {
  * empty search result that looks like a genuine miss.
  */
 export function useGlobalSearch(_query: string) {
+void _query;
   return useMemo(() => ({
     data: [] as GlobalSearchResult[],
     isLoading: false,

@@ -56,10 +56,12 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
   // ── Auswertung & Co (Live from Actions) ────────────────────────────────────────
 
   async getAusgabenNachKategorie(zeitraum: Zeitraum): Promise<KategorieSumme[]> {
+void zeitraum;
     return [];
   }
 
   async getKraftstoffAuswertung(zeitraum: Zeitraum): Promise<KraftstoffReport> {
+void zeitraum;
     return { gesamtkosten: 0, gesamtLiter: 0, durchschnittPreisProLiter: 0, anzahlTankungen: 0, nachSorte: [], nachOrt: [], nachMonat: [] };
   }
 
@@ -80,6 +82,7 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
   }
 
   async listRechnungen(filter?: RechnungFilter): Promise<Ausgangsrechnung[]> {
+void filter;
     return [];
   }
 
@@ -88,7 +91,7 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
       const { getCockpitMetricsAction } = await import('@/app/buchhaltung/actions');
       const metrics = await getCockpitMetricsAction(zeitraum.von, zeitraum.bis);
       return metrics.ustva;
-    } catch (err) {
+    } catch {
       return { zeitraumVon: zeitraum.von, zeitraumBis: zeitraum.bis, umsatz19: 0, ust19: 0, umsatz7: 0, ust7: 0, umsatz0: 0, vorsteuer: 0, zahllast: 0, status: 'entwurf' };
     }
   }
@@ -122,6 +125,7 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
   }
 
   async exportSteuerberaterPaket(zeitraum: Zeitraum): Promise<ExportDatei> {
+void zeitraum;
     throw new Error("Nicht implementiert");
   }
 
@@ -136,7 +140,7 @@ export class SupabaseBuchhaltungProvider implements BuchhaltungDataProvider {
         beraterStundensatz: 120,
         prozentAutomatisch: data.prozentAutomatisch
       };
-    } catch (err) {
+    } catch {
       return {
         jahr,
         betrag: 0,

@@ -49,12 +49,8 @@ export async function getUstvaAnalysisAction(von: string, bis: string) {
   const vmVorsteuer = vmBelege.reduce((sum, b) => sum + (Number(b.ustBetrag) || 0), 0);
   const vmZahllast = vmUst - vmVorsteuer;
 
-  // 12 Months Chart Data (Mock trend shape based on current zahllast)
-  const chartData = Array.from({length: 12}).map((_, i) => ({
-    name: `Monat \${i+1}`,
-    ist: 0,
-    vorjahr: 0
-  }));
+  // Historical data is not available; do not fabricate a trend from the current balance.
+  const chartData: Array<{ name: string; ist: number; vorjahr: number }> = [];
 
   const trendProzent = vmZahllast === 0 ? 0 : ((zahllast - vmZahllast) / Math.abs(vmZahllast)) * 100;
   
@@ -80,8 +76,8 @@ export async function getKraftstoffAnalysisAction(von: string, bis: string) {
     return foundationUnavailableAction("Buchhaltungsanalyse");
   }
   // Wir holen alle Belege, die mit Kraftstoff verknüpft sind (einfacher Join)
-  const { kraftstoffDetail, kategorie } = await import('@/db/schema_buchhaltung');
-  const { eq, sum } = await import('drizzle-orm');
+  const { kraftstoffDetail } = await import('@/db/schema_buchhaltung');
+  const { eq } = await import('drizzle-orm');
   
   const tankungenRaw = await db.select({
     belegId: beleg.id,
@@ -117,12 +113,8 @@ export async function getKraftstoffAnalysisAction(von: string, bis: string) {
   const vmKosten = vmTankungen.reduce((s, t) => s + (Number(t.brutto) || 0), 0);
   const trendProzent = vmKosten === 0 ? 0 : ((gesamtKosten - vmKosten) / vmKosten) * 100;
 
-  // Chart
-  const chartData = Array.from({length: 12}).map((_, i) => ({
-    name: `Monat \${i+1}`,
-    ist: 0,
-    vorjahr: 0
-  }));
+  // Historical data is not available; return no chart points rather than a mock trend.
+  const chartData: Array<{ name: string; ist: number; vorjahr: number }> = [];
 
   const umsatzRaw = await db.select({ netto: ausgangsrechnung.netto }).from(ausgangsrechnung)
     .where(and(ne(ausgangsrechnung.status, 'storniert'), gte(ausgangsrechnung.datum, von), lte(ausgangsrechnung.datum, bis)));
@@ -151,7 +143,7 @@ export async function getOffenePostenAnalysisAction(von: string, bis: string) {
   if (!isFoundationAreaEnabled("Buchhaltungsanalyse")) {
     return foundationUnavailableAction("Buchhaltungsanalyse");
   }
-  const { and, gte, lte, ne, eq } = await import('drizzle-orm');
+  const { and, gte, lte, ne } = await import('drizzle-orm');
   const raw = await db.select({
     id: ausgangsrechnung.id,
     netto: ausgangsrechnung.netto,
@@ -170,12 +162,8 @@ export async function getOffenePostenAnalysisAction(von: string, bis: string) {
   const offeneSumme = offene.reduce((s, r) => s + (Number(r.brutto) || 0), 0);
   const ueberfaelligSumme = ueberfaellig.reduce((s, r) => s + (Number(r.brutto) || 0), 0);
   
-  // Trend: Dummy chart since we don't have historical snapshot data for OPOS
-  const chartData = Array.from({length: 6}).map((_, i) => ({
-    name: `Monat \${i+1}`,
-    ist: 0,
-    vorjahr: 0
-  }));
+  // Historical OPOS snapshots are not available; return no fabricated trend.
+  const chartData: Array<{ name: string; ist: number; vorjahr: number }> = [];
 
   const umsatzRaw = await db.select({ netto: ausgangsrechnung.netto }).from(ausgangsrechnung)
     .where(and(ne(ausgangsrechnung.status, 'storniert'), gte(ausgangsrechnung.datum, von), lte(ausgangsrechnung.datum, bis)));
@@ -224,11 +212,8 @@ export async function getBwaAnalysisAction(von: string, bis: string) {
   const ausgabenGesamt = material + personal + betrieb;
   const betriebsergebnis = einnahmen - ausgabenGesamt;
 
-  const chartData = Array.from({length: 12}).map((_, i) => ({
-    name: `Monat \${i+1}`,
-    ist: 0,
-    vorjahr: 0
-  }));
+  // Historical data is not available; return no chart points rather than a mock trend.
+  const chartData: Array<{ name: string; ist: number; vorjahr: number }> = [];
 
   const materialQuote = einnahmen > 0 ? (material / einnahmen) * 100 : 0;
   const personalQuote = einnahmen > 0 ? (personal / einnahmen) * 100 : 0;
@@ -286,13 +271,8 @@ export async function getAusgabenAnalysisAction(von: string, bis: string) {
 
   const gesamt = variabel + fix;
 
-  // Mock Trend for Chart
-  const chartData = Array.from({length: 12}).map((_, i) => ({
-    name: `Monat \${i+1}`,
-    variabel: 0,
-    fix: 0,
-    gesamt: 0 // calculated below
-  })).map(d => ({ ...d, gesamt: d.variabel + d.fix }));
+  // No historical cost series exists yet, so the chart must remain empty.
+  const chartData: Array<{ name: string; variabel: number; fix: number; gesamt: number }> = [];
 
   // Kategorien 
   const kats: Record<string, number> = {};
@@ -321,10 +301,10 @@ export async function getAusgabenAnalysisAction(von: string, bis: string) {
 }
 
 export async function getSparzaehlerAnalysisAction(von: string, bis: string) {
-  if (!isFoundationAreaEnabled("Buchhaltungsanalyse")) {
-    return foundationUnavailableAction("Buchhaltungsanalyse");
+if (!isFoundationAreaEnabled("Buchhaltungsanalyse")) {
+    return foundationUnavailableAction("Buchhaltungsanalyse", von, bis);
   }
-  const { and, gte, lte, ne } = await import('drizzle-orm');
+  const { ne } = await import('drizzle-orm');
   // removed einkauf import
   
   const rawBelege = await db.select({
@@ -340,7 +320,7 @@ export async function getSparzaehlerAnalysisAction(von: string, bis: string) {
   
   // Settings from DB
   const { steuerprofil } = await import('@/db/schema_buchhaltung');
-  const profil = await db.select().from(steuerprofil).limit(1);
+  void (await db.select().from(steuerprofil).limit(1));
   const schwelle = 85;
   const stundensatz = 120;
   

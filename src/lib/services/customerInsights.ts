@@ -1,4 +1,4 @@
-import { Customer, CustomerInsight, CustomerMockOrder } from "../types/customer";
+import { Customer, CustomerInsight } from "../types/customer";
 import { createId } from "@paralleldrive/cuid2";
 
 export function generateCustomerInsights(customer: Customer): CustomerInsight[] {

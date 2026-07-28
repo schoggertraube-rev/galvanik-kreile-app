@@ -293,9 +293,9 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
 }
 
 export async function getTimelineForCustomerDb(_customerId: string): Promise<ActionResult<TimelineEntry[]>> {
-  return foundationUnavailableAction("Timeline");
+return foundationUnavailableAction("Timeline", _customerId);
 }
 
 export async function getTimelineForOrderDb(_orderId: string): Promise<ActionResult<TimelineEntry[]>> {
-  return foundationUnavailableAction("Timeline");
+return foundationUnavailableAction("Timeline", _orderId);
 }

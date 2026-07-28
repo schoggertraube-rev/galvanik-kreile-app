@@ -62,7 +62,7 @@ export function JahresplanClient({ isDevOrAdmin }: { isDevOrAdmin: boolean }) {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
       router.refresh();
-    } catch (err) {
+    } catch {
       alert("Fehler beim Speichern");
     } finally {
       setSaving(false);

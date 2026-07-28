@@ -30,14 +30,14 @@ export type NewBathMeasurement = Omit<BathMeasurement, "id" | "measuredAt"> & {
  */
 export const bathMeasurementsRepository = {
   async list(_bathId: string): Promise<BathMeasurement[]> {
-    return foundationUnavailableAction("Bäder und Messwerte");
+return foundationUnavailableAction("Bäder und Messwerte", _bathId);
   },
 
   async add(_measurement: NewBathMeasurement): Promise<BathMeasurement> {
-    return foundationUnavailableAction("Bäder und Messwerte");
+return foundationUnavailableAction("Bäder und Messwerte", _measurement);
   },
 
   async getLatest(_bathId: string): Promise<BathMeasurement | null> {
-    return foundationUnavailableAction("Bäder und Messwerte");
+return foundationUnavailableAction("Bäder und Messwerte", _bathId);
   },
 };

@@ -2,9 +2,9 @@
 import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 import { db } from "@/db";
-import { attribution, touchpoint, kanal } from "@/db/schema_marketing";
+import { kanal } from "@/db/schema_marketing";
 import { inquiries, orders } from "@/db/schema";
-import { eq, desc, inArray, sum } from "drizzle-orm";
+import "drizzle-orm";
 
 export async function getAttributionData() {
   if (!isFoundationAreaEnabled("Marketing")) {
@@ -51,6 +51,7 @@ export async function getAttributionData() {
     
     // Umsatz für diesen Kanal (Heuristik oder echte Attribution)
     const totalUmsatz = auftraege.reduce((sum, o) => {
+void o;
       // Wenn das order item array in db liegt, summiere es. Wir nehmen hier einen Durchschnittswert von 450.
       return sum + 450;
     }, 0);

@@ -1,6 +1,6 @@
 // src/lib/offline/idbSync.ts
 // ULID-basierte Mutation Queue mit IndexedDB und localStorage Fallback
-import { warningStore } from "@/lib/warnings/store";
+import "@/lib/warnings/store";
 
 export type SyncOperation = "CREATE" | "UPDATE" | "DELETE";
 

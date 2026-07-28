@@ -5,7 +5,7 @@ import ts from "typescript";
 const root = process.cwd();
 
 function source(relativePath: string): string {
-  return readFileSync(resolve(root, relativePath), "utf8");
+  return readFileSync(resolve(root, relativePath), "utf8").replace(/\r\n/g, "\n");
 }
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -111,7 +111,7 @@ for (const relativePath of [
   "src/lib/repositories/bathMeasurementsRepository.ts",
 ]) {
   const repository = source(relativePath);
-  assert(repository.includes('foundationUnavailableAction("Bäder und Messwerte")'), `${relativePath} must reject until its data contract is proven.`);
+  assert(repository.includes('foundationUnavailableAction("Bäder und Messwerte"'), `${relativePath} must reject until its data contract is proven.`);
   assert(!repository.includes("new Map<"), `${relativePath} must not manufacture an in-memory data fallback.`);
   assert(!repository.includes("NEXT_PUBLIC_DATA_PROVIDER"), `${relativePath} must not switch to an unproven browser data provider.`);
 }
@@ -153,7 +153,7 @@ const unavailableApiRoutes = [
 
 for (const [relativePath, area] of unavailableApiRoutes) {
   const route = source(relativePath);
-  assert(route.includes(`foundationUnavailableResponse(\"${area}\")`), `${relativePath} must identify its unavailable product area.`);
+  assert(route.includes(`foundationUnavailableResponse(\"${area}\"`), `${relativePath} must identify its unavailable product area.`);
   assert(!route.includes('from "@/db"') && !route.includes("from '@/db'"), `${relativePath} must not import the database behind a fail-closed boundary.`);
   assert(!route.includes("@supabase/supabase-js"), `${relativePath} must not initialize a Supabase client behind a fail-closed boundary.`);
 }

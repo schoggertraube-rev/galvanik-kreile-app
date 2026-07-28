@@ -6,6 +6,7 @@ import { FoundationUnavailable } from "@/components/foundation/FoundationUnavail
  * every nested route must fail closed as well.
  */
 export default function BuchhaltungLayout({ children: _children }: { children: React.ReactNode }) {
+void _children;
   return (
     <FoundationUnavailable
       title="Buchhaltung ist noch nicht freigegeben"

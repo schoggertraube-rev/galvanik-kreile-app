@@ -4,7 +4,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { usePageView } from "@/hooks/usePageView";
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronRight, Fuel, AlertTriangle, CheckCircle2, Navigation, TrendingUp } from "lucide-react";
+import { ChevronRight, Fuel, CheckCircle2, Navigation } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 import { BelegDetail } from "@/lib/buchhaltung/types";

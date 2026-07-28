@@ -5,5 +5,5 @@ import { foundationUnavailableResponse } from "@/lib/server/foundationGate";
  * Do not initialize storage, OCR, or the database for an unavailable route.
  */
 export async function POST(_request: Request) {
-  return foundationUnavailableResponse("Scan-Upload");
+return foundationUnavailableResponse("Scan-Upload", _request);
 }

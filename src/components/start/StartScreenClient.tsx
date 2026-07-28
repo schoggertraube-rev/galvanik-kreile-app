@@ -6,7 +6,8 @@ import { Delete, Clock, Wrench, Calculator, Sun } from "lucide-react";
 import { getGreeting } from "@/lib/greeting";
 import { EmailLoginDialog } from "@/components/start/EmailLoginDialog";
 import { useSearchParams } from "next/navigation";
-import { getTodayTopPriority, getFeierabendEvents } from "@/app/actions/start.actions";
+import Image from "next/image";
+import { getFeierabendEvents } from "@/app/actions/start.actions";
 import { loginWithPin } from "@/app/actions/auth.actions";
 import type { StartUserDto } from "@/lib/auth/userDtos";
 
@@ -107,6 +108,7 @@ function WeatherCardLegacyUnsafe() {
     </div>
   );
 }
+void WeatherCardLegacyUnsafe;
 
 function WeatherCard() {
   return (
@@ -263,9 +265,12 @@ function StartScreenContent({ users, usersLoadError }: { users: StartUserDto[]; 
 
       {/* Skyline Logo wordmark block */}
       <div className="flex flex-col items-center mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 fill-mode-both">
-        <img
+        <Image
           src="/assets/logo/kreile-wordmark-skyline.svg"
           alt="Kreile Wortmarke Skyline"
+          width={560}
+          height={220}
+          priority
           className="w-[360px] md:w-[480px] h-auto object-contain"
         />
       </div>

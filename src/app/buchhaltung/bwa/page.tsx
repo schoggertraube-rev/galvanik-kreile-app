@@ -92,6 +92,7 @@ export default function BwaPage() {
 }
 
 function KPI({ label, value, icon, positive, highlight }: { label: string; value: string; icon: React.ReactNode; positive?: boolean; highlight?: boolean }) {
+void positive;
   return (
     <div className={`rounded-2xl border shadow-sm p-5 flex items-center gap-4 ${highlight ? "bg-emerald-50 border-emerald-200" : "bg-white border-neutral-gray-100"}`}>
       <div className="w-10 h-10 rounded-xl bg-neutral-gray-50 flex items-center justify-center shrink-0">{icon}</div>

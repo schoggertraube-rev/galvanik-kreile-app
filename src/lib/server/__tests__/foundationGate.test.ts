@@ -20,4 +20,14 @@ describe("foundation capability allowlist", () => {
     await expect(response.json()).resolves.toMatchObject({ error: "NOT_CONFIGURED" });
     expect(() => foundationUnavailableAction("OCR")).toThrow(/NOT_CONFIGURED/);
   });
+
+  it("rejects supplied input without exposing its value", async () => {
+    const sensitiveInput = "do-not-persist-or-display";
+    const response = foundationUnavailableResponse("OCR", sensitiveInput);
+    const body = await response.json();
+
+    expect(body.message).toContain("Übergebene Eingaben wurden nicht verarbeitet");
+    expect(body.message).not.toContain(sensitiveInput);
+    expect(() => foundationUnavailableAction("OCR", sensitiveInput)).toThrow(/nicht verarbeitet/);
+  });
 });

@@ -60,29 +60,29 @@ export const bathsRepository = {
   },
 
   async getBathById(_id: string): Promise<Bath | null> {
-    return foundationUnavailableAction("Bäder und Messwerte");
+return foundationUnavailableAction("Bäder und Messwerte", _id);
   },
 
   async getMeasurementsByBath(_bathId: string): Promise<BathMeasurementLog[]> {
-    return foundationUnavailableAction("Bäder und Messwerte");
+return foundationUnavailableAction("Bäder und Messwerte", _bathId);
   },
 
   async getAdditionsByBath(_bathId: string): Promise<BathAddition[]> {
-    return foundationUnavailableAction("Bäder und Messwerte");
+return foundationUnavailableAction("Bäder und Messwerte", _bathId);
   },
 
   async addMeasurement(
     _bathId: string,
     _data: Omit<BathMeasurementLog, "id" | "bathId" | "measuredAt" | "statusAfterMeasurement">,
   ): Promise<BathMeasurementLog> {
-    return foundationUnavailableAction("Bäder und Messwerte");
+return foundationUnavailableAction("Bäder und Messwerte", _bathId, _data);
   },
 
   async addAddition(
     _bathId: string,
     _data: Omit<BathAddition, "id" | "bathId" | "createdAt">,
   ): Promise<BathAddition> {
-    return foundationUnavailableAction("Bäder und Messwerte");
+return foundationUnavailableAction("Bäder und Messwerte", _bathId, _data);
   },
 
   async updateBathStatusManual(
@@ -90,7 +90,7 @@ export const bathsRepository = {
     _status: BathStatus,
     _notes: string,
   ): Promise<Bath> {
-    return foundationUnavailableAction("Bäder und Messwerte");
+return foundationUnavailableAction("Bäder und Messwerte", _bathId, _status, _notes);
   },
 
   async hasCriticalBath(): Promise<boolean> {

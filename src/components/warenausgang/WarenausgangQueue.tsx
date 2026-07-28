@@ -13,6 +13,7 @@ type WarenausgangQueueProps = {
  * export inert until the dedicated shipping contract has passed W3/W5.
  */
 export function WarenausgangQueue({ allOrders: _allOrders }: WarenausgangQueueProps) {
+void _allOrders;
   return (
     <FoundationUnavailable
       title="Warenausgang ist noch nicht freigegeben"

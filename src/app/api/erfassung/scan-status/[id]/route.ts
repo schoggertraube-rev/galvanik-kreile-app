@@ -7,5 +7,5 @@ import { foundationUnavailableResponse } from "@/lib/server/foundationGate";
  * for an endpoint that cannot serve a request.
  */
 export async function GET(_request: Request) {
-  return foundationUnavailableResponse("Scan-Status");
+return foundationUnavailableResponse("Scan-Status", _request);
 }

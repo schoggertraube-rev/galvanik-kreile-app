@@ -10,10 +10,12 @@ function unavailableWarendurchlauf(): never {
 }
 
 export async function getStationOrders(_stationId: string): Promise<never> {
+void _stationId;
   return unavailableWarendurchlauf();
 }
 
 export async function getStationReadyOrders(_stationId: string): Promise<never> {
+void _stationId;
   return unavailableWarendurchlauf();
 }
 
@@ -23,6 +25,7 @@ export async function startProcessingStation(_input: {
   expectedStatus: string;
   clientEventId: string;
 }): Promise<never> {
+void _input;
   return unavailableWarendurchlauf();
 }
 
@@ -32,6 +35,7 @@ export async function completeProcessingStation(_input: {
   expectedStatus: string;
   clientEventId: string;
 }): Promise<never> {
+void _input;
   return unavailableWarendurchlauf();
 }
 

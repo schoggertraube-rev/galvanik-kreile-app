@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import "framer-motion";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";

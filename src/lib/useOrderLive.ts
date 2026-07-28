@@ -5,6 +5,7 @@ import { useMemo } from "react";
  * with an explicit error so it cannot be rendered as an empty order.
  */
 export function useOrderLive(_orderId: string | null) {
+void _orderId;
   return useMemo(() => ({
     orderData: null,
     loading: false,

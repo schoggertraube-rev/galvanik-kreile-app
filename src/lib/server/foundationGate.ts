@@ -77,11 +77,18 @@ const FOUNDATION_CAPABILITY_ALLOWLIST: Readonly<Record<FoundationCapability, boo
   Object.fromEntries(FOUNDATION_CAPABILITIES.map((capability) => [capability, false])) as Record<FoundationCapability, boolean>,
 );
 
-export function foundationUnavailableResponse(capability: FoundationCapability): Response {
+function unavailableInputSuffix(rejectedInputs: readonly unknown[]): string {
+  return rejectedInputs.length > 0 ? " Übergebene Eingaben wurden nicht verarbeitet." : "";
+}
+
+export function foundationUnavailableResponse(
+  capability: FoundationCapability,
+  ...rejectedInputs: readonly unknown[]
+): Response {
   return Response.json(
     {
       error: "NOT_CONFIGURED",
-      message: `${capability} ist bis zum geprüften Fundamentvertrag nicht verfügbar.`,
+      message: `${capability} ist bis zum geprüften Fundamentvertrag nicht verfügbar.${unavailableInputSuffix(rejectedInputs)}`,
     },
     {
       status: 503,
@@ -96,6 +103,11 @@ export function isFoundationAreaEnabled(capability: FoundationCapability): boole
   return FOUNDATION_CAPABILITY_ALLOWLIST[capability] === true;
 }
 
-export function foundationUnavailableAction(capability: FoundationCapability): never {
-  throw new Error(`NOT_CONFIGURED: ${capability} ist bis zum geprüften Fundamentvertrag nicht verfügbar.`);
+export function foundationUnavailableAction(
+  capability: FoundationCapability,
+  ...rejectedInputs: readonly unknown[]
+): never {
+  throw new Error(
+    `NOT_CONFIGURED: ${capability} ist bis zum geprüften Fundamentvertrag nicht verfügbar.${unavailableInputSuffix(rejectedInputs)}`,
+  );
 }

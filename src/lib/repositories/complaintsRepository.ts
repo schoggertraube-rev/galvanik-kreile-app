@@ -1,6 +1,6 @@
 import { createId } from "@paralleldrive/cuid2";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { IndexedDBHelper } from "@/lib/offline/IndexedDBHelper";
+import "@/lib/offline/OfflineManager";
+import "@/lib/offline/IndexedDBHelper";
 import { createClient } from "@/lib/supabase/client";
 
 export type Complaint = {
@@ -36,7 +36,7 @@ function isLegacyComplaintsEnabled(): boolean {
   return false;
 }
 
-const INITIAL_COMPLAINTS: Complaint[] = [];
+void ([]);
 
 export const complaintsRepository = {
   async getAll(): Promise<Complaint[]> {

@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import "lucide-react";
 import { login } from "@/app/actions/auth";
 import { useState, useTransition } from "react";
 

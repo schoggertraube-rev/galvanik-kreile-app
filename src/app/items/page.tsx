@@ -3,30 +3,15 @@
 import { usePageView } from "@/hooks/usePageView";
 import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { 
-  Search, 
-  Package, 
-  MapPin, 
-  Plus, 
-  Minus, 
-  Droplets, 
-  Thermometer, 
-  FlaskConical, 
-  Check, 
-  History, 
-  Activity, 
-  Lock,
-  Unlock,
-  User
-} from "lucide-react";
+import { Search, Package, MapPin, Plus, Minus, FlaskConical, History, User } from "lucide-react";
 import { inventoryRepository, InventoryItem, StockMovement } from "@/lib/repositories/inventoryRepository";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { trackUiEvent } from "@/lib/tracking/tracking";
-import { DetailOverlay } from "@/components/ui/DetailOverlay";
+import "@/components/ui/DetailOverlay";
 
 export default function ItemsPage() {
   return <FoundationUnavailable title="Lagerverwaltung nicht freigegeben" reason="Bestands- und Bewegungsdaten haben noch keinen tenant- und transaktionsgesicherten Serververtrag. Deshalb sind keine Lagerstände oder Buchungen verfügbar." returnHref="/" returnLabel="Zur Startseite" />;
@@ -145,7 +130,7 @@ function ItemsLegacyPage() {
   const selectedItemMovements = selectedItemId ? stockMovements.filter(m => m.inventoryItemId === selectedItemId) : [];
 
   // Chemistry materials lists for chemical addition options in dropdown
-  const chemicalList = inventoryItems.filter(item => item.category === "chemical");
+  void (inventoryItems.filter(item => item.category === "chemical"));
 
   return (
     <div className="space-y-6 pb-12 font-sans antialiased text-navy-900">
@@ -510,3 +495,4 @@ function ItemsLegacyPage() {
     </div>
   );
 }
+void ItemsLegacyPage;

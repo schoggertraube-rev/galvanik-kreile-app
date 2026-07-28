@@ -4,7 +4,7 @@ import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/serv
 import { db, isDatabaseConfigured } from "@/db";
 import { baeder, badMesswerte } from "@/db/schema";
 import { checkAppAuth } from "@/lib/server/authHelper";
-import { eq } from "drizzle-orm";
+import "drizzle-orm";
 
 export async function getBaederListAction() {
   if (!isFoundationAreaEnabled("Bäder")) {

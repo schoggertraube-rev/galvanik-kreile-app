@@ -140,6 +140,7 @@ export function usePhoneNoteAnalysis() {
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const analyze = useCallback((text: string, overrideCustomerId?: string, overrideOrderIds?: string[], forceAI: boolean = false) => {
+void forceAI;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     
     if (!text || text.trim().length < 3) {

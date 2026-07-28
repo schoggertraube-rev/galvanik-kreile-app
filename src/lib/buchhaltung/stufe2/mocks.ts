@@ -13,6 +13,7 @@ export interface BankProvider {
 
 export class MockBankProvider implements BankProvider {
   async listUmsaetze(_zeitraum: Zeitraum): Promise<Umsatz[]> {
+void _zeitraum;
     return [
       { id: "u-001", datum: "2026-05-15", betrag: -87.50, verwendungszweck: "ARAL Tankstelle", gegenkonto: "DE89...", belegId: "bel-001" },
       { id: "u-002", datum: "2026-05-22", betrag: 3200.00, verwendungszweck: "R-2026-043 Schlosserei Weber", gegenkonto: "DE44...", belegId: undefined },
@@ -28,6 +29,8 @@ export interface SteuerUebermittlung {
 
 export class MockSteuerUebermittlung implements SteuerUebermittlung {
   async sendeUstva(_werte: UstvaWerte, _zertifikat: ArrayBuffer): Promise<Quittung> {
+void _werte;
+void _zertifikat;
     return {
       transferTicket: "DEMO-TICKET-2026-05",
       zeitpunkt: new Date().toISOString(),

@@ -70,7 +70,7 @@ Antworte ausschließlich im JSON Format nach folgendem Schema, ohne Markdown Cod
     let result
     try {
       result = JSON.parse(content);
-    } catch (e) {
+    } catch {
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
          result = JSON.parse(match[0]);

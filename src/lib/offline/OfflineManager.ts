@@ -11,6 +11,7 @@ export const OfflineManager = {
   },
 
   setSimulatedOffline(_offline: boolean): never {
+void _offline;
     throw new Error("NOT_CONFIGURED: Offline-Simulation und lokale Warteschlange sind nicht freigegeben.");
   },
 
@@ -24,6 +25,8 @@ export const OfflineManager = {
   },
 
   async enqueueAction(_actionType: OfflineAction["actionType"], _payload: unknown): Promise<OfflineAction> {
+void _actionType;
+void _payload;
     throw new Error("NOT_CONFIGURED: Offline-Aktionen werden nicht lokal als erfolgreich vorgemerkt.");
   },
 

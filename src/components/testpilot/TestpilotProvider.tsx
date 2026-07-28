@@ -95,5 +95,6 @@ export function useTestpilot() {
 
 /** Browser-local click/session capture is intentionally absent until W3. */
 export function TestpilotProvider({ children, isAdmin: _isAdmin = false }: { children: ReactNode; isAdmin?: boolean }) {
+void _isAdmin;
   return <TestpilotContext.Provider value={disabledValue}>{children}</TestpilotContext.Provider>;
 }

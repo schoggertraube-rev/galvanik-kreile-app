@@ -3,11 +3,11 @@
 import { usePageView } from "@/hooks/usePageView";
 import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Mail, CheckCircle, Archive, ChevronRight, Flame, Package, Droplets, Clock } from "lucide-react";
+import { Mail, CheckCircle, Archive, ChevronRight, Flame, Package, Droplets, Clock } from "lucide-react";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { inquiriesRepository, QuoteRequest } from "@/lib/repositories/inquiriesRepository";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -314,3 +314,4 @@ kreile-galvanik.ch`;
     </div>
   );
 }
+void QuotesLegacyPage;

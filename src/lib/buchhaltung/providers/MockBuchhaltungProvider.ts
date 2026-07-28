@@ -99,6 +99,7 @@ export class MockBuchhaltungProvider implements BuchhaltungDataProvider {
   }
 
   async createBelegFromUpload(_file: BelegFile): Promise<Beleg> {
+void _file;
     return {
       id: `bel-new-${Date.now()}`,
       erfasstAm: new Date().toISOString(),
@@ -117,11 +118,13 @@ export class MockBuchhaltungProvider implements BuchhaltungDataProvider {
   }
 
   async stornoBeleg(id: string, _grund: string): Promise<Beleg> {
+void _grund;
     const beleg = DEMO_BELEGE.find(b => b.id === id) ?? DEMO_BELEGE[0];
     return { ...beleg, status: "storniert" };
   }
 
   async getAusgabenNachKategorie(_zeitraum: Zeitraum): Promise<KategorieSumme[]> {
+void _zeitraum;
     return [
       { kategorieId: "kat-kraftstoff", kategorieName: "Kraftstoff & Kfz", icon: "⛽", summe: 1240, anzahl: 18, anteilAmUmsatz: 1.5 },
       { kategorieId: "kat-material", kategorieName: "Material & Chemie", icon: "🧪", summe: 4850, anzahl: 12, anteilAmUmsatz: 5.7 },
@@ -133,6 +136,7 @@ export class MockBuchhaltungProvider implements BuchhaltungDataProvider {
   }
 
   async getKraftstoffAuswertung(_zeitraum: Zeitraum): Promise<KraftstoffReport> {
+void _zeitraum;
     return {
       gesamtkosten: 1240,
       gesamtLiter: 725.8,
@@ -156,6 +160,7 @@ export class MockBuchhaltungProvider implements BuchhaltungDataProvider {
   }
 
   async getBwa(_zeitraum: Zeitraum): Promise<Bwa> {
+void _zeitraum;
     return {
       zeitraum: { von: "2026-05-01", bis: "2026-05-31" },
       umsatzerloese: 85400,
@@ -207,6 +212,7 @@ export class MockBuchhaltungProvider implements BuchhaltungDataProvider {
   }
 
   async berechneUstva(_zeitraum: Zeitraum): Promise<UstvaWerte> {
+void _zeitraum;
     return {
       zeitraumVon: "2026-05-01", zeitraumBis: "2026-05-31",
       umsatz19: 85400, ust19: 16226,
@@ -229,6 +235,7 @@ export class MockBuchhaltungProvider implements BuchhaltungDataProvider {
   }
 
   async exportDatev(_zeitraum: Zeitraum): Promise<ExportDatei> {
+void _zeitraum;
     return {
       typ: "datev", dateiname: "EXTF_Buchungsstapel_2026-05.csv",
       inhalt: new Blob(["DEMO DATEV EXPORT"], { type: "text/csv" }),
@@ -238,6 +245,7 @@ export class MockBuchhaltungProvider implements BuchhaltungDataProvider {
   }
 
   async exportLexware(_zeitraum: Zeitraum): Promise<ExportDatei> {
+void _zeitraum;
     return {
       typ: "lexware", dateiname: "Rechnungsjournal_2026-05.csv",
       inhalt: new Blob(["DEMO LEXWARE EXPORT"], { type: "text/csv" }),
@@ -247,6 +255,7 @@ export class MockBuchhaltungProvider implements BuchhaltungDataProvider {
   }
 
   async exportSteuerberaterPaket(_zeitraum: Zeitraum): Promise<ExportDatei> {
+void _zeitraum;
     return {
       typ: "steuerberater_zip", dateiname: "Steuerberater_2026-05.zip",
       inhalt: new Blob(["DEMO ZIP"], { type: "application/zip" }),

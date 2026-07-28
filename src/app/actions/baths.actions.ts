@@ -148,11 +148,11 @@ export async function getBathsDb(): Promise<ActionResult<BathRecord[]>> {
 }
 
 export async function getBathByIdDb(_id: string): Promise<ActionResult<BathRecord | null>> {
-  return foundationUnavailableAction("Bäder und Messwerte");
+return foundationUnavailableAction("Bäder und Messwerte", _id);
 }
 
 export async function getBathMeasurementsDb(_bathId?: string): Promise<ActionResult<BathMeasurementRecord[]>> {
-  return foundationUnavailableAction("Bäder und Messwerte");
+return foundationUnavailableAction("Bäder und Messwerte", _bathId);
 }
 
 export async function createBathMeasurementDb(_payload: {
@@ -162,12 +162,12 @@ export async function createBathMeasurementDb(_payload: {
   notes?: string;
   measuredAt?: string;
 }): Promise<ActionResult<BathMeasurementRecord>> {
-  return foundationUnavailableAction("Bäder und Messwerte");
+return foundationUnavailableAction("Bäder und Messwerte", _payload);
 }
 
 export async function updateBathDb(_id: string, _payload: {
   status?: string;
   letzteWartung?: string;
 }): Promise<ActionResult<BathRecord | null>> {
-  return foundationUnavailableAction("Bäder und Messwerte");
+return foundationUnavailableAction("Bäder und Messwerte", _id, _payload);
 }

@@ -46,5 +46,7 @@ export interface ClientDossier {
  * than presenting empty/zero values as a real dossier.
  */
 export function useClientDossier(_customerId: string | null, _matchData: MatchResult | null): ClientDossier {
+void _customerId;
+void _matchData;
   throw new Error("NOT_CONFIGURED: Kundendossier benötigt einen geprüften Server-, Tenant- und Evidenzvertrag.");
 }

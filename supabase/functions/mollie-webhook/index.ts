@@ -58,7 +58,7 @@ serve(async (req) => {
     // If paid, create invoice (Ausgangsrechnung) & send receipt email
     if (newMollieStatus === 'paid' && orderId) {
       // 1. Create Invoice
-      const { data: invData, error: invError } = await supabase
+      const { data: invData } = await supabase
         .from('ausgangsrechnung')
         .insert({
           nummer: `RE-${new Date().getFullYear()}-${crypto.randomUUID().slice(0, 8)}`,

@@ -235,6 +235,7 @@ async function createOperationalOrderServiceLegacyUnsafe(data: Record<string, un
     return orderId;
   });
 }
+void createOperationalOrderServiceLegacyUnsafe;
 
 async function moveOperationalOrderToStationServiceLegacyUnsafe(orderId: string, stationId: string, actorId?: string) {
   if (!isFoundationAreaEnabled("Legacy-Statuswechsel")) {
@@ -268,6 +269,7 @@ async function moveOperationalOrderToStationServiceLegacyUnsafe(orderId: string,
     return { success: true, eventId, prevStation, targetStation };
   });
 }
+void moveOperationalOrderToStationServiceLegacyUnsafe;
 
 async function startProcessingStationServiceLegacyUnsafe(orderId: string, stationId: string, actorId?: string) {
   if (!isFoundationAreaEnabled("Legacy-Start der Stationsbearbeitung")) {
@@ -299,3 +301,4 @@ async function startProcessingStationServiceLegacyUnsafe(orderId: string, statio
     return { success: true, eventId, targetStation };
   });
 }
+void startProcessingStationServiceLegacyUnsafe;

@@ -20,6 +20,10 @@ export function IntakeCompletionSummary({
   items: _items,
   onBack: _onBack,
 }: IntakeCompletionSummaryProps) {
+void _customerSelection;
+void _newCustomerDetails;
+void _items;
+void _onBack;
   return (
     <FoundationUnavailable
       title="Auftragserfassung ist noch nicht freigegeben"

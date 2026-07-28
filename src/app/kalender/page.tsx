@@ -3,7 +3,7 @@ import { usePageView } from "@/hooks/usePageView";
 import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 import Link from "next/link";
 import { pruefeFristen } from "@/lib/buchhaltung/regeln";
-import { ChevronRight, Calendar, CalendarClock, Truck, Phone, Users, Globe, Info, ReceiptText } from "lucide-react";
+import { ChevronRight, CalendarClock, Truck, Phone, Users, Globe, ReceiptText } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 const TERMIN_QUELLEN = [
@@ -185,3 +185,4 @@ function KalenderLegacyPage() {
     </div>
   );
 }
+void KalenderLegacyPage;

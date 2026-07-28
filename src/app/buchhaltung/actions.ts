@@ -71,7 +71,7 @@ export async function getBelegAction(id: string): Promise<BelegDetail> {
   // Wenn der Beleg eine Datei hat, erzeugen wir eine Signed URL für die Vorschau
   let originalDatei = data.original_datei;
   if (originalDatei && !originalDatei.startsWith('http')) {
-    const { data: urlData, error: urlError } = await supabase
+    const { data: urlData } = await supabase
       .storage
       .from('buchhaltung-belege')
       .createSignedUrl(originalDatei, 3600); // 1h gültig
@@ -216,6 +216,7 @@ export async function freigebenBelegAction(id: string, korrektur?: Partial<Beleg
  * Storniert einen Beleg.
  */
 export async function stornoBelegAction(id: string, grund: string): Promise<Beleg> {
+void grund;
   assertBuchhaltungContract()
   const supabase = await createClient()
   
@@ -273,6 +274,7 @@ export async function getKraftstoffTankungenAction() {
 }
 
 export async function exportBelegeAction(format: "DATEV" | "Lexware" | "CSV") {
+void format;
   assertBuchhaltungContract()
   const supabase = await createClient()
   
@@ -827,7 +829,7 @@ export async function generateDatevExportAction(von: string, bis: string): Promi
   const { data: profileData } = await supabase.from('steuerprofil').select('berater_nr, mandanten_nr, sachkontenrahmen').limit(1).single();
   const beraterNr = profileData?.berater_nr || '';
   const mandantenNr = profileData?.mandanten_nr || '';
-  const skr = profileData?.sachkontenrahmen || 'SKR03';
+  void (profileData?.sachkontenrahmen || 'SKR03');
   const { data: belege } = await supabase.from('beleg').select('*').eq('status', 'festgeschrieben').gte('belegdatum', von).lte('belegdatum', bis);
   
   const headerLine = `"EXTF";700;21;"Buchungsstapel";4;` + new Date().toISOString().replace(/[-:T]/g, '').substring(0, 14) + `;"";"";"";"";"${beraterNr}";"${mandantenNr}";` + new Date(von).getFullYear() + `0101;4;` + von.replace(/-/g, '') + `;` + bis.replace(/-/g, '') + `;"";"";"";"";""`;
@@ -850,9 +852,9 @@ export async function generateLexwareExportAction(von: string, bis: string): Pro
   assertBuchhaltungContract()
   const supabase = await createClient();
   const { data: profileData } = await supabase.from('steuerprofil').select('berater_nr, mandanten_nr, sachkontenrahmen').limit(1).single();
-  const beraterNr = profileData?.berater_nr || '';
-  const mandantenNr = profileData?.mandanten_nr || '';
-  const skr = profileData?.sachkontenrahmen || 'SKR03';
+  void (profileData?.berater_nr || '');
+  void (profileData?.mandanten_nr || '');
+  void (profileData?.sachkontenrahmen || 'SKR03');
   const { data: belege } = await supabase.from('beleg').select('*').eq('status', 'festgeschrieben').gte('belegdatum', von).lte('belegdatum', bis);
 
   const columnHeaders = `Datum;Belegnummer;Buchungstext;Betrag;USt-Satz;USt-Betrag;Konto;Gegenkonto;S/H`;

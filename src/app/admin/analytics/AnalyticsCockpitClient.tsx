@@ -5,11 +5,7 @@ import React, { useState } from 'react';
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import { EventsBarChart, ActivityLineChart } from "./AnalyticsCharts";
-import { 
-  BarChart2, AlertCircle, Lightbulb, Smartphone, 
-  MousePointerClick, UserX, SearchX, Activity, ArrowRight,
-  TrendingUp, Users, MonitorSmartphone, MousePointer2
-} from "lucide-react";
+import { AlertCircle, Lightbulb, Smartphone, MousePointerClick, UserX, SearchX, Activity, ArrowRight, TrendingUp, Users, MonitorSmartphone, MousePointer2 } from "lucide-react";
 
 import type { DeveloperCockpitData, AnalyticsSuggestion, FrictionSignal, DeviceUsage } from "@/app/actions/developerAnalytics.actions";
 

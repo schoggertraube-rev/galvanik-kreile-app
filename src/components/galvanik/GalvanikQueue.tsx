@@ -12,6 +12,7 @@ type GalvanikQueueProps = {
  * decision overlays. It is a static quarantine boundary, not a fallback UI.
  */
 export function GalvanikQueue({ orders: _orders }: GalvanikQueueProps) {
+void _orders;
   return (
     <FoundationUnavailable
       title="Galvanik-Warteschlange ist noch nicht freigegeben"

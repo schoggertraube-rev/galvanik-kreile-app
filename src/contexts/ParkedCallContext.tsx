@@ -29,6 +29,7 @@ const ParkedCallContext = createContext<ParkedCallContextType | undefined>(undef
 export function ParkedCallProvider({ children }: { children: React.ReactNode }) {
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const parkCall = useCallback((_data: ParkedCallData) => {
+void _data;
     throw new Error("NOT_CONFIGURED: Telefonnotizen benötigen einen geprüften Mandanten- und Receipt-Vertrag.");
   }, []);
   const resumeCall = useCallback(() => undefined, []);

@@ -2,6 +2,7 @@ import { OcrProvider, OcrErgebnis } from "./types";
 
 export class ManualProvider implements OcrProvider {
   async extractBeleg(imageUrl: string): Promise<OcrErgebnis> {
+void imageUrl;
     // Falls OCR fehlschlägt oder kein Key da ist, liefern wir leere Daten mit 0% Confidence.
     // So weiß das System, dass es in den Status "pruefen" gehen muss und den Nutzer alles manuell eintippen lässt.
     

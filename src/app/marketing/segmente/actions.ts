@@ -3,7 +3,7 @@ import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/serv
 
 import { db } from "@/db";
 import { segment } from "@/db/schema_marketing";
-import { eq, ilike, sql } from "drizzle-orm";
+import { eq, ilike } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export async function getSegments(query?: string) {

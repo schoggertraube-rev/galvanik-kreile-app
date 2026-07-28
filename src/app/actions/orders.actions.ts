@@ -7,16 +7,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, checkAppPermission, ActionResult } from "@/lib/server/authHelper";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { unstable_noStore as noStore } from "next/cache";
-import {
-  getNextOperationalProcessStation,
-  isCanonicalClientEventId,
-  normalizeOperationalProcessStation,
-  normalizeOperationalProcessStatus,
-  OPERATIONAL_PROCESS_CHAIN,
-  requiresQualityApprovalForCompletion,
-  type OperationalProcessStation,
-  type OperationalProcessStatus,
-} from "@/lib/orders/processContract";
+import { getNextOperationalProcessStation, isCanonicalClientEventId, normalizeOperationalProcessStation, normalizeOperationalProcessStatus, requiresQualityApprovalForCompletion, type OperationalProcessStation, type OperationalProcessStatus } from "@/lib/orders/processContract";
 import { isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 // DTO Typen (zur Vereinfachung)
@@ -638,6 +629,7 @@ export async function createOrderFromScan(_params: {
   | { ok: true; data: { orderId: string; newCustomerId?: string; status: string; customerChoices?: Record<string, unknown>[] } }
   | { ok: false; error: string; message: string; details?: unknown }
 > {
+void _params;
   return {
     ok: false,
     error: "NOT_CONFIGURED",
@@ -751,3 +743,4 @@ async function createOrderFromScanLegacyUnsafe(params: {
     };
   }
 }
+void createOrderFromScanLegacyUnsafe;

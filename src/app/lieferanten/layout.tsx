@@ -1,6 +1,7 @@
 import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 export default function SuppliersLayout({ children: _children }: { children: React.ReactNode }) {
+void _children;
   return (
     <FoundationUnavailable
       title="Lieferantenverwaltung ist noch nicht freigegeben"

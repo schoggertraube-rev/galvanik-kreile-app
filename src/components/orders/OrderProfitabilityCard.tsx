@@ -5,6 +5,7 @@ import { DollarSign, TrendingUp, TrendingDown, Clock, Factory } from "lucide-rea
 import type { Order } from "@/lib/repositories/ordersRepository";
 
 export function OrderProfitabilityCard({ order }: { order: Order }) {
+void order;
   // Simulate profitability data
   const revenue = 780;
   const laborCost = 140; // 3.5 hrs * 40

@@ -1,4 +1,4 @@
-import { KommunikationClient } from "./KommunikationClient";
+import "./KommunikationClient";
 import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 export default function KommunikationPage() {

@@ -89,7 +89,9 @@ export function CompanySettingsForm() {
           <div className="md:col-span-2 flex flex-col sm:flex-row items-center sm:items-start gap-6 bg-neutral-gray-50 p-6 rounded-2xl border border-neutral-gray-100">
             <div className="w-32 h-32 bg-white rounded-xl border border-neutral-gray-200 flex items-center justify-center shrink-0 overflow-hidden shadow-sm p-2">
               {logoUrl ? (
-                <img src={logoUrl} alt="Firmenlogo" className="w-full h-full object-contain" />
+                <span className="px-3 text-center text-xs text-text-muted">
+                  Logo-URL gespeichert. Die Vorschau bleibt gesperrt, bis eine freigegebene Bildquelle konfiguriert ist.
+                </span>
               ) : (
                 <span className="text-xs text-text-muted">Kein Logo</span>
               )}

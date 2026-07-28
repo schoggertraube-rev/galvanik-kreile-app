@@ -1,6 +1,7 @@
 import React from 'react';
 
 export function CustomerStammdaten({ customerId }: { customerId: string }) {
+void customerId;
   return (
     <div className="space-y-4">
       <h3 className="font-semibold text-lg text-[var(--ci-ink)]">Stammdaten</h3>

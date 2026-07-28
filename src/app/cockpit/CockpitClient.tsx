@@ -1,8 +1,8 @@
 "use client";
 
-import { AlertCircle, Target, TrendingUp, BarChart } from "lucide-react";
+import "lucide-react";
 import { KpiKachel } from "./components/KpiKachel";
-import { PlaceholderKachel } from "./components/PlaceholderKachel";
+import "./components/PlaceholderKachel";
 import { TopKundenKachel } from "./components/TopKundenKachel";
 import { EngpassKachel } from "./components/EngpassKachel";
 import { AgingKachel } from "./components/AgingKachel";

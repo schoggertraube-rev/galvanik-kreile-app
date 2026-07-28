@@ -1,6 +1,6 @@
 import { db } from '@/db';
-import { kraftstoffDetail, bhAuditLog, kostenposten } from '@/db/schema_buchhaltung';
-import { eq } from 'drizzle-orm';
+import { kraftstoffDetail, bhAuditLog } from '@/db/schema_buchhaltung';
+import 'drizzle-orm';
 import { OcrErgebnis } from './types';
 
 export async function verteilBeleg(belegId: string, ergebnis: OcrErgebnis, kategorieName: string) {

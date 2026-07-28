@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Upload, FileText, CheckCircle2, AlertTriangle, Play, Database, Loader2 } from "lucide-react";
+import { Upload, Play, Database } from "lucide-react";
 
 type ImportRow = {
   id: string;
@@ -69,9 +69,9 @@ export function DataImportCenter() {
     reader.readAsText(file);
   };
 
-  const executeImport = () => {
+  void (() => {
     // Disabled in UI
-  };
+  });
 
   const pendingCount = rows.filter(r => r.status === 'pending').length;
   const duplicateCount = rows.filter(r => r.status === 'duplicate').length;

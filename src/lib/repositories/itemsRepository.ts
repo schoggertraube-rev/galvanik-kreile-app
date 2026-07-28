@@ -1,7 +1,7 @@
 import { createId } from "@paralleldrive/cuid2";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { IndexedDBHelper } from "@/lib/offline/IndexedDBHelper";
-import { getItemsDb, getItemsByOrderDb, createItemDb, updateItemDb, ItemResponse } from "@/app/actions/items.actions";
+import "@/lib/offline/OfflineManager";
+import "@/lib/offline/IndexedDBHelper";
+import { getItemsDb, getItemsByOrderDb, createItemDb, updateItemDb } from "@/app/actions/items.actions";
 
 export type Item = {
   id: string;

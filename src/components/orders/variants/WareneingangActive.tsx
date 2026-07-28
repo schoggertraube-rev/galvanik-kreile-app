@@ -11,6 +11,7 @@ interface WareneingangActiveProps {
  * to the canonical CAS transition. It must not send a blind process command.
  */
 export function WareneingangActive(_props: WareneingangActiveProps) {
+void _props;
   return (
     <div className="rounded-xl border border-amber-500/30 bg-amber-50 p-4 text-sm text-amber-950">
       <div className="flex items-center gap-2 font-semibold"><AlertTriangle className="h-4 w-4" /> Prozessaktion nicht freigegeben</div>

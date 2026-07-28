@@ -39,7 +39,7 @@ export async function bookStationCosts(params: {
         return { success: false, errors: ['Für den angemeldeten Benutzer ist kein Mitarbeiterkonto hinterlegt.'] };
       }
       realEmployeeId = user.id;
-    } catch (authError) {
+    } catch {
       return { success: false, errors: ['Für den angemeldeten Benutzer ist kein Mitarbeiterkonto hinterlegt.'] };
     }
   }

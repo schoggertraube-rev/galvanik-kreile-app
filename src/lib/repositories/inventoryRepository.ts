@@ -1,5 +1,5 @@
 import { createId } from "@paralleldrive/cuid2";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
+import "@/lib/offline/OfflineManager";
 import { createClient } from "@/lib/supabase/client";
 
 export interface InventoryItem {
@@ -28,7 +28,7 @@ export interface StockMovement {
   createdAt: string;
 }
 
-const INITIAL_ITEMS: InventoryItem[] = [
+void ([
   { id: "inv-1", sku: "MAT-100", name: "Salzsäure 30%", category: "chemical", unit: "l", currentStock: 85, minStock: 30, storageLocation: "Chemielager Regal A", isConsumable: true, isHazardous: true, pricePerUnit: 2.50 },
   { id: "inv-2", sku: "MAT-101", name: "Nickelzusatz Typ X", category: "chemical", unit: "l", currentStock: 45, minStock: 25, storageLocation: "Chemielager Regal B", isConsumable: true, isHazardous: true, pricePerUnit: 18.00 },
   { id: "inv-3", sku: "MAT-102", name: "Entfetter Universal", category: "chemical", unit: "l", currentStock: 60, minStock: 20, storageLocation: "Chemielager Regal A", isConsumable: true, isHazardous: true, pricePerUnit: 9.50 },
@@ -43,12 +43,12 @@ const INITIAL_ITEMS: InventoryItem[] = [
   { id: "inv-12", sku: "MAT-111", name: "Schutzfolie Rolle", category: "packaging", unit: "m", currentStock: 300, minStock: 50, storageLocation: "Warenausgang Lager", isConsumable: true, isHazardous: false, pricePerUnit: 0.15 },
   { id: "inv-13", sku: "MAT-112", name: "Polierscheibe Baumwolle", category: "consumable", unit: "pcs", currentStock: 15, minStock: 5, storageLocation: "Schleiferei Regal 1", isConsumable: true, isHazardous: false, pricePerUnit: 3.20 },
   { id: "inv-14", sku: "MAT-113", name: "Bürste Stahl", category: "consumable", unit: "pcs", currentStock: 10, minStock: 5, storageLocation: "Schleiferei Schrank 2", isConsumable: true, isHazardous: false, pricePerUnit: 7.40 }
-];
+]);
 
-const INITIAL_MOVEMENTS: StockMovement[] = [
+void ([
   { id: "sm-1", inventoryItemId: "inv-1", movementType: "stock_in", quantity: 50, unit: "l", reason: "Reguläre Nachlieferung", createdBy: "office@kreile.de", createdAt: "2026-05-20T08:30:00Z" },
   { id: "sm-2", inventoryItemId: "inv-5", movementType: "consumption", quantity: 5, unit: "pcs", orderId: "o1", reason: "Materialentnahme Schleiferei", createdBy: "werkstatt1@kreile.de", createdAt: "2026-05-21T09:15:00Z" }
-];
+]);
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 

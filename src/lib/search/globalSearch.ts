@@ -3,5 +3,6 @@
  * search must be a tenant-scoped server query with an auditable result source.
  */
 export async function globalSearch(_query: string): Promise<never> {
+void _query;
   throw new Error("NOT_CONFIGURED: Globale Suche benötigt einen geprüften Serververtrag.");
 }

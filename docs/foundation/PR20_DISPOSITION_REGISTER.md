@@ -31,6 +31,25 @@ Git history; no deletion or irreversible data operation occurred.
 The gate is now `scripts/quality/check-forbidden-patterns.mjs`: it passed for
 the current changed-file range and has no suppression or broad allowlist.
 
+## Lint-debt disposition
+
+The repository-wide lint backlog was resolved without `eslint-disable`, an
+ignore entry, a rule downgrade, or a broad allowlist. The cleanup is constrained
+by three reviewable helpers under `scripts/quality/`:
+
+- `remove-unused-imports.mjs` removes only ESLint-reported import bindings and
+  retains a value module as a side-effect import when it was the final binding;
+- `remove-unused-bindings.mjs` preserves public call signatures and initializer
+  evaluation while making unused compatibility bindings explicit;
+- `bind-unavailable-inputs.mjs` turns fail-closed adapter inputs into ephemeral
+  rejected-input arguments. `foundationUnavailableAction` and
+  `foundationUnavailableResponse` inspect only the argument count, never store,
+  log, transmit, or expose an input value.
+
+This also removed five invented finance-history chart series. The affected
+analysis actions now return an empty series where history is not available,
+rather than a zero-valued fabricated trend.
+
 ## Capability and adapter dispositions
 
 | Consumer group / preserved paths | Replacement | Why unavailable | Restore proof |
@@ -75,9 +94,9 @@ artifacts; they do not change roles, RLS, grants, views, storage or data.
    Webpack attempts remained at Next's `type-checking` stage after child work
    had stopped; `.next/BUILD_ID` was not emitted. The standalone TypeScript
    check is green, but this is not a substitute for a completed Next build.
-2. `npm run lint` exits zero with 0 errors but reports inherited warnings. No
-   lint rule was weakened and no quarantine path was ignored. The exact warning
-   count is recorded in the check receipt and must be burned down separately if
-   zero-warning policy is required.
+2. Fresh GitHub CI for this lint-debt commit, browser/role smoke and the W1
+   laboratory migration evidence remain required. Local `npm run lint` now has
+   zero errors and zero warnings; no lint rule was weakened and no quarantine
+   path was ignored.
 3. Browser/role smoke, W1 laboratory migration, remote CI and final PR-SHA
    binding remain outstanding; no PASS release claim is permitted before them.

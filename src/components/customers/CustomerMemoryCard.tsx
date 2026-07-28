@@ -1,4 +1,4 @@
-import { CustomerInsight } from "@/lib/types/customer";
+import "@/lib/types/customer";
 import { generateCustomerInsights } from "@/lib/services/customerInsights";
 import { Customer } from "@/lib/types/customer";
 import { AlertTriangle, Info, CheckCircle, ShieldAlert, Zap } from "lucide-react";

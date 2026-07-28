@@ -86,7 +86,7 @@ ${text}`
     let result
     try {
       result = JSON.parse(content);
-    } catch (e) {
+    } catch {
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
          result = JSON.parse(match[0]);

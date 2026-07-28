@@ -6,6 +6,8 @@ import { useMemo } from "react";
  * evidence links are served by an audited server contract.
  */
 export function useKiInsight(_kachel: string, _daten: Record<string, number | string | null>) {
+void _kachel;
+void _daten;
   return useMemo(() => ({
     data: undefined as { beobachtung: string; achtung?: string; empfehlung: string } | undefined,
     isLoading: false,

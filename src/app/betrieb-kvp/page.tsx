@@ -1,4 +1,4 @@
-import { BetriebKvpClient } from "./BetriebKvpClient";
+import "./BetriebKvpClient";
 import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 export const metadata = {

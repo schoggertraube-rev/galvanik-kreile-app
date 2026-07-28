@@ -11,7 +11,7 @@ import { DataImportCenter } from "@/components/admin/DataImportCenter";
 import { CompanySettingsForm } from "@/components/admin/CompanySettingsForm";
 import { BackupRestoreCenter } from "@/components/admin/BackupRestoreCenter";
 import { AdminDevicesClient } from "@/app/admin/devices/AdminDevicesClient";
-import { Server, Users, Shield, Power, Database, Settings, Building2, BarChart2, Lightbulb, Smartphone, MonitorSmartphone } from "lucide-react";
+import { Server, Users, Shield, Power, Database, Settings, Building2, BarChart2, Lightbulb, MonitorSmartphone } from "lucide-react";
 import Link from "next/link";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { TextTemplates } from "@/components/admin/TextTemplates";

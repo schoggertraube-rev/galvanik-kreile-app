@@ -12,6 +12,7 @@ type GalvanikOrderRowProps = {
  * former inferred urgency and no-op decision path from becoming reachable.
  */
 export function GalvanikOrderRow({ order: _order }: GalvanikOrderRowProps) {
+void _order;
   return (
     <FoundationUnavailable
       title="Stationsdetail ist noch nicht freigegeben"

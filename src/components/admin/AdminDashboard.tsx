@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Database, CheckCircle2, XCircle, FlaskConical, Loader2, Server } from "lucide-react";
+import { CheckCircle2, XCircle, FlaskConical, Loader2, Server } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getSystemStats, runSupabaseWriteTest } from "@/app/actions/systemStats";
 

@@ -1,6 +1,7 @@
 import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 export default function PerformanceLayout({ children: _children }: Readonly<{ children: React.ReactNode }>) {
+void _children;
   return (
     <FoundationUnavailable
       title="Performance-Auswertung ist noch nicht freigegeben"

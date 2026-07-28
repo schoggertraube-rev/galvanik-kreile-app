@@ -12,7 +12,7 @@ serve(async (req) => {
   }
 
   try {
-    const { scan_upload_id, file_url, base64_data, mime_type } = await req.json()
+    const { file_url, base64_data, mime_type } = await req.json()
 
     if (!file_url && !base64_data) {
       throw new Error("Missing 'file_url' or 'base64_data' in request body.")
@@ -109,7 +109,7 @@ Antworte ausschließlich im JSON Format nach folgendem Schema:
     let result
     try {
       result = JSON.parse(content);
-    } catch (e) {
+    } catch {
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
          result = JSON.parse(match[0]);

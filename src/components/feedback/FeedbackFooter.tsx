@@ -9,6 +9,7 @@ interface FeedbackFooterProps {
 }
 
 export function FeedbackFooter({ pageTitle, route, variant = "full" }: FeedbackFooterProps) {
+void route;
   const [feedback, setFeedback] = useState("");
   const [feedbackSent, setFeedbackSent] = useState(false);
 

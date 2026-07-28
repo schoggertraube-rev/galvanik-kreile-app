@@ -3,10 +3,7 @@
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import React, { useState, useRef } from 'react';
 import Link from 'next/link';
-import { 
-  Database, Users, History, FileText, FlaskConical, 
-  ScanLine, Camera, CheckCircle2, AlertTriangle, ArrowRight, Upload, Info
-} from 'lucide-react';
+import { Database, Users, History, FileText, FlaskConical, ScanLine, Camera, CheckCircle2, ArrowRight, Upload, Info } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
 
 type ImportFile = {

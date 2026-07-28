@@ -3,6 +3,7 @@ import type { EmailProvider, EmailProviderOptions } from "./emailProvider";
 /** No browser-to-Edge transport before a server-side mail receipt exists. */
 export class ResendAdapter implements EmailProvider {
   async send(_opts: EmailProviderOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
+void _opts;
     return { success: false, error: "NOT_CONFIGURED: E-Mail-Versand benötigt einen geprüften Server- und Receipt-Vertrag." };
   }
 

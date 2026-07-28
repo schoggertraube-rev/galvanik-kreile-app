@@ -26,7 +26,7 @@ export function getCurrentWeather(): WeatherStatus {
       if (override === "rain" || override === "normal") {
         return override;
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -51,6 +51,7 @@ export function getStationIcon(
   weather: WeatherStatus,
   volumeState: VolumeState
 ): string {
+void volumeState;
   const basePath = "/warendurchlauf";
   
   if (station === "galvanik") {
