@@ -1,5 +1,3 @@
-"use client";
-
 import { FoundationUnavailable } from "./FoundationUnavailable";
 
 type UnavailableDefinition = {
