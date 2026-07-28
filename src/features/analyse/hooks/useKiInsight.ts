@@ -1,34 +1,14 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase/client';
+import { useMemo } from "react";
 
-export function useKiInsight(kachel: string, daten: Record<string, number | string | null>) {
-  const [data, setData] = useState<{ beobachtung: string; achtung?: string; empfehlung: string } | undefined>(undefined);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchInsight = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const { data: result, error: fetchError } = await supabase.functions.invoke('kpi-insight', {
-          body: { kachel, daten },
-        });
-        if (fetchError) throw fetchError;
-        if (isMounted) setData(result as any);
-      } catch (err: any) {
-        if (isMounted) setError(err);
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-    
-    // Only fetch once when the component mounts with these dependencies
-    fetchInsight();
-    
-    return () => { isMounted = false; };
-  }, [kachel, JSON.stringify(daten)]);
-
-  return { data, isLoading, error };
+/**
+ * The legacy hook called an Edge Function directly from the browser.  It stays
+ * explicitly unavailable until its input, tenant scope, provider receipt, and
+ * evidence links are served by an audited server contract.
+ */
+export function useKiInsight(_kachel: string, _daten: Record<string, number | string | null>) {
+  return useMemo(() => ({
+    data: undefined as { beobachtung: string; achtung?: string; empfehlung: string } | undefined,
+    isLoading: false,
+    error: new Error("NOT_CONFIGURED: KI-Hinweise sind noch nicht freigegeben."),
+  }), []);
 }

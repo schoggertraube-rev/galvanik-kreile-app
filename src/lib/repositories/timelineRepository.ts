@@ -25,11 +25,23 @@ export type TimelineEntry = {
   relatedIds?: string[];
 };
 
+// Timeline aggregation currently has no verified cross-domain ownership and
+// receipt contract. It must fail visibly instead of rendering “no history”.
+function isTimelineRepositoryEnabled(): boolean {
+  return false;
+}
+
+function timelineRepositoryUnavailable(): never {
+  throw new Error("NOT_CONFIGURED: Die Verlaufshistorie ist bis zum geprüften Datenvertrag nicht freigegeben.");
+}
+
 export const timelineRepository = {
   /**
    * Generiert einen aggregierten Zeitstrahl für einen Kunden aus Events, Aufträgen und Reklamationen
    */
   async getForCustomer(customerId: string): Promise<TimelineEntry[]> {
+    if (!isTimelineRepositoryEnabled()) return timelineRepositoryUnavailable();
+
     if (OfflineManager.isOffline()) return [];
     try {
       const result = await getTimelineForCustomerDb(customerId);
@@ -45,6 +57,8 @@ export const timelineRepository = {
   },
   
   async getForOrder(orderId: string): Promise<TimelineEntry[]> {
+    if (!isTimelineRepositoryEnabled()) return timelineRepositoryUnavailable();
+
     if (OfflineManager.isOffline()) return [];
     try {
       const result = await getTimelineForOrderDb(orderId);
@@ -60,6 +74,8 @@ export const timelineRepository = {
   },
 
   async getGlobalTimeline(): Promise<TimelineEntry[]> {
+    if (!isTimelineRepositoryEnabled()) return timelineRepositoryUnavailable();
+
     if (OfflineManager.isOffline()) return [];
     try {
       const result = await getGlobalTimelineDb();

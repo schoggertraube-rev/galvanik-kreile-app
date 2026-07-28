@@ -1,8 +1,15 @@
 import { eventsRepository } from "../repositories/eventsRepository";
 import { createClient } from "@/lib/supabase/client";
 
+function isPhotoServiceEnabled(): boolean {
+  return false;
+}
+
 export const photoService = {
   async savePhotoForOrder(orderId: string, photoDataUrl: string) {
+    if (!isPhotoServiceEnabled()) {
+      throw new Error("NOT_CONFIGURED: Foto-Upload benötigt einen geprüften Storage-, Mandanten- und Receipt-Vertrag.");
+    }
     // If no Supabase URL is provided, fallback to the offline/mock approach
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL.includes("placeholder")) {
       console.log(`📸 Photo virtuell gespeichert (kein Supabase) für Order ${orderId}`);

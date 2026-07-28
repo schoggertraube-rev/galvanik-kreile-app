@@ -1,10 +1,6 @@
-import { NextResponse } from "next/server";
+import { foundationUnavailableResponse } from "@/lib/server/foundationGate";
 
+/** Daily status must not claim an unproved workshop state. */
 export async function GET() {
-  // Logic to compute today's work state: Gut auf Kurs / Aufpassen / Kritisch
-  return NextResponse.json({
-    status: "success",
-    title: "Gut auf Kurs",
-    subtitle: "Weiter so! 💪"
-  });
+  return foundationUnavailableResponse("Tagesstatus");
 }

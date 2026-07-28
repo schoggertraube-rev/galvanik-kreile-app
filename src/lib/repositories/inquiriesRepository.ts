@@ -29,8 +29,15 @@ export type QuoteRequest = {
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
+function isInquiriesRepositoryEnabled(): boolean {
+  return false;
+}
+
 export const inquiriesRepository = {
   async getAll(): Promise<QuoteRequest[]> {
+    if (!isInquiriesRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Anfragen benötigen einen geprüften Mandanten- und Receipt-Vertrag.");
+    }
     if (isSupabase) {
       const supabase = createClient();
       const { data, error } = await supabase.from('inquiries').select('*').order('created_at', { ascending: false });
@@ -71,6 +78,9 @@ export const inquiriesRepository = {
   },
 
   async getOpenCount(): Promise<number> {
+    if (!isInquiriesRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Anfragen benötigen einen geprüften Mandanten- und Receipt-Vertrag.");
+    }
     if (isSupabase) {
       const supabase = createClient();
       const { count, error } = await supabase.from('inquiries').select('*', { count: 'exact', head: true }).eq('status', 'offen');
@@ -81,6 +91,9 @@ export const inquiriesRepository = {
   },
 
   async create(data: Omit<QuoteRequest, "id" | "receivedAt" | "status" | "pricing">): Promise<QuoteRequest> {
+    if (!isInquiriesRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Anfragen benötigen einen geprüften Mandanten- und Receipt-Vertrag.");
+    }
     const newId = `inq_${createId()}`;
     const pricing = {
       grundarbeit: 0,
@@ -125,6 +138,9 @@ export const inquiriesRepository = {
   },
 
   async updateStatus(id: string, status: QuoteRequest["status"]): Promise<QuoteRequest | null> {
+    if (!isInquiriesRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Anfragen benötigen einen geprüften Mandanten- und Receipt-Vertrag.");
+    }
     if (isSupabase) {
       const supabase = createClient();
       const { error } = await supabase.from('inquiries').update({ status }).eq('id', id);
@@ -142,6 +158,9 @@ export const inquiriesRepository = {
   },
 
   async updatePricing(id: string, pricing: QuoteRequest["pricing"]): Promise<QuoteRequest | null> {
+    if (!isInquiriesRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Anfragen benötigen einen geprüften Mandanten- und Receipt-Vertrag.");
+    }
     if (isSupabase) {
       const supabase = createClient();
       const { error } = await supabase.from('inquiries').update({ pricing }).eq('id', id);

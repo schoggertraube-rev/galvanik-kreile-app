@@ -1,24 +1,57 @@
 "use server";
 
-import { db } from "@/db";
+import { db, isDatabaseConfigured } from "@/db";
 import { orders, items, customers, events } from "@/db/schema";
-import { eq, like, desc, and, sql, notInArray, notIlike, ilike } from "drizzle-orm";
+import { eq, like, desc, and, sql, notInArray, notIlike, ilike, lt, isNull } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
-import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
+import { checkAppAuth, checkAppPermission, ActionResult } from "@/lib/server/authHelper";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { unstable_noStore as noStore } from "next/cache";
+import {
+  getNextOperationalProcessStation,
+  isCanonicalClientEventId,
+  normalizeOperationalProcessStation,
+  normalizeOperationalProcessStatus,
+  OPERATIONAL_PROCESS_CHAIN,
+  requiresQualityApprovalForCompletion,
+  type OperationalProcessStation,
+  type OperationalProcessStatus,
+} from "@/lib/orders/processContract";
+import { isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 // DTO Typen (zur Vereinfachung)
 export type OrderResponse = Record<string, unknown>;
 
+type ProcessReceiptPayload = {
+  action: "start" | "complete";
+  toStation: OperationalProcessStation;
+  statusAfter: OperationalProcessStatus;
+};
+
+function readProcessReceiptPayload(payload: unknown): ProcessReceiptPayload | null {
+  if (!payload || typeof payload !== "object") return null;
+  const candidate = payload as Record<string, unknown>;
+  if (candidate.action !== "start" && candidate.action !== "complete") return null;
+
+  const toStation = normalizeOperationalProcessStation(
+    typeof candidate.toStation === "string" ? candidate.toStation : null,
+  );
+  const statusAfter = normalizeOperationalProcessStatus(
+    typeof candidate.statusAfter === "string" ? candidate.statusAfter : null,
+  );
+  if (!toStation || !statusAfter) return null;
+
+  return { action: candidate.action, toStation, statusAfter };
+}
+
 export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const authorization = await checkAppPermission("perm_data_orders");
+  if (!authorization.ok) return authorization;
 
   try {
     const { getOperationalOrders } = await import("@/lib/server/operationalOrders");
-    const data = await getOperationalOrders();
+    const data = await getOperationalOrders(authorization.data.tenantId);
     return { ok: true, data: data as OrderResponse[] };
   } catch (error: unknown) {
     console.error("[DB_ERROR_DETAIL]", error);
@@ -29,8 +62,8 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
 /** Leichtgewichtige Variante nur für Header-Badge — führt nur COUNT(*) aus. */
 export async function getOrderCountDb(): Promise<ActionResult<{ count: number }>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const authorization = await checkAppPermission("perm_data_orders");
+  if (!authorization.ok) return authorization;
 
   try {
     const result = await db
@@ -38,7 +71,7 @@ export async function getOrderCountDb(): Promise<ActionResult<{ count: number }>
       .from(orders)
       .where(
         and(
-          eq(orders.tenantId, "galvanik-kreile"),
+          eq(orders.tenantId, authorization.data.tenantId),
           notInArray(
             sql`coalesce(${orders.source}, 'manual')`,
             ["seed", "test", "demo", "integration-test"]
@@ -55,10 +88,11 @@ export async function getOrderCountDb(): Promise<ActionResult<{ count: number }>
 }
 
 export async function createOrderDb(data: Record<string, unknown>): Promise<ActionResult<Record<string, unknown>>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
+  const authorization = await checkAppPermission("perm_data_orders");
+  if (!authorization.ok) return authorization;
+  const { tenantId, userId } = authorization.data;
 
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   const { orderSchema } = await import("@/lib/validation/orderSchema");
   const parsed = orderSchema.safeParse(data);
@@ -69,6 +103,15 @@ export async function createOrderDb(data: Record<string, unknown>): Promise<Acti
   }
   
   const validData = parsed.data;
+  if (!validData.customerId) {
+    return { ok: false, error: "UNKNOWN", message: "Ein Kunde ist für einen Auftrag erforderlich." };
+  }
+  const customerId: string = validData.customerId;
+
+  // A regular order always enters through intake. Exceptional imports or
+  // rerouting require a separate audited server process and cannot be
+  // requested by a browser payload.
+  const canonicalStation: OperationalProcessStation = "wareneingang";
   
   try {
     const orderId = (typeof data.id === 'string' ? data.id : undefined) || createId();
@@ -76,10 +119,19 @@ export async function createOrderDb(data: Record<string, unknown>): Promise<Acti
     const pattern = `A-${year}-%`;
 
     const newOrder = await db.transaction(async (tx) => {
+      const [customer] = await tx
+        .select({ id: customers.id })
+        .from(customers)
+        .where(and(eq(customers.id, customerId), eq(customers.tenantId, tenantId)))
+        .limit(1);
+      if (!customer) {
+        throw new Error("CUSTOMER_NOT_AVAILABLE");
+      }
+
       const existingOrders = await tx
         .select({ orderNumber: orders.orderNumber })
         .from(orders)
-        .where(like(orders.orderNumber, pattern))
+        .where(and(eq(orders.tenantId, tenantId), like(orders.orderNumber, pattern)))
         .orderBy(desc(orders.orderNumber))
         .limit(50);
 
@@ -101,14 +153,16 @@ export async function createOrderDb(data: Record<string, unknown>): Promise<Acti
       
       const newOrderVal = {
         id: orderId,
-        tenantId: "galvanik-kreile",
+        tenantId,
         orderNumber,
-        customerId: validData.customerId || "",
+        customerId,
         title: validData.title || "Unbenannt",
-        currentStationId: validData.currentStationId || "wareneingang",
-        status: "in_progress",
-        priorityComputed: "green",
-        source: validData.source || "manual",
+        station: canonicalStation,
+        currentStationId: canonicalStation,
+        status: "ready",
+        priorityComputed: null,
+        dueDate: validData.dueDate || null,
+        source: validData.source,
       };
       
       await tx.insert(orders).values(newOrderVal);
@@ -116,27 +170,31 @@ export async function createOrderDb(data: Record<string, unknown>): Promise<Acti
       if (validData.parts && validData.parts.length > 0) {
         const newItems = validData.parts.map(p => ({
           id: p.id || createId(),
-          tenantId: "galvanik-kreile",
+          tenantId,
           orderId,
-          customerId: validData.customerId || "",
+          customerId,
           name: p.name,
           quantity: typeof p.quantity === "number" ? p.quantity : parseInt(p.quantity as string) || 1,
-          currentStationId: validData.currentStationId || "wareneingang"
+          currentStationId: canonicalStation
         }));
         await tx.insert(items).values(newItems);
       }
       
       await tx.insert(events).values({
         id: createId(),
-        tenantId: "galvanik-kreile",
+        tenantId,
         orderId,
         eventType: "ORDER_CREATED",
         description: "Auftrag erstellt",
-        station: "wareneingang",
+        station: canonicalStation,
+        userId,
       });
 
       return newOrderVal;
     });
+
+    const { invalidateOperationalOrdersCache } = await import("@/lib/server/operationalOrders");
+    invalidateOperationalOrdersCache();
 
     try { 
       const { revalidatePath } = await import("next/cache");
@@ -167,197 +225,386 @@ export async function updateOrderDb(id: string, changes: {
   currentStationId?: string;
   priorityComputed?: string;
   title?: string;
+  task?: string;
+  customerId?: string;
+  rawIntakeDate?: string;
+  rawDueDate?: string;
 }): Promise<ActionResult<Record<string, unknown>>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
+  const authorization = await checkAppPermission("perm_data_orders");
+  if (!authorization.ok) return authorization;
+  const { tenantId, userId } = authorization.data;
 
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  if (changes.status !== undefined || changes.currentStationId !== undefined || changes.priorityComputed !== undefined) {
+    return {
+      ok: false,
+      error: "NOT_CONFIGURED",
+      message: "Status, Station und Dringlichkeit werden nur über den kanonischen Prozesswechsel aktualisiert.",
+    };
+  }
+
+  const parseDate = (value: string | undefined, fieldLabel: string) => {
+    if (value === undefined) return { ok: true as const, value: undefined };
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return { ok: false as const, message: `${fieldLabel} ist kein gültiges Datum.` };
+    }
+    return { ok: true as const, value: date };
+  };
+
+  const intakeDate = parseDate(changes.rawIntakeDate, "Eingangsdatum");
+  if (!intakeDate.ok) return { ok: false, error: "UNKNOWN", message: intakeDate.message };
+  const dueDate = parseDate(changes.rawDueDate, "Liefertermin");
+  if (!dueDate.ok) return { ok: false, error: "UNKNOWN", message: dueDate.message };
+
   try {
-    const updateData: Record<string, string> = {};
-    if (changes.status !== undefined) updateData.status = changes.status;
-    if (changes.currentStationId !== undefined) updateData.currentStationId = changes.currentStationId;
-    if (changes.priorityComputed !== undefined) updateData.priorityComputed = changes.priorityComputed;
-    if (changes.title !== undefined) updateData.title = changes.title;
-    
-    await db.update(orders).set(updateData).where(eq(orders.id, id));
-    
-    if (changes.currentStationId !== undefined) {
-      await db.update(items).set({ currentStationId: changes.currentStationId }).where(eq(items.orderId, id));
+    const [currentOrder] = await db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.id, id), eq(orders.tenantId, tenantId)))
+      .limit(1);
+    if (!currentOrder) {
+      return { ok: false, error: "UNKNOWN", message: "Auftrag nicht verfügbar." };
     }
 
-    if (changes.status === "abgeschlossen" || changes.status === "completed") {
-      try {
-        const orderRec = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
-        if (orderRec.length > 0) {
-          const o = orderRec[0];
-          if (o.customerId) {
-            const plannedDate = new Date();
-            plannedDate.setDate(plannedDate.getDate() + 7); // Schedule for 7 days later
-            const { feedbackMail } = await import("@/db/schema_marketing");
-            // Check if one already exists
-            const existing = await db.select().from(feedbackMail).where(eq(feedbackMail.auftragId, id)).limit(1);
-            if (existing.length === 0) {
-              await db.insert(feedbackMail).values({
-                auftragId: id,
-                kundeId: o.customerId,
-                geplantFuer: plannedDate,
-                status: "geplant",
-                tokenFeedback: crypto.randomUUID()
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Failed to schedule feedback mail:", err);
+    if (changes.customerId !== undefined) {
+      const [customer] = await db
+        .select({ id: customers.id })
+        .from(customers)
+        .where(and(eq(customers.id, changes.customerId), eq(customers.tenantId, tenantId)))
+        .limit(1);
+      if (!customer) {
+        return { ok: false, error: "UNKNOWN", message: "Der ausgewählte Kunde ist nicht verfügbar." };
       }
     }
+
+    const updateData: {
+      title?: string;
+      task?: string;
+      customerId?: string;
+      intakeDate?: Date;
+      dueDate?: Date;
+    } = {};
+    if (changes.title !== undefined) updateData.title = changes.title;
+    if (changes.task !== undefined) updateData.task = changes.task;
+    if (changes.customerId !== undefined) updateData.customerId = changes.customerId;
+    if (intakeDate.value !== undefined) updateData.intakeDate = intakeDate.value;
+    if (dueDate.value !== undefined) updateData.dueDate = dueDate.value;
+    if (Object.keys(updateData).length === 0) {
+      return { ok: false, error: "UNKNOWN", message: "Keine änderbaren Auftragsdaten übergeben." };
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .update(orders)
+        .set(updateData)
+        .where(and(eq(orders.id, id), eq(orders.tenantId, tenantId)));
+
+      if (changes.customerId !== undefined) {
+        await tx
+          .update(items)
+          .set({ customerId: changes.customerId })
+          .where(and(eq(items.orderId, id), eq(items.tenantId, tenantId)));
+      }
+
+      await tx.insert(events).values({
+        id: createId(),
+        tenantId,
+        orderId: id,
+        eventType: "ORDER_UPDATED",
+        description: "Auftragsstammdaten aktualisiert",
+        station: currentOrder.currentStationId || currentOrder.station,
+        userId,
+      });
+    });
+
+    const { invalidateOperationalOrdersCache } = await import("@/lib/server/operationalOrders");
+    invalidateOperationalOrdersCache();
     
-    return { ok: true, data: { id, ...changes } };
+    return { ok: true, data: { id, ...updateData } };
   } catch (error) {
     console.error("Failed to update order in DB:", error);
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Aktualisieren des Auftrags", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
   }
 }
 
-export async function getRiskOrders(limit = 3) {
+export type RiskOrder = {
+  id: string;
+  kunde: string;
+  tage: number;
+};
+
+export async function getRiskOrders(limit = 3): Promise<ActionResult<RiskOrder[]>> {
+  if (!isFoundationAreaEnabled("Risikoauswertung")) {
+    return {
+      ok: false,
+      error: "NOT_CONFIGURED",
+      message: "Risikoauswertungen bleiben bis zum belegten Performance- und Evidenzvertrag gesperrt.",
+    };
+  }
+
+  const auth = await checkAppAuth();
+  if (!auth.ok) return auth;
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      error: authorization.reason === "AUTHORIZATION_UNAVAILABLE" ? "DB_ERROR" : "UNAUTHORIZED",
+      message: authorization.message,
+    };
+  }
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+
   try {
-    const { sql, desc } = await import("drizzle-orm");
+    const tenantId = authorization.data.tenantId;
+    const now = new Date();
+    const safeLimit = Math.min(Math.max(Math.floor(limit), 1), 50);
     const riskOrders = await db.select({
       id: orders.orderNumber,
       kunde: customers.name,
-      tage: sql<number>`-2` // Mock risk days for now to keep the UI the same
+      dueDate: orders.dueDate,
     })
     .from(orders)
-    .leftJoin(customers, eq(orders.customerId, customers.id))
-    .where(eq(orders.status, 'in_progress'))
-    .orderBy(desc(orders.createdAt))
-    .limit(limit);
+    .leftJoin(customers, and(eq(orders.customerId, customers.id), eq(customers.tenantId, tenantId)))
+    .where(and(
+      eq(orders.tenantId, tenantId),
+      eq(orders.status, "in_progress"),
+      lt(orders.dueDate, now),
+      notInArray(sql`coalesce(${orders.source}, 'manual')`, ["seed", "test", "demo", "integration-test"]),
+    ))
+    .orderBy(orders.dueDate)
+    .limit(safeLimit);
 
-    return riskOrders.map((o, i) => ({
-      id: o.id || `A-2026-00${89 + i}`,
-      kunde: o.kunde || "Unbekannter Kunde",
-      tage: -2 + i
-    }));
+    return {
+      ok: true,
+      data: riskOrders.map((o) => ({
+        id: o.id,
+        kunde: o.kunde || "Kunde nicht hinterlegt",
+        tage: Math.floor((new Date(o.dueDate as Date).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
+      })),
+    };
   } catch (error) {
     console.error("Failed to get risk orders:", error);
-    return [];
+    return { ok: false, error: "DB_ERROR", message: "Überfällige Aufträge konnten nicht geladen werden." };
   }
 }
 
 export async function setOrderStationDb(orderId: string, newStation: string): Promise<ActionResult<{ success: boolean }>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  try {
-    // removed unused createId import
-    
-    // fetch current order to get current station
-    const currentOrder = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-    const aktuelleStation = currentOrder[0]?.currentStationId || currentOrder[0]?.station || "wareneingang";
-    // update order to new station
-    await db.update(orders).set({ currentStationId: newStation }).where(eq(orders.id, orderId));
-    
-    // Insert exit event
-    // events are imported statically
-    await db.insert(events).values({
-      id: crypto.randomUUID(),
-      tenantId: "galvanik-kreile",
-      orderId,
-      eventType: "STATION_AUSGANG",
-      station: aktuelleStation,
-      description: `Station verlassen: ${aktuelleStation}`,
-      createdAt: new Date()
-    });
-    
-    // Insert entry event
-    await db.insert(events).values({
-      id: crypto.randomUUID(),
-      tenantId: "galvanik-kreile",
-      orderId,
-      eventType: "STATION_EINGANG",
-      station: newStation,
-      description: `Station betreten: ${newStation}`,
-      createdAt: new Date()
-    });
-
-    return { ok: true, data: { success: true } };
-  } catch (error) {
-    console.error("Failed to update station:", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Setzen der Station", details: String(error) };
-  }
+  void orderId;
+  void newStation;
+  return {
+    ok: false,
+    error: "NOT_CONFIGURED",
+    message: "Direkte Stationssprünge sind nicht freigegeben. Verwende den kanonischen Prozessschritt.",
+  };
 }
 
 export async function transitionOrderProcess(params: {
   orderId: string;
+  expectedStation: string;
+  expectedStatus: string;
+  clientEventId: string;
   targetStep?: string;
-  action?: string;
-}) {
-  const { orderId, targetStep, action } = params;
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  action: "start" | "complete";
+}): Promise<ActionResult<{ success: boolean; newStation: string; newStatus: string | null; receiptId: string; idempotent: boolean }>> {
+  if (!isFoundationAreaEnabled("Auftragsprozess")) {
+    return {
+      ok: false,
+      error: "NOT_CONFIGURED",
+      message: "Prozesswechsel bleiben bis zur geprüften W1-Receipt-Migration und dem Retry-Nachweis gesperrt.",
+    };
+  }
+
+  const { orderId, expectedStation, expectedStatus, clientEventId, targetStep, action } = params;
+  const authorization = await checkAppPermission("perm_op_status");
+  if (!authorization.ok) return authorization;
+  const tenantId = authorization.data.tenantId;
+  const userId = authorization.data.userId;
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+
+  if (targetStep !== undefined) {
+    return {
+      ok: false,
+      error: "NOT_CONFIGURED",
+      message: "Zielstationen werden serverseitig aus dem Prozessvertrag bestimmt.",
+    };
+  }
+
+  if (!isCanonicalClientEventId(clientEventId)) {
+    return {
+      ok: false,
+      error: "NOT_CONFIGURED",
+      message: "Der Prozessbefehl benötigt eine stabile Ereignis-ID für den Wiederholungsnachweis.",
+    };
+  }
+
+  const normalizedExpectedStation = normalizeOperationalProcessStation(expectedStation);
+  const normalizedExpectedStatus = normalizeOperationalProcessStatus(expectedStatus);
+  if (!normalizedExpectedStation || !normalizedExpectedStatus) {
+    return {
+      ok: false,
+      error: "NOT_CONFIGURED",
+      message: "Der erwartete Prozesszustand ist ungültig oder unvollständig.",
+    };
+  }
+
+  if (action !== "start" && action !== "complete") {
+    return {
+      ok: false,
+      error: "NOT_CONFIGURED",
+      message: "Nur Starten oder Abschließen eines aktuellen Prozessschritts ist freigegeben.",
+    };
+  }
   
   try {
-    const currentOrder = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-    if (currentOrder.length === 0) return { ok: false, error: "NOT_FOUND", message: "Auftrag nicht gefunden" };
+    const [existingReceipt] = await db
+      .select({
+        id: events.id,
+        orderId: events.orderId,
+        eventType: events.eventType,
+        payload: events.payload,
+      })
+      .from(events)
+      .where(and(eq(events.tenantId, tenantId), eq(events.clientEventId, clientEventId)))
+      .limit(1);
+
+    if (existingReceipt) {
+      const receipt = readProcessReceiptPayload(existingReceipt.payload);
+      const expectedEventType = action === "start" ? "STATION_STARTED" : "STATION_COMPLETED";
+      if (
+        existingReceipt.orderId !== orderId ||
+        existingReceipt.eventType !== expectedEventType ||
+        !receipt ||
+        receipt.action !== action
+      ) {
+        return {
+          ok: false,
+          error: "FORBIDDEN",
+          message: "Diese Ereignis-ID gehört nicht zu diesem Prozessbefehl.",
+        };
+      }
+
+      return {
+        ok: true,
+        data: {
+          success: true,
+          newStation: receipt.toStation,
+          newStatus: receipt.statusAfter,
+          receiptId: existingReceipt.id,
+          idempotent: true,
+        },
+      };
+    }
+
+    const currentOrder = await db
+      .select()
+      .from(orders)
+      .where(and(eq(orders.id, orderId), eq(orders.tenantId, tenantId)))
+      .limit(1);
+    if (currentOrder.length === 0) return { ok: false, error: "UNKNOWN", message: "Auftrag nicht gefunden" };
     const o = currentOrder[0];
+    const persistedStationCondition = o.currentStationId === null
+      ? isNull(orders.currentStationId)
+      : eq(orders.currentStationId, o.currentStationId);
     
-    let newStation = o.currentStationId || "wareneingang";
-    let newStatus = o.status;
+    const currentStation = normalizeOperationalProcessStation(o.currentStationId || o.station);
+    if (!currentStation) {
+      return { ok: false, error: "UNKNOWN", message: "Auftrag hat keinen gültigen Prozessstatus." };
+    }
+
+    const storedStation = normalizeOperationalProcessStation(o.station);
+    if (!storedStation || storedStation !== currentStation) {
+      return { ok: false, error: "UNKNOWN", message: "Die gespeicherten Stationsfelder widersprechen sich. Der Prozesswechsel wurde nicht ausgeführt." };
+    }
+
+    const currentStatus = normalizeOperationalProcessStatus(o.status);
+    if (!currentStatus) {
+      return { ok: false, error: "UNKNOWN", message: "Auftrag hat keinen freigegebenen Prozessstatus." };
+    }
+
+    if (normalizedExpectedStation !== currentStation || normalizedExpectedStatus !== currentStatus) {
+      return { ok: false, error: "UNKNOWN", message: "Der Auftrag wurde zwischenzeitlich verändert. Bitte neu laden." };
+    }
+
+    let newStation = currentStation;
+    let newStatus: OperationalProcessStatus = currentStatus;
     let eventType = "STATION_STARTED";
     let description = "Prozessschritt gestartet";
     
     if (action === "start") {
+      if (currentStatus !== "ready") {
+        return { ok: false, error: "FORBIDDEN", message: "Nur ein bereiter Prozessschritt kann gestartet werden." };
+      }
       newStatus = "in_progress";
       description = `Bearbeitung gestartet in ${newStation}`;
-    } else if (action === "complete") {
-      const orderProcessChain = ["wareneingang", "entmetallisierung", "schleiferei", "galvanik", "qualitaetssicherung", "warenausgang"];
-      const currIdx = orderProcessChain.indexOf(newStation);
-      if (currIdx >= 0 && currIdx < orderProcessChain.length - 1) {
-        newStation = orderProcessChain[currIdx + 1];
-        if (newStation === "qualitaetssicherung") {
-          newStatus = "QS/Fertigprüfung";
-        } else if (newStation === "warenausgang") {
-          newStatus = "Bereit für Versand";
-        } else {
-          newStatus = "ready";
-        }
-        eventType = "STATION_COMPLETED";
-        description = `Station abgeschlossen. Weitergeleitet an ${newStation}`;
-      } else if (currIdx === orderProcessChain.length - 1) {
-        newStatus = "abgeschlossen";
-        eventType = "STATION_COMPLETED";
-        description = `Auftrag abgeschlossen und versendet.`;
+    } else {
+      if (currentStatus !== "in_progress") {
+        return { ok: false, error: "FORBIDDEN", message: "Nur ein gestarteter Prozessschritt kann abgeschlossen werden." };
       }
-    } else if (targetStep) {
-      newStation = targetStep;
-      if (newStation === "qualitaetssicherung") newStatus = "QS/Fertigprüfung";
-      else if (newStation === "warenausgang") newStatus = "Bereit für Versand";
-      else newStatus = "ready";
-      description = `Manuell zu Station ${newStation} gewechselt`;
+      if (o.status !== "in_progress") {
+        return { ok: false, error: "FORBIDDEN", message: "Nur ein gestarteter Prozessschritt kann abgeschlossen werden." };
+      }
+      if (requiresQualityApprovalForCompletion(currentStation) && !authorization.data.permissions.includes("perm_op_qa")) {
+        return { ok: false, error: "FORBIDDEN", message: "Für den Abschluss der Qualitätsprüfung fehlt die Berechtigung." };
+      }
+      const nextStation = getNextOperationalProcessStation(currentStation);
+      newStation = nextStation || currentStation;
+      newStatus = nextStation ? "ready" : "completed";
+      eventType = "STATION_COMPLETED";
+      description = nextStation
+        ? `Station abgeschlossen. Weitergeleitet an ${nextStation}`
+        : "Auftrag im Prozess als abgeschlossen markiert.";
     }
 
+    const transitionAt = new Date();
+    const isFinalCompletion = action === "complete" && newStatus === "completed";
+    const receiptId = createId();
+
     await db.transaction(async (tx) => {
-      await tx.update(orders).set({
+      const [updatedOrder] = await tx.update(orders).set({
+        station: newStation,
         currentStationId: newStation,
-        status: newStatus
-      }).where(eq(orders.id, orderId));
+        status: newStatus,
+        ...(isFinalCompletion ? { completedDate: transitionAt } : {}),
+      }).where(and(
+        eq(orders.id, orderId),
+        eq(orders.tenantId, tenantId),
+        persistedStationCondition,
+        eq(orders.station, o.station),
+        eq(orders.status, o.status),
+      )).returning({ id: orders.id });
+
+      if (!updatedOrder) {
+        throw new Error("TRANSITION_CONFLICT");
+      }
       
       await tx.update(items).set({
         currentStationId: newStation
-      }).where(eq(items.orderId, orderId));
+      }).where(and(eq(items.orderId, orderId), eq(items.tenantId, tenantId)));
       
       await tx.insert(events).values({
-        id: crypto.randomUUID(),
-        tenantId: "galvanik-kreile",
+        id: receiptId,
+        tenantId,
+        clientEventId,
         orderId,
         eventType,
-        station: newStation,
+        station: currentStation,
         description,
-        createdAt: new Date()
+        payload: {
+          action,
+          fromStation: currentStation,
+          toStation: newStation,
+          statusBefore: currentStatus,
+          statusAfter: newStatus,
+          transitionAt: transitionAt.toISOString(),
+        },
+        userId,
+        createdAt: transitionAt
       });
     });
+
+    const { invalidateOperationalOrdersCache } = await import("@/lib/server/operationalOrders");
+    invalidateOperationalOrdersCache();
 
     try { 
       const { revalidatePath } = await import("next/cache");
@@ -366,14 +613,22 @@ export async function transitionOrderProcess(params: {
       revalidatePath("/warendurchlauf");
     } catch { /* ignore */ }
 
-    return { ok: true, data: { success: true, newStation, newStatus } };
+    return { ok: true, data: { success: true, newStation, newStatus, receiptId, idempotent: false } };
   } catch (error) {
     console.error("Failed transition:", error);
+    if (error instanceof Error && error.message === "TRANSITION_CONFLICT") {
+      return { ok: false, error: "UNKNOWN", message: "Der Auftrag wurde zwischenzeitlich verändert. Bitte neu laden." };
+    }
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Prozesswechsel" };
   }
 }
 
-export async function createOrderFromScan(params: {
+/**
+ * Scan capture has no durable, tenant-bound upload/OCR receipt yet. Keep the
+ * public server-action surface fail-closed rather than synthesising an order
+ * from browser text or a fallback title.
+ */
+export async function createOrderFromScan(_params: {
   customerId?: string;
   customerName?: string;
   title?: string;
@@ -383,14 +638,29 @@ export async function createOrderFromScan(params: {
   | { ok: true; data: { orderId: string; newCustomerId?: string; status: string; customerChoices?: Record<string, unknown>[] } }
   | { ok: false; error: string; message: string; details?: unknown }
 > {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return { ok: false, error: auth.error, message: auth.message };
+  return {
+    ok: false,
+    error: "NOT_CONFIGURED",
+    message: "Scan-Erfassung benötigt einen geprüften Upload-, OCR- und Receipt-Vertrag.",
+  };
+}
 
-  const authRes = await resolveAuthorization();
-  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
-  const tenantId = authRes.data.tenantId;
+/** @deprecated Kept private only while the new capture contract is designed. */
+async function createOrderFromScanLegacyUnsafe(params: {
+  customerId?: string;
+  customerName?: string;
+  title?: string;
+  parts: { name: string; quantity: number; surfaceRequested?: string; material?: string }[];
+  forceCreateCustomer?: boolean;
+}): Promise<
+  | { ok: true; data: { orderId: string; newCustomerId?: string; status: string; customerChoices?: Record<string, unknown>[] } }
+  | { ok: false; error: string; message: string; details?: unknown }
+> {
+  const authorization = await checkAppPermission("perm_data_orders");
+  if (!authorization.ok) return { ok: false, error: authorization.error, message: authorization.message };
+  const tenantId = authorization.data.tenantId;
 
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
 
   try {
     let finalCustomerId = params.customerId;
@@ -420,27 +690,12 @@ export async function createOrderFromScan(params: {
       } else {
         // Kein Treffer
         if (params.forceCreateCustomer) {
-          const { createCustomerDb } = await import("./customers.actions");
-          const createResult = await createCustomerDb({
-            company: params.customerName,
-            firstName: "",
-            lastName: "",
-            street: "Hauptstraße",
-            houseNumber: "1",
-            city: "Frankfurt",
-            postalCode: "60311",
-            country: "Deutschland"
-          });
-          if (createResult.ok) {
-            finalCustomerId = createResult.data.id;
-          } else {
-            return {
-              ok: false,
-              error: "CUSTOMER_CREATION_FAILED",
-              message: "Kunde konnte nicht angelegt werden",
-              details: createResult.error
-            };
-          }
+          return {
+            ok: false,
+            error: "CUSTOMER_DETAILS_REQUIRED",
+            message: "Für einen neuen Kunden müssen die echten Stammdaten erfasst werden. Es werden keine Platzhalterdaten angelegt.",
+            details: { customerName: params.customerName },
+          };
         } else {
           return {
             ok: false,
@@ -496,4 +751,3 @@ export async function createOrderFromScan(params: {
     };
   }
 }
-

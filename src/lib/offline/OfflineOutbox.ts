@@ -30,6 +30,17 @@ const DB_NAME = "KreileOfflineOutboxDB";
 const STORE_NAME = "outbox";
 const DB_VERSION = 1;
 
+// Existing local outbox entries may contain unsynchronised user work. A repair
+// must never discard them before a dedicated tenant-bound recovery contract
+// can prove whether the corresponding server receipt exists.
+function isOfflineDestructiveRecoveryEnabled(): boolean {
+  return false;
+}
+
+function offlineDestructiveRecoveryUnavailable(): never {
+  throw new Error("NOT_CONFIGURED: Offline-Vormerkungen dürfen ohne bestätigten Wiederherstellungsvertrag nicht gelöscht werden.");
+}
+
 function getDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     if (typeof window === "undefined" || !window.indexedDB) {
@@ -50,6 +61,8 @@ function getDB(): Promise<IDBDatabase> {
 
 export const offlineOutbox = {
   async saveItem(item: OfflineOutboxItem): Promise<void> {
+    if (!isOfflineDestructiveRecoveryEnabled()) return offlineDestructiveRecoveryUnavailable();
+
     const db = await getDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readwrite");
@@ -61,21 +74,19 @@ export const offlineOutbox = {
   },
 
   async getAllItems(): Promise<OfflineOutboxItem[]> {
-    try {
-      const db = await getDB();
-      return new Promise((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readonly");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.getAll();
-        req.onsuccess = () => resolve(req.result as OfflineOutboxItem[]);
-        req.onerror = () => reject(req.error);
-      });
-    } catch {
-      return [];
-    }
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result as OfflineOutboxItem[]);
+      req.onerror = () => reject(req.error);
+    });
   },
 
   async removeItem(id: string): Promise<void> {
+    if (!isOfflineDestructiveRecoveryEnabled()) return offlineDestructiveRecoveryUnavailable();
+
     const db = await getDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readwrite");
@@ -87,6 +98,8 @@ export const offlineOutbox = {
   },
   
   async clearAll(): Promise<void> {
+    if (!isOfflineDestructiveRecoveryEnabled()) return offlineDestructiveRecoveryUnavailable();
+
     const db = await getDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, "readwrite");

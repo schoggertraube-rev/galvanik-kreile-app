@@ -1,4 +1,5 @@
 "use server";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 import { db } from "@/db";
 import { segment } from "@/db/schema_marketing";
@@ -6,6 +7,9 @@ import { eq, ilike, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export async function getSegments(query?: string) {
+  if (!isFoundationAreaEnabled("Marketing")) {
+    return foundationUnavailableAction("Marketing");
+  }
   if (query) {
     return await db.select().from(segment).where(ilike(segment.name, `%${query}%`)).orderBy(segment.name);
   }
@@ -13,11 +17,17 @@ export async function getSegments(query?: string) {
 }
 
 export async function getSegmentById(id: string) {
+  if (!isFoundationAreaEnabled("Marketing")) {
+    return foundationUnavailableAction("Marketing");
+  }
   const result = await db.select().from(segment).where(eq(segment.id, id)).limit(1);
   return result[0] || null;
 }
 
 export async function createSegment(formData: FormData) {
+  if (!isFoundationAreaEnabled("Marketing")) {
+    return foundationUnavailableAction("Marketing");
+  }
   const name = formData.get("name")?.toString();
   const icon = formData.get("icon")?.toString() || "";
   const farbe = formData.get("farbe")?.toString() || "#e91e63";
@@ -40,6 +50,9 @@ export async function createSegment(formData: FormData) {
 }
 
 export async function updateSegment(id: string, formData: FormData) {
+  if (!isFoundationAreaEnabled("Marketing")) {
+    return foundationUnavailableAction("Marketing");
+  }
   const name = formData.get("name")?.toString();
   const icon = formData.get("icon")?.toString() || "";
   const farbe = formData.get("farbe")?.toString() || "#e91e63";
@@ -62,6 +75,9 @@ export async function updateSegment(id: string, formData: FormData) {
 }
 
 export async function deleteSegment(id: string) {
+  if (!isFoundationAreaEnabled("Marketing")) {
+    return foundationUnavailableAction("Marketing");
+  }
   const target = await getSegmentById(id);
   if (target?.isDemo === false) {
     // Only true demo items could be deleted if we want to restrict, 

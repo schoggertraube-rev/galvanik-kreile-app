@@ -3,7 +3,14 @@
 import { X } from "lucide-react";
 import { login } from "@/app/actions/auth";
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+
+function isNextRedirect(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "digest" in error
+    && typeof error.digest === "string"
+    && error.digest.startsWith("NEXT_REDIRECT");
+}
 
 export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
   const [isPending, startTransition] = useTransition();
@@ -13,14 +20,14 @@ export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     startTransition(async () => {
-      // Direct call to the server action
+      setErrorMsg("");
       try {
         await login(formData);
       } catch (err) {
-        // If redirect happens it throws an error in nextjs, which is normal
-        // but if it doesn't redirect, maybe we can catch a standard error?
-        // Actually, the server action does `redirect('/start?message=...')` on error.
-        // So we will just handle it. 
+        // Redirect is the action's deliberate success/error transport. It
+        // must reach Next instead of leaving the dialog indefinitely pending.
+        if (isNextRedirect(err)) throw err;
+        setErrorMsg("Die Anmeldung konnte nicht bestätigt werden. Bitte Verbindung und Zugangsdaten prüfen.");
       }
     });
   };

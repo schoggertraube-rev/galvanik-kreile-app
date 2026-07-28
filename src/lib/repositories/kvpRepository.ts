@@ -15,8 +15,18 @@ export type KvpItem = {
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
+// Browser-side writes and hard-coded tenant values cannot prove actor, tenant
+// or receipt ownership. Keep the legacy adapter inert until its server contract
+// and RLS proof have been released.
+function isKvpRepositoryEnabled(): boolean {
+  return false;
+}
+
 export const kvpRepository = {
   async getAll(): Promise<KvpItem[]> {
+    if (!isKvpRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: KVP ist bis zum geprüften Fundamentvertrag nicht verfügbar.");
+    }
     if (!isSupabase) return [];
     
     // Strict: Do not read from shadow DB
@@ -42,6 +52,9 @@ export const kvpRepository = {
   },
 
   async addItem(item: Omit<KvpItem, "id">): Promise<KvpItem> {
+    if (!isKvpRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: KVP ist bis zum geprüften Fundamentvertrag nicht verfügbar.");
+    }
     const id = "b-" + createId();
     const newItem: KvpItem = { ...item, id };
     
@@ -72,6 +85,9 @@ export const kvpRepository = {
   },
 
   async updateItemStatus(id: string, status: KvpItem["status"]): Promise<KvpItem | null> {
+    if (!isKvpRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: KVP ist bis zum geprüften Fundamentvertrag nicht verfügbar.");
+    }
     if (isSupabase) {
       const supabase = createClient();
       const { error } = await supabase.from('kvp_items').update({ status }).eq('id', id);

@@ -1,7 +1,7 @@
 import React from "react";
 import { ChevronRight } from "lucide-react";
 
-export type UrgencyType = "ok" | "soon" | "wait" | "crit";
+export type UrgencyType = "ok" | "soon" | "wait" | "crit" | "unknown";
 
 interface OrderCompactCardProps {
   id: string;
@@ -32,6 +32,7 @@ export function OrderCompactCard({
 }: OrderCompactCardProps) {
   const isCrit = urgency === "crit";
   const isWait = urgency === "wait";
+  const isUnknown = urgency === "unknown";
 
   return (
     <div
@@ -72,6 +73,8 @@ export function OrderCompactCard({
             <span className="text-danger-red">{badgeText || "KRITISCH"}</span>
           ) : isWait ? (
             <span className="text-gold-800">{badgeText || "WARTEND"}</span>
+          ) : isUnknown ? (
+            <span className="text-text-muted">{badgeText || "DRINGLICHKEIT OFFEN"}</span>
           ) : (
             <span className="text-success-green">{badgeText || "IM PLAN"}</span>
           )}

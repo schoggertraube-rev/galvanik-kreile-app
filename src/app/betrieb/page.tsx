@@ -1,9 +1,12 @@
-import { hasPermission } from "@/lib/auth/permissions";
-import { BetriebDashboardClient } from "./BetriebDashboardClient";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 export const dynamic = "force-dynamic";
 
-export default async function BetriebPage() {
-  const isAdminOrDev = await hasPermission("perm_view_leitstand");
-  return <BetriebDashboardClient isAdminOrDev={isAdminOrDev} />;
+export default function BetriebPage() {
+  return (
+    <FoundationUnavailable
+      title="Betriebscockpit ist noch nicht freigegeben"
+      reason="Die bisherige Navigation verknüpfte unverbundene oder gesperrte Fachbereiche und konnte damit funktionsfähige Betriebsabläufe vortäuschen."
+    />
+  );
 }

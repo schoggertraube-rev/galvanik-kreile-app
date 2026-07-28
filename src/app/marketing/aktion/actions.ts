@@ -1,4 +1,5 @@
 "use server";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 import { db } from "@/db";
 import { aktion, touchpoint, kanal, segment } from "@/db/schema_marketing";
@@ -6,6 +7,9 @@ import { eq, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 export async function getAktionen() {
+  if (!isFoundationAreaEnabled("Marketing")) {
+    return foundationUnavailableAction("Marketing");
+  }
   const data = await db
     .select({
       id: aktion.id,
@@ -24,11 +28,17 @@ export async function getAktionen() {
 }
 
 export async function getAktionById(id: string) {
+  if (!isFoundationAreaEnabled("Marketing")) {
+    return foundationUnavailableAction("Marketing");
+  }
   const result = await db.select().from(aktion).where(eq(aktion.id, id)).limit(1);
   return result[0] || null;
 }
 
 export async function createAktion(formData: FormData) {
+  if (!isFoundationAreaEnabled("Marketing")) {
+    return foundationUnavailableAction("Marketing");
+  }
   const titel = formData.get("titel")?.toString();
   const typ = formData.get("typ")?.toString(); // post, mail, review_request
   const kanalId = formData.get("kanalId")?.toString();
@@ -51,6 +61,9 @@ export async function createAktion(formData: FormData) {
 }
 
 export async function changeAktionStatus(id: string, newStatus: string) {
+  if (!isFoundationAreaEnabled("Marketing")) {
+    return foundationUnavailableAction("Marketing");
+  }
   const target = await getAktionById(id);
   if (!target) throw new Error("Aktion nicht gefunden");
 

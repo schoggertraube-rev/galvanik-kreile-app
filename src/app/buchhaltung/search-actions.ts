@@ -1,10 +1,14 @@
 "use server";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 import { db } from "@/db";
 import { beleg } from "@/db/schema_buchhaltung";
 import { ilike, or } from "drizzle-orm";
 
 export async function searchBelegeByOcrTextAction(term: string) {
+  if (!isFoundationAreaEnabled("Belegsuche")) {
+    return foundationUnavailableAction("Belegsuche");
+  }
   if (!term || term.length < 2) return [];
 
   try {

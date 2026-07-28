@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { TelefonnotizDesktop } from "@/components/telefonnotiz/TelefonnotizDesktop";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 export const metadata = {
   title: "Telefonnotiz · WerkstattCockpit",
@@ -7,6 +8,7 @@ export const metadata = {
 };
 
 export default function TelefonnotizPage() {
+  return <FoundationUnavailable title="Telefonnotizen nicht freigegeben" reason="Die bisherige Telefonnotizfunktion hatte keinen serverseitig abgeleiteten Mandanten, keine Actor-Grenze und mehrere Platzhalteraktionen. Bis zum belegten Kommunikationsvertrag wird keine Notiz gespeichert oder als versandt dargestellt." returnHref="/" returnLabel="Zur Startseite" />;
   return (
     <Suspense fallback={
       <div style={{ minHeight: "100vh", background: "#FAF6EE", display: "grid", placeItems: "center", fontFamily: "'Manrope', sans-serif" }}>

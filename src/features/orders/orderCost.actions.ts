@@ -5,6 +5,13 @@ import type { WorkEntry, MaterialEntry, ExtraCostEntry } from '@/lib/orders/cost
 import { db } from "@/db";
 import { arbeitszeitBuchung, events } from "@/db/schema";
 import { getCurrentAppUser } from "@/lib/auth/permissions";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from '@/lib/server/foundationGate';
+
+function assertOrderCostContract(): void {
+  if (!isFoundationAreaEnabled('Auftragskosten und Verbrauchsbuchung')) {
+    foundationUnavailableAction('Auftragskosten und Verbrauchsbuchung');
+  }
+}
 
 // ─────────────────────────────────────────────
 // Book station costs (Erfassung buchen)
@@ -18,6 +25,7 @@ export async function bookStationCosts(params: {
   employeeId: string;
   kostenstelleKuerzel: string;
 }) {
+  assertOrderCostContract();
   const supabase = await createClient();
   const { orderId, station, workEntries, consumableEntries, extraCostEvents, employeeId, kostenstelleKuerzel } = params;
   const errors: string[] = [];
@@ -65,9 +73,10 @@ export async function bookStationCosts(params: {
         userId: realEmployeeId,
       });
     });
-  } catch (txError: any) {
+  } catch (txError: unknown) {
     console.error("Drizzle transaction failed in bookStationCosts:", txError);
-    return { success: false, errors: [`Datenbankfehler bei der Buchung: ${txError.message || txError}`] };
+    const message = txError instanceof Error ? txError.message : String(txError);
+    return { success: false, errors: [`Datenbankfehler bei der Buchung: ${message}`] };
   }
 
   // 2) Material → consumable_uses (inserted via Supabase client, since table is not in Drizzle schema)
@@ -113,6 +122,7 @@ export async function bookStationCosts(params: {
 // Get station cost summary (bisherige Buchungen)
 // ─────────────────────────────────────────────
 export async function getStationCostSummary(orderId: string) {
+  assertOrderCostContract();
   const supabase = await createClient();
 
   // Arbeitszeit pro Station
@@ -177,6 +187,7 @@ export async function getStationCostSummary(orderId: string) {
 // Get benchmark data for a station
 // ─────────────────────────────────────────────
 export async function getBenchmarkData(station: string) {
+  assertOrderCostContract();
   const supabase = await createClient();
 
   const { data: zeitVorlagen } = await supabase

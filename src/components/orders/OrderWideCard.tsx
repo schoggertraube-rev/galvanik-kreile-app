@@ -4,7 +4,7 @@ import React from "react";
 import { ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 
-export type UrgencyType = "crit" | "soon" | "wait" | "ok";
+export type UrgencyType = "crit" | "soon" | "wait" | "ok" | "unknown";
 
 export interface OrderWideCardProps {
   id: string;
@@ -42,6 +42,7 @@ export function OrderWideCard({
   if (urgency === "crit") uClass = "u-crit";
   if (urgency === "soon") uClass = "u-soon";
   if (urgency === "wait") uClass = "u-wait";
+  if (urgency === "unknown") uClass = "u-unknown";
 
   // Map surface key to dot class
   const sDotClass = `s-${surfaceKey}`;
@@ -62,6 +63,7 @@ export function OrderWideCard({
         .u-soon .card-bar { background: #d4850a; }
         .u-ok .card-bar { background: #1e7e45; }
         .u-wait .card-bar { background: #2471a3; }
+        .u-unknown .card-bar { background: #9e9689; }
 
         .sdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.12); display: inline-block; }
         .s-chrom { background: linear-gradient(135deg, #c0c0c0, #e8e8e8); }
@@ -81,6 +83,7 @@ export function OrderWideCard({
         .u-soon .c-due-val { color: #d4850a; }
         .u-ok .c-due-val { color: #1e7e45; }
         .u-wait .c-due-val { color: #2471a3; }
+        .u-unknown .c-due-val { color: #5e5850; }
 
         .card-pulse.u-crit { animation: cpulse 3s ease-in-out infinite; }
         @keyframes cpulse {

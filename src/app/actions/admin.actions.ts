@@ -6,6 +6,13 @@ import { eq } from 'drizzle-orm'
 import { createClient } from '@supabase/supabase-js'
 import { requireAdminOrDeveloper } from '@/lib/auth/permissions'
 import { toAdminUserDto } from '@/lib/auth/userDtos'
+import { foundationUnavailableAction, isFoundationAreaEnabled } from '@/lib/server/foundationGate'
+
+function assertAdminMutationContract(): void {
+  if (!isFoundationAreaEnabled('Benutzer- und Rechteverwaltung')) {
+    foundationUnavailableAction('Benutzer- und Rechteverwaltung')
+  }
+}
 
 // Admin client using Service Role Key (MUST ONLY BE USED IN SERVER ACTIONS)
 const getAdminSupabase = () => {
@@ -27,12 +34,14 @@ const getAdminSupabase = () => {
 // ── Users ──────────────────────────────────────────────────────────────
 
 export async function getUsers() {
+  assertAdminMutationContract()
   await requireAdminOrDeveloper();
   const users = await db.select().from(appUsers)
   return users.map(toAdminUserDto)
 }
 
 export async function createUser(data: { email: string, fullName: string, role: string, location?: string, language?: string, pinHash?: string }) {
+  assertAdminMutationContract()
   await requireAdminOrDeveloper();
   const supabase = getAdminSupabase()
   
@@ -73,18 +82,21 @@ export async function createUser(data: { email: string, fullName: string, role: 
 }
 
 export async function updateUserRole(userId: string, newRole: string) {
+  assertAdminMutationContract()
   await requireAdminOrDeveloper();
   await db.update(appUsers).set({ role: newRole }).where(eq(appUsers.id, userId))
   return { success: true }
 }
 
 export async function updateUserPin(userId: string, newPin: string) {
+  assertAdminMutationContract()
   await requireAdminOrDeveloper();
   await db.update(appUsers).set({ pinHash: newPin }).where(eq(appUsers.id, userId))
   return { success: true }
 }
 
 export async function toggleUserStatus(userId: string, active: boolean) {
+  assertAdminMutationContract()
   await requireAdminOrDeveloper();
   await db.update(appUsers).set({ active }).where(eq(appUsers.id, userId))
   return { success: true }
@@ -93,23 +105,27 @@ export async function toggleUserStatus(userId: string, active: boolean) {
 // ── Feature Flags ───────────────────────────────────────────────────────
 
 export async function getFeatureFlags() {
+  assertAdminMutationContract()
   await requireAdminOrDeveloper();
   return await db.select().from(featureFlags)
 }
 
 export async function toggleFeatureFlag(id: string, enabled: boolean) {
+  assertAdminMutationContract()
   await requireAdminOrDeveloper();
   await db.update(featureFlags).set({ enabled }).where(eq(featureFlags.id, id))
   return { success: true }
 }
 
 export async function updateFeatureFlagRoles(id: string, rolesAllowed: string[]) {
+  assertAdminMutationContract()
   await requireAdminOrDeveloper();
   await db.update(featureFlags).set({ rolesAllowed }).where(eq(featureFlags.id, id))
   return { success: true }
 }
 
 export async function initializeDefaultFlags() {
+  assertAdminMutationContract()
   await requireAdminOrDeveloper();
   const defaults = [
     { id: 'module_performance', name: 'Performance Dashboard', description: 'Erweiterte Statistiken', enabled: true },

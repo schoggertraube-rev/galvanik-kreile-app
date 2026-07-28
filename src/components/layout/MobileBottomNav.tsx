@@ -3,19 +3,14 @@
 import { Home, PackageCheck, Scan, Search, Menu, Users, ClipboardList, TrendingUp, Settings, MessageSquare, ShieldCheck, Lightbulb, HeartHandshake, Beaker, Warehouse, Database } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 export function MobileBottomNav({ className = "" }: { className?: string }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
-  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
-
-  useEffect(() => {
-    const role = localStorage.getItem("kreile_user_role");
-    if (role === "admin" || role === "developer") {
-      setTimeout(() => setIsAdminOrDev(true), 0);
-    }
-  }, []);
+  const { role } = usePermissions();
+  const isAdminOrDev = role === "admin" || role === "developer";
 
   const isActive = (path: string) =>
     path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
@@ -77,11 +72,11 @@ export function MobileBottomNav({ className = "" }: { className?: string }) {
                   <SheetLink href="/orders" icon={<ClipboardList />} label="Aufträge" onClick={() => setMoreOpen(false)} />
                   <SheetLink href="/customers" icon={<Users />} label="Kunden" onClick={() => setMoreOpen(false)} />
                   <SheetLink href="/quotes" icon={<MessageSquare />} label="Angebote" onClick={() => setMoreOpen(false)} />
-                  <button onClick={() => { window.dispatchEvent(new Event('kreile-open-search')); setMoreOpen(false); }} className="flex flex-col items-center gap-2 group">
-                    <div className="w-12 h-12 rounded-2xl bg-bg-app-soft flex items-center justify-center text-navy-700 group-hover:bg-neutral-gray-100 transition-colors">
+                  <button disabled title="Suche ist bis zum geprüften Datenvertrag nicht freigegeben" className="flex flex-col items-center gap-2 opacity-45 cursor-not-allowed">
+                    <div className="w-12 h-12 rounded-2xl bg-bg-app-soft flex items-center justify-center text-navy-700">
                       <Search />
                     </div>
-                    <span className="text-[10px] font-bold text-navy-900 text-center">Suche</span>
+                    <span className="text-[10px] font-bold text-navy-900 text-center">Suche (später)</span>
                   </button>
                 </div>
               </div>
@@ -91,7 +86,12 @@ export function MobileBottomNav({ className = "" }: { className?: string }) {
                 <div className="grid grid-cols-4 gap-y-4 gap-x-2">
                   <SheetLink href="/kontrolle" icon={<ShieldCheck />} label="Kontrolle" onClick={() => setMoreOpen(false)} />
                   <SheetLink href="/kommunikation" icon={<MessageSquare />} label="Messenger" onClick={() => setMoreOpen(false)} />
-                  <SheetLink href="/kundenservice" icon={<HeartHandshake />} label="Service" onClick={() => setMoreOpen(false)} />
+                  <button disabled title="Kundenservice ist bis zum geprüften Datenvertrag nicht freigegeben" className="flex flex-col items-center gap-2 opacity-45 cursor-not-allowed">
+                    <div className="w-12 h-12 rounded-2xl bg-bg-app-soft flex items-center justify-center text-navy-700">
+                      <HeartHandshake />
+                    </div>
+                    <span className="text-[10px] font-bold text-navy-900 text-center">Service (später)</span>
+                  </button>
                   <SheetLink href="/betrieb-kvp" icon={<Lightbulb />} label="KVP" onClick={() => setMoreOpen(false)} />
                   <SheetLink href="/baeder" icon={<Beaker />} label="Bäder" onClick={() => setMoreOpen(false)} />
                   <SheetLink href="/items" icon={<Warehouse />} label="Lager" onClick={() => setMoreOpen(false)} />

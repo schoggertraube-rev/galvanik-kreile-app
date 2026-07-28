@@ -3,8 +3,10 @@
 import { db } from "@/db";
 import { orders, items, events, customers, priceLines, payments, communications } from "@/db/schema";
 import { eq, desc, asc } from "drizzle-orm";
+import { foundationUnavailableAction } from "@/lib/server/foundationGate";
 
 export async function getOrderWithDetails(orderId: string) {
+  foundationUnavailableAction("Auftragsdetail");
   try {
     const orderResults = await db.select()
       .from(orders)

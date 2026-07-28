@@ -1,8 +1,23 @@
 "use server";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 import { createClient } from '@/lib/supabase/server';
 
+type WhatIfContext = {
+  db_marge_je_ks: Record<string, number>;
+  kostensatz_je_ks: Record<string, number>;
+  auslastung_je_ks: Record<string, number>;
+  verfuegbare_stunden_je_ks: Record<string, number>;
+  umsatz_12m_je_kundengruppe: Record<string, number>;
+  db_marge_gesamt: number;
+  top_kunden_je_gruppe: Record<string, Array<{ name: string; umsatz: number }>>;
+  kostenstellen_liste: Array<{ kuerzel: string; name: string }>;
+};
+
 export async function getCockpitKpis() {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   
   // v_monatsergebnis for current month
@@ -69,6 +84,9 @@ export async function getCockpitKpis() {
 }
 
 export async function getTopKunden(limit = 10) {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_kunde_clv')
@@ -84,6 +102,9 @@ export async function getTopKunden(limit = 10) {
 }
 
 export async function getInaktiveKunden() {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   
   const nineMonthsAgo = new Date();
@@ -103,6 +124,9 @@ export async function getInaktiveKunden() {
 }
 
 export async function getEngpassDaten() {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_engpass')
@@ -117,6 +141,9 @@ export async function getEngpassDaten() {
 }
 
 export async function getAgingDaten() {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   
   const { data, error } = await supabase
@@ -155,6 +182,9 @@ export async function getAgingDaten() {
 }
 
 export async function getAuftragDbRanking(limit = 10) {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_auftrag_db')
@@ -171,9 +201,12 @@ export async function getAuftragDbRanking(limit = 10) {
 }
 
 export async function getWhatIfKontext() {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   
-  const kontext: any = {
+  const kontext: WhatIfContext = {
     db_marge_je_ks: {},
     kostensatz_je_ks: {},
     auslastung_je_ks: {},
@@ -189,7 +222,7 @@ export async function getWhatIfKontext() {
     kontext.kostenstellen_liste = kostenstellen.map(ks => ({ kuerzel: ks.kuerzel, name: ks.name }));
     kostenstellen.forEach(ks => {
       if (ks.kuerzel) {
-        kontext.verfuegbare_stunden_je_ks[ks.kuerzel] = ks.verfuegbare_stunden_monatlich;
+        kontext.verfuegbare_stunden_je_ks[ks.kuerzel] = Number(ks.verfuegbare_stunden_monatlich || 0);
       }
     });
   }
@@ -198,7 +231,7 @@ export async function getWhatIfKontext() {
   if (engpass) {
     engpass.forEach(e => {
       if (e.kuerzel) {
-        kontext.auslastung_je_ks[e.kuerzel] = e.auslastung_quote || 0;
+        kontext.auslastung_je_ks[e.kuerzel] = Number(e.auslastung_quote || 0);
         kontext.kostensatz_je_ks[e.kuerzel] = 45; // Default if not found
       }
     });
@@ -227,8 +260,6 @@ export async function getWhatIfKontext() {
     Object.keys(ksStats).forEach(ks => {
       if (ksStats[ks].c >= 3 && ksStats[ks].u > 0) {
         kontext.db_marge_je_ks[ks] = ksStats[ks].db / ksStats[ks].u;
-      } else {
-        kontext.db_marge_je_ks[ks] = null; // null triggers "Datengrundlage fehlt"
       }
     });
   }
@@ -238,27 +269,30 @@ export async function getWhatIfKontext() {
     clv.forEach(c => {
       const g = c.kundentyp || 'alle'; // mapped
       if (!kontext.umsatz_12m_je_kundengruppe[g]) kontext.umsatz_12m_je_kundengruppe[g] = 0;
-      kontext.umsatz_12m_je_kundengruppe[g] += (c.umsatz_gesamt || 0);
+        kontext.umsatz_12m_je_kundengruppe[g] += Number(c.umsatz_gesamt || 0);
       
       if (!kontext.top_kunden_je_gruppe[g]) kontext.top_kunden_je_gruppe[g] = [];
-      kontext.top_kunden_je_gruppe[g].push({ name: c.name, umsatz: c.umsatz_gesamt });
+        kontext.top_kunden_je_gruppe[g].push({ name: c.name || "Unbekannt", umsatz: Number(c.umsatz_gesamt || 0) });
       
       if (g !== 'alle') {
         if (!kontext.umsatz_12m_je_kundengruppe['alle']) kontext.umsatz_12m_je_kundengruppe['alle'] = 0;
-        kontext.umsatz_12m_je_kundengruppe['alle'] += (c.umsatz_gesamt || 0);
+        kontext.umsatz_12m_je_kundengruppe['alle'] += Number(c.umsatz_gesamt || 0);
         if (!kontext.top_kunden_je_gruppe['alle']) kontext.top_kunden_je_gruppe['alle'] = [];
-        kontext.top_kunden_je_gruppe['alle'].push({ name: c.name, umsatz: c.umsatz_gesamt });
+        kontext.top_kunden_je_gruppe['alle'].push({ name: c.name || "Unbekannt", umsatz: Number(c.umsatz_gesamt || 0) });
       }
     });
     
     Object.keys(kontext.top_kunden_je_gruppe).forEach(g => {
-      kontext.top_kunden_je_gruppe[g].sort((a: any, b: any) => b.umsatz - a.umsatz);
+      kontext.top_kunden_je_gruppe[g].sort((a, b) => b.umsatz - a.umsatz);
     });
   }
   return kontext;
 }
 
 export async function getEngpassDetails(station: string) {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   
   const { data: waitingOrders } = await supabase.from('orders')
@@ -274,12 +308,18 @@ export async function getEngpassDetails(station: string) {
 }
 
 export async function getAuftragDbDetails(orderId: string) {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   const { data } = await supabase.from('v_auftrag_db').select('*').eq('order_id', orderId).single();
   return data;
 }
 
 export async function getForecastDaten() {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   const { data: results, error } = await supabase.from('v_monatsergebnis')
     .select('monat, umsatz, db, db_marge_prozent')
@@ -307,6 +347,9 @@ export async function getForecastDaten() {
 }
 
 export async function getKundenDetails(customerId: string) {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   
   const { data: clv } = await supabase.from('v_kunde_clv').select('*').eq('customer_id', customerId).single();
@@ -321,7 +364,7 @@ export async function getKundenDetails(customerId: string) {
     .select('order_id, order_number, deckungsbeitrag, erloes_netto, intake_date')
     .eq('customer_id', customerId);
 
-  let details = orders ? await Promise.all(orders.map(async o => {
+  const details = orders ? await Promise.all(orders.map(async o => {
     const dbInfo = auftraegeDb?.find(x => x.order_id === o.id);
     return {
       ...o,
@@ -335,6 +378,9 @@ export async function getKundenDetails(customerId: string) {
 
 
 export async function getAgingRechnungen(bucket: string) {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_aging')
@@ -350,6 +396,9 @@ export async function getAgingRechnungen(bucket: string) {
 }
 
 export async function getAktiveWarnungen() {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('warning_event')
@@ -376,6 +425,9 @@ export async function getAktiveWarnungen() {
 }
 
 export async function dismissWarnung(id: string, begruendung: string) {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   if (!begruendung || begruendung.length < 10) {
     throw new Error("Begründung muss mindestens 10 Zeichen lang sein.");
   }
@@ -406,6 +458,9 @@ export async function dismissWarnung(id: string, begruendung: string) {
 }
 
 export async function refreshWarnungen() {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   const { error } = await supabase.rpc('fn_compute_warnings', { p_tenant: 'galvanik-kreile' });
   if (error) {
@@ -416,6 +471,9 @@ export async function refreshWarnungen() {
 }
 
 export async function getAktiverJahresplan(jahr: number) {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('forecast_version')
@@ -434,6 +492,9 @@ export async function getAktiverJahresplan(jahr: number) {
 }
 
 export async function speichereJahresplan(jahr: number, monate: Record<string, number>) {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   
   await supabase
@@ -466,6 +527,9 @@ export async function speichereJahresplan(jahr: number, monate: Record<string, n
 }
 
 export async function savePhoneNote(data: { customer_id?: string, caller_name?: string, raw_text: string, category: string, urgency: string }) {
+  if (!isFoundationAreaEnabled("Cockpit")) {
+    return foundationUnavailableAction("Cockpit");
+  }
   const supabase = await createClient();
   const { error } = await supabase.from('phone_notes').insert({
     tenant_id: 'galvanik-kreile',

@@ -1,2 +1,4 @@
-#!/usr/bin/env sh
-npm run verify:precommit
+#!/bin/sh
+node node_modules/typescript/bin/tsc --noEmit || exit $?
+node scripts/verify-staged-files.mjs || exit $?
+node node_modules/vitest/vitest.mjs run --exclude "**/*.integration.test.ts"

@@ -94,3 +94,9 @@ export function getRoleLabel(role: AppRole): string {
 export function getPermissionsForRole(role: AppRole): readonly PermissionKey[] {
   return ROLE_PERMISSIONS[role] || [];
 }
+
+/** Developers use the administrative identity flow and must never appear on the
+ * anonymous PIN selector screen. */
+export function canUsePinLoginRole(role: AppRole): boolean {
+  return role !== "developer";
+}

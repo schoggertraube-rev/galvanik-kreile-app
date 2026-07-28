@@ -4,8 +4,16 @@ import { db } from '@/db'
 import { orders, customers, appUsers } from '@/db/schema'
 import { count } from 'drizzle-orm'
 import { createClient } from '@/lib/supabase/server'
+import { foundationUnavailableAction, isFoundationAreaEnabled } from '@/lib/server/foundationGate'
+
+function assertDiagnosticsContract(): void {
+  if (!isFoundationAreaEnabled('Systemdiagnose und Schreibtest')) {
+    foundationUnavailableAction('Systemdiagnose und Schreibtest')
+  }
+}
 
 export async function getSystemStats() {
+  assertDiagnosticsContract()
   const provider = process.env.NEXT_PUBLIC_DATA_PROVIDER || 'local'
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
   
@@ -64,6 +72,7 @@ export async function runSupabaseWriteTest(): Promise<{
   message: string;
   durationMs: number;
 }> {
+  assertDiagnosticsContract()
   const provider = process.env.NEXT_PUBLIC_DATA_PROVIDER || 'local'
   if (provider !== 'supabase') {
     return { success: false, message: 'Datenquelle ist nicht Supabase', durationMs: 0 }

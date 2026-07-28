@@ -52,8 +52,17 @@ const INITIAL_MOVEMENTS: StockMovement[] = [
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
+function legacyInventoryUnavailable(): never {
+  throw new Error("NOT_CONFIGURED: Lagerzugriff und Bestandsbuchungen besitzen keinen belegten Server- und Transaktionsvertrag.");
+}
+
+function isLegacyInventoryEnabled(): boolean {
+  return false;
+}
+
 export const inventoryRepository = {
   async getAllItems(): Promise<InventoryItem[]> {
+    if (!isLegacyInventoryEnabled()) return legacyInventoryUnavailable();
     if (isSupabase) {
       const supabase = createClient();
       const { data, error } = await supabase.from('inventory_items').select('*').order('name', { ascending: true });
@@ -82,6 +91,7 @@ export const inventoryRepository = {
   },
 
   async getAllMovements(): Promise<StockMovement[]> {
+    if (!isLegacyInventoryEnabled()) return legacyInventoryUnavailable();
     if (isSupabase) {
       const supabase = createClient();
       const { data, error } = await supabase.from('stock_movements').select('*').order('created_at', { ascending: false });
@@ -108,6 +118,8 @@ export const inventoryRepository = {
   },
 
   async getItemById(id: string): Promise<InventoryItem | null> {
+    void id;
+    if (!isLegacyInventoryEnabled()) return legacyInventoryUnavailable();
     if (isSupabase) {
       const supabase = createClient();
       const { data, error } = await supabase.from('inventory_items').select('*').eq('id', id).single();
@@ -139,6 +151,8 @@ export const inventoryRepository = {
   },
 
   async getMovementsByItem(inventoryItemId: string): Promise<StockMovement[]> {
+    void inventoryItemId;
+    if (!isLegacyInventoryEnabled()) return legacyInventoryUnavailable();
     if (isSupabase) {
       const supabase = createClient();
       const { data, error } = await supabase.from('stock_movements').select('*').eq('inventory_item_id', inventoryItemId).order('created_at', { ascending: false });
@@ -165,6 +179,8 @@ export const inventoryRepository = {
   },
 
   async createMovement(data: Omit<StockMovement, "id" | "createdAt">): Promise<StockMovement> {
+    void data;
+    if (!isLegacyInventoryEnabled()) return legacyInventoryUnavailable();
     if (isSupabase) {
       const supabase = createClient();
       
@@ -234,6 +250,7 @@ export const inventoryRepository = {
   },
 
   async hasCriticalStock(): Promise<boolean> {
+    if (!isLegacyInventoryEnabled()) return legacyInventoryUnavailable();
     const items = await this.getAllItems();
     return items.some(item => item.currentStock < item.minStock);
   }

@@ -1,4 +1,5 @@
 "use server";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 import { db } from "@/db";
 import { beleg, ausgangsrechnung, lieferant, kostenposten, zahlung } from "@/db/schema_buchhaltung";
@@ -6,6 +7,9 @@ import { orders, customers, baeder, inventoryItems, phoneNotes } from "@/db/sche
 import { ilike, or } from "drizzle-orm";
 
 export async function globalSearchAction(term: string) {
+  if (!isFoundationAreaEnabled("Globale Suche")) {
+    return foundationUnavailableAction("Globale Suche");
+  }
   if (!term || term.length < 2) return [];
 
   const safeTerm = `%${term}%`;

@@ -170,6 +170,8 @@ export type Customer = {
 
   // Legacy mappings for backwards compatibility
   orders?: CustomerMockOrder[];
+  /** Tenant-scoped live count from the canonical orders relation. */
+  orderCount?: number;
   priceAgreements?: Record<string, unknown>[];
   feedbacks?: Record<string, unknown>[];
 

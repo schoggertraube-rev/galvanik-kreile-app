@@ -1,31 +1,17 @@
-import { supabase } from "@/lib/supabase/client";
-import { EmailProvider, EmailProviderOptions } from "./emailProvider";
+import type { EmailProvider, EmailProviderOptions } from "./emailProvider";
 
+/** No browser-to-Edge transport before a server-side mail receipt exists. */
 export class ResendAdapter implements EmailProvider {
-  async send(opts: EmailProviderOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
-    try {
-      const { data, error } = await supabase.functions.invoke("email-send", {
-        body: opts,
-      });
-
-      if (error) {
-        console.error("ResendAdapter Invoke Error:", error);
-        return { success: false, error: error.message };
-      }
-
-      return { success: data.success, messageId: data.messageId, error: data.error };
-    } catch (e: any) {
-      console.error("ResendAdapter Exception:", e);
-      return { success: false, error: e.message };
-    }
+  async send(_opts: EmailProviderOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
+    return { success: false, error: "NOT_CONFIGURED: E-Mail-Versand benötigt einen geprüften Server- und Receipt-Vertrag." };
   }
 
   supportsTemplates(): boolean {
-    return true; // We resolve templates via the Edge Function and DB
+    return false;
   }
 
   supportsWebhooks(): boolean {
-    return true; // Resend Webhooks update communications table via Edge Function
+    return false;
   }
 }
 

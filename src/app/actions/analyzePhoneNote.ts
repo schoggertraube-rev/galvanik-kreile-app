@@ -2,6 +2,7 @@
 
 import { Type } from "@google/genai";
 import { generateGeminiContentWithFallback } from "@/lib/ai/geminiClient";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 export type PhoneNoteCategory =
   | "pickup_request"
@@ -36,6 +37,9 @@ export interface AIAnalysisInput {
 }
 
 export async function analyzePhoneNoteWithAI(input: AIAnalysisInput) {
+  if (!isFoundationAreaEnabled("KI-Telefonnotizanalyse")) {
+    return foundationUnavailableAction("KI-Telefonnotizanalyse");
+  }
   if (!input.text || input.text.trim().length < 3) return null;
 
   const schema = {

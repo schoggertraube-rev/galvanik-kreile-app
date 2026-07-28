@@ -1,49 +1,13 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase/client";
-import { getOrderWithDetails } from "./repositories/orderQueries";
+import { useMemo } from "react";
 
-export function useOrderLive(orderId: string | null) {
-  const [orderData, setOrderData] = useState<any>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-
-  useEffect(() => {
-    if (!orderId) {
-      setOrderData(null);
-      setLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-
-    const fetchInitial = async () => {
-      const data = await getOrderWithDetails(orderId);
-      if (isMounted) {
-        setOrderData(data);
-        setLoading(false);
-      }
-    };
-
-    setOrderData(null);
-    setLoading(true);
-    fetchInitial();
-
-    // Supabase Realtime Subscription for this order
-    const channel = supabase
-      .channel(`order_live_${orderId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'events', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'communications', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'price_lines', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'complaints', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .subscribe();
-
-    return () => {
-      isMounted = false;
-      supabase.removeChannel(channel);
-    };
-  }, [orderId]);
-
-  return { orderData, loading };
+/**
+ * Realtime order reads need W3 tenant/RLS proof.  Null is deliberately paired
+ * with an explicit error so it cannot be rendered as an empty order.
+ */
+export function useOrderLive(_orderId: string | null) {
+  return useMemo(() => ({
+    orderData: null,
+    loading: false,
+    error: new Error("NOT_CONFIGURED: Auftrags-Realtime ist noch nicht freigegeben."),
+  }), []);
 }

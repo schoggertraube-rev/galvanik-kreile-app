@@ -9,10 +9,25 @@ import { InquiryToQuote } from "./InquiryFlow/InquiryToQuote";
 import { CustomerWizard } from "./ManualFlow/CustomerWizard";
 import { StartGate } from "./StartGate";
 
+const FOUNDATION_CAPTURE_UNAVAILABLE = true;
+
 export function ErfassungModal() {
   const { options, isDirty, closeErfassung } = useErfassung();
 
   if (!options) return null;
+
+  if (FOUNDATION_CAPTURE_UNAVAILABLE) {
+    return (
+      <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-[#1a1c23]/40 backdrop-blur-md">
+        <section className="w-full max-w-lg rounded-2xl border border-amber-500/30 bg-white p-6 shadow-2xl" role="dialog" aria-modal="true">
+          <p className="text-xs font-bold uppercase tracking-wider text-amber-800">Datenvertrag noch nicht freigegeben</p>
+          <h2 className="mt-2 text-xl font-bold text-navy-900">Erfassung ist vorübergehend gesperrt</h2>
+          <p className="mt-3 text-sm leading-relaxed text-text-muted">Die frühere Erfassung konnte lokale oder ungesicherte Upload-, OCR- und Schreibpfade als Erfolg darstellen. Bis der kanonische Server- und Storagevertrag steht, wird keine Erfassung angenommen.</p>
+          <button type="button" onClick={closeErfassung} className="mt-5 rounded-lg bg-navy-900 px-4 py-2 text-sm font-semibold text-white">Schließen</button>
+        </section>
+      </div>
+    );
+  }
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget && !isDirty) {

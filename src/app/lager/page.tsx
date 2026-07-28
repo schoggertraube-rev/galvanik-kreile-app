@@ -1,9 +1,10 @@
-import { LagerCockpitClient } from "./LagerCockpitClient";
-import { getLagerbestandAction } from "./actions";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
-export default async function LagerPage() {
-  const result = await getLagerbestandAction();
-  const lagerData = result.ok ? result.data : [];
-  
-  return <LagerCockpitClient lagerData={lagerData} />;
+export default function LagerPage() {
+  return (
+    <FoundationUnavailable
+      title="Lagerbestand ist noch nicht freigegeben"
+      reason="Die aktuell erwartete Lagerrelation ist im Produkt-Schema nicht vorhanden. Deshalb wird weder ein Bestand noch eine Material-Entwarnung angezeigt."
+    />
+  );
 }

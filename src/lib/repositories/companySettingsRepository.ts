@@ -49,8 +49,17 @@ const DEFAULT_SETTINGS: CompanySettings = {
   emailAdditionalNotes: "",
 };
 
+// This browser repository returns realistic-looking placeholder company and
+// banking data on failure. That must never become a product-facing truth.
+function isCompanySettingsContractEnabled(): boolean {
+  return false;
+}
+
 export const companySettingsRepository = {
   async getSettings(): Promise<CompanySettings> {
+    if (!isCompanySettingsContractEnabled()) {
+      throw new Error("NOT_CONFIGURED: Firmeneinstellungen sind bis zum geprüften Fundamentvertrag nicht verfügbar.");
+    }
     try {
       if (OfflineManager.isOffline()) {
         if (typeof window !== "undefined") {
@@ -111,6 +120,9 @@ export const companySettingsRepository = {
   },
 
   async updateSettings(settings: Partial<CompanySettings>): Promise<CompanySettings> {
+    if (!isCompanySettingsContractEnabled()) {
+      throw new Error("NOT_CONFIGURED: Firmeneinstellungen sind bis zum geprüften Fundamentvertrag nicht verfügbar.");
+    }
     if (OfflineManager.isOffline()) {
       throw new Error("Cannot update company settings while offline.");
     }

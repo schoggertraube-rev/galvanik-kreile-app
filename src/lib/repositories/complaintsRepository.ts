@@ -28,10 +28,19 @@ export type Complaint = {
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
+function legacyComplaintsUnavailable(): never {
+  throw new Error("NOT_CONFIGURED: Reklamationen besitzen keinen belegten serverseitigen Mandantenvertrag.");
+}
+
+function isLegacyComplaintsEnabled(): boolean {
+  return false;
+}
+
 const INITIAL_COMPLAINTS: Complaint[] = [];
 
 export const complaintsRepository = {
   async getAll(): Promise<Complaint[]> {
+    if (!isLegacyComplaintsEnabled()) return legacyComplaintsUnavailable();
     if (isSupabase) {
       const supabase = createClient();
       const { data, error } = await supabase.from('complaints').select('*').order('created_at', { ascending: false });
@@ -59,6 +68,8 @@ export const complaintsRepository = {
   },
 
   async getByCustomer(customerId: string): Promise<Complaint[]> {
+    void customerId;
+    if (!isLegacyComplaintsEnabled()) return legacyComplaintsUnavailable();
     if (isSupabase) {
       const supabase = createClient();
       const { data, error } = await supabase.from('complaints').select('*').eq('customer_id', customerId).order('created_at', { ascending: false });
@@ -87,6 +98,8 @@ export const complaintsRepository = {
   },
 
   async addComplaint(complaint: Omit<Complaint, "id" | "createdAt">): Promise<Complaint> {
+    void complaint;
+    if (!isLegacyComplaintsEnabled()) return legacyComplaintsUnavailable();
     const id = createId();
     const createdAt = new Date().toISOString();
     
@@ -117,6 +130,9 @@ export const complaintsRepository = {
   },
   
   async updateComplaint(id: string, changes: Partial<Complaint>): Promise<Complaint | null> {
+    void id;
+    void changes;
+    if (!isLegacyComplaintsEnabled()) return legacyComplaintsUnavailable();
     if (isSupabase) {
       const supabase = createClient();
       const updateData: Record<string, unknown> = {};

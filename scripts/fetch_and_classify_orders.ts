@@ -1,6 +1,8 @@
 import { getOperationalOrders } from "../src/lib/server/operationalOrders";
 
-function classify(order: any): string {
+type OperationalOrder = Awaited<ReturnType<typeof getOperationalOrders>>[number];
+
+function classify(order: OperationalOrder): string {
   const title = (order.title || "").toLowerCase();
   const customer = (order.customerName || "").toLowerCase();
   const number = (order.orderNumber || "").toLowerCase();
@@ -11,13 +13,16 @@ function classify(order: any): string {
 }
 
 (async () => {
-  const orders = await getOperationalOrders();
+  const tenantId = process.env.KREILE_TENANT_ID;
+  if (!tenantId) {
+    throw new Error("KREILE_TENANT_ID is required; this diagnostic script must not choose a tenant implicitly.");
+  }
+  const orders = await getOperationalOrders(tenantId);
   const enriched = orders.map(o => ({
     id: o.id,
     orderNumber: o.orderNumber,
     title: o.title,
     customerName: o.customerName,
-    source: (o as any).source,
     createdAt: o.createdAt,
     currentStationId: o.currentStationId,
     status: o.status,

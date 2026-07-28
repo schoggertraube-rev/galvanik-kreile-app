@@ -1,16 +1,33 @@
 "use server";
 
-import { db } from "@/db";
-import { customers } from "@/db/schema";
-import { eq, ilike, or, and, sql } from "drizzle-orm";
+import { db, isDatabaseConfigured } from "@/db";
+import { customers, orders } from "@/db/schema";
+import { eq, ilike, or, and, inArray, notIlike, notInArray, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { InferSelectModel } from "drizzle-orm";
-import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
+import { checkAppPermission, ActionResult } from "@/lib/server/authHelper";
 import { Customer } from "@/lib/types/customer";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization } from "@/lib/server/authorization";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 type DbCustomer = InferSelectModel<typeof customers>;
+
+/** Minimal tenant-scoped payload for the active customer list. */
+export type CustomerListDto = Pick<
+  Customer,
+  "id" | "customerNumber" | "name" | "type" | "city" | "orderCount"
+>;
+
+function mapCustomerListDto(customer: DbCustomer): CustomerListDto {
+  return {
+    id: customer.id,
+    customerNumber: customer.customerNumber || customer.id.substring(0, 8),
+    name: customer.name,
+    type: customer.type as Customer["type"],
+    city: customer.city || undefined,
+  };
+}
 
 function mapDbCustomer(c: DbCustomer): Customer {
   return {
@@ -36,8 +53,8 @@ function mapDbCustomer(c: DbCustomer): Customer {
     city: c.city || undefined,
     zipCode: c.zipCode || undefined,
     country: c.country || undefined,
-    createdAt: c.createdAt ? c.createdAt.toISOString() : new Date().toISOString(),
-    updatedAt: c.updatedAt ? c.updatedAt.toISOString() : new Date().toISOString(),
+    createdAt: c.createdAt?.toISOString(),
+    updatedAt: c.updatedAt?.toISOString(),
   };
 }
 
@@ -64,26 +81,47 @@ function sanitizeCustomerPayload(data: Record<string, unknown>, isUpdate = false
   return result;
 }
 
-export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
+export async function getCustomersDb(): Promise<ActionResult<CustomerListDto[]>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const authorization = await checkAppPermission("perm_view_customers");
+  if (!authorization.ok) return authorization;
+  const tenantId = authorization.data.tenantId;
 
-  const authRes = await resolveAuthorization();
-  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
-  const tenantId = authRes.data.tenantId;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
     const dbCustomers = await db.select().from(customers).where(
       and(
         eq(customers.tenantId, tenantId),
-        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
-        sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
+        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`
       )
     ).orderBy(customers.createdAt);
-    const data = dbCustomers.map(mapDbCustomer).reverse(); // Order by createdAt desc
+    const customerIds = dbCustomers.map((customer) => customer.id);
+    const orderCountRows = customerIds.length > 0
+      ? await db
+          .select({
+            customerId: orders.customerId,
+            count: sql<number>`count(*)`,
+          })
+          .from(orders)
+          .where(and(
+            eq(orders.tenantId, tenantId),
+            inArray(orders.customerId, customerIds),
+            notInArray(sql`coalesce(${orders.source}, 'manual')`, ["seed", "test", "demo", "integration-test"]),
+            notIlike(sql`coalesce(${orders.orderNumber}, '')`, "A-SEED-%"),
+            notIlike(sql`coalesce(${orders.orderNumber}, '')`, "%TEST%"),
+          ))
+          .groupBy(orders.customerId)
+      : [];
+    const orderCountsByCustomerId = new Map(
+      orderCountRows.map((row) => [row.customerId, Number(row.count)]),
+    );
+    const data = dbCustomers
+      .map((customer) => ({
+        ...mapCustomerListDto(customer),
+        orderCount: orderCountsByCustomerId.get(customer.id) ?? 0,
+      }))
+      .reverse(); // Order by createdAt desc
     return { ok: true, data };
   } catch (error) {
     console.error("Failed to get customers from DB:", error);
@@ -93,14 +131,11 @@ export async function getCustomersDb(): Promise<ActionResult<Customer[]>> {
 
 export async function getCustomerByIdDb(id: string): Promise<ActionResult<Customer | null>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const authorization = await checkAppPermission("perm_data_customers");
+  if (!authorization.ok) return authorization;
+  const tenantId = authorization.data.tenantId;
 
-  const authRes = await resolveAuthorization();
-  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
-  const tenantId = authRes.data.tenantId;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
     const dbCustomers = await db.select().from(customers).where(
@@ -120,14 +155,11 @@ export async function getCustomerByIdDb(id: string): Promise<ActionResult<Custom
 }
 
 export async function createCustomerDb(data: Record<string, unknown>): Promise<ActionResult<Customer>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
+  const authorization = await checkAppPermission("perm_data_customers");
+  if (!authorization.ok) return authorization;
+  const tenantId = authorization.data.tenantId;
 
-  const authRes = await resolveAuthorization();
-  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
-  const tenantId = authRes.data.tenantId;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   const { customerSchema } = await import("@/lib/validation/customerSchema");
   const parsed = customerSchema.safeParse(data);
@@ -148,7 +180,7 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
     const rawCustomerDb = {
       id: newId,
       tenantId: tenantId,
-      customerNumber: `K-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      customerNumber: `K-${new Date().getFullYear()}-${newId.slice(-6).toUpperCase()}`,
       name: nameStr,
       companyName: validData.company || null,
       type: "business",
@@ -201,10 +233,11 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
 }
 
 export async function updateCustomerDb(id: string, changes: Partial<Customer>): Promise<ActionResult<Customer | null>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
+  const authorization = await checkAppPermission("perm_data_customers");
+  if (!authorization.ok) return authorization;
+  const tenantId = authorization.data.tenantId;
 
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
     const rawUpdateData: Record<string, unknown> = {};
@@ -232,7 +265,7 @@ export async function updateCustomerDb(id: string, changes: Partial<Customer>): 
     if (Object.keys(updateData).length > 0) {
       updateData.updatedAt = new Date();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await db.update(customers).set(updateData as any).where(eq(customers.id, id));
+      await db.update(customers).set(updateData as any).where(and(eq(customers.id, id), eq(customers.tenantId, tenantId)));
     }
     
     return await getCustomerByIdDb(id);
@@ -244,14 +277,11 @@ export async function updateCustomerDb(id: string, changes: Partial<Customer>): 
 
 export async function searchCustomersDb(query: string): Promise<ActionResult<Customer[]>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const authorization = await checkAppPermission("perm_data_customers");
+  if (!authorization.ok) return authorization;
+  const tenantId = authorization.data.tenantId;
 
-  const authRes = await resolveAuthorization();
-  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
-  const tenantId = authRes.data.tenantId;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   if (!query || query.trim() === "") {
     return { ok: true, data: [] };
@@ -267,8 +297,7 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
           ilike(customers.phone, searchPattern),
           ilike(customers.email, searchPattern)
         ),
-        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`,
-        sql`coalesce(${customers.name}, '') NOT LIKE 'Capture%'`
+        sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`
       )
     );
     
@@ -280,6 +309,9 @@ export async function searchCustomersDb(query: string): Promise<ActionResult<Cus
 }
 
 export async function getTopKunden(limit = 5) {
+  if (!isFoundationAreaEnabled("Top-Kunden")) {
+    return foundationUnavailableAction("Top-Kunden");
+  }
   try {
     const authRes = await resolveAuthorization();
     if (!authRes.ok) return [];

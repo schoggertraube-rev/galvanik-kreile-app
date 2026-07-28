@@ -1,305 +1,109 @@
 "use server";
 
-import { db } from "@/db";
-import { customers, orders, events, complaints, priceAgreements, communicationDrafts, phoneNotes } from "@/db/schema";
-import { ausgangsrechnung } from "@/db/schema_buchhaltung";
-import { eq, desc, and, sql } from "drizzle-orm";
-import { checkAppAuth } from "@/lib/server/authHelper";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
-// 1. Core Customer Data
-export async function getCustomerCard(customerId: string) {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: auth.error };
+export type LegacyCustomerCardRecord = Record<string, unknown>;
 
-  try {
-    // 1. Stammdaten
-    const [customer] = await db.select().from(customers).where(eq(customers.id, customerId)).limit(1);
-    
-    if (!customer) return { ok: false, error: "NOT_FOUND" };
+export type LegacyCustomerCardResult<T> = {
+  ok: boolean;
+  data?: T;
+  error?: string;
+};
 
-    // 2. KPI aus View (Raw SQL fallback if view not directly accessible via drizzle-orm object without defining it, but we can use sql helper)
-    let kpi = null;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const kpiRows: any = await db.execute(sql`SELECT * FROM v_analyse_kunden_kpi WHERE customer_id = ${customerId}`);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      kpi = (kpiRows.rows ? kpiRows.rows[0] : kpiRows[0]) || null;
-    } catch (e) {
-      console.warn("Could not fetch KPI view for customer", customerId, e);
-      kpi = null;
-    }
-
-    // 3. Offene Aufträge (limit 5 for overview)
-    const openOrders = await db.select()
-      .from(orders)
-      .where(and(eq(orders.customerId, customerId), eq(orders.status, 'in_progress')))
-      .orderBy(orders.createdAt)
-      .limit(5);
-
-    // 4. Tags & Notes are already in customer object
-    
-    // We'll return everything combined
-    return { 
-      ok: true, 
-      data: {
-        ...customer,
-        kpi,
-        openOrders
-      } 
-    };
-  } catch (err: unknown) {
-    console.error("getCustomerCard error", err);
-    return { ok: false, error: (err as Error).message };
+function customerCardUnavailable(): never {
+  if (!isFoundationAreaEnabled("Legacy-Kundenkarte")) {
+    return foundationUnavailableAction("Legacy-Kundenkarte");
   }
+
+  return foundationUnavailableAction("Legacy-Kundenkarte");
 }
 
-// 2. Detailed Orders
-export async function getCustomerOrders(customerId: string) {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: auth.error };
-
-  try {
-    const allOrders = await db.select()
-      .from(orders)
-      .where(eq(orders.customerId, customerId))
-      .orderBy(desc(orders.createdAt));
-
-    return { ok: true, data: allOrders };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
-  }
+/**
+ * Compatibility surface for the old customer-card tabs. The historical
+ * adapter mixed cross-domain reads and writes without a proved evidence,
+ * permission and tenant contract, so it cannot be used as a release path.
+ */
+export async function getCustomerCard(
+  customerId: string,
+): Promise<LegacyCustomerCardResult<LegacyCustomerCardRecord>> {
+  void customerId;
+  return customerCardUnavailable();
 }
 
-// 3. Timeline
-export async function getCustomerTimeline(customerId: string) {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: auth.error };
-
-  try {
-    const timeline: any[] = [];
-
-    // Events
-    const dbEvents = await db.select().from(events)
-      .innerJoin(orders, eq(events.orderId, orders.id))
-      .where(eq(orders.customerId, customerId))
-      .orderBy(desc(events.createdAt))
-      .limit(50);
-      
-    for (const e of dbEvents) {
-      timeline.push({
-        id: e.events.id,
-        type: "status",
-        title: e.events.eventType,
-        subtitle: e.events.description,
-        timestamp: e.events.createdAt.toISOString(),
-        relatedOrderId: e.events.orderId,
-        severity: e.events.status === "error" ? "critical" : "neutral"
-      });
-    }
-
-    // Phone notes
-    const dbNotes = await db.select().from(phoneNotes)
-      .where(eq(phoneNotes.customerId, customerId))
-      .orderBy(desc(phoneNotes.createdAt))
-      .limit(20);
-
-    for (const n of dbNotes) {
-      timeline.push({
-        id: n.id,
-        type: "note",
-        title: "Telefonnotiz",
-        subtitle: n.rawText,
-        timestamp: (n.createdAt || new Date()).toISOString(),
-        severity: "neutral"
-      });
-    }
-
-    // Comm drafts (sent/archived could be considered here)
-    const dbComms = await db.select().from(communicationDrafts)
-      .where(eq(communicationDrafts.customerId, customerId))
-      .orderBy(desc(communicationDrafts.createdAt))
-      .limit(20);
-
-    for (const c of dbComms) {
-      timeline.push({
-        id: c.id,
-        type: "email",
-        title: c.subject,
-        subtitle: c.status,
-        timestamp: c.createdAt.toISOString(),
-        severity: "neutral"
-      });
-    }
-
-    // Sort combined timeline desc
-    timeline.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-    return { ok: true, data: timeline };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
-  }
+export async function getCustomerOrders(
+  customerId: string,
+): Promise<LegacyCustomerCardResult<LegacyCustomerCardRecord[]>> {
+  void customerId;
+  return customerCardUnavailable();
 }
 
-// 4. Financials
-export async function getCustomerFinancials(customerId: string) {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: auth.error };
-
-  try {
-    const invoices = await db.select().from(ausgangsrechnung)
-      .where(eq(ausgangsrechnung.kundeId, customerId))
-      .orderBy(desc(ausgangsrechnung.datum));
-
-    // We could fetch payments explicitly, but they might be tied to invoices. For now return invoices
-    return { ok: true, data: { invoices } };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
-  }
+export async function getCustomerTimeline(
+  customerId: string,
+): Promise<LegacyCustomerCardResult<LegacyCustomerCardRecord[]>> {
+  void customerId;
+  return customerCardUnavailable();
 }
 
-// 5. Similar Orders
-export async function getCustomerSimilarOrders(customerId: string, orderId?: string) {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: auth.error };
-
-  try {
-    const similar = await db.select()
-      .from(orders)
-      .where(and(
-        eq(orders.customerId, customerId),
-        eq(orders.status, 'abgeschlossen')
-      ))
-      .orderBy(desc(orders.createdAt))
-      .limit(10);
-      
-    // Exclude self if provided
-    const filtered = orderId ? similar.filter(o => o.id !== orderId) : similar;
-
-    return { ok: true, data: filtered };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
-  }
+export async function getCustomerFinancials(
+  customerId: string,
+): Promise<LegacyCustomerCardResult<{ invoices: LegacyCustomerCardRecord[] }>> {
+  void customerId;
+  return customerCardUnavailable();
 }
 
-// 6. Items (Teile)
-export async function getCustomerItems(customerId: string) {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: auth.error };
-
-  try {
-    // Finde alle distinct items (Gruppierung nach bezeichnung/material/oberflaeche)
-    const res: any = await db.execute(sql`
-      SELECT 
-        bezeichnung, 
-        material, 
-        oberflaeche, 
-        COUNT(id) as count, 
-        MAX(created_at) as last_seen,
-        AVG(preis_netto) as avg_price
-      FROM items 
-      WHERE order_id IN (SELECT id FROM orders WHERE customer_id = ${customerId})
-      GROUP BY bezeichnung, material, oberflaeche
-      ORDER BY count DESC
-    `);
-    
-    return { ok: true, data: res.rows || res };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
-  }
+export async function getCustomerSimilarOrders(
+  customerId: string,
+  orderId?: string,
+): Promise<LegacyCustomerCardResult<LegacyCustomerCardRecord[]>> {
+  void customerId;
+  void orderId;
+  return customerCardUnavailable();
 }
 
-// 7. Prices
-export async function getCustomerPrices(customerId: string) {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: auth.error };
-
-  try {
-    const prices = await db.select().from(priceAgreements)
-      .where(eq(priceAgreements.customerId, customerId))
-      .orderBy(desc(priceAgreements.date));
-    
-    return { ok: true, data: prices };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
-  }
+export async function getCustomerItems(
+  customerId: string,
+): Promise<LegacyCustomerCardResult<LegacyCustomerCardRecord[]>> {
+  void customerId;
+  return customerCardUnavailable();
 }
 
-// 8. Complaints
-export async function getCustomerComplaints(customerId: string) {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: auth.error };
-
-  try {
-    const data = await db.select().from(complaints)
-      .innerJoin(orders, eq(complaints.orderId, orders.id))
-      .where(eq(orders.customerId, customerId))
-      .orderBy(desc(complaints.createdAt));
-    
-    return { ok: true, data };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
-  }
+export async function getCustomerPrices(
+  customerId: string,
+): Promise<LegacyCustomerCardResult<LegacyCustomerCardRecord[]>> {
+  void customerId;
+  return customerCardUnavailable();
 }
 
-// 9. Write Functions
-export async function updateCustomerCore(customerId: string, patch: Record<string, any>) {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return { ok: false, error: auth.error };
-
-  try {
-    const allowedFields = ['shippingPreference', 'paymentPreference', 'classification', 'internalNotes', 'tags', 'name', 'contactPerson', 'email', 'phone'];
-    const updateData: any = { updatedAt: new Date() };
-    
-    for (const field of allowedFields) {
-      if (patch[field] !== undefined) {
-        updateData[field] = patch[field];
-      }
-    }
-
-    if (Object.keys(updateData).length > 1) {
-      await db.update(customers).set(updateData).where(eq(customers.id, customerId));
-    }
-    
-    return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
-  }
+export async function getCustomerComplaints(
+  customerId: string,
+): Promise<LegacyCustomerCardResult<LegacyCustomerCardRecord[]>> {
+  void customerId;
+  return customerCardUnavailable();
 }
 
-export async function addCustomerTag(customerId: string, tag: string) {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return { ok: false, error: auth.error };
-
-  try {
-    const [c] = await db.select({ tags: customers.tags }).from(customers).where(eq(customers.id, customerId));
-    if (!c) return { ok: false, error: "NOT_FOUND" };
-    
-    let currentTags = c.tags as string[] || [];
-    if (!currentTags.includes(tag)) {
-      currentTags = [...currentTags, tag];
-      await db.update(customers).set({ tags: currentTags, updatedAt: new Date() }).where(eq(customers.id, customerId));
-    }
-    
-    return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
-  }
+export async function updateCustomerCore(
+  customerId: string,
+  patch: Record<string, unknown>,
+): Promise<LegacyCustomerCardResult<never>> {
+  void customerId;
+  void patch;
+  return customerCardUnavailable();
 }
 
-export async function removeCustomerTag(customerId: string, tag: string) {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return { ok: false, error: auth.error };
+export async function addCustomerTag(
+  customerId: string,
+  tag: string,
+): Promise<LegacyCustomerCardResult<never>> {
+  void customerId;
+  void tag;
+  return customerCardUnavailable();
+}
 
-  try {
-    const [c] = await db.select({ tags: customers.tags }).from(customers).where(eq(customers.id, customerId));
-    if (!c) return { ok: false, error: "NOT_FOUND" };
-    
-    let currentTags = c.tags as string[] || [];
-    currentTags = currentTags.filter(t => t !== tag);
-    await db.update(customers).set({ tags: currentTags, updatedAt: new Date() }).where(eq(customers.id, customerId));
-    
-    return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
-  }
+export async function removeCustomerTag(
+  customerId: string,
+  tag: string,
+): Promise<LegacyCustomerCardResult<never>> {
+  void customerId;
+  void tag;
+  return customerCardUnavailable();
 }

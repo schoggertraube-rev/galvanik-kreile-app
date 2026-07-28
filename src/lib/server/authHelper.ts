@@ -1,11 +1,12 @@
 import { readAppSession, type AppSession, type SessionReadResult } from "@/lib/server/appSession";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import type { PermissionKey } from "@/lib/auth/authorizationContract";
 
 export type ActionResult<T> =
   | { ok: true; data: T }
   | {
       ok: false;
-      error: "UNAUTHORIZED" | "FORBIDDEN" | "DB_ERROR" | "NETWORK_ERROR" | "UNKNOWN" | "EMPTY_RESULT";
+      error: "UNAUTHORIZED" | "FORBIDDEN" | "DB_ERROR" | "NETWORK_ERROR" | "UNKNOWN" | "EMPTY_RESULT" | "NOT_CONFIGURED";
       message: string;
       details?: unknown;
     };
@@ -108,4 +109,41 @@ export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<Act
   }
 
   return { ok: true, data: roleLower };
+}
+
+/**
+ * Permission-level guard for mutations whose effect is narrower than a generic
+ * write role.  Server actions must use this instead of trusting a client-side
+ * hidden button or a broad office/workshop role.
+ */
+export async function checkAppPermission(permission: PermissionKey): Promise<ActionResult<AuthorizationSnapshot>> {
+  const result = await resolveAuthorization();
+
+  if (!result.ok) {
+    const errorMap: Record<string, "UNAUTHORIZED" | "DB_ERROR" | "UNKNOWN"> = {
+      NO_SESSION: "UNAUTHORIZED",
+      INVALID_SESSION: "UNAUTHORIZED",
+      USER_NOT_FOUND: "UNAUTHORIZED",
+      USER_INACTIVE: "UNAUTHORIZED",
+      ROLE_MISMATCH: "UNAUTHORIZED",
+      UNKNOWN_ROLE: "UNAUTHORIZED",
+      AUTHORIZATION_UNAVAILABLE: "DB_ERROR",
+    };
+
+    return {
+      ok: false,
+      error: errorMap[result.reason] || "UNKNOWN",
+      message: result.message,
+    };
+  }
+
+  if (!result.data.permissions.includes(permission)) {
+    return {
+      ok: false,
+      error: "FORBIDDEN",
+      message: "Keine Berechtigung für diese Aktion.",
+    };
+  }
+
+  return { ok: true, data: result.data };
 }

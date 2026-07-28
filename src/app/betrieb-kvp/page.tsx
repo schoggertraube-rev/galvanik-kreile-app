@@ -1,4 +1,5 @@
 import { BetriebKvpClient } from "./BetriebKvpClient";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 export const metadata = {
   title: "Betriebs-KVP | Kreile App",
@@ -6,5 +7,5 @@ export const metadata = {
 };
 
 export default function BetriebKvpPage() {
-  return <BetriebKvpClient />;
+  return <FoundationUnavailable title="Betriebs-KVP nicht freigegeben" reason="Die bisherige KVP-Funktion nutzt einen nicht tenant-gesicherten Client-Schreibpfad und kann Umsetzungen nur vortäuschen. Bis zum kanonischen Serververtrag ist sie gesperrt." returnHref="/" returnLabel="Zur Startseite" />;
 }

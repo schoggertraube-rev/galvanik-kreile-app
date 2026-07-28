@@ -1,4 +1,5 @@
 "use server";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 import { db } from "@/db";
 import { attribution, touchpoint, kanal } from "@/db/schema_marketing";
@@ -6,6 +7,9 @@ import { inquiries, orders } from "@/db/schema";
 import { eq, desc, inArray, sum } from "drizzle-orm";
 
 export async function getAttributionData() {
+  if (!isFoundationAreaEnabled("Marketing")) {
+    return foundationUnavailableAction("Marketing");
+  }
   // 1. Hole alle Kanäle für die Gruppierung
   const alleKanaele = await db.select().from(kanal);
   

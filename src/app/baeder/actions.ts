@@ -1,15 +1,19 @@
 "use server";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
-import { db } from "@/db";
+import { db, isDatabaseConfigured } from "@/db";
 import { baeder, badMesswerte } from "@/db/schema";
 import { checkAppAuth } from "@/lib/server/authHelper";
 import { eq } from "drizzle-orm";
 
 export async function getBaederListAction() {
+  if (!isFoundationAreaEnabled("Bäder")) {
+    return foundationUnavailableAction("Bäder");
+  }
   const auth = await checkAppAuth();
   if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
 
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
 
   try {
     const baederRecords = await db.select().from(baeder).orderBy(baeder.name);

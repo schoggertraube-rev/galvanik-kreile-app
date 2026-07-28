@@ -1,0 +1,92 @@
+{
+  "schemaVersion": "1.0",
+  "status": "NO_GO_REPAIR_CONTINUES",
+  "capturedOn": "2026-07-28",
+  "target": {
+    "kind": "CANONICAL_PRODUCT_SYSTEM",
+    "ref": "syhaigjhsbpjmtnggqka"
+  },
+  "candidate": {
+    "branch": "codex/foundation-consolidation-v3-20260728",
+    "baseRevision": "6e1d1831be823b7655130f0f46ba964d45c4b8dc",
+    "candidateRevision": null,
+    "candidateRevisionReason": "No commit is permitted until the non-bypassed pre-commit gate passes."
+  },
+  "artifacts": {
+    "w1Migration": {
+      "path": "supabase/migrations/20260728124147_foundation_w1_runtime_receipt_columns.sql",
+      "sha256": "29d477539a18b52989875106d122c6a034ba080cac5005d6ec214612469d08e5",
+      "status": "PENDING_ISOLATED_LAB_AND_EXPLICIT_PRODUCT_APPROVAL"
+    },
+    "productSchemaSnapshot": {
+      "path": "contracts/product-schema-snapshot.v1.json",
+      "sha256": "930fbc8ee03e160cf66eb9b9d04e4fdf25630cd12ebd90bab3bd094fc66edf2c"
+    },
+    "runtimeObservedColumns": {
+      "path": "contracts/runtime-observed-required-columns.v1.json",
+      "sha256": "b370ca8207ab81eb413fa8a6a035e667cc50cc8576df81b0c2a97327c8e79c65"
+    },
+    "productSecuritySnapshot": {
+      "path": "contracts/product-security-snapshot.v1.json",
+      "sha256": "5f5fe38ca1045baa32dfdd79bbd439b1ec7b05c23ed7bb37e0c4db1545c097f1"
+    },
+    "w1Manifest": {
+      "path": "docs/foundation/W1_RUNTIME_RECEIPT_WAVE_MANIFEST.md",
+      "sha256": "7062e0bf303089a208aa94bced41c51ae82c20a5e1baa12012248cd23fbb738c"
+    },
+    "w3Manifest": {
+      "path": "docs/foundation/W3_AUTH_RLS_DISCOVERY_MANIFEST.md",
+      "sha256": "82e09af060bab85cf1f89323a3c0285d3862eabe5314605898608bddc8789952"
+    },
+    "reconciliationMatrix": {
+      "path": "docs/foundation/RECONCILIATION_MATRIX_V3.md",
+      "sha256": "4bb23d28e5ae53f00fb3b1a989b386bdb9f043ca4eb4dd09df835b48bb941a33"
+    },
+    "dispositionRegister": {
+      "path": "docs/foundation/FOUNDATION_DISPOSITION_REGISTER.md",
+      "sha256": "d6f56c80855c50692da1eba357ab509487df2ec59d566cd61fe9562b3353bdcd",
+      "status": "ACTIVE_NO_DELETION_WITHOUT_DECISION"
+    }
+  },
+  "checks": {
+    "foundationBoundary": {
+      "command": "node node_modules\\tsx\\dist\\cli.mjs scripts\\verify-foundation-boundaries.ts",
+      "status": "PASS",
+      "evidence": "69 server-action gates; one static-only service worker"
+    },
+    "typecheck": {
+      "command": "node node_modules\\typescript\\bin\\tsc --noEmit",
+      "status": "PASS"
+    },
+    "unit": {
+      "command": "node node_modules\\vitest\\vitest.mjs run --exclude \"**/*.integration.test.ts\"",
+      "status": "PASS",
+      "evidence": "19 files, 90 tests"
+    },
+    "productionBuild": {
+      "command": "node node_modules\\next\\dist\\bin\\next build",
+      "status": "PASS",
+      "evidence": "77 routes generated"
+    },
+    "remoteSchemaContract": {
+      "command": "node node_modules\\tsx\\dist\\cli.mjs scripts\\verify-product-schema-contract.ts",
+      "status": "EXPECTED_FAIL_UNTIL_W1",
+      "evidence": [
+        "audit_log.client_request_id missing",
+        "audit_log.tenant_id missing",
+        "events.client_event_id missing"
+      ]
+    },
+    "preCommit": {
+      "command": "npm.cmd run verify:precommit",
+      "status": "PASS",
+      "evidence": "227 staged source files linted with 0 errors; TypeScript passed; 19 test files / 90 tests passed. 155 lint warnings remain non-blocking and are retained as a separately visible debt, not suppressed."
+    }
+  },
+  "notPerformed": [
+    "No product database migration or RLS/policy/storage/view mutation.",
+    "No deployment, promotion, push, merge, reset, stash or delete.",
+    "No W2 backfill: no evidence yet proves a backfill is required.",
+    "No W3 cutover: per-relation owner, tenant and actor contracts remain incomplete."
+  ]
+}

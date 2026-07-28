@@ -1,20 +1,11 @@
-import { NextResponse } from "next/server";
-import { db } from "@/db";
-import { scanUploads } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { foundationUnavailableResponse } from "@/lib/server/foundationGate";
 
-export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await context.params;
-    const record = await db.select().from(scanUploads).where(eq(scanUploads.id, id)).limit(1);
-
-    if (!record || record.length === 0) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(record[0]);
-  } catch (error) {
-    console.error("Scan status error:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
-  }
+/**
+ * Scan status has no validated product-data contract yet.  Keep the endpoint
+ * explicitly unavailable and, crucially, do not import the legacy database
+ * implementation: static production builds must not require a database secret
+ * for an endpoint that cannot serve a request.
+ */
+export async function GET(_request: Request) {
+  return foundationUnavailableResponse("Scan-Status");
 }

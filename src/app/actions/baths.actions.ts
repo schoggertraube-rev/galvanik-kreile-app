@@ -1,14 +1,23 @@
 "use server";
 
-import { db } from "@/db";
-import { baeder, badMesswerte } from "@/db/schema";
-import { eq, desc, and } from "drizzle-orm";
-import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
-import { createId } from "@paralleldrive/cuid2";
+import { ActionResult } from "@/lib/server/authHelper";
+import { foundationUnavailableAction } from "@/lib/server/foundationGate";
 
-// Server-side actions for galvanik baths and bath measurements access.
+type BathRecord = Record<string, unknown>;
+type BathMeasurementRecord = Record<string, unknown>;
 
-export async function getBathsDb(): Promise<ActionResult<any[]>> {
+/*
+ * Legacy implementation retained in this source file for forensic provenance.
+ * It used hard-coded tenant values and IDs without a tenant/receipt contract;
+ * therefore it is deliberately excluded from the executable server-action
+ * surface until the Bäder contract has passed W3.
+ *
+ * Server-side actions for galvanik baths and bath measurements access.
+ */
+/*
+
+export async function getBathsDb(): Promise<ActionResult<BathRecord[]>> {
+  foundationUnavailableAction("Bäder und Messwerte");
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
@@ -24,6 +33,7 @@ export async function getBathsDb(): Promise<ActionResult<any[]>> {
 }
 
 export async function getBathByIdDb(id: string): Promise<ActionResult<any | null>> {
+  foundationUnavailableAction("Bäder und Messwerte");
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
@@ -40,6 +50,7 @@ export async function getBathByIdDb(id: string): Promise<ActionResult<any | null
 }
 
 export async function getBathMeasurementsDb(bathId?: string): Promise<ActionResult<any[]>> {
+  foundationUnavailableAction("Bäder und Messwerte");
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
@@ -75,6 +86,7 @@ export async function createBathMeasurementDb(payload: {
   notes?: string;
   measuredAt?: string;
 }): Promise<ActionResult<any>> {
+  foundationUnavailableAction("Bäder und Messwerte");
   const auth = await checkAppAuth("write");
   if (!auth.ok) return auth;
 
@@ -107,6 +119,7 @@ export async function updateBathDb(id: string, payload: {
   status?: string;
   letzteWartung?: string;
 }): Promise<ActionResult<any>> {
+  foundationUnavailableAction("Bäder und Messwerte");
   const auth = await checkAppAuth("write");
   if (!auth.ok) return auth;
 
@@ -127,4 +140,34 @@ export async function updateBathDb(id: string, payload: {
     console.error("Failed to update bath in DB:", error);
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Aktualisieren des Bades", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
   }
+}
+*/
+
+export async function getBathsDb(): Promise<ActionResult<BathRecord[]>> {
+  return foundationUnavailableAction("Bäder und Messwerte");
+}
+
+export async function getBathByIdDb(_id: string): Promise<ActionResult<BathRecord | null>> {
+  return foundationUnavailableAction("Bäder und Messwerte");
+}
+
+export async function getBathMeasurementsDb(_bathId?: string): Promise<ActionResult<BathMeasurementRecord[]>> {
+  return foundationUnavailableAction("Bäder und Messwerte");
+}
+
+export async function createBathMeasurementDb(_payload: {
+  bathId: string;
+  temperature?: number | null;
+  phValue?: number | null;
+  notes?: string;
+  measuredAt?: string;
+}): Promise<ActionResult<BathMeasurementRecord>> {
+  return foundationUnavailableAction("Bäder und Messwerte");
+}
+
+export async function updateBathDb(_id: string, _payload: {
+  status?: string;
+  letzteWartung?: string;
+}): Promise<ActionResult<BathRecord | null>> {
+  return foundationUnavailableAction("Bäder und Messwerte");
 }

@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
-import { createClient } from "@/lib/supabase/client";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
 
 export function deriveInitials(displayName: string): string {
@@ -50,14 +49,14 @@ export function PermissionsProvider({
   const [error, setError] = useState<string | null>(
     initialAuthState.status === "error" ? initialAuthState.message : null
   );
-  const [role] = useState<string | null>(
+  const [role, setRole] = useState<string | null>(
     initialAuthState.status === "authenticated" ? initialAuthState.session.role : null
   );
   const [permissions, setPermissions] = useState<string[]>([]);
-  const [name] = useState<string>(
+  const [name, setName] = useState<string>(
     initialAuthState.status === "authenticated" ? initialAuthState.session.displayName : ""
   );
-  const [initials] = useState<string>(
+  const [initials, setInitials] = useState<string>(
     initialAuthState.status === "authenticated" ? deriveInitials(initialAuthState.session.displayName) : ""
   );
   const [loading, setLoading] = useState(true);
@@ -68,6 +67,12 @@ export function PermissionsProvider({
 
       if (result.ok) {
         setPermissions([...result.data.permissions]);
+        // Identity, role label and initials originate from the signed bootstrap
+        // session. A later capability snapshot may add permissions but must not
+        // rewrite the displayed identity from a separate response.
+        setRole((current) => current ?? result.data.role);
+        setName((current) => current || result.data.displayName);
+        setInitials((current) => current || deriveInitials(result.data.displayName));
         setStatus("authenticated");
         setError(null);
       } else {
@@ -92,20 +97,15 @@ export function PermissionsProvider({
     };
     init();
     
-    const handleStorage = () => { if(isMounted) refreshPermissions(); };
+    const handleStorage = () => { if (isMounted) void refreshPermissions(); };
+    const handleAuthChanged = () => { if (isMounted) void refreshPermissions(); };
     window.addEventListener("storage", handleStorage);
+    window.addEventListener("kreile:auth-changed", handleAuthChanged);
     
-    const supabase = createClient();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-        refreshPermissions();
-      }
-    });
-
     return () => {
       isMounted = false;
       window.removeEventListener("storage", handleStorage);
-      subscription.unsubscribe();
+      window.removeEventListener("kreile:auth-changed", handleAuthChanged);
     };
   }, [refreshPermissions]);
 

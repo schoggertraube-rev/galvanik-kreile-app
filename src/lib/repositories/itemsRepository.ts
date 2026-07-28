@@ -16,8 +16,21 @@ export type Item = {
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
+// The browser repository has no independently verified actor, tenant and
+// receipt contract. Do not translate a failed server action into an empty list
+// or a locally fabricated successful item.
+function isItemsRepositoryEnabled(): boolean {
+  return false;
+}
+
+function itemsRepositoryUnavailable(): never {
+  throw new Error("NOT_CONFIGURED: Die Artikelverwaltung ist bis zum geprüften Datenvertrag nicht freigegeben.");
+}
+
 export const itemsRepository = {
   async getAll(): Promise<Item[]> {
+    if (!isItemsRepositoryEnabled()) return itemsRepositoryUnavailable();
+
     if (isSupabase) {
       const result = await getItemsDb();
       if (!result.ok) {
@@ -32,6 +45,8 @@ export const itemsRepository = {
   },
 
   async getByOrderId(orderId: string): Promise<Item[]> {
+    if (!isItemsRepositoryEnabled()) return itemsRepositoryUnavailable();
+
     if (isSupabase) {
       const result = await getItemsByOrderDb(orderId);
       if (!result.ok) {
@@ -46,6 +61,8 @@ export const itemsRepository = {
   },
 
   async create(data: Omit<Item, "id"> & { id?: string }): Promise<Item> {
+    if (!isItemsRepositoryEnabled()) return itemsRepositoryUnavailable();
+
     const id = data.id || createId();
     
     if (isSupabase) {
@@ -62,6 +79,8 @@ export const itemsRepository = {
   },
 
   async update(id: string, changes: Partial<Item>): Promise<Item | null> {
+    if (!isItemsRepositoryEnabled()) return itemsRepositoryUnavailable();
+
     if (isSupabase) {
       const result = await updateItemDb(id, changes);
       if (!result.ok) {
@@ -79,6 +98,8 @@ export const itemsRepository = {
   },
 
   async createMany(items: Omit<Item, "id">[]): Promise<Item[]> {
+    if (!isItemsRepositoryEnabled()) return itemsRepositoryUnavailable();
+
     const results: Item[] = [];
     for (const item of items) {
       results.push(await this.create(item));

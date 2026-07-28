@@ -1,7 +1,13 @@
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 import { requireAdminOrDeveloper } from "@/lib/auth/permissions";
-import { AdminImportClient } from "./AdminImportClient";
 
 export default async function AdminImportPage() {
   await requireAdminOrDeveloper();
-  return <AdminImportClient />;
+
+  return (
+    <FoundationUnavailable
+      title="Administrativer Import ist noch nicht freigegeben"
+      reason="Die bisherige Oberfläche stellte Cloud-OCR, KI-Auswertung und Datenbankimport als aktiv dar, obwohl kein belegter Ausführungsweg vorhanden war."
+    />
+  );
 }

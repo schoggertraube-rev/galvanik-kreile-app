@@ -1,10 +1,10 @@
-export type Urgency = "kritisch" | "gefaehrdet" | "im_plan";
+export type Urgency = "kritisch" | "gefaehrdet" | "im_plan" | "unbekannt";
 
 export function getUrgency(dueDate: Date | string | null | undefined, now = new Date()): Urgency {
-  if (!dueDate) return "im_plan";
+  if (!dueDate) return "unbekannt";
 
   const due = new Date(dueDate);
-  if (isNaN(due.getTime())) return "im_plan";
+  if (isNaN(due.getTime())) return "unbekannt";
 
   // Normalize 'now' to start of day for comparison
   const today = new Date(now);

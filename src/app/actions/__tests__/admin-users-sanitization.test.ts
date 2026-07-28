@@ -24,13 +24,13 @@ vi.mock("drizzle-orm", () => ({
   eq: vi.fn(),
 }));
 
-describe("getUsers() payload sanitization", () => {
+describe("getUsers() foundation gate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAdminOrDeveloper.mockResolvedValue(undefined);
   });
 
-  it("omits pinHash and auth secrets from admin client DTOs", async () => {
+  it("fails closed before any admin-user read can occur", async () => {
     mockFrom.mockResolvedValue([
       {
         id: "user-1",
@@ -46,23 +46,8 @@ describe("getUsers() payload sanitization", () => {
     ]);
 
     const { getUsers } = await import("@/app/actions/admin.actions");
-    const result = await getUsers();
-    const payload = JSON.stringify(result);
-
-    expect(result).toEqual([
-      {
-        id: "user-1",
-        email: "max@kreile.de",
-        fullName: "Max Mustermann",
-        role: "admin",
-        active: true,
-        location: null,
-        language: "de",
-      },
-    ]);
-    expect(payload).not.toContain("pinHash");
-    expect(payload).not.toContain("4321");
-    expect(payload).not.toContain("authSecret");
-    expect(payload).not.toContain("service-role-secret");
+    await expect(getUsers()).rejects.toThrow("NOT_CONFIGURED: Benutzer- und Rechteverwaltung");
+    expect(mockRequireAdminOrDeveloper).not.toHaveBeenCalled();
+    expect(mockFrom).not.toHaveBeenCalled();
   });
 });

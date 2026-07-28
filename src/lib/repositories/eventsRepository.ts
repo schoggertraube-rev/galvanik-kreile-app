@@ -54,11 +54,19 @@ function getMonotonicTimestamp(): string {
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
+function isLegacyEventRepositoryEnabled(): boolean {
+  return false;
+}
+
 // RLS-Hinweis:
 // Diese Tabelle muss auf INSERT+SELECT beschränkt werden. (Append-Only Log)
 
 export const eventsRepository = {
   async getAll(): Promise<StatusEvent[]> {
+    if (!isLegacyEventRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Legacy-Ereignisprotokoll ist bis zum belegten Server- und Receipt-Vertrag nicht verfÃ¼gbar.");
+    }
+
     if (isSupabase) {
       try {
         const result = await getRecentStatusEvents(100);
@@ -96,6 +104,11 @@ export const eventsRepository = {
   },
 
   async addEvent(event: Omit<StatusEvent, "id" | "timestamp">): Promise<StatusEvent> {
+    void event;
+    if (!isLegacyEventRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Legacy-Ereignisprotokoll kann keine lokale Erfolgsmeldung erzeugen.");
+    }
+
     const newId = createId();
     const timestamp = getMonotonicTimestamp();
 

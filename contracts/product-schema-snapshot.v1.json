@@ -1,0 +1,1859 @@
+{
+  "contractVersion": 1,
+  "targetType": "CANONICAL_PRODUCT_SYSTEM",
+  "targetRef": "syhaigjhsbpjmtnggqka",
+  "scope": "public relation columns only; no rows, values, secrets, policies, or grants",
+  "capturedOn": "2026-07-28",
+  "relations": [
+    {
+      "table": "ai_usage_reservations",
+      "columns": [
+        "actual_units",
+        "completed_at",
+        "created_at",
+        "estimated_units",
+        "feature",
+        "id",
+        "provider_status",
+        "reason",
+        "request_key_hash",
+        "result_expires_at",
+        "result_json",
+        "started_at",
+        "status",
+        "tenant_id",
+        "updated_at",
+        "user_id"
+      ]
+    },
+    {
+      "table": "aktion",
+      "columns": [
+        "aufwand_min",
+        "ausgefuehrt_am",
+        "erstellt_am",
+        "erwarteter_output",
+        "freigegeben_von",
+        "geplant_fuer",
+        "id",
+        "inhalt",
+        "is_demo",
+        "kampagne_id",
+        "kanal_id",
+        "kosten_budget",
+        "score",
+        "segment_id",
+        "status",
+        "titel",
+        "typ"
+      ]
+    },
+    {
+      "table": "app_kvp_items",
+      "columns": [
+        "category",
+        "created_at",
+        "created_by",
+        "id",
+        "impact",
+        "note",
+        "status",
+        "tenant_id",
+        "title",
+        "updated_at"
+      ]
+    },
+    {
+      "table": "app_usage_events",
+      "columns": [
+        "actor_pseudonym",
+        "actor_role",
+        "build_id",
+        "click_count",
+        "client_event_id",
+        "device_class",
+        "duration_ms",
+        "event_type",
+        "id",
+        "occurred_at",
+        "outcome",
+        "query_length",
+        "received_at",
+        "result_count",
+        "route",
+        "session_id",
+        "target",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "app_users",
+      "columns": [
+        "active",
+        "created_at",
+        "email",
+        "full_name",
+        "id",
+        "ist_produktiv",
+        "kostensatz_eur_pro_stunde",
+        "language",
+        "location",
+        "pin_hash",
+        "role",
+        "tenant_id",
+        "updated_at",
+        "urlaubstage_pro_jahr",
+        "wochenstunden"
+      ]
+    },
+    {
+      "table": "arbeitszeit_buchung",
+      "columns": [
+        "aktualisiert_am",
+        "auftrag_id",
+        "bemerkung",
+        "dauer_minuten",
+        "employee_id",
+        "end_zeit",
+        "erfasst_modus",
+        "erstellt_am",
+        "id",
+        "item_id",
+        "kostensatz_eur_pro_stunde",
+        "kostenstelle_kuerzel",
+        "start_zeit",
+        "station_kuerzel",
+        "tenant_id",
+        "vorlage_id",
+        "war_aus_vorlage"
+      ]
+    },
+    {
+      "table": "attribution",
+      "columns": [
+        "auftrag_id",
+        "erstellt_am",
+        "id",
+        "lead_id",
+        "modell",
+        "touchpoint_id",
+        "umsatz"
+      ]
+    },
+    {
+      "table": "audit_log",
+      "columns": [
+        "action",
+        "actor_id",
+        "created_at",
+        "id",
+        "payload",
+        "record_id",
+        "table_name"
+      ]
+    },
+    {
+      "table": "ausgangsrechnung",
+      "columns": [
+        "aging_status",
+        "bemerkung",
+        "bezahlt_am",
+        "bezahlt_betrag_eur",
+        "bezahlt_methode",
+        "bezahlt_payment_id",
+        "brutto",
+        "datum",
+        "erechnung_xml",
+        "erloes_konto_id",
+        "erstellt_am",
+        "faellig_am",
+        "forderung_konto_id",
+        "id",
+        "is_demo",
+        "kunde_id",
+        "lead_id",
+        "mahnstufe",
+        "netto",
+        "nummer",
+        "order_id",
+        "periode_id",
+        "status",
+        "tenant_id",
+        "ust_betrag",
+        "ust_satz"
+      ]
+    },
+    {
+      "table": "ausgangsrechnung_position",
+      "columns": [
+        "ausgangsrechnung_id",
+        "beschreibung",
+        "einzelpreis_netto",
+        "id",
+        "menge"
+      ]
+    },
+    {
+      "table": "bath_measurements",
+      "columns": [
+        "bath_id",
+        "created_at",
+        "id",
+        "measured_at",
+        "notes",
+        "ph_value",
+        "temperature",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "baths",
+      "columns": [
+        "id",
+        "last_measured_at",
+        "name",
+        "ph_max",
+        "ph_min",
+        "process_type",
+        "station_id",
+        "status",
+        "target_values",
+        "temperature_max",
+        "temperature_min"
+      ]
+    },
+    {
+      "table": "beleg",
+      "columns": [
+        "absetzbar_grund",
+        "absetzbar_prozent",
+        "bank_zahlung_id",
+        "belegart",
+        "belegdatum",
+        "brutto",
+        "erfasst_am",
+        "erstellt_am",
+        "erstellt_von",
+        "id",
+        "ist_auf_auftrag_zugeordnet",
+        "kategorie_id",
+        "konto_id",
+        "kostenstelle_id",
+        "lieferant_id",
+        "lieferant_text",
+        "netto",
+        "ocr_confidence",
+        "ocr_confidence_scale",
+        "ocr_positionen",
+        "ocr_provider",
+        "ocr_rohtext",
+        "original_datei",
+        "original_format",
+        "periode_id",
+        "rechnungsnummer_extern",
+        "skr_konto",
+        "status",
+        "storniert_von",
+        "ust_betrag",
+        "ust_satz",
+        "vorsteuer_abzug",
+        "zahlungsart",
+        "zugeordneter_order_id"
+      ]
+    },
+    {
+      "table": "beleg_position",
+      "columns": [
+        "beleg_id",
+        "beschreibung",
+        "id",
+        "netto",
+        "skr_konto",
+        "sortierung",
+        "ust_betrag",
+        "ust_satz"
+      ]
+    },
+    {
+      "table": "bh_audit_log",
+      "columns": [
+        "aktion",
+        "benutzer",
+        "entitaet",
+        "entitaet_id",
+        "id",
+        "nachher",
+        "vorher",
+        "zeit"
+      ]
+    },
+    {
+      "table": "bh_einstellungen",
+      "columns": [
+        "aktualisiert_am",
+        "berater_stundensatz",
+        "erstellt_am",
+        "id",
+        "minuten_pro_beleg",
+        "ocr_confidence_schwelle",
+        "standard_kontenrahmen"
+      ]
+    },
+    {
+      "table": "business_kvp_items",
+      "columns": [
+        "benefit",
+        "category",
+        "created_at",
+        "created_by",
+        "id",
+        "note",
+        "photo_url",
+        "priority",
+        "status",
+        "tenant_id",
+        "title",
+        "updated_at"
+      ]
+    },
+    {
+      "table": "calendar_events",
+      "columns": [
+        "created_at",
+        "customer_id",
+        "ends_at",
+        "event_type",
+        "id",
+        "order_id",
+        "source",
+        "source_ref",
+        "starts_at",
+        "status",
+        "tenant_id",
+        "time_slot",
+        "title"
+      ]
+    },
+    {
+      "table": "communication_drafts",
+      "columns": [
+        "body",
+        "created_at",
+        "customer_id",
+        "id",
+        "status",
+        "subject",
+        "tenant_id",
+        "type",
+        "updated_at"
+      ]
+    },
+    {
+      "table": "communication_messages",
+      "columns": [
+        "body",
+        "channel",
+        "created_at",
+        "created_by",
+        "direction",
+        "id",
+        "summary",
+        "tenant_id",
+        "thread_id"
+      ]
+    },
+    {
+      "table": "communication_threads",
+      "columns": [
+        "category",
+        "created_at",
+        "created_by",
+        "customer_id",
+        "id",
+        "order_id",
+        "priority",
+        "source",
+        "status",
+        "subject",
+        "tenant_id",
+        "updated_at"
+      ]
+    },
+    {
+      "table": "communications",
+      "columns": [
+        "body",
+        "bounced_at",
+        "channel_type",
+        "complained_at",
+        "created_at",
+        "customer_id",
+        "id",
+        "opened_at",
+        "order_id",
+        "resend_message_id",
+        "status",
+        "subject",
+        "tenant_id",
+        "type"
+      ]
+    },
+    {
+      "table": "company_settings",
+      "columns": [
+        "bank_name",
+        "bic",
+        "city",
+        "company_name",
+        "country",
+        "email",
+        "email_additional_notes",
+        "email_agb_text",
+        "email_footer",
+        "email_greeting",
+        "email_payment_info",
+        "email_pickup_info",
+        "iban",
+        "id",
+        "logo_url",
+        "phone",
+        "street",
+        "tagline",
+        "tax_id",
+        "tenant_id",
+        "updated_at",
+        "website",
+        "wochenziel",
+        "workflow_templates",
+        "zip"
+      ]
+    },
+    {
+      "table": "complaints",
+      "columns": [
+        "created_at",
+        "customer_id",
+        "description",
+        "id",
+        "item_id",
+        "order_id",
+        "photo_ids",
+        "reason",
+        "resolution",
+        "resolved_at",
+        "station_id",
+        "status",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "consumable_uses",
+      "columns": [
+        "created_at",
+        "erfasst_von",
+        "id",
+        "inventory_item_id",
+        "item_name",
+        "order_id",
+        "quantity",
+        "station_kuerzel",
+        "tenant_id",
+        "unit",
+        "unit_cost_eur",
+        "vorlage_id"
+      ]
+    },
+    {
+      "table": "cost_positions",
+      "columns": [
+        "amount",
+        "category",
+        "cost_type",
+        "created_at",
+        "created_by",
+        "id",
+        "interval_or_basis",
+        "name",
+        "note",
+        "status",
+        "tenant_id",
+        "updated_at"
+      ]
+    },
+    {
+      "table": "customers",
+      "columns": [
+        "address",
+        "approval_profile",
+        "behavior_notes",
+        "city",
+        "classification",
+        "company_name",
+        "contact_person",
+        "converted_at",
+        "country",
+        "created_at",
+        "credit_rating",
+        "customer_number",
+        "email",
+        "enriched_fields",
+        "expectation_profile",
+        "id",
+        "image_urls",
+        "internal_notes",
+        "internal_warning",
+        "is_lead",
+        "last_reactivated_at",
+        "lead_since",
+        "marketing_opt_out",
+        "name",
+        "notes",
+        "payment_preference",
+        "payment_profile",
+        "phone",
+        "pref_comm",
+        "risk",
+        "risk_note",
+        "shipping_preference",
+        "source",
+        "source_ref",
+        "street",
+        "tags",
+        "technical_profile",
+        "tenant_id",
+        "trust_level",
+        "type",
+        "updated_at",
+        "zip_code"
+      ]
+    },
+    {
+      "table": "developer_feedback",
+      "columns": [
+        "actor_pseudonym",
+        "actor_role",
+        "build_id",
+        "client_request_id",
+        "created_at",
+        "id",
+        "message",
+        "route",
+        "status",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "devices",
+      "columns": [
+        "created_at",
+        "id",
+        "last_seen",
+        "name",
+        "status",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "einwilligung",
+      "columns": [
+        "erstellt_am",
+        "id",
+        "kanal",
+        "kunde_id",
+        "nachweis",
+        "quelle",
+        "status",
+        "zeitpunkt"
+      ]
+    },
+    {
+      "table": "email_templates",
+      "columns": [
+        "body_html_template",
+        "body_text_template",
+        "created_at",
+        "id",
+        "name",
+        "subject_template",
+        "template_key",
+        "tenant_id",
+        "updated_at",
+        "variables"
+      ]
+    },
+    {
+      "table": "events",
+      "columns": [
+        "created_at",
+        "description",
+        "event_type",
+        "id",
+        "item_id",
+        "notes",
+        "order_id",
+        "payload",
+        "station",
+        "status",
+        "tenant_id",
+        "user_id",
+        "worker_id"
+      ]
+    },
+    {
+      "table": "export_lauf",
+      "columns": [
+        "anzahl_buchungen",
+        "datei_pfad",
+        "erstellt_am",
+        "erstellt_von",
+        "id",
+        "typ",
+        "zeitraum_bis",
+        "zeitraum_von"
+      ]
+    },
+    {
+      "table": "feature_flags",
+      "columns": [
+        "created_at",
+        "description",
+        "enabled",
+        "id",
+        "name",
+        "roles_allowed",
+        "updated_at"
+      ]
+    },
+    {
+      "table": "feedback_eingang",
+      "columns": [
+        "eingegangen_am",
+        "feedback_mail_id",
+        "fotos_hochgeladen",
+        "freitext",
+        "google_bewertung_geklickt",
+        "id",
+        "zufriedenheit"
+      ]
+    },
+    {
+      "table": "feedback_mail",
+      "columns": [
+        "ankunft_am",
+        "ankunft_quelle",
+        "auftrag_id",
+        "einwilligung_ok",
+        "erstellt_am",
+        "geplant_fuer",
+        "gesendet_am",
+        "id",
+        "kunde_id",
+        "segment_id",
+        "status",
+        "token_feedback",
+        "token_upload"
+      ]
+    },
+    {
+      "table": "feedback_notes",
+      "columns": [
+        "created_at",
+        "created_by",
+        "id",
+        "note",
+        "page_path",
+        "role",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "forecast_version",
+      "columns": [
+        "basis_data",
+        "bemerkung",
+        "erstellt_am",
+        "erstellt_von",
+        "id",
+        "ist_aktiv",
+        "jahr",
+        "monat",
+        "tenant_id",
+        "version_typ",
+        "werte"
+      ]
+    },
+    {
+      "table": "import_job_rows",
+      "columns": [
+        "created_at",
+        "data",
+        "error_message",
+        "id",
+        "job_id",
+        "row_index",
+        "status"
+      ]
+    },
+    {
+      "table": "import_jobs",
+      "columns": [
+        "completed_at",
+        "created_at",
+        "created_by",
+        "id",
+        "status",
+        "type"
+      ]
+    },
+    {
+      "table": "inquiries",
+      "columns": [
+        "assigned_order_id",
+        "attachment_urls",
+        "created_at",
+        "customer_email",
+        "customer_id",
+        "customer_name",
+        "customer_phone",
+        "description",
+        "dirt_level",
+        "extracted_data",
+        "id",
+        "image_urls",
+        "internal_notes",
+        "material",
+        "message",
+        "part_count",
+        "photo",
+        "pricing",
+        "priority",
+        "quelle_konfidenz",
+        "quelle_manuell",
+        "quelle_touchpoint_id",
+        "quelle_typ",
+        "received_at",
+        "rust_level",
+        "source",
+        "status",
+        "subject",
+        "tenant_id",
+        "updated_at"
+      ]
+    },
+    {
+      "table": "inventory_items",
+      "columns": [
+        "category",
+        "current_stock",
+        "einheit_normiert",
+        "einkaufspreis_eur",
+        "id",
+        "kostenstelle_default_kuerzel",
+        "letzter_preis_aktualisiert_am",
+        "letzter_preis_quelle_beleg_id",
+        "min_stock",
+        "name",
+        "tenant_id",
+        "unit"
+      ]
+    },
+    {
+      "table": "invoices",
+      "columns": [
+        "amount_total",
+        "created_at",
+        "customer_id",
+        "due_date",
+        "id",
+        "invoice_number",
+        "order_id",
+        "status",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "item_photo_jobs",
+      "columns": [
+        "actual_units",
+        "analysis_result",
+        "completed_at",
+        "content_sha256",
+        "created_at",
+        "file_bytes",
+        "id",
+        "item_id",
+        "mime_type",
+        "order_id",
+        "provider_status",
+        "request_key_hash",
+        "started_at",
+        "status",
+        "storage_path",
+        "tenant_id",
+        "updated_at",
+        "uploaded_at",
+        "user_id"
+      ]
+    },
+    {
+      "table": "item_photos",
+      "columns": [
+        "created_at",
+        "id",
+        "item_id",
+        "note",
+        "order_id",
+        "photo_type",
+        "station",
+        "storage_path",
+        "tenant_id",
+        "thumbnail_path",
+        "uploaded_at",
+        "uploaded_by"
+      ]
+    },
+    {
+      "table": "items",
+      "columns": [
+        "created_at",
+        "current_station_id",
+        "current_step",
+        "customer_id",
+        "id",
+        "internal_notes",
+        "material",
+        "name",
+        "order_id",
+        "photo",
+        "photo_ids",
+        "preis_netto",
+        "quantity",
+        "repair_types",
+        "station_sequence",
+        "surface_requested",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "kampagne",
+      "columns": [
+        "budget",
+        "erstellt_am",
+        "id",
+        "is_demo",
+        "name",
+        "status",
+        "zeitraum_bis",
+        "zeitraum_von",
+        "ziel"
+      ]
+    },
+    {
+      "table": "kanal",
+      "columns": [
+        "access_token_encrypted",
+        "config",
+        "erstellt_am",
+        "id",
+        "name",
+        "status",
+        "typ",
+        "verbunden"
+      ]
+    },
+    {
+      "table": "kategorie",
+      "columns": [
+        "default_absetzbar_prozent",
+        "erstellt_am",
+        "icon",
+        "id",
+        "name",
+        "skr_konto",
+        "sortierung",
+        "typ"
+      ]
+    },
+    {
+      "table": "konto",
+      "columns": [
+        "bezeichnung",
+        "created_at",
+        "externes_konto_datev",
+        "externes_konto_lexware",
+        "id",
+        "ist_aktiv",
+        "ist_erfolgskonto",
+        "kategorie",
+        "nummer",
+        "steuerprofil_id",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "kosten_posten",
+      "columns": [
+        "beschreibung",
+        "betrag",
+        "gebucht_am",
+        "id",
+        "kampagne_id",
+        "kanal",
+        "modul",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "kostenposten",
+      "columns": [
+        "art",
+        "beleg_id",
+        "betrag",
+        "bezeichnung",
+        "gilt_ab",
+        "gilt_bis",
+        "id",
+        "intervall",
+        "is_demo",
+        "kampagne_id",
+        "kategorie"
+      ]
+    },
+    {
+      "table": "kostensatz_default",
+      "columns": [
+        "bemerkung",
+        "eur_pro_stunde",
+        "gilt_ab",
+        "id",
+        "station_kuerzel",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "kostenstelle",
+      "columns": [
+        "capacity_center_id",
+        "created_at",
+        "energie_anteil_prozent",
+        "geplante_personalkosten_monatlich",
+        "geplante_sachkosten_monatlich",
+        "id",
+        "ist_aktiv",
+        "kuerzel",
+        "name",
+        "notiz",
+        "tenant_id",
+        "typ",
+        "updated_at",
+        "verfuegbare_stunden_monatlich"
+      ]
+    },
+    {
+      "table": "kostenstellen_energie_monat",
+      "columns": [
+        "created_at",
+        "energie_eur_pro_stunde",
+        "id",
+        "kostenstelle_id",
+        "monat",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "kpi_cost_assumptions",
+      "columns": [
+        "created_at",
+        "description",
+        "id",
+        "is_active",
+        "key",
+        "tenant_id",
+        "unit",
+        "updated_at",
+        "value_numeric"
+      ]
+    },
+    {
+      "table": "kpi_snapshots",
+      "columns": [
+        "created_at",
+        "einheit",
+        "id",
+        "kpi_key",
+        "meta",
+        "periode",
+        "periode_start",
+        "tenant_id",
+        "wert"
+      ]
+    },
+    {
+      "table": "kraftstoff_detail",
+      "columns": [
+        "beleg_id",
+        "id",
+        "liter",
+        "ort",
+        "preis_pro_liter",
+        "sorte",
+        "tankstelle"
+      ]
+    },
+    {
+      "table": "kvp_items",
+      "columns": [
+        "benefit",
+        "category",
+        "created_at",
+        "date",
+        "has_photo",
+        "id",
+        "is_demo",
+        "problem_desc",
+        "status",
+        "tenant_id",
+        "title"
+      ]
+    },
+    {
+      "table": "lern_metrik",
+      "columns": [
+        "aktionen",
+        "aktualisiert_am",
+        "anfragen",
+        "dimension",
+        "id",
+        "konfidenz",
+        "umsatz",
+        "wert"
+      ]
+    },
+    {
+      "table": "licenses",
+      "columns": [
+        "created_at",
+        "id",
+        "plan",
+        "tenant_id",
+        "valid_until"
+      ]
+    },
+    {
+      "table": "lieferant",
+      "columns": [
+        "adresse",
+        "erstellt_am",
+        "id",
+        "name",
+        "name_normalisiert",
+        "standard_kategorie_id",
+        "standard_skr_konto",
+        "ust_id"
+      ]
+    },
+    {
+      "table": "locations",
+      "columns": [
+        "active",
+        "area",
+        "description",
+        "id",
+        "location_code",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "marketing_asset",
+      "columns": [
+        "auftrag_id",
+        "erstellt_am",
+        "freigabe_marketing",
+        "id",
+        "kunde_id",
+        "qualitaet_score",
+        "quelle",
+        "segment_id",
+        "storage_pfad",
+        "typ"
+      ]
+    },
+    {
+      "table": "marketing_touchpoints",
+      "columns": [
+        "aktion_id",
+        "aufwand_minuten",
+        "ausgefuehrt_am",
+        "budget",
+        "created_at",
+        "id",
+        "kanal",
+        "tenant_id",
+        "titel"
+      ]
+    },
+    {
+      "table": "offline_outbox",
+      "columns": [
+        "created_at",
+        "id",
+        "last_error",
+        "mutation_type",
+        "payload",
+        "processed_at",
+        "retry_count",
+        "status",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "operator_control_events",
+      "columns": [
+        "canonical_payload",
+        "effective_at",
+        "expires_at",
+        "id",
+        "issued_at",
+        "mode",
+        "notice",
+        "plan",
+        "policy_version",
+        "reason",
+        "received_at",
+        "request_digest",
+        "signature",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "order_cost_events",
+      "columns": [
+        "amount_eur",
+        "caused_by",
+        "created_at",
+        "event_type",
+        "id",
+        "order_id",
+        "reason",
+        "source",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "order_cost_positions",
+      "columns": [
+        "amount_cents",
+        "created_at",
+        "description",
+        "id",
+        "order_id",
+        "tenant_id",
+        "type"
+      ]
+    },
+    {
+      "table": "order_financials",
+      "columns": [
+        "approved_revenue_net_eur",
+        "created_at",
+        "expected_revenue_net_eur",
+        "id",
+        "invoiced_revenue_net_eur",
+        "order_id",
+        "price_status",
+        "source",
+        "tenant_id",
+        "updated_at"
+      ]
+    },
+    {
+      "table": "orders",
+      "columns": [
+        "attachment_url",
+        "attachment_urls",
+        "completed_date",
+        "created_at",
+        "current_station",
+        "current_station_id",
+        "customer_id",
+        "db_geplant",
+        "db_ist",
+        "db_letzte_berechnung",
+        "delay_reason",
+        "delivery_method",
+        "due_date",
+        "freetext_original",
+        "id",
+        "inquiry_id",
+        "intake_date",
+        "is_quote",
+        "kostenstelle_primaer_id",
+        "order_number",
+        "parts",
+        "payment_status",
+        "priority",
+        "priority_computed",
+        "promised_due_date",
+        "quote_converted_order_id",
+        "quote_status",
+        "recommended_action",
+        "risk",
+        "source",
+        "source_ref",
+        "station",
+        "status",
+        "status_text",
+        "task",
+        "tenant_id",
+        "title"
+      ]
+    },
+    {
+      "table": "payments",
+      "columns": [
+        "amount_eur",
+        "created_at",
+        "id",
+        "invoice_id",
+        "method",
+        "mollie_method",
+        "mollie_status",
+        "order_id",
+        "paid_at",
+        "provider",
+        "provider_intent_id",
+        "provider_reference",
+        "receipt_url",
+        "status",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "periode",
+      "columns": [
+        "bemerkung",
+        "geschlossen_am",
+        "geschlossen_von",
+        "id",
+        "jahr",
+        "monat",
+        "status",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "phone_notes",
+      "columns": [
+        "caller_name",
+        "category",
+        "company",
+        "created_at",
+        "created_by",
+        "customer_id",
+        "extraction_json",
+        "generated_answer",
+        "id",
+        "links_json",
+        "order_id",
+        "phone",
+        "raw_text",
+        "status",
+        "tenant_id",
+        "thread_id",
+        "updated_at",
+        "urgency"
+      ]
+    },
+    {
+      "table": "price_agreements",
+      "columns": [
+        "customer_id",
+        "date",
+        "id",
+        "rate",
+        "scope"
+      ]
+    },
+    {
+      "table": "price_lines",
+      "columns": [
+        "created_at",
+        "id",
+        "item_id",
+        "order_id",
+        "position_text",
+        "qty",
+        "sort_order",
+        "tenant_id",
+        "unit_price_eur",
+        "unit_total_eur",
+        "updated_at"
+      ]
+    },
+    {
+      "table": "scan_uploads",
+      "columns": [
+        "client_idempotency_key",
+        "conversion_event_id",
+        "conversion_order_id",
+        "detected_type",
+        "detection_confidence",
+        "extracted_data",
+        "field_confidence",
+        "file_type",
+        "file_url",
+        "id",
+        "linked_customer_id",
+        "linked_invoice_id",
+        "linked_order_id",
+        "ocr_provider",
+        "original_hash",
+        "original_secured_at",
+        "original_size_bytes",
+        "original_storage_path",
+        "review_required",
+        "reviewed_at",
+        "reviewed_by",
+        "status",
+        "tenant_id",
+        "uploaded_at",
+        "uploaded_by"
+      ]
+    },
+    {
+      "table": "security_rate_limit_counters",
+      "columns": [
+        "attempt_count",
+        "namespace",
+        "subject_hash",
+        "updated_at",
+        "window_started_at"
+      ]
+    },
+    {
+      "table": "segment",
+      "columns": [
+        "beschreibung",
+        "erstellt_am",
+        "farbe",
+        "filter_regel",
+        "icon",
+        "id",
+        "is_demo",
+        "name"
+      ]
+    },
+    {
+      "table": "shipments",
+      "columns": [
+        "carrier",
+        "created_at",
+        "delivered_at",
+        "id",
+        "insurance_eur",
+        "kolli_count",
+        "label_url",
+        "order_id",
+        "shipped_at",
+        "shipping_cost_eur",
+        "status",
+        "tenant_id",
+        "tracking_number",
+        "updated_at",
+        "weight_kg"
+      ]
+    },
+    {
+      "table": "statistik_kennzahl",
+      "columns": [
+        "aktualisiert_am",
+        "id",
+        "metrik",
+        "periode",
+        "quelle",
+        "wert"
+      ]
+    },
+    {
+      "table": "steuerprofil",
+      "columns": [
+        "aktiv",
+        "app_einrichtung_einmalig",
+        "app_lizenz_monat",
+        "app_startdatum",
+        "berater_nr",
+        "bezeichnung",
+        "erstellt_am",
+        "id",
+        "kleinunternehmer",
+        "mandanten_nr",
+        "reduziert_ust_satz",
+        "sachkontenrahmen",
+        "standard_ust_satz",
+        "voranmeldung_rhythmus",
+        "wj_beginn"
+      ]
+    },
+    {
+      "table": "stock_movements",
+      "columns": [
+        "created_at",
+        "erfasst_von",
+        "id",
+        "inventory_item_id",
+        "kostenstelle_kuerzel",
+        "movement_type",
+        "notiz",
+        "order_id",
+        "quantity",
+        "reason",
+        "snapshot_einkaufspreis_eur",
+        "station_kuerzel",
+        "tenant_id",
+        "vorlage_id",
+        "war_aus_vorlage"
+      ]
+    },
+    {
+      "table": "teile_klassifikator",
+      "columns": [
+        "beispiel_oberflaechen",
+        "id",
+        "keywords",
+        "klasse",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "telemetrie_event",
+      "columns": [
+        "event_typ",
+        "id",
+        "is_anonym",
+        "meta",
+        "zeitpunkt"
+      ]
+    },
+    {
+      "table": "tenant_operator_controls",
+      "columns": [
+        "canonical_payload",
+        "effective_at",
+        "expires_at",
+        "issued_at",
+        "mode",
+        "notice",
+        "plan",
+        "policy_version",
+        "reason",
+        "received_at",
+        "request_digest",
+        "signature",
+        "tenant_id",
+        "updated_at"
+      ]
+    },
+    {
+      "table": "touchpoint",
+      "columns": [
+        "aktion_id",
+        "ausgefuehrt_am",
+        "externe_ref",
+        "id",
+        "kanal_id",
+        "klicks",
+        "reichweite",
+        "utm_campaign",
+        "utm_medium",
+        "utm_source"
+      ]
+    },
+    {
+      "table": "ui_events",
+      "columns": [
+        "created_at",
+        "event_type",
+        "id",
+        "payload",
+        "session_id",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "ustva_periode",
+      "columns": [
+        "erstellt_am",
+        "freigegeben_am",
+        "freigegeben_von",
+        "id",
+        "status",
+        "umsatz_0",
+        "umsatz_19",
+        "umsatz_7",
+        "ust_19",
+        "ust_7",
+        "vorsteuer",
+        "zahllast",
+        "zeitraum_bis",
+        "zeitraum_von"
+      ]
+    },
+    {
+      "table": "v_aging",
+      "columns": [
+        "aging_bucket",
+        "bezahlt_am",
+        "brutto",
+        "company_name",
+        "customer_id",
+        "faellig_am",
+        "id",
+        "kunde_name",
+        "mahnstufe",
+        "netto",
+        "rechnungsnummer",
+        "tage_ueberfaellig"
+      ]
+    },
+    {
+      "table": "v_analyse_durchlaufzeit",
+      "columns": [
+        "avg_tage",
+        "n"
+      ]
+    },
+    {
+      "table": "v_analyse_engpass",
+      "columns": [
+        "station",
+        "teile_wartend"
+      ]
+    },
+    {
+      "table": "v_analyse_kunden_kpi",
+      "columns": [
+        "aktive_auftraege",
+        "classification",
+        "customer_id",
+        "gewinn_ltv",
+        "kunde",
+        "kunde_seit",
+        "offene_posten",
+        "puenklichkeit_pct",
+        "reklamationen",
+        "umsatz_ltv"
+      ]
+    },
+    {
+      "table": "v_analyse_station_durchlauf",
+      "columns": [
+        "avg_tage",
+        "n",
+        "station",
+        "teile_aktuell"
+      ]
+    },
+    {
+      "table": "v_analyse_termintreue",
+      "columns": [
+        "nenner",
+        "ohne_zusagetermin",
+        "puenktlich",
+        "termintreue_pct"
+      ]
+    },
+    {
+      "table": "v_analyse_werkstatt_puls_economics",
+      "columns": [
+        "actual_delay_cost_eur",
+        "arbeitszeit_kosten",
+        "confidence",
+        "customer_id",
+        "customer_name",
+        "db_ist",
+        "db_marge",
+        "delay_days",
+        "erloes_netto",
+        "material_kosten",
+        "missing_reasons",
+        "model_delay_risk_eur",
+        "order_id",
+        "order_number",
+        "revenue_reference_eur",
+        "revenue_source",
+        "station_id",
+        "station_name"
+      ]
+    },
+    {
+      "table": "v_analyse_wochenziel",
+      "columns": [
+        "fertig_diese_woche"
+      ]
+    },
+    {
+      "table": "v_auftrag_db",
+      "columns": [
+        "anz_rechnungen",
+        "anz_verbrauch",
+        "anz_zeitbuchungen",
+        "arbeitszeit_kosten",
+        "company_name",
+        "current_station",
+        "customer_id",
+        "db_marge",
+        "deckungsbeitrag",
+        "due_date",
+        "energie_anteil_kosten",
+        "erloes_netto",
+        "intake_date",
+        "kunde_name",
+        "material_kosten",
+        "order_id",
+        "order_number",
+        "status"
+      ]
+    },
+    {
+      "table": "v_engpass",
+      "columns": [
+        "auslastung_quote",
+        "avg_stunden_pro_auftrag_30d",
+        "engpass_score",
+        "gebuchte_stunden_aktuell",
+        "kostenstelle_id",
+        "kuerzel",
+        "name",
+        "typ",
+        "verfuegbare_stunden_monatlich",
+        "warteschlange_aktuell"
+      ]
+    },
+    {
+      "table": "v_kostenstelle_monatswerte",
+      "columns": [
+        "anz_auftraege",
+        "auslastung_quote",
+        "gebuchte_stunden",
+        "kostenstelle_id",
+        "kuerzel",
+        "monat",
+        "name",
+        "personalkosten_ist",
+        "typ",
+        "verfuegbare_stunden_monatlich"
+      ]
+    },
+    {
+      "table": "v_kunde_clv",
+      "columns": [
+        "auftraege_12m",
+        "auftraege_gesamt",
+        "avg_durchlauf_tage",
+        "avg_zahlungsverzug_tage",
+        "company_name",
+        "customer_id",
+        "db_gesamt",
+        "db_marge",
+        "erstkontakt",
+        "kundentyp",
+        "letzter_auftrag",
+        "name",
+        "reklamationen",
+        "umsatz_gesamt"
+      ]
+    },
+    {
+      "table": "v_monatsergebnis",
+      "columns": [
+        "energie_kosten",
+        "ergebnis",
+        "erloes_netto",
+        "material_kosten",
+        "monat",
+        "personal_kosten",
+        "sachkosten"
+      ]
+    },
+    {
+      "table": "v_periodenabschluss_status",
+      "columns": [
+        "auftraege_ohne_db",
+        "belege_ohne_konto",
+        "belege_ohne_kostenstelle",
+        "geschlossen_am",
+        "id",
+        "jahr",
+        "monat",
+        "rechnungen_offen",
+        "rechnungen_ohne_auftrag",
+        "status"
+      ]
+    },
+    {
+      "table": "v_pipeline_forecast",
+      "columns": [
+        "anz_auftraege",
+        "erwarteter_monat",
+        "pipeline_wert_gewichtet",
+        "pipeline_wert_ungewichtet"
+      ]
+    },
+    {
+      "table": "v_production_customers",
+      "columns": [
+        "address",
+        "approval_profile",
+        "behavior_notes",
+        "city",
+        "classification",
+        "company_name",
+        "contact_person",
+        "converted_at",
+        "country",
+        "created_at",
+        "credit_rating",
+        "customer_number",
+        "email",
+        "enriched_fields",
+        "expectation_profile",
+        "id",
+        "image_urls",
+        "internal_notes",
+        "internal_warning",
+        "is_lead",
+        "last_reactivated_at",
+        "lead_since",
+        "marketing_opt_out",
+        "name",
+        "notes",
+        "payment_preference",
+        "payment_profile",
+        "phone",
+        "pref_comm",
+        "risk",
+        "risk_note",
+        "shipping_preference",
+        "source",
+        "source_ref",
+        "street",
+        "tags",
+        "technical_profile",
+        "tenant_id",
+        "trust_level",
+        "type",
+        "updated_at",
+        "zip_code"
+      ]
+    },
+    {
+      "table": "v_production_orders",
+      "columns": [
+        "attachment_url",
+        "attachment_urls",
+        "completed_date",
+        "created_at",
+        "current_station",
+        "current_station_id",
+        "customer_id",
+        "db_geplant",
+        "db_ist",
+        "db_letzte_berechnung",
+        "delay_reason",
+        "delivery_method",
+        "due_date",
+        "freetext_original",
+        "id",
+        "inquiry_id",
+        "intake_date",
+        "is_quote",
+        "kostenstelle_primaer_id",
+        "order_number",
+        "parts",
+        "payment_status",
+        "priority",
+        "priority_computed",
+        "promised_due_date",
+        "quote_converted_order_id",
+        "quote_status",
+        "recommended_action",
+        "risk",
+        "source",
+        "source_ref",
+        "station",
+        "status",
+        "status_text",
+        "task",
+        "tenant_id",
+        "title"
+      ]
+    },
+    {
+      "table": "vorlage_verbrauch",
+      "columns": [
+        "einheit_normiert",
+        "haeufigkeit_prozent",
+        "id",
+        "inventory_item_id",
+        "letzte_aktualisierung",
+        "median_menge",
+        "n_referenzauftraege",
+        "oberflaeche",
+        "p25_menge",
+        "p75_menge",
+        "schluessel",
+        "station_kuerzel",
+        "teilekategorie",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "vorlage_zeit",
+      "columns": [
+        "id",
+        "letzte_aktualisierung",
+        "median_minuten",
+        "n_referenzauftraege",
+        "oberflaeche",
+        "p25_minuten",
+        "p75_minuten",
+        "schluessel",
+        "station_kuerzel",
+        "teilekategorie",
+        "tenant_id"
+      ]
+    },
+    {
+      "table": "warning_event",
+      "columns": [
+        "begruendung",
+        "beschreibung",
+        "dismissed_am",
+        "dismissed_von",
+        "erzeugt_am",
+        "id",
+        "link",
+        "payload",
+        "schwere",
+        "suppress_bis",
+        "tenant_id",
+        "titel",
+        "typ"
+      ]
+    },
+    {
+      "table": "zahlung",
+      "columns": [
+        "art",
+        "ausgangsrechnung_id",
+        "bank_umsatz_ref",
+        "beleg_id",
+        "betrag",
+        "datum",
+        "id",
+        "is_demo",
+        "richtung"
+      ]
+    }
+  ]
+}

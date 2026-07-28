@@ -1,12 +1,20 @@
 "use server";
 
-import { db } from "@/db";
+import { db, isDatabaseConfigured } from "@/db";
 import { complaints } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
+
+function assertComplaintContract(): void {
+  if (!isFoundationAreaEnabled("Reklamationen")) {
+    foundationUnavailableAction("Reklamationen");
+  }
+}
 
 export async function getComplaints() {
-  if (!db) return [];
+  assertComplaintContract();
+  if (!isDatabaseConfigured()) return [];
   try {
     const dbComplaints = await db.select().from(complaints).orderBy(complaints.createdAt);
     return dbComplaints;
@@ -17,7 +25,8 @@ export async function getComplaints() {
 }
 
 export async function getByOrder(orderId: string) {
-  if (!db) return [];
+  assertComplaintContract();
+  if (!isDatabaseConfigured()) return [];
   try {
     const dbComplaints = await db.select().from(complaints).where(eq(complaints.orderId, orderId)).orderBy(complaints.createdAt);
     return dbComplaints;
@@ -37,7 +46,8 @@ export async function createComplaint(data: {
   description?: string;
   photoIds?: string[];
 }) {
-  if (!db) return null;
+  assertComplaintContract();
+  if (!isDatabaseConfigured()) return null;
   try {
     const complaintId = data.id || createId();
     
@@ -71,7 +81,8 @@ export async function updateComplaint(id: string, changes: {
   resolvedAt?: Date;
   photoIds?: string[];
 }) {
-  if (!db) return null;
+  assertComplaintContract();
+  if (!isDatabaseConfigured()) return null;
   try {
     await db.update(complaints).set(changes).where(eq(complaints.id, id));
     return { id, ...changes };
@@ -82,7 +93,8 @@ export async function updateComplaint(id: string, changes: {
 }
 
 export async function resolveComplaint(id: string, resolution: string) {
-  if (!db) return null;
+  assertComplaintContract();
+  if (!isDatabaseConfigured()) return null;
   try {
     const changes = {
       status: "resolved",

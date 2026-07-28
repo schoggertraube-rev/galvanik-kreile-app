@@ -1,0 +1,24 @@
+{
+  "contractVersion": 1,
+  "targetType": "CANONICAL_PRODUCT_SYSTEM",
+  "targetRef": "syhaigjhsbpjmtnggqka",
+  "observedDeployment": "dpl_47oAM8ChQ8sxCRT8L4T5F7KizTQ7",
+  "observedOn": "2026-07-27",
+  "requirements": [
+    {
+      "relation": "events",
+      "column": "client_event_id",
+      "reason": "Preview process transition queried this column and failed with PostgreSQL 42703."
+    },
+    {
+      "relation": "audit_log",
+      "column": "tenant_id",
+      "reason": "Preview PIN-help receipt insert wrote this column and failed with PostgreSQL 42703."
+    },
+    {
+      "relation": "audit_log",
+      "column": "client_request_id",
+      "reason": "The same tenant-bound audit receipt contract requires a request idempotency key."
+    }
+  ]
+}

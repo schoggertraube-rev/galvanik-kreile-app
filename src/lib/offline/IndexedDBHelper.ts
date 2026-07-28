@@ -1,7 +1,17 @@
 import { createId } from "@paralleldrive/cuid2";
 
 const DB_NAME = "kreile_offline_db";
-const DB_VERSION = 2; // bumped version to clean up old object stores
+const DB_VERSION = 2;
+
+// Offline writes/deletes remain disabled until W3 defines tenant ownership,
+// idempotency and recovery receipts. Existing browser data is preserved.
+function isOfflineQueueContractEnabled(): boolean {
+  return false;
+}
+
+function offlineQueueContractUnavailable(): never {
+  throw new Error("NOT_CONFIGURED: Die lokale Offline-Warteschlange besitzt keinen bestätigten Server-Receipt-Vertrag.");
+}
 
 export interface OfflineAction {
   id: string; // unique cuid
@@ -29,15 +39,15 @@ export const IndexedDBHelper = {
         if (!db.objectStoreNames.contains("write_queue")) {
           db.createObjectStore("write_queue", { keyPath: "id" });
         }
-        // If read_cache exists from V1, delete it to enforce Supabase as source of truth
-        if (db.objectStoreNames.contains("read_cache")) {
-          db.deleteObjectStore("read_cache");
-        }
+        // Do not remove legacy object stores during a repair. They are ignored
+        // by the current application until a reviewed recovery path exists.
       };
     });
   },
 
   async pushToQueue(actionType: OfflineAction["actionType"], payload: unknown): Promise<OfflineAction> {
+    if (!isOfflineQueueContractEnabled()) return offlineQueueContractUnavailable();
+
     const db = await this.getDB();
     const id = createId();
     
@@ -80,6 +90,8 @@ export const IndexedDBHelper = {
   },
 
   async removeFromQueue(id: string): Promise<void> {
+    if (!isOfflineQueueContractEnabled()) return offlineQueueContractUnavailable();
+
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction("write_queue", "readwrite");
@@ -92,6 +104,8 @@ export const IndexedDBHelper = {
   },
 
   async clearQueue(): Promise<void> {
+    if (!isOfflineQueueContractEnabled()) return offlineQueueContractUnavailable();
+
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const transaction = db.transaction("write_queue", "readwrite");

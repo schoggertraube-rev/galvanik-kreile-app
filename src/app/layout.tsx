@@ -52,7 +52,6 @@ import { PermissionsProvider } from "@/lib/auth/PermissionsContext";
 import { AppShortcutProvider } from "@/components/ui/AppShortcutContext";
 import { SyncProvider } from "@/lib/offline/SyncContext";
 import { FeatureFlagProvider } from "@/lib/analytics/useFeatureFlag";
-import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { OrderModalProvider } from "@/components/orders/OrderModalProvider";
 import { ErfassungProvider } from "@/components/erfassung/ErfassungProvider";
 
@@ -66,6 +65,7 @@ export default async function RootLayout({
 }>) {
   const isAdmin = await isAdminOrDeveloper();
   const authState = await getAuthBootstrapState();
+  const showInternalTools = process.env.NODE_ENV !== "production";
 
   return (
     <html
@@ -73,7 +73,6 @@ export default async function RootLayout({
       className={`${fraunces.variable} ${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body>
-        <ServiceWorkerRegister />
         <Suspense fallback={null}>
         <TestpilotProvider isAdmin={isAdmin}>
           <SyncProvider>
@@ -92,8 +91,8 @@ export default async function RootLayout({
                     </FeatureFlagProvider>
                   </AppShortcutProvider>
                 </LicenseProvider>
-                <DiagnosticsWidget />
-                <TestpilotFloatingButton />
+                {showInternalTools && <DiagnosticsWidget />}
+                {showInternalTools && <TestpilotFloatingButton />}
               </DiagnosticsProvider>
             </PermissionsProvider>
           </SyncProvider>

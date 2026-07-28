@@ -1,9 +1,13 @@
 "use server";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 import { checkAppAuth } from "@/lib/server/authHelper";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export async function extractCustomerDataFromFreetext(text: string) {
+  if (!isFoundationAreaEnabled("KI-Anreicherung")) {
+    return foundationUnavailableAction("KI-Anreicherung");
+  }
   const auth = await checkAppAuth("write");
   if (!auth.ok) return { ok: false, error: auth.message };
 
@@ -48,6 +52,9 @@ Freitext: "${text}"
 }
 
 export async function enrichCustomerData(company: string, city: string) {
+  if (!isFoundationAreaEnabled("KI-Anreicherung")) {
+    return foundationUnavailableAction("KI-Anreicherung");
+  }
   const auth = await checkAppAuth("write");
   if (!auth.ok) return { ok: false, error: auth.message };
 

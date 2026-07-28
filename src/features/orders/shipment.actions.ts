@@ -1,12 +1,20 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { foundationUnavailableAction, isFoundationAreaEnabled } from '@/lib/server/foundationGate';
+
+function assertShipmentContract(): void {
+  if (!isFoundationAreaEnabled('Versand und Versandkommunikation')) {
+    foundationUnavailableAction('Versand und Versandkommunikation');
+  }
+}
 
 export async function saveShipmentInfo(params: {
   orderId: string;
   carrier: string;
   trackingNumber: string | null;
 }) {
+  assertShipmentContract();
   const supabase = await createClient();
   const { orderId, carrier, trackingNumber } = params;
 
@@ -90,6 +98,7 @@ export async function sendShippingConfirmation(params: {
   carrier: string;
   trackingNumber: string | null;
 }) {
+  assertShipmentContract();
   const supabase = await createClient();
   const { orderId, carrier, trackingNumber } = params;
 

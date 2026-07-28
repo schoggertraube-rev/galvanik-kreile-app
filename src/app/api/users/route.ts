@@ -1,10 +1,6 @@
-import { NextResponse } from "next/server";
+import { foundationUnavailableResponse } from "@/lib/server/foundationGate";
 
+/** User enumeration must not expose legacy mock identities. */
 export async function GET() {
-  const users = [
-    { id: "1", name: "Meister Kreile", initials: "MK", active: true },
-    { id: "2", name: "Chef-Stellvertreter", initials: "CD", active: true },
-    { id: "3", name: "Büro / Rechnung", initials: "RS", active: true }
-  ];
-  return NextResponse.json(users);
+  return foundationUnavailableResponse("Benutzer-API");
 }

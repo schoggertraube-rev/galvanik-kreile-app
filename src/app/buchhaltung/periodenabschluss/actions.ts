@@ -1,4 +1,5 @@
 'use server'
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 import { createClient } from '@/lib/supabase/server'
 
@@ -16,6 +17,9 @@ export interface PeriodenabschlussStatus {
 }
 
 export async function getPeriodenabschlussStatusAction(): Promise<PeriodenabschlussStatus | null> {
+  if (!isFoundationAreaEnabled("Periodenabschluss")) {
+    return foundationUnavailableAction("Periodenabschluss");
+  }
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_periodenabschluss_status')
@@ -35,6 +39,9 @@ export async function getPeriodenabschlussStatusAction(): Promise<Periodenabschl
 }
 
 export async function runEnergieVerteilungAction(jahr: number, monat: number) {
+  if (!isFoundationAreaEnabled("Periodenabschluss")) {
+    return foundationUnavailableAction("Periodenabschluss");
+  }
   const supabase = await createClient();
   const { error } = await supabase.rpc('fn_verteile_energiekosten', { p_jahr: jahr, p_monat: monat, p_tenant: 'galvanik-kreile' });
   if (error) {
@@ -45,6 +52,9 @@ export async function runEnergieVerteilungAction(jahr: number, monat: number) {
 }
 
 export async function schliessePeriodeAction(periodeId: string) {
+  if (!isFoundationAreaEnabled("Periodenabschluss")) {
+    return foundationUnavailableAction("Periodenabschluss");
+  }
   const supabase = await createClient();
 
   // 1. Serverseitige Blocker-Prüfung
@@ -81,6 +91,9 @@ export async function schliessePeriodeAction(periodeId: string) {
 }
 
 export async function finalSchliessePeriodeAction(periodeId: string) {
+  if (!isFoundationAreaEnabled("Periodenabschluss")) {
+    return foundationUnavailableAction("Periodenabschluss");
+  }
   const supabase = await createClient();
   const { error } = await supabase.from('periode').update({ 
     status: 'final_geschlossen', 

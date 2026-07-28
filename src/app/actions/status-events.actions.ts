@@ -1,10 +1,17 @@
 "use server";
 
 import { createId } from "@paralleldrive/cuid2";
-import { db } from "@/db"; 
+import { db, isDatabaseConfigured } from "@/db";
 import { statusEvents } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
+
+function assertStatusEventContract(): void {
+  if (!isFoundationAreaEnabled("Legacy-Statusereignisse")) {
+    foundationUnavailableAction("Legacy-Statusereignisse");
+  }
+}
 
 export async function createStatusEvent(data: {
   orderId: string;
@@ -16,10 +23,11 @@ export async function createStatusEvent(data: {
   payload?: Record<string, unknown>;
   status?: string;
 }): Promise<ActionResult<Record<string, unknown>>> {
+  assertStatusEventContract();
   const auth = await checkAppAuth("write");
   if (!auth.ok) return auth;
 
-  if (!db) {
+  if (!isDatabaseConfigured()) {
     console.warn("DB not initialized, skipping createStatusEvent");
     return { ok: false, error: "DB_ERROR", message: "Database not available" };
   }
@@ -46,10 +54,11 @@ export async function createStatusEvent(data: {
 }
 
 export async function getStatusEventsByOrderId(orderId: string): Promise<ActionResult<Record<string, unknown>[]>> {
+  assertStatusEventContract();
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   try {
     const data = await db.query.statusEvents.findMany({
       where: eq(statusEvents.orderId, orderId),
@@ -63,10 +72,11 @@ export async function getStatusEventsByOrderId(orderId: string): Promise<ActionR
 }
 
 export async function getStatusEventsByItemId(itemId: string): Promise<ActionResult<Record<string, unknown>[]>> {
+  assertStatusEventContract();
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   try {
     const data = await db.query.statusEvents.findMany({
       where: eq(statusEvents.itemId, itemId),
@@ -80,10 +90,11 @@ export async function getStatusEventsByItemId(itemId: string): Promise<ActionRes
 }
 
 export async function getRecentStatusEvents(limit = 10): Promise<ActionResult<Record<string, unknown>[]>> {
+  assertStatusEventContract();
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
+  if (!isDatabaseConfigured()) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   try {
     const data = await db.query.statusEvents.findMany({
       orderBy: [desc(statusEvents.createdAt)],

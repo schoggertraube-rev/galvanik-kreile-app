@@ -1,8 +1,10 @@
-import { WarendurchlaufCockpitClient } from "./WarendurchlaufCockpitClient";
-import { getWarendurchlaufKPIs } from "./actions";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
-export default async function WarendurchlaufIndex() {
-  const result = await getWarendurchlaufKPIs();
-  const data = result.ok ? result.data : null;
-  return <WarendurchlaufCockpitClient data={data} />;
+export default function WarendurchlaufIndex() {
+  return (
+    <FoundationUnavailable
+      title="Warendurchlauf-Cockpit ist noch nicht freigegeben"
+      reason="Die bisherige Übersicht berechnet Termintreue, Durchlaufzeit und Engpässe aus Ersatzregeln. Die echten Stationsansichten werden separat auf einen transaktionalen Prozesswechsel umgestellt."
+    />
+  );
 }

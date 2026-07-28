@@ -1,8 +1,16 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
+
+function assertDunningContract(): void {
+  if (!isFoundationAreaEnabled("Zahlungserinnerungen und Mahnungen")) {
+    foundationUnavailableAction("Zahlungserinnerungen und Mahnungen");
+  }
+}
 
 export async function sendeZahlungserinnerung(rechnungId: string) {
+  assertDunningContract();
   const supabase = await createClient();
 
   const { data: rechnung, error } = await supabase
@@ -55,6 +63,7 @@ Galvanik Kreile`;
 }
 
 export async function sendeMahnung(rechnungId: string) {
+  assertDunningContract();
   const supabase = await createClient();
 
   const { data: rechnung, error } = await supabase

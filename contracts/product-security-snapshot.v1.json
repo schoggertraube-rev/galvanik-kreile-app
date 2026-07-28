@@ -1,0 +1,573 @@
+{
+  "contractVersion": 1,
+  "targetType": "CANONICAL_PRODUCT_SYSTEM",
+  "targetRef": "syhaigjhsbpjmtnggqka",
+  "capturedOn": "2026-07-28",
+  "scope": "security catalog only; no rows, values, secrets, roles, grants, or mutations",
+  "advisorCounts": {
+    "total": 69,
+    "error": 27,
+    "warn": 31,
+    "info": 11
+  },
+  "rlsDisabledRelations": [
+    {
+      "relation": "aktion",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "attribution",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "einwilligung",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "feedback_eingang",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "feedback_mail",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "forecast_version",
+      "has_tenant_id": true
+    },
+    {
+      "relation": "inventory_items",
+      "has_tenant_id": true
+    },
+    {
+      "relation": "kampagne",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "kanal",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "kosten_posten",
+      "has_tenant_id": true
+    },
+    {
+      "relation": "kostensatz_default",
+      "has_tenant_id": true
+    },
+    {
+      "relation": "kostenstelle",
+      "has_tenant_id": true
+    },
+    {
+      "relation": "kostenstellen_energie_monat",
+      "has_tenant_id": true
+    },
+    {
+      "relation": "lern_metrik",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "marketing_asset",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "marketing_touchpoints",
+      "has_tenant_id": true
+    },
+    {
+      "relation": "periode",
+      "has_tenant_id": true
+    },
+    {
+      "relation": "price_agreements",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "segment",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "statistik_kennzahl",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "teile_klassifikator",
+      "has_tenant_id": true
+    },
+    {
+      "relation": "telemetrie_event",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "touchpoint",
+      "has_tenant_id": false
+    },
+    {
+      "relation": "vorlage_verbrauch",
+      "has_tenant_id": true
+    },
+    {
+      "relation": "vorlage_zeit",
+      "has_tenant_id": true
+    },
+    {
+      "relation": "warning_event",
+      "has_tenant_id": true
+    }
+  ],
+  "alwaysTruePolicies": [
+    {
+      "relation": "app_kvp_items",
+      "policy_name": "service_role_all_app_kvp",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "audit_log",
+      "policy_name": "Allow full access to audit_log",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "bath_measurements",
+      "policy_name": "service_role_bath_measurements",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "baths",
+      "policy_name": "service_role_baths",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "beleg",
+      "policy_name": "beleg_all",
+      "roles": "{authenticated}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "beleg_position",
+      "policy_name": "beleg_position_all",
+      "roles": "{authenticated}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "bh_audit_log",
+      "policy_name": "bh_audit_log_insert",
+      "roles": "{authenticated}",
+      "command": "INSERT",
+      "qual": null,
+      "with_check": "true"
+    },
+    {
+      "relation": "bh_audit_log",
+      "policy_name": "bh_audit_log_select",
+      "roles": "{authenticated}",
+      "command": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "relation": "bh_einstellungen",
+      "policy_name": "bh_einstellungen_all",
+      "roles": "{authenticated}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "business_kvp_items",
+      "policy_name": "service_role_all_business_kvp",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "calendar_events",
+      "policy_name": "allow_all_calendar_events",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "calendar_events",
+      "policy_name": "service_role_all_calendar_events",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "communication_drafts",
+      "policy_name": "Enable all for authenticated users",
+      "roles": "{authenticated}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "relation": "communication_messages",
+      "policy_name": "service_role_all_communication_messages",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "communication_threads",
+      "policy_name": "service_role_all_communication_threads",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "consumable_uses",
+      "policy_name": "service_role_all_consumable_uses",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "cost_positions",
+      "policy_name": "service_role_all_cost_positions",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "customers",
+      "policy_name": "service_role_customers",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "devices",
+      "policy_name": "service_role_all_devices",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "email_templates",
+      "policy_name": "email_templates_all",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "export_lauf",
+      "policy_name": "export_lauf_all",
+      "roles": "{authenticated}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "feature_flags",
+      "policy_name": "Allow full access to feature_flags",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "feedback_notes",
+      "policy_name": "service_role_all_feedback_notes",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "import_job_rows",
+      "policy_name": "Allow full access to import_job_rows",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "import_jobs",
+      "policy_name": "Allow full access to import_jobs",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "inquiries",
+      "policy_name": "auth_all_inquiries",
+      "roles": "{authenticated}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "inquiries",
+      "policy_name": "public_all_inquiries_final",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "invoices",
+      "policy_name": "service_role_all_invoices",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "items",
+      "policy_name": "public_all_items_final",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "items",
+      "policy_name": "service_role_items",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "kategorie",
+      "policy_name": "kategorie_all",
+      "roles": "{authenticated}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "kostenposten",
+      "policy_name": "Allow all actions for public",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "kpi_cost_assumptions",
+      "policy_name": "service_role_all_kpi_cost_assumptions",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "kpi_snapshots",
+      "policy_name": "analyse_read",
+      "roles": "{public}",
+      "command": "SELECT",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "relation": "kraftstoff_detail",
+      "policy_name": "kraftstoff_detail_all",
+      "roles": "{authenticated}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "kvp_items",
+      "policy_name": "Enable all for public on kvp_items",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "relation": "licenses",
+      "policy_name": "service_role_all_licenses",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "lieferant",
+      "policy_name": "lieferant_all",
+      "roles": "{authenticated}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "offline_outbox",
+      "policy_name": "Enable all for authenticated users",
+      "roles": "{authenticated}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "relation": "order_cost_events",
+      "policy_name": "service_role_all_order_cost_events",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "order_cost_positions",
+      "policy_name": "Enable all for authenticated users",
+      "roles": "{authenticated}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": null
+    },
+    {
+      "relation": "order_financials",
+      "policy_name": "service_role_all_order_financials",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "orders",
+      "policy_name": "public_all_orders_final",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "orders",
+      "policy_name": "service_role_orders",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "payments",
+      "policy_name": "payments_all",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "payments",
+      "policy_name": "service_role_all_payments",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "phone_notes",
+      "policy_name": "service_role_all_phone_notes",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "price_lines",
+      "policy_name": "price_lines_all",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "scan_uploads",
+      "policy_name": "scan_uploads_service_role_all",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "shipments",
+      "policy_name": "service_role_all_shipments",
+      "roles": "{service_role}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "steuerprofil",
+      "policy_name": "Allow all actions for public",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "steuerprofil",
+      "policy_name": "steuerprofil_all",
+      "roles": "{authenticated}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "ustva_periode",
+      "policy_name": "ustva_periode_all",
+      "roles": "{authenticated}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    },
+    {
+      "relation": "zahlung",
+      "policy_name": "Allow all actions for public",
+      "roles": "{public}",
+      "command": "ALL",
+      "qual": "true",
+      "with_check": "true"
+    }
+  ],
+  "securityDefinerViews": [
+    {
+      "relation": "v_auftrag_db",
+      "relkind": "v",
+      "has_default_view_options": true
+    }
+  ],
+  "rlsEnabledNoPolicyRelations": [
+    "ai_usage_reservations",
+    "app_usage_events",
+    "app_users",
+    "developer_feedback",
+    "item_photo_jobs",
+    "item_photos",
+    "locations",
+    "operator_control_events",
+    "security_rate_limit_counters",
+    "stock_movements",
+    "tenant_operator_controls"
+  ]
+}

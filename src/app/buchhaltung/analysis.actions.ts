@@ -1,4 +1,5 @@
 'use server';
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 import { db } from '@/db';
 import { ausgangsrechnung, beleg } from '@/db/schema_buchhaltung';
@@ -6,6 +7,9 @@ import { and, gte, lte, ne } from 'drizzle-orm';
 import { generateInsight } from '@/lib/analyse/insights';
 
 export async function getUstvaAnalysisAction(von: string, bis: string) {
+  if (!isFoundationAreaEnabled("Buchhaltungsanalyse")) {
+    return foundationUnavailableAction("Buchhaltungsanalyse");
+  }
   // Aktueller Monat
   const rechnungen = await db.select({ netto: ausgangsrechnung.netto, ustBetrag: ausgangsrechnung.ustBetrag, ustSatz: ausgangsrechnung.ustSatz })
     .from(ausgangsrechnung)
@@ -72,6 +76,9 @@ export async function getUstvaAnalysisAction(von: string, bis: string) {
 }
 
 export async function getKraftstoffAnalysisAction(von: string, bis: string) {
+  if (!isFoundationAreaEnabled("Buchhaltungsanalyse")) {
+    return foundationUnavailableAction("Buchhaltungsanalyse");
+  }
   // Wir holen alle Belege, die mit Kraftstoff verknüpft sind (einfacher Join)
   const { kraftstoffDetail, kategorie } = await import('@/db/schema_buchhaltung');
   const { eq, sum } = await import('drizzle-orm');
@@ -141,6 +148,9 @@ export async function getKraftstoffAnalysisAction(von: string, bis: string) {
 }
 
 export async function getOffenePostenAnalysisAction(von: string, bis: string) {
+  if (!isFoundationAreaEnabled("Buchhaltungsanalyse")) {
+    return foundationUnavailableAction("Buchhaltungsanalyse");
+  }
   const { and, gte, lte, ne, eq } = await import('drizzle-orm');
   const raw = await db.select({
     id: ausgangsrechnung.id,
@@ -189,6 +199,9 @@ export async function getOffenePostenAnalysisAction(von: string, bis: string) {
 }
 
 export async function getBwaAnalysisAction(von: string, bis: string) {
+  if (!isFoundationAreaEnabled("Buchhaltungsanalyse")) {
+    return foundationUnavailableAction("Buchhaltungsanalyse");
+  }
   const { and, gte, lte, ne } = await import('drizzle-orm');
   
   const rechnungen = await db.select({ netto: ausgangsrechnung.netto }).from(ausgangsrechnung)
@@ -240,6 +253,9 @@ export async function getBwaAnalysisAction(von: string, bis: string) {
 }
 
 export async function getAusgabenAnalysisAction(von: string, bis: string) {
+  if (!isFoundationAreaEnabled("Buchhaltungsanalyse")) {
+    return foundationUnavailableAction("Buchhaltungsanalyse");
+  }
   const { kostenposten } = await import('@/db/schema_buchhaltung');
   const { and, gte, lte, ne } = await import('drizzle-orm');
 
@@ -305,6 +321,9 @@ export async function getAusgabenAnalysisAction(von: string, bis: string) {
 }
 
 export async function getSparzaehlerAnalysisAction(von: string, bis: string) {
+  if (!isFoundationAreaEnabled("Buchhaltungsanalyse")) {
+    return foundationUnavailableAction("Buchhaltungsanalyse");
+  }
   const { and, gte, lte, ne } = await import('drizzle-orm');
   // removed einkauf import
   
@@ -370,6 +389,9 @@ export async function getSparzaehlerAnalysisAction(von: string, bis: string) {
 }
 
 export async function getAusgabenKategorien() {
+  if (!isFoundationAreaEnabled("Buchhaltungsanalyse")) {
+    return foundationUnavailableAction("Buchhaltungsanalyse");
+  }
   const { sql, eq } = await import('drizzle-orm');
   const { beleg, kategorie } = await import('@/db/schema_buchhaltung');
 

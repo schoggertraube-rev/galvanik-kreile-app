@@ -1,5 +1,6 @@
 "use client";
 import { usePageView } from "@/hooks/usePageView";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 import Link from "next/link";
 import { pruefeFristen } from "@/lib/buchhaltung/regeln";
 import { ChevronRight, Calendar, CalendarClock, Truck, Phone, Users, Globe, Info, ReceiptText } from "lucide-react";
@@ -64,6 +65,10 @@ const TERMIN_QUELLEN = [
 ];
 
 export default function KalenderPage() {
+  return <FoundationUnavailable title="Kalenderdaten nicht freigegeben" reason="Die frühere Kalenderansicht bestand aus festen Terminen und Beträgen. Bis eine belegte Fristen- und Kalenderquelle angebunden ist, wird kein Terminstatus behauptet." returnHref="/" returnLabel="Zur Startseite" />;
+}
+
+function KalenderLegacyPage() {
   usePageView();
   const fristenHinweise = pruefeFristen();
 

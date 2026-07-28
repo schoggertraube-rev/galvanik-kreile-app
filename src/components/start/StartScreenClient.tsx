@@ -6,12 +6,12 @@ import { Delete, Clock, Wrench, Calculator, Sun } from "lucide-react";
 import { getGreeting } from "@/lib/greeting";
 import { EmailLoginDialog } from "@/components/start/EmailLoginDialog";
 import { useSearchParams } from "next/navigation";
-import { getTodayTopPriority, getFeierabendEvents, notifyAdminPinReset } from "@/app/actions/start.actions";
+import { getTodayTopPriority, getFeierabendEvents } from "@/app/actions/start.actions";
 import { loginWithPin } from "@/app/actions/auth.actions";
 import type { StartUserDto } from "@/lib/auth/userDtos";
 
 // Asynchronous weather card fetching directly from Open-Meteo
-function WeatherCard() {
+function WeatherCardLegacyUnsafe() {
   const [weatherText, setWeatherText] = useState("");
   const [temperature, setTemperature] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -108,7 +108,13 @@ function WeatherCard() {
   );
 }
 
-import { initializeDemoIfNeeded } from "@/app/actions/demoSetup";
+function WeatherCard() {
+  return (
+    <aside className="absolute right-6 top-6 w-[320px] rounded-2xl border border-amber-500/30 bg-amber-50 p-5 text-sm text-amber-900" role="status">
+      Wetter- und Veranstaltungshinweise sind ohne einen geprüften Datenvertrag nicht freigegeben.
+    </aside>
+  );
+}
 
 // PIN Dialog Component
 function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void }) {
@@ -126,30 +132,10 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
       setIsInitializing(true);
 
       try {
-        const res = await loginWithPin(user.id, newPin);
+        const res = await loginWithPin(user.loginSelector, newPin);
 
         if (res.ok) {
-          // Setup / Initialisierung nur im echten Demo-Modus
-          if (process.env.NEXT_PUBLIC_DEMO_MODE === "true" && !localStorage.getItem("setup_done")) {
-            try {
-              const initRes = await initializeDemoIfNeeded();
-              if (initRes?.initialized || initRes?.reason === "data_exists" || initRes?.reason === "not_supabase") {
-                localStorage.setItem("setup_done", "true");
-              }
-            } catch (e) {
-              console.warn("Demo setup failed", e);
-            }
-          }
-
-          // UI state in localStorage (not auth relevant)
-          try {
-            localStorage.setItem("kreile_user_role", res.role || user.role);
-            localStorage.setItem("kreile_user_initials", user.initials);
-          } catch (e) {
-            console.warn("localStorage is blocked, skipping user info storage", e);
-          }
-
-          // Redirect to home
+          // The server-created session is the only source of identity and role.
           window.location.href = "/";
         } else {
           setError(true);
@@ -199,13 +185,6 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
           <button onClick={onClose} className="text-text-muted hover:text-navy-900 text-2xl leading-none cursor-pointer" disabled={isInitializing}>×</button>
         </div>
 
-        {isInitializing && process.env.NEXT_PUBLIC_DEMO_MODE === "true" && !localStorage.getItem("setup_done") && (
-          <div className="bg-accent-orange/10 px-6 py-3 border-b border-accent-orange/20 flex flex-col items-center justify-center">
-             <span className="text-sm font-semibold text-accent-orange animate-pulse">Beispieldaten werden vorbereitet...</span>
-             <span className="text-xs text-text-muted text-center mt-1">Dieser Vorgang dauert einen Moment.</span>
-          </div>
-        )}
-
         {/* PIN Dots */}
         <div className="flex justify-center gap-4 py-7">
           {[0, 1, 2, 3].map((i) => (
@@ -219,14 +198,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
         </div>
         {error && (
           <p className="text-center text-danger-red text-xs font-semibold -mt-4 mb-3">
-            Falscher PIN. <button onClick={async () => {
-              const res = await notifyAdminPinReset(user.id, user.fullName);
-              if (res.success) {
-                alert("Der Administrator wurde benachrichtigt und wird sich bei Ihnen melden.");
-              } else {
-                alert("Fehler beim Benachrichtigen des Administrators. Bitte sprechen Sie ihn direkt an.");
-              }
-            }} className="underline hover:text-danger-red/80">Administrator kontaktieren</button>
+            Falscher PIN. Bitte den Administrator direkt kontaktieren.
           </p>
         )}
 
@@ -266,13 +238,10 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
 
 import { Suspense } from "react";
 
-function StartScreenContent({ users }: { users: StartUserDto[] }) {
+function StartScreenContent({ users, usersLoadError }: { users: StartUserDto[]; usersLoadError: string | null }) {
   const [selectedUser, setSelectedUser] = useState<StartUserDto | null>(null);
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [greetingInfo, setGreetingInfo] = useState({ text: "Guten Morgen, Meister!", emoji: "👋" });
-  const [priorityTask, setPriorityTask] = useState<string | null>(null);
-  const [deadlineTime, setDeadlineTime] = useState<string>("11:30");
-  const [isEvening, setIsEvening] = useState(false);
 
   const searchParams = useSearchParams();
   const errorMessage = searchParams?.get("message");
@@ -283,26 +252,6 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
     };
     updateGreeting();
     const id = setInterval(updateGreeting, 60000);
-
-    // Fetch dynamic task priority
-    const fetchTask = async () => {
-      try {
-        const res = await getTodayTopPriority();
-        if (res && res.taskText) {
-          setPriorityTask(res.taskText);
-        }
-        // Calculate dynamic deadline (e.g. current hour + 2)
-        const d = new Date();
-        const currentHour = d.getHours();
-        const nextHour = currentHour + 2;
-        const formattedHour = Math.min(nextHour, 23).toString().padStart(2, "0");
-        setDeadlineTime(`${formattedHour}:00`);
-        setIsEvening(currentHour >= 16);
-      } catch (e) {
-        console.error("Failed to fetch priority task", e);
-      }
-    };
-    fetchTask();
 
     return () => clearInterval(id);
   }, []);
@@ -329,7 +278,7 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
         </h2>
       </div>
 
-      {/* Clock notice card / Priority job */}
+      {/* Priority is intentionally not inferred before authentication. */}
       <div className="w-full max-w-xl mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-200 fill-mode-both">
         <div className="bg-white rounded-[24px] border border-neutral-gray-100 shadow-card px-6 py-5 flex items-center justify-between gap-4 hover:shadow-md transition-shadow">
           <div className="flex items-center gap-4">
@@ -337,12 +286,8 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
               <Clock className="w-6 h-6 text-gold-600" strokeWidth={1.5} />
             </div>
             <div>
-              <p className="font-bold text-navy-900 text-sm md:text-base leading-snug">
-                Zuerst steht an: <span className="font-extrabold text-navy-900">{priorityTask || "Lade Aufgaben..."}</span>
-              </p>
-              <p className="text-xs md:text-sm text-text-muted mt-1 leading-relaxed">
-                Wenn das bis <span className="text-accent-orange font-bold">{deadlineTime} Uhr</span> erledigt ist, {isEvening ? "starten wir morgen entspannt in den Tag." : "bleibt der Nachmittag entspannt."}
-              </p>
+              <p className="font-bold text-navy-900 text-sm md:text-base leading-snug">Tagespriorität noch nicht freigegeben</p>
+              <p className="text-xs md:text-sm text-text-muted mt-1 leading-relaxed">Vor dem Login zeigt die App keine Auftragsinhalte, Fristen oder erfundenen Prioritäten an.</p>
             </div>
           </div>
           <svg viewBox="0 0 24 24" fill="none" stroke="#B8923F" strokeWidth="2" className="w-5 h-5 shrink-0 ml-2">
@@ -354,10 +299,10 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
       {/* User Avatar Kacheln */}
       <div className="flex gap-5 md:gap-7 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-300 fill-mode-both overflow-x-auto pb-4 snap-x">
         {users.map((user) => {
-          const Icon = user.role === "buero" ? Calculator : Wrench;
+          const Icon = user.loginKind === "office" ? Calculator : Wrench;
           return (
             <button
-              key={user.id}
+              key={user.loginSelector}
               onClick={() => setSelectedUser(user)}
               className="w-[220px] h-[260px] shrink-0 snap-center bg-bg-app-soft rounded-[28px] border border-neutral-gray-100 shadow-card hover:shadow-md hover:-translate-y-1 transition-all duration-300 active:scale-95 flex flex-col items-center justify-center gap-6 p-6 group cursor-pointer"
             >
@@ -381,6 +326,16 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
             {errorMessage}
           </p>
         )}
+        {usersLoadError && (
+          <p className="text-sm text-danger-red font-bold bg-danger-red/10 px-4 py-2 rounded-xl mb-2">
+            {usersLoadError}
+          </p>
+        )}
+        {!usersLoadError && users.length === 0 && (
+          <p className="text-sm text-text-muted font-medium">
+            Für diesen Mandanten ist kein PIN-Benutzer freigegeben.
+          </p>
+        )}
         <button
           onClick={() => setShowEmailLogin(true)}
           className="text-xs text-text-muted hover:text-navy-900 font-bold uppercase tracking-wider transition-colors cursor-pointer"
@@ -388,30 +343,6 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
           Administrator / E-Mail Login
         </button>
 
-        {/* Robust Tablet Test Login */}
-        <button
-          onClick={() => {
-            try {
-              alert("Button wurde geklickt!"); // DEBUG
-              localStorage.setItem("kreile_user_role", "werkstatt");
-              localStorage.setItem("kreile_user_initials", "CD");
-              const isHttps = window.location.protocol === "https:";
-
-              // WARNING: Demo Cookies (bypass-auth, kreile_role) are no longer used for secure auth.
-              // They are still set here for the tablet test login fallback, but checkAppAuth will reject them in production.
-              document.cookie = `bypass-auth=true; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-              document.cookie = `kreile_role=werkstatt; path=/; max-age=31536000; SameSite=Lax${isHttps ? "; Secure" : ""}`;
-
-              window.location.href = "/";
-            } catch (err: unknown) {
-              alert("Fehler beim Login: " + (err as Error).message);
-            }
-          }}
-          className="mt-4 px-6 py-2 bg-neutral-gray-100 hover:bg-neutral-gray-200 text-navy-900 text-sm font-bold rounded-full transition-colors cursor-pointer flex items-center gap-2"
-        >
-          <span className="w-2 h-2 rounded-full bg-accent-orange animate-pulse"></span>
-          Tablet Test-Login (Werkstatt)
-        </button>
       </div>
 
       {selectedUser && (
@@ -425,7 +356,7 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
   );
 }
 
-export function StartScreenClient({ users }: { users: StartUserDto[] }) {
+export function StartScreenClient({ users, usersLoadError }: { users: StartUserDto[]; usersLoadError: string | null }) {
   usePageView();
   return (
     <Suspense fallback={
@@ -433,7 +364,7 @@ export function StartScreenClient({ users }: { users: StartUserDto[] }) {
         <div className="text-text-muted font-bold animate-pulse text-lg">Lade Startbildschirm...</div>
       </div>
     }>
-      <StartScreenContent users={users} />
+      <StartScreenContent users={users} usersLoadError={usersLoadError} />
     </Suspense>
   );
 }

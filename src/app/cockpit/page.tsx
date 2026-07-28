@@ -1,9 +1,11 @@
 import { getCurrentRole } from "@/lib/auth/roles";
 import { CockpitClient } from "./CockpitClient";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 export const dynamic = "force-dynamic";
 
 export default async function CockpitPage() {
+  return <FoundationUnavailable title="Inhaber-Cockpit nicht freigegeben" reason="Finanz-, Engpass- und Warnungsdaten dieses Cockpits haben noch keinen tenant- und view-gesicherten Datenvertrag. Bis dahin werden keine Kennzahlen oder Schreibaktionen behauptet." returnHref="/" returnLabel="Zur Startseite" />;
   const role = await getCurrentRole();
   const normalizedRole = role?.toLowerCase();
   

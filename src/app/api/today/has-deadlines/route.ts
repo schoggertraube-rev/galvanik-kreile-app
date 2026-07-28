@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { foundationUnavailableResponse } from "@/lib/server/foundationGate";
 
+/** Deadline status needs a canonical order and due-date contract. */
 export async function GET() {
-  return NextResponse.json({ hasDeadlines: true });
+  return foundationUnavailableResponse("Tagesfristen");
 }

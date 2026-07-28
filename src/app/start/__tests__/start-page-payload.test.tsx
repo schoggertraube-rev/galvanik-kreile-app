@@ -1,10 +1,13 @@
 import React from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+
 import type { StartUserDto } from "@/lib/auth/userDtos";
 
 const mockWhere = vi.fn();
+const mockCreatePinLoginSelector = vi.fn();
 const capturedUsers: StartUserDto[][] = [];
+const capturedErrors: Array<string | null> = [];
 
 vi.mock("@/db", () => ({
   db: {
@@ -21,19 +24,27 @@ vi.mock("@/db/schema", () => ({
     id: "id",
     fullName: "full_name",
     role: "role",
+    tenantId: "tenant_id",
     active: "active",
   },
 }));
 
 vi.mock("drizzle-orm", () => ({
+  and: vi.fn(),
   eq: vi.fn(),
 }));
 
+vi.mock("@/lib/server/pinLoginSelector", () => ({
+  createPinLoginSelector: mockCreatePinLoginSelector,
+}));
+
 vi.mock("@/components/start/StartScreenClient", () => ({
-  StartScreenClient: ({ users }: { users: StartUserDto[] }) => {
+  StartScreenClient: ({ users, usersLoadError }: { users: StartUserDto[]; usersLoadError: string | null }) => {
     capturedUsers.push(users);
+    capturedErrors.push(usersLoadError);
     return React.createElement("div", {
       "data-users": JSON.stringify(users),
+      "data-error": usersLoadError ?? "",
     });
   },
 }));
@@ -42,9 +53,11 @@ describe("StartPage payload sanitization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     capturedUsers.length = 0;
+    capturedErrors.length = 0;
+    mockCreatePinLoginSelector.mockImplementation((id: string) => `opaque-selector-${id === "user-1" ? "one" : "two"}`);
   });
 
-  it("keeps pinHash, PIN values, and auth secrets out of the anonymous start payload", async () => {
+  it("keeps identifiers, names, PIN values, and auth secrets out of the anonymous start payload", async () => {
     mockWhere.mockResolvedValue([
       {
         id: "user-1",
@@ -69,23 +82,26 @@ describe("StartPage payload sanitization", () => {
 
     expect(capturedUsers[0]).toEqual([
       {
-        id: "user-1",
-        fullName: "Max Mustermann",
-        role: "werkstatt",
+        loginSelector: "opaque-selector-one",
         initials: "MM",
+        loginKind: "workshop",
       },
     ]);
+    expect(capturedErrors).toEqual([null]);
 
-    expect(payload).not.toContain("pinHash");
-    expect(payload).not.toContain("1234");
-    expect(payload).not.toContain("9999");
-    expect(payload).not.toContain("password");
-    expect(payload).not.toContain("authSecret");
-    expect(payload).not.toContain("service-role-secret");
+    for (const forbidden of ["user-1", "Max Mustermann", "pinHash", "1234", "9999", "password", "authSecret", "service-role-secret"]) {
+      expect(payload).not.toContain(forbidden);
+      expect(html).not.toContain(forbidden);
+    }
+  });
 
-    expect(html).not.toContain("pinHash");
-    expect(html).not.toContain("1234");
-    expect(html).not.toContain("9999");
-    expect(html).not.toContain("service-role-secret");
+  it("does not invent a fallback administrator when the user source is unavailable", async () => {
+    mockWhere.mockRejectedValue(new Error("source unavailable"));
+
+    const { default: StartPage } = await import("@/app/start/page");
+    renderToStaticMarkup(await StartPage());
+
+    expect(capturedUsers.at(-1)).toEqual([]);
+    expect(capturedErrors.at(-1)).toMatch(/nicht geladen/i);
   });
 });

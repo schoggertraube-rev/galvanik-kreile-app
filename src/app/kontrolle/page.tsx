@@ -1,13 +1,12 @@
-import { hasPermission } from "@/lib/auth/permissions";
-import { KontrolleDashboardClient } from "./KontrolleDashboardClient";
-import { getQsListenAction } from "./actions";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 export const dynamic = "force-dynamic";
 
-export default async function KontrollePage() {
-  const isDevOrAdmin = await hasPermission("perm_op_qa");
-  const qsResult = await getQsListenAction();
-  const qsData = qsResult.ok ? qsResult.data : [];
-
-  return <KontrolleDashboardClient isDevOrAdmin={isDevOrAdmin} qsData={qsData} />;
+export default function KontrollePage() {
+  return (
+    <FoundationUnavailable
+      title="Qualitätskontrolle ist noch nicht freigegeben"
+      reason="Die benötigte QS-Relation ist im Produkt-Schema nicht vorhanden. Der bisherige Bildschirm hätte leere Daten als fehlende Qualitätsmängel ausgelegt."
+    />
+  );
 }

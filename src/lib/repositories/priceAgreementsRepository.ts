@@ -16,8 +16,15 @@ export type PriceAgreement = {
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
+function isPriceAgreementsRepositoryEnabled(): boolean {
+  return false;
+}
+
 export const priceAgreementsRepository = {
   async getAll(): Promise<PriceAgreement[]> {
+    if (!isPriceAgreementsRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Preisvereinbarungen benötigen einen geprüften Mandantenvertrag.");
+    }
     if (!isSupabase) return [];
     
     const supabase = createClient();
@@ -43,6 +50,9 @@ export const priceAgreementsRepository = {
   },
 
   async getByCustomer(customerId: string): Promise<PriceAgreement[]> {
+    if (!isPriceAgreementsRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Preisvereinbarungen benötigen einen geprüften Mandantenvertrag.");
+    }
     if (!isSupabase) return [];
     
     const supabase = createClient();

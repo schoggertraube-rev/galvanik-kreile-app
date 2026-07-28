@@ -1,12 +1,11 @@
 export type StartUserDto = {
-  id: string;
+  loginSelector: string;
   initials: string;
-  role: string;
-  fullName: string;
+  loginKind: "office" | "workshop";
 };
 
 export type StartUserSource = {
-  id: string;
+  selector: string;
   fullName: string;
   role: string;
 };
@@ -39,10 +38,9 @@ export function deriveUserInitials(fullName: string): string {
 
 export function toStartUserDto(user: StartUserSource): StartUserDto {
   return {
-    id: user.id,
-    fullName: user.fullName,
-    role: user.role,
+    loginSelector: user.selector,
     initials: deriveUserInitials(user.fullName),
+    loginKind: user.role === "buero" || user.role === "office" ? "office" : "workshop",
   };
 }
 

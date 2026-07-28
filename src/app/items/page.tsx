@@ -1,6 +1,7 @@
 "use client";
 
 import { usePageView } from "@/hooks/usePageView";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,10 @@ import { trackUiEvent } from "@/lib/tracking/tracking";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 
 export default function ItemsPage() {
+  return <FoundationUnavailable title="Lagerverwaltung nicht freigegeben" reason="Bestands- und Bewegungsdaten haben noch keinen tenant- und transaktionsgesicherten Serververtrag. Deshalb sind keine Lagerstände oder Buchungen verfügbar." returnHref="/" returnLabel="Zur Startseite" />;
+}
+
+function ItemsLegacyPage() {
   usePageView();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterCategory, setFilterCategory] = useState<string>("all");

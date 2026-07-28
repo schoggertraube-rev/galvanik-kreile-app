@@ -1,6 +1,10 @@
 import { logUiEvent } from "@/app/actions/tracking.actions";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 
+function isTelemetryContractEnabled(): boolean {
+  return false;
+}
+
 export type UiEventName =
   | "nav_click"
   | "overlay_open"
@@ -11,6 +15,9 @@ export type UiEventName =
   | "search";
 
 export function trackUiEvent(eventName: UiEventName, payload?: Record<string, unknown>) {
+  if (!isTelemetryContractEnabled()) {
+    return;
+  }
   // Lokales Debugging
   console.log(`[Tracking] Event: ${eventName}`, payload || {});
 

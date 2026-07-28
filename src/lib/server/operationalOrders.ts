@@ -1,28 +1,46 @@
-import { db } from "@/db";
+import { db, isDatabaseConfigured } from "@/db";
 import { orders, customers, items } from "@/db/schema";
 import { eq, desc, and, notInArray, notIlike, sql, inArray } from "drizzle-orm";
+import { foundationUnavailableAction, isFoundationAreaEnabled } from "@/lib/server/foundationGate";
 
 // Short-lived in-memory cache (5 seconds) — prevents parallel duplicate DB calls
 // during a single page render without blocking real-time updates.
-let _ordersCache: { data: Awaited<ReturnType<typeof _fetchAndMap>>; ts: number } | null = null;
+const _ordersCache = new Map<string, { data: Awaited<ReturnType<typeof _fetchAndMap>>; ts: number }>();
 const CACHE_TTL_MS = 5_000;
 
 export function invalidateOperationalOrdersCache() {
-  _ordersCache = null;
+  _ordersCache.clear();
 }
 
-export async function getOperationalOrders() {
+export async function getOperationalOrders(tenantId: string) {
+  if (!tenantId) throw new Error("Tenant context is required for operational orders");
   const now = Date.now();
-  if (_ordersCache && now - _ordersCache.ts < CACHE_TTL_MS) {
-    return _ordersCache.data;
+  const cached = _ordersCache.get(tenantId);
+  if (cached && now - cached.ts < CACHE_TTL_MS) {
+    return cached.data;
   }
-  const data = await _fetchAndMap();
-  _ordersCache = { data, ts: now };
+  const data = await _fetchAndMap(tenantId);
+  _ordersCache.set(tenantId, { data, ts: now });
   return data;
 }
 
-async function _fetchAndMap() {
-  if (!db) throw new Error("Database not available");
+function toIsoString(value: Date | string | null | undefined): string | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+function formatDueDate(dueDate: string | undefined): string {
+  if (!dueDate) return "nicht hinterlegt";
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(dueDate));
+}
+
+async function _fetchAndMap(tenantId: string) {
+  if (!isDatabaseConfigured()) throw new Error("Database not available");
 
   const results = await db
     .select({
@@ -37,13 +55,20 @@ async function _fetchAndMap() {
       currentStationId: orders.currentStationId,
       intakeDate: orders.intakeDate,
       dueDate: orders.dueDate,
+      completedDate: orders.completedDate,
       createdAt: orders.createdAt,
     })
     .from(orders)
-    .leftJoin(customers, eq(customers.id, orders.customerId))
+    .leftJoin(
+      customers,
+      and(
+        eq(customers.id, orders.customerId),
+        eq(customers.tenantId, tenantId),
+      ),
+    )
     .where(
       and(
-        eq(orders.tenantId, "galvanik-kreile"),
+        eq(orders.tenantId, tenantId),
         notInArray(
           sql`coalesce(${orders.source}, 'manual')`,
           ["seed", "test", "demo", "integration-test"]
@@ -60,13 +85,15 @@ async function _fetchAndMap() {
     ? await db
         .select()
         .from(items)
-        .where(and(eq(items.tenantId, "galvanik-kreile"), inArray(items.orderId, orderIds)))
+        .where(and(eq(items.tenantId, tenantId), inArray(items.orderId, orderIds)))
     : [];
 
   return results.map((o) => {
     const orderParts = allParts.filter((p) => p.orderId === o.id);
-    const intakeDate = o.intakeDate ? new Date(o.intakeDate).toISOString() : (o.createdAt ? new Date(o.createdAt).toISOString() : new Date().toISOString());
-    const dueDate = o.dueDate ? new Date(o.dueDate).toISOString() : new Date(new Date(intakeDate).getTime() + 10 * 24 * 60 * 60 * 1000).toISOString();
+    const intakeDate = toIsoString(o.intakeDate);
+    const dueDate = toIsoString(o.dueDate);
+    const completedDate = toIsoString(o.completedDate);
+    const risk = typeof o.risk === "string" && o.risk.trim() ? o.risk : "unknown";
 
     return {
       id: o.id,
@@ -76,38 +103,37 @@ async function _fetchAndMap() {
       title: o.title,
       task: o.task,
       itemDescription: o.task || (orderParts.length > 0 ? orderParts[0].name : null),
-      surfaceRequested: orderParts.length > 0 ? (orderParts[0] as any).surfaceRequested || (orderParts[0] as any).finish || null : null,
-      station: o.currentStationId || "wareneingang",
+      surfaceRequested: orderParts[0]?.surfaceRequested ?? null,
+      station: o.currentStationId || "unzugeordnet",
       status: o.status,
-      risk: o.risk || "green",
-      currentStationId: o.currentStationId || "wareneingang",
+      risk,
+      currentStationId: o.currentStationId || "unzugeordnet",
       parts: orderParts,
       intakeDate,
       dueDate,
-      dueLabel: "Fällig in",
-      dueValue: "10 Tagen",
+      completedDate,
+      dueLabel: dueDate ? "Fällig am" : "Termin",
+      dueValue: formatDueDate(dueDate),
       createdAt: o.createdAt?.toISOString(),
     };
   });
 }
 
-export async function getOperationalOrdersByStation(stationId: string) {
-  const all = await getOperationalOrders();
+export async function getOperationalOrdersByStation(tenantId: string, stationId: string) {
+  const all = await getOperationalOrders(tenantId);
   return all.filter((o) => o.currentStationId === stationId);
 }
 
-export async function getOperationalOrdersReadyForStation(stationId: string) {
-  const all = await getOperationalOrders();
-  // Galvanik expects orders that are still in wareneingang and not blocked
-  if (stationId === "galvanik" || stationId === "beschichtung") {
-    return all.filter((o) => o.currentStationId === "wareneingang" && o.status !== "blocked");
-  }
-  // Generic fallback if not galvanik
-  return all.filter((o) => o.currentStationId === "wareneingang" && o.status !== "blocked");
+export async function getOperationalOrdersReadyForStation(tenantId: string, stationId: string) {
+  const all = await getOperationalOrders(tenantId);
+  const canonicalStationId = stationId === "beschichtung" ? "galvanik" : stationId;
+  // "Bereit" is an actual process state at the requested station. Never
+  // infer readiness from a different station or from "not blocked".
+  return all.filter((o) => o.currentStationId === canonicalStationId && o.status === "ready");
 }
 
-export async function getOperationalOrdersForCustomer(customerId: string) {
-  const all = await getOperationalOrders();
+export async function getOperationalOrdersForCustomer(tenantId: string, customerId: string) {
+  const all = await getOperationalOrders(tenantId);
   return all.filter((o) => o.customerId === customerId);
 }
 
@@ -117,8 +143,12 @@ import { createId } from "@paralleldrive/cuid2";
 import { events } from "@/db/schema";
 import { like } from "drizzle-orm";
 
-export async function createOperationalOrderService(data: Record<string, unknown>, actorId?: string) {
-  if (!db) throw new Error("Database not available");
+async function createOperationalOrderServiceLegacyUnsafe(data: Record<string, unknown>, actorId?: string) {
+  if (!isFoundationAreaEnabled("Legacy-Auftragserfassung")) {
+    return foundationUnavailableAction("Legacy-Auftragserfassung");
+  }
+
+  if (!isDatabaseConfigured()) throw new Error("Database not available");
 
   const { orderSchema } = await import("@/lib/validation/orderSchema");
   const parsed = orderSchema.safeParse(data);
@@ -187,7 +217,7 @@ export async function createOperationalOrderService(data: Record<string, unknown
         name: p.name,
         quantity: typeof p.quantity === "number" ? p.quantity : parseInt(p.quantity as string) || 1,
         currentStationId: stationId,
-        surfaceRequested: (p as any).surfaceRequested || (p as any).surface || (p as any).finish || (p as any).verfahren || null,
+        surfaceRequested: p.surfaceRequested ?? null,
       }));
       await tx.insert(items).values(newItems);
     }
@@ -206,8 +236,12 @@ export async function createOperationalOrderService(data: Record<string, unknown
   });
 }
 
-export async function moveOperationalOrderToStationService(orderId: string, stationId: string, actorId?: string) {
-  if (!db) throw new Error("Database not available");
+async function moveOperationalOrderToStationServiceLegacyUnsafe(orderId: string, stationId: string, actorId?: string) {
+  if (!isFoundationAreaEnabled("Legacy-Statuswechsel")) {
+    return foundationUnavailableAction("Legacy-Statuswechsel");
+  }
+
+  if (!isDatabaseConfigured()) throw new Error("Database not available");
 
   // Canonical station fix
   const targetStation = stationId === "beschichtung" ? "galvanik" : stationId;
@@ -235,8 +269,12 @@ export async function moveOperationalOrderToStationService(orderId: string, stat
   });
 }
 
-export async function startProcessingStationService(orderId: string, stationId: string, actorId?: string) {
-  if (!db) throw new Error("Database not available");
+async function startProcessingStationServiceLegacyUnsafe(orderId: string, stationId: string, actorId?: string) {
+  if (!isFoundationAreaEnabled("Legacy-Start der Stationsbearbeitung")) {
+    return foundationUnavailableAction("Legacy-Start der Stationsbearbeitung");
+  }
+
+  if (!isDatabaseConfigured()) throw new Error("Database not available");
 
   const targetStation = stationId === "beschichtung" ? "galvanik" : stationId;
 

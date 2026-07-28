@@ -1,6 +1,7 @@
 "use client";
 
 import { usePageView } from "@/hooks/usePageView";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +26,10 @@ function calcTotal(p: QuoteRequest["pricing"]) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function QuotesPage() {
+  return <FoundationUnavailable title="Anfragen sind nicht freigegeben" reason="Die bisherige Anfrageverwaltung enthielt einen parallelen, nicht tenant-gesicherten Schreibpfad und erfundene Angebotswerte. Bis zum kanonischen Vertrag werden keine Anfragen dargestellt oder erstellt." returnHref="/" returnLabel="Zur Startseite" />;
+}
+
+function QuotesLegacyPage() {
   usePageView();
   const [requests, setRequests] = useState<QuoteRequest[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);

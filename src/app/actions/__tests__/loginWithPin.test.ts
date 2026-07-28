@@ -1,47 +1,18 @@
-/**
- * loginWithPin.test.ts
- *
- * Unit-Tests für den PIN-Login.
- *
- * Abgedeckte Szenarien:
- *  8a. PIN-Login erstellt vollständige AppSession mit korrektem displayName
- *  8b. PIN-Login mit leerem fullName → Fehler statt UUID-Fallback
- *  8c. Falscher PIN → nicht-ok Ergebnis
- */
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-
-// ─── Testschlüssel ──────────────────────────────────────────────────────────
-const TEST_SECRET = "test-secret-loginwithpin-unit-tests";
-process.env.APP_SESSION_SECRET = TEST_SECRET;
-
-// ─── Mocks ──────────────────────────────────────────────────────────────────
 const mockSetAppSession = vi.fn();
-const mockCookieSet = vi.fn();
+const mockDbSelect = vi.fn();
+const mockVerifyPinLoginSelector = vi.fn();
 
 vi.mock("@/lib/server/appSession", () => ({
   setAppSession: mockSetAppSession,
-  clearAppSession: vi.fn(),
-  getAppSession: vi.fn().mockResolvedValue(null),
-  readAppSession: vi.fn().mockResolvedValue({ ok: false, reason: "NO_COOKIE" }),
   SESSION_TTL_MS: 12 * 60 * 60 * 1000,
-  COOKIE_NAME: "kreile_app_session",
 }));
 
-vi.mock("next/headers", () => ({
-  cookies: vi.fn().mockResolvedValue({
-    get: vi.fn().mockReturnValue(undefined),
-    set: mockCookieSet,
-    delete: vi.fn(),
-  }),
+vi.mock("@/lib/server/pinLoginSelector", () => ({
+  verifyPinLoginSelector: mockVerifyPinLoginSelector,
 }));
 
-vi.mock("next/navigation", () => ({
-  redirect: vi.fn(),
-}));
-
-// DB-Mock: simuliert appUsers-Abfrage
-const mockDbSelect = vi.fn();
 vi.mock("@/db", () => ({
   db: {
     select: () => ({
@@ -53,7 +24,14 @@ vi.mock("@/db", () => ({
 }));
 
 vi.mock("@/db/schema", () => ({
-  appUsers: { id: "id", tenantId: "tenant_id", pinHash: "pin_hash", active: "active", role: "role", fullName: "full_name" },
+  appUsers: {
+    id: "id",
+    tenantId: "tenant_id",
+    pinHash: "pin_hash",
+    active: "active",
+    role: "role",
+    fullName: "full_name",
+  },
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -61,15 +39,14 @@ vi.mock("drizzle-orm", () => ({
   and: vi.fn(),
 }));
 
-// ─── Tests ──────────────────────────────────────────────────────────────────
-
-describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
+describe("loginWithPin", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSetAppSession.mockResolvedValue(undefined);
   });
 
-  it("8a – gültiger PIN mit vollständigem fullName → AppSession wird mit displayName gesetzt", async () => {
+  it("issues a canonical session only for a valid opaque selector and PIN", async () => {
+    mockVerifyPinLoginSelector.mockReturnValue({ ok: true, userId: "user-abc" });
     mockDbSelect.mockResolvedValue([{
       id: "user-abc",
       tenantId: "galvanik-kreile",
@@ -80,45 +57,32 @@ describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
     }]);
 
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin("user-abc", "1234");
+    const result = await loginWithPin("opaque-selector", "1234");
 
-    expect(result.ok).toBe(true);
-    if (result.ok) expect(result.role).toBe("werkstatt");
-
+    expect(result).toEqual({ ok: true, role: "werkstatt" });
+    expect(mockVerifyPinLoginSelector).toHaveBeenCalledWith("opaque-selector");
     expect(mockSetAppSession).toHaveBeenCalledOnce();
-    const sessionArg = mockSetAppSession.mock.calls[0][0];
-    expect(sessionArg.userId).toBe("user-abc");
-    expect(sessionArg.displayName).toBe("Max Mustermann");
-    expect(sessionArg.role).toBe("werkstatt");
-    expect(sessionArg.tenantId).toBe("galvanik-kreile");
-    // Keine UUID als displayName
-    expect(sessionArg.displayName).not.toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    );
+    expect(mockSetAppSession).toHaveBeenCalledWith(expect.objectContaining({
+      userId: "user-abc",
+      displayName: "Max Mustermann",
+      role: "werkstatt",
+      tenantId: "galvanik-kreile",
+    }));
   });
 
-  it("8b – fullName leer → Fehler statt UUID-Fallback", async () => {
-    mockDbSelect.mockResolvedValue([{
-      id: "user-def",
-      tenantId: "galvanik-kreile",
-      pinHash: "5678",
-      active: true,
-      role: "buero",
-      fullName: "   ", // nur Leerzeichen
-    }]);
+  it("rejects an invalid or expired selector before issuing a session", async () => {
+    mockVerifyPinLoginSelector.mockReturnValue({ ok: false });
 
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin("user-def", "5678");
+    const result = await loginWithPin("tampered-selector", "1234");
 
     expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.message).toMatch(/Anzeigename/i);
-    }
-    // setAppSession darf NICHT aufgerufen worden sein
+    expect(mockDbSelect).not.toHaveBeenCalled();
     expect(mockSetAppSession).not.toHaveBeenCalled();
   });
 
-  it("8c – falscher PIN → nicht-ok, keine Session erstellt", async () => {
+  it("rejects an invalid PIN without leaking which condition failed", async () => {
+    mockVerifyPinLoginSelector.mockReturnValue({ ok: true, userId: "user-ghi" });
     mockDbSelect.mockResolvedValue([{
       id: "user-ghi",
       tenantId: "galvanik-kreile",
@@ -129,7 +93,25 @@ describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
     }]);
 
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin("user-ghi", "0000"); // falscher PIN
+    const result = await loginWithPin("opaque-selector", "0000");
+
+    expect(result).toEqual({ ok: false, message: "Ungültige PIN oder inaktiver Benutzer." });
+    expect(mockSetAppSession).not.toHaveBeenCalled();
+  });
+
+  it("rejects a developer account from the anonymous PIN flow", async () => {
+    mockVerifyPinLoginSelector.mockReturnValue({ ok: true, userId: "dev-user" });
+    mockDbSelect.mockResolvedValue([{
+      id: "dev-user",
+      tenantId: "galvanik-kreile",
+      pinHash: "1234",
+      active: true,
+      role: "developer",
+      fullName: "Dev User",
+    }]);
+
+    const { loginWithPin } = await import("@/app/actions/auth.actions");
+    const result = await loginWithPin("opaque-selector", "1234");
 
     expect(result.ok).toBe(false);
     expect(mockSetAppSession).not.toHaveBeenCalled();

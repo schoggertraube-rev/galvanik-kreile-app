@@ -12,6 +12,10 @@ interface AppShortcutOverlayProps {
   onClose: () => void;
 }
 
+function isAppShortcutContractEnabled(): boolean {
+  return false;
+}
+
 export function AppShortcutOverlay({ type, onClose }: AppShortcutOverlayProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -24,6 +28,20 @@ export function AppShortcutOverlay({ type, onClose }: AppShortcutOverlayProps) {
       document.body.style.overflow = "auto";
     };
   }, []);
+
+  if (!isAppShortcutContractEnabled()) {
+    return (
+      <div className="fixed inset-0 z-9999 flex items-center justify-center p-4">
+        <div className="absolute inset-0 bg-navy-900/40 backdrop-blur-md" onClick={onClose} />
+        <section className="relative w-full max-w-lg rounded-2xl border border-amber-500/30 bg-white p-6 shadow-2xl" role="dialog" aria-modal="true">
+          <p className="text-xs font-bold uppercase tracking-wider text-amber-800">Datenvertrag noch nicht freigegeben</p>
+          <h2 className="mt-2 text-xl font-bold text-navy-900">Diese Erfassung ist noch nicht verfügbar</h2>
+          <p className="mt-3 text-sm leading-relaxed text-text-muted">Die früheren Schnellaktionen konnten Scan, Import oder lokale Eingaben als ausgeführt darstellen. Bis ein belegter Server-, Storage- und Receipt-Vertrag besteht, wird keine Aktion simuliert.</p>
+          <button type="button" onClick={onClose} className="mt-5 rounded-lg bg-navy-900 px-4 py-2 text-sm font-semibold text-white">Schließen</button>
+        </section>
+      </div>
+    );
+  }
 
   const handleAction = (href: string) => {
     onClose();

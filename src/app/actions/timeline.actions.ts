@@ -1,12 +1,17 @@
 "use server";
 
-import { db } from "@/db";
-import { events, orders, customers, complaints } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
-import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
+import { ActionResult } from "@/lib/server/authHelper";
+import { foundationUnavailableAction } from "@/lib/server/foundationGate";
 import { TimelineEntry } from "@/lib/repositories/timelineRepository";
 
+/*
+ * Legacy timeline queries retained for forensic provenance only. They joined
+ * ID-only relations and used a fixed tenant, so no live action may execute
+ * them until the canonical timeline read contract passes W3.
+ */
+/*
 export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[]>> {
+  foundationUnavailableAction("Timeline");
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
@@ -118,6 +123,7 @@ export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[
 }
 
 export async function getTimelineForCustomerDb(customerId: string): Promise<ActionResult<TimelineEntry[]>> {
+  foundationUnavailableAction("Timeline");
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
@@ -203,6 +209,7 @@ export async function getTimelineForCustomerDb(customerId: string): Promise<Acti
 }
 
 export async function getTimelineForOrderDb(orderId: string): Promise<ActionResult<TimelineEntry[]>> {
+  foundationUnavailableAction("Timeline");
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
@@ -278,4 +285,17 @@ export async function getTimelineForOrderDb(orderId: string): Promise<ActionResu
     console.error("Failed to get timeline for order:", error);
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Laden der Timeline" };
   }
+}
+*/
+
+export async function getGlobalTimelineDb(): Promise<ActionResult<TimelineEntry[]>> {
+  return foundationUnavailableAction("Timeline");
+}
+
+export async function getTimelineForCustomerDb(_customerId: string): Promise<ActionResult<TimelineEntry[]>> {
+  return foundationUnavailableAction("Timeline");
+}
+
+export async function getTimelineForOrderDb(_orderId: string): Promise<ActionResult<TimelineEntry[]>> {
+  return foundationUnavailableAction("Timeline");
 }

@@ -7,34 +7,21 @@ import { MobileNav } from "./MobileNav";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { PwaRegister } from "./PwaRegister";
 import { useEffect, useState } from "react";
-import { getSystemStats } from "@/app/actions/systemStats";
 import { AlertTriangle } from "lucide-react";
 import { RealtimeSyncProvider } from "./RealtimeSyncManager";
 import { ParkedCallProvider } from "@/contexts/ParkedCallContext";
 import { FloatingParkedCall } from "@/components/telefonnotiz/FloatingParkedCall";
-import { OrderOverlay } from "@/components/orders/OrderOverlay";
-import { CustomerOverlay } from "@/components/customers/CustomerOverlay";
+import { FoundationOverlayGate } from "@/components/foundation/FoundationOverlayGate";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import { SessionWarningBanner } from "./SessionWarningBanner";
 
 export function KreileAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  // Diagnostics no longer probes the database from the app shell. Keep the
+  // legacy banner dormant rather than reclassifying a gated action as offline.
+  const isDemoMode = false;
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isSessionExpired, setIsSessionExpired] = useState(false);
-
-  useEffect(() => {
-    if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
-      getSystemStats().then(stats => {
-        if (!stats.reachable || stats.provider !== 'supabase') {
-          setIsDemoMode(true);
-        }
-      }).catch(() => setIsDemoMode(true));
-    } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsDemoMode(false);
-    }
-  }, []);
 
   useEffect(() => {
     if (pathname !== "/start" && pathname !== "/login") {
@@ -60,8 +47,7 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
             <PwaRegister />
             {children}
             <FloatingParkedCall />
-            <OrderOverlay />
-            <CustomerOverlay />
+            <FoundationOverlayGate />
           </div>
         </RealtimeSyncProvider>
       </ParkedCallProvider>
@@ -125,11 +111,9 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
           {/* Global Floating Parked Call Button & Prompt */}
           <FloatingParkedCall />
           
-          {/* Global Order Overlay Drawer */}
-          <OrderOverlay />
-          
-          {/* Global Customer Overlay */}
-          <CustomerOverlay />
+          {/* Legacy drawers are replaced with a truth-preserving gate until their
+              tenant-scoped data contracts are rebuilt. */}
+          <FoundationOverlayGate />
         </div>
       </RealtimeSyncProvider>
     </ParkedCallProvider>

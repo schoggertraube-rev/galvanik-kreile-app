@@ -3,8 +3,15 @@ import { getCustomersDb, getCustomerByIdDb, createCustomerDb, updateCustomerDb, 
 
 export type { Customer };
 
+function isCustomersRepositoryEnabled(): boolean {
+  return false;
+}
+
 export const customersRepository = {
   async getAll(): Promise<Customer[]> {
+    if (!isCustomersRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Kundenlisten benötigen einen geprüften Datenvertrag.");
+    }
     const res = await getCustomersDb();
     if (!res.ok) {
       if (res.error === "UNAUTHORIZED" || res.error === "FORBIDDEN") {
@@ -16,6 +23,9 @@ export const customersRepository = {
   },
 
   async getById(id: string): Promise<Customer | null> {
+    if (!isCustomersRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Kundenlisten benötigen einen geprüften Datenvertrag.");
+    }
     const res = await getCustomerByIdDb(id);
     if (!res.ok) {
       if (res.error === "UNAUTHORIZED" || res.error === "FORBIDDEN") {
@@ -27,6 +37,9 @@ export const customersRepository = {
   },
 
   async create(data: Omit<Customer, "id" | "customerNumber">): Promise<Customer> {
+    if (!isCustomersRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Kundenlisten benötigen einen geprüften Datenvertrag.");
+    }
     const res = await createCustomerDb(data);
     if (!res.ok) {
       throw new Error(res.message);
@@ -35,6 +48,9 @@ export const customersRepository = {
   },
 
   async findSimilar(nameOrPhone: string): Promise<Customer[]> {
+    if (!isCustomersRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Kundenlisten benötigen einen geprüften Datenvertrag.");
+    }
     const res = await searchCustomersDb(nameOrPhone);
     if (!res.ok) {
       if (res.error === "UNAUTHORIZED" || res.error === "FORBIDDEN") {
@@ -46,6 +62,9 @@ export const customersRepository = {
   },
 
   async updateCustomer(id: string, changes: Partial<Customer>): Promise<Customer | null> {
+    if (!isCustomersRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Kundenlisten benötigen einen geprüften Datenvertrag.");
+    }
 
 
     const res = await updateCustomerDb(id, changes);

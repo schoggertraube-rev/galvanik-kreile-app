@@ -156,6 +156,7 @@ export const items = pgTable("items", {
 export const events = pgTable("events", {
   id: cuidPrimaryKey("id"),
   tenantId: varchar("tenant_id", { length: 50 }).default("galvanik-kreile"),
+  clientEventId: uuid("client_event_id"),
   orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
   itemId: text("item_id"),
   eventType: varchar("event_type", { length: 100 }).notNull(),
@@ -263,8 +264,6 @@ export const inquiries = pgTable("inquiries", {
     marge: number;
   }>(),
   extractedData: jsonb("extracted_data"),
-  convertedToOrderId: text("converted_to_order_id"),
-  convertedToCustomerId: text("converted_to_customer_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -328,6 +327,8 @@ export const importJobRows = pgTable("import_job_rows", {
 
 export const auditLog = pgTable("audit_log", {
   id: text("id").primaryKey().$defaultFn(() => createId()),
+  tenantId: text("tenant_id"),
+  clientRequestId: uuid("client_request_id"),
   action: text("action").notNull(),
   tableName: text("table_name"),
   recordId: text("record_id"),
@@ -443,18 +444,6 @@ export const kostenPosten = pgTable("kosten_posten", {
   gebuchtAm: timestamp("gebucht_am").defaultNow().notNull(),
 });
 
-// 14. Qualitätskontrolle (QS)
-export const qs = pgTable("qs", {
-  id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
-  orderId: text("order_id").notNull().references(() => orders.id, { onDelete: "cascade" }),
-  ergebnis: varchar("ergebnis", { length: 50 }).notNull(), // "bestanden", "nacharbeit", "ausschuss"
-  pruefer: text("pruefer"),
-  datum: timestamp("datum").defaultNow().notNull(),
-  bemerkung: text("bemerkung"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
 // 15. Bäder (Galvanik)
 export const baeder = pgTable("baths", {
   id: cuidPrimaryKey("id"),
@@ -480,20 +469,6 @@ export const badMesswerte = pgTable("bath_measurements", {
   notes: text("notes"),
   measuredAt: timestamp("measured_at").defaultNow(),
   createdAt: timestamp("created_at").defaultNow(),
-});
-
-// 17. Lager & Chemie
-export const lagerArtikel = pgTable("lager_artikel", {
-  id: cuidPrimaryKey("id"),
-  tenantId: varchar("tenant_id", { length: 50 }).notNull().default("galvanik-kreile"),
-  artikelnummer: varchar("artikelnummer", { length: 100 }).notNull(),
-  name: varchar("name", { length: 255 }).notNull(),
-  kategorie: varchar("kategorie", { length: 50 }).notNull(), // "chemie", "verpackung", "verschleiss"
-  bestand: numeric("bestand", { precision: 10, scale: 2 }).notNull().default("0"),
-  mindestbestand: numeric("mindestbestand", { precision: 10, scale: 2 }).notNull().default("0"),
-  einheit: varchar("einheit", { length: 20 }).notNull().default("Stk"),
-  letzterWareneingang: timestamp("letzter_wareneingang"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // 11. Buchhaltung & Finanzen

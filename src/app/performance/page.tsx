@@ -1,12 +1,10 @@
-import React from 'react';
-import { PerformanceCockpitClient } from './PerformanceCockpitClient';
-import { getAnalyseOverview } from '@/features/analyse/analyse.actions';
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
-export default async function PerformanceCockpitPage() {
-  const result = await getAnalyseOverview("Monat");
-  const perfData = result.data || [];
-
+export default function PerformanceCockpitPage() {
   return (
-    <PerformanceCockpitClient overviews={perfData} />
+    <FoundationUnavailable
+      title="Performance-Auswertung ist noch nicht freigegeben"
+      reason="Der vorhandene Bildschirm mischt unbelegte Vergleiche, feste Zeitangaben und nicht angebundene Empfehlungen mit echten Auftragsdaten. Er bleibt gesperrt, bis Kennzahlen, Belege und Zustände vollständig aus dem kanonischen Datenvertrag stammen."
+    />
   );
 }

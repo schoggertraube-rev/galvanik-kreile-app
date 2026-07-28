@@ -13,6 +13,7 @@ export type Order = {
   risk: string; 
   currentStationId?: string;
   dueDate?: string;
+  completedDate?: string;
   parts: Record<string, unknown>[];
   statusText?: string;
   delayReason?: string;
@@ -32,8 +33,15 @@ export type Order = {
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
+function isOrdersRepositoryEnabled(): boolean {
+  return false;
+}
+
 export const ordersRepository = {
   async getAll(): Promise<Order[]> {
+    if (!isOrdersRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Auftragslisten benötigen einen geprüften Datenvertrag.");
+    }
     if (isSupabase) {
       try {
         const result = await getOrdersDb();
@@ -58,6 +66,9 @@ export const ordersRepository = {
   },
 
   async create(data: Omit<Order, "id" | "orderNumber" | "status" | "risk"> & { id?: string }): Promise<Order> {
+    if (!isOrdersRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Auftragslisten benötigen einen geprüften Datenvertrag.");
+    }
     const intakeDate = new Date().toISOString();
     const dueDate = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString();
     
@@ -75,6 +86,9 @@ export const ordersRepository = {
   },
 
   async updateOrder(idOrNumber: string, changes: Partial<Order>): Promise<Order | null> {
+    if (!isOrdersRepositoryEnabled()) {
+      throw new Error("NOT_CONFIGURED: Auftragslisten benötigen einen geprüften Datenvertrag.");
+    }
     if (isSupabase) {
       const result = await updateOrderDb(idOrNumber, changes);
       if (!result.ok) {

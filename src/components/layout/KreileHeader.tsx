@@ -6,9 +6,7 @@ import { Search, Camera, Bell, Calendar, Menu, Plus } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { useState, useEffect, useRef } from "react";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { getOrderCountDb } from "@/app/actions/orders.actions";
 import { logout } from "@/app/actions/auth";
-import { trackUiEvent } from "@/lib/tracking/tracking";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { getCompanySettings } from "@/app/actions/company.actions";
@@ -22,13 +20,17 @@ interface KreileHeaderProps {
   onMenuToggle: () => void;
 }
 
-export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
+/**
+ * @deprecated This historic header is deliberately not mounted. It remains
+ * exported only while the visual migration is being completed; the active
+ * header below does not claim sync, realtime, notifications, or search
+ * capabilities that lack a verified foundation contract.
+ */
+export function LegacyKreileHeaderUnsafe({ onMenuToggle }: KreileHeaderProps) {
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [isOffline, setIsOffline] = useState(false);
-  const [orderCount, setOrderCount] = useState(0);
-  const [logoUrl, setLogoUrl] = useState("/assets/logo/kreile-wordmark-skyline.svg");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [logoUrl, setLogoUrl] = useState("/assets/logo/kreile-wordmark-skyline.svg");
   const notificationsRef = useRef<HTMLDivElement>(null);
 
   const { initials, status, name } = usePermissions();
@@ -62,14 +64,8 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     if (isLoggingOut) return; // Doppel-Aufruf verhindern
     setIsLoggingOut(true);
     setUserDropdownOpen(false);
-    // Entferne nicht-autoritative UI-Cachewerte (localStorage)
-    localStorage.removeItem("kreile_user_role");
-    localStorage.removeItem("kreile_user_initials");
-    // Dev-Bypass-Cookie löschen: StartScreenClient.tsx schreibt ihn,
-    // proxy.ts und roles.ts lesen ihn – konsistente Bereinigung erforderlich.
-    // Sicherheitsauftrag: vollständige Migration auf kreile_app_session ist geplant.
-    document.cookie = "bypass-auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
     await logout();
+    window.dispatchEvent(new Event("kreile:auth-changed"));
     router.replace("/start");
   };
 
@@ -82,9 +78,6 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
   useEffect(() => {
     const updateState = async () => {
-      setIsOffline(OfflineManager.isOffline());
-      const countResult = await getOrderCountDb();
-      setOrderCount(countResult.ok ? countResult.data.count : 0);
       try {
         const settings = await getCompanySettings();
         if (settings.logoUrl) setLogoUrl(settings.logoUrl);
@@ -93,10 +86,6 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
       }
     };
     updateState();
-
-    const events = ["kreile-network-change", "kreile-sync-queue-updated", "online", "offline"];
-    events.forEach(e => window.addEventListener(e, updateState));
-    return () => events.forEach(e => window.removeEventListener(e, updateState));
   }, []);
 
   const isAnyDropdownOpen = userDropdownOpen || notificationsOpen;
@@ -318,6 +307,111 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
       </div>
 
       <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
+    </header>
+  );
+}
+
+/**
+ * Active header: only authentication, navigation, theme, and the explicitly
+ * gated capture entry point are exposed. This prevents the shell from
+ * presenting static notifications or an unverified live/offline state.
+ */
+export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
+  const router = useRouter();
+  const { initials, status, name } = usePermissions();
+  const { openErfassung } = useErfassung();
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!userDropdownOpen) return;
+    const closeIfOutside = (event: MouseEvent) => {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+        setUserDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", closeIfOutside);
+    return () => document.removeEventListener("mousedown", closeIfOutside);
+  }, [userDropdownOpen]);
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setUserDropdownOpen(false);
+    await logout();
+    window.dispatchEvent(new Event("kreile:auth-changed"));
+    router.replace("/start");
+  };
+
+  const dateString = new Date().toLocaleDateString("de-DE", {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+  });
+
+  return (
+    <header className="relative z-[100] flex h-[72px] shrink-0 items-center gap-3 bg-transparent px-4 md:px-6">
+      <button
+        className="flex min-h-[48px] min-w-[48px] items-center justify-center rounded-full p-3 text-navy-900 hover:bg-neutral-gray-100 lg:hidden"
+        onClick={onMenuToggle}
+        aria-label="Navigation öffnen"
+      >
+        <Menu className="h-6 w-6" />
+      </button>
+
+      <Link href="/" className="hidden shrink-0 items-center md:flex">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/assets/logo/kreile-wordmark-skyline.svg" alt="Galvanik Kreile" className="h-10 w-auto max-w-[200px] object-contain" />
+      </Link>
+
+      <div className="hidden flex-1 items-center gap-3 rounded-2xl border border-amber-500/30 bg-amber-50/80 px-4 py-3 text-sm text-text-muted md:flex" role="status">
+        <Search className="h-5 w-5 shrink-0" aria-hidden="true" />
+        <span>Suche wird nach dem verifizierten Datenvertrag freigegeben.</span>
+      </div>
+
+      <div className="ml-auto flex shrink-0 items-center gap-2 md:gap-3">
+        <button
+          onClick={() => openErfassung({ mode: "gate" })}
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-orange text-white shadow-sm transition-colors hover:bg-accent-orange/90"
+          title="Neue Erfassung"
+          aria-label="Neue Erfassung"
+        >
+          <Plus className="h-5 w-5" />
+        </button>
+        <div className="hidden items-center gap-2 rounded-full border border-amber-500/30 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 lg:flex" role="status">
+          <Calendar className="h-4 w-4" aria-hidden="true" />
+          <span>Heute · {dateString}</span>
+          <span className="sr-only">Synchronisationsstatus nicht freigegeben</span>
+        </div>
+        <div className="ml-1"><ThemeToggle /></div>
+        {status === "authenticated" && initials && (
+          <div className="relative" ref={userDropdownRef}>
+            <button
+              onClick={() => setUserDropdownOpen((open) => !open)}
+              className="flex h-10 w-10 items-center justify-center rounded-full border border-navy-500 bg-navy-700/90 text-sm font-black text-white shadow-sm transition-colors hover:bg-navy-900"
+              aria-expanded={userDropdownOpen}
+              aria-label="Benutzermenü"
+            >
+              {initials}
+            </button>
+            {userDropdownOpen && (
+              <div className="absolute right-0 top-14 z-50 mt-2 w-48 rounded-2xl border-2 border-neutral-gray-100 bg-white p-2 shadow-xl">
+                <div className="mb-1 border-b border-neutral-gray-100 px-3 py-2">
+                  <p className="text-xs font-bold text-navy-900">Angemeldet als</p>
+                  <p className="text-[10px] text-text-muted">{name || initials}</p>
+                </div>
+                <Link href="/settings" onClick={() => setUserDropdownOpen(false)} className="mb-1 block rounded-xl px-3 py-2 text-sm font-bold text-navy-900 hover:bg-neutral-gray-100">
+                  Einstellungen
+                </Link>
+                <button onClick={handleLogout} disabled={isLoggingOut} className="w-full rounded-xl px-3 py-2 text-left text-sm font-bold text-danger-red hover:bg-danger-red/10 disabled:cursor-not-allowed disabled:opacity-50">
+                  {isLoggingOut ? "Abmelden…" : "Abmelden"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </header>
   );
 }
