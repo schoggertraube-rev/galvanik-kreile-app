@@ -121,6 +121,13 @@ assert(offlineOutbox.includes("function isOfflineDestructiveRecoveryEnabled(): b
 assert(firstIndex(offlineOutbox, "if (!isOfflineDestructiveRecoveryEnabled())") < firstIndex(offlineOutbox, "store.delete"), "Offline outbox must guard before deleting a local entry.");
 assert(!offlineOutbox.includes("catch {\n      return [];"), "A failed outbox read must not become an empty queue.");
 
+const offlineSync = source("src/lib/offline/idbSync.ts");
+assert(!/^\s*import\s/m.test(offlineSync), "Offline sync unavailable adapter must be import-free.");
+for (const forbiddenMarker of ["indexedDB", "localStorage", "Math.random", "store.add", "store.put", "store.delete"]) {
+  assert(!offlineSync.includes(forbiddenMarker), `Offline sync unavailable adapter must not retain ${forbiddenMarker}.`);
+}
+assert(offlineSync.includes("OfflineSyncNotConfiguredError"), "Offline sync must reject with its explicit unavailable contract.");
+
 const indexedDbHelper = source("src/lib/offline/IndexedDBHelper.ts");
 assert(!indexedDbHelper.includes("deleteObjectStore"), "Repair code must not delete legacy IndexedDB stores.");
 assert(indexedDbHelper.includes("function isOfflineQueueContractEnabled(): boolean {\n  return false;\n}"), "Offline queue writes/deletes must remain disabled.");
