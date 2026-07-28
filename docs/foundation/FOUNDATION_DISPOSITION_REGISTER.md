@@ -35,6 +35,10 @@ complete.
 | `src/components/offline/OfflineSyncBadge.tsx`, `src/lib/offline/SyncContext.tsx` | `QUARANTINE` | Browser online state cannot prove synchronization; queue mutation/recovery remains unavailable. |
 | `src/lib/repositories/bathsRepository.ts`, `src/lib/repositories/bathMeasurementsRepository.ts` | `QUARANTINE` | Historic code combined mock data, hard-coded assumptions and unverified measurement storage. Public type boundaries remain, operations reject. |
 | `src/lib/server/operationalOrders.ts` private `*LegacyUnsafe` functions | `QUARANTINE` | They are private, unreferenced and gated; their historical implementation is retained only as provenance and must not be re-enabled directly. |
+| `src/lib/auth/PermissionsContext.tsx`, `src/app/layout.tsx`, `src/proxy.ts`, `src/lib/server/devAuthBypass.ts` and their named tests | `MERGE` | Current repair baseline replaces a mixed user identity/permission snapshot, remounts on a changed server session, closes the implicit missing-env development bypass and preserves Supabase refresh cookies across proxy redirects. Local unit proof is required before any preview claim. |
+| `src/app/actions/customers.actions.ts` | `MERGE` | The retained list DTO now says `Kundennummer nicht hinterlegt` rather than deriving a false identifier. Detail/create/update symbols remain separately gated by their contracts. |
+| Every remaining legacy `src/app/**`, `src/components/**`, `src/features/**`, `src/hooks/**`, `src/lib/**`, `src/db/**`, `src/types/**`, `public/**`, `drizzle/**`, non-W1 `supabase/migrations/**` and test artifact in the PR diff | `QUARANTINE` | `scripts/verify-foundation-disposition-coverage.mjs` enumerates every `origin/main...HEAD` artifact and assigns this safe default unless a narrower row names it. |
+| `scripts/verify-foundation-disposition-coverage.mjs` and `contracts/**` / `docs/foundation/**` evidence artifacts | `KEEP` | They do not claim a live product capability and make the no-delete decision mechanically checkable. |
 | Historic source/contracts that are not executable or target-proven | `DELETE_AFTER_PROOF` | No source file is deleted. Removal may occur only after a canonical replacement, product readback, regression proof and explicit review. |
 
 ## Rule for further consolidation
@@ -42,3 +46,9 @@ complete.
 Before replacing or removing any further executable legacy body, append its
 path, exact decision, active caller check and activation proof to this register.
 No `DELETE_AFTER_PROOF` entry may be deleted in the current mission.
+
+## Exact DELETE_AFTER_PROOF list for this release package
+
+`[]` — intentionally empty. No artifact has all five required proofs: last
+consumer, replacement contract, no-import search, regression test, ordered
+release/recovery path. The coverage verifier reports this zero explicitly.

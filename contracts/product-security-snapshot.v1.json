@@ -3,7 +3,7 @@
   "targetType": "CANONICAL_PRODUCT_SYSTEM",
   "targetRef": "syhaigjhsbpjmtnggqka",
   "capturedOn": "2026-07-28",
-  "scope": "security catalog only; no rows, values, secrets, roles, grants, or mutations",
+  "scope": "RLS, policy, view and storage catalog only; no rows, values, secrets or mutation. Relation and function ACLs are recorded separately in contracts/product-security-acl-snapshot.v1.json.",
   "advisorCounts": {
     "total": 69,
     "error": 27,

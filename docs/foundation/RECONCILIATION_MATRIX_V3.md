@@ -14,8 +14,8 @@ Produktverträge von historischer, nicht mehr reproduzierbarer Quellannahme.
 | Production-Basis | `origin/main` `6e1d1831be823b7655130f0f46ba964d45c4b8dc` |
 | Lokaler Reparaturbranch | `codex/foundation-consolidation-v3-20260728` |
 | Schema-Snapshot | `contracts/product-schema-snapshot.v1.json` |
-| Sicherheits-Snapshot | `contracts/product-security-snapshot.v1.json` |
-| Kandidaten-SHA | `abecbaf669bf9b14c461a7084e4d492df02a64ea` (lokaler, voll gegateter Kandidat; kein Remote-Apply) |
+| Sicherheits-Snapshot | `contracts/product-security-snapshot.v1.json` + `contracts/product-security-acl-snapshot.v1.json` |
+| Kandidaten-SHA | `f59f1ce4632058ed55ea3c678d756f085b95dc41` (lokaler Reparatur-Baseline-Commit; kein Remote-Apply) |
 
 ## Aktive Pfade und Datenwahrheit
 
@@ -90,7 +90,9 @@ Browser-Transportmodul oder ein generisches `supabase db push` ersetzt werden.
 2. W3 ist nach aktuellem Produktkatalog nicht entscheidungsreif; die genaue
    Relation-, Policy-, View- und Storage-Inventur steht in
    `W3_AUTH_RLS_DISCOVERY_MANIFEST.md`.
-3. Der lokale Kandidat besitzt keinen zulässigen Commit, weil der Pre-Commit-Gate
-   noch an bestehenden Lint-Schulden scheitert. Kein Hook wird umgangen.
+3. Der lokale Reparatur-Baseline-Commit `f59f1ce` hat seinen nicht umgangenen
+   Pre-Commit-Gate bestanden. Der Voll-Lint des gesamten historischen Baums
+   bleibt dennoch rot und ist ein separater Release-Blocker; kein Hook wird
+   umgangen.
 
 Solange diese Punkte offen sind, bleibt der Status `NO_GO — REPAIR_CONTINUES`.

@@ -11,7 +11,7 @@ It is not applied anywhere yet.
 | --- | --- |
 | Target | Supabase `syhaigjhsbpjmtnggqka` (`CANONICAL_PRODUCT_SYSTEM`) |
 | Migration | `20260728124147_foundation_w1_runtime_receipt_columns.sql` |
-| Candidate source SHA | `abecbaf669bf9b14c461a7084e4d492df02a64ea` — locally committed after the non-bypassed pre-commit gate; do not apply remotely |
+| Candidate source SHA | `f59f1ce4632058ed55ea3c678d756f085b95dc41` — local repair baseline with the nullable-column preflight/postflight correction; do not apply remotely |
 | Approval ID | `UNASSIGNED — product mutation not approved` |
 | Canonical runner | `supabase migration up` against the approved target only |
 | Explicitly forbidden runner | `supabase db push` |
@@ -45,7 +45,7 @@ Before execution, the runner must prove all of the following from the target
 catalog and data:
 
 - `public.events` and `public.audit_log` exist;
-- the three columns are absent or exactly the declared types;
+- the three columns are absent or exactly the declared types **and nullable**;
 - `public.audit_log.action` is `text NOT NULL`;
 - no duplicate non-null `(tenant_id, client_event_id)` values exist in `events`;
 - no duplicate non-null `(tenant_id, client_request_id, action)` values exist
@@ -60,7 +60,8 @@ identifier. A null identifier must never be treated as a receipt.
 
 ## Migration semantics
 
-The migration runs one transaction. It validates index class, schema, target
+The migration runs one transaction. It validates existing receipt-column type
+and nullability, index class, schema, target
 table, uniqueness, readiness, liveness, key count/order, expression-free
 definition, and partial predicate both before and after `CREATE INDEX IF NOT
 EXISTS`. A collision, incompatible type, duplicate, lock timeout, or invalid
@@ -106,3 +107,21 @@ Only after a single explicit product approval may the canonical runner target
 - runtime receipt behavior, reload, retry and tenant-negative cases.
 
 Any difference from the expected catalog diff stops the rollout.
+
+## Read-only product check recorded 2026-07-28
+
+The expected catalog query was executed read-only against
+`syhaigjhsbpjmtnggqka` after the migration contract correction. Expected result
+before a rollout is five `MISSING` entries; actual result was exactly:
+
+| Kind | Object | Result |
+| --- | --- | --- |
+| column | `audit_log.client_request_id` | `MISSING` |
+| column | `audit_log.tenant_id` | `MISSING` |
+| column | `events.client_event_id` | `MISSING` |
+| index | `audit_log_tenant_request_action_uidx` | `MISSING` |
+| index | `events_tenant_client_event_uidx` | `MISSING` |
+
+This is evidence that W1 is not live, not an authorization to run it. The
+preflight and postflight now reject an existing non-null receipt column as
+incompatible with this additive compatibility contract.

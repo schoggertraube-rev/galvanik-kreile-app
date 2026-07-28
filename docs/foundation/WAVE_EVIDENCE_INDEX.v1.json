@@ -9,13 +9,13 @@
   "candidate": {
     "branch": "codex/foundation-consolidation-v3-20260728",
     "baseRevision": "6e1d1831be823b7655130f0f46ba964d45c4b8dc",
-    "candidateRevision": "abecbaf669bf9b14c461a7084e4d492df02a64ea",
-    "candidateRevisionReason": "Local candidate commit sealed after the non-bypassed pre-commit gate. This index remains a no-go proof and does not authorize a remote apply."
+    "candidateRevision": "f59f1ce4632058ed55ea3c678d756f085b95dc41",
+    "candidateRevisionReason": "Local repair baseline: the non-bypassed pre-commit gate passed after the identity, proxy, customer-truth and W1-nullability fixes. This index remains a no-go proof and does not authorize a remote apply."
   },
   "artifacts": {
     "w1Migration": {
       "path": "supabase/migrations/20260728124147_foundation_w1_runtime_receipt_columns.sql",
-      "sha256": "29d477539a18b52989875106d122c6a034ba080cac5005d6ec214612469d08e5",
+      "sha256": "c24a9b01a9093c56512b1860c87d00508e651ff3e20f7a6eb014d61cca4321fe",
       "status": "PENDING_ISOLATED_LAB_AND_EXPLICIT_PRODUCT_APPROVAL"
     },
     "productSchemaSnapshot": {
@@ -28,24 +28,39 @@
     },
     "productSecuritySnapshot": {
       "path": "contracts/product-security-snapshot.v1.json",
-      "sha256": "5f5fe38ca1045baa32dfdd79bbd439b1ec7b05c23ed7bb37e0c4db1545c097f1"
+      "sha256": "ef29edf80a72ccc36ba7bbcb87d2bc381b06992aa18e0cc1135f4f597d8a36fe"
+    },
+    "productSecurityAclSnapshot": {
+      "path": "contracts/product-security-acl-snapshot.v1.json",
+      "sha256": "2f938229f625a51cfcd1082b7f558193230c02af45e79179d9947575ea3a8d1c",
+      "status": "READ_ONLY_CATALOG_CAPTURE_NO_REMOTE_MUTATION"
     },
     "w1Manifest": {
       "path": "docs/foundation/W1_RUNTIME_RECEIPT_WAVE_MANIFEST.md",
-      "sha256": "1c494dc5b6de8aa90212ac6c7e1db404297a97e2186467e318aaaae3172248b0"
+      "sha256": "34bbb7ac1629661c9adbac67163c0b817a7097ae4208fe0de9eabc4b63c91773"
     },
     "w3Manifest": {
       "path": "docs/foundation/W3_AUTH_RLS_DISCOVERY_MANIFEST.md",
-      "sha256": "d9d76ca1b95d5dc801b7ad956e1352370c1631a7e5bd8732f835a2d08d714f46"
+      "sha256": "ad20f5e9574adcf1c0e9b86a0381b8b74291ae3c85ee999ef845d49cbfcbb36c"
     },
     "reconciliationMatrix": {
       "path": "docs/foundation/RECONCILIATION_MATRIX_V3.md",
-      "sha256": "b1e15e0e79601704d4842ccc729845d0748a4131c7ba158211ca3bb19d4f3a15"
+      "sha256": "ebdec5a83d066e923b12d4eedf072d3e08d6d47c8c517e6b5e6405d2ff7a940b"
     },
     "dispositionRegister": {
       "path": "docs/foundation/FOUNDATION_DISPOSITION_REGISTER.md",
-      "sha256": "d6f56c80855c50692da1eba357ab509487df2ec59d566cd61fe9562b3353bdcd",
+      "sha256": "9dbe9cf9189447aaa5f0da3b1d43ff0e829e0ccfce373dd5c3ce5ee4c1b24c5c",
       "status": "ACTIVE_NO_DELETION_WITHOUT_DECISION"
+    },
+    "dispositionCoverageVerifier": {
+      "path": "scripts/verify-foundation-disposition-coverage.mjs",
+      "sha256": "6cdc2e2a8054de677b638e9f91e43de7f8cf9728766cae2ecd4d061ad925f374",
+      "status": "LOCAL_READ_ONLY_DIFF_COVERAGE"
+    },
+    "releasePackage": {
+      "path": "docs/foundation/FOUNDATION_RELEASE_PACKAGE_2026-07-28.md",
+      "sha256": "8db76e56dbbe7f723a28ae4b55a80d3fd649b79cdd0e309d24932cabaf5a768d",
+      "status": "NO_GO_RELEASE_PACKAGE"
     }
   },
   "checks": {
@@ -61,7 +76,7 @@
     "unit": {
       "command": "node node_modules\\vitest\\vitest.mjs run --exclude \"**/*.integration.test.ts\"",
       "status": "PASS",
-      "evidence": "19 files, 90 tests"
+      "evidence": "19 files, 88 tests"
     },
     "productionBuild": {
       "command": "node node_modules\\next\\dist\\bin\\next build",
@@ -80,7 +95,7 @@
     "preCommit": {
       "command": "npm.cmd run verify:precommit",
       "status": "PASS",
-      "evidence": "227 staged source files linted with 0 errors; TypeScript passed; 19 test files / 90 tests passed. 155 lint warnings remain non-blocking and are retained as a separately visible debt, not suppressed."
+      "evidence": "8 staged source files linted with 0 errors; TypeScript passed; 19 test files / 88 tests passed. The whole-tree lint remains separately red and is not suppressed."
     }
   },
   "notPerformed": [

@@ -7,9 +7,9 @@
 | Feld | Wert |
 | --- | --- |
 | Ziel | Supabase `syhaigjhsbpjmtnggqka` (`CANONICAL_PRODUCT_SYSTEM`) |
-| Snapshot | `contracts/product-security-snapshot.v1.json` |
+| Snapshot | `contracts/product-security-snapshot.v1.json` + `contracts/product-security-acl-snapshot.v1.json` |
 | Erfasst am | 2026-07-28 |
-| Kandidaten-SHA | `abecbaf669bf9b14c461a7084e4d492df02a64ea` (lokaler, voll gegateter Kandidat; keine W3-Mutation) |
+| Kandidaten-SHA | `f59f1ce4632058ed55ea3c678d756f085b95dc41` (lokaler Reparatur-Baseline-Commit; keine W3-Mutation) |
 | Produktfreigabe | `UNASSIGNED` |
 | Migration | keine — W3 ist noch nicht entscheidungsreif |
 
@@ -121,7 +121,7 @@ Fehlerzustand geraten.
 
 | Befund | Entscheidung | Beweis vor Cutover |
 | --- | --- | --- |
-| Security-Definer; keine `security_invoker`-Reloption; SELECT für `anon`, `authenticated`, `service_role`; feste Tenant-Literale | `GATE_AND_REBUILD_WITH_EXPLICIT_INVOKER_AND_TENANT_CONTRACT` | vollständige Quellenmatrix, invoker/owner-Entscheidung, Grants, positive sowie anon/authenticated/cross-tenant-negative Tests |
+| Security-Definer; keine `security_invoker`-Reloption; für `anon`, `authenticated`, `service_role` sind `DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE` gewährt; feste Tenant-Literale | `GATE_AND_REBUILD_WITH_EXPLICIT_INVOKER_AND_TENANT_CONTRACT` | vollständige Quellenmatrix, invoker/owner-Entscheidung, Grants, positive sowie anon/authenticated/cross-tenant-negative Tests |
 
 Die lokale Controlling-Viewdatei ist nur historische Quellinformation. Sie
 beweist nicht, dass die gleichnamige Remote-View aktuell dieselbe Definition
@@ -158,3 +158,51 @@ Delete-Verhalten sind explizit belegt.
 
 Bis dahin bleibt jede nicht vollständig bewiesene Fachfläche server- und
 oberflächenseitig fail-closed.
+
+## Ergänzung: ACL- und Funktionskatalog (read-only, 2026-07-28)
+
+`contracts/product-security-snapshot.v1.json` erfasst bewusst RLS, Policies,
+Views und Storage. Der separate
+`contracts/product-security-acl-snapshot.v1.json` ergänzt die bis dahin fehlende
+Relation- und Funktions-ACL-Sicht. Die Abfragen lesen ausschließlich
+Systemkataloge; keine Produktzeile und keine Konfiguration wurde verändert.
+
+### Relations-ACL
+
+Für alle 26 RLS-losen Relationen aus diesem Manifest **und**
+`public.v_auftrag_db` meldete der aktuelle Katalog für `anon`,
+`authenticated` und `service_role` jeweils dieselbe breite Liste:
+`DELETE, INSERT, REFERENCES, SELECT, TRIGGER, TRUNCATE, UPDATE`.
+
+Das ist ein tatsächlicher DB-Gewährungsbefund. Eine lokale Server-Action-Gate
+oder eine sichtbare UI-Sperre ersetzt ihn nicht. Bis zu einer individuellen
+Rollen-/Tenant-/Negativtest-Matrix lautet die Entscheidung für jede dieser
+Relationen `GATE_ALL_UNTIL_PER_RELATION_TENANT_AND_ROLE_CONTRACT`.
+
+### Funktions-ACL
+
+Zehn `SECURITY DEFINER`-Funktionen sind nur für `service_role` ausführbar:
+`bind_item_photo_upload`, `claim_ai_usage_reservation`,
+`claim_item_photo_analysis`, `consume_security_rate_limit`,
+`mark_item_photo_uncertain`, `reserve_ai_usage`, `reserve_item_photo_job`,
+`reset_security_rate_limit`, `settle_ai_usage_reservation` und
+`settle_item_photo_analysis`. Das ist kein Freigabesignal: jede Funktion
+bleibt `PRIVATE_SERVER_ONLY_PENDING_OWNER_AND_NEGATIVE_TEST_PROOF`.
+
+Für `anon` und `authenticated` ausführbar sind
+`fn_compute_warnings(p_tenant)`, `fn_is_production_order(p_order_id)`,
+`fn_verteile_energiekosten(p_jahr,p_monat,p_tenant)` und
+`search_global(query)`. Die zugehörigen Fachflächen bleiben gesperrt; besonders
+ein App-Gate ersetzt keinen Datenbank-Grant. Die Triggernamen
+`fn_update_vorlagen`, `log_beleg_insert`, `prevent_audit_mutation`,
+`prevent_beleg_delete` und `prevent_beleg_mutation` sind inventarisiert, aber
+nicht als nutzbare Produkt-RPC behauptet.
+
+### Nicht ableitbare Fachentscheidung
+
+Der aktuelle Rollenvertrag kennt nur `developer`, `admin`, `meister`, `buero`,
+`werkstatt` und `readonly` und enthält keine Finanz-, Consent-, Export-,
+Kommunikations-, Telemetrie- oder Foto/OCR-Owner. Deshalb kann W3 nicht korrekt
+generiert werden, bevor eine gebündelte Rollenentscheidung vorliegt. Es wird
+keine pauschale Policy, kein `app.tenant_id`-Mechanismus und kein neuer
+Browser-Transport geraten oder remote ausprobiert.

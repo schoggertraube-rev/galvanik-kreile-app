@@ -1,0 +1,92 @@
+{
+  "contractVersion": 1,
+  "status": "DISCOVERY_ONLY_NO_REMOTE_MUTATION",
+  "targetType": "CANONICAL_PRODUCT_SYSTEM",
+  "targetRef": "syhaigjhsbpjmtnggqka",
+  "capturedOn": "2026-07-28",
+  "captureMethod": {
+    "kind": "READ_ONLY_SYSTEM_CATALOG_QUERY",
+    "scope": "public relation ACLs and function EXECUTE privileges only; no product rows, values, secrets or mutation",
+    "result": "26 RLS-disabled relations plus public.v_auftrag_db have the listed privileges for anon, authenticated and service_role."
+  },
+  "relationGrantSummary": {
+    "relations": [
+      "aktion",
+      "attribution",
+      "einwilligung",
+      "feedback_eingang",
+      "feedback_mail",
+      "forecast_version",
+      "inventory_items",
+      "kampagne",
+      "kanal",
+      "kosten_posten",
+      "kostensatz_default",
+      "kostenstelle",
+      "kostenstellen_energie_monat",
+      "lern_metrik",
+      "marketing_asset",
+      "marketing_touchpoints",
+      "periode",
+      "price_agreements",
+      "segment",
+      "statistik_kennzahl",
+      "teile_klassifikator",
+      "telemetrie_event",
+      "touchpoint",
+      "v_auftrag_db",
+      "vorlage_verbrauch",
+      "vorlage_zeit",
+      "warning_event"
+    ],
+    "grantees": ["anon", "authenticated", "service_role"],
+    "observedPrivileges": ["DELETE", "INSERT", "REFERENCES", "SELECT", "TRIGGER", "TRUNCATE", "UPDATE"],
+    "decision": "GATE_ALL_UNTIL_PER_RELATION_TENANT_AND_ROLE_CONTRACT",
+    "note": "The catalog grant is recorded even where a view or relation may reject a particular DML shape at execution. A broad grant is not proof of a permitted product action."
+  },
+  "securityDefinerFunctions": [
+    {"name": "bind_item_photo_upload", "arguments": "p_job_id uuid, p_tenant_id text, p_user_id text"},
+    {"name": "claim_ai_usage_reservation", "arguments": "p_reservation_id uuid, p_tenant_id text, p_user_id text, p_feature text"},
+    {"name": "claim_item_photo_analysis", "arguments": "p_job_id uuid"},
+    {"name": "consume_security_rate_limit", "arguments": "p_namespace text, p_subject_hash text, p_limit integer, p_window_seconds integer"},
+    {"name": "mark_item_photo_uncertain", "arguments": "p_job_id uuid, p_tenant_id text, p_user_id text, p_reason text"},
+    {"name": "reserve_ai_usage", "arguments": "p_tenant_id text, p_user_id text, p_feature text, p_request_key_hash text, p_estimated_units integer, p_window_seconds integer, p_user_window_limit integer, p_tenant_window_limit integer, p_user_daily_unit_limit bigint, p_tenant_daily_unit_limit bigint"},
+    {"name": "reserve_item_photo_job", "arguments": "p_job_id uuid, p_tenant_id text, p_user_id text, p_order_id text, p_item_id text, p_request_key_hash text, p_content_sha256 text, p_storage_path text, p_mime_type text, p_file_bytes integer, p_window_seconds integer, p_user_window_limit integer, p_item_limit integer, p_tenant_daily_bytes_limit bigint, p_user_daily_analysis_limit integer, p_tenant_daily_analysis_limit integer, p_user_concurrent_limit integer, p_tenant_concurrent_limit integer"},
+    {"name": "reset_security_rate_limit", "arguments": "p_namespace text, p_subject_hash text"},
+    {"name": "settle_ai_usage_reservation", "arguments": "p_reservation_id uuid, p_tenant_id text, p_user_id text, p_feature text, p_outcome text, p_actual_units integer, p_provider_status text, p_result jsonb"},
+    {"name": "settle_item_photo_analysis", "arguments": "p_job_id uuid, p_outcome text, p_actual_units integer, p_provider_status text, p_result jsonb"}
+  ],
+  "securityDefinerExecute": {
+    "anon": false,
+    "authenticated": false,
+    "service_role": true,
+    "decision": "PRIVATE_SERVER_ONLY_PENDING_OWNER_AND_NEGATIVE_TEST_PROOF"
+  },
+  "publicExecutableFunctions": [
+    {"name": "fn_compute_warnings", "arguments": "p_tenant text", "kind": "normal_function", "decision": "GATE_WARNING_UNTIL_TENANT_ACTOR_EVIDENCE"},
+    {"name": "fn_is_production_order", "arguments": "p_order_id text", "kind": "normal_function", "decision": "GATE_SEARCH_UNTIL_TENANT_SCOPE_PROOF"},
+    {"name": "fn_verteile_energiekosten", "arguments": "p_jahr integer, p_monat integer, p_tenant text", "kind": "normal_function", "decision": "GATE_FINANCE_UNTIL_OWNER_ROLE_AND_RECEIPT_PROOF"},
+    {"name": "search_global", "arguments": "query text", "kind": "normal_function", "decision": "GATE_SEARCH_UNTIL_TENANT_SCOPE_PROOF"}
+  ],
+  "triggerNamedFunctions": [
+    {"name": "fn_update_vorlagen", "arguments": "", "decision": "INVENTORY_ONLY_NOT_A_PRODUCT_RPC"},
+    {"name": "log_beleg_insert", "arguments": "", "decision": "INVENTORY_ONLY_NOT_A_PRODUCT_RPC"},
+    {"name": "prevent_audit_mutation", "arguments": "", "decision": "INVENTORY_ONLY_NOT_A_PRODUCT_RPC"},
+    {"name": "prevent_beleg_delete", "arguments": "", "decision": "INVENTORY_ONLY_NOT_A_PRODUCT_RPC"},
+    {"name": "prevent_beleg_mutation", "arguments": "", "decision": "INVENTORY_ONLY_NOT_A_PRODUCT_RPC"}
+  ],
+  "publicExecute": {
+    "anon": true,
+    "authenticated": true,
+    "service_role": true,
+    "decision": "NO_APP_GATE_COUNTS_AS_A_DATABASE_GRANT_OR_RLS_FIX"
+  },
+  "openBusinessDecisions": [
+    "Finance read, book, close, reverse and export roles",
+    "Marketing consent, attribution and feedback roles",
+    "Warning creation, acknowledgement and suppression roles",
+    "Global search scope and cross-tenant prohibition",
+    "Photo, OCR and AI reservation ownership and deletion",
+    "Calendar, communication, import, KVP and developer telemetry ownership"
+  ]
+}
