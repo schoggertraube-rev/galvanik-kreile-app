@@ -59,7 +59,7 @@
     },
     "releasePackage": {
       "path": "docs/foundation/FOUNDATION_RELEASE_PACKAGE_2026-07-28.md",
-      "sha256": "8db76e56dbbe7f723a28ae4b55a80d3fd649b79cdd0e309d24932cabaf5a768d",
+      "sha256": "3fff504bc982ec4ea8af85ae3207c68706b0d62faff1955c74d1540ee8e668fd",
       "status": "NO_GO_RELEASE_PACKAGE"
     }
   },

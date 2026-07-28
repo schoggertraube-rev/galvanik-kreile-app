@@ -38,7 +38,7 @@ Es bedeutet weder Löschung noch eine Aussage, dass der Inhalt unbrauchbar ist.
 | `02_app/.claude/worktrees/ux-recovery-001` | `c786224` | `UNKNOWN` | UX-Recovery nicht als Fundamentquelle bewertet; behalten. |
 | `02_app_logout_verify` | `27c4634` | `ARCHIVE_CANDIDATE` | isolierter Logout-Nachweis. |
 | `02_app_offline_diag` | `1621702` | `ARCHIVE_CANDIDATE` | Diagnose-Nebenstrang, kein Releasezweig. |
-| `02_app_r14c_s1_clean` | `f59f1ce` | `TEMPORARY` | aktueller Reparatur-/Draft-PR-Worktree. |
+| `02_app_r14c_s1_clean` | Quellbasis `f59f1ce` + dieses Paket | `TEMPORARY` | aktueller Reparatur-/Draft-PR-Worktree; keine Produktwahrheit. |
 | `_agent_worktrees/foundation-contract-reconciliation-20260727` | `338a13c` | `ARCHIVE_CANDIDATE` | frühere Vertragsrekonstruktion. |
 | `_agent_worktrees/foundation-hardening-20260714` | `6e1d183` | `ARCHIVE_CANDIDATE` | historischer Main-Snapshot. |
 | `_agent_worktrees/foundation-reconstruction-20260727` | `338a13c` | `ARCHIVE_CANDIDATE` | frühere Rekonstruktion. |
