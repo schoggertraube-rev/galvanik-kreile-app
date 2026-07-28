@@ -14,3 +14,20 @@ export function allowsDevelopmentAuthBypass(input: {
     input.cookieValue === "true"
   );
 }
+
+/**
+ * Missing public Supabase variables are never an implicit local authentication
+ * bypass. The proxy can continue without those variables only after the full,
+ * explicitly opted-in development bypass has been verified.
+ */
+export function resolveProxyAuthEnvironment(input: {
+  nodeEnv: string | undefined;
+  explicitFlag: string | undefined;
+  cookieValue: string | undefined;
+  supabaseUrl: string | undefined;
+  supabaseKey: string | undefined;
+}): "development_bypass" | "misconfigured" | "configured" {
+  if (allowsDevelopmentAuthBypass(input)) return "development_bypass";
+  if (!input.supabaseUrl || !input.supabaseKey) return "misconfigured";
+  return "configured";
+}

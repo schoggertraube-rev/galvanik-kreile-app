@@ -67,24 +67,30 @@ export function PermissionsProvider({
 
       if (result.ok) {
         setPermissions([...result.data.permissions]);
-        // Identity, role label and initials originate from the signed bootstrap
-        // session. A later capability snapshot may add permissions but must not
-        // rewrite the displayed identity from a separate response.
-        setRole((current) => current ?? result.data.role);
-        setName((current) => current || result.data.displayName);
-        setInitials((current) => current || deriveInitials(result.data.displayName));
+        // The authorization snapshot is bound to the signed server-side app
+        // session. It must replace the complete identity after a login change;
+        // retaining a prior client identity can mix users and permissions.
+        setRole(result.data.role);
+        setName(result.data.displayName);
+        setInitials(deriveInitials(result.data.displayName));
         setStatus("authenticated");
         setError(null);
       } else {
         setStatus("error");
         setError(result.message);
         setPermissions([]);
+        setRole(null);
+        setName("");
+        setInitials("");
       }
     } catch (err) {
       console.error("Failed to load permissions", err);
       setStatus("error");
       setError("AUTH_ERROR: Berechtigungen nicht verfügbar");
       setPermissions([]);
+      setRole(null);
+      setName("");
+      setInitials("");
     } finally {
       setLoading(false);
     }
@@ -95,8 +101,8 @@ export function PermissionsProvider({
     const init = async () => {
       await refreshPermissions();
     };
-    init();
-    
+    void init();
+
     const handleStorage = () => { if (isMounted) void refreshPermissions(); };
     const handleAuthChanged = () => { if (isMounted) void refreshPermissions(); };
     window.addEventListener("storage", handleStorage);

@@ -2,19 +2,34 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 import { COOKIE_NAME, getSessionSecret, verifyAppSessionToken, type AppSession } from "@/lib/server/appSessionToken";
-import { allowsDevelopmentAuthBypass } from "@/lib/server/devAuthBypass";
+import { resolveProxyAuthEnvironment } from "@/lib/server/devAuthBypass";
+
+function redirectWithRefreshedCookies(url: URL, source: NextResponse): NextResponse {
+  const response = NextResponse.redirect(url);
+  source.cookies.getAll().forEach((cookie) => response.cookies.set(cookie));
+  return response;
+}
 
 export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
-  if (!supabaseUrl || !supabaseKey) {
-    if (process.env.NODE_ENV === "development") {
-      console.warn("Supabase env vars missing. Skipping auth proxy in development.");
-      return NextResponse.next({ request });
-    }
-    throw new Error("Missing Supabase environment variables");
+  const authEnvironment = resolveProxyAuthEnvironment({
+    nodeEnv: process.env.NODE_ENV,
+    explicitFlag: process.env.KREILE_ALLOW_DEV_AUTH_BYPASS,
+    cookieValue: request.cookies.get("bypass-auth")?.value,
+    supabaseUrl,
+    supabaseKey,
+  });
+
+  if (authEnvironment === "development_bypass") {
+    return supabaseResponse;
+  }
+
+  if (authEnvironment === "misconfigured" || !supabaseUrl || !supabaseKey) {
+    console.error("Supabase env vars missing. Authentication proxy remains closed.");
+    return new NextResponse("AUTH_CONFIGURATION_MISSING", { status: 503 });
   }
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
@@ -29,14 +44,6 @@ export async function proxy(request: NextRequest) {
       },
     },
   });
-
-  if (allowsDevelopmentAuthBypass({
-    nodeEnv: process.env.NODE_ENV,
-    explicitFlag: process.env.KREILE_ALLOW_DEV_AUTH_BYPASS,
-    cookieValue: request.cookies.get("bypass-auth")?.value,
-  })) {
-    return supabaseResponse;
-  }
 
   const token = request.cookies.get(COOKIE_NAME)?.value;
   let appSession: AppSession | null = null;
@@ -67,7 +74,7 @@ export async function proxy(request: NextRequest) {
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/start";
-    const response = NextResponse.redirect(url);
+    const response = redirectWithRefreshedCookies(url, supabaseResponse);
     if (mustClearInvalidSession) response.cookies.delete(COOKIE_NAME);
     return response;
   }
@@ -75,7 +82,7 @@ export async function proxy(request: NextRequest) {
   if (hasVerifiedAppSession && request.nextUrl.pathname.startsWith("/start")) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
-    return NextResponse.redirect(url);
+    return redirectWithRefreshedCookies(url, supabaseResponse);
   }
 
   const guardedDetailRoot = ["/buchhaltung", "/marketing", "/performance"].find(
@@ -84,7 +91,7 @@ export async function proxy(request: NextRequest) {
   if (guardedDetailRoot) {
     const url = request.nextUrl.clone();
     url.pathname = guardedDetailRoot;
-    return NextResponse.redirect(url);
+    return redirectWithRefreshedCookies(url, supabaseResponse);
   }
 
   // These test dashboards are not a production capability. Hiding their entry
@@ -92,7 +99,7 @@ export async function proxy(request: NextRequest) {
   if (process.env.NODE_ENV === "production" && request.nextUrl.pathname.startsWith("/admin/testanalyse")) {
     const url = request.nextUrl.clone();
     url.pathname = "/";
-    return NextResponse.redirect(url);
+    return redirectWithRefreshedCookies(url, supabaseResponse);
   }
 
   return supabaseResponse;

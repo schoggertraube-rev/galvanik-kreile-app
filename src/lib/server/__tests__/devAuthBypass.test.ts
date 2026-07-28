@@ -1,18 +1,40 @@
 import { describe, expect, it } from "vitest";
 
-import { allowsDevelopmentAuthBypass } from "../devAuthBypass";
+import { allowsDevelopmentAuthBypass, resolveProxyAuthEnvironment } from "../devAuthBypass";
 
-describe("allowsDevelopmentAuthBypass", () => {
-  it.each(["production", "test", undefined])("rejects the bypass outside an explicit development process (%s)", (nodeEnv) => {
-    expect(allowsDevelopmentAuthBypass({ nodeEnv, explicitFlag: "true", cookieValue: "true" })).toBe(false);
+describe("development auth bypass", () => {
+  it("requires development, an explicit flag and the explicit cookie", () => {
+    expect(allowsDevelopmentAuthBypass({
+      nodeEnv: "development",
+      explicitFlag: "true",
+      cookieValue: "true",
+    })).toBe(true);
+    expect(allowsDevelopmentAuthBypass({
+      nodeEnv: "development",
+      explicitFlag: undefined,
+      cookieValue: "true",
+    })).toBe(false);
+    expect(allowsDevelopmentAuthBypass({
+      nodeEnv: "production",
+      explicitFlag: "true",
+      cookieValue: "true",
+    })).toBe(false);
   });
 
-  it("requires the explicit local flag as well as the cookie", () => {
-    expect(allowsDevelopmentAuthBypass({ nodeEnv: "development", explicitFlag: undefined, cookieValue: "true" })).toBe(false);
-    expect(allowsDevelopmentAuthBypass({ nodeEnv: "development", explicitFlag: "true", cookieValue: undefined })).toBe(false);
-  });
-
-  it("allows only the explicit local-development test case", () => {
-    expect(allowsDevelopmentAuthBypass({ nodeEnv: "development", explicitFlag: "true", cookieValue: "true" })).toBe(true);
+  it("does not turn missing Supabase variables into an implicit local bypass", () => {
+    expect(resolveProxyAuthEnvironment({
+      nodeEnv: "development",
+      explicitFlag: undefined,
+      cookieValue: undefined,
+      supabaseUrl: undefined,
+      supabaseKey: undefined,
+    })).toBe("misconfigured");
+    expect(resolveProxyAuthEnvironment({
+      nodeEnv: "development",
+      explicitFlag: "true",
+      cookieValue: "true",
+      supabaseUrl: undefined,
+      supabaseKey: undefined,
+    })).toBe("development_bypass");
   });
 });

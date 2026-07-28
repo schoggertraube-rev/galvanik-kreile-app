@@ -26,9 +26,9 @@ BEGIN
     WHERE table_schema = 'public'
       AND table_name = 'events'
       AND column_name = 'client_event_id'
-      AND data_type <> 'uuid'
+      AND (data_type <> 'uuid' OR is_nullable <> 'YES')
   ) THEN
-    RAISE EXCEPTION 'public.events.client_event_id exists with an incompatible type';
+    RAISE EXCEPTION 'public.events.client_event_id exists with an incompatible type or nullability';
   END IF;
 
   IF EXISTS (
@@ -37,9 +37,9 @@ BEGIN
     WHERE table_schema = 'public'
       AND table_name = 'audit_log'
       AND column_name = 'tenant_id'
-      AND data_type <> 'text'
+      AND (data_type <> 'text' OR is_nullable <> 'YES')
   ) THEN
-    RAISE EXCEPTION 'public.audit_log.tenant_id exists with an incompatible type';
+    RAISE EXCEPTION 'public.audit_log.tenant_id exists with an incompatible type or nullability';
   END IF;
 
   IF EXISTS (
@@ -48,9 +48,9 @@ BEGIN
     WHERE table_schema = 'public'
       AND table_name = 'audit_log'
       AND column_name = 'client_request_id'
-      AND data_type <> 'uuid'
+      AND (data_type <> 'uuid' OR is_nullable <> 'YES')
   ) THEN
-    RAISE EXCEPTION 'public.audit_log.client_request_id exists with an incompatible type';
+    RAISE EXCEPTION 'public.audit_log.client_request_id exists with an incompatible type or nullability';
   END IF;
 
   IF NOT EXISTS (
@@ -191,15 +191,15 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'events'
-      AND column_name = 'client_event_id' AND data_type = 'uuid'
+      AND column_name = 'client_event_id' AND data_type = 'uuid' AND is_nullable = 'YES'
   ) OR NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'audit_log'
-      AND column_name = 'tenant_id' AND data_type = 'text'
+      AND column_name = 'tenant_id' AND data_type = 'text' AND is_nullable = 'YES'
   ) OR NOT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'audit_log'
-      AND column_name = 'client_request_id' AND data_type = 'uuid'
+      AND column_name = 'client_request_id' AND data_type = 'uuid' AND is_nullable = 'YES'
   ) THEN
     RAISE EXCEPTION 'W1 receipt column postflight check failed';
   END IF;

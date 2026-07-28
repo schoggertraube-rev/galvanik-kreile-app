@@ -73,7 +73,7 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
     );
   };
 
-  it("T-01: Sessionidentität bleibt stabil", async () => {
+  it("T-01: Server-Snapshot ersetzt die vollständige Sessionidentität", async () => {
     const initialState: AuthBootstrapState = {
       status: "authenticated",
       session: {
@@ -86,7 +86,7 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       }
     };
 
-    // Client action returns different name, but context must NOT update name or initials
+    // A fresh snapshot represents the current signed app session.
     vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
       ok: true,
       data: {
@@ -107,8 +107,8 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       );
     });
 
-    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
-    expect(screen.getByTestId("initials").textContent).toBe("CD");
+    expect(screen.getByTestId("name").textContent).toBe("Anderer Benutzer");
+    expect(screen.getByTestId("initials").textContent).toBe("AB");
     expect(screen.getByTestId("role").textContent).toBe("buero");
     expect(screen.getByTestId("status").textContent).toBe("authenticated");
   });
@@ -181,9 +181,9 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
 
     expect(getAuthorizationSnapshotAction).toHaveBeenCalledTimes(1);
 
-    expect(screen.getByTestId("role").textContent).toBe("buero");
-    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
-    expect(screen.getByTestId("initials").textContent).toBe("CD");
+    expect(screen.getByTestId("role").textContent).toBe("");
+    expect(screen.getByTestId("name").textContent).toBe("");
+    expect(screen.getByTestId("initials").textContent).toBe("");
     expect(screen.getByTestId("permissions").textContent).toBe(""); // Discarded
     expect(screen.getByTestId("status").textContent).toBe("error");
     expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Sitzung veraltet");
@@ -212,11 +212,87 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       );
     });
 
-    expect(screen.getByTestId("role").textContent).toBe("buero");
-    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
-    expect(screen.getByTestId("initials").textContent).toBe("CD");
+    expect(screen.getByTestId("role").textContent).toBe("");
+    expect(screen.getByTestId("name").textContent).toBe("");
+    expect(screen.getByTestId("initials").textContent).toBe("");
     expect(screen.getByTestId("status").textContent).toBe("error");
     expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Berechtigungen nicht verfügbar");
+  });
+
+  it("T-06: Auth-Wechsel ersetzt Rolle, Namen und Rechte als einen Snapshot", async () => {
+    const initialState: AuthBootstrapState = {
+      status: "authenticated",
+      session: {
+        userId: "michael",
+        tenantId: "t1",
+        role: "werkstatt",
+        displayName: "Michael Kreile",
+        issuedAt: 0,
+        expiresAt: 0,
+      },
+    };
+
+    vi.mocked(getAuthorizationSnapshotAction)
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          userId: "michael",
+          tenantId: "t1",
+          displayName: "Michael Kreile",
+          role: "werkstatt",
+          permissions: ["perm_op_status"],
+          active: true,
+        },
+      } as AuthorizationResult)
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          userId: "admin",
+          tenantId: "t1",
+          displayName: "Admin Kreile",
+          role: "admin",
+          permissions: ["perm_sys_users", "perm_data_orders"],
+          active: true,
+        },
+      } as AuthorizationResult)
+      .mockResolvedValueOnce({
+        ok: true,
+        data: {
+          userId: "michael",
+          tenantId: "t1",
+          displayName: "Michael Kreile",
+          role: "werkstatt",
+          permissions: ["perm_op_status"],
+          active: true,
+        },
+      } as AuthorizationResult);
+
+    await act(async () => {
+      render(
+        <PermissionsProvider initialAuthState={initialState}>
+          <TestComponent />
+        </PermissionsProvider>,
+      );
+    });
+
+    expect(screen.getByTestId("name").textContent).toBe("Michael Kreile");
+    expect(screen.getByTestId("role").textContent).toBe("werkstatt");
+    expect(screen.getByTestId("permissions").textContent).toBe("perm_op_status");
+
+    await act(async () => {
+      window.dispatchEvent(new Event("kreile:auth-changed"));
+    });
+    expect(screen.getByTestId("name").textContent).toBe("Admin Kreile");
+    expect(screen.getByTestId("initials").textContent).toBe("AK");
+    expect(screen.getByTestId("role").textContent).toBe("admin");
+    expect(screen.getByTestId("permissions").textContent).toBe("perm_sys_users,perm_data_orders");
+
+    await act(async () => {
+      window.dispatchEvent(new Event("kreile:auth-changed"));
+    });
+    expect(screen.getByTestId("name").textContent).toBe("Michael Kreile");
+    expect(screen.getByTestId("role").textContent).toBe("werkstatt");
+    expect(screen.getByTestId("permissions").textContent).toBe("perm_op_status");
   });
 
   it("T-05: Kein Local Storage", async () => {

@@ -65,6 +65,9 @@ export default async function RootLayout({
 }>) {
   const isAdmin = await isAdminOrDeveloper();
   const authState = await getAuthBootstrapState();
+  const authProviderKey = authState.status === "authenticated"
+    ? `${authState.session.userId}:${authState.session.issuedAt}`
+    : authState.status;
   const showInternalTools = process.env.NODE_ENV !== "production";
 
   return (
@@ -76,7 +79,7 @@ export default async function RootLayout({
         <Suspense fallback={null}>
         <TestpilotProvider isAdmin={isAdmin}>
           <SyncProvider>
-            <PermissionsProvider initialAuthState={authState}>
+            <PermissionsProvider key={authProviderKey} initialAuthState={authState}>
               <DiagnosticsProvider>
                 <LicenseProvider>
                   <AppShortcutProvider>

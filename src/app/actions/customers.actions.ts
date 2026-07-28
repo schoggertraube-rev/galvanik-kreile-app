@@ -22,7 +22,7 @@ export type CustomerListDto = Pick<
 function mapCustomerListDto(customer: DbCustomer): CustomerListDto {
   return {
     id: customer.id,
-    customerNumber: customer.customerNumber || customer.id.substring(0, 8),
+    customerNumber: customer.customerNumber || "Kundennummer nicht hinterlegt",
     name: customer.name,
     type: customer.type as Customer["type"],
     city: customer.city || undefined,
@@ -32,7 +32,7 @@ function mapCustomerListDto(customer: DbCustomer): CustomerListDto {
 function mapDbCustomer(c: DbCustomer): Customer {
   return {
     id: c.id,
-    customerNumber: c.customerNumber || c.id.substring(0, 8),
+    customerNumber: c.customerNumber || "Kundennummer nicht hinterlegt",
     name: c.name,
     companyName: c.companyName || undefined,
     type: c.type as import("@/lib/types/customer").CustomerType,
