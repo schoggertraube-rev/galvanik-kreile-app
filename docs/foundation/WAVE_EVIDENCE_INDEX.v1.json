@@ -9,8 +9,8 @@
   "candidate": {
     "branch": "codex/foundation-consolidation-v3-20260728",
     "baseRevision": "6e1d1831be823b7655130f0f46ba964d45c4b8dc",
-    "candidateRevision": null,
-    "candidateRevisionReason": "No commit is permitted until the non-bypassed pre-commit gate passes."
+    "candidateRevision": "abecbaf669bf9b14c461a7084e4d492df02a64ea",
+    "candidateRevisionReason": "Local candidate commit sealed after the non-bypassed pre-commit gate. This index remains a no-go proof and does not authorize a remote apply."
   },
   "artifacts": {
     "w1Migration": {
@@ -32,15 +32,15 @@
     },
     "w1Manifest": {
       "path": "docs/foundation/W1_RUNTIME_RECEIPT_WAVE_MANIFEST.md",
-      "sha256": "7062e0bf303089a208aa94bced41c51ae82c20a5e1baa12012248cd23fbb738c"
+      "sha256": "1c494dc5b6de8aa90212ac6c7e1db404297a97e2186467e318aaaae3172248b0"
     },
     "w3Manifest": {
       "path": "docs/foundation/W3_AUTH_RLS_DISCOVERY_MANIFEST.md",
-      "sha256": "82e09af060bab85cf1f89323a3c0285d3862eabe5314605898608bddc8789952"
+      "sha256": "d9d76ca1b95d5dc801b7ad956e1352370c1631a7e5bd8732f835a2d08d714f46"
     },
     "reconciliationMatrix": {
       "path": "docs/foundation/RECONCILIATION_MATRIX_V3.md",
-      "sha256": "4bb23d28e5ae53f00fb3b1a989b386bdb9f043ca4eb4dd09df835b48bb941a33"
+      "sha256": "b1e15e0e79601704d4842ccc729845d0748a4131c7ba158211ca3bb19d4f3a15"
     },
     "dispositionRegister": {
       "path": "docs/foundation/FOUNDATION_DISPOSITION_REGISTER.md",

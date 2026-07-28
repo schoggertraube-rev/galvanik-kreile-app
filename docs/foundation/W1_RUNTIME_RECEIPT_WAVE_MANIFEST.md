@@ -11,7 +11,7 @@ It is not applied anywhere yet.
 | --- | --- |
 | Target | Supabase `syhaigjhsbpjmtnggqka` (`CANONICAL_PRODUCT_SYSTEM`) |
 | Migration | `20260728124147_foundation_w1_runtime_receipt_columns.sql` |
-| Candidate source SHA | `UNASSIGNED — local candidate has no passing pre-commit yet; do not apply` |
+| Candidate source SHA | `abecbaf669bf9b14c461a7084e4d492df02a64ea` — locally committed after the non-bypassed pre-commit gate; do not apply remotely |
 | Approval ID | `UNASSIGNED — product mutation not approved` |
 | Canonical runner | `supabase migration up` against the approved target only |
 | Explicitly forbidden runner | `supabase db push` |

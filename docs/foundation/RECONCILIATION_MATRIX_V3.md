@@ -15,7 +15,7 @@ Produktverträge von historischer, nicht mehr reproduzierbarer Quellannahme.
 | Lokaler Reparaturbranch | `codex/foundation-consolidation-v3-20260728` |
 | Schema-Snapshot | `contracts/product-schema-snapshot.v1.json` |
 | Sicherheits-Snapshot | `contracts/product-security-snapshot.v1.json` |
-| Kandidaten-SHA | `UNASSIGNED_PRECOMMIT_RED` |
+| Kandidaten-SHA | `abecbaf669bf9b14c461a7084e4d492df02a64ea` (lokaler, voll gegateter Kandidat; kein Remote-Apply) |
 
 ## Aktive Pfade und Datenwahrheit
 

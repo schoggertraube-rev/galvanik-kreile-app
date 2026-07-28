@@ -9,7 +9,7 @@
 | Ziel | Supabase `syhaigjhsbpjmtnggqka` (`CANONICAL_PRODUCT_SYSTEM`) |
 | Snapshot | `contracts/product-security-snapshot.v1.json` |
 | Erfasst am | 2026-07-28 |
-| Kandidaten-SHA | `UNASSIGNED_PRECOMMIT_RED` |
+| Kandidaten-SHA | `abecbaf669bf9b14c461a7084e4d492df02a64ea` (lokaler, voll gegateter Kandidat; keine W3-Mutation) |
 | Produktfreigabe | `UNASSIGNED` |
 | Migration | keine — W3 ist noch nicht entscheidungsreif |
 
