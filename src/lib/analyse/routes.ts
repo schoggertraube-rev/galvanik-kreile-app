@@ -1,7 +1,7 @@
 import { AnalyseEntityLink, AnalyseTileKey } from "./dataContracts";
 
 // URL builder for returns
-export function getAnalyseReturnTo(tileKey: AnalyseTileKey, period: string, filters?: any): string {
+export function getAnalyseReturnTo(tileKey: AnalyseTileKey, period: string, filters?: Record<string, unknown>): string {
   const searchParams = new URLSearchParams();
   searchParams.set("tile", tileKey);
   searchParams.set("period", period);

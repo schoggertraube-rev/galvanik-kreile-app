@@ -1,6 +1,17 @@
 import type { Customer } from "@/lib/types/customer";
 
-type Order = any; // fallback type
+type OrderPart = {
+  material?: string;
+  finish?: string;
+};
+
+type Order = {
+  id: string;
+  customerId?: string;
+  orderNumber?: string;
+  statusText?: string;
+  parts?: OrderPart[];
+};
 
 export interface MatchResult {
   matchedCustomer: Customer | null;
@@ -61,9 +72,8 @@ export function smartMatchText(val: string, allCustomers: Customer[], allOrders:
     let hasFinish = false;
     if (ord.parts && ord.parts.length > 0) {
       for (const p of ord.parts) {
-        const part = p as any;
-        if (foundMat && typeof part.material === 'string' && part.material.toLowerCase().includes(foundMat)) hasMat = true;
-        if (foundFinish && typeof part.finish === 'string' && part.finish.toLowerCase().includes(foundFinish)) hasFinish = true;
+        if (foundMat && typeof p.material === 'string' && p.material.toLowerCase().includes(foundMat)) hasMat = true;
+        if (foundFinish && typeof p.finish === 'string' && p.finish.toLowerCase().includes(foundFinish)) hasFinish = true;
       }
     }
     if (hasMat) {

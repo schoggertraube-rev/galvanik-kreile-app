@@ -99,8 +99,8 @@ serve(async (req) => {
     }
 
     return new Response("OK", { status: 200 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Webhook Error:", err);
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Unbekannter Fehler" }), { status: 500 });
   }
 });

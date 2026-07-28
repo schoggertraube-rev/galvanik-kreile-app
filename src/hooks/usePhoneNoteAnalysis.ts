@@ -40,7 +40,7 @@ export interface LivePhoneAction {
   confidence: number;
   priority: "low" | "medium" | "high" | "critical";
   source: "database" | "local" | "ai" | "manual";
-  payload: Record<string, any>;
+  payload: Record<string, unknown>;
   status: "suggested" | "selected" | "dismissed";
 }
 
@@ -120,6 +120,17 @@ export interface AnalysisResult {
   // Execution Context
   usedAI: boolean;
   aiReason?: string;
+}
+
+const PHONE_NOTE_CATEGORIES: readonly PhoneNoteCategory[] = [
+  "pickup_request", "status_question", "payment_question", "complaint", "callback",
+  "new_order_intake", "new_customer_request", "quote_request", "email_review",
+  "attachment_review", "photo_review", "document_review", "appointment_request",
+  "deadline_request", "material_or_surface_info", "shipping_question", "technical_question", "general",
+];
+
+function isPhoneNoteCategory(value: string): value is PhoneNoteCategory {
+  return PHONE_NOTE_CATEGORIES.some((category) => category === value);
 }
 
 /* ===== Main Hook ===== */
@@ -317,15 +328,15 @@ export function usePhoneNoteAnalysis() {
         };
 
         const aiData = await analyzePhoneNoteWithAI(payload);
-        if (aiData) {
+        if (aiData && "category" in aiData && typeof aiData.category === "string" && isPhoneNoteCategory(aiData.category)) {
           // Merge AI insights with local strict data. DB matches (customer/order overrides) always win over AI.
           const mergedResult = {
               ...localResult,
-              matchedTheme: (aiData as any).category || localResult.matchedTheme,
-              matchedMaterial: (aiData as any).material || localResult.matchedMaterial,
-              surfaceRequested: (aiData as any).surfaceRequested || localResult.surfaceRequested,
-              suggestedAnswer: (aiData as any).suggestedAnswer || localResult.suggestedAnswer,
-              overallConfidence: (aiData as any).overallConfidence || localResult.overallConfidence,
+              matchedTheme: aiData.category || localResult.matchedTheme,
+              matchedMaterial: aiData.material || localResult.matchedMaterial,
+              surfaceRequested: aiData.surfaceRequested || localResult.surfaceRequested,
+              suggestedAnswer: aiData.suggestedAnswer || localResult.suggestedAnswer,
+              overallConfidence: aiData.overallConfidence || localResult.overallConfidence,
               aiReason: "Hybrid AI Analyse (Absicht & Formulierung)"
           };
           setResult(buildFieldsAndActions(mergedResult, aiData.category, true));

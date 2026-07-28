@@ -1,0 +1,20 @@
+-- W3-ROLE-MATRIX-001 — POLICY-DRAFT-BASELINE ONLY
+--
+-- NON-EXECUTABLE. This file intentionally contains no DDL, no RLS policy,
+-- no GRANT/REVOKE and no data mutation. It exists to reserve the mandatory
+-- migration proof shape before a future explicitly approved W3 wave.
+--
+-- Required binding before any executable successor is authored:
+--   1. exact PR commit SHA and canonical product snapshot digest;
+--   2. identity -> tenant -> explicit work-item assignment relation contract;
+--   3. exhaustive relation/view/RPC/bucket ACL matrix with field guards;
+--   4. positive + negative anon/role/tenant/assignment test receipts;
+--   5. forward migration, rollback/fail-forward strategy and owner approvals.
+--
+-- Planned additive concepts only; names are NOT approved schema proposals:
+--   * multiple explicit role assignments per user and tenant;
+--   * explicit work-item assignment evidence;
+--   * append-only operational event evidence;
+--   * tenant-scoped policy predicates for one relation at a time.
+--
+-- STOP: no remote migration is authorized by this draft.

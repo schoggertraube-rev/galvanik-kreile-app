@@ -65,7 +65,7 @@ Antworte ausschließlich im JSON Format nach folgendem Schema:
   }
 }`
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       contents: [
         { 
           role: "user", 

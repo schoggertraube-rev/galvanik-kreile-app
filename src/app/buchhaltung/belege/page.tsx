@@ -1,24 +1,7 @@
-import { BelegeClient } from "./BelegeClient";
-import { getBuchhaltungProvider } from "@/lib/buchhaltung";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 export const dynamic = "force-dynamic";
 
-export default async function BelegePage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const provider = getBuchhaltungProvider();
-  const sp = await searchParams;
-  
-  const filter = {
-    kategorieId: sp.kategorie as string | undefined,
-    status: sp.status as any,
-    belegart: sp.belegart as any,
-    missingKonto: sp.view === "missingKonto" ? true : undefined,
-    missingKostenstelle: sp.view === "missingKostenstelle" ? true : undefined,
-    nichtAufAuftrag: sp.view === "nichtAufAuftrag" ? true : undefined,
-  };
-  
-  const belege = await provider.listBelege(filter);
-  
-  return <BelegeClient initialBelege={belege} />;
+export default function BelegePage() {
+  return <FoundationUnavailable title="Belege nicht freigegeben" reason="Belegdaten werden erst nach einem durchgaengigen Finanz-, Rollen- und Mandantenvertrag gezeigt." />;
 }
-
-

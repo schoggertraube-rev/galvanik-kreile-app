@@ -78,9 +78,23 @@ assert(!parkedCall.includes("localStorage"), "Parked calls must not restore or p
 assert(parkedCall.includes("activeParkedCall: null"), "Parked calls must remain inert pending W3 proof.");
 
 const telemetry = source("src/lib/tracking/tracking.ts");
-assert(telemetry.includes("function isTelemetryContractEnabled(): boolean {\n  return false;\n}"), "Telemetry must be disabled pending W3 proof.");
-assert(firstIndex(telemetry, "if (!isTelemetryContractEnabled())") < firstIndex(telemetry, "logUiEvent(event)"), "Telemetry must guard before invoking the server action.");
-assert(firstIndex(telemetry, "if (!isTelemetryContractEnabled())") < firstIndex(telemetry, "ui_event_queue"), "Telemetry must guard before touching the local queue.");
+assert(!/^\s*import\s/m.test(telemetry), "Telemetry unavailable adapter must be import-free.");
+for (const forbiddenMarker of ["Math.random", "localStorage", "OfflineManager", "logUiEvent", "fetch("]) {
+  assert(!telemetry.includes(forbiddenMarker), `Telemetry unavailable adapter must not retain ${forbiddenMarker}.`);
+}
+assert(telemetry.includes("export function trackUiEvent"), "Telemetry must retain only the unavailable compatibility call shape.");
+
+const photoService = source("src/lib/services/photoService.ts");
+assert(!/^\s*import\s/m.test(photoService), "Photo unavailable adapter must be import-free.");
+for (const forbiddenMarker of ["upload(", "getPublicUrl", "base64", "eventsRepository", "createClient", "fetch("]) {
+  assert(!photoService.includes(forbiddenMarker), `Photo unavailable adapter must not retain ${forbiddenMarker}.`);
+}
+assert(photoService.includes("PhotoServiceNotConfiguredError"), "Photo service must reject with its explicit unavailable contract.");
+
+const foundationGate = source("src/lib/server/foundationGate.ts");
+assert(foundationGate.includes("FOUNDATION_CAPABILITIES"), "Foundation boundaries need named typed capabilities.");
+assert(foundationGate.includes("FOUNDATION_CAPABILITY_ALLOWLIST"), "Foundation boundaries need a per-capability allowlist.");
+assert(!foundationGate.includes("function isFoundationAreaEnabled(_area: string): boolean {\n  return false;\n}"), "Foundation boundaries must not use a global return-false gate.");
 
 const guardedRepositories = [
   ["src/lib/repositories/itemsRepository.ts", "isItemsRepositoryEnabled"],

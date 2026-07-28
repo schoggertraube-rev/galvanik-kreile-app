@@ -45,7 +45,7 @@ Antworte ausschließlich im JSON Format nach folgendem Schema:
   "confidence": 0.0 bis 1.0
 }`
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       contents: [
         { 
           role: "user", 

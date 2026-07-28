@@ -1,17 +1,17 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useClientReady } from "@/hooks/useClientReady";
 
 export function AppOverlayPortal({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useClientReady();
 
   useEffect(() => {
-    setMounted(true);
     // Overlay open -> body scroll hidden
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";

@@ -1,9 +1,10 @@
 // src/components/ui/DetailOverlay.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { createPortal } from "react-dom";
+import { useClientReady } from "@/hooks/useClientReady";
 
 interface DetailOverlayProps {
   open: boolean;
@@ -15,15 +16,9 @@ interface DetailOverlayProps {
 }
 
 export function DetailOverlay({ open, onClose, title, subtitle, badgeContent, children }: DetailOverlayProps) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useClientReady();
   const overlayRef = useRef<HTMLDivElement>(null);
   const startYRef = useRef<number | null>(null);
-
-  // mount once on client
-  useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
 
   // lock body scroll when open
   useEffect(() => {

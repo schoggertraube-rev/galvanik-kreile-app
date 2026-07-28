@@ -72,10 +72,10 @@ serve(async (req) => {
       JSON.stringify({ success: true, intentId, checkoutUrl }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Invoke Error:", err);
     return new Response(
-      JSON.stringify({ success: false, error: err.message }),
+      JSON.stringify({ success: false, error: err instanceof Error ? err.message : "Unbekannter Fehler" }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     );
   }
