@@ -62,7 +62,8 @@ from the quality gate.
 
 ## W1/W3 status
 
-W1 remains an isolated additive migration draft only. W3 uses
+W1 remains an isolated additive migration draft only. W3 is bound to code
+commit `6cbc21f86ce776966983a5e4b33a6984a60ed5a6` and uses
 `docs/foundation/W3_ROLE_MATRIX_001_POLICY_DRAFT.md`,
 `supabase/migrations/drafts/W3_ROLE_MATRIX_001__POLICY_DRAFT_ONLY.sql`, and
 `src/lib/auth/w3RoleMatrixDraft.ts`. These are non-executing preparation

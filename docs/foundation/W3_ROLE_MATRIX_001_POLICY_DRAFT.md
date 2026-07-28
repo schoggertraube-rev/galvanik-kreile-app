@@ -4,10 +4,11 @@ Status: `POLICY_DRAFT_BASELINE_ONLY — NO_REMOTE_MUTATION`
 
 This document incorporates the approved role baseline dated 2026-07-28. It is
 not an RLS policy, grant, migration, view change, deployment, or activation.
-It applies to the next exact PR head only after that head is committed and its
-SHA plus the product snapshot digest are entered in the release receipt. The
-current W3 discovery snapshot is `contracts/product-security-snapshot.v1.json`
-and `contracts/product-security-acl-snapshot.v1.json`; neither was mutated.
+Its bound containment-code commit is
+`6cbc21f86ce776966983a5e4b33a6984a60ed5a6`; any code change after that commit
+requires a new binding and re-run of this draft's tests. The current W3
+discovery snapshot is `contracts/product-security-snapshot.v1.json` and
+`contracts/product-security-acl-snapshot.v1.json`; neither was mutated.
 
 ## Canonical identity and assignment contract — currently missing
 
