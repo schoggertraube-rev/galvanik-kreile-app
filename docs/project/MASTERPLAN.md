@@ -39,7 +39,7 @@ Primaerer Kundennutzen:
    - jede Erhoehung in CI blockieren,
    - keine `eslint-disable`-, Ignore- oder Regelabsenkungs-Abkuerzung.
 
-`LINT-DEBT-001` startet danach als parallele, nichtfachliche Begleitspur: 434 Fehler und 385 Warnungen werden in kleinen unabhaengigen Wellen bis null abgebaut. Diese Altlast darf P0-, Auth- oder DB-Fixes nicht blockieren; jede Welle muss den Ratchet senken und darf keine fachliche Umstrukturierung verstecken. `continue-on-error` faellt erst beim belegten Nullstand.
+`LINT-DEBT-001` startet danach als parallele, nichtfachliche Begleitspur: 484 Fehler und 460 Warnungen werden in kleinen unabhaengigen Wellen bis null abgebaut. Die hoehere ehrliche Baseline entsteht durch `noInlineConfig`: 57 bestehende Disable-Direktiven koennen Schuld nicht mehr verstecken. Diese Altlast darf P0-, Auth- oder DB-Fixes nicht blockieren; jede Welle muss den Ratchet samt Baseline senken und darf keine fachliche Umstrukturierung verstecken. Eine `continue-on-error`-Ausnahme fuer neue globale Schuld existiert nicht mehr.
 
 3. `BRANCH-DISPOSITION-001`
    - fuer PR 8, 15, 19 und 20 exakten Head, historischen PR-Base und aktuellen Merge-Base erfassen,

@@ -90,11 +90,10 @@ jobs:
             echo "No changed TS/TSX files to lint."
             exit 0
           fi
-          npx eslint "${files[@]}"
+          npx eslint --max-warnings 0 "${files[@]}"
 
-      - name: Repository lint debt metric
-        continue-on-error: true
-        run: npm run lint
+      - name: Repository ESLint ratchet
+        run: node --import tsx scripts/quality/check-eslint-ratchet.ts --base "${{ steps.diff.outputs.base }}"
 
       - name: Whitespace and merge marker check
         run: git diff --check "${{ steps.diff.outputs.base }}" "${{ steps.diff.outputs.head }}"
