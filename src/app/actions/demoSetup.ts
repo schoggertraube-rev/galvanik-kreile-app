@@ -4,11 +4,26 @@ import { db } from '@/db'
 import { orders, customers, appUsers } from '@/db/schema'
 import { seedDatabase } from '@/db/seed'
 import { count } from 'drizzle-orm'
+import { resolveAuthorization } from '@/lib/server/authorization'
 
 export async function initializeDemoIfNeeded() {
   // Wenn DATA_PROVIDER nicht supabase ist, machen wir gar nichts
   if (process.env.NEXT_PUBLIC_DATA_PROVIDER !== 'supabase') {
     return { initialized: false, reason: 'not_supabase' }
+  }
+
+  // Demo-Seeding ist niemals ein Produktionspfad. Außerhalb der Produktion
+  // bleibt es zusätzlich an den expliziten Demo-Modus und eine echte Sitzung gebunden.
+  if (
+    process.env.NODE_ENV === 'production' ||
+    process.env.NEXT_PUBLIC_DEMO_MODE !== 'true'
+  ) {
+    return { initialized: false, reason: 'disabled' }
+  }
+
+  const authorization = await resolveAuthorization()
+  if (!authorization.ok) {
+    return { initialized: false, reason: 'unauthorized' }
   }
 
   try {
