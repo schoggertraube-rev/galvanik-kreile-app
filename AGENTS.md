@@ -27,7 +27,8 @@ Vor jeder Mission aus aktuellem `origin/main` lesen:
 3. `docs/project/CURRENT_STATE.md`
 4. `docs/project/NON_LOSS_REGISTER.md`
 5. `docs/project/DOCUMENT_AUTHORITY.md`
-6. die freigegebene Missionsdatei oder nummerierten Akzeptanzkriterien
+6. `docs/project/MODULARITY_STRATEGY.md`
+7. die freigegebene Missionsdatei oder nummerierten Akzeptanzkriterien
 
 - Alte Masterplaene, Uebergaben, Review-Bundles, lokale Governance-Dateien und Dirty-Worktrees sind nur Quellenmaterial.
 - Sie duerfen den kanonischen Stand nicht ueberschreiben.

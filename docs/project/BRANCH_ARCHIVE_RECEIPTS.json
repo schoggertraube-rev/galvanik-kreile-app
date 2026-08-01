@@ -1,0 +1,6592 @@
+{
+  "schema_version": 1,
+  "generated_from": "local Git object database verified against documented GitHub heads",
+  "digest_contract": "SHA-256 of UTF-8 compact JSON.stringify over keys in this exact order: schema_version, pr, pr_base_sha, merge_base_sha, head_sha, archive_ref, unique_commits, changed_files. changed_files entries always use key order status, old_path, path and are sorted by path, old_path, status using Node localeCompare(en). unique_commits use git rev-list --reverse --topo-order <merge_base>..<head>.",
+  "closure_rule": "A PR may be closed only after its archive_ref resolves to head_sha and this receipt is merged on main. Source branches are not deleted by this operation.",
+  "receipts": [
+    {
+      "pr": 8,
+      "source_branch": "fix/auth-identity-002-root",
+      "ref": "origin/fix/auth-identity-002-root",
+      "pr_base_sha": "78c761f66f5bff2279ecc5bcfd1dd0a6462ffbba",
+      "merge_base_sha": "78c761f66f5bff2279ecc5bcfd1dd0a6462ffbba",
+      "head_sha": "007b85bec133ea77675b9eb851d398b707ef905d",
+      "archive_ref": "archive/pr-8-auth-identity-002-007b85b",
+      "unique_commits": [
+        "9535dfd7310371794b7832da22aa627f4ff787a2",
+        "3a9e81070290f48238bb3ff8c787eb6362939b46",
+        "007b85bec133ea77675b9eb851d398b707ef905d"
+      ],
+      "changed_files": [
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/__tests__/loginWithPin.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/__tests__/logout.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/auth.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/auth.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kontrolle/KontrolleDashboardClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kvp/KvpClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/__tests__/SessionWarningBanner.test.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/KreileHeader.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/MobileBottomNav.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/SessionWarningBanner.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/start/EmailLoginDialog.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/start/StartScreenClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/auth/__tests__/PermissionsContext.test.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/auth/PermissionsContext.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/proxy.ts"
+        }
+      ],
+      "stats": {
+        "unique_commit_count": 3,
+        "changed_file_count": 15,
+        "additions": 561,
+        "deletions": 219
+      },
+      "inventory_sha256": "7f408d25ee90ae06f1fa0be0f8dd642bbb74d06c2190ddccb649ef082aa885d2"
+    },
+    {
+      "pr": 15,
+      "source_branch": "feature/capture-auth-tenant",
+      "ref": "origin/feature/capture-auth-tenant",
+      "pr_base_sha": "02906c400516a765d07ac15455cfa6c668bd495a",
+      "merge_base_sha": "27c463421af0aed98c85f173609855d41ff894b2",
+      "head_sha": "f0090ab33fecac024415752366101add6102eb7f",
+      "archive_ref": "archive/pr-15-capture-auth-tenant-f0090ab",
+      "unique_commits": [
+        "8d3662e476d817475df78b5d8f708fb434f9b7ec",
+        "f1fdb184d30ff7b910a1f9b041965591232dc838",
+        "c7b9374bdb7cb2852f0ef846239f2b2acc6e2c06",
+        "357ef9d5b09552ed9565b44686c80c66e342fbe5",
+        "72c156da16b66b53264b8c1d0281c787b7333d01",
+        "5e8b3994bd1b4f8daf54f1441ea8bbf3375580ac",
+        "b005c6cd89b011f84743562361dc0440c3ecb60b",
+        "4134ee54176d71a85dc0689bf92cba0567252c07",
+        "0e87cf65c69d50ed50977ac1b20dffba8485f047",
+        "72837985d0b6ec7faddc79fc16d9572b75096f65",
+        "a9a377c37403ca06eae05ed03391d4752cb9a7bd",
+        "cbe330b8740e52f8bef1e51200b08bb6f1b75cad",
+        "204f3f105824ea098f2d71f72489dc1bd0de85e3",
+        "c198e8570ef894e83153cd2ac9911db6732138bf",
+        "61d524fddbc8fd6810f162dc5491f47536dcaf41",
+        "abbe488e29471475de7c6f00c568874ff260c22d",
+        "7ba792e111990c1ea579cdc4d03efd1528ce65c6",
+        "6873837915664d9b02d0e902b2c0bbe4ef7bffe3",
+        "dd1df380949f87d503659a8d36c596ff31beef3a",
+        "b5c847b39ab727ae6b82bd20cdaa8c8adb829077",
+        "69d1a654f5882b6d353fa4535935b658a7ab271b",
+        "f8be836952ce3228864f6dd728fa213219b5ad2a",
+        "40000fd5a19b222600c2f190873c711049a59074",
+        "d9b803cc7323c1ae2aa0b1cb27c3297a269bfe29",
+        "2b9e128a34f8fd69ac15eaf21ea95d88812a5074",
+        "2ef09b5f54db88dfe4cbe62fc017a743cdbb8ff2",
+        "31f0ad97000bc2167596df4bc56f6606beea7028",
+        "8dd1c3d40703aaaec493646c3ba000baf25f4fc6",
+        "e284968bcbdc9a28325a770a23e8f3cb11d8e4f0",
+        "a88a941d7281477f87011a2dd06202d3d9b1665e",
+        "6293023bdba555d77b392334a72343bd1b0c1941",
+        "e965c2622dd4f01def8897e030d91aff1f5ca80f",
+        "1afd82f85c96668308f26d26f3c5c326ca174175",
+        "5220b85b5f21b2ba7d5f32e4b36bdf0be36721c9",
+        "a4badbf1f363099761e3f4664c6fad39b4af08cd",
+        "22a9b548ff942fc0b11e52a6cfc81d1adbfc3a2d",
+        "21a871fe7aff3b0b0dd333c7fd763e28a5dddc73",
+        "60ea86bb055c9bf777c778f5546c08615e3825b2",
+        "8e6e5dfcc35d6376cf2864ee821b9f4782b554e7",
+        "3cf264b57a575b573d6d49a4c0cb57d1855c3eb1",
+        "d73f56d67711b91fc2803d9b655cb46bfa9d1cc3",
+        "bcf3ea63f3618a33f231a616299868094b17f5c5",
+        "6b65c8001d7422be50459d3c4a0d281c36333741",
+        "a519f86ece14dcbd167f28c8f70dbf5f15a48655",
+        "09caba8d14c60038a7a2067358334efc9fc1d31f",
+        "08bbc87e73f076aba8568ae01a7aec8ebf4df5f4",
+        "3eb0f47361c008bdfd176155968e0b6536649a1f",
+        "f0090ab33fecac024415752366101add6102eb7f"
+      ],
+      "changed_files": [
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "_handoff/KREILE_F2_M1_REPORT.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "_handoff/KREILE_F2_M3_REPORT.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": ".claude/_snapshots/2026-07-05_pre_M4M5/hooks/guard-destructive.mjs"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": ".claude/_snapshots/2026-07-05_pre_M4M5/hooks/README.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": ".claude/_snapshots/2026-07-05_pre_M4M5/settings.json"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": ".claude/_snapshots/2026-07-05_pre_M4M5/settings.local.json"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": ".claude/hooks/guard-destructive.mjs"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": ".claude/hooks/guard-tests.mjs"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": ".claude/hooks/README.md"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": ".claude/settings.json"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": ".claude/settings.local.json"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": ".editorconfig"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": ".env.local.example"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": ".github/workflows/agentur-gate.yml"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": ".gitignore"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": ".husky/pre-commit"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": ".husky/pre-push"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "buchhaltung_spec.md"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "CLAUDE.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/R15C_LOCAL_ENV_RUNTIME_STATUS.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/R15F_WORKTREE_GOVERNANCE_FINDINGS.md"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "eslint.config.mjs"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "eslint.edge.config.mjs"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "eslint.scripts.config.mjs"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "KREILE_CLAUDE_COWORK_MASCHINERIE/handoffs/ANALYSIS_HANDOFF.md"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "KREILE_CLAUDE_COWORK_MASCHINERIE/registers/DECISION_LOG.md"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "KREILE_CLAUDE_COWORK_MASCHINERIE/registers/EVIDENCE_LEDGER.md"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "KREILE_CLAUDE_COWORK_MASCHINERIE/registers/FINDINGS_REGISTER.md"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "KREILE_CLAUDE_COWORK_MASCHINERIE/registers/IDEA_REGISTER.md"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "KREILE_CLAUDE_COWORK_MASCHINERIE/registers/RISK_REGISTER.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_F2_M1_REPORT_SPIEGEL.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_F2_M3_REPORT_SPIEGEL.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/00_AUTORITATIV/00_PROJECT_TRUTH.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/00_AUTORITATIV/01_PRODUCT_AND_SLICE_CONTRACT.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/00_AUTORITATIV/02_AUTONOMOUS_MISSION_PROTOCOL.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/00_AUTORITATIV/03_PHASE0_AND_V1_FINDINGS.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/00_AUTORITATIV/04_CURRENT_GATE_AND_DESIGN_SEQUENCE.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/00_AUTORITATIV/05_SLICE1_IMPLEMENTATION_CONTRACT_V2_4.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/00_LIESMICH_UND_INHALT.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/01_EXECUTIVE_SUMMARY.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/02_BEFUNDE_UND_ROOT_CAUSES.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/03_REPARATURLEITFADEN_6_WELLEN.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/04_WIEDERVERWENDBARKEIT_EVAS_LERNINSEL.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/05_USERTWIN_UND_IDEEN_ABGLEICH.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/06_REDTEAM_UND_TRUTH_PROTOKOLL.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/07_LIVEGANG_GATE_UND_ROADMAP.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/08_KOMMENDE_KOMPLIKATIONEN_UND_TIPPS.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/09_KARTIERUNG.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/10_UX_WORKFLOW.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/11_PLATTFORM_ARCHITEKTUR.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/12_ARCHAEOLOGIE.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/register_snapshot/DECISION_LOG.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/register_snapshot/EVIDENCE_LEDGER.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/register_snapshot/FINDINGS_REGISTER.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/register_snapshot/IDEA_REGISTER.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/register_snapshot/RISK_REGISTER.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/rohdaten/recovered_finders.json"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/rohdaten/workflow_result_raw.json"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/10_FUNDAMENT_BIBEL_2026-07-05/ZIP_SHA256.txt"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/KREILE_FUNDAMENT_BIBEL_2026-07-05.zip"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/M6_EVIDENZ/36_M6_VERTRAG_FREMDPRUEFUNG_V22.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/M6_EVIDENZ/37_M6_KORREKTUR_DIREKTIVE_V23.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/M6_EVIDENZ/38_M6_VERTRAG_FINALE_FREMDPRUEFUNG_V23.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "KREILE_PROJEKT_DOKUMENTATION/M6_UEBERGABE_PROMPTS.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "lint-baseline.json"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "package.json"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/check-mojibake.mjs"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/git-gates/kreile-git-gate.ps1"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/lint-ratchet.mjs"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/actions/__tests__/customers.page-loader.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/__tests__/loginWithPin.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/__tests__/logout.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/actions/__tests__/review.actions.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/admin.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/auth.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/auth.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/customers.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/erfassung.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/orders.actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/actions/review.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/timeline.actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/erfassung/__tests__/scan-auth-routes.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/customer-enrich/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/customer-search/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/freetext-extract/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/inquiry-extract/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/item-photo-upload/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/notes-extract/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/scan-status/[id]/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/scan-upload/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/ocr-process/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/customers/CustomersPageClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/customers/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kontrolle/KontrolleDashboardClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kvp/KvpClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/components/StudioView.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/scan/__tests__/legacy_capture.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/scan/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/settings/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/start/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/wareneingang/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/admin/UserManagement.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ManualFlow/ManualWizard.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/components/erfassung/ScanFlow/Eingangskarte.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ScanFlow/ScanResult.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/intake/CameraCapture.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/KreileAppShell.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/KreileHeader.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/MobileBottomNav.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/OrderOverlay.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/components/start/__tests__/StartUser.type.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/start/EmailLoginDialog.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/start/StartScreenClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/db/schema.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/orders/orderPhoto.actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/auth/__tests__/authorizationContract.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/auth/__tests__/PermissionsContext.test.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/auth/authorizationContract.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/auth/PermissionsContext.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/appSession.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/authBootstrap.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/authHelper.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/authorization.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/featureFlags.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/orderVisibility.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/appSession.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/appSessionToken.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/authBootstrap.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/authorization.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/contracts/__tests__/customersContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/contracts/customersContract.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/db/__tests__/withTenant.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/db/withTenant.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/featureFlags.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/operationalOrders.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/orderVisibility.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/proxy.ts"
+        },
+        {
+          "status": "R100",
+          "old_path": "supabase/migrations/20260627000002_steuerprofil_app_licensing.sql",
+          "path": "supabase/migrations/20260619200020_steuerprofil_app_licensing.sql"
+        },
+        {
+          "status": "R100",
+          "old_path": "supabase/migrations/20260627000003_add_tenant_id_to_customers.sql",
+          "path": "supabase/migrations/20260619200027_add_tenant_id_to_customers.sql"
+        },
+        {
+          "status": "R100",
+          "old_path": "supabase/migrations/20260627000004_rls_phase1_five_tables.sql",
+          "path": "supabase/migrations/20260619200037_rls_phase1_five_tables.sql"
+        },
+        {
+          "status": "R100",
+          "old_path": "supabase/migrations/20260627000005_rls_ausgangsrechnung_tenant.sql",
+          "path": "supabase/migrations/20260619200050_rls_ausgangsrechnung_tenant.sql"
+        },
+        {
+          "status": "R100",
+          "old_path": "supabase/migrations/20260627000006_drop_legacy_open_policies.sql",
+          "path": "supabase/migrations/20260619200209_drop_legacy_open_policies.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260621103338_fk_scan_uploads.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260621103346_add_ocr_provider.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260706213500_b1_scan_upload_security_foundation.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260708195800_order_visibility_views_contract.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260709071600_fix_production_orders_null_safe.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260710143540_security_invoker_views_and_search_path.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260712154103_v_production_customers.sql"
+        }
+      ],
+      "stats": {
+        "unique_commit_count": 48,
+        "changed_file_count": 149,
+        "additions": 13830,
+        "deletions": 1915
+      },
+      "inventory_sha256": "0443d4bd7cae1d1eaba7a4132b1ebe4d90a0f5cba0045b457f2e869af1b70391"
+    },
+    {
+      "pr": 19,
+      "source_branch": "codex/foundation-security-remediation-20260715",
+      "ref": "origin/codex/foundation-security-remediation-20260715",
+      "pr_base_sha": "6e1d1831be823b7655130f0f46ba964d45c4b8dc",
+      "merge_base_sha": "6e1d1831be823b7655130f0f46ba964d45c4b8dc",
+      "head_sha": "338a13c09228ea1943bd06c40d4abbdea177a1e2",
+      "archive_ref": "archive/pr-19-foundation-security-338a13c",
+      "unique_commits": [
+        "31e6063d943feffad7a7a72559c9893a4c7f7f41",
+        "01fd9a08814758513ae363fcff8ff2aea67397e3",
+        "165d0d68c564198f6e4108c52c8c6b4560f57a53",
+        "702ee227515576022dbe3a4512c36a55a8cd9bf0",
+        "71e4cf0859a39801c0ec01bea9b259ddba408771",
+        "2d2b1d513022d2a076acf52fc5238da2ee546a31",
+        "c0015f171689c3fa43615a10385118b83b284018",
+        "de7a2b89c07bb0cd2937492e2979cc3e4fb53eac",
+        "ebb367a52ee959408d60401245c0bf6877a154d1",
+        "37f2731d252f24a6622797a19a92fa3385a99e32",
+        "338a13c09228ea1943bd06c40d4abbdea177a1e2"
+      ],
+      "changed_files": [
+        {
+          "status": "M",
+          "old_path": null,
+          "path": ".gitignore"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/design/KREILE_PERFORMANCE_UX_CONTRACT_V1.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/project/FOUNDATION_CAPABILITIES.json"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/project/FOUNDATION_CAPABILITY_MAPPING.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/project/FOUNDATION_CHECKPOINT_2026-07-16.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/security/DATABASE_RUNTIME_PROVISIONING.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/security/FIX_REPORT_2026-07-16.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/security/FOUNDATION_TRUTH_CONTRACT_2026-07-15.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/security/HARDENING_2026-07-14.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "eslint-ratchet-baseline.json"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "migrate.mjs"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "missions/KREILE_REMOTE_FOUNDATION_ROLLOUT_20260726.yml"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "package-lock.json"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "package.json"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "public/sw.js"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "scripts/fetch_and_classify_orders.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/lint-ratchet.mjs"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "scripts/quality/check-forbidden-patterns.mjs"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/ai_usage_ledger.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/analytics_truth_contracts.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/capture_integrity_assertions.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/capture_integrity_fixture.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/database_runtime_platform_receipt.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/developer_feedback.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/developer_feedback.setup.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/email_delivery.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/email_delivery.setup.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/finance_server_boundary.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/finance_server_boundary.setup.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/inventory_foundation.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/invoice_number_uniqueness.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/item_photo_jobs.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/marketing_connector.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/marketing_connector.setup.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/marketing_server_boundary.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/marketing_server_boundary.setup.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/ocr_confidence_scale.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/operational_baths_foundation.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/operational_events_source_empty.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/operational_events_source_empty.setup.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/operational_events.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/operational_events.setup.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/operator_control_assertions.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/operator_control_fixture.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/payment_foundation.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/payment_pin_concurrency.local.mjs"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/period_close_foundation.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/period_close.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/period_close.setup.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/usage_telemetry_contract.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/usage_telemetry.local.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/validation/usage_telemetry.setup.local.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "seed_channels.js"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "seed_segments.js"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/__tests__/admin-users-sanitization.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/actions/__tests__/adminTenantBoundary.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/actions/__tests__/aiEnrichmentTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/__tests__/loginWithPin.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/admin.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/ai-enrichment.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/aiSearch.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/analyzePhoneNote.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/auth.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/baths.actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/actions/capture.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/company.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/complaints.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/customers.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/demoSetup.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/developerAnalytics.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/erfassung.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/inquiries.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/items.actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/actions/itemsTruth.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/actions/kvp.actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/actions/kvpTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/mahnung.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/ocr.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/orders.actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/actions/ordersAuthorizationTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/pdf.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/performance.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/phoneNotes.actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/actions/price-agreements.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/price-lines.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/search.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/start.actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/actions/status-events.actions.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/status-events.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/systemStats.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/timeline.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/tracking.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/vorlage.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/admin/analytics/AnalyticsCockpitClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/admin/devices/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/analyse/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/cron/send-feedback/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/developer-feedback/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/developer-feedback/routeBoundary.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/email/deliveries/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/email/send/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/email/templates/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/erfassung/__tests__/aiProxyAuthorization.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/erfassung/__tests__/auth-routes.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/erfassung/__tests__/captureAuthorization.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/erfassung/__tests__/itemPhotoMetering.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/customer-enrich/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/customer-search/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/freetext-extract/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/inquiry-extract/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/item-photo-upload/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/notes-extract/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/erfassung/scan-process/[id]/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/scan-status/[id]/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/scan-upload/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/marketing/instagram/callback/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/marketing/instagram/connect/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/marketing/instagram/publish/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/marketing/instagram/status/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/morning-message/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/ocr-process/__tests__/route.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/ocr-process/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/operator/control/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/operator/control/routeBoundary.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/payments/mollie/create/__tests__/route.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/payments/mollie/create/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/payments/mollie/status/__tests__/route.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/payments/mollie/status/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/telemetry/events/route.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/telemetry/events/routeBoundary.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/today/has-deadlines/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/today/important/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/today/status/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/today/timeline/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/users/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/baeder/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/baeder/BaederDashboardClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/baeder/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/betrieb-kvp/BetriebKvpClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/betrieb/BetriebDashboardClient.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/buchhaltung/__tests__/actionsAuthorization.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/buchhaltung/__tests__/analysisAuthorization.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/analysis.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/ausgaben/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/belege/[id]/BelegDetailClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/belege/BelegeClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/belege/neu/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/belege/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/BuchhaltungCockpitClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/bwa/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/components/HeroBand.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/components/RoiKachel.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/buchhaltung/einstellungen/actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/buchhaltung/einstellungen/EinstellungenClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/einstellungen/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/export/ExportClient.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/buchhaltung/export/exportTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/export/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/fristen/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/kosten/[id]/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/kosten/neu/KostenForm.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/kraftstoff/KraftstoffClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/kraftstoff/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/buchhaltung/periodenabschluss/actions.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/periodenabschluss/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/periodenabschluss/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/periodenabschluss/PeriodenabschlussClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/rechnungen/[id]/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/rechnungen/neu/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/rechnungen/neu/RechnungForm.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/rechnungen/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/rechnungen/RechnungenClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/steuerprofil/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/buchhaltung/zahlung/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/zahlung/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/cockpit/cockpitTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/components/AgingKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/components/ForecastKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/components/FruehwarnungenKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/components/KpiKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/components/TopKundenKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/jahresplan/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/customers/[id]/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/customers/[id]/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/customers/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/feedback/[token]/feedbackTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/feedback/[token]/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/global-search-actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/items/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/kalender/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kalender/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/kommunikation/communicationTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kommunikation/KommunikationClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kontrolle/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kontrolle/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kvp/KvpClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kvp/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/lager/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/lager/LagerCockpitClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/lager/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/layout.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/aktion/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/aktion/neu/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/aktion/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/analysis.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/attribution/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/attribution/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/components/IdeenView.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/components/KampagnenView.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/components/KundenView.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/components/ReichweiteView.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/components/StudioView.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/components/WirkungView.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/einwilligungen/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/einwilligungen/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/marketing/instagramConnectorTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/kanaele/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/kanaele/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/marketing.actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/marketing/marketingAuthorizationBoundary.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/MarketingStudioClient.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/marketing/marketingTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/segmente/[id]/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/segmente/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/segmente/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/orders/[id]/orderConnections.actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/orders/[id]/orderConnectionsTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/orders/[id]/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/orders/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/baeder-material/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/performance/components/AnalyseDataStateBadge.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/components/BaederMaterialKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/components/KundenMarktKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/components/MarketingWirkungKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/components/QualitaetRisikoKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/components/UmsatzMargeKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/components/WerkstattPulsKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/ki-empfehlungen/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/kunden-markt/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/PerformanceCockpitClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/qualitaet-risiko/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/umsatz-marge/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/werkstatt-puls/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/quotes/new/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/quotes/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/scan/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/settings/SettingsClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/start/__tests__/start-page-payload.test.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/start/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/station/[slug]/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/status/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/today/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/actions.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/components/DurchlaufzeitKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/components/EngpassKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/components/OffeneAuftraegeKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/components/TermintreueKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/galvanik/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/warenausgang/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/WarendurchlaufCockpitClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/wareneingang/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/admin/AdminDashboard.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/admin/BackupRestoreCenter.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/admin/CompanySettingsForm.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/admin/UserManagement.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/analytics/DatenherkunftZeile.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/analytics/TrackingOverview.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/buchhaltung/BelegUploadOverlay.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/CustomerHeader.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/CustomerKpiRow.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/CustomerOverlay.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/NewCustomerForm.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/PriceAgreementPanel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerAnalysisTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerInvoicesTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerPricesTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/useCustomerKpi.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/BestaetigenButton.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/components/erfassung/CaptureCard.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/components/erfassung/CaptureSheet.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ErfassungCard.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ErfassungSheet.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ManualFlow/CustomerWizard.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ManualFlow/DateSection.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/components/erfassung/ManualFlow/ItemsSection.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ManualFlow/ItemsSection.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ManualFlow/ManualWizard.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ScanFlow/ScanResult.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ScanFlow/ScanUpload.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/shared/ItemPhotoUploader.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/VorschlagBanner.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/feedback/FeedbackFooter.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/intake/CameraCapture.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/intake/IntakeCompletionSummary.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/intake/OcrMatchResult.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/intake/SuggestedItemsPanel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/kommunikation/kommandozentrale/hooks/useClientDossier.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/GlobalSearch.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/GlobalSearchAIResult.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/KreileHeader.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/MobileBottomNav.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/MobileNav.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/components/layout/OperatorControlNotice.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/RealtimeSyncManager.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/components/layout/realtimeTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/RightNav.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/TabletTopFlowNav.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/TopWorkflowBar.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/offline/OfflineSyncBadge.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/ItemDrawer.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/LabelPrintView.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/NewOrderForm.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/OrderActionGrid.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/OrderEditModal.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/OrderMaterialTimeDrawer.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/OrderOverlay.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/OrderProfitabilityCard.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/PaymentDrawer.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/PriceLinesEditor.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/StationCompletionModal.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/StationContextBlock.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/StationStatusButton.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/StatusMailDrawer.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/variants/ErfassungVariant.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/variants/GalvanikExtras.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/components/orders/variants/HandoverVariant.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/variants/VersandVariant.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/variants/WareneingangActive.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/start/StartScreenClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/telefonnotiz/FloatingParkedCall.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/telefonnotiz/TelefonnotizDesktop.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/ui/AnalysisOverlay.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/ui/AppActionTile.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/ui/AppBackButton.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/ui/AppShortcutOverlay.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/components/ui/AppShortcutTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/warendurchlauf/WarendurchlaufStationNav.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/contexts/ParkedCallContext.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/db/create-missing-tables.mjs"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/db/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/db/schema_buchhaltung.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/db/schema_erfassung.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/db/schema_marketing.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/db/schema_operator.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/db/schema.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/db/seed_analyse.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/db/seed.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/analyse.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/AnalyseDrillOverlay.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/features/analyse/analyseTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/hooks/useGlobalSearch.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/hooks/useKiInsight.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/hooks/useWerkstattPuls.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/kacheln/werkstatt-puls/WerkstattPulsFooter.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/kacheln/werkstatt-puls/WerkstattPulsHero.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/kacheln/werkstatt-puls/WerkstattPulsInsightBox.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/kacheln/werkstatt-puls/WerkstattPulsLevel2.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/kacheln/werkstatt-puls/WerkstattPulsOrdersTable.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/kacheln/werkstatt-puls/WerkstattPulsStationArena.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/customers/customer-card/customerCard.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/orders/orderCost.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/orders/orderPhoto.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/orders/shipment.actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/features/orders/shipmentTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/hooks/useAutosaveDraft.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/hooks/useLiveContext.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/hooks/useOfflineManager.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/hooks/usePageView.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/hooks/usePhoneNoteAnalysis.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/ai/geminiClient.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/analyse/dataContracts.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/analyse/routes.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/analyse/routes.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/analytics/analyticsDataService.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/analytics/analyticsTruthContracts.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/analytics/cockpitTruth.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/analytics/evidenceContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/analytics/evidenceContract.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/analytics/workshopEvidence.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/analytics/workshopEvidence.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/auth/__tests__/PermissionsContext.test.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/auth/authorizationContract.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/auth/PermissionsContext.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/auth/userDtos.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/baths/computeBathStatus.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/baths/computeBathStatus.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/activeFinanceTruth.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/costSchedule.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/costSchedule.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/dunningTruth.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/financeOutstandingTruth.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/inputContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/inputContract.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/providers/BuchhaltungDataProvider.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/providers/MockBuchhaltungProvider.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/providers/SupabaseBuchhaltungProvider.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/providers/SupabaseBuchhaltungProvider.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/regeln.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/settingsContract.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/settingsTruth.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/storedZip.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/types.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/costs/stationCost.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/email/deliveryMailTemplate.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/email/emailProvider.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/email/followUpMailTemplate.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/email/resendAdapter.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/email/statusEmailContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/email/statusEmailContract.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/erfassung/captureContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/erfassung/captureContract.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/erfassung/captureTruth.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/erfassung/klassifikator.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/erfassung/klassifikator.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/events/operationalEventContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/events/operationalEventContract.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/feedback/contract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/feedback/contract.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/inventory/inventoryMutationContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/inventory/inventoryMutationContract.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/inventory/inventorySummary.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/inventory/inventorySummary.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/inventory/inventorySync.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/inventory/inventoryTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/localPhoneAnalysis.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/marketing/adapters/InstagramAdapter.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/marketing/adapters/InstagramAdapter.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/marketing/marketingMockProvider.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/marketing/marketingTypes.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/marketing/measurementTruth.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/marketing/orderConnectionTruth.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/navigation/safeReturnTo.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/ocr/__tests__/GeminiProvider.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/ocr/geminiOcr.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/ocr/geminiOcr.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/ocr/GeminiProvider.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/ocr/KlippaProvider.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/ocr/ManualProvider.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/ocr/ocrAccountingTruth.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/ocr/ocrTruth.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/ocr/resultContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/ocr/resultContract.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/ocr/types.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/ocr/Verteilung.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/offline/IndexedDBHelper.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/offline/OfflineManager.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/offline/OfflineOutbox.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/offline/offlineTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/offline/SyncContext.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/operator/controlContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/operator/controlContract.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/operator/operatorControlIntegration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/orders/orderMutationContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/orders/orderMutationContract.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/orders/orderRouting.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/orders/orderRouting.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/orders/routeSnapshot.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/orders/shipmentContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/orders/shipmentContract.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/payments/__tests__/mollieClientContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/payments/__tests__/molliePaymentState.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/payments/__tests__/serverAmount.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/payments/mollieAdapter.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/payments/mollieClientContract.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/payments/paymentProvider.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/payments/serverAmount.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/privacy/dsgvoAnonymizer.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/project/foundationCapabilityManifest.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/bathMeasurementsRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/bathsRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/companySettingsRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/complaintsRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/customersRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/eventsRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/inquiriesRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/inventoryRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/itemsRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/kvpRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/orderQueries.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/ordersRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/priceAgreementsRepository.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/repositories/repositoryConnectivityTruth.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/timelineRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/search/actionRegistry.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/search/aiAggregation.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/search/fuzzy.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/search/globalSearch.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/search/searchSecurityTruth.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/security/__tests__/edgeHardeningContracts.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/security/__tests__/legacyOrderCostQuarantine.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/security/__tests__/navigationAndHighlight.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/security/browserDataBoundary.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/security/highlightHtml.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/aiInputs.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/aiUsage.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/aiUsageMigration.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/appSession.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/authHelper.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/boundedRequestBody.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/developerFeedbackMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/durableRateLimit.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/emailDelivery.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/emailDeliveryMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/financeAuthorization.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/financeServerBoundaryMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/financeTruthMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/invoiceNumberUniquenessMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/itemPhotoJobs.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/itemPhotoMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/marketingAuthorization.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/marketingConnectorMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/marketingServerBoundaryMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/marketingTenantContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/marketingTokenVault.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/metaInstagram.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/migrationRunnerSafety.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/mockApiGuard.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/mockBuchhaltung.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/molliePaymentSecurityContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/operationalBathMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/operationalEventsChronology.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/operationalEventsMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/operatorControl.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/operatorControlMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/paymentPinConcurrencyHarness.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/pendingMigrationRunnerContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/periodCloseMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/phase2PublicRlsRemediationMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/pinLoginSelector.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/pinResetRequestTruth.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/proxySessionState.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/receiptStorageMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/securityRateLimitMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/seedSafety.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/usageTelemetryMigration.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/aiInputs.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/aiUsage.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/appSession.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/appSessionToken.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/authHelper.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/authorization.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/boundedRequestBody.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/captureWriteCapability.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/captureWriteCapability.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/databaseRuntimeIdentity.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/databaseRuntimeIdentity.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/durableRateLimit.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/emailDelivery.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/financeAuthorization.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/inventoryWriteCapability.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/invoiceCreateCapability.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/itemPhotoJobs.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/marketingAuthorization.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/marketingTokenVault.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/metaInstagram.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/mockApiGuard.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/mockBuchhaltung.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/operationalCoreCapability.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/operationalCoreCapability.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/operationalOrders.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/operationalOrdersConcurrencyTruth.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/operatorControl.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/pinLoginAttempts.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/pinLoginSelector.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/proxySessionState.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/scanCaptureCapability.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/scanMigrationContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/scanOriginalContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/scanOriginalContract.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/statusEmailCapability.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/supabaseService.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/services/intakeService.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/services/labelService.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/services/marketingEmailService.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/services/photoService.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/telefonnotiz/phoneNoteTruth.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/telemetry/callsitePrivacy.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/telemetry/contract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/telemetry/contract.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/tracking/telemetryOutbox.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/tracking/tracking.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/useOrderLive.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/validation/customerSchema.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/validation/orderSchema.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/validation/orderSchema.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/warendurchlauf/kpis.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/warendurchlauf/kpis.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/warendurchlauf/orderTrend.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/warendurchlauf/orderTrend.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/proxy.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/test/scan_order.integration.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/test/verify.integration.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/config.toml"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/functions/_shared/aiUsage.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/functions/_shared/boundedRequestBody.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/functions/_shared/geminiJson.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/functions/_shared/molliePaymentState.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/functions/_shared/security.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/functions/_shared/storageFetch.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/customer-enrich/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/email-send/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/email-webhook/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/freetext-extract/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/inquiry-extract/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/item-photo-analyze/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/kpi-insight/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/mollie-create-payment/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/mollie-webhook/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/notes-extract/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/payments-intent/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/payments-webhook-mollie/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/scan-analyze/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/0001_app_schema.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/0004_fix_hotel_tenant.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/0005_inquiries.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/0006_customer_extras.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/0012_harden_rls.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/0015_mvp_operational_modules.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/202605290001_realtime_activation.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/202606051200_phase3_resilience.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260609000008_seed_periode_aktuelle.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260610000000_customers_kundenkarte.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260611114327_create_storage_buckets.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260613000001_orders_controlling.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260613000003_ausgangsrechnung_periode.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260615235959_mark_verified_legacy_orders.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260619200037_rls_phase1_five_tables.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260619200050_rls_ausgangsrechnung_tenant.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260619200209_drop_legacy_open_policies.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260620000001_baths_target_values.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260621000000_phase2_migrations.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260621103338_fk_scan_uploads.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260621103346_add_ocr_provider.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260622000001_view_werkstatt_puls.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260623000001_consumable_uses.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260625000000_cleanup_demo_data.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260626000000_erfassung_additive_spalten.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260627000000_app_users_tenant_contract.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/migrations/20260627000001_normalize_app_user_office_role.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260706213500_b1_scan_upload_security_foundation.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260708195800_order_visibility_views_contract.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260709071600_fix_production_orders_null_safe.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260710143540_security_invoker_views_and_search_path.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260712154103_v_production_customers.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260713000100_security_rate_limit_index.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260713000200_ai_usage_ledger.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260713000300_item_photo_jobs.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260713000400_usage_telemetry.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260713000500_developer_feedback.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260713000600_ocr_confidence_scale_expand.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260713000700_invoice_number_uniqueness.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260713000800_operator_control_plane.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260714000050_operational_events_payment_prerequisite_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260714000100_payment_idempotency_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260714000200_pin_bcrypt_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715000200_buchhaltung_receipt_storage_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715000500_finance_server_boundary_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715000550_marketing_source_contract_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715000575_marketing_tenant_relationships_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715000600_marketing_server_boundary_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715000700_marketing_connector_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715000800_email_delivery_ledger_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715001000_period_close_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715001150_operational_events_source_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715001200_operational_events_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715001300_operational_server_boundary_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715001550_inventory_contract_reconciliation_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715001600_capture_integrity_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715001620_operational_source_contracts_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715001625_operational_core_boundary_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715001650_capture_template_projection_reconciliation_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715001660_analytics_truth_contracts_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260715001670_finance_truth_contracts_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260716000100_station_completion_receipt_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260716000200_calendar_price_boundary_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260720000100_scan_original_receipt_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260720000200_phase2_public_rls_remediation_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260720000300_ui_events_contract_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260720000400_ocr_confidence_percent_contract_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260720000500_bath_measurement_contract_prepared_unapplied.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/seed.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "tsconfig.json"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "vitest.config.ts"
+        }
+      ],
+      "stats": {
+        "unique_commit_count": 11,
+        "changed_file_count": 692,
+        "additions": 75509,
+        "deletions": 22912
+      },
+      "inventory_sha256": "5e2bf0b74e4a300c1ed4d36fbc686ba85ed494cbacec7b142b22042de94108f4"
+    },
+    {
+      "pr": 20,
+      "source_branch": "codex/foundation-consolidation-v3-20260728",
+      "ref": "origin/codex/foundation-consolidation-v3-20260728",
+      "pr_base_sha": "6e1d1831be823b7655130f0f46ba964d45c4b8dc",
+      "merge_base_sha": "6e1d1831be823b7655130f0f46ba964d45c4b8dc",
+      "head_sha": "2589fdebb198720b168aab359236673e39c911d5",
+      "archive_ref": "archive/pr-20-foundation-consolidation-2589fde",
+      "unique_commits": [
+        "abecbaf669bf9b14c461a7084e4d492df02a64ea",
+        "65780f6f6abe3b13ac2e1300d12485b7bf6295e8",
+        "f59f1ce4632058ed55ea3c678d756f085b95dc41",
+        "6b6ef0fa5f4f4d8a1ee24689c518d5adc0c93d76",
+        "10e78cd1cd6edefa44903e2c7d180a30660ad2d2",
+        "6cbc21f86ce776966983a5e4b33a6984a60ed5a6",
+        "3370d5cbbb526b3860d7619c0b9d6b388515cc87",
+        "d2f447602b2fe5c1601ed7028da80a3f0f05d9f2",
+        "b3f0d32730af7e6d5d128376b8e17588a6ca1fa5",
+        "951581e2d9f92be2a127c1f9c812af08226c4401",
+        "3c3d82ab490cbc01b2e441b6c4813d862b34bbbc",
+        "2589fdebb198720b168aab359236673e39c911d5"
+      ],
+      "changed_files": [
+        {
+          "status": "M",
+          "old_path": null,
+          "path": ".husky/pre-commit"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "contracts/product-schema-snapshot.v1.json"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "contracts/product-security-acl-snapshot.v1.json"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "contracts/product-security-snapshot.v1.json"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "contracts/runtime-observed-required-columns.v1.json"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "create_migrate.js"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/foundation/FOUNDATION_DISPOSITION_REGISTER.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/foundation/FOUNDATION_RELEASE_PACKAGE_2026-07-28.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/foundation/PR20_DISPOSITION_REGISTER.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/foundation/RECONCILIATION_MATRIX_V3.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/foundation/W1_RUNTIME_RECEIPT_WAVE_MANIFEST.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/foundation/W3_AUTH_RLS_DISCOVERY_MANIFEST.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/foundation/W3_ROLE_MATRIX_001_POLICY_DRAFT.md"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "docs/foundation/WAVE_EVIDENCE_INDEX.v1.json"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "enrich.js"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "init_marketing_db.js"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "package.json"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "public/sw.js"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "rewrite.js"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "run_audit.js"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "scratch/run_vitest.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "scripts/fetch_and_classify_orders.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/quality/bind-unavailable-inputs.mjs"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "scripts/quality/check-forbidden-patterns.mjs"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/quality/remove-unused-bindings.mjs"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/quality/remove-unused-imports.mjs"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "scripts/test_order_source.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/verify-foundation-boundaries.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/verify-foundation-disposition-coverage.mjs"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "scripts/verify-product-schema-contract.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "scripts/verify-staged-files.mjs"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "seed_channels.js"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "seed_segments.js"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/__tests__/admin-users-sanitization.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/__tests__/loginWithPin.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/admin.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/ai-enrichment.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/aiSearch.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/analyzePhoneNote.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/auth.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/baths.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/company.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/complaints.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/customers.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/demoSetup.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/developerAnalytics.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/erfassung.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/inquiries.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/items.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/mahnung.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/ocr.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/orders.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/pdf.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/performance.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/phoneNotes.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/price-lines.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/search.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/start.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/status-events.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/systemStats.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/timeline.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/tracking.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/actions/vorlage.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/admin/analytics/AnalyticsCockpitClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/admin/analytics/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/admin/devices/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/admin/import/AdminImportClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/admin/import/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/admin/testanalyse/live/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/admin/testanalyse/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/analyse/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/api/__tests__/foundationUnavailableRoutes.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/cron/send-feedback/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/email/send/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/customer-enrich/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/customer-search/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/freetext-extract/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/inquiry-extract/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/item-photo-upload/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/notes-extract/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/scan-status/[id]/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/erfassung/scan-upload/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/morning-message/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/ocr-process/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/payments/mollie/create/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/today/has-deadlines/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/today/important/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/today/status/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/today/timeline/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/api/users/route.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/archive/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/baeder/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/baeder/BaederDashboardClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/baeder/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/betrieb-kvp/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/betrieb/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/analysis.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/ausgaben/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/belege/[id]/BelegDetailClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/belege/BelegeClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/belege/neu/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/belege/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/bwa/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/components/RoiKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/components/Tile.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/components/ZahlungKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/export/ExportClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/fristen/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/kosten/neu/KostenForm.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/kraftstoff/KraftstoffClient.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/buchhaltung/layout.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/periodenabschluss/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/periodenabschluss/PeriodenabschlussClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/rechnungen/[id]/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/rechnungen/neu/RechnungForm.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/rechnungen/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/rechnungen/RechnungenClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/search-actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/steuerprofil/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/buchhaltung/zahlung/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/CockpitClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/components/AgingKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/components/DbRankingKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/components/EngpassKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/components/ForecastKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/components/FruehwarnungenKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/components/TopKundenKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/components/WhatIfStudio.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/jahresplan/JahresplanClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/jahresplan/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/cockpit/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/customers/[id]/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/customers/[id]/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/customers/layout.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/customers/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/feedback/[token]/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/global-search-actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/items/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kalender/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kommunikation/KommunikationClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kommunikation/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kommunikation/PhoneNoteDetailView.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kommunikation/smartMatcher.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kontrolle/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kontrolle/KontrolleDashboardClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kontrolle/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kunden-auftraege/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kvp/KvpClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/kvp/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/lager/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/lager/LagerCockpitClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/lager/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/layout.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/lieferanten/[id]/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/lieferanten/layout.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/lieferanten/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/aktion/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/aktion/neu/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/aktion/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/analysis.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/attribution/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/attribution/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/components/StudioView.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/einwilligungen/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/einwilligungen/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/kanaele/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/kanaele/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/marketing/layout.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/marketing.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/segmente/[id]/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/segmente/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/marketing/segmente/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/orders/[id]/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/orders/layout.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/orders/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/kunden-markt/page.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/app/performance/layout.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/PerformanceCockpitClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/PerformanceDetailLayout.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/umsatz-marge/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/performance/werkstatt-puls/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/print-queue/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/quotes/new/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/quotes/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/scan/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/settings/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/settings/SettingsClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/start/__tests__/start-page-payload.test.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/start/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/station/[slug]/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/station/layout.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/status/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/telefonnotiz/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/today/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/components/DurchlaufzeitKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/components/EngpassKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/components/OffeneAuftraegeKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/components/TermintreueKachel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/galvanik/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/layout.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/warenausgang/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/warenausgang/PaymentCaptureModal.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/WarendurchlaufCockpitClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/app/warendurchlauf/wareneingang/page.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/admin/AdminDashboard.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/admin/CompanySettingsForm.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/admin/DataImportCenter.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/admin/FeatureToggles.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/admin/RoleMatrix.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/analytics/AnalyticsDrillDrawer.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/analytics/DatenherkunftZeile.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/analytics/DrillChart.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/analytics/DrillComposition.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/analytics/InfoPopover.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/analytics/TrackingOverview.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/buchhaltung/MassenzuordnungModal.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/CustomerKommHistorie.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/CustomerMemoryCard.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/CustomerStammdaten.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/CustomerTagEditor.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/NewCustomerForm.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerAnalysisTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerCommunicationTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerComplaintsTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerHistorySimilarTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerInvoicesTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerItemsProfileTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerNotesTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerOrdersTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerOverviewTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerPhotosTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/tabs/CustomerPricesTab.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/useCustomerData.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/customers/useCustomerKpi.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/diagnostics/DiagnosticsWidget.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/entities/CustomerFocusView.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/entities/OrderFocusView.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ErfassungCard.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ErfassungModal.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ErfassungSheet.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/InquiryFlow/InquiryToQuote.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ManualFlow/CustomerSection.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ManualFlow/ItemsSection.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/PhoneFlow/PhoneExtractionResult.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ScanFlow/ScanResult.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ScanFlow/ScanUpload.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/shared/ItemPhotoUploader.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/VorschlagBanner.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/erfassung/ZeitSlider.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/feedback/FeedbackFooter.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/components/foundation/createFoundationUnavailableComponent.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/components/foundation/FoundationOverlayGate.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/components/foundation/FoundationUnavailable.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/galvanik/GalvanikOrderRow.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/galvanik/GalvanikQueue.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/home/DayTimeline.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/home/HomeKpiCard.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/intake/IntakeCompletionSummary.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/intake/OcrMatchResult.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/kommunikation/kommandozentrale/hooks/useClientDossier.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/GlobalSearch.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/GlobalSearchAIResult.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/KreileAppShell.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/KreileHeader.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/MobileBottomNav.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/RealtimeSyncManager.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/layout/TabletTopFlowNav.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/offline/OfflineSyncBadge.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/BenchmarkSlider.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/BulkLabelPrintView.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/CostSummaryTable.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/HeadCostBadge.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/ItemDrawer.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/LabelPrintView.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/NewOrderForm.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/OrderActionGrid.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/OrderCompactCard.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/OrderOverlay.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/OrderProfitabilityCard.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/OrderTile.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/OrderWideCard.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/PaymentDrawer.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/PriceLinesEditor.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/StationCompletionModal.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/StationContextBlock.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/StationStatusButton.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/StatusMailDrawer.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/variants/ErfassungVariant.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/variants/VersandVariant.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/orders/variants/WareneingangActive.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/ServiceWorkerRegister.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/start/EmailLoginDialog.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/start/PinDialog.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/start/StartScreenClient.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/start/WeatherBubble.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/telefonnotiz/FloatingParkedCall.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/telefonnotiz/TelefonnotizDesktop.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/testpilot/TestpilotProvider.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/ui/AnalysisChart.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/ui/AnalysisOverlay.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/ui/AppOverlayPortal.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/ui/AppShortcutOverlay.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/ui/DetailOverlay.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/ui/PreviewDrawer.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/ui/ResponsiveDetailDrawer.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/ui/ThemeToggle.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/components/warenausgang/WarenausgangQueue.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/contexts/ParkedCallContext.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/db/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/db/schema_buchhaltung.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/db/schema.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/analyse.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/AnalyseDrillOverlay.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/hooks/useGlobalSearch.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/hooks/useKiInsight.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/hooks/useWerkstattPuls.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/kacheln/werkstatt-puls/WerkstattPulsOverlay.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/analyse/kacheln/werkstatt-puls/WerkstattPulsTile.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/customers/customer-card/customerCard.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/orders/orderCost.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/orders/orderPhoto.actions.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/features/orders/shipment.actions.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/hooks/useClientReady.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/hooks/useOfflineManager.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/hooks/usePhoneNoteAnalysis.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/ai/geminiClient.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/analyse/insights.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/analyse/routes.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/analytics/drillContext.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/analytics/useFeatureFlag.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/auth/__tests__/PermissionsContext.test.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/auth/__tests__/pinClientBoundary.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/auth/__tests__/w3RoleMatrixDraft.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/auth/authorizationContract.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/auth/PermissionsContext.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/auth/userDtos.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/auth/w3RoleMatrixDraft.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/erechnung/MockERechnungParser.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/providers/MockBuchhaltungProvider.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/providers/SupabaseBuchhaltungProvider.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/buchhaltung/stufe2/mocks.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/email/resendAdapter.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/marketing/adapters/InstagramAdapter.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/ocr/KlippaProvider.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/ocr/ManualProvider.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/ocr/Verteilung.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/offline/__tests__/idbSync.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/offline/idbSync.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/offline/IndexedDBHelper.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/offline/OfflineManager.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/offline/OfflineOutbox.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/offline/SyncContext.tsx"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/orders/__tests__/getUrgency.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/orders/__tests__/processContract.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/orders/__tests__/w1MigrationDraft.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/orders/getUrgency.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/orders/processContract.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/payments/mollieAdapter.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/payments/paymentProvider.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/pdf/DeliveryNote.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/pdf/OrderLabel.tsx"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/privacy/dsgvoAnonymizer.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/bathMeasurementsRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/bathsRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/companySettingsRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/complaintsRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/customersRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/eventsRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/inquiriesRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/inventoryRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/itemsRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/kvpRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/orderQueries.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/ordersRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/priceAgreementsRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/repositories/timelineRepository.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/search/aiAggregation.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/search/globalSearch.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/devAuthBypass.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/foundationGate.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/pinAttemptLimiter.test.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/__tests__/pinLoginSelector.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/appSession.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/appSessionToken.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/authHelper.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/devAuthBypass.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/foundationGate.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/server/operationalOrders.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/pinAttemptLimiter.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/server/pinLoginSelector.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/services/__tests__/photoService.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/services/customerInsights.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/services/labelService.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/services/photoService.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/stations/nextStation.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/supabase/client.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "src/lib/tracking/__tests__/tracking.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/tracking/tracking.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/types/customer.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/useOrderLive.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/lib/warendurchlaufIconResolver.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/proxy.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/test/scan_order.integration.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "src/test/verify.integration.test.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/customer-enrich/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/freetext-extract/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/inquiry-extract/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/item-photo-analyze/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/kpi-insight/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/mollie-create-payment/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/mollie-webhook/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/notes-extract/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/payments-webhook-mollie/index.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "supabase/functions/scan-analyze/index.ts"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/20260728124147_foundation_w1_runtime_receipt_columns.sql"
+        },
+        {
+          "status": "A",
+          "old_path": null,
+          "path": "supabase/migrations/drafts/W3_ROLE_MATRIX_001__POLICY_DRAFT_ONLY.sql"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "test_legacy.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "test_station_counts.ts"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "test-routes.js"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "verify.js"
+        },
+        {
+          "status": "M",
+          "old_path": null,
+          "path": "vitest.config.ts"
+        }
+      ],
+      "stats": {
+        "unique_commit_count": 12,
+        "changed_file_count": 430,
+        "additions": 11041,
+        "deletions": 34054
+      },
+      "inventory_sha256": "9cf75c29c76fac6487558820a8d5dd882d2e4f600cb2926731f94d5f5339e16c"
+    }
+  ]
+}
