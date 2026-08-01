@@ -77,13 +77,13 @@ BEGIN
         )
         AND COALESCE(lower(trim(it.surface_requested)), 'unbekannt') = v_oberflaeche
         -- Ausreißer-Schutz: ignoriere Werte > 3x oder < 1/3 des bisherigen Medians
-        AND zb.dauer_minuten BETWEEN 
-          COALESCE((SELECT median_minuten / 3 FROM vorlage_zeit 
-                    WHERE schluessel = v_schluessel AND station_kuerzel = v_station 
+        AND zb.dauer_minuten BETWEEN
+          COALESCE((SELECT median_minuten / 3 FROM vorlage_zeit
+                    WHERE schluessel = v_schluessel AND station_kuerzel = v_station
                     AND tenant_id = v_tenant), 0)
           AND
-          COALESCE((SELECT median_minuten * 3 FROM vorlage_zeit 
-                    WHERE schluessel = v_schluessel AND station_kuerzel = v_station 
+          COALESCE((SELECT median_minuten * 3 FROM vorlage_zeit
+                    WHERE schluessel = v_schluessel AND station_kuerzel = v_station
                     AND tenant_id = v_tenant), 99999)
       ON CONFLICT (tenant_id, schluessel, station_kuerzel)
       DO UPDATE SET
@@ -152,11 +152,11 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql
 
 -- Trigger auf orders
 CREATE TRIGGER trg_update_vorlagen
   AFTER UPDATE OF status ON orders
   FOR EACH ROW
   WHEN (NEW.status IN ('completed', 'abgeschlossen') AND OLD.status IS DISTINCT FROM NEW.status)
-  EXECUTE FUNCTION fn_update_vorlagen();
+  EXECUTE FUNCTION fn_update_vorlagen()

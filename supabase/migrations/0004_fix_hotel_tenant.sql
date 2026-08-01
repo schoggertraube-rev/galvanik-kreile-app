@@ -1,7 +1,7 @@
 -- Migration: 0004_fix_hotel_tenant.sql
 -- Purpose: Remove all 'hotel-kreile' defaults and fix existing tenant_id data safely
 
-DO $$ 
+DO $$
 BEGIN
     -- 1. Tabelle 'orders'
     IF EXISTS (SELECT FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'tenant_id') THEN
@@ -21,7 +21,7 @@ BEGIN
         UPDATE events SET tenant_id = 'galvanik-kreile' WHERE tenant_id = 'hotel-kreile';
     END IF;
 
-END $$;
+END $$
 
 -- Supabase Schema-Cache neu laden, um Fehler (wie PGRST204) zu vermeiden
-NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload schema'

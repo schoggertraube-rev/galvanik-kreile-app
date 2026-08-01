@@ -1,12 +1,12 @@
 -- 1. Overlay Pflicht
-ALTER TABLE orders 
-  ADD COLUMN IF NOT EXISTS priority text DEFAULT 'normal', 
-  ADD COLUMN IF NOT EXISTS promised_due_date timestamptz, 
-  ADD COLUMN IF NOT EXISTS intake_date timestamptz DEFAULT now(), 
-  ADD COLUMN IF NOT EXISTS completed_date timestamptz;
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS priority text DEFAULT 'normal',
+  ADD COLUMN IF NOT EXISTS promised_due_date timestamptz,
+  ADD COLUMN IF NOT EXISTS intake_date timestamptz DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS completed_date timestamptz
 
-ALTER TABLE events 
-  ADD COLUMN IF NOT EXISTS station text;
+ALTER TABLE events
+  ADD COLUMN IF NOT EXISTS station text
 
 CREATE TABLE IF NOT EXISTS communications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS communications (
   bounced_at timestamptz,
   complained_at timestamptz,
   created_at timestamptz DEFAULT now()
-);
+)
 
 -- 2. Email Templates
 CREATE TABLE IF NOT EXISTS email_templates (
@@ -37,15 +37,16 @@ CREATE TABLE IF NOT EXISTS email_templates (
   variables jsonb DEFAULT '[]'::jsonb,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_email_templates_tenant ON email_templates(tenant_id);
+)
+
+CREATE INDEX IF NOT EXISTS idx_email_templates_tenant ON email_templates(tenant_id)
 
 -- 3. Items Restauration
-ALTER TABLE items 
+ALTER TABLE items
   ADD COLUMN IF NOT EXISTS repair_types text[] DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS station_sequence jsonb DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS current_step integer DEFAULT 0,
-  ADD COLUMN IF NOT EXISTS internal_notes text;
+  ADD COLUMN IF NOT EXISTS internal_notes text
 
 -- 4. Price Lines
 CREATE TABLE IF NOT EXISTS price_lines (
@@ -60,9 +61,11 @@ CREATE TABLE IF NOT EXISTS price_lines (
   sort_order integer DEFAULT 0,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_price_lines_order ON price_lines(order_id);
-CREATE INDEX IF NOT EXISTS idx_price_lines_item ON price_lines(item_id);
+)
+
+CREATE INDEX IF NOT EXISTS idx_price_lines_order ON price_lines(order_id)
+
+CREATE INDEX IF NOT EXISTS idx_price_lines_item ON price_lines(item_id)
 
 -- 5. Payments
 CREATE TABLE IF NOT EXISTS payments (
@@ -74,40 +77,46 @@ CREATE TABLE IF NOT EXISTS payments (
   provider text NOT NULL,
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
-);
+)
 
-ALTER TABLE payments 
+ALTER TABLE payments
   ADD COLUMN IF NOT EXISTS provider_intent_id text,
   ADD COLUMN IF NOT EXISTS mollie_status text,
   ADD COLUMN IF NOT EXISTS mollie_method text,
-  ADD COLUMN IF NOT EXISTS receipt_url text;
+  ADD COLUMN IF NOT EXISTS receipt_url text
 
-CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id);
-CREATE INDEX IF NOT EXISTS idx_payments_intent ON payments(provider_intent_id);
+CREATE INDEX IF NOT EXISTS idx_payments_order ON payments(order_id)
+
+CREATE INDEX IF NOT EXISTS idx_payments_intent ON payments(provider_intent_id)
 
 -- 6. Payments RLS
-ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "payments_all" ON payments FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE price_lines ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "price_lines_all" ON price_lines FOR ALL TO public USING (true) WITH CHECK (true);
-ALTER TABLE email_templates ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "email_templates_all" ON email_templates FOR ALL TO public USING (true) WITH CHECK (true);
+ALTER TABLE payments ENABLE ROW LEVEL SECURITY
+
+CREATE POLICY "payments_all" ON payments FOR ALL TO public USING (true) WITH CHECK (true)
+
+ALTER TABLE price_lines ENABLE ROW LEVEL SECURITY
+
+CREATE POLICY "price_lines_all" ON price_lines FOR ALL TO public USING (true) WITH CHECK (true)
+
+ALTER TABLE email_templates ENABLE ROW LEVEL SECURITY
+
+CREATE POLICY "email_templates_all" ON email_templates FOR ALL TO public USING (true) WITH CHECK (true)
 
 -- 7. Ausgangsrechnung Payment
-ALTER TABLE ausgangsrechnung 
+ALTER TABLE ausgangsrechnung
   ADD COLUMN IF NOT EXISTS bezahlt_am timestamptz,
   ADD COLUMN IF NOT EXISTS bezahlt_methode text,
   ADD COLUMN IF NOT EXISTS bezahlt_betrag_eur numeric(10,2),
-  ADD COLUMN IF NOT EXISTS bezahlt_payment_id uuid REFERENCES payments(id) ON DELETE SET NULL;
+  ADD COLUMN IF NOT EXISTS bezahlt_payment_id uuid REFERENCES payments(id) ON DELETE SET NULL
 
 -- 8. Company Settings Workflow Templates
-ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS workflow_templates jsonb DEFAULT '{}'::jsonb;
+ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS workflow_templates jsonb DEFAULT '{}'::jsonb
 
-UPDATE company_settings 
+UPDATE company_settings
 SET workflow_templates = '{
   "chrom_hochglanz": ["wareneingang", "entmetallisierung", "reparatur", "schleiferei_grob", "schleiferei_fein", "kupfer", "kupfer_schleifen", "nickel", "chrom", "politur", "nachpolitur", "qs", "warenausgang"],
   "vernickeln": ["wareneingang", "entmetallisierung", "reparatur", "schleiferei_grob", "schleiferei_fein", "nickel", "qs", "warenausgang"],
   "bruenieren": ["wareneingang", "entmetallisierung", "reparatur", "schleiferei_grob", "bruenieren", "qs", "warenausgang"],
   "verzinken": ["wareneingang", "entmetallisierung", "reparatur", "schleiferei_grob", "verzinken", "qs", "warenausgang"]
-}'::jsonb 
-WHERE tenant_id = 'galvanik-kreile';
+}'::jsonb
+WHERE tenant_id = 'galvanik-kreile'

@@ -3,7 +3,7 @@
 ALTER TABLE IF EXISTS baths
   ADD COLUMN IF NOT EXISTS target_values JSONB NOT NULL DEFAULT '{}'::jsonb,
   ADD COLUMN IF NOT EXISTS process_type TEXT NOT NULL DEFAULT 'unknown',
-  ADD COLUMN IF NOT EXISTS station_id TEXT;
+  ADD COLUMN IF NOT EXISTS station_id TEXT
 
 UPDATE baths
 SET target_values = jsonb_strip_nulls(
@@ -20,4 +20,4 @@ WHERE target_values = '{}'::jsonb
     OR temperature_max IS NOT NULL
     OR ph_min IS NOT NULL
     OR ph_max IS NOT NULL
-  );
+  )

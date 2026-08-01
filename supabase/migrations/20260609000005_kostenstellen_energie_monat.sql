@@ -6,6 +6,6 @@ CREATE TABLE kostenstellen_energie_monat (
   energie_eur_pro_stunde  NUMERIC(8,2) NOT NULL,
   created_at              TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (tenant_id, kostenstelle_id, monat)
-);
+)
 
-CREATE INDEX idx_kostenstellen_energie_monat_tenant ON kostenstellen_energie_monat(tenant_id);
+CREATE INDEX idx_kostenstellen_energie_monat_tenant ON kostenstellen_energie_monat(tenant_id)

@@ -13,12 +13,14 @@ CREATE TABLE IF NOT EXISTS order_cost_events (
 
   source        text NOT NULL DEFAULT 'manual',
   created_at    timestamptz DEFAULT now()
-);
+)
 
-CREATE INDEX idx_order_cost_events_order ON order_cost_events(order_id);
-CREATE INDEX idx_order_cost_events_caused ON order_cost_events(caused_by);
+CREATE INDEX idx_order_cost_events_order ON order_cost_events(order_id)
 
-ALTER TABLE order_cost_events ENABLE ROW LEVEL SECURITY;
+CREATE INDEX idx_order_cost_events_caused ON order_cost_events(caused_by)
+
+ALTER TABLE order_cost_events ENABLE ROW LEVEL SECURITY
+
 CREATE POLICY "service_role_all_order_cost_events" ON order_cost_events
   AS PERMISSIVE FOR ALL TO service_role
-  USING (true) WITH CHECK (true);
+  USING (true) WITH CHECK (true)

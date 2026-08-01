@@ -85,7 +85,7 @@ SELECT
   (SELECT COUNT(*) FROM stock_movements sm WHERE sm.order_id = o.id AND sm.movement_type = 'verbrauch') AS anz_verbrauch,
   (SELECT COUNT(*) FROM arbeitszeit_buchung zb WHERE zb.auftrag_id = o.id) AS anz_zeitbuchungen
 FROM orders o
-LEFT JOIN customers c ON c.id = o.customer_id;
+LEFT JOIN customers c ON c.id = o.customer_id
 
 -- ==========================================
 -- VIEW 2: v_kostenstelle_monatswerte
@@ -105,12 +105,12 @@ SELECT
   COALESCE(SUM(zb.dauer_minuten / 60.0 * zb.kostensatz_eur_pro_stunde), 0) AS personalkosten_ist,
   COUNT(DISTINCT zb.auftrag_id) AS anz_auftraege
 FROM kostenstelle ks
-LEFT JOIN arbeitszeit_buchung zb 
+LEFT JOIN arbeitszeit_buchung zb
   ON zb.kostenstelle_kuerzel = ks.kuerzel
   AND zb.tenant_id = ks.tenant_id
 WHERE ks.tenant_id = 'galvanik-kreile'
-GROUP BY ks.id, ks.kuerzel, ks.name, ks.typ, 
-  date_trunc('month', zb.start_zeit), ks.verfuegbare_stunden_monatlich;
+GROUP BY ks.id, ks.kuerzel, ks.name, ks.typ,
+  date_trunc('month', zb.start_zeit), ks.verfuegbare_stunden_monatlich
 
 -- ==========================================
 -- VIEW 3: v_periodenabschluss_status
@@ -123,21 +123,21 @@ SELECT
   p.status,
   p.geschlossen_am,
   -- Belege ohne Konto
-  (SELECT COUNT(*) FROM beleg b 
+  (SELECT COUNT(*) FROM beleg b
    WHERE b.periode_id = p.id AND b.konto_id IS NULL) AS belege_ohne_konto,
   -- Belege ohne Kostenstelle
-  (SELECT COUNT(*) FROM beleg b 
+  (SELECT COUNT(*) FROM beleg b
    WHERE b.periode_id = p.id AND b.kostenstelle_id IS NULL) AS belege_ohne_kostenstelle,
   -- Rechnungen ohne Auftragszuordnung
-  (SELECT COUNT(*) FROM ausgangsrechnung ar 
+  (SELECT COUNT(*) FROM ausgangsrechnung ar
    WHERE ar.periode_id = p.id AND ar.order_id IS NULL) AS rechnungen_ohne_auftrag,
   -- Rechnungen unbezahlt
-  (SELECT COUNT(*) FROM ausgangsrechnung ar 
+  (SELECT COUNT(*) FROM ausgangsrechnung ar
    WHERE ar.periode_id = p.id AND ar.bezahlt_am IS NULL) AS rechnungen_offen,
   -- Aufträge mit Abschluss im Monat aber ohne DB
-  (SELECT COUNT(*) FROM orders o 
+  (SELECT COUNT(*) FROM orders o
    WHERE o.status IN ('completed','abgeschlossen')
      AND date_trunc('month', o.due_date) = make_date(p.jahr, p.monat, 1)
      AND o.db_ist IS NULL) AS auftraege_ohne_db
 FROM periode p
-WHERE p.tenant_id = 'galvanik-kreile';
+WHERE p.tenant_id = 'galvanik-kreile'

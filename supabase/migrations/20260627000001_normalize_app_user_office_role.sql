@@ -1,4 +1,4 @@
-begin;
+begin
 
 do $$
 declare
@@ -21,8 +21,8 @@ begin
       updated_at = now()
   where tenant_id = 'galvanik-kreile'
     and role = 'office';
-end $$;
+end $$
 
-commit;
+commit
 
-notify pgrst, 'reload schema';
+notify pgrst, 'reload schema'

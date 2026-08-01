@@ -1,5 +1,4 @@
 -- RLS Phase 1 Migration
--- Skipping table: public.ausgangsrechnung_position (STOP: Missing tenant_id column, reported to Siglinder)
 
 -- 1. Table: events
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;

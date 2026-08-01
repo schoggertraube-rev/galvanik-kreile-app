@@ -14,6 +14,6 @@ CREATE TABLE vorlage_verbrauch (
   haeufigkeit_prozent      numeric(5,2),            -- in wieviel % der Aufträge dieser Klasse benutzt
   letzte_aktualisierung    timestamptz DEFAULT now(),
   UNIQUE (tenant_id, schluessel, station_kuerzel, inventory_item_id)
-);
+)
 
-ALTER TABLE stock_movements ADD CONSTRAINT fk_stock_movements_vorlage_id FOREIGN KEY (vorlage_id) REFERENCES vorlage_verbrauch(id);
+ALTER TABLE stock_movements ADD CONSTRAINT fk_stock_movements_vorlage_id FOREIGN KEY (vorlage_id) REFERENCES vorlage_verbrauch(id)

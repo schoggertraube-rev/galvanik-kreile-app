@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS warning_event (
   dismissed_von   uuid,
   begruendung     text,               -- Pflichtfeld beim Dismiss
   suppress_bis    timestamptz         -- nach Dismiss: 7 Tage Ruhe
-);
+)
 
-CREATE INDEX IF NOT EXISTS idx_warning_tenant_aktiv 
-  ON warning_event(tenant_id, dismissed_am) 
-  WHERE dismissed_am IS NULL;
+CREATE INDEX IF NOT EXISTS idx_warning_tenant_aktiv
+  ON warning_event(tenant_id, dismissed_am)
+  WHERE dismissed_am IS NULL

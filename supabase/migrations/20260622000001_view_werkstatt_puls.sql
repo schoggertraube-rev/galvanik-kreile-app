@@ -27,8 +27,7 @@ SELECT
   ) AS ohne_zusagetermin
 FROM orders
 WHERE tenant_id = 'galvanik-kreile'
-  AND created_at >= date_trunc('week', now());
-
+  AND created_at >= date_trunc('week', now())
 
 -- B: Durchlaufzeit gesamt (letzte 30 Tage, abgeschlossene Aufträge)
 CREATE OR REPLACE VIEW v_analyse_durchlaufzeit AS
@@ -39,8 +38,7 @@ SELECT
 FROM orders
 WHERE tenant_id = 'galvanik-kreile'
   AND completed_date IS NOT NULL
-  AND completed_date >= now() - interval '30 days';
-
+  AND completed_date >= now() - interval '30 days'
 
 -- C: Durchlaufzeit pro Station (Events-basiert)
 CREATE OR REPLACE VIEW v_analyse_station_durchlauf AS
@@ -65,8 +63,7 @@ SELECT
 FROM eingang e
 JOIN ausgang a ON a.order_id = e.order_id AND a.station = e.station
 WHERE e.ts_ein >= now() - interval '30 days'
-GROUP BY e.station;
-
+GROUP BY e.station
 
 -- D: Wochenziel (abgeschlossene Aufträge diese Woche)
 CREATE OR REPLACE VIEW v_analyse_wochenziel AS
@@ -75,8 +72,7 @@ SELECT
 FROM orders
 WHERE tenant_id = 'galvanik-kreile'
   AND completed_date IS NOT NULL
-  AND completed_date >= date_trunc('week', now());
-
+  AND completed_date >= date_trunc('week', now())
 
 -- E: Engpass-Heatmap (Teile pro Station JETZT)
 CREATE OR REPLACE VIEW v_analyse_engpass AS
@@ -86,4 +82,4 @@ SELECT
 FROM items
 WHERE current_station_id IS NOT NULL
 GROUP BY current_station_id
-ORDER BY teile_wartend DESC;
+ORDER BY teile_wartend DESC

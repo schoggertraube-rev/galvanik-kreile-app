@@ -1,12 +1,14 @@
 -- Phase 3: Resilience, Order Profitability & Marketing Reactivation
 
 -- 1. Extend Customers
-ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "marketing_opt_out" boolean DEFAULT false;
-ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "last_reactivated_at" timestamp;
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "marketing_opt_out" boolean DEFAULT false
+
+ALTER TABLE "customers" ADD COLUMN IF NOT EXISTS "last_reactivated_at" timestamp
 
 -- 2. Extend Events
-ALTER TABLE "events" ADD COLUMN IF NOT EXISTS "payload" jsonb;
-ALTER TABLE "events" ADD COLUMN IF NOT EXISTS "status" varchar(50) DEFAULT 'success';
+ALTER TABLE "events" ADD COLUMN IF NOT EXISTS "payload" jsonb
+
+ALTER TABLE "events" ADD COLUMN IF NOT EXISTS "status" varchar(50) DEFAULT 'success'
 
 -- 3. Offline Outbox
 CREATE TABLE IF NOT EXISTS "offline_outbox" (
@@ -19,11 +21,13 @@ CREATE TABLE IF NOT EXISTS "offline_outbox" (
   "last_error" text,
   "created_at" timestamp NOT NULL DEFAULT now(),
   "processed_at" timestamp
-);
+)
 
-ALTER TABLE "offline_outbox" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Enable all for authenticated users" ON "offline_outbox";
-CREATE POLICY "Enable all for authenticated users" ON "offline_outbox" FOR ALL TO authenticated USING (true);
+ALTER TABLE "offline_outbox" ENABLE ROW LEVEL SECURITY
+
+DROP POLICY IF EXISTS "Enable all for authenticated users" ON "offline_outbox"
+
+CREATE POLICY "Enable all for authenticated users" ON "offline_outbox" FOR ALL TO authenticated USING (true)
 
 -- 4. Order Cost Positions
 CREATE TABLE IF NOT EXISTS "order_cost_positions" (
@@ -34,11 +38,13 @@ CREATE TABLE IF NOT EXISTS "order_cost_positions" (
   "description" text NOT NULL,
   "amount_cents" integer NOT NULL,
   "created_at" timestamp NOT NULL DEFAULT now()
-);
+)
 
-ALTER TABLE "order_cost_positions" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Enable all for authenticated users" ON "order_cost_positions";
-CREATE POLICY "Enable all for authenticated users" ON "order_cost_positions" FOR ALL TO authenticated USING (true);
+ALTER TABLE "order_cost_positions" ENABLE ROW LEVEL SECURITY
+
+DROP POLICY IF EXISTS "Enable all for authenticated users" ON "order_cost_positions"
+
+CREATE POLICY "Enable all for authenticated users" ON "order_cost_positions" FOR ALL TO authenticated USING (true)
 
 -- 5. Communication Drafts
 CREATE TABLE IF NOT EXISTS "communication_drafts" (
@@ -51,8 +57,10 @@ CREATE TABLE IF NOT EXISTS "communication_drafts" (
   "status" varchar(50) NOT NULL DEFAULT 'draft',
   "created_at" timestamp NOT NULL DEFAULT now(),
   "updated_at" timestamp NOT NULL DEFAULT now()
-);
+)
 
-ALTER TABLE "communication_drafts" ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Enable all for authenticated users" ON "communication_drafts";
-CREATE POLICY "Enable all for authenticated users" ON "communication_drafts" FOR ALL TO authenticated USING (true);
+ALTER TABLE "communication_drafts" ENABLE ROW LEVEL SECURITY
+
+DROP POLICY IF EXISTS "Enable all for authenticated users" ON "communication_drafts"
+
+CREATE POLICY "Enable all for authenticated users" ON "communication_drafts" FOR ALL TO authenticated USING (true)

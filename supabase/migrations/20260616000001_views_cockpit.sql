@@ -19,7 +19,7 @@ SELECT
     THEN SUM(vdb.deckungsbeitrag) / SUM(vdb.erloes_netto)
     ELSE NULL END AS db_marge,
   MAX(o.intake_date) AS letzter_auftrag,
-  (SELECT COUNT(*) FROM complaints cpl WHERE cpl.customer_id = c.id) 
+  (SELECT COUNT(*) FROM complaints cpl WHERE cpl.customer_id = c.id)
     AS reklamationen,
   -- Durchschnittliche Durchlaufzeit (Eingang bis letzte Zeitbuchung)
   AVG(EXTRACT(EPOCH FROM (
@@ -31,9 +31,9 @@ SELECT
 FROM customers c
 LEFT JOIN orders o ON o.customer_id = c.id
 LEFT JOIN v_auftrag_db vdb ON vdb.order_id = o.id
-LEFT JOIN ausgangsrechnung ar ON ar.order_id = o.id 
+LEFT JOIN ausgangsrechnung ar ON ar.order_id = o.id
   AND (ar.is_demo IS NULL OR ar.is_demo = false)
-GROUP BY c.id, c.name, c.company_name, c.type, c.created_at;
+GROUP BY c.id, c.name, c.company_name, c.type, c.created_at
 
 -- View 2: v_engpass
 CREATE OR REPLACE VIEW v_engpass AS
@@ -78,7 +78,7 @@ SELECT
       ELSE 0 END
   )) AS engpass_score
 FROM kostenstelle ks
-WHERE ks.typ = 'produktion' AND ks.tenant_id = 'galvanik-kreile';
+WHERE ks.typ = 'produktion' AND ks.tenant_id = 'galvanik-kreile'
 
 -- View 3: v_aging
 CREATE OR REPLACE VIEW v_aging AS
@@ -104,23 +104,23 @@ SELECT
     ELSE '>90'
   END AS aging_bucket,
   CASE WHEN ar.bezahlt_am IS NULL AND ar.faellig_am IS NOT NULL
-    THEN GREATEST(0, NOW()::date - ar.faellig_am) 
+    THEN GREATEST(0, NOW()::date - ar.faellig_am)
     ELSE NULL END AS tage_ueberfaellig
 FROM ausgangsrechnung ar
 LEFT JOIN customers c ON c.id = ar.kunde_id
-WHERE ar.is_demo IS NULL OR ar.is_demo = false;
+WHERE ar.is_demo IS NULL OR ar.is_demo = false
 
 -- View 4: v_monatsergebnis
 CREATE OR REPLACE VIEW v_monatsergebnis AS
 WITH erloes AS (
-  SELECT date_trunc('month', ar.datum)::date AS monat, 
+  SELECT date_trunc('month', ar.datum)::date AS monat,
          SUM(ar.netto) AS summe
   FROM ausgangsrechnung ar
   WHERE ar.is_demo IS NULL OR ar.is_demo = false
   GROUP BY 1
 ),
 material AS (
-  SELECT date_trunc('month', b.erstellt_am)::date AS monat, 
+  SELECT date_trunc('month', b.erstellt_am)::date AS monat,
          SUM(b.netto) AS summe
   FROM beleg b
   LEFT JOIN konto k ON k.id = b.konto_id
@@ -134,7 +134,7 @@ personal AS (
   GROUP BY 1
 ),
 energie AS (
-  SELECT date_trunc('month', b.erstellt_am)::date AS monat, 
+  SELECT date_trunc('month', b.erstellt_am)::date AS monat,
          SUM(b.netto) AS summe
   FROM beleg b
   LEFT JOIN konto k ON k.id = b.konto_id
@@ -142,7 +142,7 @@ energie AS (
   GROUP BY 1
 ),
 sachkosten AS (
-  SELECT date_trunc('month', b.erstellt_am)::date AS monat, 
+  SELECT date_trunc('month', b.erstellt_am)::date AS monat,
          SUM(b.netto) AS summe
   FROM beleg b
   LEFT JOIN konto k ON k.id = b.konto_id
@@ -163,10 +163,10 @@ SELECT
   COALESCE(p.summe, 0) AS personal_kosten,
   COALESCE(en.summe, 0) AS energie_kosten,
   COALESCE(s.summe, 0) AS sachkosten,
-  COALESCE(e.summe, 0) 
-    - COALESCE(m.summe, 0) 
-    - COALESCE(p.summe, 0) 
-    - COALESCE(en.summe, 0) 
+  COALESCE(e.summe, 0)
+    - COALESCE(m.summe, 0)
+    - COALESCE(p.summe, 0)
+    - COALESCE(en.summe, 0)
     - COALESCE(s.summe, 0) AS ergebnis
 FROM alle_monate am
 LEFT JOIN erloes e ON e.monat = am.monat
@@ -174,4 +174,4 @@ LEFT JOIN material m ON m.monat = am.monat
 LEFT JOIN personal p ON p.monat = am.monat
 LEFT JOIN energie en ON en.monat = am.monat
 LEFT JOIN sachkosten s ON s.monat = am.monat
-ORDER BY am.monat DESC;
+ORDER BY am.monat DESC

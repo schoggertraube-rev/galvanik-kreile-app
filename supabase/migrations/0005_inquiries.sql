@@ -16,12 +16,12 @@ CREATE TABLE inquiries (
   pricing       jsonb,
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
-);
+)
 
-ALTER TABLE inquiries ENABLE ROW LEVEL SECURITY;
+ALTER TABLE inquiries ENABLE ROW LEVEL SECURITY
 
 CREATE POLICY "allow_tenant_all_inquiries" ON inquiries
     FOR ALL
     TO public
     USING (tenant_id = current_setting('app.tenant_id', true))
-    WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
+    WITH CHECK (tenant_id = current_setting('app.tenant_id', true))

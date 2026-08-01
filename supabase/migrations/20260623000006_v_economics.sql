@@ -92,6 +92,6 @@ LEFT JOIN kpi_cost_assumptions kca_delay
  AND kca_delay.is_active = true
  AND kca_delay.tenant_id = o.tenant_id
 WHERE o.tenant_id = 'galvanik-kreile'
-  AND COALESCE(o.status, '') NOT IN ('closed', 'abgeschlossen', 'cancelled', 'storniert');
+  AND COALESCE(o.status, '') NOT IN ('closed', 'abgeschlossen', 'cancelled', 'storniert')
 
-NOTIFY pgrst, 'reload schema';
+NOTIFY pgrst, 'reload schema'

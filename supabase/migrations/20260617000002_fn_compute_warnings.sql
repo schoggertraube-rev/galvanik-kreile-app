@@ -5,7 +5,7 @@ BEGIN
   INSERT INTO warning_event (tenant_id, typ, titel, beschreibung, schwere, link)
   SELECT p_tenant, 'liquiditaet',
     'Offene Forderungen über 30 Tage',
-    COUNT(*) || ' Rechnungen über 30 Tage überfällig, Volumen ' || 
+    COUNT(*) || ' Rechnungen über 30 Tage überfällig, Volumen ' ||
       COALESCE(SUM(netto)::int::text, '0') || ' €',
     CASE WHEN COUNT(*) > 3 THEN 'kritisch' ELSE 'warnung' END,
     '/buchhaltung'
@@ -13,7 +13,7 @@ BEGIN
   WHERE aging_bucket IN ('31-60','61-90','>90')
   HAVING COUNT(*) > 0
   AND NOT EXISTS (
-    SELECT 1 FROM warning_event we 
+    SELECT 1 FROM warning_event we
     WHERE we.tenant_id = p_tenant AND we.typ = 'liquiditaet'
       AND (we.dismissed_am IS NULL OR we.suppress_bis > NOW())
   );
@@ -28,7 +28,7 @@ BEGIN
   FROM v_engpass
   WHERE auslastung_quote > 0.85
   AND NOT EXISTS (
-    SELECT 1 FROM warning_event we 
+    SELECT 1 FROM warning_event we
     WHERE we.tenant_id = p_tenant AND we.typ = 'auslastung_' || kuerzel
       AND (we.dismissed_am IS NULL OR we.suppress_bis > NOW())
   );
@@ -37,7 +37,7 @@ BEGIN
   INSERT INTO warning_event (tenant_id, typ, titel, beschreibung, schwere, link, payload)
   SELECT p_tenant, 'abwanderung',
     'Stammkunden-Abwanderung',
-    COUNT(*) || ' Stammkunden seit >9 Monaten inaktiv (Umsatz: ' || 
+    COUNT(*) || ' Stammkunden seit >9 Monaten inaktiv (Umsatz: ' ||
       COALESCE(SUM(umsatz_gesamt)::int::text, '0') || ' €)',
     'warnung',
     '/cockpit',
@@ -49,7 +49,7 @@ BEGIN
     AND auftraege_gesamt >= 3
   HAVING COUNT(*) > 0
   AND NOT EXISTS (
-    SELECT 1 FROM warning_event we 
+    SELECT 1 FROM warning_event we
     WHERE we.tenant_id = p_tenant AND we.typ = 'abwanderung'
       AND (we.dismissed_am IS NULL OR we.suppress_bis > NOW())
   );
@@ -67,8 +67,8 @@ BEGIN
     AND erloes_netto > 0
     AND status IN ('completed','abgeschlossen')
   AND NOT EXISTS (
-    SELECT 1 FROM warning_event we 
+    SELECT 1 FROM warning_event we
     WHERE we.tenant_id = p_tenant AND we.typ = 'db_negativ_' || order_id
   );
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql

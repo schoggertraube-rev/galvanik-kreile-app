@@ -14,6 +14,6 @@ CREATE TABLE forecast_version (
   werte           JSONB NOT NULL,       -- Forecast-KPIs als Struktur
   bemerkung       TEXT,
   ist_aktiv       BOOLEAN DEFAULT FALSE -- nur eine pro (jahr,monat,version_typ)
-);
+)
 
-CREATE INDEX idx_forecast_version_tenant ON forecast_version(tenant_id);
+CREATE INDEX idx_forecast_version_tenant ON forecast_version(tenant_id)

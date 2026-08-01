@@ -1,10 +1,17 @@
-ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS kostenstelle_kuerzel text;
-ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS station_kuerzel text;
-ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS erfasst_von uuid; -- FK app_users(id)
-ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS war_aus_vorlage boolean DEFAULT false;
-ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS vorlage_id uuid;  
-ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS snapshot_einkaufspreis_eur numeric(10,4);
-ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS notiz text;
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS kostenstelle_kuerzel text
+
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS station_kuerzel text
+
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS erfasst_von uuid
+
+-- FK app_users(id)
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS war_aus_vorlage boolean DEFAULT false
+
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS vorlage_id uuid
+
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS snapshot_einkaufspreis_eur numeric(10,4)
+
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS notiz text
 
 DO $$
 BEGIN
@@ -13,4 +20,4 @@ BEGIN
     END IF;
 EXCEPTION WHEN duplicate_object THEN
     -- Ignore
-END $$;
+END $$

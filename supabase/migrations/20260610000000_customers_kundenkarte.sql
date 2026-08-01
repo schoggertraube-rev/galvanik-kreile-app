@@ -4,7 +4,7 @@ ALTER TABLE customers
   ADD COLUMN IF NOT EXISTS payment_preference text DEFAULT 'rechnung_14',
   ADD COLUMN IF NOT EXISTS classification text DEFAULT 'B',
   ADD COLUMN IF NOT EXISTS tags jsonb DEFAULT '[]'::jsonb,
-  ADD COLUMN IF NOT EXISTS internal_notes text;
+  ADD COLUMN IF NOT EXISTS internal_notes text
 
 -- Seed email templates if not exists
 INSERT INTO email_templates (tenant_id, template_key, name, subject_template, body_html_template, body_text_template) VALUES
@@ -14,7 +14,7 @@ INSERT INTO email_templates (tenant_id, template_key, name, subject_template, bo
   ('galvanik-kreile', 'mahnung', 'Mahnung', 'Mahnung – {rechnungsnummer}',
    '<p>Sehr geehrte/r {kunde_name},</p><p>trotz unserer Erinnerung ist die Rechnung {rechnungsnummer} weiterhin offen.</p>',
    'Sehr geehrte/r {kunde_name}, trotz unserer Erinnerung ist die Rechnung {rechnungsnummer} weiterhin offen.')
-ON CONFLICT (template_key) DO NOTHING;
+ON CONFLICT (template_key) DO NOTHING
 
 CREATE OR REPLACE VIEW v_analyse_kunden_kpi AS
 SELECT
@@ -60,4 +60,4 @@ SELECT
   END AS puenktlichkeit_pct,
   -- Reklamationen
   coalesce((SELECT count(*) FROM complaints co JOIN orders o ON o.id = co.order_id WHERE o.customer_id = c.id), 0) AS reklamationen
-FROM customers c;
+FROM customers c

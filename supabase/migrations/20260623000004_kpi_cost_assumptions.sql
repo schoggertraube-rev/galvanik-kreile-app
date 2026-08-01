@@ -13,9 +13,10 @@ CREATE TABLE IF NOT EXISTS kpi_cost_assumptions (
   created_at      timestamptz DEFAULT now(),
   updated_at      timestamptz DEFAULT now(),
   UNIQUE (tenant_id, key)
-);
+)
 
-ALTER TABLE kpi_cost_assumptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE kpi_cost_assumptions ENABLE ROW LEVEL SECURITY
+
 CREATE POLICY "service_role_all_kpi_cost_assumptions" ON kpi_cost_assumptions
   AS PERMISSIVE FOR ALL TO service_role
-  USING (true) WITH CHECK (true);
+  USING (true) WITH CHECK (true)

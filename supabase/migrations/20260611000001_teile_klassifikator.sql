@@ -5,6 +5,6 @@ CREATE TABLE teile_klassifikator (
   keywords        text[] NOT NULL,
   beispiel_oberflaechen text[],
   UNIQUE (tenant_id, klasse)
-);
+)
 
-CREATE INDEX idx_teile_klassifikator_tenant ON teile_klassifikator(tenant_id);
+CREATE INDEX idx_teile_klassifikator_tenant ON teile_klassifikator(tenant_id)

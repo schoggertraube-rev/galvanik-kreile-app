@@ -3,7 +3,7 @@ CREATE OR REPLACE VIEW v_pipeline_forecast AS
 SELECT
   date_trunc('month', o.due_date)::date AS erwarteter_monat,
   COUNT(*) AS anz_auftraege,
-  SUM(CASE 
+  SUM(CASE
     WHEN o.intake_date > NOW() - INTERVAL '7 days' THEN COALESCE(ar.netto, 0) * 0.80
     WHEN o.intake_date > NOW() - INTERVAL '21 days' THEN COALESCE(ar.netto, 0) * 0.60
     WHEN o.intake_date > NOW() - INTERVAL '45 days' THEN COALESCE(ar.netto, 0) * 0.30
@@ -16,4 +16,4 @@ WHERE o.status NOT IN ('completed','abgeschlossen','cancelled','storniert')
   AND o.due_date IS NOT NULL
   AND (o.tenant_id = 'galvanik-kreile' OR o.tenant_id IS NULL)
 GROUP BY 1
-ORDER BY 1;
+ORDER BY 1

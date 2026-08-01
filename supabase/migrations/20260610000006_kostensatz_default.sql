@@ -6,4 +6,4 @@ CREATE TABLE kostensatz_default (
   gilt_ab            date NOT NULL,
   bemerkung          text,
   UNIQUE (tenant_id, station_kuerzel, gilt_ab)
-);
+)

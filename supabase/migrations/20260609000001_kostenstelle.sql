@@ -17,6 +17,6 @@ CREATE TABLE kostenstelle (
   created_at      TIMESTAMPTZ DEFAULT NOW(),
   updated_at      TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (tenant_id, kuerzel)
-);
+)
 
-CREATE INDEX idx_kostenstelle_tenant ON kostenstelle(tenant_id);
+CREATE INDEX idx_kostenstelle_tenant ON kostenstelle(tenant_id)

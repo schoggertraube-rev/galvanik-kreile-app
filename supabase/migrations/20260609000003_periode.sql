@@ -12,6 +12,6 @@ CREATE TABLE periode (
   geschlossen_von UUID,                 -- NO REFERENCES YET
   bemerkung       TEXT,
   UNIQUE (tenant_id, jahr, monat)
-);
+)
 
-CREATE INDEX idx_periode_tenant ON periode(tenant_id);
+CREATE INDEX idx_periode_tenant ON periode(tenant_id)

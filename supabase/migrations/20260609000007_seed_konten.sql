@@ -31,4 +31,4 @@ INSERT INTO konto (tenant_id, nummer, bezeichnung, kategorie, ist_erfolgskonto) 
 ('galvanik-kreile', '1360', 'Geldtransit', 'kasse', false),
 ('galvanik-kreile', '1400', 'Forderungen', 'forderung', false),
 ('galvanik-kreile', '1600', 'Verbindlichkeiten', 'verbindlichkeit', false)
-ON CONFLICT (tenant_id, nummer) DO NOTHING;
+ON CONFLICT (tenant_id, nummer) DO NOTHING
