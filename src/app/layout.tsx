@@ -92,7 +92,7 @@ export default async function RootLayout({
                     </FeatureFlagProvider>
                   </AppShortcutProvider>
                 </LicenseProvider>
-                <DiagnosticsWidget />
+                {isAdmin && <DiagnosticsWidget />}
                 <TestpilotFloatingButton />
               </DiagnosticsProvider>
             </PermissionsProvider>
