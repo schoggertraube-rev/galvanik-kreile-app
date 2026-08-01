@@ -1,0 +1,58 @@
+name: Foundation replay
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "supabase/config.toml"
+      - "supabase/migrations/**"
+      - ".github/workflows/foundation-replay.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-replay-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fresh-replay:
+    name: Fresh Supabase migration replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.111.0
+
+      - name: Validate local migration inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t migrations < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -printf '%f\n' | sort)
+          test "${#migrations[@]}" -gt 0
+          printf 'LOCAL_MIGRATION_FILES=%s\n' "${#migrations[@]}"
+          printf '%s\n' "${migrations[@]}"
+
+      - name: Start isolated local Supabase
+        run: supabase start
+
+      - name: Reset and replay every migration
+        run: supabase db reset --local --no-seed
+
+      - name: Verify applied migration ledger
+        shell: bash
+        run: |
+          set -euo pipefail
+          expected="$(find supabase/migrations -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')"
+          applied="$(supabase migration list --local --output json | jq 'length')"
+          test "$applied" = "$expected"
+          printf 'EXPECTED_MIGRATIONS=%s\n' "$expected"
+          printf 'APPLIED_MIGRATIONS=%s\n' "$applied"
