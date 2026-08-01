@@ -6,7 +6,7 @@ import { Delete, Clock, Wrench, Calculator, Sun } from "lucide-react";
 import { getGreeting } from "@/lib/greeting";
 import { EmailLoginDialog } from "@/components/start/EmailLoginDialog";
 import { useSearchParams } from "next/navigation";
-import { getTodayTopPriority, getFeierabendEvents, notifyAdminPinReset } from "@/app/actions/start.actions";
+import { getFeierabendEvents, notifyAdminPinReset } from "@/app/actions/start.actions";
 import { loginWithPin } from "@/app/actions/auth.actions";
 import type { StartUserDto } from "@/lib/auth/userDtos";
 
@@ -220,7 +220,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
         {error && (
           <p className="text-center text-danger-red text-xs font-semibold -mt-4 mb-3">
             Falscher PIN. <button onClick={async () => {
-              const res = await notifyAdminPinReset(user.id, user.fullName);
+              const res = await notifyAdminPinReset(user.id);
               if (res.success) {
                 alert("Der Administrator wurde benachrichtigt und wird sich bei Ihnen melden.");
               } else {
@@ -270,9 +270,6 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
   const [selectedUser, setSelectedUser] = useState<StartUserDto | null>(null);
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [greetingInfo, setGreetingInfo] = useState({ text: "Guten Morgen, Meister!", emoji: "👋" });
-  const [priorityTask, setPriorityTask] = useState<string | null>(null);
-  const [deadlineTime, setDeadlineTime] = useState<string>("11:30");
-  const [isEvening, setIsEvening] = useState(false);
 
   const searchParams = useSearchParams();
   const errorMessage = searchParams?.get("message");
@@ -283,26 +280,6 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
     };
     updateGreeting();
     const id = setInterval(updateGreeting, 60000);
-
-    // Fetch dynamic task priority
-    const fetchTask = async () => {
-      try {
-        const res = await getTodayTopPriority();
-        if (res && res.taskText) {
-          setPriorityTask(res.taskText);
-        }
-        // Calculate dynamic deadline (e.g. current hour + 2)
-        const d = new Date();
-        const currentHour = d.getHours();
-        const nextHour = currentHour + 2;
-        const formattedHour = Math.min(nextHour, 23).toString().padStart(2, "0");
-        setDeadlineTime(`${formattedHour}:00`);
-        setIsEvening(currentHour >= 16);
-      } catch (e) {
-        console.error("Failed to fetch priority task", e);
-      }
-    };
-    fetchTask();
 
     return () => clearInterval(id);
   }, []);
@@ -338,10 +315,10 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
             </div>
             <div>
               <p className="font-bold text-navy-900 text-sm md:text-base leading-snug">
-                Zuerst steht an: <span className="font-extrabold text-navy-900">{priorityTask || "Lade Aufgaben..."}</span>
+                Zuerst steht an: <span className="font-extrabold text-navy-900">Tagesplan nach dem Einloggen prüfen.</span>
               </p>
               <p className="text-xs md:text-sm text-text-muted mt-1 leading-relaxed">
-                Wenn das bis <span className="text-accent-orange font-bold">{deadlineTime} Uhr</span> erledigt ist, {isEvening ? "starten wir morgen entspannt in den Tag." : "bleibt der Nachmittag entspannt."}
+                Nach dem Login sehen Sie Ihre aktuellen Aufgaben und Fristen.
               </p>
             </div>
           </div>
