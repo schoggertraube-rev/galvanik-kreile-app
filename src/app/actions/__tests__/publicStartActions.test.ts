@@ -15,11 +15,12 @@ const mockGte = vi.fn((column: unknown, value: unknown) => ({
   column,
   value,
 }));
-const mockNe = vi.fn((column: unknown, value: unknown) => ({
-  kind: "ne",
+const mockInArray = vi.fn((column: unknown, value: unknown) => ({
+  kind: "inArray",
   column,
   value,
 }));
+const mockIsNotNull = vi.fn((column: unknown) => ({ kind: "isNotNull", column }));
 const mockSql = vi.fn(
   (strings: TemplateStringsArray, ...values: unknown[]) => ({
     strings: [...strings],
@@ -59,6 +60,7 @@ vi.mock("@/db/schema", () => ({
     fullName: "full_name",
     role: "role",
     active: "active",
+    pinHash: "pin_hash",
   },
   uiEventsTable: {
     tenantId: "tenant_id",
@@ -72,7 +74,8 @@ vi.mock("drizzle-orm", () => ({
   and: mockAnd,
   eq: mockEq,
   gte: mockGte,
-  ne: mockNe,
+  inArray: mockInArray,
+  isNotNull: mockIsNotNull,
   sql: mockSql,
 }));
 
@@ -81,7 +84,7 @@ describe("public start actions", () => {
     vi.clearAllMocks();
     selectResults.length = 0;
     mockTransaction.mockImplementation(async (callback) => callback(tx));
-    mockTxExecute.mockResolvedValue(undefined);
+    mockTxExecute.mockResolvedValue([{ acquired: true }]);
     mockTxValues.mockResolvedValue(undefined);
     mockDirectValues.mockResolvedValue(undefined);
   });
@@ -157,11 +160,15 @@ describe("public start actions", () => {
     expect(mockEq).toHaveBeenCalledWith("id", canonicalUser.id);
     expect(mockEq).toHaveBeenCalledWith("tenant_id", "galvanik-kreile");
     expect(mockEq).toHaveBeenCalledWith("active", true);
-    expect(mockNe).toHaveBeenCalledWith("role", "developer");
+    expect(mockInArray).toHaveBeenCalledWith(
+      "role",
+      ["meister", "buero", "werkstatt", "readonly"],
+    );
+    expect(mockIsNotNull).toHaveBeenCalledWith("pin_hash");
     expect(mockGte).toHaveBeenCalledWith("created_at", expect.any(Date));
     expect(mockTxExecute).toHaveBeenCalledOnce();
     expect(mockTxExecute.mock.calls[0][0].strings.join(" ")).toContain(
-      "pg_advisory_xact_lock",
+      "pg_try_advisory_xact_lock",
     );
     expect(mockTxExecute.mock.invocationCallOrder[0]).toBeLessThan(
       mockTxValues.mock.invocationCallOrder[0],

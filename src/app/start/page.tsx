@@ -1,7 +1,8 @@
 import { StartScreenClient } from "@/components/start/StartScreenClient";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { PIN_LOGIN_ROLES } from "@/lib/auth/pinPolicy";
 import { toStartUserDto, type StartUserDto } from "@/lib/auth/userDtos";
 
 export const dynamic = "force-dynamic";
@@ -16,23 +17,19 @@ export default async function StartPage() {
       role: appUsers.role,
     })
       .from(appUsers)
-      .where(eq(appUsers.active, true));
+      .where(
+        and(
+          eq(appUsers.tenantId, "galvanik-kreile"),
+          eq(appUsers.active, true),
+          inArray(appUsers.role, [...PIN_LOGIN_ROLES]),
+          isNotNull(appUsers.pinHash),
+        ),
+      );
 
-    // Filter out developers so they don't appear as PIN logins
-    // We only want normal roles like admin, werkstatt, buero, etc.
-    const eligibleUsers = dbUsers.filter(u => u.role !== "developer");
-
-    users = eligibleUsers.map(toStartUserDto);
+    users = dbUsers.map(toStartUserDto);
   } catch (err) {
     console.error("Failed to fetch start users:", err);
-    // Fallback if DB is completely unreachable
-    users = [
-      toStartUserDto({
-        id: "1",
-        fullName: "Fallback Admin",
-        role: "admin",
-      }),
-    ];
+    users = [];
   }
 
   return <StartScreenClient users={users} />;

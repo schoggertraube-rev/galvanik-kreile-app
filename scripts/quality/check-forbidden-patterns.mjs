@@ -48,10 +48,21 @@ function isProductionPath(filePath) {
 
 function isClientFacingPath(filePath, lines) {
   const normalized = filePath.replaceAll("\\", "/");
+  if (/(^|\/)(__tests__|__mocks__|mocks?)\//.test(normalized)) return false;
+  if (/\.(test|spec)\.[cm]?[jt]sx?$/.test(normalized)) return false;
   if (/^src\/components\//.test(normalized)) return true;
-  if (/^src\/app\/.+\.(tsx|jsx)$/.test(normalized)) return true;
   if (normalized.toLowerCase().includes("dto")) return true;
   return lines.some((line) => /^\s*["']use client["']/.test(line));
+}
+
+function isServerAppComponent(filePath, lines) {
+  const normalized = filePath.replaceAll("\\", "/");
+  return (
+    /^src\/app\/.+\.(tsx|jsx)$/.test(normalized) &&
+    !isClientFacingPath(filePath, lines) &&
+    !/(^|\/)(__tests__|__mocks__|mocks?)\//.test(normalized) &&
+    !/\.(test|spec)\.[cm]?[jt]sx?$/.test(normalized)
+  );
 }
 
 function addViolations(violations, filePath, lines, predicate, message) {
@@ -94,6 +105,7 @@ for (const filePath of files) {
   const content = lines.join("\n");
   const productionPath = isProductionPath(filePath);
   const clientFacingPath = isClientFacingPath(filePath, lines);
+  const serverAppComponent = isServerAppComponent(filePath, lines);
   const containsPrivateBucket = privateBuckets.some((bucket) =>
     content.includes(`from("${bucket}")`) || content.includes(`from('${bucket}')`)
   );
@@ -131,6 +143,23 @@ for (const filePath of files) {
       (line) => line.includes("SUPABASE_SERVICE_ROLE_KEY"),
       "forbidden service-role key reference in client-facing code",
     );
+    addViolations(
+      violations,
+      filePath,
+      lines,
+      (line) => /["']1234["']/.test(line),
+      "forbidden public default PIN in client-facing code",
+    );
+  }
+
+  if (serverAppComponent) {
+    addViolations(
+      violations,
+      filePath,
+      lines,
+      (line) => /\bpinHash\s*[:=]/.test(line),
+      "forbidden pinHash projection from a server component",
+    );
   }
 
   if (productionPath) {
@@ -156,6 +185,15 @@ for (const filePath of files) {
       lines,
       (line) => line.includes("Math.random("),
       "forbidden Math.random in production path",
+    );
+    addViolations(
+      violations,
+      filePath,
+      lines,
+      (line) =>
+        /\bpinHash\s*:\s*["']\d{4}["']/.test(line) ||
+        /\bpinHash\b\s*[!=]==?\s*\bpin\b/.test(line),
+      "forbidden plaintext PIN storage or comparison",
     );
     addViolations(
       violations,

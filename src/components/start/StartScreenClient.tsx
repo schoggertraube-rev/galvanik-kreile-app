@@ -113,14 +113,14 @@ import { initializeDemoIfNeeded } from "@/app/actions/demoSetup";
 // PIN Dialog Component
 function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void }) {
   const [pin, setPin] = useState("");
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
 
   const handleInput = async (num: string) => {
     if (pin.length >= 4) return;
     const newPin = pin + num;
     setPin(newPin);
-    setError(false);
+    setError(null);
 
     if (newPin.length === 4) {
       setIsInitializing(true);
@@ -152,13 +152,16 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
           // Redirect to home
           window.location.href = "/";
         } else {
-          setError(true);
+          const waitMessage = res.retryAfterSeconds
+            ? ` Erneut versuchen in etwa ${Math.max(1, Math.ceil(res.retryAfterSeconds / 60))} Minute(n).`
+            : "";
+          setError(`${res.message}${waitMessage}`);
           setTimeout(() => setPin(""), 600);
           setIsInitializing(false);
         }
-      } catch (e) {
-        console.error("Login failed:", e);
-        setError(true);
+      } catch {
+        console.error("PIN login request failed.");
+        setError("Server-Fehler beim Login.");
         setTimeout(() => setPin(""), 600);
         setIsInitializing(false);
       }
@@ -219,7 +222,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
         </div>
         {error && (
           <p className="text-center text-danger-red text-xs font-semibold -mt-4 mb-3">
-            Falscher PIN. <button onClick={async () => {
+            {error} <button onClick={async () => {
               const res = await notifyAdminPinReset(user.id);
               if (res.success) {
                 alert("Der Administrator wurde benachrichtigt und wird sich bei Ihnen melden.");

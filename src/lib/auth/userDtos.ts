@@ -19,11 +19,16 @@ export type AdminUserDto = {
   active: boolean;
   location: string | null;
   language: string | null;
+  pinStatus: AdminPinStatus;
 };
 
-export type AdminUserSource = AdminUserDto & {
-  pinHash?: string | null;
-};
+export type AdminPinStatus =
+  | "ready"
+  | "needs_rotation"
+  | "missing"
+  | "not_applicable";
+
+export type AdminUserSource = AdminUserDto;
 
 export function deriveUserInitials(fullName: string): string {
   const normalized = fullName.trim();
@@ -55,5 +60,6 @@ export function toAdminUserDto(user: AdminUserSource): AdminUserDto {
     active: user.active,
     location: user.location,
     language: user.language,
+    pinStatus: user.pinStatus,
   };
 }

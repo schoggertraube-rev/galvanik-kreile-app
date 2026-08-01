@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockRequireAdminOrDeveloper = vi.fn();
 const mockFrom = vi.fn();
+const mockWhere = vi.fn();
 
 vi.mock("@/lib/auth/permissions", () => ({
   requireAdminOrDeveloper: mockRequireAdminOrDeveloper,
@@ -16,22 +17,34 @@ vi.mock("@/db", () => ({
 }));
 
 vi.mock("@/db/schema", () => ({
-  appUsers: {},
+  appUsers: {
+    id: "id",
+    tenantId: "tenant_id",
+    email: "email",
+    fullName: "full_name",
+    role: "role",
+    active: "active",
+    location: "location",
+    language: "language",
+    pinHash: "pin_hash",
+  },
   featureFlags: {},
 }));
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn(),
+  sql: vi.fn((strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values })),
 }));
 
 describe("getUsers() payload sanitization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRequireAdminOrDeveloper.mockResolvedValue(undefined);
+    mockFrom.mockReturnValue({ where: mockWhere });
   });
 
   it("omits pinHash and auth secrets from admin client DTOs", async () => {
-    mockFrom.mockResolvedValue([
+    mockWhere.mockResolvedValue([
       {
         id: "user-1",
         email: "max@kreile.de",
@@ -40,6 +53,7 @@ describe("getUsers() payload sanitization", () => {
         active: true,
         location: null,
         language: "de",
+        pinStatus: "needs_rotation",
         pinHash: "4321",
         authSecret: "service-role-secret",
       },
@@ -58,6 +72,7 @@ describe("getUsers() payload sanitization", () => {
         active: true,
         location: null,
         language: "de",
+        pinStatus: "needs_rotation",
       },
     ]);
     expect(payload).not.toContain("pinHash");

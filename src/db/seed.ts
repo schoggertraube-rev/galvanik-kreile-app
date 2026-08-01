@@ -14,11 +14,37 @@ import {
   INITIAL_ORDERS, 
   INITIAL_COMPLAINTS, 
 } from "../lib/mockData";
+import { validateNewPin } from "../lib/auth/pinPolicy";
+import { sql } from "drizzle-orm";
+
+function requireSeedPin(variableName: string): string {
+  const result = validateNewPin(process.env[variableName]);
+  if (!result.ok) {
+    throw new Error(`${variableName}: ${result.message}`);
+  }
+  return result.pin;
+}
+
+function getSeedPins() {
+  const pins = {
+    workshop: requireSeedPin("SEED_WORKSHOP_PIN"),
+    office: requireSeedPin("SEED_OFFICE_PIN"),
+  };
+
+  if (new Set(Object.values(pins)).size !== Object.keys(pins).length) {
+    throw new Error("Seed-PINs müssen für jeden Benutzer eindeutig sein.");
+  }
+
+  return pins;
+}
 
 export async function seedDatabase({ safeMode = false } = {}) {
   console.log("🌱 Starte Datenbank-Seeding für V2...");
 
   try {
+    // Validate all credentials before any destructive seed operation starts.
+    const seedPins = getSeedPins();
+
     // 1. Cleanup existing data (Cascade deletes handle relations if configured, but safe ordering is best)
     if (!safeMode) {
       console.log("🧹 Lösche alte Daten...");
@@ -51,7 +77,6 @@ export async function seedDatabase({ safeMode = false } = {}) {
         email: "admin@kreile.de",
         fullName: "Max Kreile",
         role: "admin",
-        pinHash: "1234",
         active: true,
       },
       {
@@ -60,7 +85,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
         email: "werkstatt@kreile.de",
         fullName: "Christian Dieter",
         role: "werkstatt",
-        pinHash: "1234",
+        pinHash: sql`extensions.crypt(${seedPins.workshop}, extensions.gen_salt('bf', 12))`,
         active: true,
       },
       {
@@ -69,7 +94,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
         email: "buero@kreile.de",
         fullName: "Reiner Schmitt",
         role: "buero",
-        pinHash: "1234",
+        pinHash: sql`extensions.crypt(${seedPins.office}, extensions.gen_salt('bf', 12))`,
         active: true,
       }
     ]);
@@ -149,9 +174,10 @@ export async function seedDatabase({ safeMode = false } = {}) {
 
     console.log("✅ Seeding erfolgreich abgeschlossen!");
     return { success: true };
-  } catch (error) {
-    console.error("❌ Fehler beim Seeding:", error);
-    throw error;
+  } catch {
+    // Database errors can contain SQL parameters, including configured seed PINs.
+    console.error("❌ Seeding fehlgeschlagen; geheime Eingabewerte wurden nicht protokolliert.");
+    throw new Error("Database seeding failed.");
   }
 }
 

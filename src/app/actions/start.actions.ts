@@ -2,7 +2,8 @@
 
 import { db } from "@/db";
 import { appUsers, uiEventsTable } from "@/db/schema";
-import { and, eq, gte, ne, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
+import { PIN_LOGIN_ROLES } from "@/lib/auth/pinPolicy";
 
 const TENANT_ID = "galvanik-kreile";
 const RESET_EVENT_TYPE = "pin_reset_requested";
@@ -45,22 +46,26 @@ export async function notifyAdminPinReset(userId: string) {
     return { success: true };
   }
 
+  const canonicalUserId = userId.toLowerCase();
+
   try {
     await db.transaction(async (tx) => {
-      const throttleKey = `${TENANT_ID}:${userId}`;
-      await tx.execute(
-        sql`SELECT pg_advisory_xact_lock(hashtextextended(${throttleKey}, 0))`,
+      const throttleKey = `${TENANT_ID}:${canonicalUserId}`;
+      const lockRows = await tx.execute<{ acquired: boolean }>(
+        sql`SELECT pg_try_advisory_xact_lock(hashtextextended(${throttleKey}, 0)) AS acquired`,
       );
+      if (!lockRows[0]?.acquired) return;
 
       const [user] = await tx
         .select({ id: appUsers.id, fullName: appUsers.fullName })
         .from(appUsers)
         .where(
           and(
-            eq(appUsers.id, userId),
+            eq(appUsers.id, canonicalUserId),
             eq(appUsers.tenantId, TENANT_ID),
             eq(appUsers.active, true),
-            ne(appUsers.role, "developer"),
+            inArray(appUsers.role, [...PIN_LOGIN_ROLES]),
+            isNotNull(appUsers.pinHash),
           ),
         )
         .limit(1);

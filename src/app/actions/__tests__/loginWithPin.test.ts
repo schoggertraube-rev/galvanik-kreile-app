@@ -17,7 +17,7 @@ process.env.APP_SESSION_SECRET = TEST_SECRET;
 
 // ─── Mocks ──────────────────────────────────────────────────────────────────
 const mockSetAppSession = vi.fn();
-const mockCookieSet = vi.fn();
+const mockVerifyPinLogin = vi.fn();
 
 vi.mock("@/lib/server/appSession", () => ({
   setAppSession: mockSetAppSession,
@@ -28,37 +28,12 @@ vi.mock("@/lib/server/appSession", () => ({
   COOKIE_NAME: "kreile_app_session",
 }));
 
-vi.mock("next/headers", () => ({
-  cookies: vi.fn().mockResolvedValue({
-    get: vi.fn().mockReturnValue(undefined),
-    set: mockCookieSet,
-    delete: vi.fn(),
-  }),
+vi.mock("@/lib/server/pinAuth", () => ({
+  verifyPinLogin: mockVerifyPinLogin,
 }));
 
-vi.mock("next/navigation", () => ({
-  redirect: vi.fn(),
-}));
-
-// DB-Mock: simuliert appUsers-Abfrage
-const mockDbSelect = vi.fn();
-vi.mock("@/db", () => ({
-  db: {
-    select: () => ({
-      from: () => ({
-        where: mockDbSelect,
-      }),
-    }),
-  },
-}));
-
-vi.mock("@/db/schema", () => ({
-  appUsers: { id: "id", tenantId: "tenant_id", pinHash: "pin_hash", active: "active", role: "role", fullName: "full_name" },
-}));
-
-vi.mock("drizzle-orm", () => ({
-  eq: vi.fn(),
-  and: vi.fn(),
+vi.mock("@/lib/server/authorization", () => ({
+  resolveAuthorization: vi.fn(),
 }));
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -70,24 +45,28 @@ describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
   });
 
   it("8a – gültiger PIN mit vollständigem fullName → AppSession wird mit displayName gesetzt", async () => {
-    mockDbSelect.mockResolvedValue([{
-      id: "user-abc",
-      tenantId: "galvanik-kreile",
-      pinHash: "1234",
-      active: true,
-      role: "werkstatt",
-      fullName: "Max Mustermann",
-    }]);
+    mockVerifyPinLogin.mockResolvedValue({
+      ok: true,
+      identity: {
+        id: "223e4567-e89b-42d3-a456-426614174001",
+        tenantId: "galvanik-kreile",
+        role: "werkstatt",
+        displayName: "Max Mustermann",
+      },
+    });
 
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin("user-abc", "1234");
+    const result = await loginWithPin(
+      "223e4567-e89b-42d3-a456-426614174001",
+      "6147",
+    );
 
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.role).toBe("werkstatt");
 
     expect(mockSetAppSession).toHaveBeenCalledOnce();
     const sessionArg = mockSetAppSession.mock.calls[0][0];
-    expect(sessionArg.userId).toBe("user-abc");
+    expect(sessionArg.userId).toBe("223e4567-e89b-42d3-a456-426614174001");
     expect(sessionArg.displayName).toBe("Max Mustermann");
     expect(sessionArg.role).toBe("werkstatt");
     expect(sessionArg.tenantId).toBe("galvanik-kreile");
@@ -98,17 +77,16 @@ describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
   });
 
   it("8b – fullName leer → Fehler statt UUID-Fallback", async () => {
-    mockDbSelect.mockResolvedValue([{
-      id: "user-def",
-      tenantId: "galvanik-kreile",
-      pinHash: "5678",
-      active: true,
-      role: "buero",
-      fullName: "   ", // nur Leerzeichen
-    }]);
+    mockVerifyPinLogin.mockResolvedValue({
+      ok: false,
+      message: "Kein Anzeigename für diesen Benutzer konfiguriert. Bitte Administrator kontaktieren.",
+    });
 
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin("user-def", "5678");
+    const result = await loginWithPin(
+      "323e4567-e89b-42d3-a456-426614174002",
+      "6147",
+    );
 
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -119,19 +97,59 @@ describe("loginWithPin() – AppSession-Erstellung (A-08)", () => {
   });
 
   it("8c – falscher PIN → nicht-ok, keine Session erstellt", async () => {
-    mockDbSelect.mockResolvedValue([{
-      id: "user-ghi",
-      tenantId: "galvanik-kreile",
-      pinHash: "9999",
-      active: true,
-      role: "meister",
-      fullName: "Paul Meister",
-    }]);
+    mockVerifyPinLogin.mockResolvedValue({
+      ok: false,
+      message: "Ungültige PIN oder inaktiver Benutzer.",
+    });
 
     const { loginWithPin } = await import("@/app/actions/auth.actions");
-    const result = await loginWithPin("user-ghi", "0000"); // falscher PIN
+    const result = await loginWithPin(
+      "423e4567-e89b-42d3-a456-426614174003",
+      "0000",
+    );
 
     expect(result.ok).toBe(false);
+    expect(mockSetAppSession).not.toHaveBeenCalled();
+  });
+
+  it("8d – Drosselung wird unverändert an die Oberfläche weitergegeben", async () => {
+    mockVerifyPinLogin.mockResolvedValue({
+      ok: false,
+      message: "Zu viele Fehlversuche.",
+      retryAfterSeconds: 420,
+    });
+
+    const { loginWithPin } = await import("@/app/actions/auth.actions");
+    await expect(
+      loginWithPin("523e4567-e89b-42d3-a456-426614174004", "6147"),
+    ).resolves.toEqual({
+      ok: false,
+      message: "Zu viele Fehlversuche.",
+      retryAfterSeconds: 420,
+    });
+    expect(mockSetAppSession).not.toHaveBeenCalled();
+  });
+
+  it("8e – Datenbankfehler loggt weder Error-Objekt noch PIN-Parameter", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const databaseError = Object.assign(new Error("query failed"), {
+      params: ["623e4567-e89b-42d3-a456-426614174005", "6147"],
+    });
+    mockVerifyPinLogin.mockRejectedValue(databaseError);
+
+    const { loginWithPin } = await import("@/app/actions/auth.actions");
+    await expect(
+      loginWithPin("623e4567-e89b-42d3-a456-426614174005", "6147"),
+    ).resolves.toEqual({
+      ok: false,
+      message: "Server-Fehler beim Login.",
+    });
+
+    expect(consoleError).toHaveBeenCalledWith(
+      "PIN login failed before a session could be created.",
+    );
+    expect(consoleError.mock.calls.flat()).not.toContain(databaseError);
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("6147");
     expect(mockSetAppSession).not.toHaveBeenCalled();
   });
 });

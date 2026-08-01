@@ -1,30 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { X, Lock, Delete } from "lucide-react";
+import { X, Delete } from "lucide-react";
 
 interface PinDialogProps {
   initials: string;
   onClose: () => void;
+  onSubmit: (pin: string) => Promise<boolean>;
 }
 
-export function PinDialog({ initials, onClose }: PinDialogProps) {
+export function PinDialog({ initials, onClose, onSubmit }: PinDialogProps) {
   const [pin, setPin] = useState("");
   const [error, setError] = useState(false);
-  const router = useRouter();
 
-  const handleInput = (num: string) => {
+  const handleInput = async (num: string) => {
     if (pin.length < 4) {
       const newPin = pin + num;
       setPin(newPin);
       setError(false);
       
       if (newPin.length === 4) {
-        // Demologik: PIN 1234 ist korrekt
-        if (newPin === "1234") {
-          router.push("/");
-        } else {
+        const accepted = await onSubmit(newPin);
+        if (!accepted) {
           setError(true);
           setTimeout(() => setPin(""), 600);
         }
@@ -73,7 +70,7 @@ export function PinDialog({ initials, onClose }: PinDialogProps) {
         </div>
         
         {error && (
-          <p className="text-center text-danger-red text-xs font-bold mb-2 animate-pulse">PIN inkorrekt (Versuche 1234)</p>
+          <p className="text-center text-danger-red text-xs font-bold mb-2 animate-pulse">PIN inkorrekt</p>
         )}
         {!error && (
           <p className="text-center text-text-muted text-xs mb-2 opacity-0 select-none">Platzhalter</p>
@@ -84,7 +81,7 @@ export function PinDialog({ initials, onClose }: PinDialogProps) {
           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
             <button
               key={num}
-              onClick={() => handleInput(num.toString())}
+              onClick={() => void handleInput(num.toString())}
               className="h-16 rounded-2xl bg-bg-app hover:bg-bg-app-soft border border-transparent hover:border-neutral-gray-300 text-2xl font-black text-navy-900 transition-all active:scale-95"
             >
               {num}
@@ -92,7 +89,7 @@ export function PinDialog({ initials, onClose }: PinDialogProps) {
           ))}
           <div className="col-start-2">
             <button
-              onClick={() => handleInput("0")}
+              onClick={() => void handleInput("0")}
               className="w-full h-16 rounded-2xl bg-bg-app hover:bg-bg-app-soft border border-transparent hover:border-neutral-gray-300 text-2xl font-black text-navy-900 transition-all active:scale-95"
             >
               0

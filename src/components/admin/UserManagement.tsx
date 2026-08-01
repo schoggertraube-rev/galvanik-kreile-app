@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Shield, Mail, XCircle, Loader2 } from "lucide-react";
+import { Users, Plus, Shield, Mail, XCircle, Loader2, KeyRound } from "lucide-react";
 import { getUsers, createUser, toggleUserStatus, updateUserRole, updateUserPin } from "@/app/actions/admin.actions";
 import type { AdminUserDto } from "@/lib/auth/userDtos";
+import { isPinLoginRole } from "@/lib/auth/pinPolicy";
 
 export function UserManagement() {
   const [users, setUsers] = useState<AdminUserDto[]>([]);
@@ -19,9 +20,11 @@ export function UserManagement() {
   const [showCreate, setShowCreate] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [newName, setNewName] = useState("");
-  const [newPin, setNewPin] = useState("1234");
+  const [newPin, setNewPin] = useState("");
   const [newRole, setNewRole] = useState("werkstatt");
   const [isCreating, setIsCreating] = useState(false);
+  const [savingPinFor, setSavingPinFor] = useState<string | null>(null);
+  const newRoleUsesPin = isPinLoginRole(newRole);
 
   const fetchUsers = async () => {
     try {
@@ -46,11 +49,16 @@ export function UserManagement() {
     setIsCreating(true);
     setError(null);
     try {
-      await createUser({ email: newEmail, fullName: newName, role: newRole, pinHash: newPin });
+      await createUser({
+        email: newEmail,
+        fullName: newName,
+        role: newRole,
+        pin: newRoleUsesPin ? newPin : undefined,
+      });
       setShowCreate(false);
       setNewEmail("");
       setNewName("");
-      setNewPin("1234");
+      setNewPin("");
       await fetchUsers();
     } catch (err) {
       setError(String(err));
@@ -79,14 +87,22 @@ export function UserManagement() {
 
   const handlePinChange = async (id: string, newPin: string) => {
     if (newPin.length !== 4) return;
+    setSavingPinFor(id);
     try {
       await updateUserPin(id, newPin);
+      setPinDrafts((current) => ({ ...current, [id]: "" }));
       await fetchUsers();
       alert("PIN erfolgreich geändert!");
     } catch (err) {
       alert(String(err));
+    } finally {
+      setSavingPinFor(null);
     }
   };
+
+  const usersRequiringPinAction = users.filter(
+    (user) => user.pinStatus === "needs_rotation" || user.pinStatus === "missing",
+  ).length;
 
   if (loading && users.length === 0) {
     return <div className="p-8 text-center text-text-muted animate-pulse">Lade Benutzer...</div>;
@@ -105,6 +121,18 @@ export function UserManagement() {
         </Button>
       </CardHeader>
       <CardContent className="space-y-6">
+
+        {usersRequiringPinAction > 0 && (
+          <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+            <p className="font-bold flex items-center gap-2">
+              <KeyRound className="h-4 w-4" />
+              {usersRequiringPinAction} PIN-Zugänge müssen aktualisiert werden
+            </p>
+            <p className="mt-1 text-xs">
+              Setzen Sie für jeden markierten Benutzer eine eigene, nicht leicht erratbare PIN.
+            </p>
+          </div>
+        )}
 
         {error && (
           <div className="p-3 bg-red-50 text-danger-red border border-red-200 rounded-md text-sm">
@@ -142,10 +170,28 @@ export function UserManagement() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-navy-700">Tablet-PIN (4 Ziffern)</label>
-                <Input value={newPin} onChange={e => setNewPin(e.target.value)} maxLength={4} placeholder="1234" />
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  autoComplete="new-password"
+                  value={newPin}
+                  onChange={(event) => setNewPin(event.target.value.replace(/\D/g, "").slice(0, 4))}
+                  maxLength={4}
+                  placeholder={newRoleUsesPin ? "Neue PIN" : "E-Mail-Login"}
+                  disabled={!newRoleUsesPin}
+                />
               </div>
             </div>
-            <Button onClick={handleCreateUser} disabled={isCreating || !newEmail || !newName || newPin.length !== 4} className="w-full md:w-auto">
+            <Button
+              onClick={handleCreateUser}
+              disabled={
+                isCreating ||
+                !newEmail ||
+                !newName ||
+                (newRoleUsesPin && newPin.length !== 4)
+              }
+              className="w-full md:w-auto"
+            >
               {isCreating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
               Benutzer anlegen
             </Button>
@@ -163,6 +209,21 @@ export function UserManagement() {
                   <h4 className="font-bold text-navy-900 flex items-center gap-2">
                     {user.fullName}
                     {!user.active && <Badge variant="outline" className="text-[10px] text-danger-red border-danger-red">Deaktiviert</Badge>}
+                    {user.pinStatus === "needs_rotation" && (
+                      <Badge variant="outline" className="text-[10px] border-amber-400 text-amber-800">
+                        PIN rotieren
+                      </Badge>
+                    )}
+                    {user.pinStatus === "missing" && (
+                      <Badge variant="outline" className="text-[10px] border-danger-red text-danger-red">
+                        PIN fehlt
+                      </Badge>
+                    )}
+                    {user.pinStatus === "ready" && (
+                      <Badge variant="outline" className="text-[10px] border-emerald-400 text-emerald-700">
+                        PIN geschützt
+                      </Badge>
+                    )}
                   </h4>
                   <div className="flex items-center gap-3 text-xs text-text-muted mt-0.5">
                     <span className="flex items-center gap-1"><Mail className="w-3 h-3"/> {user.email}</span>
@@ -192,6 +253,8 @@ export function UserManagement() {
                   <span className="text-[10px] text-text-muted font-bold">PIN:</span>
                   <Input 
                     type="password"
+                    inputMode="numeric"
+                    autoComplete="new-password"
                     value={pinDrafts[user.id] ?? ""}
                     maxLength={4}
                     placeholder="Neu"
@@ -200,13 +263,21 @@ export function UserManagement() {
                       const nextValue = e.target.value.replace(/\D/g, "").slice(0, 4);
                       setPinDrafts((current) => ({ ...current, [user.id]: nextValue }));
                     }}
-                    onBlur={(e) => {
-                      if (e.target.value.length === 4) {
-                        handlePinChange(user.id, e.target.value);
-                      }
-                    }}
-                    disabled={!user.active}
+                    disabled={user.pinStatus === "not_applicable"}
                   />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 px-2 text-[10px]"
+                    disabled={
+                      user.pinStatus === "not_applicable" ||
+                      savingPinFor === user.id ||
+                      (pinDrafts[user.id]?.length ?? 0) !== 4
+                    }
+                    onClick={() => void handlePinChange(user.id, pinDrafts[user.id] ?? "")}
+                  >
+                    {savingPinFor === user.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Setzen"}
+                  </Button>
                 </div>
                 
                 <Button 

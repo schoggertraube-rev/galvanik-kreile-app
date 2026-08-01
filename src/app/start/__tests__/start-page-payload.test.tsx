@@ -4,6 +4,9 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { StartUserDto } from "@/lib/auth/userDtos";
 
 const mockWhere = vi.fn();
+const mockEq = vi.fn();
+const mockInArray = vi.fn();
+const mockIsNotNull = vi.fn();
 const capturedUsers: StartUserDto[][] = [];
 
 vi.mock("@/db", () => ({
@@ -22,11 +25,16 @@ vi.mock("@/db/schema", () => ({
     fullName: "full_name",
     role: "role",
     active: "active",
+    tenantId: "tenant_id",
+    pinHash: "pin_hash",
   },
 }));
 
 vi.mock("drizzle-orm", () => ({
-  eq: vi.fn(),
+  and: vi.fn((...conditions: unknown[]) => conditions),
+  eq: mockEq,
+  inArray: mockInArray,
+  isNotNull: mockIsNotNull,
 }));
 
 vi.mock("@/components/start/StartScreenClient", () => ({
@@ -53,12 +61,6 @@ describe("StartPage payload sanitization", () => {
         pinHash: "1234",
         password: "topsecret",
         authSecret: "service-role-secret",
-      },
-      {
-        id: "user-2",
-        fullName: "Dev Hidden",
-        role: "developer",
-        pinHash: "9999",
       },
     ]);
 
@@ -87,5 +89,13 @@ describe("StartPage payload sanitization", () => {
     expect(html).not.toContain("1234");
     expect(html).not.toContain("9999");
     expect(html).not.toContain("service-role-secret");
+
+    expect(mockEq).toHaveBeenCalledWith("tenant_id", "galvanik-kreile");
+    expect(mockEq).toHaveBeenCalledWith("active", true);
+    expect(mockInArray).toHaveBeenCalledWith(
+      "role",
+      ["meister", "buero", "werkstatt", "readonly"],
+    );
+    expect(mockIsNotNull).toHaveBeenCalledWith("pin_hash");
   });
 });
