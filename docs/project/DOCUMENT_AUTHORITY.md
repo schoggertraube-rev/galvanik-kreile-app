@@ -1,31 +1,45 @@
 # Dokumentenautorität
 
-Stand: 2026-06-27
+Stand: 2026-08-01
 
 ## Zweck
 
 Diese Datei verhindert, dass veraltete Masterpläne, Übergaben, Agenturkonzepte oder lokale Artefakte die aktuelle Produkt- und Lieferwahrheit überschreiben.
 
-## Autoritätsreihenfolge
+## Autoritaetsbereiche
 
-### 1. Reale Liefer- und Systemwahrheit
+Es gibt keine einzige Totalrangfolge fuer Fakten, Scope und Produktprioritaet. Jede Quelle ist nur in ihrem Bereich autoritativ:
 
-1. GitHub `main` und der konkrete Commit.
-2. Vercel Production-Deployment und dessen Git-Commit.
-3. Remote-Supabase-Schema, Policies, Storage und ausgeführte Migrationen.
-4. Reproduzierbare Tests, Runtime-Logs und reale Browsernachweise.
+### Arbeits- und Sicherheitsgesetze
 
-Dokumentation darf diesen Zustand beschreiben, aber nicht ersetzen.
+- Root-`AGENTS.md` bestimmt Sicherheitsgrenzen, Arbeitsmodell und unverhandelbare Architekturregeln.
+- Eine Mission oder Roadmap darf diese Gesetze nicht still lockern.
 
-### 2. Verbindliche Arbeits- und Produktsteuerung
+### Reale Liefer- und Systemwahrheit
 
-1. Root-`AGENTS.md` – Arbeits-, Sicherheits- und Architekturgesetze.
-2. `docs/project/MASTERPLAN.md` – aktive Reihenfolge und Produktziel.
-3. `docs/project/CURRENT_STATE.md` – letzter verifizierter Lieferstand und aktuelle Blocker.
-4. `docs/project/NON_LOSS_REGISTER.md` – geschützte Ideen, verschobene Missionen und Salvage-Arbeit.
-5. freigegebene Missionsdatei oder ausdrücklich nummerierte Akzeptanzkriterien.
+- GitHub `main` und der konkrete Commit sind die Code-Lieferwahrheit.
+- Vercel Production-Deployment und dessen Git-Commit sind die laufende App-Wahrheit.
+- Remote-Supabase-Production-Schema, Policies, Storage und Ledger sind die produktive Datenbankwahrheit.
+- Integration, Preview und lokale Worktrees sind Test- oder Kandidatenstaende, niemals Production-Ersatz.
+- Reproduzierbare Tests, Runtime-Logs und reale Browsernachweise belegen das Verhalten eines konkreten Stands.
 
-Bei Widerspruch gilt die höher stehende Quelle. Ein Agent darf Widersprüche nicht still auflösen, sondern muss sie benennen und den autoritativen Stand verwenden.
+Diese Ebenen koennen voneinander abweichen. Dann gewinnt nicht still eine andere Ebene; die Abweichung ist `DRIFT` und bleibt Blocker, bis sie vorwaertsgerichtet aufgeloest wurde. Dokumentation darf diesen Zustand beschreiben, aber nicht ersetzen.
+
+### Aktuelle Mission
+
+- Die ausdruecklich freigegebene Missionsdatei oder die aktuellen nummerierten Akzeptanzkriterien bestimmen Scope und Abnahme der Mission.
+- Sie duerfen weder reale Systemfakten umdeuten noch Sicherheitsgesetze aushebeln.
+- Verlangt die Mission eine neue Produktentscheidung ausserhalb ihres Scopes oder widerspricht sie einer geschuetzten Produktentscheidung, wird der Konflikt explizit eskaliert.
+
+### Produktsteuerung und Erhalt
+
+- `docs/project/MASTERPLAN.md` bestimmt Produktziel und aktive Reihenfolge.
+- `docs/project/CURRENT_STATE.md` beschreibt den letzten verifizierten Stand und offene Blocker.
+- `docs/project/NON_LOSS_REGISTER.md` schuetzt Ziele, verschobene Missionen und Salvage vor stillem Verlust.
+- `docs/project/DOCUMENT_AUTHORITY.md` definiert diese Autoritaetsbereiche und Driftregeln.
+- `docs/project/MODULARITY_STRATEGY.md` definiert Ist-/Zielstruktur und Modulregeln.
+
+Keine dieser Dateien darf ausserhalb ihres Bereichs eine andere Quelle ueberschreiben. Ein Agent benennt Konflikte, verwendet den jeweils zustaendigen Vertrag und eskaliert echte Scope-/Produktentscheidungen statt still zu priorisieren.
 
 ## Unterstützende, nicht autoritative Quellen
 
@@ -36,7 +50,7 @@ Folgende Inhalte dürfen Ideen, Historie oder Detailwissen liefern, aber keine a
 - Review-Bundles und Reparaturberichte,
 - User-Twin- und USP-Quelldokumente,
 - Screenshots und Präsentationsnotizen,
-- lokale Branches und Worktrees,
+- lokale oder entfernte Branches, PRs und Worktrees,
 - nicht versionierte Planungs-, Agentur- oder Governance-Dateien.
 
 Bestätigte Inhalte daraus werden in `MASTERPLAN.md`, `CURRENT_STATE.md` oder `NON_LOSS_REGISTER.md` übernommen. Erst dann sind sie Teil der kanonischen Steuerung.
@@ -63,9 +77,9 @@ Diese Dateien werden nicht automatisch gelöscht. Sie werden erst nach Snapshot,
 Vor jeder Mission:
 
 1. `origin/main` aktualisieren.
-2. die fünf verbindlichen Steuerungsquellen lesen.
+2. alle oben genannten verbindlichen Steuerungsquellen und die Missionsakzeptanz lesen.
 3. aktuellen Git-, Vercel- und bei DB-Arbeit Supabase-Zustand verifizieren.
-4. lokale Dirty-Worktrees ausschließlich read-only behandeln, sofern die Mission nichts anderes ausdrücklich freigibt.
+4. lokale Dirty-Worktrees ausschliesslich read-only behandeln, sofern die Mission nichts anderes ausdruecklich freigibt; nicht einsehbare externe Checkouts als `UNKNOWN_EXTERNAL` markieren.
 5. keine alte Datei als Begründung nutzen, wenn sie dem kanonischen Stand widerspricht.
 
 ## Pflege
