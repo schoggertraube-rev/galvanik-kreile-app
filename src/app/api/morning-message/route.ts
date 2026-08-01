@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     const data = await weatherRes.json();
     temp = Math.round(data?.current_weather?.temperature ?? 20);
     code = data?.current_weather?.weathercode ?? 0;
-  } catch (e) {
+  } catch {
     console.warn("API Weather fetch failed, using default values");
   }
 
