@@ -138,6 +138,22 @@ for (const filePath of files) {
       violations,
       filePath,
       lines,
+      (line) =>
+        /bypass-auth\s*=\s*true/i.test(line) ||
+        /cookies\.get\(\s*["']bypass-auth["']\s*\)/.test(line),
+      "forbidden production auth bypass",
+    );
+    addViolations(
+      violations,
+      filePath,
+      lines,
+      (line) => line.includes("Tablet Test-Login"),
+      "forbidden production test login",
+    );
+    addViolations(
+      violations,
+      filePath,
+      lines,
       (line) => line.includes("Math.random("),
       "forbidden Math.random in production path",
     );
