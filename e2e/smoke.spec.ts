@@ -50,10 +50,15 @@ test.describe("Kreile auth boundary", () => {
     expect(remainingCookieNames).not.toContain("kreile_role");
     expect(remainingCookieNames).not.toContain("kreile_app_session");
 
-    const apiResponse = await context.request.get(
+    for (const apiPath of [
       "/api/erfassung/customer-search?q=kr",
-    );
-    expect(apiResponse.status()).toBe(401);
-    await expect(apiResponse.json()).resolves.toEqual({ error: "UNAUTHORIZED" });
+      "/api/erfassung/scan-status/forged.json",
+    ]) {
+      const apiResponse = await context.request.get(apiPath);
+      expect(apiResponse.status()).toBe(401);
+      await expect(apiResponse.json()).resolves.toEqual({
+        error: "UNAUTHORIZED",
+      });
+    }
   });
 });

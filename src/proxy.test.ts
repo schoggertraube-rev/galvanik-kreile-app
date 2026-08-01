@@ -73,6 +73,13 @@ describe("proxy auth boundary", () => {
         url: "https://werkstatt.example/api/users",
       }),
     ).toBe(true);
+    expect(
+      unstable_doesMiddlewareMatch({
+        config,
+        nextConfig: {},
+        url: "https://werkstatt.example/api/erfassung/scan-status/forged.json",
+      }),
+    ).toBe(true);
   });
 
   it("rejects and expires the legacy bypass cookie", async () => {
