@@ -75,8 +75,8 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright WebKit
+        run: npx playwright install --with-deps webkit
 
       - name: Auth boundary E2E
         run: npm run test:e2e
