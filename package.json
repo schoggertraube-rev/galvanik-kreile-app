@@ -11,6 +11,8 @@
     "start": "next start",
     "lint": "eslint",
     "lint:full": "eslint .",
+    "lint:ratchet": "node --import tsx scripts/quality/check-eslint-ratchet.ts",
+    "lint:ratchet:update": "node --import tsx scripts/quality/check-eslint-ratchet.ts --update",
     "lint:staged": "node scripts/verify-staged-files.mjs",
     "test": "vitest run",
     "test:unit": "vitest run --exclude \"**/*.integration.test.ts\"",

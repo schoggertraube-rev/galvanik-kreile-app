@@ -20,11 +20,11 @@ Dieses Register schuetzt bestaetigte Produktziele, verschobene Missionen und ver
 
 | ID | Ziel | Status | Abhaengigkeit / Nachweis |
 |---|---|---|---|
-| `TRUTH-CLEANUP-001` | Eine kanonische Sicht auf `main`, Vercel, Supabase, PRs und Worktrees. | `ACTIVE` | Docs-/Dispositions-PR auf `main@b511318...`. |
-| `QUALITY-RATCHET-001` | Globalen Lintbestand maschinenlesbar festhalten und jede Erhoehung blockieren. | `READY_AFTER_DEPENDENCY` | Sofort nach Truth-Merge; keine Disable-/Ignore-/Regelabsenkung. |
-| `LINT-DEBT-001` | 434 Fehler und 385 Warnungen in kleinen nichtfachlichen Wellen bis null abbauen. | `READY_AFTER_DEPENDENCY` | Start nach Ratchet; laeuft parallel und blockiert P0-/Auth-/DB-Fixes nicht. |
+| `TRUTH-CLEANUP-001` | Eine kanonische Sicht auf `main`, Vercel, Supabase, PRs und Worktrees. | `DONE_VERIFIED` | PR 25; `main`, Vercel und Archive-Receipts gegengeprueft. |
+| `QUALITY-RATCHET-001` | Globalen Lintbestand maschinenlesbar festhalten und jede Erhoehung blockieren. | `ACTIVE` | Baseline 484/460; Inline-Disable wirkungslos; Base-Judge und GitHub-Enforcement werden gemeinsam abgenommen. |
+| `LINT-DEBT-001` | 484 Fehler und 460 Warnungen in kleinen nichtfachlichen Wellen bis null abbauen. | `READY_AFTER_DEPENDENCY` | Start nach Ratchet; laeuft parallel und blockiert P0-/Auth-/DB-Fixes nicht. |
 | `DB-TRUTH-001` | 79 lokale Dateien, 92 Production-Ledger-Eintraege und 1 Integration-Eintrag vorwaertsgerichtet versoehnen. | `BLOCKED` | 13 fehlende Quellen und gebrochener Fresh-Replay; keine Alt-Historie umschreiben. |
-| `BRANCH-DISPOSITION-001` | Alte PRs unveraenderlich archivieren, inventarisieren und erst danach schliessen. | `ACTIVE` | Archivrefs und vollstaendige [`BRANCH_ARCHIVE_RECEIPTS.json`](./BRANCH_ARCHIVE_RECEIPTS.json) fuer PR 8/15/19/20 erstellt; Dispositionskommentar/Schliessung erst nach Truth-Merge, Quellbranch bleibt erhalten. |
+| `BRANCH-DISPOSITION-001` | Alte PRs unveraenderlich archivieren, inventarisieren und erst danach schliessen. | `DONE_VERIFIED` | PR 8/15/19/20 einzeln kommentiert und ungemergt geschlossen; Archivrefs, Receipts und Quellbranches erhalten. |
 | `WINDOWS-WORKTREE-AUDIT-001` | Externen Windows-Checkout samt bekannter Diagnose- und nicht versionierter Arbeit inventarisieren und verlustfrei sauberstellen. | `UNKNOWN_EXTERNAL` | Nur im betroffenen Checkout ausfuehrbar; kein Reset/Stash/Delete. Erwartete Quelle: `diagnose/auth-session-permissions-2026-06-17@1621702` sowie Capture-/Foto-/Testarbeit. |
 
 ## Sicherheits- und Betriebsmissionen

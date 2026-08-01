@@ -12,7 +12,7 @@ Verifiziert gegen GitHub, Vercel, Supabase und einen sauberen lokalen Checkout.
 | Production-Deployment | `PASS` | Vercel Production laeuft auf demselben Commit wie `main`. |
 | Lokale Worktree-Hygiene | `PASS_LOCAL` | Alle in diesem Arbeitsbereich sichtbaren App-Worktrees sind sauber und voneinander isoliert. |
 | Migrations-/Schemaquelle | `FAIL` | `main` enthaelt 79 Migrationsdateien, Production 92 Ledger-Eintraege, Integration 1. |
-| Vollstaendiger Quality-Vertrag | `FAIL` | Der globale ESLint-Lauf hat 434 Fehler und 385 Warnungen; er ist in CI nicht blockierend. |
+| Quality-Ratchet / Lint-Nullstand | `PASS_RATCHET` / `FAIL_ZERO` | 484 Fehler und 460 Warnungen sind ehrlich inventarisiert; Inline-Disable ist wirkungslos, jede Erhoehung und jede nicht verbuchte Reduktion blockiert. |
 | Produkt-Go-live | `NO_GO` | RLS, PIN-Grenze, Offline-Vertrag und operativer End-to-End-Kern sind nicht vollstaendig abgenommen. |
 
 Ein gruenes Deployment oder ein gemergter Sicherheitsfix ist deshalb kein Gesamt-PASS.
@@ -21,8 +21,8 @@ Ein gruenes Deployment oder ein gemergter Sicherheitsfix ist deshalb kein Gesamt
 
 | Ebene | Autoritaet | Aktueller Stand | Darf nicht ersetzt werden durch |
 |---|---|---|---|
-| Code-Lieferung | GitHub `main` | `b511318579c5b589b2f052544762f6c7cb6ef1fb` | lokale Branches, offene PRs, alte Uebergaben |
-| Laufende App | Vercel Production | Deployment `dpl_Fu6A96nnSn28MCNm3v2XQ74wqc5A`, `READY`, Commit `b511318...` | Preview, lokaler Dev-Server |
+| Code-Lieferung | GitHub `main` | Vor diesem Quality-Kandidaten verifiziert auf `672ee4c5496324303500b46d9a94b2c70a727aa1` | lokale Branches, offene PRs, alte Uebergaben |
+| Laufende App | Vercel Production | Deployment `dpl_J3wMBows7eQmPnxNPA8AiLTNSLP7`, `READY`, Commit `672ee4c...` | Preview, lokaler Dev-Server |
 | Produktive Datenbank | Supabase Production | Projekt `syhaigjhsbpjmtnggqka`, 92 Ledger-Eintraege | lokale SQL-Dateien, Integration |
 | Nichtproduktiver DB-Test | Supabase Integration | Projekt `yroeivcldiphoyfmxuus`, 1 Ledger-Eintrag | Production, Fresh-Replay-Beweis |
 | Kandidaten / Quellen | PRs, Remote-Branches, isolierte Worktrees | nur Salvage oder Review | `main`, Production |
@@ -33,22 +33,15 @@ Bei einem Widerspruch wird nicht still eine Ebene bevorzugt. Der Widerspruch wir
 ## GitHub und Vercel
 
 - GitHub Default Branch: `main`.
-- Lokal verifizierter `main` und `origin/main`: exakt `b511318579c5b589b2f052544762f6c7cb6ef1fb`.
+- Vor diesem Quality-Kandidaten verifizierter `main` und `origin/main`: exakt `672ee4c5496324303500b46d9a94b2c70a727aa1`.
 - Vercel-Projekt: `galvanik-kreile-werkstatt`.
 - Production-URL: `https://galvanik-kreile-werkstatt.vercel.app`.
 - Aktuelles Production-Deployment ist `READY` und nennt exakt denselben GitHub-Commit.
 - Der kombinierte GitHub-Status fuer `main` enthaelt aktuell den erfolgreichen Vercel-Status. Die PR-Gates der gemergten PRs 23 und 24 waren vor Merge gruen; das ersetzt keinen Fresh-Replay- oder Gesamtproduktnachweis.
 
-### Offene Draft-PRs
+### Branch-Disposition
 
-| PR | Branch | Einordnung | Entscheidung |
-|---|---|---|---|
-| `#8` | `fix/auth-identity-002-root`, Head `007b85bec133ea77675b9eb851d398b707ef905d`, PR-Base/Merge-Base `78c761f66f5bff2279ecc5bcfd1dd0a6462ffbba` | alter Auth-Kandidat; der Identity-Switch-Blocker ist auf `main` weiter offen | nicht mergen oder schliessen, bevor Archivref und Diff-Inventar belegt sind |
-| `#15` | `feature/capture-auth-tenant`, Head `f0090ab33fecac024415752366101add6102eb7f`, historischer PR-Base `02906c400516a765d07ac15455cfa6c668bd495a`, aktueller Merge-Base `27c463421af0aed98c85f173609855d41ff894b2` | 48-Commit-Salvage-Branch; kein kleiner Liefer-PR | nicht mergen oder schliessen, bevor Archivref und Diff-Inventar belegt sind |
-| `#19` | `codex/foundation-security-remediation-20260715`, Head `338a13c09228ea1943bd06c40d4abbdea177a1e2`, PR-Base/Merge-Base `6e1d1831be823b7655130f0f46ba964d45c4b8dc` | grosse Foundation-Quelle; acht passende Versionsnummern sind im Production-Ledger registriert, Gleichheit der Branch-Blobs mit ausgefuehrtem SQL ist unbewiesen | nicht mergen oder schliessen, bevor Archivref und Diff-Inventar belegt sind |
-| `#20` | `codex/foundation-consolidation-v3-20260728`, Head `2589fdebb198720b168aab359236673e39c911d5`, PR-Base/Merge-Base `6e1d1831be823b7655130f0f46ba964d45c4b8dc` | grosser, nicht mergebarer Konsolidierungskandidat | nicht mergen oder schliessen, bevor Archivref und Diff-Inventar belegt sind |
-
-Diese PRs sind keine parallelen Wahrheiten. Die geforderten Archivrefs und Inventar-Receipts wurden inzwischen erzeugt:
+Vor dem aktuellen Quality-Kandidaten gab es **null offene PRs**. PR `#8`, `#15`, `#19` und `#20` wurden nach Einzelkommentar geschlossen und nicht gemergt. Ihre Quellbranches bleiben als Salvage erhalten; die unveraenderlichen Archivrefs und Inventar-Receipts lauten:
 
 | PR | Archivref | Unique Commits | Dateien | `+` / `-` | Inventar-SHA-256 |
 |---|---|---:|---:|---:|---|
@@ -57,7 +50,7 @@ Diese PRs sind keine parallelen Wahrheiten. Die geforderten Archivrefs und Inven
 | `#19` | `archive/pr-19-foundation-security-338a13c` | 11 | 692 | 75509 / 22912 | `5e2bf0b74e4a300c1ed4d36fbc686ba85ed494cbacec7b142b22042de94108f4` |
 | `#20` | `archive/pr-20-foundation-consolidation-2589fde` | 12 | 430 | 11041 / 34054 | `9cf75c29c76fac6487558820a8d5dd882d2e4f600cb2926731f94d5f5339e16c` |
 
-Das vollstaendige maschinenlesbare Inventar steht in [`BRANCH_ARCHIVE_RECEIPTS.json`](./BRANCH_ARCHIVE_RECEIPTS.json): geordnete Unique-Commit-SHAs, sortierte `name-status`-Pfade, Base/Head/Archivref, Stats und der exakte kanonische Digest-Vertrag. Der volle Head-SHA und der dedizierte Archivref sichern den Inhalt. Kein Alt-PR ist zu diesem Zeitpunkt geschlossen und keine Quellbranch geloescht; nach Merge dieses Registers folgt je PR ein Dispositionskommentar und erst dann die Schliessung.
+Das vollstaendige maschinenlesbare Inventar steht in [`BRANCH_ARCHIVE_RECEIPTS.json`](./BRANCH_ARCHIVE_RECEIPTS.json): geordnete Unique-Commit-SHAs, sortierte `name-status`-Pfade, Base/Head/Archivref, Stats und der exakte kanonische Digest-Vertrag. Der volle Head-SHA und der dedizierte Archivref sichern den Inhalt. Die PR-Schliessung hat keine Quellbranch geloescht.
 
 ## Worktree-Audit
 
@@ -65,8 +58,8 @@ Zum Pruefzeitpunkt sind in diesem Arbeitsbereich genau drei App-Worktrees sichtb
 
 | Branch | Commit / Basis | Zustand | Zweck |
 |---|---|---|---|
-| `main` | `b511318...` | sauber, exakt `origin/main` | lokale Lieferreferenz |
-| `agent/truth-structure-cleanup` | Basis `b511318...` | isolierter Docs-Kandidat | diese Wahrheitsbereinigung |
+| `main` | `672ee4c...` | sauber, exakt `origin/main` | lokale Lieferreferenz |
+| `agent/quality-eslint-ratchet` | Basis `672ee4c...` | sauberer, isolierter Kandidat | Quality-Ratchet; nach Merge entfernen |
 | `agent/p0-pin-hardening` | lokal `d7d2bd342221e4dbfc08be83f1864230dccd7341`; Remote-Checkpoint `dad42eb83e4dc4617291568631dea23f731febaa` | sauber; lokaler und Remote-Tree exakt `04474f3626b45f465242d17936764b7b0117712c` | `checkpoint/sec-pin-002-no-merge-20260801`, ausdruecklich `NO_MERGE` |
 
 Damit gibt es hier **null uncommittete App-Aenderungen** ausser dem jeweils aktiv bearbeiteten, vor Commit sichtbaren Missionsdiff.
@@ -126,19 +119,19 @@ Der frueher erwaehnte Windows-Checkout ist von diesem Arbeitsbereich aus nicht e
 
 ## Quality-Stand
 
-Der App-Codebaum des Governance-/Docs-Kandidaten ist identisch mit `main@b511318...`; geaendert werden ausschliesslich `AGENTS.md`, die fuenf kanonischen Projektdokumente und das maschinenlesbare Branch-Archiv-Receipt. Lokal wurden TypeScript, 87 Unit-Tests in 16 Testdateien und der Production-Build erfolgreich ausgefuehrt.
+Der Quality-Kandidat fuehrt einen maschinenlesbaren Multiset-Ratchet ein. Der Judge, sein direkter Aufruf, die ESLint-Konfiguration, die geschuetzte Node-Auswahl und die vollstaendige transitive Lockfile-Closure der Lint-Einfluesse (`eslint`, `eslint-config-next`, `typescript`, `tsx`, `next`, `react`) sind gehasht. Ein geschuetzter `pull_request_target`-Workflow fuehrt Judge, Config und Abhaengigkeiten aus dem Base-Commit aus; Kandidatencode erhaelt keine Git-Credentials. Datei- und Meldungsschluessel werden unter Linux und Windows identisch kanonisiert.
 
-Auf `main@b511318...` wurde ausserdem der vollstaendige ESLint-Lauf neu gemessen:
+Inline-ESLint-Konfiguration ist mit `noInlineConfig` vollstaendig wirkungslos. Dadurch wurden 57 bestehende Disable-Direktiven und die zuvor darunter versteckte Schuld erstmals ehrlich sichtbar. Die kanonische Baseline lautet:
 
 | Messwert | Stand |
 |---|---:|
-| Dateien mit Meldungen | 261 |
-| Fehler | 434 |
-| Warnungen | 385 |
+| Dateien mit Meldungen | 280 |
+| Fehler | 484 |
+| Warnungen | 460 |
 | automatisch behebbare Fehler | 6 |
-| automatisch behebbare Warnungen | 2 |
+| automatisch behebbare Warnungen | 0 |
 
-Der Workflow blockiert ESLint-Fehler in geaenderten TypeScript-/TSX-Dateien. Der globale Lauf ist als `Repository lint debt metric` mit `continue-on-error: true` markiert. Ein gruener GitHub-Check bedeutet daher nicht `0` globale Lintfehler.
+Der Workflow blockiert weiterhin jede Meldung in geaenderten TypeScript-/TSX-Dateien. Zusaetzlich blockiert der globale Ratchet jedes neue Finding, jede Baseline-Erhoehung, Regel-/Dependency-/Judge-Drift, neue oder veraenderte Git-getrackte Code-Dateien unter ESLint-Ignores sowie eine Reduktion ohne mitgesenkte Baseline. Ein gruener Ratchet bedeutet weiterhin nicht `0` globale Lintfehler.
 
 Weitere Luecken:
 
@@ -149,12 +142,12 @@ Weitere Luecken:
 
 ## Unmittelbare Reihenfolge
 
-1. `TRUTH-CLEANUP-001`: dieses Dokumentset mergen.
-2. `QUALITY-RATCHET-001`: globale Lint-Baseline verbindlich machen und jede Erhoehung blockieren. `LINT-DEBT-001` baut parallel in kleinen Wellen bis null ab, blockiert aber keine P0-/Auth-/DB-Reparatur.
-3. `BRANCH-DISPOSITION-001`: PR 8/15/19/20 inventarisieren, dedizierte Archivrefs erzeugen und erst danach geordnet schliessen.
-4. `AUTH-IDENTITY-002`: PR-8-Salvage pruefen, Identity-Snapshot atomar aktualisieren und real im Browser beweisen.
-5. `DB-TRUTH-001`: 79/92-Quellluecke und vorwaertsgerichteten Baseline-/Replay-Vertrag loesen.
-6. `APP-STRUCTURE-001`: Ownership-/Importvertrag festlegen; noch keine Big-Bang-Ordnerumsortierung.
+1. `TRUTH-CLEANUP-001` und `BRANCH-DISPOSITION-001`: abgeschlossen.
+2. `QUALITY-RATCHET-001`: diesen Kandidaten mergen und den geschuetzten Check im aktiven `main`-Ruleset verpflichtend registrieren.
+3. `AUTH-IDENTITY-002`: PR-8-Salvage pruefen, Identity-Snapshot atomar aktualisieren und real im Browser beweisen.
+4. `DB-TRUTH-001`: 79/92-Quellluecke und vorwaertsgerichteten Baseline-/Replay-Vertrag loesen.
+5. `APP-STRUCTURE-001`: Ownership-/Importvertrag festlegen; noch keine Big-Bang-Ordnerumsortierung.
+6. `LINT-DEBT-001`: parallel kleine nichtfachliche Reduktionswellen von 484/460 bis null.
 7. `SEC-PIN-002B`: Device-/Challenge-Grenze und Session-Widerruf entscheiden und beweisen; erst dann Bestandsrotation und Merge.
 8. `RLS-CONTRACT-001`: Rollen-, Tenant-, Grant- und Relationmatrix read-only ableiten; relationenweise PRs.
 9. `OFFLINE-SHELL-001`: genau eine sichere Offline-App-Shell herstellen.

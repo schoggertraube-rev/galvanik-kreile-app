@@ -1,0 +1,62 @@
+name: ESLint Ratchet
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout protected base
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: ratchet-base
+          persist-credentials: false
+
+      - name: Checkout candidate without credentials
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          persist-credentials: false
+
+      - name: Determine protected Node version
+        id: node-version
+        working-directory: ratchet-base
+        shell: bash
+        run: |
+          set -euo pipefail
+          node_version="$(node -e "const fs=require('fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); process.stdout.write(pkg.engines?.node ?? '')")"
+          if [ -z "$node_version" ]; then
+            node_version="24"
+          fi
+          echo "version=$node_version" >> "$GITHUB_OUTPUT"
+
+      - name: Setup protected Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.node-version.outputs.version }}
+          cache: npm
+          cache-dependency-path: ratchet-base/package-lock.json
+
+      - name: Install protected lint dependencies
+        working-directory: ratchet-base
+        run: npm ci --ignore-scripts
+
+      - name: Enforce protected repository ratchet
+        working-directory: ratchet-base
+        run: |
+          test ! -e "$GITHUB_WORKSPACE/candidate/node_modules"
+          ln -s "$GITHUB_WORKSPACE/ratchet-base/node_modules" "$GITHUB_WORKSPACE/candidate/node_modules"
+          node --import tsx scripts/quality/check-eslint-ratchet.ts \
+            --root "$GITHUB_WORKSPACE/candidate" \
+            --config "$GITHUB_WORKSPACE/ratchet-base/eslint.config.mjs" \
+            --base-baseline "$GITHUB_WORKSPACE/ratchet-base/quality/eslint-baseline.json"
