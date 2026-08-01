@@ -66,4 +66,4 @@ BEGIN
     (gen_random_uuid()::text, v_tenant_id, v_order_id, v_item_id, 'STATION_AUSGANG', 'wareneingang', now() - interval '9 days'),
     (gen_random_uuid()::text, v_tenant_id, v_order_id, v_item_id, 'STATION_EINGANG', 'galvanik', now() - interval '9 days');
 
-END $$
+END $$;

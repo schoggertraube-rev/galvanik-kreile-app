@@ -20,15 +20,15 @@ CREATE TABLE IF NOT EXISTS shipments (
 
   created_at        timestamptz DEFAULT now(),
   updated_at        timestamptz DEFAULT now()
-)
+);
 
-CREATE INDEX idx_shipments_order ON shipments(order_id)
+CREATE INDEX idx_shipments_order ON shipments(order_id);
 
-ALTER TABLE shipments ENABLE ROW LEVEL SECURITY
+ALTER TABLE shipments ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "service_role_all_shipments" ON shipments
   AS PERMISSIVE FOR ALL TO service_role
-  USING (true) WITH CHECK (true)
+  USING (true) WITH CHECK (true);
 
 -- Neue Spalte an orders
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_method text
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_method text;

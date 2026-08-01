@@ -15,10 +15,10 @@ CREATE TABLE arbeitszeit_buchung (
   bemerkung                   text,
   erstellt_am                 timestamptz DEFAULT now(),
   aktualisiert_am             timestamptz DEFAULT now()
-)
+);
 
-CREATE INDEX idx_arbeitszeit_auftrag ON arbeitszeit_buchung(auftrag_id)
+CREATE INDEX idx_arbeitszeit_auftrag ON arbeitszeit_buchung(auftrag_id);
 
-CREATE INDEX idx_arbeitszeit_employee_monat ON arbeitszeit_buchung(employee_id, start_zeit)
+CREATE INDEX idx_arbeitszeit_employee_monat ON arbeitszeit_buchung(employee_id, start_zeit);
 
-CREATE INDEX idx_arbeitszeit_kostenstelle_monat ON arbeitszeit_buchung(kostenstelle_kuerzel, start_zeit)
+CREATE INDEX idx_arbeitszeit_kostenstelle_monat ON arbeitszeit_buchung(kostenstelle_kuerzel, start_zeit);

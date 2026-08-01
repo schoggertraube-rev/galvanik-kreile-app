@@ -152,11 +152,11 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql;
 
 -- Trigger auf orders
 CREATE TRIGGER trg_update_vorlagen
   AFTER UPDATE OF status ON orders
   FOR EACH ROW
   WHEN (NEW.status IN ('completed', 'abgeschlossen') AND OLD.status IS DISTINCT FROM NEW.status)
-  EXECUTE FUNCTION fn_update_vorlagen()
+  EXECUTE FUNCTION fn_update_vorlagen();

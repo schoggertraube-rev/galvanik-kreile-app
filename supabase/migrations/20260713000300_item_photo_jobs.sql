@@ -2,15 +2,15 @@
 -- Durable item-photo allocation and exactly-once analysis jobs.
 -- Creates a new service-only table and RPCs; no existing policy is modified.
 
-SET lock_timeout = '5s'
+SET lock_timeout = '5s';
 
-SET statement_timeout = '5min'
+SET statement_timeout = '5min';
 
 CREATE UNIQUE INDEX IF NOT EXISTS orders_tenant_id_uidx
-  ON public.orders (tenant_id, id)
+  ON public.orders (tenant_id, id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS items_tenant_order_id_uidx
-  ON public.items (tenant_id, order_id, id)
+  ON public.items (tenant_id, order_id, id);
 
 CREATE TABLE public.item_photo_jobs (
   id uuid PRIMARY KEY,
@@ -49,23 +49,23 @@ CREATE TABLE public.item_photo_jobs (
     FOREIGN KEY (tenant_id, order_id, item_id)
     REFERENCES public.items (tenant_id, order_id, id)
     ON DELETE RESTRICT
-)
+);
 
-ALTER TABLE public.item_photo_jobs ENABLE ROW LEVEL SECURITY
+ALTER TABLE public.item_photo_jobs ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE public.item_photo_jobs FORCE ROW LEVEL SECURITY
+ALTER TABLE public.item_photo_jobs FORCE ROW LEVEL SECURITY;
 
 CREATE UNIQUE INDEX uq_item_photo_request
-  ON public.item_photo_jobs(tenant_id, user_id, request_key_hash)
+  ON public.item_photo_jobs(tenant_id, user_id, request_key_hash);
 
 CREATE UNIQUE INDEX uq_item_photo_content
-  ON public.item_photo_jobs(tenant_id, item_id, content_sha256)
+  ON public.item_photo_jobs(tenant_id, item_id, content_sha256);
 
 CREATE INDEX idx_item_photo_item_created
-  ON public.item_photo_jobs(tenant_id, item_id, created_at DESC)
+  ON public.item_photo_jobs(tenant_id, item_id, created_at DESC);
 
 CREATE INDEX idx_item_photo_user_created
-  ON public.item_photo_jobs(tenant_id, user_id, created_at DESC)
+  ON public.item_photo_jobs(tenant_id, user_id, created_at DESC);
 
 CREATE FUNCTION public.reserve_item_photo_job(
   p_job_id uuid,
@@ -269,7 +269,7 @@ BEGIN
   RETURN QUERY SELECT true, v_inserted.id, false, true, v_inserted.status,
     v_inserted.storage_path, NULL::jsonb, 0, 'reserved'::text;
 END;
-$$
+$$;
 
 CREATE FUNCTION public.bind_item_photo_upload(
   p_job_id uuid,
@@ -296,7 +296,7 @@ BEGIN
   WHERE id = p_job_id;
   RETURN true;
 END;
-$$
+$$;
 
 CREATE FUNCTION public.claim_item_photo_analysis(p_job_id uuid)
 RETURNS TABLE(
@@ -332,7 +332,7 @@ BEGIN
   WHERE id = v_job.id;
   RETURN QUERY SELECT true, false, 'in_flight'::text, v_job.storage_path, v_job.mime_type, NULL::jsonb;
 END;
-$$
+$$;
 
 CREATE FUNCTION public.settle_item_photo_analysis(
   p_job_id uuid,
@@ -374,7 +374,7 @@ BEGIN
   WHERE id = v_job.id;
   RETURN QUERY SELECT true, p_outcome;
 END;
-$$
+$$;
 
 CREATE FUNCTION public.mark_item_photo_uncertain(
   p_job_id uuid,
@@ -397,29 +397,29 @@ BEGIN
     AND status IN ('reserved', 'uploaded');
   RETURN FOUND;
 END;
-$$
+$$;
 
-REVOKE ALL ON TABLE public.item_photo_jobs FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON TABLE public.item_photo_jobs FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.reserve_item_photo_job(uuid,text,text,text,text,text,text,text,text,integer,integer,integer,integer,bigint,integer,integer,integer,integer) FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON FUNCTION public.reserve_item_photo_job(uuid,text,text,text,text,text,text,text,text,integer,integer,integer,integer,bigint,integer,integer,integer,integer) FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.bind_item_photo_upload(uuid,text,text) FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON FUNCTION public.bind_item_photo_upload(uuid,text,text) FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.claim_item_photo_analysis(uuid) FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON FUNCTION public.claim_item_photo_analysis(uuid) FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.settle_item_photo_analysis(uuid,text,integer,text,jsonb) FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON FUNCTION public.settle_item_photo_analysis(uuid,text,integer,text,jsonb) FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.mark_item_photo_uncertain(uuid,text,text,text) FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON FUNCTION public.mark_item_photo_uncertain(uuid,text,text,text) FROM PUBLIC, anon, authenticated, service_role;
 
-GRANT EXECUTE ON FUNCTION public.reserve_item_photo_job(uuid,text,text,text,text,text,text,text,text,integer,integer,integer,integer,bigint,integer,integer,integer,integer) TO service_role
+GRANT EXECUTE ON FUNCTION public.reserve_item_photo_job(uuid,text,text,text,text,text,text,text,text,integer,integer,integer,integer,bigint,integer,integer,integer,integer) TO service_role;
 
-GRANT EXECUTE ON FUNCTION public.bind_item_photo_upload(uuid,text,text) TO service_role
+GRANT EXECUTE ON FUNCTION public.bind_item_photo_upload(uuid,text,text) TO service_role;
 
-GRANT EXECUTE ON FUNCTION public.claim_item_photo_analysis(uuid) TO service_role
+GRANT EXECUTE ON FUNCTION public.claim_item_photo_analysis(uuid) TO service_role;
 
-GRANT EXECUTE ON FUNCTION public.settle_item_photo_analysis(uuid,text,integer,text,jsonb) TO service_role
+GRANT EXECUTE ON FUNCTION public.settle_item_photo_analysis(uuid,text,integer,text,jsonb) TO service_role;
 
-GRANT EXECUTE ON FUNCTION public.mark_item_photo_uncertain(uuid,text,text,text) TO service_role
+GRANT EXECUTE ON FUNCTION public.mark_item_photo_uncertain(uuid,text,text,text) TO service_role;
 
 DO $verification$
 DECLARE
@@ -841,4 +841,4 @@ BEGIN
     RAISE EXCEPTION 'ITEM_PHOTO_VERIFICATION_FAILED: function ACL drift';
   END IF;
 END
-$verification$
+$verification$;

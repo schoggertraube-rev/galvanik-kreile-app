@@ -6,7 +6,7 @@ ALTER TABLE customers
   ADD COLUMN IF NOT EXISTS enriched_fields jsonb DEFAULT '[]'::jsonb,
   ADD COLUMN IF NOT EXISTS is_lead boolean DEFAULT false,
   ADD COLUMN IF NOT EXISTS lead_since timestamptz,
-  ADD COLUMN IF NOT EXISTS converted_at timestamptz
+  ADD COLUMN IF NOT EXISTS converted_at timestamptz;
 
 -- 2. orders erweitern
 ALTER TABLE orders
@@ -15,11 +15,11 @@ ALTER TABLE orders
   ADD COLUMN IF NOT EXISTS freetext_original text,
   ADD COLUMN IF NOT EXISTS is_quote boolean DEFAULT false,
   ADD COLUMN IF NOT EXISTS quote_status text,
-  ADD COLUMN IF NOT EXISTS quote_converted_order_id text
+  ADD COLUMN IF NOT EXISTS quote_converted_order_id text;
 
 -- 3. items Foto-Spalte sicherstellen
 ALTER TABLE items
-  ADD COLUMN IF NOT EXISTS photo_ids jsonb DEFAULT '[]'::jsonb
+  ADD COLUMN IF NOT EXISTS photo_ids jsonb DEFAULT '[]'::jsonb;
 
 -- 4. inquiries
 CREATE TABLE IF NOT EXISTS inquiries (
@@ -37,11 +37,11 @@ CREATE TABLE IF NOT EXISTS inquiries (
   converted_to_order_id text,
   converted_to_customer_id text,
   created_at timestamptz NOT NULL DEFAULT now()
-)
+);
 
-CREATE INDEX IF NOT EXISTS inquiries_status_idx ON inquiries(status)
+CREATE INDEX IF NOT EXISTS inquiries_status_idx ON inquiries(status);
 
-CREATE INDEX IF NOT EXISTS inquiries_received_at_idx ON inquiries(received_at DESC)
+CREATE INDEX IF NOT EXISTS inquiries_received_at_idx ON inquiries(received_at DESC);
 
 -- 5. scan_uploads
 CREATE TABLE IF NOT EXISTS scan_uploads (
@@ -58,16 +58,16 @@ CREATE TABLE IF NOT EXISTS scan_uploads (
   linked_order_id text,
   linked_customer_id text,
   linked_invoice_id text
-)
+);
 
 -- RLS for scan_uploads
-ALTER TABLE scan_uploads ENABLE ROW LEVEL SECURITY
+ALTER TABLE scan_uploads ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "service_role_all_scan_uploads" ON scan_uploads FOR ALL TO service_role USING (true) WITH CHECK (true)
+CREATE POLICY "service_role_all_scan_uploads" ON scan_uploads FOR ALL TO service_role USING (true) WITH CHECK (true);
 
-CREATE POLICY "auth_read_scan_uploads" ON scan_uploads FOR SELECT TO authenticated USING (true)
+CREATE POLICY "auth_read_scan_uploads" ON scan_uploads FOR SELECT TO authenticated USING (true);
 
-CREATE POLICY "allow_tenant_all_scan_uploads" ON scan_uploads FOR ALL TO authenticated USING (tenant_id = 'galvanik-kreile')
+CREATE POLICY "allow_tenant_all_scan_uploads" ON scan_uploads FOR ALL TO authenticated USING (tenant_id = 'galvanik-kreile');
 
 -- 6. PostgREST reload
-NOTIFY pgrst, 'reload schema'
+NOTIFY pgrst, 'reload schema';

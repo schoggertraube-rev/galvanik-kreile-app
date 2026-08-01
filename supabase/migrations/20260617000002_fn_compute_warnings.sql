@@ -71,4 +71,4 @@ BEGIN
     WHERE we.tenant_id = p_tenant AND we.typ = 'db_negativ_' || order_id
   );
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql;

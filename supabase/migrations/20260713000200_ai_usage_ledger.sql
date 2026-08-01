@@ -2,9 +2,9 @@
 -- Durable, atomic and fail-closed AI usage admission for paid provider calls.
 -- Creates a new service-only table and RPCs; no existing policy is modified.
 
-SET lock_timeout = '5s'
+SET lock_timeout = '5s';
 
-SET statement_timeout = '5min'
+SET statement_timeout = '5min';
 
 CREATE TABLE public.ai_usage_reservations (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
@@ -30,20 +30,20 @@ CREATE TABLE public.ai_usage_reservations (
   CONSTRAINT ai_usage_status_known CHECK (
     status IN ('reserved', 'in_flight', 'succeeded', 'failed', 'uncertain')
   )
-)
+);
 
-ALTER TABLE public.ai_usage_reservations ENABLE ROW LEVEL SECURITY
+ALTER TABLE public.ai_usage_reservations ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE public.ai_usage_reservations FORCE ROW LEVEL SECURITY
+ALTER TABLE public.ai_usage_reservations FORCE ROW LEVEL SECURITY;
 
 CREATE UNIQUE INDEX uq_ai_usage_request
-  ON public.ai_usage_reservations(tenant_id, user_id, feature, request_key_hash)
+  ON public.ai_usage_reservations(tenant_id, user_id, feature, request_key_hash);
 
 CREATE INDEX idx_ai_usage_user_window
-  ON public.ai_usage_reservations(tenant_id, user_id, feature, created_at DESC)
+  ON public.ai_usage_reservations(tenant_id, user_id, feature, created_at DESC);
 
 CREATE INDEX idx_ai_usage_tenant_window
-  ON public.ai_usage_reservations(tenant_id, created_at DESC)
+  ON public.ai_usage_reservations(tenant_id, created_at DESC);
 
 CREATE FUNCTION public.reserve_ai_usage(
   p_tenant_id text,
@@ -260,7 +260,7 @@ BEGIN
     true, v_inserted.id, false, v_inserted.status,
     NULL::jsonb, 0, 'reserved'::text;
 END;
-$$
+$$;
 
 CREATE FUNCTION public.claim_ai_usage_reservation(
   p_reservation_id uuid,
@@ -285,7 +285,7 @@ BEGIN
   IF NOT FOUND THEN RETURN false; END IF;
   RETURN true;
 END;
-$$
+$$;
 
 CREATE FUNCTION public.settle_ai_usage_reservation(
   p_reservation_id uuid,
@@ -343,21 +343,21 @@ BEGIN
 
   RETURN QUERY SELECT true, p_outcome;
 END;
-$$
+$$;
 
-REVOKE ALL ON TABLE public.ai_usage_reservations FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON TABLE public.ai_usage_reservations FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.reserve_ai_usage(text,text,text,text,integer,integer,integer,integer,bigint,bigint) FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON FUNCTION public.reserve_ai_usage(text,text,text,text,integer,integer,integer,integer,bigint,bigint) FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.claim_ai_usage_reservation(uuid,text,text,text) FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON FUNCTION public.claim_ai_usage_reservation(uuid,text,text,text) FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON FUNCTION public.settle_ai_usage_reservation(uuid,text,text,text,text,integer,text,jsonb) FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON FUNCTION public.settle_ai_usage_reservation(uuid,text,text,text,text,integer,text,jsonb) FROM PUBLIC, anon, authenticated, service_role;
 
-GRANT EXECUTE ON FUNCTION public.reserve_ai_usage(text,text,text,text,integer,integer,integer,integer,bigint,bigint) TO service_role
+GRANT EXECUTE ON FUNCTION public.reserve_ai_usage(text,text,text,text,integer,integer,integer,integer,bigint,bigint) TO service_role;
 
-GRANT EXECUTE ON FUNCTION public.claim_ai_usage_reservation(uuid,text,text,text) TO service_role
+GRANT EXECUTE ON FUNCTION public.claim_ai_usage_reservation(uuid,text,text,text) TO service_role;
 
-GRANT EXECUTE ON FUNCTION public.settle_ai_usage_reservation(uuid,text,text,text,text,integer,text,jsonb) TO service_role
+GRANT EXECUTE ON FUNCTION public.settle_ai_usage_reservation(uuid,text,text,text,text,integer,text,jsonb) TO service_role;
 
 DO $verification$
 DECLARE
@@ -622,4 +622,4 @@ BEGIN
     END IF;
   END LOOP;
 END;
-$verification$
+$verification$;

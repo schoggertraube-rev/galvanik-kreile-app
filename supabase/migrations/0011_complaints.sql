@@ -13,30 +13,30 @@ CREATE TABLE IF NOT EXISTS complaints (
   resolution text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
-)
+);
 
-ALTER TABLE complaints ADD COLUMN IF NOT EXISTS tenant_id text DEFAULT 'galvanik-kreile'
+ALTER TABLE complaints ADD COLUMN IF NOT EXISTS tenant_id text DEFAULT 'galvanik-kreile';
 
-ALTER TABLE complaints ADD COLUMN IF NOT EXISTS item_id text
+ALTER TABLE complaints ADD COLUMN IF NOT EXISTS item_id text;
 
-ALTER TABLE complaints ADD COLUMN IF NOT EXISTS station_id text
+ALTER TABLE complaints ADD COLUMN IF NOT EXISTS station_id text;
 
-ALTER TABLE complaints ADD COLUMN IF NOT EXISTS description text DEFAULT ''
+ALTER TABLE complaints ADD COLUMN IF NOT EXISTS description text DEFAULT '';
 
-ALTER TABLE complaints ADD COLUMN IF NOT EXISTS photo_ids jsonb DEFAULT '[]'::jsonb
+ALTER TABLE complaints ADD COLUMN IF NOT EXISTS photo_ids jsonb DEFAULT '[]'::jsonb;
 
-ALTER TABLE complaints ADD COLUMN IF NOT EXISTS resolved_at timestamptz
+ALTER TABLE complaints ADD COLUMN IF NOT EXISTS resolved_at timestamptz;
 
-ALTER TABLE complaints ADD COLUMN IF NOT EXISTS resolution text
+ALTER TABLE complaints ADD COLUMN IF NOT EXISTS resolution text;
 
-ALTER TABLE complaints ENABLE ROW LEVEL SECURITY
+ALTER TABLE complaints ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "tenant_isolation_complaints" ON complaints
+DROP POLICY IF EXISTS "tenant_isolation_complaints" ON complaints;
 
 CREATE POLICY "tenant_isolation_complaints"
   ON complaints
   FOR ALL
   TO public
-  USING (tenant_id = current_setting('app.tenant_id', true))
+  USING (tenant_id = current_setting('app.tenant_id', true));
 
-CREATE INDEX IF NOT EXISTS complaints_tenant_created_idx ON complaints (tenant_id, created_at DESC)
+CREATE INDEX IF NOT EXISTS complaints_tenant_created_idx ON complaints (tenant_id, created_at DESC);

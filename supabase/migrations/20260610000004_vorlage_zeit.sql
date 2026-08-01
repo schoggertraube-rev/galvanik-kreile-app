@@ -11,6 +11,6 @@ CREATE TABLE vorlage_zeit (
   n_referenzauftraege      integer NOT NULL,
   letzte_aktualisierung    timestamptz DEFAULT now(),
   UNIQUE (tenant_id, schluessel, station_kuerzel)
-)
+);
 
-ALTER TABLE arbeitszeit_buchung ADD CONSTRAINT fk_arbeitszeit_vorlage_id FOREIGN KEY (vorlage_id) REFERENCES vorlage_zeit(id)
+ALTER TABLE arbeitszeit_buchung ADD CONSTRAINT fk_arbeitszeit_vorlage_id FOREIGN KEY (vorlage_id) REFERENCES vorlage_zeit(id);

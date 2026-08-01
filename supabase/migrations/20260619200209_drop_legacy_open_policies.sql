@@ -11,4 +11,4 @@ DROP POLICY IF EXISTS "tenant_isolation_events" ON events;
 DROP POLICY IF EXISTS "Allow all actions for public" ON ausgangsrechnung;
 
 -- Smoke-Verification: nach dieser Migration sollte
---   SET app.tenant_id='anderer-mandant'; SELECT COUNT(*) FROM events; → 0 liefern
+--   SET app.tenant_id='anderer-mandant'; SELECT COUNT(*) FROM events; → 0 liefern;

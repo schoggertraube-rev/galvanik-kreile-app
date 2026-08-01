@@ -5,9 +5,9 @@ CREATE TABLE stations (
     name text NOT NULL, -- Anzeigename der Station in der Werkstatt
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Zeitstempel der Erstellung
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL -- Zeitstempel der letzten Änderung
-)
+);
 
-ALTER TABLE stations ENABLE ROW LEVEL SECURITY
+ALTER TABLE stations ENABLE ROW LEVEL SECURITY;
 
 -- RLS aktivieren (Deny All by default)
 
@@ -19,9 +19,9 @@ CREATE TABLE users (
     role text NOT NULL, -- Rolle (z.B. admin, worker) für App-Berechtigungen
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Erstellungszeitpunkt
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL -- Aktualisierungszeitpunkt
-)
+);
 
-ALTER TABLE users ENABLE ROW LEVEL SECURITY
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
 -- RLS aktivieren
 
@@ -43,9 +43,9 @@ CREATE TABLE customers (
     credit_rating text, -- Bonitäts-Einstufung des Kunden
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Zeitpunkt der Anlage
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL -- Zeitpunkt der letzten Änderung
-)
+);
 
-ALTER TABLE customers ENABLE ROW LEVEL SECURITY
+ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 
 -- RLS aktivieren
 
@@ -67,9 +67,9 @@ CREATE TABLE orders (
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Letzte Änderung
     -- FK: RESTRICT, da ein Kunde mit aktiven Aufträgen nicht versehentlich gelöscht werden darf
     CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT
-)
+);
 
-ALTER TABLE orders ENABLE ROW LEVEL SECURITY
+ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
 
 -- RLS aktivieren
 
@@ -89,9 +89,9 @@ CREATE TABLE items (
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Letzte Änderung
     -- FK: CASCADE, da Einzelteile fest an einen Auftrag gebunden sind und mit ihm gelöscht werden sollen
     CONSTRAINT fk_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
-)
+);
 
-ALTER TABLE items ENABLE ROW LEVEL SECURITY
+ALTER TABLE items ENABLE ROW LEVEL SECURITY;
 
 -- RLS aktivieren
 
@@ -112,9 +112,9 @@ CREATE TABLE status_events (
     CONSTRAINT fk_item FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
     -- FK: CASCADE, Event wird bereinigt, wenn der Kunde gelöscht wird
     CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-)
+);
 
-ALTER TABLE status_events ENABLE ROW LEVEL SECURITY
+ALTER TABLE status_events ENABLE ROW LEVEL SECURITY;
 
 -- RLS aktivieren
 
@@ -134,9 +134,9 @@ CREATE TABLE baths (
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Letzte Änderung
     -- FK: RESTRICT, da eine Station nicht gelöscht werden darf, wenn noch Bäder dort aktiv sind
     CONSTRAINT fk_station FOREIGN KEY (station_id) REFERENCES stations(id) ON DELETE RESTRICT
-)
+);
 
-ALTER TABLE baths ENABLE ROW LEVEL SECURITY
+ALTER TABLE baths ENABLE ROW LEVEL SECURITY;
 
 -- RLS aktivieren
 
@@ -158,9 +158,9 @@ CREATE TABLE bath_measurements (
     CONSTRAINT fk_bath FOREIGN KEY (bath_id) REFERENCES baths(id) ON DELETE CASCADE,
     -- FK: RESTRICT, damit die Nachvollziehbarkeit des Mitarbeiters nicht unabsichtlich zerreißt
     CONSTRAINT fk_measured_by FOREIGN KEY (measured_by) REFERENCES users(id) ON DELETE RESTRICT
-)
+);
 
-ALTER TABLE bath_measurements ENABLE ROW LEVEL SECURITY
+ALTER TABLE bath_measurements ENABLE ROW LEVEL SECURITY;
 
 -- RLS aktivieren
 
@@ -184,9 +184,9 @@ CREATE TABLE complaints (
     CONSTRAINT fk_item FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE,
     -- FK: RESTRICT, da Stationen historisch stabil bleiben müssen, um Qualitätsstatistiken nicht zu verfälschen
     CONSTRAINT fk_station FOREIGN KEY (station_id) REFERENCES stations(id) ON DELETE RESTRICT
-)
+);
 
-ALTER TABLE complaints ENABLE ROW LEVEL SECURITY
+ALTER TABLE complaints ENABLE ROW LEVEL SECURITY;
 
 -- RLS aktivieren
 
@@ -203,9 +203,9 @@ CREATE TABLE inventory_items (
     is_hazardous boolean DEFAULT false NOT NULL, -- Flag für Gefahrstoff (Sicherheitskennzeichnung)
     created_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Anlagezeitpunkt im System
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL -- Letzte Änderung
-)
+);
 
-ALTER TABLE inventory_items ENABLE ROW LEVEL SECURITY
+ALTER TABLE inventory_items ENABLE ROW LEVEL SECURITY;
 
 -- RLS aktivieren
 
@@ -227,9 +227,9 @@ CREATE TABLE stock_movements (
     CONSTRAINT fk_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE RESTRICT,
     -- FK: RESTRICT, Nachvollziehbarkeit des Mitarbeiters (Audit-Trail) muss unveränderlich bleiben
     CONSTRAINT fk_created_by FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT
-)
+);
 
-ALTER TABLE stock_movements ENABLE ROW LEVEL SECURITY
+ALTER TABLE stock_movements ENABLE ROW LEVEL SECURITY;
 
 -- RLS aktivieren
 
@@ -248,9 +248,9 @@ CREATE TABLE price_agreements (
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Letzte Änderung
     -- FK: CASCADE, wenn der Kunde gelöscht wird, entfallen seine spezifischen Sonderpreise
     CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-)
+);
 
-ALTER TABLE price_agreements ENABLE ROW LEVEL SECURITY
+ALTER TABLE price_agreements ENABLE ROW LEVEL SECURITY;
 
 -- RLS aktivieren
 
@@ -270,8 +270,8 @@ CREATE TABLE inquiries (
     updated_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Letzte Änderung
     -- FK: SET NULL, falls ein Bestandskunde gelöscht wird, bleibt die alte Anfrage für die globale Statistik anonymisiert erhalten
     CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
-)
+);
 
-ALTER TABLE inquiries ENABLE ROW LEVEL SECURITY
+ALTER TABLE inquiries ENABLE ROW LEVEL SECURITY;
 
 -- RLS aktivieren

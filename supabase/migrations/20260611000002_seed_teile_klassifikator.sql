@@ -118,4 +118,4 @@ INSERT INTO teile_klassifikator (tenant_id, klasse, keywords, beispiel_oberflaec
 
 ('galvanik-kreile', 'sonstiges',
  ARRAY['sonstiges','sonder','spezial','prototyp','einzelstueck','einzelstück','unikat','unbekannt'],
- ARRAY['chrom','vernickelt','messing','versilbert','vergoldet'])
+ ARRAY['chrom','vernickelt','messing','versilbert','vergoldet']);

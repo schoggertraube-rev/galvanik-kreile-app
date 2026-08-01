@@ -1,7 +1,7 @@
 -- Migration: 20260622000002_search_global_and_wochenziel.sql
 
 -- 1. Add wochenziel to company_settings
-ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS wochenziel integer DEFAULT 25
+ALTER TABLE company_settings ADD COLUMN IF NOT EXISTS wochenziel integer DEFAULT 25;
 
 -- 2. Create search_global function
 CREATE OR REPLACE FUNCTION search_global(query text)
@@ -25,4 +25,4 @@ RETURNS TABLE (typ text, id text, label text, sublabel text) AS $$
   WHERE name ILIKE '%' || query || '%' OR material ILIKE '%' || query || '%'
 
   LIMIT 20;
-$$ LANGUAGE sql STABLE
+$$ LANGUAGE sql STABLE;

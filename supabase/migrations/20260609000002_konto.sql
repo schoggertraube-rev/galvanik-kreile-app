@@ -11,6 +11,6 @@ CREATE TABLE konto (
   ist_aktiv       BOOLEAN DEFAULT TRUE,
   created_at      TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (tenant_id, nummer)
-)
+);
 
-CREATE INDEX idx_konto_tenant ON konto(tenant_id)
+CREATE INDEX idx_konto_tenant ON konto(tenant_id);

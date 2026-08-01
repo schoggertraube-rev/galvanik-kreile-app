@@ -84,7 +84,7 @@ CREATE OR REPLACE VIEW public.v_production_orders AS
       COALESCE(order_number, '') ~* 'test|e2e|demo|seed|mock|fixture|sample|placeholder'
       OR COALESCE(title, '') ~* 'test|e2e|demo|seed|mock|fixture|sample|placeholder'
       OR COALESCE(task, '') ~* 'test|e2e|demo|seed|mock|fixture|sample|placeholder'
-    )
+    );
 
 -- Set search_path on fn_is_production_order
-ALTER FUNCTION public.fn_is_production_order(text) SET search_path = 'public'
+ALTER FUNCTION public.fn_is_production_order(text) SET search_path = 'public';

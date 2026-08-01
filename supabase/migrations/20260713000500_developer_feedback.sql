@@ -1,11 +1,11 @@
 -- REMOTE WAVE 1: explicitly approved 2026-07-26; use only the reviewed atomic runner.
 -- Explicit user feedback for the future operator control plane; separate from usage telemetry and marketing feedback.
 
-SET lock_timeout = '5s'
+SET lock_timeout = '5s';
 
-SET statement_timeout = '5min'
+SET statement_timeout = '5min';
 
-SET search_path = pg_catalog, public, pg_temp
+SET search_path = pg_catalog, public, pg_temp;
 
 CREATE TABLE public.developer_feedback (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
@@ -25,21 +25,21 @@ CREATE TABLE public.developer_feedback (
   CONSTRAINT developer_feedback_route_chk CHECK (route ~ '^/(?:[a-z][a-z-]{0,39}|:id)?(?:/(?:[a-z][a-z-]{0,39}|:id)){0,4}$'),
   CONSTRAINT developer_feedback_message_chk CHECK (char_length(message) BETWEEN 3 AND 2000),
   CONSTRAINT developer_feedback_status_chk CHECK (status = 'new')
-)
+);
 
 CREATE INDEX developer_feedback_tenant_created_idx
-  ON public.developer_feedback (tenant_id, created_at DESC)
+  ON public.developer_feedback (tenant_id, created_at DESC);
 
 CREATE INDEX developer_feedback_tenant_status_idx
-  ON public.developer_feedback (tenant_id, status, created_at DESC)
+  ON public.developer_feedback (tenant_id, status, created_at DESC);
 
-ALTER TABLE public.developer_feedback ENABLE ROW LEVEL SECURITY
+ALTER TABLE public.developer_feedback ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE public.developer_feedback FORCE ROW LEVEL SECURITY
+ALTER TABLE public.developer_feedback FORCE ROW LEVEL SECURITY;
 
-REVOKE ALL ON TABLE public.developer_feedback FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON TABLE public.developer_feedback FROM PUBLIC, anon, authenticated, service_role;
 
-GRANT SELECT ON TABLE public.developer_feedback TO service_role
+GRANT SELECT ON TABLE public.developer_feedback TO service_role;
 
 GRANT INSERT (
   tenant_id,
@@ -49,7 +49,7 @@ GRANT INSERT (
   route,
   message,
   build_id
-) ON public.developer_feedback TO service_role
+) ON public.developer_feedback TO service_role;
 
 DO $verification$
 DECLARE
@@ -398,4 +398,4 @@ BEGIN
     RAISE EXCEPTION 'DEVELOPER_FEEDBACK_VERIFICATION_FAILED: service role access drifted';
   END IF;
 END
-$verification$
+$verification$;

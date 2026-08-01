@@ -9,4 +9,4 @@ INSERT INTO kostenstelle (tenant_id, kuerzel, name, typ) VALUES
 ('galvanik-kreile', 'VERTRIEB', 'Akquise / Angebote', 'vertrieb'),
 ('galvanik-kreile', 'ENERGIE', 'Strom / Wasser / Abwasser', 'energie'),
 ('galvanik-kreile', 'GEBAEUDE', 'Halle / Miete / Versicherung', 'gebaeude')
-ON CONFLICT (tenant_id, kuerzel) DO NOTHING
+ON CONFLICT (tenant_id, kuerzel) DO NOTHING;

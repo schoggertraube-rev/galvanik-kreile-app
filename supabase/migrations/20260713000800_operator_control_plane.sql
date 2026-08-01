@@ -1,11 +1,11 @@
 -- REMOTE WAVE 1: explicitly approved 2026-07-26; use only the reviewed atomic runner.
 -- Signed, transparent tenant control state. No remote code execution and no covert slowdown mode.
 
-SET lock_timeout = '5s'
+SET lock_timeout = '5s';
 
-SET statement_timeout = '5min'
+SET statement_timeout = '5min';
 
-SET search_path = pg_catalog, public, pg_temp
+SET search_path = pg_catalog, public, pg_temp;
 
 CREATE TABLE public.tenant_operator_controls (
   tenant_id text PRIMARY KEY,
@@ -40,10 +40,10 @@ CREATE TABLE public.tenant_operator_controls (
   CONSTRAINT tenant_operator_controls_version_chk CHECK (policy_version > 0),
   CONSTRAINT tenant_operator_controls_signature_chk CHECK (signature ~ '^[A-Za-z0-9_-]{86}$'),
   CONSTRAINT tenant_operator_controls_digest_chk CHECK (request_digest ~ '^[0-9a-f]{64}$')
-)
+);
 
 CREATE INDEX tenant_operator_controls_mode_idx
-  ON public.tenant_operator_controls (mode, effective_at)
+  ON public.tenant_operator_controls (mode, effective_at);
 
 CREATE TABLE public.operator_control_events (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
@@ -79,10 +79,10 @@ CREATE TABLE public.operator_control_events (
   CONSTRAINT operator_control_events_version_chk CHECK (policy_version > 0),
   CONSTRAINT operator_control_events_signature_chk CHECK (signature ~ '^[A-Za-z0-9_-]{86}$'),
   CONSTRAINT operator_control_events_digest_chk CHECK (request_digest ~ '^[0-9a-f]{64}$')
-)
+);
 
 CREATE INDEX operator_control_events_tenant_received_idx
-  ON public.operator_control_events (tenant_id, received_at DESC)
+  ON public.operator_control_events (tenant_id, received_at DESC);
 
 CREATE FUNCTION public.enforce_operator_control_monotonic_version()
 RETURNS trigger
@@ -96,29 +96,29 @@ BEGIN
   END IF;
   RETURN NEW;
 END
-$function$
+$function$;
 
 CREATE TRIGGER tenant_operator_controls_monotonic_version_trg
 BEFORE UPDATE ON public.tenant_operator_controls
-FOR EACH ROW EXECUTE FUNCTION public.enforce_operator_control_monotonic_version()
+FOR EACH ROW EXECUTE FUNCTION public.enforce_operator_control_monotonic_version();
 
-REVOKE ALL ON FUNCTION public.enforce_operator_control_monotonic_version() FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON FUNCTION public.enforce_operator_control_monotonic_version() FROM PUBLIC, anon, authenticated, service_role;
 
-ALTER TABLE public.tenant_operator_controls ENABLE ROW LEVEL SECURITY
+ALTER TABLE public.tenant_operator_controls ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE public.tenant_operator_controls FORCE ROW LEVEL SECURITY
+ALTER TABLE public.tenant_operator_controls FORCE ROW LEVEL SECURITY;
 
-ALTER TABLE public.operator_control_events ENABLE ROW LEVEL SECURITY
+ALTER TABLE public.operator_control_events ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE public.operator_control_events FORCE ROW LEVEL SECURITY
+ALTER TABLE public.operator_control_events FORCE ROW LEVEL SECURITY;
 
-REVOKE ALL ON TABLE public.tenant_operator_controls FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON TABLE public.tenant_operator_controls FROM PUBLIC, anon, authenticated, service_role;
 
-REVOKE ALL ON TABLE public.operator_control_events FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON TABLE public.operator_control_events FROM PUBLIC, anon, authenticated, service_role;
 
-GRANT SELECT, INSERT, UPDATE ON TABLE public.tenant_operator_controls TO service_role
+GRANT SELECT, INSERT, UPDATE ON TABLE public.tenant_operator_controls TO service_role;
 
-GRANT SELECT, INSERT ON TABLE public.operator_control_events TO service_role
+GRANT SELECT, INSERT ON TABLE public.operator_control_events TO service_role;
 
 DO $verification$
 DECLARE
@@ -158,7 +158,7 @@ BEGIN
         AND c.relrowsecurity AND c.relforcerowsecurity) <> 2
   THEN RAISE EXCEPTION 'Operator control tables must use forced RLS'; END IF;
 END
-$verification$
+$verification$;
 
 DO $access_verification$
 DECLARE
@@ -274,7 +274,7 @@ BEGIN
     END IF;
   END LOOP;
 END
-$access_verification$
+$access_verification$;
 
 DO $catalog_receipt$
 DECLARE
@@ -848,4 +848,4 @@ BEGIN
     RAISE EXCEPTION 'OPERATOR_CONTROL_POSTFLIGHT_FAILED: migration created control state';
   END IF;
 END
-$catalog_receipt$
+$catalog_receipt$;

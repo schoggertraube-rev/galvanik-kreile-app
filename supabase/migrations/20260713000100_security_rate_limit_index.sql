@@ -2,13 +2,13 @@
 -- Durable atomic security counters. The Supabase migration runner owns the
 -- transaction and records the ledger entry in that same transaction.
 
-SET lock_timeout = '5s'
+SET lock_timeout = '5s';
 
-SET statement_timeout = '60s'
+SET statement_timeout = '60s';
 
-SET idle_in_transaction_session_timeout = '60s'
+SET idle_in_transaction_session_timeout = '60s';
 
-SET search_path = pg_catalog, pg_temp
+SET search_path = pg_catalog, pg_temp;
 
 DO $preflight$
 DECLARE
@@ -384,7 +384,7 @@ BEGIN
     RAISE EXCEPTION 'SECURITY_RATE_LIMIT_PREFLIGHT_FAILED: function overload or owner drift';
   END IF;
 END
-$preflight$
+$preflight$;
 
 CREATE TABLE IF NOT EXISTS public.security_rate_limit_counters (
   namespace text NOT NULL,
@@ -400,7 +400,7 @@ CREATE TABLE IF NOT EXISTS public.security_rate_limit_counters (
     CHECK (namespace ~ '^[a-z0-9._-]{1,80}$'),
   CONSTRAINT security_rate_limit_counters_subject_hash_check
     CHECK (subject_hash ~ '^[0-9a-f]{64}$')
-)
+);
 
 DO $table_contract$
 DECLARE
@@ -488,14 +488,14 @@ BEGIN
     RAISE EXCEPTION 'SECURITY_RATE_LIMIT_CONTRACT_FAILED: owner, options or policies drifted';
   END IF;
 END
-$table_contract$
+$table_contract$;
 
-ALTER TABLE public.security_rate_limit_counters ENABLE ROW LEVEL SECURITY
+ALTER TABLE public.security_rate_limit_counters ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE public.security_rate_limit_counters FORCE ROW LEVEL SECURITY
+ALTER TABLE public.security_rate_limit_counters FORCE ROW LEVEL SECURITY;
 
 REVOKE ALL PRIVILEGES ON TABLE public.security_rate_limit_counters
-  FROM PUBLIC, anon, authenticated, service_role
+  FROM PUBLIC, anon, authenticated, service_role;
 
 DO $column_acl$
 DECLARE
@@ -518,7 +518,7 @@ BEGIN
     END LOOP;
   END LOOP;
 END
-$column_acl$
+$column_acl$;
 
 CREATE OR REPLACE FUNCTION public.consume_security_rate_limit(
   p_namespace text,
@@ -588,7 +588,7 @@ BEGIN
 
   RETURN QUERY SELECT true, greatest(0, p_limit - v_counter.attempt_count), 0;
 END
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.reset_security_rate_limit(
   p_namespace text,
@@ -621,19 +621,19 @@ BEGIN
 
   RETURN true;
 END
-$function$
+$function$;
 
 REVOKE ALL ON FUNCTION public.consume_security_rate_limit(text,text,integer,integer)
-  FROM PUBLIC, anon, authenticated, service_role
+  FROM PUBLIC, anon, authenticated, service_role;
 
 REVOKE ALL ON FUNCTION public.reset_security_rate_limit(text,text)
-  FROM PUBLIC, anon, authenticated, service_role
+  FROM PUBLIC, anon, authenticated, service_role;
 
 GRANT EXECUTE ON FUNCTION public.consume_security_rate_limit(text,text,integer,integer)
-  TO service_role
+  TO service_role;
 
 GRANT EXECUTE ON FUNCTION public.reset_security_rate_limit(text,text)
-  TO service_role
+  TO service_role;
 
 DO $verification$
 DECLARE
@@ -818,4 +818,4 @@ BEGIN
     END IF;
   END LOOP;
 END
-$verification$
+$verification$;

@@ -2,11 +2,11 @@
 -- Expand only: the legacy sink is sealed by the later ui_events contract after
 -- every executable dependency has moved to a typed, truthful server ledger.
 
-SET lock_timeout = '5s'
+SET lock_timeout = '5s';
 
-SET statement_timeout = '5min'
+SET statement_timeout = '5min';
 
-SET search_path = pg_catalog, public, pg_temp
+SET search_path = pg_catalog, public, pg_temp;
 
 CREATE TABLE public.app_usage_events (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
@@ -49,21 +49,21 @@ CREATE TABLE public.app_usage_events (
   CONSTRAINT app_usage_events_time_window_chk CHECK (
     occurred_at >= received_at - interval '7 days' AND occurred_at <= received_at + interval '5 minutes'
   )
-)
+);
 
 CREATE INDEX app_usage_events_tenant_occurred_idx
-  ON public.app_usage_events (tenant_id, occurred_at DESC)
+  ON public.app_usage_events (tenant_id, occurred_at DESC);
 
 CREATE INDEX app_usage_events_tenant_type_idx
-  ON public.app_usage_events (tenant_id, event_type, occurred_at DESC)
+  ON public.app_usage_events (tenant_id, event_type, occurred_at DESC);
 
-ALTER TABLE public.app_usage_events ENABLE ROW LEVEL SECURITY
+ALTER TABLE public.app_usage_events ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE public.app_usage_events FORCE ROW LEVEL SECURITY
+ALTER TABLE public.app_usage_events FORCE ROW LEVEL SECURITY;
 
-REVOKE ALL ON TABLE public.app_usage_events FROM PUBLIC, anon, authenticated, service_role
+REVOKE ALL ON TABLE public.app_usage_events FROM PUBLIC, anon, authenticated, service_role;
 
-GRANT SELECT ON TABLE public.app_usage_events TO service_role
+GRANT SELECT ON TABLE public.app_usage_events TO service_role;
 
 GRANT INSERT (
   tenant_id,
@@ -82,7 +82,7 @@ GRANT INSERT (
   click_count,
   build_id,
   occurred_at
-) ON public.app_usage_events TO service_role
+) ON public.app_usage_events TO service_role;
 
 DO $verification$
 DECLARE
@@ -439,4 +439,4 @@ BEGIN
     RAISE EXCEPTION 'USAGE_TELEMETRY_VERIFICATION_FAILED: service role access drifted';
   END IF;
 END
-$verification$
+$verification$;

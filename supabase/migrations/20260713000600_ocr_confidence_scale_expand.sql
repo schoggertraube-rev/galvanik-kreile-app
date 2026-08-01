@@ -3,11 +3,11 @@
 -- fractional; its numeric values stay unchanged until the bridge application
 -- is deployed and all old writers are drained.
 
-SET lock_timeout = '5s'
+SET lock_timeout = '5s';
 
-SET statement_timeout = '5min'
+SET statement_timeout = '5min';
 
-SET search_path = pg_catalog, public, pg_temp
+SET search_path = pg_catalog, public, pg_temp;
 
 DO $migration$
 BEGIN
@@ -52,10 +52,10 @@ BEGIN
       'OCR_CONFIDENCE_RECONCILIATION_REQUIRED: immutable receipt has unclassified confidence';
   END IF;
 END
-$migration$
+$migration$;
 
 ALTER TABLE public.beleg
-  ADD COLUMN ocr_confidence_scale text
+  ADD COLUMN ocr_confidence_scale text;
 
 -- The preceding ALTER TABLE retains its stronger ACCESS EXCLUSIVE lock until
 -- the Supabase CLI's implicit migration batch (including the ledger insert)
@@ -149,7 +149,7 @@ BEGIN
       'OCR_CONFIDENCE_RECONCILIATION_REQUIRED: stored value and scale disagree';
   END IF;
 END
-$legacy_provenance$
+$legacy_provenance$;
 
 ALTER TABLE public.beleg
   ADD CONSTRAINT beleg_ocr_confidence_range_chk
@@ -173,22 +173,22 @@ ALTER TABLE public.beleg
         ocr_confidence_scale IS DISTINCT FROM 'fraction'
         OR ocr_confidence BETWEEN 0 AND 1
       )
-    ) NOT VALID
+    ) NOT VALID;
 
 ALTER TABLE public.beleg
-  VALIDATE CONSTRAINT beleg_ocr_confidence_range_chk
+  VALIDATE CONSTRAINT beleg_ocr_confidence_range_chk;
 
 ALTER TABLE public.beleg
-  VALIDATE CONSTRAINT beleg_ocr_confidence_scale_chk
+  VALIDATE CONSTRAINT beleg_ocr_confidence_scale_chk;
 
 ALTER TABLE public.beleg
-  VALIDATE CONSTRAINT beleg_ocr_confidence_scale_value_chk
+  VALIDATE CONSTRAINT beleg_ocr_confidence_scale_value_chk;
 
 COMMENT ON COLUMN public.beleg.ocr_confidence IS
-  'Provider confidence. Interpret only together with ocr_confidence_scale; this is not an accounting approval.'
+  'Provider confidence. Interpret only together with ocr_confidence_scale; this is not an accounting approval.';
 
 COMMENT ON COLUMN public.beleg.ocr_confidence_scale IS
-  'Explicit magnitude provenance: fraction or percent. NULL means the stored non-NULL value is not safely interpretable.'
+  'Explicit magnitude provenance: fraction or percent. NULL means the stored non-NULL value is not safely interpretable.';
 
 -- This is an exact preservation receipt for the pre-existing receipt boundary,
 -- including its current RLS/policy/ACL state. It must not be described as a
@@ -778,4 +778,4 @@ BEGIN
     RAISE EXCEPTION 'OCR_CONFIDENCE_POSTFLIGHT_FAILED: column ACL contract drifted';
   END IF;
 END
-$postflight$
+$postflight$;

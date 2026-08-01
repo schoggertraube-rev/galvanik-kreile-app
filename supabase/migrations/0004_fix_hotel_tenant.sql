@@ -21,7 +21,7 @@ BEGIN
         UPDATE events SET tenant_id = 'galvanik-kreile' WHERE tenant_id = 'hotel-kreile';
     END IF;
 
-END $$
+END $$;
 
 -- Supabase Schema-Cache neu laden, um Fehler (wie PGRST204) zu vermeiden
-NOTIFY pgrst, 'reload schema'
+NOTIFY pgrst, 'reload schema';

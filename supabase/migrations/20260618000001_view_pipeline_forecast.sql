@@ -16,4 +16,4 @@ WHERE o.status NOT IN ('completed','abgeschlossen','cancelled','storniert')
   AND o.due_date IS NOT NULL
   AND (o.tenant_id = 'galvanik-kreile' OR o.tenant_id IS NULL)
 GROUP BY 1
-ORDER BY 1
+ORDER BY 1;

@@ -18,15 +18,15 @@ CREATE TABLE IF NOT EXISTS company_settings (
   tax_id text DEFAULT '',
   logo_url text DEFAULT '/logo.png',
   updated_at timestamptz NOT NULL DEFAULT now()
-)
+);
 
 -- Enable RLS
-ALTER TABLE company_settings ENABLE ROW LEVEL SECURITY
+ALTER TABLE company_settings ENABLE ROW LEVEL SECURITY;
 
 -- Policy: CRUD nur fuer eigenen Tenant
 DO $$ BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
+    SELECT 1 FROM pg_policies
     WHERE tablename = 'company_settings' AND policyname = 'tenant_isolation_company_settings'
   ) THEN
     CREATE POLICY "tenant_isolation_company_settings" ON company_settings
@@ -35,4 +35,4 @@ DO $$ BEGIN
       USING (tenant_id = current_setting('app.tenant_id', true))
       WITH CHECK (tenant_id = current_setting('app.tenant_id', true));
   END IF;
-END $$
+END $$;

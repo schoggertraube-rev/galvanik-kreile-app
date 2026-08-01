@@ -2,7 +2,7 @@
 -- Add missing amount_eur column to payments table
 
 ALTER TABLE payments
-  ADD COLUMN IF NOT EXISTS amount_eur numeric(10,2)
+  ADD COLUMN IF NOT EXISTS amount_eur numeric(10,2);
 
 -- Optionally copy data from existing amount column if it exists
 DO $$
@@ -11,4 +11,4 @@ BEGIN
     UPDATE payments SET amount_eur = amount;
     ALTER TABLE payments DROP COLUMN amount;
   END IF;
-END $$
+END $$;

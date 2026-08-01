@@ -44,7 +44,7 @@ WHERE tenant_id = 'galvanik-kreile'
     order_number ~* 'test|e2e|demo|seed|mock|fixture|sample|placeholder' OR
     title ~* 'test|e2e|demo|seed|mock|fixture|sample|placeholder' OR
     task ~* 'test|e2e|demo|seed|mock|fixture|sample|placeholder'
-  )
+  );
 
 -- B. Central helper function using v_production_orders
 CREATE OR REPLACE FUNCTION fn_is_production_order(p_order_id text)
@@ -54,7 +54,7 @@ BEGIN
     SELECT 1 FROM v_production_orders WHERE id = p_order_id
   );
 END;
-$$ LANGUAGE plpgsql STABLE
+$$ LANGUAGE plpgsql STABLE;
 
 -- C. Pflicht-Views neu definieren
 -- 1. v_analyse_termintreue
@@ -83,7 +83,7 @@ SELECT
     WHERE promised_due_date IS NULL AND status != 'storniert'
   ) AS ohne_zusagetermin
 FROM v_production_orders
-WHERE created_at >= date_trunc('week', now())
+WHERE created_at >= date_trunc('week', now());
 
 -- 2. v_analyse_durchlaufzeit
 CREATE OR REPLACE VIEW v_analyse_durchlaufzeit AS
@@ -93,7 +93,7 @@ SELECT
   count(*) AS n
 FROM v_production_orders
 WHERE completed_date IS NOT NULL
-  AND completed_date >= now() - interval '30 days'
+  AND completed_date >= now() - interval '30 days';
 
 -- 3. v_analyse_wochenziel
 CREATE OR REPLACE VIEW v_analyse_wochenziel AS
@@ -101,7 +101,7 @@ SELECT
   count(*) AS fertig_diese_woche
 FROM v_production_orders
 WHERE completed_date IS NOT NULL
-  AND completed_date >= date_trunc('week', now())
+  AND completed_date >= date_trunc('week', now());
 
 -- 4. v_analyse_station_durchlauf
 CREATE OR REPLACE VIEW v_analyse_station_durchlauf AS
@@ -128,7 +128,7 @@ SELECT
 FROM eingang e
 JOIN ausgang a ON a.order_id = e.order_id AND a.station = e.station
 WHERE e.ts_ein >= now() - interval '30 days'
-GROUP BY e.station
+GROUP BY e.station;
 
 -- 5. v_auftrag_db
 CREATE OR REPLACE VIEW v_auftrag_db AS
@@ -222,7 +222,7 @@ SELECT
   (SELECT COUNT(*) FROM stock_movements sm WHERE sm.order_id = o.id AND sm.movement_type = 'verbrauch' AND sm.tenant_id = 'galvanik-kreile') AS anz_verbrauch,
   (SELECT COUNT(*) FROM arbeitszeit_buchung zb WHERE zb.auftrag_id = o.id AND zb.tenant_id = 'galvanik-kreile') AS anz_zeitbuchungen
 FROM v_production_orders o
-LEFT JOIN customers c ON c.id = o.customer_id
+LEFT JOIN customers c ON c.id = o.customer_id;
 
 -- 6. v_analyse_werkstatt_puls_economics
 CREATE OR REPLACE VIEW v_analyse_werkstatt_puls_economics AS
@@ -316,7 +316,7 @@ LEFT JOIN kpi_cost_assumptions kca_delay
   ON kca_delay.key = 'delay_cost_per_day_eur'
  AND kca_delay.is_active = true
  AND kca_delay.tenant_id = o.tenant_id
-WHERE COALESCE(o.status, '') NOT IN ('closed', 'abgeschlossen', 'cancelled', 'storniert')
+WHERE COALESCE(o.status, '') NOT IN ('closed', 'abgeschlossen', 'cancelled', 'storniert');
 
 -- 7. v_analyse_kunden_kpi
 CREATE OR REPLACE VIEW v_analyse_kunden_kpi AS
@@ -369,7 +369,7 @@ SELECT
   -- Reklamationen
   coalesce((SELECT count(*) FROM complaints co JOIN v_production_orders o ON o.id = co.order_id WHERE o.customer_id = c.id AND co.tenant_id = 'galvanik-kreile'), 0) AS reklamationen
 FROM customers c
-WHERE c.tenant_id = 'galvanik-kreile'
+WHERE c.tenant_id = 'galvanik-kreile';
 
 -- 8. v_engpass
 CREATE OR REPLACE VIEW v_engpass AS
@@ -418,7 +418,7 @@ SELECT
       ELSE 0 END
   )) AS engpass_score
 FROM kostenstelle ks
-WHERE ks.typ = 'produktion' AND ks.tenant_id = 'galvanik-kreile'
+WHERE ks.typ = 'produktion' AND ks.tenant_id = 'galvanik-kreile';
 
 -- 9. v_periodenabschluss_status
 CREATE OR REPLACE VIEW v_periodenabschluss_status AS
@@ -446,7 +446,7 @@ SELECT
      AND date_trunc('month', o.due_date) = make_date(p.jahr, p.monat, 1)
      AND o.db_ist IS NULL) AS auftraege_ohne_db
 FROM periode p
-WHERE p.tenant_id = 'galvanik-kreile'
+WHERE p.tenant_id = 'galvanik-kreile';
 
 -- 10. v_kunde_clv
 CREATE OR REPLACE VIEW v_kunde_clv AS
@@ -482,7 +482,7 @@ LEFT JOIN ausgangsrechnung ar ON ar.order_id = o.id
   AND (ar.is_demo IS NULL OR ar.is_demo = false)
   AND ar.tenant_id = 'galvanik-kreile'
 WHERE c.tenant_id = 'galvanik-kreile'
-GROUP BY c.id, c.name, c.company_name, c.type, c.created_at
+GROUP BY c.id, c.name, c.company_name, c.type, c.created_at;
 
 -- 11. v_monatsergebnis
 CREATE OR REPLACE VIEW v_monatsergebnis AS
@@ -553,7 +553,7 @@ LEFT JOIN material m ON m.monat = am.monat
 LEFT JOIN personal p ON p.monat = am.monat
 LEFT JOIN energie en ON en.monat = am.monat
 LEFT JOIN sachkosten s ON s.monat = am.monat
-ORDER BY am.monat DESC
+ORDER BY am.monat DESC;
 
 -- 12. v_aging
 CREATE OR REPLACE VIEW v_aging AS
@@ -584,6 +584,6 @@ SELECT
 FROM ausgangsrechnung ar
 LEFT JOIN customers c ON c.id = ar.kunde_id
 WHERE (ar.is_demo IS NULL OR ar.is_demo = false)
-  AND ar.tenant_id = 'galvanik-kreile'
+  AND ar.tenant_id = 'galvanik-kreile';
 
-NOTIFY pgrst, 'reload schema'
+NOTIFY pgrst, 'reload schema';

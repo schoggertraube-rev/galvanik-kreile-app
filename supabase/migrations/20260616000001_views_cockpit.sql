@@ -33,7 +33,7 @@ LEFT JOIN orders o ON o.customer_id = c.id
 LEFT JOIN v_auftrag_db vdb ON vdb.order_id = o.id
 LEFT JOIN ausgangsrechnung ar ON ar.order_id = o.id
   AND (ar.is_demo IS NULL OR ar.is_demo = false)
-GROUP BY c.id, c.name, c.company_name, c.type, c.created_at
+GROUP BY c.id, c.name, c.company_name, c.type, c.created_at;
 
 -- View 2: v_engpass
 CREATE OR REPLACE VIEW v_engpass AS
@@ -78,7 +78,7 @@ SELECT
       ELSE 0 END
   )) AS engpass_score
 FROM kostenstelle ks
-WHERE ks.typ = 'produktion' AND ks.tenant_id = 'galvanik-kreile'
+WHERE ks.typ = 'produktion' AND ks.tenant_id = 'galvanik-kreile';
 
 -- View 3: v_aging
 CREATE OR REPLACE VIEW v_aging AS
@@ -108,7 +108,7 @@ SELECT
     ELSE NULL END AS tage_ueberfaellig
 FROM ausgangsrechnung ar
 LEFT JOIN customers c ON c.id = ar.kunde_id
-WHERE ar.is_demo IS NULL OR ar.is_demo = false
+WHERE ar.is_demo IS NULL OR ar.is_demo = false;
 
 -- View 4: v_monatsergebnis
 CREATE OR REPLACE VIEW v_monatsergebnis AS
@@ -174,4 +174,4 @@ LEFT JOIN material m ON m.monat = am.monat
 LEFT JOIN personal p ON p.monat = am.monat
 LEFT JOIN energie en ON en.monat = am.monat
 LEFT JOIN sachkosten s ON s.monat = am.monat
-ORDER BY am.monat DESC
+ORDER BY am.monat DESC;

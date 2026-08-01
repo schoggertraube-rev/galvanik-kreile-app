@@ -12,10 +12,10 @@
 -- ACHTUNG: Diese Datei ist eine Vorschau. Sie wird erst nach expliziter
 -- Freigabe als echte Migration angelegt und auf Supabase angewendet.
 
-BEGIN
+BEGIN;
 
 -- Extension für Fuzzy-Suche (Lieferanten)
-CREATE EXTENSION IF NOT EXISTS pg_trgm
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 -- ============================================================================
 -- 1. Kategorien (Ausgaben/Einnahmen)
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS kategorie (
   icon TEXT,
   sortierung INTEGER DEFAULT 0,
   erstellt_am TIMESTAMPTZ DEFAULT NOW() NOT NULL
-)
+);
 
 -- ============================================================================
 -- 2. Lieferanten
@@ -43,9 +43,9 @@ CREATE TABLE IF NOT EXISTS lieferant (
   ust_id TEXT,
   adresse TEXT,
   erstellt_am TIMESTAMPTZ DEFAULT NOW() NOT NULL
-)
+);
 
-CREATE INDEX IF NOT EXISTS idx_lieferant_name_trgm ON lieferant USING gin (name_normalisiert gin_trgm_ops)
+CREATE INDEX IF NOT EXISTS idx_lieferant_name_trgm ON lieferant USING gin (name_normalisiert gin_trgm_ops);
 
 -- ============================================================================
 -- 3. Belege (Eingangsbelege)
@@ -74,15 +74,15 @@ CREATE TABLE IF NOT EXISTS beleg (
   bank_zahlung_id UUID,
   erstellt_von UUID NOT NULL,
   erstellt_am TIMESTAMPTZ DEFAULT NOW() NOT NULL
-)
+);
 
-CREATE INDEX IF NOT EXISTS idx_beleg_belegdatum ON beleg(belegdatum)
+CREATE INDEX IF NOT EXISTS idx_beleg_belegdatum ON beleg(belegdatum);
 
-CREATE INDEX IF NOT EXISTS idx_beleg_kategorie ON beleg(kategorie_id)
+CREATE INDEX IF NOT EXISTS idx_beleg_kategorie ON beleg(kategorie_id);
 
-CREATE INDEX IF NOT EXISTS idx_beleg_status ON beleg(status)
+CREATE INDEX IF NOT EXISTS idx_beleg_status ON beleg(status);
 
-CREATE INDEX IF NOT EXISTS idx_beleg_lieferant ON beleg(lieferant_id)
+CREATE INDEX IF NOT EXISTS idx_beleg_lieferant ON beleg(lieferant_id);
 
 -- ============================================================================
 -- 4. Beleg-Positionen
@@ -96,7 +96,7 @@ CREATE TABLE IF NOT EXISTS beleg_position (
   ust_betrag NUMERIC(12,2),
   skr_konto TEXT,
   sortierung INTEGER DEFAULT 0
-)
+);
 
 -- ============================================================================
 -- 5. Kraftstoff-Detail (1:1 bei Kategorie Kraftstoff)
@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS kraftstoff_detail (
   preis_pro_liter NUMERIC(6,3),
   tankstelle TEXT,
   ort TEXT
-)
+);
 
 -- ============================================================================
 -- 6. Ausgangsrechnungen (Einnahmen)
@@ -129,7 +129,7 @@ CREATE TABLE IF NOT EXISTS ausgangsrechnung (
   mahnstufe INTEGER DEFAULT 0,
   erechnung_xml TEXT,
   erstellt_am TIMESTAMPTZ DEFAULT NOW() NOT NULL
-)
+);
 
 -- ============================================================================
 -- 7. Zahlungen
@@ -145,7 +145,7 @@ CREATE TABLE IF NOT EXISTS zahlung (
   zahlungsart TEXT,
   bank_referenz TEXT,
   erstellt_am TIMESTAMPTZ DEFAULT NOW() NOT NULL
-)
+);
 
 -- FK: beleg → zahlung (zirkulär, daher nachträglich)
 DO $$
@@ -156,7 +156,7 @@ BEGIN
     ALTER TABLE beleg ADD CONSTRAINT fk_beleg_zahlung
       FOREIGN KEY (bank_zahlung_id) REFERENCES zahlung(id);
   END IF;
-END $$
+END $$;
 
 -- ============================================================================
 -- 8. Steuerprofil
@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS steuerprofil (
   wj_beginn DATE,
   aktiv BOOLEAN DEFAULT TRUE,
   erstellt_am TIMESTAMPTZ DEFAULT NOW() NOT NULL
-)
+);
 
 -- ============================================================================
 -- 9. UStVA-Periode
@@ -194,7 +194,7 @@ CREATE TABLE IF NOT EXISTS ustva_periode (
   freigegeben_am TIMESTAMPTZ,
   freigegeben_von UUID,
   erstellt_am TIMESTAMPTZ DEFAULT NOW() NOT NULL
-)
+);
 
 -- ============================================================================
 -- 10. Export-Läufe
@@ -208,7 +208,7 @@ CREATE TABLE IF NOT EXISTS export_lauf (
   anzahl_buchungen INTEGER DEFAULT 0,
   erstellt_von UUID NOT NULL,
   erstellt_am TIMESTAMPTZ DEFAULT NOW() NOT NULL
-)
+);
 
 -- ============================================================================
 -- 11. Buchhaltungs-Audit-Log (append-only, GoBD)
@@ -223,7 +223,7 @@ CREATE TABLE IF NOT EXISTS bh_audit_log (
   aktion TEXT NOT NULL,
   vorher JSONB,
   nachher JSONB
-)
+);
 
 -- ============================================================================
 -- 12. Buchhaltungs-Einstellungen
@@ -236,7 +236,7 @@ CREATE TABLE IF NOT EXISTS bh_einstellungen (
   standard_kontenrahmen TEXT DEFAULT 'SKR03',
   erstellt_am TIMESTAMPTZ DEFAULT NOW() NOT NULL,
   aktualisiert_am TIMESTAMPTZ DEFAULT NOW() NOT NULL
-)
+);
 
 -- ============================================================================
 -- GoBD-Trigger
@@ -257,49 +257,49 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_beleg_gobd ON beleg
+DROP TRIGGER IF EXISTS trg_beleg_gobd ON beleg;
 
 CREATE TRIGGER trg_beleg_gobd
   BEFORE UPDATE ON beleg
   FOR EACH ROW
-  EXECUTE FUNCTION prevent_beleg_mutation()
+  EXECUTE FUNCTION prevent_beleg_mutation();
 
 -- T2: Beleg DELETE komplett verhindern (GoBD-Pflicht, fehlte in V1!)
 CREATE OR REPLACE FUNCTION prevent_beleg_delete() RETURNS TRIGGER AS $$
 BEGIN
   RAISE EXCEPTION 'GoBD: Belege dürfen nicht gelöscht werden. Nur Storno ist erlaubt.';
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_beleg_no_delete ON beleg
+DROP TRIGGER IF EXISTS trg_beleg_no_delete ON beleg;
 
 CREATE TRIGGER trg_beleg_no_delete
   BEFORE DELETE ON beleg
   FOR EACH ROW
-  EXECUTE FUNCTION prevent_beleg_delete()
+  EXECUTE FUNCTION prevent_beleg_delete();
 
 -- T3: Audit-Log append-only (kein UPDATE/DELETE)
 CREATE OR REPLACE FUNCTION prevent_audit_mutation() RETURNS TRIGGER AS $$
 BEGIN
   RAISE EXCEPTION 'GoBD: Audit-Log ist append-only. Änderungen/Löschungen sind nicht erlaubt.';
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_audit_no_update ON bh_audit_log
+DROP TRIGGER IF EXISTS trg_audit_no_update ON bh_audit_log;
 
 CREATE TRIGGER trg_audit_no_update
   BEFORE UPDATE ON bh_audit_log
   FOR EACH ROW
-  EXECUTE FUNCTION prevent_audit_mutation()
+  EXECUTE FUNCTION prevent_audit_mutation();
 
-DROP TRIGGER IF EXISTS trg_audit_no_delete ON bh_audit_log
+DROP TRIGGER IF EXISTS trg_audit_no_delete ON bh_audit_log;
 
 CREATE TRIGGER trg_audit_no_delete
   BEFORE DELETE ON bh_audit_log
   FOR EACH ROW
-  EXECUTE FUNCTION prevent_audit_mutation()
+  EXECUTE FUNCTION prevent_audit_mutation();
 
 -- T4: Automatischer Audit-Eintrag bei Beleg-INSERT
 CREATE OR REPLACE FUNCTION log_beleg_insert() RETURNS TRIGGER AS $$
@@ -308,98 +308,98 @@ BEGIN
   VALUES (NEW.erstellt_von, 'beleg', NEW.id, 'create', to_jsonb(NEW));
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql
+$$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_beleg_audit_insert ON beleg
+DROP TRIGGER IF EXISTS trg_beleg_audit_insert ON beleg;
 
 CREATE TRIGGER trg_beleg_audit_insert
   AFTER INSERT ON beleg
   FOR EACH ROW
-  EXECUTE FUNCTION log_beleg_insert()
+  EXECUTE FUNCTION log_beleg_insert();
 
 -- ============================================================================
 -- RLS-Policies (Prototyping: alle authentifizierten Nutzer)
 -- Phase 2: Rollenbasierte Policies (EMPLOYEE/ACCOUNTING/OWNER/AUDIT)
 -- ============================================================================
 
-ALTER TABLE beleg ENABLE ROW LEVEL SECURITY
+ALTER TABLE beleg ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE beleg_position ENABLE ROW LEVEL SECURITY
+ALTER TABLE beleg_position ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE kraftstoff_detail ENABLE ROW LEVEL SECURITY
+ALTER TABLE kraftstoff_detail ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE ausgangsrechnung ENABLE ROW LEVEL SECURITY
+ALTER TABLE ausgangsrechnung ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE zahlung ENABLE ROW LEVEL SECURITY
+ALTER TABLE zahlung ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE kategorie ENABLE ROW LEVEL SECURITY
+ALTER TABLE kategorie ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE lieferant ENABLE ROW LEVEL SECURITY
+ALTER TABLE lieferant ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE steuerprofil ENABLE ROW LEVEL SECURITY
+ALTER TABLE steuerprofil ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE ustva_periode ENABLE ROW LEVEL SECURITY
+ALTER TABLE ustva_periode ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE export_lauf ENABLE ROW LEVEL SECURITY
+ALTER TABLE export_lauf ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE bh_audit_log ENABLE ROW LEVEL SECURITY
+ALTER TABLE bh_audit_log ENABLE ROW LEVEL SECURITY;
 
-ALTER TABLE bh_einstellungen ENABLE ROW LEVEL SECURITY
+ALTER TABLE bh_einstellungen ENABLE ROW LEVEL SECURITY;
 
 -- Prototyping: offen für alle authentifizierten Nutzer
-DROP POLICY IF EXISTS beleg_all ON beleg
+DROP POLICY IF EXISTS beleg_all ON beleg;
 
-CREATE POLICY beleg_all ON beleg FOR ALL TO authenticated USING (true) WITH CHECK (true)
+CREATE POLICY beleg_all ON beleg FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS beleg_position_all ON beleg_position
+DROP POLICY IF EXISTS beleg_position_all ON beleg_position;
 
-CREATE POLICY beleg_position_all ON beleg_position FOR ALL TO authenticated USING (true) WITH CHECK (true)
+CREATE POLICY beleg_position_all ON beleg_position FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS kraftstoff_detail_all ON kraftstoff_detail
+DROP POLICY IF EXISTS kraftstoff_detail_all ON kraftstoff_detail;
 
-CREATE POLICY kraftstoff_detail_all ON kraftstoff_detail FOR ALL TO authenticated USING (true) WITH CHECK (true)
+CREATE POLICY kraftstoff_detail_all ON kraftstoff_detail FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS ausgangsrechnung_all ON ausgangsrechnung
+DROP POLICY IF EXISTS ausgangsrechnung_all ON ausgangsrechnung;
 
-CREATE POLICY ausgangsrechnung_all ON ausgangsrechnung FOR ALL TO authenticated USING (true) WITH CHECK (true)
+CREATE POLICY ausgangsrechnung_all ON ausgangsrechnung FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS zahlung_all ON zahlung
+DROP POLICY IF EXISTS zahlung_all ON zahlung;
 
-CREATE POLICY zahlung_all ON zahlung FOR ALL TO authenticated USING (true) WITH CHECK (true)
+CREATE POLICY zahlung_all ON zahlung FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS kategorie_all ON kategorie
+DROP POLICY IF EXISTS kategorie_all ON kategorie;
 
-CREATE POLICY kategorie_all ON kategorie FOR ALL TO authenticated USING (true) WITH CHECK (true)
+CREATE POLICY kategorie_all ON kategorie FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS lieferant_all ON lieferant
+DROP POLICY IF EXISTS lieferant_all ON lieferant;
 
-CREATE POLICY lieferant_all ON lieferant FOR ALL TO authenticated USING (true) WITH CHECK (true)
+CREATE POLICY lieferant_all ON lieferant FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS steuerprofil_all ON steuerprofil
+DROP POLICY IF EXISTS steuerprofil_all ON steuerprofil;
 
-CREATE POLICY steuerprofil_all ON steuerprofil FOR ALL TO authenticated USING (true) WITH CHECK (true)
+CREATE POLICY steuerprofil_all ON steuerprofil FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS ustva_periode_all ON ustva_periode
+DROP POLICY IF EXISTS ustva_periode_all ON ustva_periode;
 
-CREATE POLICY ustva_periode_all ON ustva_periode FOR ALL TO authenticated USING (true) WITH CHECK (true)
+CREATE POLICY ustva_periode_all ON ustva_periode FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
-DROP POLICY IF EXISTS export_lauf_all ON export_lauf
+DROP POLICY IF EXISTS export_lauf_all ON export_lauf;
 
-CREATE POLICY export_lauf_all ON export_lauf FOR ALL TO authenticated USING (true) WITH CHECK (true)
+CREATE POLICY export_lauf_all ON export_lauf FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- Audit-Log: INSERT-only für authentifizierte Nutzer (kein UPDATE/DELETE per Trigger gesichert)
-DROP POLICY IF EXISTS bh_audit_log_insert ON bh_audit_log
+DROP POLICY IF EXISTS bh_audit_log_insert ON bh_audit_log;
 
-CREATE POLICY bh_audit_log_insert ON bh_audit_log FOR INSERT TO authenticated WITH CHECK (true)
+CREATE POLICY bh_audit_log_insert ON bh_audit_log FOR INSERT TO authenticated WITH CHECK (true);
 
-DROP POLICY IF EXISTS bh_audit_log_select ON bh_audit_log
+DROP POLICY IF EXISTS bh_audit_log_select ON bh_audit_log;
 
-CREATE POLICY bh_audit_log_select ON bh_audit_log FOR SELECT TO authenticated USING (true)
+CREATE POLICY bh_audit_log_select ON bh_audit_log FOR SELECT TO authenticated USING (true);
 
 -- Einstellungen
-DROP POLICY IF EXISTS bh_einstellungen_all ON bh_einstellungen
+DROP POLICY IF EXISTS bh_einstellungen_all ON bh_einstellungen;
 
-CREATE POLICY bh_einstellungen_all ON bh_einstellungen FOR ALL TO authenticated USING (true) WITH CHECK (true)
+CREATE POLICY bh_einstellungen_all ON bh_einstellungen FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- ============================================================================
 -- Realtime
@@ -425,6 +425,6 @@ BEGIN
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE zahlung;
   END IF;
-END $$
+END $$;
 
-COMMIT
+COMMIT;

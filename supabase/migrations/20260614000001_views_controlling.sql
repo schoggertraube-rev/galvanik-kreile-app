@@ -85,7 +85,7 @@ SELECT
   (SELECT COUNT(*) FROM stock_movements sm WHERE sm.order_id = o.id AND sm.movement_type = 'verbrauch') AS anz_verbrauch,
   (SELECT COUNT(*) FROM arbeitszeit_buchung zb WHERE zb.auftrag_id = o.id) AS anz_zeitbuchungen
 FROM orders o
-LEFT JOIN customers c ON c.id = o.customer_id
+LEFT JOIN customers c ON c.id = o.customer_id;
 
 -- ==========================================
 -- VIEW 2: v_kostenstelle_monatswerte
@@ -110,7 +110,7 @@ LEFT JOIN arbeitszeit_buchung zb
   AND zb.tenant_id = ks.tenant_id
 WHERE ks.tenant_id = 'galvanik-kreile'
 GROUP BY ks.id, ks.kuerzel, ks.name, ks.typ,
-  date_trunc('month', zb.start_zeit), ks.verfuegbare_stunden_monatlich
+  date_trunc('month', zb.start_zeit), ks.verfuegbare_stunden_monatlich;
 
 -- ==========================================
 -- VIEW 3: v_periodenabschluss_status
@@ -140,4 +140,4 @@ SELECT
      AND date_trunc('month', o.due_date) = make_date(p.jahr, p.monat, 1)
      AND o.db_ist IS NULL) AS auftraege_ohne_db
 FROM periode p
-WHERE p.tenant_id = 'galvanik-kreile'
+WHERE p.tenant_id = 'galvanik-kreile';

@@ -15,12 +15,12 @@ CREATE TABLE IF NOT EXISTS order_financials (
 
   created_at                  timestamptz DEFAULT now(),
   updated_at                  timestamptz DEFAULT now()
-)
+);
 
-CREATE INDEX idx_order_financials_order ON order_financials(order_id)
+CREATE INDEX idx_order_financials_order ON order_financials(order_id);
 
-ALTER TABLE order_financials ENABLE ROW LEVEL SECURITY
+ALTER TABLE order_financials ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "service_role_all_order_financials" ON order_financials
   AS PERMISSIVE FOR ALL TO service_role
-  USING (true) WITH CHECK (true)
+  USING (true) WITH CHECK (true);

@@ -2,9 +2,9 @@
 -- Productive invoice numbers are business identities and must be unique inside
 -- the tenant. Historical is_demo fixtures are not accounting identities.
 
-SET lock_timeout = '5s'
+SET lock_timeout = '5s';
 
-SET statement_timeout = '5min'
+SET statement_timeout = '5min';
 
 DO $validation$
 BEGIN
@@ -31,11 +31,11 @@ BEGIN
     RAISE EXCEPTION 'Duplicate productive invoice numbers must be resolved before applying this migration';
   END IF;
 END
-$validation$
+$validation$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_ausgangsrechnung_tenant_nummer
   ON public.ausgangsrechnung (tenant_id, nummer)
-  WHERE is_demo IS DISTINCT FROM TRUE
+  WHERE is_demo IS DISTINCT FROM TRUE;
 
 DO $verification$
 BEGIN
@@ -73,4 +73,4 @@ BEGIN
     RAISE EXCEPTION 'Productive invoice number uniqueness index verification failed';
   END IF;
 END
-$verification$
+$verification$;
