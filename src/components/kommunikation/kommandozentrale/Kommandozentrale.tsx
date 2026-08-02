@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   ChevronLeft, X, CreditCard, FileText, Activity, AlertTriangle,
-  MessageSquare, User, Edit3, Calendar, Paperclip, Zap, Package,
-  Check, Send, Image as ImageIcon, Phone, Mail, Globe, Smartphone, PenLine
+  MessageSquare, User, Edit3, Calendar, Paperclip, Package,
+  Check, Send, Image as ImageIcon, Phone, Mail, Globe, Smartphone
 } from "lucide-react";
 import { useClientDossier, ClientDossier } from "./hooks/useClientDossier";
 import { useTopicRelevance, TileKey } from "./hooks/useTopicRelevance";
@@ -216,7 +216,7 @@ function renderTileContent(key: TileKey, dossier: ClientDossier): React.ReactNod
     case "notizen":
       return (
         <div style={{ fontSize: 12, color: "var(--kz-ink-mute)" }}>
-          „{dossier.stamm.notes.slice(0, 80)}{dossier.stamm.notes.length > 80 ? "…" : ""}"
+          „{dossier.stamm.notes.slice(0, 80)}{dossier.stamm.notes.length > 80 ? "…" : ""}”
         </div>
       );
 
@@ -442,7 +442,9 @@ function renderDetailBody(key: TileKey, dossier: ClientDossier): React.ReactNode
         <>
           <div className="kz-scorecards">
             <div className="kz-scorecard"><div className="sc-num">{dossier.orderStats.total}</div><div className="sc-lbl">Aufträge</div></div>
-            <div className="kz-scorecard"><div className="sc-num">~{dossier.orderStats.revenue} €</div><div className="sc-lbl">Umsatz</div></div>
+            {dossier.capabilities.canViewFinance && (
+              <div className="kz-scorecard"><div className="sc-num">~{dossier.orderStats.revenue} €</div><div className="sc-lbl">Umsatz</div></div>
+            )}
             <div className="kz-scorecard"><div className="sc-num good">{dossier.orderStats.vsLastYear}</div><div className="sc-lbl">vs. Vorjahr</div></div>
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -498,7 +500,9 @@ function renderDetailBody(key: TileKey, dossier: ClientDossier): React.ReactNode
               <tr><td style={{ color: "var(--kz-ink-mute)" }}>Adresse</td><td>{dossier.stamm.address}, {dossier.stamm.city}</td></tr>
               <tr><td style={{ color: "var(--kz-ink-mute)" }}>Seit</td><td>{dossier.stamm.since}</td></tr>
               <tr><td style={{ color: "var(--kz-ink-mute)" }}>Kanal</td><td>{dossier.stamm.preferredChannel} bevorzugt</td></tr>
-              <tr><td style={{ color: "var(--kz-ink-mute)" }}>Zahlart</td><td>{dossier.stamm.paymentMethod}</td></tr>
+              {dossier.capabilities.canViewFinance && (
+                <tr><td style={{ color: "var(--kz-ink-mute)" }}>Zahlart</td><td>{dossier.stamm.paymentMethod}</td></tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -607,7 +611,7 @@ function renderDetailBody(key: TileKey, dossier: ClientDossier): React.ReactNode
         <>
           <div className="kz-chart-card">
             <div style={{ fontSize: 13, color: "var(--kz-ink-soft)", lineHeight: 1.6 }}>
-              „{dossier.stamm.notes}"
+              „{dossier.stamm.notes}”
             </div>
           </div>
           <div className="kz-chart-card">
@@ -645,13 +649,24 @@ export function Kommandozentrale({
   const dossier = useClientDossier(customerId, matchData);
   const messageTexts = useMemo(() => messages.map(m => m.text), [messages]);
   const { relevantKeys } = useTopicRelevance(messageTexts, matchData);
+  const visibleLeftTiles = LEFT_TILES.filter(
+    (tile) =>
+      (tile.key !== "zahlung" || dossier.capabilities.canViewFinance) &&
+      (tile.key !== "reklas" || dossier.capabilities.canViewQuality),
+  );
 
-  // Pre-fill composer with suggested answer
-  useEffect(() => {
-    if (dossier.suggestedAnswer && !composerText) {
-      setComposerText(dossier.suggestedAnswer);
+  const handleClose = useCallback(() => {
+    if (!actionsApplied && dossier.preparedActions.length > 0) {
+      // Anti-Sackgasse: show toast
+      setShowToast(true);
+      setTimeout(() => {
+        setShowToast(false);
+        onClose();
+      }, 2500);
+    } else {
+      onClose();
     }
-  }, [dossier.suggestedAnswer]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [actionsApplied, dossier.preparedActions.length, onClose]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -672,20 +687,7 @@ export function Kommandozentrale({
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open, activeDetail]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleClose = useCallback(() => {
-    if (!actionsApplied && dossier.preparedActions.length > 0) {
-      // Anti-Sackgasse: show toast
-      setShowToast(true);
-      setTimeout(() => {
-        setShowToast(false);
-        onClose();
-      }, 2500);
-    } else {
-      onClose();
-    }
-  }, [actionsApplied, dossier.preparedActions.length, onClose]);
+  }, [open, activeDetail, handleClose]);
 
   const handleApplyAll = useCallback(() => {
     // Phase 4: Route to central flow for quotes
@@ -716,8 +718,10 @@ export function Kommandozentrale({
   }, [openErfassung, matchData, customerId, customerName, customerCity, messages]);
 
   const handleHighlightClick = useCallback((key: TileKey) => {
+    if (key === "zahlung" && !dossier.capabilities.canViewFinance) return;
+    if (key === "reklas" && !dossier.capabilities.canViewQuality) return;
     setActiveDetail(key);
-  }, []);
+  }, [dossier.capabilities.canViewFinance, dossier.capabilities.canViewQuality]);
 
   if (!open) return null;
 
@@ -770,7 +774,7 @@ export function Kommandozentrale({
           {/* ── LEFT: Klient ── */}
           <div className="kz-bento" data-testid="kz-bento-left">
             <div className="kz-bento-label">Klient</div>
-            {sortTiles(LEFT_TILES).map(tile => {
+            {sortTiles(visibleLeftTiles).map(tile => {
               const isRelevant = relevantKeys.has(tile.key);
               const isDim = mode === "smart" && !isRelevant;
               const span = isRelevant ? 2 : tile.defaultSpan;
@@ -917,7 +921,7 @@ export function Kommandozentrale({
             {/* Answer suggestion (cream card) */}
             <div className="kz-sug cream" data-testid="kz-answer-suggestion">
               <div className="sl">Antwort-Vorschlag</div>
-              <p>„{dossier.suggestedAnswer}"</p>
+              <p>„{dossier.suggestedAnswer}”</p>
               <div className="kz-sug-actions">
                 <button className="kz-sug-btn primary" onClick={() => setComposerText(dossier.suggestedAnswer)}>Übernehmen</button>
               </div>
@@ -926,7 +930,9 @@ export function Kommandozentrale({
         </div>
 
         {/* ═══ DETAIL OVERLAY ═══ */}
-        {activeDetail && (
+        {activeDetail &&
+          (activeDetail !== "zahlung" || dossier.capabilities.canViewFinance) &&
+          (activeDetail !== "reklas" || dossier.capabilities.canViewQuality) && (
           <DetailOverlay
             tileKey={activeDetail}
             dossier={dossier}

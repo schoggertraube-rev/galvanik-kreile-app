@@ -3,8 +3,48 @@
 import { createClient } from '@/lib/supabase/server';
 import type { WorkEntry, MaterialEntry, ExtraCostEntry } from '@/lib/orders/costCalculation';
 import { db } from "@/db";
-import { arbeitszeitBuchung, events } from "@/db/schema";
+import { arbeitszeitBuchung, events, orders } from "@/db/schema";
 import { getCurrentAppUser } from "@/lib/auth/permissions";
+import { resolveFinanceDataScope } from "@/lib/server/financeDataAccess";
+import { and, eq } from "drizzle-orm";
+
+const emptyStationCostSummary = () => ({
+  stations: {},
+  totals: {
+    zeitMin: 0,
+    zeitEur: 0,
+    matEur: 0,
+    extraEur: 0,
+    gesamtEur: 0,
+  },
+});
+
+const emptyBenchmarkData = () => ({
+  zeitVorlagen: [],
+  verbrauchVorlagen: [],
+  kostensatzEurProStunde: null,
+});
+
+async function resolveAuthorizedCostOrder(orderId: string) {
+  const scope = await resolveFinanceDataScope([
+    "perm_data_orders",
+    "perm_view_leitstand",
+  ]);
+  if (!scope.ok || !scope.data.canViewFinance) return null;
+
+  const [order] = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(
+      and(
+        eq(orders.id, orderId),
+        eq(orders.tenantId, scope.data.tenantId),
+      ),
+    )
+    .limit(1);
+
+  return order ? scope.data : null;
+}
 
 // ─────────────────────────────────────────────
 // Book station costs (Erfassung buchen)
@@ -18,23 +58,25 @@ export async function bookStationCosts(params: {
   employeeId: string;
   kostenstelleKuerzel: string;
 }) {
-  const supabase = await createClient();
-  const { orderId, station, workEntries, consumableEntries, extraCostEvents, employeeId, kostenstelleKuerzel } = params;
+  const { orderId, station, workEntries, consumableEntries, extraCostEvents, kostenstelleKuerzel } = params;
   const errors: string[] = [];
 
-  // Resolve active employee ID on the server
-  let realEmployeeId = employeeId;
-  if (employeeId === '00000000-0000-0000-0000-000000000000' || !employeeId) {
-    try {
-      const user = await getCurrentAppUser();
-      if (!user) {
-        return { success: false, errors: ['Für den angemeldeten Benutzer ist kein Mitarbeiterkonto hinterlegt.'] };
-      }
-      realEmployeeId = user.id;
-    } catch (authError) {
-      return { success: false, errors: ['Für den angemeldeten Benutzer ist kein Mitarbeiterkonto hinterlegt.'] };
-    }
+  const scope = await resolveAuthorizedCostOrder(orderId);
+  if (!scope) {
+    return {
+      success: false,
+      errors: ["Keine Berechtigung für Kosten- und Preisdaten dieses Auftrags."],
+    };
   }
+
+  const supabase = await createClient();
+
+  // Never trust a client-supplied employee identity.
+  const user = await getCurrentAppUser();
+  if (!user) {
+    return { success: false, errors: ['Für den angemeldeten Benutzer ist kein Mitarbeiterkonto hinterlegt.'] };
+  }
+  const realEmployeeId = user.id;
 
   // Atomically book work entries and create the event log via Drizzle transaction
   try {
@@ -43,7 +85,7 @@ export async function bookStationCosts(params: {
       for (const entry of workEntries) {
         if (entry.minutes <= 0) continue;
         await tx.insert(arbeitszeitBuchung).values({
-          tenantId: 'galvanik-kreile',
+          tenantId: scope.tenantId,
           auftragId: orderId,
           employeeId: realEmployeeId,
           kostenstelleKuerzel: kostenstelleKuerzel,
@@ -58,23 +100,30 @@ export async function bookStationCosts(params: {
 
       // 4) Event-Log -> events (using correct column userId instead of non-existent created_by)
       await tx.insert(events).values({
-        tenantId: 'galvanik-kreile',
+        tenantId: scope.tenantId,
         orderId: orderId,
         eventType: 'STATION_COST_BOOKED',
         description: `Erfassung ${station} gebucht`,
         userId: realEmployeeId,
       });
     });
-  } catch (txError: any) {
+  } catch (txError: unknown) {
     console.error("Drizzle transaction failed in bookStationCosts:", txError);
-    return { success: false, errors: [`Datenbankfehler bei der Buchung: ${txError.message || txError}`] };
+    return {
+      success: false,
+      errors: [
+        `Datenbankfehler bei der Buchung: ${
+          txError instanceof Error ? txError.message : String(txError)
+        }`,
+      ],
+    };
   }
 
   // 2) Material → consumable_uses (inserted via Supabase client, since table is not in Drizzle schema)
   for (const mat of consumableEntries) {
     if (mat.quantity <= 0) continue;
     const { error } = await supabase.from('consumable_uses').insert({
-      tenant_id: 'galvanik-kreile',
+      tenant_id: scope.tenantId,
       order_id: orderId,
       station_kuerzel: station,
       inventory_item_id: mat.inventoryItemId || null,
@@ -92,7 +141,7 @@ export async function bookStationCosts(params: {
   for (const extra of extraCostEvents) {
     if (!extra.active || extra.costEur <= 0) continue;
     const { error } = await supabase.from('order_cost_events').insert({
-      tenant_id: 'galvanik-kreile',
+      tenant_id: scope.tenantId,
       order_id: orderId,
       event_type: extra.eventType,
       amount_eur: extra.costEur,
@@ -113,13 +162,17 @@ export async function bookStationCosts(params: {
 // Get station cost summary (bisherige Buchungen)
 // ─────────────────────────────────────────────
 export async function getStationCostSummary(orderId: string) {
+  const scope = await resolveAuthorizedCostOrder(orderId);
+  if (!scope) return emptyStationCostSummary();
+
   const supabase = await createClient();
 
   // Arbeitszeit pro Station
   const { data: zeitData, error: zeitErr } = await supabase
     .from('arbeitszeit_buchung')
     .select('station_kuerzel, dauer_minuten, kostensatz_eur_pro_stunde')
-    .eq('auftrag_id', orderId);
+    .eq('auftrag_id', orderId)
+    .eq('tenant_id', scope.tenantId);
 
   if (zeitErr) console.error('getStationCostSummary zeit:', zeitErr.message, zeitErr.details, zeitErr.hint);
 
@@ -127,7 +180,8 @@ export async function getStationCostSummary(orderId: string) {
   const { data: matData, error: matErr } = await supabase
     .from('consumable_uses')
     .select('station_kuerzel, quantity, unit_cost_eur')
-    .eq('order_id', orderId);
+    .eq('order_id', orderId)
+    .eq('tenant_id', scope.tenantId);
 
   if (matErr) console.error('getStationCostSummary material:', matErr.message, matErr.details, matErr.hint);
 
@@ -135,7 +189,8 @@ export async function getStationCostSummary(orderId: string) {
   const { data: extraData, error: extraErr } = await supabase
     .from('order_cost_events')
     .select('amount_eur, reason, caused_by')
-    .eq('order_id', orderId);
+    .eq('order_id', orderId)
+    .eq('tenant_id', scope.tenantId);
 
   if (extraErr) console.error('getStationCostSummary extras:', extraErr.message, extraErr.details, extraErr.hint);
 
@@ -177,26 +232,32 @@ export async function getStationCostSummary(orderId: string) {
 // Get benchmark data for a station
 // ─────────────────────────────────────────────
 export async function getBenchmarkData(station: string) {
+  const scope = await resolveFinanceDataScope([
+    "perm_data_orders",
+    "perm_view_leitstand",
+  ]);
+  if (!scope.ok || !scope.data.canViewFinance) return emptyBenchmarkData();
+
   const supabase = await createClient();
 
   const { data: zeitVorlagen } = await supabase
     .from('vorlage_zeit')
-    .select('*')
+    .select('id, taetigkeit, dauer_median_minuten, n_referenzauftraege')
     .eq('station_kuerzel', station)
-    .eq('tenant_id', 'galvanik-kreile');
+    .eq('tenant_id', scope.data.tenantId);
 
   const { data: verbrauchVorlagen } = await supabase
     .from('vorlage_verbrauch')
-    .select('*')
+    .select('id, artikel_name, menge_median, einheit, einzelpreis_eur, inventory_item_id')
     .eq('station_kuerzel', station)
-    .eq('tenant_id', 'galvanik-kreile')
+    .eq('tenant_id', scope.data.tenantId)
     .gte('haeufigkeit_prozent', 50);
 
   // Get Kostensatz
   const { data: kostensatzRow } = await supabase
     .from('kostenstelle')
     .select('kuerzel, kostensatz_plan_eur_pro_stunde')
-    .eq('tenant_id', 'galvanik-kreile')
+    .eq('tenant_id', scope.data.tenantId)
     .eq('kuerzel', station)
     .single();
 

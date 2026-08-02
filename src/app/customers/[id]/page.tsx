@@ -31,6 +31,11 @@ import {
   Tag
 } from "lucide-react";
 import { useAppShortcut } from "@/components/ui/AppShortcutContext";
+import type {
+  CustomerDetailsOrderDto,
+  CustomerInvoiceDto,
+  CustomerQualityDto,
+} from "./actions";
 
 export default function CustomerProfilePage({ params }: { params: Promise<{ id: string }> }) {
   usePageView();
@@ -40,6 +45,11 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [invoices, setInvoices] = useState<CustomerInvoiceDto[]>([]);
+  const [capabilities, setCapabilities] = useState({
+    canViewFinance: false,
+    canViewQuality: false,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const { openShortcut } = useAppShortcut();
 
@@ -57,26 +67,32 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
         
         if (res.ok && res.data) {
           setCustomer(res.data.customer as unknown as Customer);
-          setAgreements(res.data.agreements as unknown as PriceAgreement[]);
-          setOrders(res.data.orders.map((o: Record<string, any>) => ({
+          setAgreements((res.data.agreements ?? []) as unknown as PriceAgreement[]);
+          setInvoices(res.data.invoices ?? []);
+          setCapabilities(res.data.capabilities);
+          setOrders(res.data.orders.map((o: CustomerDetailsOrderDto) => ({
              ...o,
              statusText: o.status === "completed" ? "ERLEDIGT" : "IN ARBEIT",
              title: o.title || "Auftrag " + o.orderNumber
           })) as Order[]);
-          setComplaints(res.data.complaints.map((c: Record<string, any>) => ({
+          setComplaints((res.data.complaints ?? []).map((c: CustomerQualityDto) => ({
              id: c.id,
              orderId: c.orderId,
-             reason: c.ergebnis,
-             description: c.bemerkung || "Qualitätsprüfung",
+             reason: c.result,
+             description: c.note || "Qualitätsprüfung",
              createdAt: c.createdAt,
-             resolvedAt: c.ergebnis === 'bestanden' ? c.datum : null,
-             resolution: c.ergebnis === 'bestanden' ? 'OK' : 'Nacharbeit nötig',
+             resolvedAt: c.result === 'bestanden' ? c.date : undefined,
+             resolution: c.result === 'bestanden' ? 'OK' : 'Nacharbeit nötig',
              customerId: id,
              photoIds: []
           })) as Complaint[]);
           setTimeline([]);
         } else {
            setCustomer(null);
+           setAgreements([]);
+           setInvoices([]);
+           setComplaints([]);
+           setCapabilities({ canViewFinance: false, canViewQuality: false });
         }
       } catch (err) {
         console.error("Error loading customer profile:", err);
@@ -289,10 +305,12 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
             </Card>
 
             {/* Preisabsprachen */}
-            <PriceAgreementPanel agreements={agreements} />
+            {capabilities.canViewFinance && (
+              <PriceAgreementPanel agreements={agreements} />
+            )}
 
             {/* Reklamationen & Nacharbeit */}
-            <Card className="border-2 border-danger-red rounded-3xl overflow-hidden shadow-xs bg-white">
+            {capabilities.canViewQuality && <Card className="border-2 border-danger-red rounded-3xl overflow-hidden shadow-xs bg-white">
               <div className="bg-linear-to-br from-navy-900 to-black p-6 rounded-[24px] text-white flex flex-col justify-between relative overflow-hidden group">
                 <div className="flex items-center gap-2">
                   <AlertCircle className="w-5 h-5 text-danger-red" />
@@ -352,7 +370,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                   )}
                 </div>
               </CardContent>
-            </Card>
+            </Card>}
 
             {/* Wiederkehrende Teile */}
             <Card className="border-2 border-neutral-gray-300 rounded-3xl overflow-hidden shadow-xs bg-white">
@@ -413,7 +431,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
             </Card>
 
             {/* Rechnungen & Offene Posten */}
-            <Card className="border-2 border-neutral-gray-300 rounded-3xl overflow-hidden shadow-xs bg-white">
+            {capabilities.canViewFinance && <Card className="border-2 border-neutral-gray-300 rounded-3xl overflow-hidden shadow-xs bg-white">
               <CardContent className="p-6 md:p-8 space-y-6">
                 <div className="flex justify-between items-center border-b pb-4">
                   <div className="space-y-1">
@@ -428,39 +446,54 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                 </div>
                 
                 <div className="space-y-3">
-                  <Link href="/buchhaltung/rechnungen/1" className="block group">
-                    <div className="p-4 bg-bg-app-soft border border-neutral-gray-200 rounded-2xl flex items-center justify-between group-hover:border-navy-500 transition-colors">
-                      <div>
-                        <span className="text-[10px] text-text-muted font-bold block mb-0.5">RE-{new Date().getFullYear()}-0042 · Vor 3 Tagen</span>
-                        <span className="text-sm font-black text-navy-900 flex items-center gap-2">
-                          <AlertTriangle className="w-4 h-4 text-accent-orange" />
-                          Offen
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-sm font-black text-navy-900 block">4.200,00 €</span>
-                        <span className="text-[10px] text-text-muted font-bold">Zahlungsziel in 4 Tagen</span>
-                      </div>
-                    </div>
-                  </Link>
+                  {invoices.map((invoice) => {
+                    const isPaid = invoice.status === "bezahlt";
+                    return (
+                      <Link
+                        key={invoice.id}
+                        href={`/buchhaltung/rechnungen/${invoice.id}`}
+                        className="block group"
+                      >
+                        <div className="p-4 bg-bg-app-soft border border-neutral-gray-200 rounded-2xl flex items-center justify-between group-hover:border-navy-500 transition-colors">
+                          <div>
+                            <span className="text-[10px] text-text-muted font-bold block mb-0.5">
+                              {invoice.number} · {new Date(invoice.date).toLocaleDateString("de-DE")}
+                            </span>
+                            <span className={`text-sm font-black flex items-center gap-2 ${isPaid ? "text-emerald-700" : "text-navy-900"}`}>
+                              {isPaid ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                              ) : (
+                                <AlertTriangle className="w-4 h-4 text-accent-orange" />
+                              )}
+                              {isPaid ? "Bezahlt" : "Offen"}
+                            </span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-sm font-black text-navy-900 block">
+                              {invoice.gross.toLocaleString("de-DE", {
+                                style: "currency",
+                                currency: "EUR",
+                              })}
+                            </span>
+                            {invoice.dueDate && !isPaid && (
+                              <span className="text-[10px] text-text-muted font-bold">
+                                Fällig {new Date(invoice.dueDate).toLocaleDateString("de-DE")}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })}
 
-                  <Link href="/buchhaltung/rechnungen/2" className="block group">
-                    <div className="p-4 bg-white border border-neutral-gray-100 rounded-2xl flex items-center justify-between group-hover:border-navy-500 transition-colors">
-                      <div>
-                        <span className="text-[10px] text-text-muted font-bold block mb-0.5">RE-{new Date().getFullYear()}-0018 · Letzter Monat</span>
-                        <span className="text-sm font-black text-emerald-700 flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                          Bezahlt
-                        </span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-sm font-black text-text-muted block">1.840,00 €</span>
-                      </div>
+                  {invoices.length === 0 && (
+                    <div className="p-6 text-center text-text-muted bg-bg-app-soft border border-neutral-gray-100 rounded-2xl">
+                      Noch keine Rechnungen erfasst.
                     </div>
-                  </Link>
+                  )}
                 </div>
               </CardContent>
-            </Card>
+            </Card>}
 
             {/* Kommunikationshistorie */}
             <Card className="border-2 border-neutral-gray-300 rounded-3xl overflow-hidden shadow-xs bg-white">

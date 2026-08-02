@@ -4,9 +4,9 @@
   "lintContractHash": "1b2b68e76dd239761610ef33e3b87e8584c3d1191803fba63e2646ff1c624aa1",
   "judgeContractHash": "cf480b7edaf2923df1ed9ac0b236812e6ad3567cc51f6506870742192e836e5a",
   "totals": {
-    "filesWithIssues": 279,
-    "errors": 484,
-    "warnings": 459
+    "filesWithIssues": 272,
+    "errors": 461,
+    "warnings": 447
   },
   "issues": [
     {
@@ -1184,14 +1184,6 @@
       "messageId": "unusedVar",
       "message": "'err' is defined but never used.",
       "count": 1
-    },
-    {
-      "file": "src/app/customers/[id]/page.tsx",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "messageId": "unexpectedAny",
-      "message": "Unexpected any. Specify a different type.",
-      "count": 2
     },
     {
       "file": "src/app/feedback/[token]/page.tsx",
@@ -3298,126 +3290,6 @@
       "count": 1
     },
     {
-      "file": "src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'PenLine' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Zap' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx",
-      "ruleId": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "messageId": null,
-      "message": "React Hook useEffect has a missing dependency: 'composerText'. Either include it or remove the dependency array.",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx",
-      "ruleId": "react-hooks/exhaustive-deps",
-      "severity": 1,
-      "messageId": null,
-      "message": "React Hook useEffect has a missing dependency: 'handleClose'. Either include it or remove the dependency array.",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx",
-      "ruleId": "react-hooks/immutability",
-      "severity": 2,
-      "messageId": null,
-      "message": "Error: Cannot access variable before it is declared\n\n`handleClose` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.\n\n<repo>/src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx:669:11\n  667 |           setActiveDetail(null);\n  668 |         } else {\n> 669 |           handleClose();\n      |           ^^^^^^^^^^^ `handleClose` accessed before it is declared\n  670 |         }\n  671 |       }\n  672 |     };\n\n<repo>/src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx:677:3\n  675 |   }, [open, activeDetail]); // eslint-disable-line react-hooks/exhaustive-deps\n  676 |\n> 677 |   const handleClose = useCallback(() => {\n      |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 678 |     if (!actionsApplied && dossier.preparedActions.length > 0) {\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 679 |       // Anti-Sackgasse: show toast\n      …\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 687 |     }\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 688 |   }, [actionsApplied, dossier.preparedActions.length, onClose]);\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `handleClose` is declared here\n  689 |\n  690 |   const handleApplyAll = useCallback(() => {\n  691 |     // Phase 4: Route to central flow for quotes",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx",
-      "ruleId": "react-hooks/preserve-manual-memoization",
-      "severity": 2,
-      "messageId": null,
-      "message": "Compilation Skipped: Existing memoization could not be preserved\n\nReact Compiler has skipped optimizing this component because the existing manual memoization could not be preserved. This value was memoized in source but not in compilation output.\n\n<repo>/src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx:677:35\n  675 |   }, [open, activeDetail]); // eslint-disable-line react-hooks/exhaustive-deps\n  676 |\n> 677 |   const handleClose = useCallback(() => {\n      |                                   ^^^^^^^\n> 678 |     if (!actionsApplied && dossier.preparedActions.length > 0) {\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 679 |       // Anti-Sackgasse: show toast\n      …\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 687 |     }\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 688 |   }, [actionsApplied, dossier.preparedActions.length, onClose]);\n      | ^^^^ Could not preserve existing memoization\n  689 |\n  690 |   const handleApplyAll = useCallback(() => {\n  691 |     // Phase 4: Route to central flow for quotes",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx",
-      "ruleId": "react-hooks/set-state-in-effect",
-      "severity": 2,
-      "messageId": null,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx:652:7\n  650 |   useEffect(() => {\n  651 |     if (dossier.suggestedAnswer && !composerText) {\n> 652 |       setComposerText(dossier.suggestedAnswer);\n      |       ^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect\n  653 |     }\n  654 |   }, [dossier.suggestedAnswer]); // eslint-disable-line react-hooks/exhaustive-deps\n  655 |",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx",
-      "ruleId": "react/no-unescaped-entities",
-      "severity": 2,
-      "messageId": "unescapedEntityAlts",
-      "message": "`\"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.",
-      "count": 3
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx",
-      "ruleId": null,
-      "severity": 1,
-      "messageId": null,
-      "message": "'// eslint-disable-line react-hooks/exhaustive-deps' has no effect because you have 'noInlineConfig' setting in your config.",
-      "count": 2
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/hooks/useClientDossier.ts",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "messageId": "unexpectedAny",
-      "message": "Unexpected any. Specify a different type.",
-      "count": 6
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/hooks/useClientDossier.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'INITIAL_CUSTOMERS' is assigned a value but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/hooks/useClientDossier.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'React' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/hooks/useClientDossier.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'buildDossier' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/hooks/useClientDossier.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'useCallback' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/hooks/useClientDossier.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'useMemo' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/components/layout/GlobalSearch.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
@@ -3730,14 +3602,6 @@
       "count": 1
     },
     {
-      "file": "src/components/orders/OrderOverlay.tsx",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "messageId": "unexpectedAny",
-      "message": "Unexpected any. Specify a different type.",
-      "count": 4
-    },
-    {
       "file": "src/components/orders/OrderProfitabilityCard.tsx",
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
@@ -3792,14 +3656,6 @@
       "messageId": null,
       "message": "Error: Cannot access variable before it is declared\n\n`loadLines` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.\n\n<repo>/src/components/orders/PriceLinesEditor.tsx:30:5\n  28 |\n  29 |   useEffect(() => {\n> 30 |     loadLines();\n     |     ^^^^^^^^^ `loadLines` accessed before it is declared\n  31 |   }, [orderId, itemId]);\n  32 |\n  33 |   const loadLines = async () => {\n\n<repo>/src/components/orders/PriceLinesEditor.tsx:33:3\n  31 |   }, [orderId, itemId]);\n  32 |\n> 33 |   const loadLines = async () => {\n     |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 34 |     setLoading(true);\n     | ^^^^^^^^^^^^^^^^^^^^^\n> 35 |     const result = await getPriceLinesDb(orderId, itemId);\n     …\n     | ^^^^^^^^^^^^^^^^^^^^^\n> 49 |     setLoading(false);\n     | ^^^^^^^^^^^^^^^^^^^^^\n> 50 |   };\n     | ^^^^^ `loadLines` is declared here\n  51 |\n  52 |   const handleSave = async () => {\n  53 |     const payload = {",
       "count": 1
-    },
-    {
-      "file": "src/components/orders/StationContextBlock.tsx",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "messageId": "unexpectedAny",
-      "message": "Unexpected any. Specify a different type.",
-      "count": 2
     },
     {
       "file": "src/components/orders/StatusMailDrawer.tsx",
@@ -4264,22 +4120,6 @@
       "messageId": null,
       "message": "'// eslint-disable-next-line @typescript-eslint/no-explicit-any' has no effect because you have 'noInlineConfig' setting in your config.",
       "count": 2
-    },
-    {
-      "file": "src/features/orders/orderCost.actions.ts",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "messageId": "unexpectedAny",
-      "message": "Unexpected any. Specify a different type.",
-      "count": 1
-    },
-    {
-      "file": "src/features/orders/orderCost.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'authError' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/features/orders/orderPhoto.actions.ts",
@@ -4807,22 +4647,6 @@
       "severity": 1,
       "messageId": "unusedVar",
       "message": "'CustomerMockOrder' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/useOrderLive.ts",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "messageId": "unexpectedAny",
-      "message": "Unexpected any. Specify a different type.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/useOrderLive.ts",
-      "ruleId": "react-hooks/set-state-in-effect",
-      "severity": 2,
-      "messageId": null,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/lib/useOrderLive.ts:11:7\n   9 |   useEffect(() => {\n  10 |     if (!orderId) {\n> 11 |       setOrderData(null);\n     |       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect\n  12 |       setLoading(false);\n  13 |       return;\n  14 |     }",
       "count": 1
     },
     {

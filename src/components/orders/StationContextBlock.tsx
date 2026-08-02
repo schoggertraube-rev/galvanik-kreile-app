@@ -17,6 +17,7 @@ interface StationContextBlockProps {
   orderMarginPercent: number;
   customerName: string;
   isOrderCompleted: boolean;
+  canViewFinance: boolean;
 }
 
 export const StationContextBlock: React.FC<StationContextBlockProps> = ({
@@ -27,10 +28,17 @@ export const StationContextBlock: React.FC<StationContextBlockProps> = ({
   orderMargin,
   orderMarginPercent,
   customerName,
-  isOrderCompleted
+  isOrderCompleted,
+  canViewFinance,
 }) => {
-  const currentStationIndex = Math.max(0, STATION_ORDER.indexOf(orderCurrentStation as any));
-  const activeStationIndex = Math.max(0, STATION_ORDER.indexOf(activeStation as any));
+  const currentStationIndex = Math.max(
+    0,
+    STATION_ORDER.indexOf(orderCurrentStation as (typeof STATION_ORDER)[number]),
+  );
+  const activeStationIndex = Math.max(
+    0,
+    STATION_ORDER.indexOf(activeStation as (typeof STATION_ORDER)[number]),
+  );
 
   const variant = getStationVariant(activeStation, currentStationIndex, activeStationIndex, isOrderCompleted);
 
@@ -42,6 +50,7 @@ export const StationContextBlock: React.FC<StationContextBlockProps> = ({
           orderRevenue={orderRevenue}
           orderMargin={orderMargin}
           orderMarginPercent={orderMarginPercent}
+          canViewFinance={canViewFinance}
         />
       )}
       
@@ -52,7 +61,7 @@ export const StationContextBlock: React.FC<StationContextBlockProps> = ({
         />
       )}
       
-      {variant === 'erfassung' && (
+      {variant === 'erfassung' && canViewFinance && (
         <ErfassungVariant 
           orderId={orderId} 
           station={activeStation} 
@@ -60,6 +69,12 @@ export const StationContextBlock: React.FC<StationContextBlockProps> = ({
           orderMargin={orderMargin}
           orderMarginPercent={orderMarginPercent}
         />
+      )}
+
+      {variant === 'erfassung' && !canViewFinance && (
+        <div className="station-context" id="station-context-block">
+          Kosten- und Preiserfassung ist für diese Rolle nicht freigegeben.
+        </div>
       )}
       
       {variant === 'wareneingang_active' && (

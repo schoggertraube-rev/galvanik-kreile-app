@@ -35,10 +35,10 @@ export function RealtimeSyncProvider({ children }: { children: ReactNode }) {
     let channel: RealtimeChannel;
 
     // Dispatch global event so repositories can listen
-    const dispatchSync = (table: string, payload?: Record<string, unknown>) => {
-      console.log(`[RealtimeSync] DB Change detected on ${table}`, payload);
-      window.dispatchEvent(new CustomEvent(`kreile-sync-${table}`, { detail: payload }));
-      window.dispatchEvent(new CustomEvent('kreile-sync', { detail: { table, payload } }));
+    const dispatchSync = (table: string) => {
+      console.log(`[RealtimeSync] DB Change detected on ${table}`);
+      window.dispatchEvent(new CustomEvent(`kreile-sync-${table}`));
+      window.dispatchEvent(new CustomEvent('kreile-sync', { detail: { table } }));
     };
 
     // Focus fallback: Re-fetch when user switches back to tab
@@ -52,27 +52,17 @@ export function RealtimeSyncProvider({ children }: { children: ReactNode }) {
     const connectRealtime = () => {
       setStatus("connecting");
       
-      // Subscribing to specific tables rather than schema wildcard to avoid socket closure (1006) for public role
+      // Only relations without finance-bearing columns may reach the browser channel.
       channel = supabase.channel('schema-db-changes')
         .on(
           'postgres_changes',
-          { event: '*', schema: 'public', table: 'orders' },
-          (payload) => dispatchSync('orders', payload)
-        )
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'customers' },
-          (payload) => dispatchSync('customers', payload)
-        )
-        .on(
-          'postgres_changes',
           { event: '*', schema: 'public', table: 'items' },
-          (payload) => dispatchSync('items', payload)
+          () => dispatchSync('items')
         )
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'events' },
-          (payload) => dispatchSync('events', payload)
+          () => dispatchSync('events')
         )
         .subscribe((subscribeStatus, err) => {
           if (subscribeStatus === 'SUBSCRIBED') {

@@ -1,49 +1,57 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
-import { getOrderWithDetails } from "./repositories/orderQueries";
+import {
+  getOrderWithDetails,
+  type OrderDetailsDto,
+} from "./repositories/orderQueries";
+
+type OrderLiveState = {
+  orderId: string;
+  data: OrderDetailsDto | null;
+  loading: boolean;
+};
 
 export function useOrderLive(orderId: string | null) {
-  const [orderData, setOrderData] = useState<any>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [state, setState] = useState<OrderLiveState>({
+    orderId: "",
+    data: null,
+    loading: false,
+  });
 
   useEffect(() => {
-    if (!orderId) {
-      setOrderData(null);
-      setLoading(false);
-      return;
-    }
+    if (!orderId) return;
 
     let isMounted = true;
 
     const fetchInitial = async () => {
       const data = await getOrderWithDetails(orderId);
       if (isMounted) {
-        setOrderData(data);
-        setLoading(false);
+        setState({ orderId, data, loading: false });
       }
     };
 
-    setOrderData(null);
-    setLoading(true);
-    fetchInitial();
+    void fetchInitial();
 
-    // Supabase Realtime Subscription for this order
+    // Finance-bearing relations are refreshed only through the authorized server DTO.
     const channel = supabase
       .channel(`order_live_${orderId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` }, fetchInitial)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: `order_id=eq.${orderId}` }, fetchInitial)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'events', filter: `order_id=eq.${orderId}` }, fetchInitial)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'communications', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'price_lines', filter: `order_id=eq.${orderId}` }, fetchInitial)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments', filter: `order_id=eq.${orderId}` }, fetchInitial)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'complaints', filter: `order_id=eq.${orderId}` }, fetchInitial)
       .subscribe();
 
+    const handleFocusSync = () => void fetchInitial();
+    window.addEventListener("kreile-sync-focus", handleFocusSync);
+
     return () => {
       isMounted = false;
-      supabase.removeChannel(channel);
+      window.removeEventListener("kreile-sync-focus", handleFocusSync);
+      void supabase.removeChannel(channel);
     };
   }, [orderId]);
 
-  return { orderData, loading };
+  if (!orderId) return { orderData: null, loading: false };
+  if (state.orderId !== orderId) return { orderData: null, loading: true };
+  return { orderData: state.data, loading: state.loading };
 }
