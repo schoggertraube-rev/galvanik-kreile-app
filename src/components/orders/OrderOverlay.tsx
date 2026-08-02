@@ -11,7 +11,11 @@ import {
 import { StationContextBlock } from "./StationContextBlock";
 import { HeadCostBadge } from "./HeadCostBadge";
 import { AppOverlayPortal } from "@/components/ui/AppOverlayPortal";
-import { uploadOrderPhotoRecord } from "@/features/orders/orderPhoto.actions";
+import {
+  cancelOrderPhotoUpload,
+  completeOrderPhotoUpload,
+  prepareOrderPhotoUpload,
+} from "@/features/orders/orderPhoto.actions";
 import { createClient } from "@/lib/supabase/client";
 import type {
   OrderDetailsEventDto,
@@ -442,28 +446,43 @@ export function OrderOverlay() {
                           
                           setIsUploadingPhoto(true);
                           setUploadError(null);
+                          let pendingUpload: { uploadId: string; path: string } | null = null;
                           try {
+                            const preparation = await prepareOrderPhotoUpload({
+                              orderId: currentOrderId,
+                              fileType: file.type,
+                              fileSize: file.size,
+                            });
+                            if (!preparation.success) throw new Error(preparation.error);
+                            pendingUpload = preparation.data;
+
                             const supabase = createClient();
-                            const fileName = `galvanik-kreile/${currentOrderId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-                            
                             const { error: uploadError } = await supabase.storage
                               .from("scans")
-                              .upload(fileName, file);
+                              .uploadToSignedUrl(
+                                preparation.data.path,
+                                preparation.data.token,
+                                file,
+                                { contentType: file.type },
+                              );
 
                             if (uploadError) throw new Error(uploadError.message);
-                            
-                            const { data: publicUrlData } = supabase.storage.from("scans").getPublicUrl(fileName);
 
-                            const dbRes = await uploadOrderPhotoRecord({
+                            const completion = await completeOrderPhotoUpload({
                               orderId: currentOrderId,
-                              fileUrl: publicUrlData.publicUrl,
-                              fileType: file.type
+                              uploadId: preparation.data.uploadId,
                             });
 
-                            if (!dbRes.success) throw new Error(dbRes.error);
-                            
+                            if (!completion.success) throw new Error(completion.error);
+                            pendingUpload = null;
                           } catch (err: unknown) {
                             console.error("Foto-Upload fehlgeschlagen:", err);
+                            if (pendingUpload) {
+                              await cancelOrderPhotoUpload({
+                                orderId: currentOrderId,
+                                uploadId: pendingUpload.uploadId,
+                              });
+                            }
                             setUploadError("Fehler beim Upload.");
                           } finally {
                             setIsUploadingPhoto(false);

@@ -281,6 +281,8 @@ export const scanUploads = pgTable("scan_uploads", {
   detectionConfidence: numeric("detection_confidence", { precision: 3, scale: 2 }),
   extractedData: jsonb("extracted_data"),
   status: text("status").notNull().default("new"),
+  uploadClaimToken: text("upload_claim_token"),
+  uploadClaimedAt: timestamp("upload_claimed_at", { withTimezone: true }),
   linkedOrderId: text("linked_order_id"),
   linkedCustomerId: text("linked_customer_id"),
   linkedInvoiceId: text("linked_invoice_id"),

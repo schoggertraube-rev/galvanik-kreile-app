@@ -151,6 +151,7 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
 
   try {
     const newId = (typeof data.id === 'string' ? data.id : undefined) || createId();
+    const customerNumberToken = createId().toUpperCase();
     
     const nameStr = validData.company || [validData.firstName, validData.lastName].filter(Boolean).join(" ");
     const streetCombined = validData.street + " " + validData.houseNumber;
@@ -158,7 +159,7 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
     const newCustomerDb: CustomerInsert = {
       id: newId,
       tenantId: tenantId,
-      customerNumber: `K-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      customerNumber: `K-${new Date().getFullYear()}-${customerNumberToken}`,
       name: nameStr,
       companyName: validData.company || null,
       type: "business",

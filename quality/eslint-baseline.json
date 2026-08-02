@@ -4,9 +4,9 @@
   "lintContractHash": "1b2b68e76dd239761610ef33e3b87e8584c3d1191803fba63e2646ff1c624aa1",
   "judgeContractHash": "cf480b7edaf2923df1ed9ac0b236812e6ad3567cc51f6506870742192e836e5a",
   "totals": {
-    "filesWithIssues": 268,
-    "errors": 433,
-    "warnings": 438
+    "filesWithIssues": 267,
+    "errors": 432,
+    "warnings": 437
   },
   "issues": [
     {
@@ -4016,22 +4016,6 @@
       "messageId": null,
       "message": "'// eslint-disable-next-line @typescript-eslint/no-explicit-any' has no effect because you have 'noInlineConfig' setting in your config.",
       "count": 2
-    },
-    {
-      "file": "src/features/orders/orderPhoto.actions.ts",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "messageId": "unexpectedAny",
-      "message": "Unexpected any. Specify a different type.",
-      "count": 1
-    },
-    {
-      "file": "src/features/orders/orderPhoto.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'createClient' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/hooks/useOfflineManager.ts",
