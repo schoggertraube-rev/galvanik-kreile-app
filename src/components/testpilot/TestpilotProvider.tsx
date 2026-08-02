@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { createId } from '@paralleldrive/cuid2';
+import { usePermissions } from '@/lib/auth/PermissionsContext';
 
 export type EventType = 'click' | 'route' | 'error' | 'network' | 'dead_click' | 'marker';
 
@@ -109,7 +110,9 @@ function RouteTracker({ isActive, isRecording, addEvent }: { isActive: boolean; 
   return null;
 }
 
-export function TestpilotProvider({ children, isAdmin = false }: { children: React.ReactNode, isAdmin?: boolean }) {
+export function TestpilotProvider({ children }: { children: React.ReactNode }) {
+  const { hasPermission, loading } = usePermissions();
+  const canUseTestpilot = hasPermission('perm_sys_diag');
   const [isActive, setIsActive] = useState(false);
   const [session, setSession] = useState<TestpilotSession | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -119,9 +122,19 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
 
   // Initialize from localStorage and env vars
   useEffect(() => {
+    if (loading) return;
+
     const initTimer = setTimeout(() => {
-      // 1. Role Check
-      if (!isAdmin) return;
+      // 1. Der aktuelle kanonische Berechtigungssnapshot ist die einzige Rollequelle.
+      if (!canUseTestpilot) {
+        setIsActive(false);
+        setIsRecording(false);
+        setSession(null);
+        eventsRef.current = [];
+        localStorage.removeItem('testpilot_session');
+        localStorage.removeItem('testpilot_enabled');
+        return;
+      }
 
       // 2. Env Var Check
       const envEnabled = process.env.NEXT_PUBLIC_ENABLE_TEST_ANALYTICS === 'true';
@@ -155,7 +168,7 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
     }, 0);
     
     return () => clearTimeout(initTimer);
-  }, [isAdmin]);
+  }, [canUseTestpilot, loading]);
 
   const saveToStorage = useCallback((newSession: TestpilotSession) => {
     setSession(newSession);
@@ -181,6 +194,8 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
   }, [isRecording]);
 
   const startSession = useCallback(() => {
+    if (!canUseTestpilot) return;
+
     const newSession: TestpilotSession = {
       sessionId: createId(),
       startTime: Date.now(),
@@ -196,7 +211,7 @@ export function TestpilotProvider({ children, isAdmin = false }: { children: Rea
     localStorage.setItem('testpilot_enabled', 'true');
     setIsActive(true);
     setIsRecording(true);
-  }, [saveToStorage]);
+  }, [canUseTestpilot, saveToStorage]);
 
   const stopSession = useCallback(() => {
     setIsRecording(false);

@@ -56,7 +56,6 @@ import { ServiceWorkerRegister } from "@/components/ServiceWorkerRegister";
 import { OrderModalProvider } from "@/components/orders/OrderModalProvider";
 import { ErfassungProvider } from "@/components/erfassung/ErfassungProvider";
 
-import { isAdminOrDeveloper } from "@/lib/auth/permissions";
 import { getAuthBootstrapState } from "@/lib/server/authBootstrap";
 
 export default async function RootLayout({
@@ -64,7 +63,6 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const isAdmin = await isAdminOrDeveloper();
   const authState = await getAuthBootstrapState();
 
   return (
@@ -75,9 +73,9 @@ export default async function RootLayout({
       <body>
         <ServiceWorkerRegister />
         <Suspense fallback={null}>
-        <TestpilotProvider isAdmin={isAdmin}>
-          <SyncProvider>
-            <PermissionsProvider initialAuthState={authState}>
+        <SyncProvider>
+          <PermissionsProvider initialAuthState={authState}>
+            <TestpilotProvider>
               <DiagnosticsProvider>
                 <LicenseProvider>
                   <AppShortcutProvider>
@@ -92,12 +90,12 @@ export default async function RootLayout({
                     </FeatureFlagProvider>
                   </AppShortcutProvider>
                 </LicenseProvider>
-                {isAdmin && <DiagnosticsWidget />}
+                <DiagnosticsWidget />
                 <TestpilotFloatingButton />
               </DiagnosticsProvider>
-            </PermissionsProvider>
-          </SyncProvider>
-        </TestpilotProvider>
+            </TestpilotProvider>
+          </PermissionsProvider>
+        </SyncProvider>
         </Suspense>
       </body>
     </html>

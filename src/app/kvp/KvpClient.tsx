@@ -7,6 +7,7 @@ import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { OfflineSyncBadge } from "@/components/offline/OfflineSyncBadge";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 interface KvpItem {
   id: string;
@@ -83,8 +84,9 @@ export function KvpClient() {
   usePageView();
 
   const [items, setItems] = useState<KvpItem[]>(DEMO_ITEMS);
-  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
   const [activeItem, setActiveItem] = useState<KvpItem | null>(null);
+  const { hasPermission } = usePermissions();
+  const canManageUsers = hasPermission("perm_sys_users");
 
   // Form State
   const [newTitle, setNewTitle] = useState("");
@@ -93,17 +95,17 @@ export function KvpClient() {
   const [newProblem, setNewProblem] = useState("");
 
   useEffect(() => {
-    const role = localStorage.getItem("kreile_user_role");
-    if (role === "admin" || role === "developer") setIsAdminOrDev(true);
-
     const saved = localStorage.getItem("kreile_kvp_items");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
+    if (!saved) return;
+
+    try {
+      const parsed = JSON.parse(saved);
+      const restoreTimer = window.setTimeout(() => {
         setItems([...parsed, ...DEMO_ITEMS]);
-      } catch(e) {
-        setItems(DEMO_ITEMS);
-      }
+      }, 0);
+      return () => window.clearTimeout(restoreTimer);
+    } catch {
+      return;
     }
   }, []);
 
@@ -129,7 +131,7 @@ export function KvpClient() {
     const currentSaved = localStorage.getItem("kreile_kvp_items");
     let currentArr = [];
     if (currentSaved) {
-      try { currentArr = JSON.parse(currentSaved); } catch(e) {}
+      try { currentArr = JSON.parse(currentSaved); } catch {}
     }
     currentArr.unshift(newItem);
     localStorage.setItem("kreile_kvp_items", JSON.stringify(currentArr));
@@ -252,7 +254,7 @@ export function KvpClient() {
             <ul className="space-y-3 mb-6">
               <li className="flex justify-between items-center border-b border-neutral-gray-100 pb-2">
                 <span className="text-sm font-medium text-navy-900">Häufigste Suche ohne Treffer</span>
-                <span className="text-xs font-bold text-error-red">"Urlaub"</span>
+                <span className="text-xs font-bold text-error-red">&ldquo;Urlaub&rdquo;</span>
               </li>
               <li className="flex justify-between items-center border-b border-neutral-gray-100 pb-2">
                 <span className="text-sm font-medium text-navy-900">Rollenblockaden (Woche)</span>
@@ -264,7 +266,7 @@ export function KvpClient() {
               </li>
             </ul>
 
-            {isAdminOrDev ? (
+            {canManageUsers ? (
               <Link href="/admin/analytics" className="w-full flex items-center justify-center gap-2 bg-bg-app-soft text-navy-900 border border-neutral-gray-200 font-bold py-2 rounded-xl text-sm hover:bg-neutral-gray-200 transition">
                 <BarChart3 className="w-4 h-4" /> Zu Developer Analytics
               </Link>

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import { createClient } from "@/lib/supabase/client";
 import type { AuthorizationResult } from "@/lib/server/authorization";
@@ -148,6 +148,12 @@ function bootstrapKey(initialAuthState: AuthBootstrapState): string {
   ]);
 }
 
+function bootstrapExpiresAt(initialAuthState: AuthBootstrapState): number | null {
+  return initialAuthState.status === "authenticated"
+    ? initialAuthState.session.expiresAt
+    : null;
+}
+
 function clearLegacyIdentityStorage(): void {
   try {
     for (const key of LEGACY_IDENTITY_STORAGE_KEYS) {
@@ -172,6 +178,7 @@ export function PermissionsProvider({
   initialAuthState: AuthBootstrapState;
 }) {
   const pathname = usePathname();
+  const { replace } = useRouter();
   const [identity, setIdentity] = useState<IdentityState>(() =>
     identityStateFromBootstrap(initialAuthState),
   );
@@ -180,6 +187,14 @@ export function PermissionsProvider({
   const previousPathnameRef = useRef<string | null>(null);
   const appliedBootstrapKeyRef = useRef(bootstrapKey(initialAuthState));
   const currentBootstrapKey = bootstrapKey(initialAuthState);
+  const sessionExpiresAt = bootstrapExpiresAt(initialAuthState);
+
+  const expireSession = useCallback(() => {
+    refreshSequenceRef.current += 1;
+    clearLegacyIdentityStorage();
+    setIdentity(emptyIdentityState("unauthenticated", null, false));
+    replace("/start");
+  }, [replace]);
 
   const refreshPermissions = useCallback(async (): Promise<void> => {
     const refreshSequence = ++refreshSequenceRef.current;
@@ -224,6 +239,17 @@ export function PermissionsProvider({
     };
     void refreshFromBootstrap();
   }, [currentBootstrapKey, initialAuthState, refreshPermissions]);
+
+  useEffect(() => {
+    if (sessionExpiresAt === null) return;
+
+    const remainingMs = sessionExpiresAt - Date.now();
+    const expirationTimer = window.setTimeout(
+      expireSession,
+      Math.max(remainingMs, 0),
+    );
+    return () => window.clearTimeout(expirationTimer);
+  }, [currentBootstrapKey, expireSession, sessionExpiresAt]);
 
   useEffect(() => {
     const crossesLoginBoundary =

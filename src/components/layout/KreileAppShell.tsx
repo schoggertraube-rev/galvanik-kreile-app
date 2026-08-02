@@ -16,24 +16,23 @@ import { OrderOverlay } from "@/components/orders/OrderOverlay";
 import { CustomerOverlay } from "@/components/customers/CustomerOverlay";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import { SessionWarningBanner } from "./SessionWarningBanner";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 export function KreileAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { status } = usePermissions();
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isSessionExpired, setIsSessionExpired] = useState(false);
 
   useEffect(() => {
-    if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
-      getSystemStats().then(stats => {
-        if (!stats.reachable || stats.provider !== 'supabase') {
-          setIsDemoMode(true);
-        }
-      }).catch(() => setIsDemoMode(true));
-    } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setIsDemoMode(false);
-    }
+    if (process.env.NEXT_PUBLIC_DEMO_MODE !== "true") return;
+
+    getSystemStats().then(stats => {
+      if (!stats.reachable || stats.provider !== 'supabase') {
+        setIsDemoMode(true);
+      }
+    }).catch(() => setIsDemoMode(true));
   }, []);
 
   useEffect(() => {
@@ -51,6 +50,17 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   const isStartScreen = pathname === "/start" || pathname === "/login";
+
+  // Der Provider leert den Snapshot unmittelbar bei Ablauf oder Rollenwechsel.
+  // Bis der Redirect zur öffentlichen Anmeldung angekommen ist, darf weder
+  // Seiteninhalt noch Navigation aus einem erhaltenen App-Router-Layout sichtbar bleiben.
+  if (!isStartScreen && status !== "authenticated") {
+    return (
+      <div className="min-h-screen bg-bg-app text-kreile-text antialiased">
+        <SessionWarningBanner show />
+      </div>
+    );
+  }
 
   if (isStartScreen) {
     return (

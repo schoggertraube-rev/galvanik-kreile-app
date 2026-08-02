@@ -3,6 +3,8 @@ import React, { useState, useCallback, useRef, useEffect } from "react";
 import { useDiagnostics, DiagEvent } from "@/lib/diagnostics/DiagnosticsContext";
 import { Bug, X, Flag, Trash2, Download, ChevronDown, ChevronUp, AlertTriangle, AlertCircle, Info, Camera } from "lucide-react";
 import { TestpilotCanvas } from "@/components/testpilot/TestpilotCanvas";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
+import Image from "next/image";
 
 /* ===== Severity Icon ===== */
 function SevIcon({ severity }: { severity: DiagEvent["severity"] }) {
@@ -33,6 +35,8 @@ function TypeBadge({ type }: { type: DiagEvent["type"] }) {
 
 export function DiagnosticsWidget() {
   const { isActive, events, toggle, markProblem, clearEvents, exportReport, eventCount } = useDiagnostics();
+  const { hasPermission } = usePermissions();
+  const canUseDiagnostics = hasPermission("perm_sys_diag");
   const [expanded, setExpanded] = useState(false);
   const [showMarkDialog, setShowMarkDialog] = useState(false);
   const [markText, setMarkText] = useState("");
@@ -46,14 +50,20 @@ export function DiagnosticsWidget() {
   const dragStartRef = useRef({ x: 0, y: 0, initialX: 0, initialY: 0 });
 
   useEffect(() => {
-    setDialogPos({ x: window.innerWidth / 2 - 190, y: window.innerHeight / 2 - 150 });
+    const centerTimer = window.setTimeout(() => {
+      setDialogPos({ x: window.innerWidth / 2 - 190, y: window.innerHeight / 2 - 150 });
+    }, 0);
+    return () => window.clearTimeout(centerTimer);
   }, []);
 
   // Center dialog on mount if showMarkDialog becomes true
   useEffect(() => {
-    if (showMarkDialog) {
+    if (!showMarkDialog) return;
+
+    const centerTimer = window.setTimeout(() => {
       setDialogPos({ x: window.innerWidth / 2 - 190, y: window.innerHeight / 2 - 150 });
-    }
+    }, 0);
+    return () => window.clearTimeout(centerTimer);
   }, [showMarkDialog]);
 
   // Drag handlers
@@ -109,6 +119,8 @@ export function DiagnosticsWidget() {
       setShowMarkDialog(false);
     }
   }, [markText, screenshot, markProblem]);
+
+  if (!canUseDiagnostics) return null;
 
   // Floating Activation Button (always visible when diagnostic is OFF)
   if (!isActive) {
@@ -221,8 +233,7 @@ export function DiagnosticsWidget() {
                       {ev.screenshot && (
                         <div style={{ marginTop: 6 }}>
                           <span style={{ fontSize: 9, color: "#475569", display: "block", marginBottom: 2 }}>Screenshot:</span>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={ev.screenshot} alt="Screenshot" style={{ maxWidth: '100%', maxHeight: 150, borderRadius: 4, border: "1px solid #334155" }} />
+                          <Image src={ev.screenshot} alt="Screenshot" width={320} height={150} unoptimized style={{ maxWidth: '100%', maxHeight: 150, borderRadius: 4, border: "1px solid #334155" }} />
                         </div>
                       )}
                     </div>
@@ -290,8 +301,7 @@ export function DiagnosticsWidget() {
           
           {screenshot ? (
             <div style={{ position: "relative", marginTop: 12, borderRadius: 8, overflow: "hidden", border: "1px solid #334155" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={screenshot} alt="Screenshot" style={{ width: "100%", maxHeight: 150, objectFit: "cover", display: "block" }} />
+              <Image src={screenshot} alt="Screenshot" width={380} height={150} unoptimized style={{ width: "100%", maxHeight: 150, objectFit: "cover", display: "block" }} />
               <button 
                 onClick={() => setScreenshot(null)}
                 style={{ position: "absolute", top: 4, right: 4, background: "rgba(220,38,38,0.9)", color: "white", border: "none", borderRadius: "50%", width: 20, height: 20, display: "grid", placeItems: "center", cursor: "pointer" }}

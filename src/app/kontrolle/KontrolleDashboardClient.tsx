@@ -3,40 +3,42 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import Link from 'next/link';
 import { 
   ShieldAlert, Activity, Archive, BarChart3, 
   AlertTriangle, Clock, PackageX, Wrench, 
-  Truck, MailQuestion, ArrowRight, XCircle, Info
+  Truck, MailQuestion, ArrowRight, Info
 } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
+
+type QsData = {
+  orderId: string;
+  ergebnis: string;
+  pruefer: string | null;
+  bemerkung: string | null;
+  orderNumber: string;
+};
 
 interface Props {
-  isDevOrAdmin: boolean;
-  qsData?: any[];
+  qsData?: QsData[];
 }
 
-export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
+export function KontrolleDashboardClient({ qsData = [] }: Props) {
   const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
-  const [isAdminOrDevLocal, setIsAdminOrDevLocal] = useState(isDevOrAdmin);
+  const { hasPermission } = usePermissions();
+  const canAccessQa = hasPermission("perm_op_qa");
 
   const qsCount = qsData.length;
-  const qsRows = qsCount > 0 ? qsData.map((q: any) => ({
+  const qsRows = qsCount > 0 ? qsData.map((q) => ({
     avatar: q.ergebnis === "ausschuss" ? "A" : "N",
     avatarColor: q.ergebnis === "ausschuss" ? "bg-error-red" : "bg-warning-yellow",
     name: `${q.orderNumber} (${q.bemerkung || q.ergebnis})`,
     amount: q.pruefer || "Unbekannt",
     href: `/orders/${q.orderId}`
   })) : [{ avatar: "✓", avatarColor: "bg-success-green", name: "Keine Qualitätsmängel", amount: "-", href: "#" }];
-
-  useEffect(() => {
-    const role = localStorage.getItem("kreile_user_role");
-    if (role === "admin" || role === "developer" || isDevOrAdmin) {
-      setIsAdminOrDevLocal(true);
-    }
-  }, [isDevOrAdmin]);
 
   const closeOverlay = () => setActiveOverlay(null);
 
@@ -79,7 +81,7 @@ export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
           <p className="text-xs text-text-muted">Abgeschlossene historische Vorgänge</p>
         </Link>
 
-        {isAdminOrDevLocal && (
+        {canAccessQa && (
           <Link href="/admin/analytics" className="bg-navy-900 hover:bg-navy-800 rounded-2xl p-6 border border-navy-900 shadow-sm hover:shadow-md transition-all relative overflow-hidden flex flex-col justify-between h-40 group cursor-pointer">
             <div>
               <BarChart3 className="w-8 h-8 text-white mb-3 group-hover:scale-110 transition-transform" />
@@ -279,7 +281,7 @@ export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
               <ul className="list-disc pl-5 space-y-1 text-sm text-text-muted">
                 <li><strong className="text-navy-900">3x</strong> Neukunden-Anfragen (Preisanfragen)</li>
                 <li><strong className="text-navy-900">2x</strong> Statusnachfragen zu laufenden Aufträgen</li>
-                <li><strong className="text-error-red">1x</strong> Reklamationsverdacht ("Teile sehen fleckig aus")</li>
+                <li><strong className="text-error-red">1x</strong> Reklamationsverdacht (&ldquo;Teile sehen fleckig aus&rdquo;)</li>
                 <li><strong className="text-navy-900">1x</strong> Änderung der Lieferadresse</li>
               </ul>
             </div>

@@ -3,12 +3,15 @@
 import React, { useState } from 'react';
 import { useTestpilot } from '@/components/testpilot/TestpilotProvider';
 import { TestpilotOverlay } from '@/components/testpilot/TestpilotOverlay';
+import { usePermissions } from '@/lib/auth/PermissionsContext';
 
 export function TestpilotFloatingButton() {
   const { isActive } = useTestpilot();
+  const { hasPermission } = usePermissions();
   const [isOpen, setIsOpen] = useState(false);
+  const canUseTestpilot = hasPermission('perm_sys_diag');
 
-  if (!isActive) return null;
+  if (!canUseTestpilot || !isActive) return null;
 
   return (
     <>

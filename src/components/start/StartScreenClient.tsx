@@ -6,6 +6,7 @@ import { Delete, Clock, Wrench, Calculator, Sun } from "lucide-react";
 import { getGreeting } from "@/lib/greeting";
 import { EmailLoginDialog } from "@/components/start/EmailLoginDialog";
 import { useSearchParams } from "next/navigation";
+import Image from "next/image";
 import { getFeierabendEvents, notifyAdminPinReset } from "@/app/actions/start.actions";
 import { loginWithPin } from "@/app/actions/auth.actions";
 import type { StartUserDto } from "@/lib/auth/userDtos";
@@ -139,14 +140,6 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
             } catch (e) {
               console.warn("Demo setup failed", e);
             }
-          }
-
-          // UI state in localStorage (not auth relevant)
-          try {
-            localStorage.setItem("kreile_user_role", res.role || user.role);
-            localStorage.setItem("kreile_user_initials", user.initials);
-          } catch (e) {
-            console.warn("localStorage is blocked, skipping user info storage", e);
           }
 
           // Redirect to home
@@ -291,9 +284,13 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
 
       {/* Skyline Logo wordmark block */}
       <div className="flex flex-col items-center mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 fill-mode-both">
-        <img
+        <Image
           src="/assets/logo/kreile-wordmark-skyline.svg"
           alt="Kreile Wortmarke Skyline"
+          width={560}
+          height={220}
+          sizes="(min-width: 768px) 480px, 360px"
+          priority
           className="w-[360px] md:w-[480px] h-auto object-contain"
         />
       </div>

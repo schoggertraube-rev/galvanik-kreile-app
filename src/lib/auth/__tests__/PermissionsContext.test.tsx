@@ -8,10 +8,11 @@ import type { AuthorizationResult } from "@/lib/server/authorization";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
 import { deriveInitials, PermissionsProvider, usePermissions } from "../PermissionsContext";
 
-const navigation = vi.hoisted(() => ({ pathname: "/" }));
+const navigation = vi.hoisted(() => ({ pathname: "/", replace: vi.fn() }));
 
 vi.mock("next/navigation", () => ({
   usePathname: () => navigation.pathname,
+  useRouter: () => ({ replace: navigation.replace }),
 }));
 
 vi.mock("@/lib/supabase/client", () => ({
@@ -138,6 +139,7 @@ describe("PermissionsProvider identity snapshot", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
@@ -246,6 +248,61 @@ describe("PermissionsProvider identity snapshot", () => {
     });
 
     await expectIdentity(adminSnapshot as Extract<AuthorizationResult, { ok: true }>);
+  });
+
+  it("ignoriert eine verspätete Resolver-Antwort nach dem Unmount", async () => {
+    let resolveSnapshot: ((value: AuthorizationResult) => void) | undefined;
+    const pendingSnapshot = new Promise<AuthorizationResult>((resolve) => {
+      resolveSnapshot = resolve;
+    });
+    vi.mocked(getAuthorizationSnapshotAction).mockReturnValueOnce(pendingSnapshot);
+
+    const { unmount } = render(<Provider />);
+    unmount();
+    localStorage.setItem("kreile_user_role", "werkstatt");
+
+    await act(async () => {
+      resolveSnapshot?.(adminSnapshot);
+      await pendingSnapshot;
+    });
+
+    expect(localStorage.getItem("kreile_user_role")).toBe("werkstatt");
+  });
+
+  it("leert die Identität beim Ablauf im geöffneten Tab ohne Navigation fail-closed", async () => {
+    vi.useFakeTimers();
+    const now = new Date("2026-08-02T10:00:00.000Z").getTime();
+    vi.setSystemTime(now);
+    const expiringBootstrap: AuthBootstrapState = {
+      status: "authenticated",
+      session: {
+        ...mkBootstrap.session,
+        issuedAt: now - 1_000,
+        expiresAt: now + 1_000,
+      },
+    };
+
+    render(<Provider initialAuthState={expiringBootstrap} />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId("status").textContent).toBe("authenticated");
+    localStorage.setItem("kreile_user_role", "werkstatt");
+    localStorage.setItem("kreile_user_initials", "MK");
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(screen.getByTestId("status").textContent).toBe("unauthenticated");
+    expect(screen.getByTestId("user-id").textContent).toBe("");
+    expect(screen.getByTestId("role").textContent).toBe("");
+    expect(screen.getByTestId("permissions").textContent).toBe("");
+    expect(screen.getByTestId("active").textContent).toBe("false");
+    expect(localStorage.getItem("kreile_user_role")).toBeNull();
+    expect(localStorage.getItem("kreile_user_initials")).toBeNull();
+    expect(navigation.replace).toHaveBeenCalledWith("/start");
   });
 
   it("aktualisiert denselben erhaltenen Layout-Provider beim Start-Login-Wechsel", async () => {

@@ -3,19 +3,14 @@
 import { Home, PackageCheck, Scan, Search, Menu, Users, ClipboardList, TrendingUp, Settings, MessageSquare, ShieldCheck, Lightbulb, HeartHandshake, Beaker, Warehouse, Database } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 export function MobileBottomNav({ className = "" }: { className?: string }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
-  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
-
-  useEffect(() => {
-    const role = localStorage.getItem("kreile_user_role");
-    if (role === "admin" || role === "developer") {
-      setTimeout(() => setIsAdminOrDev(true), 0);
-    }
-  }, []);
+  const { hasPermission } = usePermissions();
+  const canManageUsers = hasPermission("perm_sys_users");
 
   const isActive = (path: string) =>
     path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
@@ -106,7 +101,7 @@ export function MobileBottomNav({ className = "" }: { className?: string }) {
                 </div>
               </div>
 
-              {isAdminOrDev && (
+              {canManageUsers && (
                 <div>
                   <h3 className="text-xs font-bold text-neutral-gray-400 mb-3 px-2 uppercase tracking-wider">Verwaltung</h3>
                   <div className="grid grid-cols-4 gap-y-4 gap-x-2">

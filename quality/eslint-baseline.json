@@ -4,9 +4,9 @@
   "lintContractHash": "1b2b68e76dd239761610ef33e3b87e8584c3d1191803fba63e2646ff1c624aa1",
   "judgeContractHash": "cf480b7edaf2923df1ed9ac0b236812e6ad3567cc51f6506870742192e836e5a",
   "totals": {
-    "filesWithIssues": 279,
-    "errors": 484,
-    "warnings": 459
+    "filesWithIssues": 274,
+    "errors": 473,
+    "warnings": 450
   },
   "issues": [
     {
@@ -1402,68 +1402,12 @@
       "count": 2
     },
     {
-      "file": "src/app/kontrolle/KontrolleDashboardClient.tsx",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "messageId": "unexpectedAny",
-      "message": "Unexpected any. Specify a different type.",
-      "count": 2
-    },
-    {
-      "file": "src/app/kontrolle/KontrolleDashboardClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'XCircle' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/kontrolle/KontrolleDashboardClient.tsx",
-      "ruleId": "react-hooks/set-state-in-effect",
-      "severity": 2,
-      "messageId": null,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/app/kontrolle/KontrolleDashboardClient.tsx:37:7\n  35 |     const role = localStorage.getItem(\"kreile_user_role\");\n  36 |     if (role === \"admin\" || role === \"developer\" || isDevOrAdmin) {\n> 37 |       setIsAdminOrDevLocal(true);\n     |       ^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect\n  38 |     }\n  39 |   }, [isDevOrAdmin]);\n  40 |",
-      "count": 1
-    },
-    {
-      "file": "src/app/kontrolle/KontrolleDashboardClient.tsx",
-      "ruleId": "react/no-unescaped-entities",
-      "severity": 2,
-      "messageId": "unescapedEntityAlts",
-      "message": "`\"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.",
-      "count": 2
-    },
-    {
       "file": "src/app/kontrolle/actions.ts",
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
       "message": "'eq' is defined but never used.",
       "count": 1
-    },
-    {
-      "file": "src/app/kvp/KvpClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'e' is defined but never used.",
-      "count": 2
-    },
-    {
-      "file": "src/app/kvp/KvpClient.tsx",
-      "ruleId": "react-hooks/set-state-in-effect",
-      "severity": 2,
-      "messageId": null,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/app/kvp/KvpClient.tsx:97:51\n   95 |   useEffect(() => {\n   96 |     const role = localStorage.getItem(\"kreile_user_role\");\n>  97 |     if (role === \"admin\" || role === \"developer\") setIsAdminOrDev(true);\n      |                                                   ^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect\n   98 |\n   99 |     const saved = localStorage.getItem(\"kreile_kvp_items\");\n  100 |     if (saved) {",
-      "count": 1
-    },
-    {
-      "file": "src/app/kvp/KvpClient.tsx",
-      "ruleId": "react/no-unescaped-entities",
-      "severity": 2,
-      "messageId": "unescapedEntityAlts",
-      "message": "`\"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.",
-      "count": 2
     },
     {
       "file": "src/app/lager/LagerCockpitClient.tsx",
@@ -2914,38 +2858,6 @@
       "count": 1
     },
     {
-      "file": "src/components/diagnostics/DiagnosticsWidget.tsx",
-      "ruleId": "@next/next/no-img-element",
-      "severity": 1,
-      "messageId": null,
-      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
-      "count": 2
-    },
-    {
-      "file": "src/components/diagnostics/DiagnosticsWidget.tsx",
-      "ruleId": "react-hooks/set-state-in-effect",
-      "severity": 2,
-      "messageId": null,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/diagnostics/DiagnosticsWidget.tsx:49:5\n  47 |\n  48 |   useEffect(() => {\n> 49 |     setDialogPos({ x: window.innerWidth / 2 - 190, y: window.innerHeight / 2 - 150 });\n     |     ^^^^^^^^^^^^ Avoid calling setState() directly within an effect\n  50 |   }, []);\n  51 |\n  52 |   // Center dialog on mount if showMarkDialog becomes true",
-      "count": 1
-    },
-    {
-      "file": "src/components/diagnostics/DiagnosticsWidget.tsx",
-      "ruleId": "react-hooks/set-state-in-effect",
-      "severity": 2,
-      "messageId": null,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/diagnostics/DiagnosticsWidget.tsx:55:7\n  53 |   useEffect(() => {\n  54 |     if (showMarkDialog) {\n> 55 |       setDialogPos({ x: window.innerWidth / 2 - 190, y: window.innerHeight / 2 - 150 });\n     |       ^^^^^^^^^^^^ Avoid calling setState() directly within an effect\n  56 |     }\n  57 |   }, [showMarkDialog]);\n  58 |",
-      "count": 1
-    },
-    {
-      "file": "src/components/diagnostics/DiagnosticsWidget.tsx",
-      "ruleId": null,
-      "severity": 1,
-      "messageId": null,
-      "message": "'/* eslint-disable-next-line @next/next/no-img-element */' has no effect because you have 'noInlineConfig' setting in your config.",
-      "count": 2
-    },
-    {
       "file": "src/components/entities/CustomerFocusView.tsx",
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
@@ -3498,22 +3410,6 @@
       "count": 1
     },
     {
-      "file": "src/components/layout/KreileAppShell.tsx",
-      "ruleId": "react-hooks/set-state-in-effect",
-      "severity": 2,
-      "messageId": null,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/layout/KreileAppShell.tsx:35:7\n  33 |     } else {\n  34 |       // eslint-disable-next-line react-hooks/set-state-in-effect\n> 35 |       setIsDemoMode(false);\n     |       ^^^^^^^^^^^^^ Avoid calling setState() directly within an effect\n  36 |     }\n  37 |   }, []);\n  38 |",
-      "count": 1
-    },
-    {
-      "file": "src/components/layout/KreileAppShell.tsx",
-      "ruleId": null,
-      "severity": 1,
-      "messageId": null,
-      "message": "'// eslint-disable-next-line react-hooks/set-state-in-effect' has no effect because you have 'noInlineConfig' setting in your config.",
-      "count": 1
-    },
-    {
       "file": "src/components/layout/KreileHeader.tsx",
       "ruleId": "@next/next/no-img-element",
       "severity": 1,
@@ -3887,14 +3783,6 @@
       "severity": 1,
       "messageId": "unusedVar",
       "message": "'Lock' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/start/StartScreenClient.tsx",
-      "ruleId": "@next/next/no-img-element",
-      "severity": 1,
-      "messageId": null,
-      "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
       "count": 1
     },
     {
