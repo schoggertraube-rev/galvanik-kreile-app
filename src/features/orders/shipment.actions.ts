@@ -1,56 +1,95 @@
-'use server';
+"use server";
 
-import { createClient } from '@/lib/supabase/server';
+import { createId } from "@paralleldrive/cuid2";
+import { and, eq, sql } from "drizzle-orm";
+import { db } from "@/db";
+import { customers, events, orders } from "@/db/schema";
+import { resolveAuthorization } from "@/lib/server/authorization";
 
-export async function saveShipmentInfo(params: {
+const ALLOWED_CARRIERS = new Set(["dhl", "dpd", "spedition", "selbstabholung"]);
+
+type ShipmentParams = {
   orderId: string;
   carrier: string;
   trackingNumber: string | null;
-}) {
-  const supabase = await createClient();
-  const { orderId, carrier, trackingNumber } = params;
+};
 
-  if (carrier !== 'selbstabholung') {
-    // Check customer address
-    const { data: orderData, error: orderFetchErr } = await supabase
-      .from('orders')
-      .select('customer_id')
-      .eq('id', orderId)
-      .single();
+async function resolveShipmentScope() {
+  const authorization = await resolveAuthorization();
+  if (!authorization.ok) {
+    return { ok: false as const, error: authorization.message };
+  }
 
-    if (orderFetchErr || !orderData?.customer_id) {
-      return { success: false, error: 'Auftrag oder Kunde nicht gefunden' };
-    }
+  const canShip = authorization.data.permissions.includes("perm_op_status");
+  if (!canShip) {
+    return { ok: false as const, error: "Keine Berechtigung für den Versand." };
+  }
 
-    const { data: customerData, error: customerFetchErr } = await supabase
-      .from('customers')
-      .select('street, zip_code, city, country')
-      .eq('id', orderData.customer_id)
-      .single();
+  return { ok: true as const, data: authorization.data };
+}
 
-    if (customerFetchErr || !customerData) {
-      return { success: false, error: 'Kunde nicht gefunden' };
-    }
+function validateShipmentParams(params: ShipmentParams) {
+  const orderId = params.orderId.trim();
+  const carrier = params.carrier.trim().toLowerCase();
+  const trackingNumber = params.trackingNumber?.trim() || null;
 
-    const hasStreet = Boolean(customerData.street && customerData.street.trim().length > 0);
-    const hasHouseNumber = Boolean(customerData.street && /\d/.test(customerData.street));
-    const hasZipCode = Boolean(customerData.zip_code && customerData.zip_code.trim().length >= 4);
-    const hasCity = Boolean(customerData.city && customerData.city.trim().length > 0);
-    const hasCountry = Boolean(customerData.country && customerData.country.trim().length > 0);
+  if (!orderId || !ALLOWED_CARRIERS.has(carrier)) {
+    return { ok: false as const, error: "Ungültige Versanddaten." };
+  }
 
-    const isComplete = hasStreet && hasHouseNumber && hasZipCode && hasCity && hasCountry;
+  return { ok: true as const, data: { orderId, carrier, trackingNumber } };
+}
 
-    if (!isComplete) {
-      const missingFields = [];
-      if (!hasStreet) missingFields.push('Straße');
-      if (!hasHouseNumber) missingFields.push('Hausnummer');
-      if (!hasZipCode) missingFields.push('PLZ');
-      if (!hasCity) missingFields.push('Ort');
-      if (!hasCountry) missingFields.push('Land');
+export async function saveShipmentInfo(params: ShipmentParams) {
+  const scope = await resolveShipmentScope();
+  if (!scope.ok) return { success: false, error: scope.error };
+
+  const validated = validateShipmentParams(params);
+  if (!validated.ok) return { success: false, error: validated.error };
+
+  const { orderId, carrier, trackingNumber } = validated.data;
+  const tenantId = scope.data.tenantId;
+  const [order] = await db
+    .select({
+      id: orders.id,
+      street: customers.street,
+      zipCode: customers.zipCode,
+      city: customers.city,
+      country: customers.country,
+    })
+    .from(orders)
+    .leftJoin(
+      customers,
+      and(
+        eq(customers.id, orders.customerId),
+        eq(customers.tenantId, tenantId),
+      ),
+    )
+    .where(and(eq(orders.id, orderId), eq(orders.tenantId, tenantId)))
+    .limit(1);
+
+  if (!order) {
+    return { success: false, error: "Auftrag oder Kunde nicht gefunden" };
+  }
+
+  if (carrier !== "selbstabholung") {
+    const hasStreet = Boolean(order.street?.trim());
+    const hasHouseNumber = Boolean(order.street && /\d/.test(order.street));
+    const hasZipCode = Boolean(order.zipCode && order.zipCode.trim().length >= 4);
+    const hasCity = Boolean(order.city?.trim());
+    const hasCountry = Boolean(order.country?.trim());
+
+    if (!(hasStreet && hasHouseNumber && hasZipCode && hasCity && hasCountry)) {
+      const missingFields: string[] = [];
+      if (!hasStreet) missingFields.push("Straße");
+      if (!hasHouseNumber) missingFields.push("Hausnummer");
+      if (!hasZipCode) missingFields.push("PLZ");
+      if (!hasCity) missingFields.push("Ort");
+      if (!hasCountry) missingFields.push("Land");
 
       return {
         success: false,
-        error: 'Unvollständige Versandadresse',
+        error: "Unvollständige Versandadresse",
         missingFields,
         canChoosePickup: true,
         canEnterAlternativeAddress: true,
@@ -58,62 +97,84 @@ export async function saveShipmentInfo(params: {
     }
   }
 
-  // Insert or Update shipment
-  const { error: shipmentErr } = await supabase
-    .from('shipments')
-    .upsert(
-      { 
-        tenant_id: 'galvanik-kreile',
-        order_id: orderId, 
-        carrier, 
-        tracking_number: trackingNumber,
-        status: 'pending'
-      },
-      { onConflict: 'order_id' }
-    );
-
-  if (shipmentErr) return { success: false, error: shipmentErr.message };
-
-  // Update order delivery method
-  const { error: orderErr } = await supabase
-    .from('orders')
-    .update({ delivery_method: carrier })
-    .eq('id', orderId);
-
-  if (orderErr) return { success: false, error: orderErr.message };
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      SELECT pg_advisory_xact_lock(
+        hashtextextended(${`${tenantId}:${orderId}`}, 0)
+      )
+    `);
+    await tx.execute(sql`
+      WITH updated AS (
+        UPDATE public.shipments
+        SET carrier = ${carrier},
+            tracking_number = ${trackingNumber},
+            status = 'pending',
+            updated_at = now()
+        WHERE tenant_id = ${tenantId}
+          AND order_id = ${orderId}
+        RETURNING id
+      )
+      INSERT INTO public.shipments (
+        tenant_id,
+        order_id,
+        carrier,
+        tracking_number,
+        status
+      )
+      SELECT ${tenantId}, ${orderId}, ${carrier}, ${trackingNumber}, 'pending'
+      WHERE NOT EXISTS (SELECT 1 FROM updated)
+    `);
+    await tx.execute(sql`
+      UPDATE public.orders
+      SET delivery_method = ${carrier}
+      WHERE id = ${orderId}
+        AND tenant_id = ${tenantId}
+    `);
+  });
 
   return { success: true };
 }
 
-export async function sendShippingConfirmation(params: {
-  orderId: string;
-  carrier: string;
-  trackingNumber: string | null;
-}) {
-  const supabase = await createClient();
-  const { orderId, carrier, trackingNumber } = params;
+export async function sendShippingConfirmation(params: ShipmentParams) {
+  const scope = await resolveShipmentScope();
+  if (!scope.ok) return { success: false, error: scope.error };
 
-  // 1. Update order status and shipment status
-  await supabase.from('orders').update({ status: 'shipped' }).eq('id', orderId);
-  await supabase.from('shipments').update({ status: 'shipped', shipped_at: new Date().toISOString() }).eq('order_id', orderId);
+  const validated = validateShipmentParams(params);
+  if (!validated.ok) return { success: false, error: validated.error };
 
-  // 2. Log event
-  await supabase.from('events').insert({
-    tenant_id: 'galvanik-kreile',
-    order_id: orderId,
-    event_type: 'SHIPPED',
-    description: `Versand via ${carrier}${trackingNumber ? ' (' + trackingNumber + ')' : ''}`,
-  });
+  const { orderId, carrier, trackingNumber } = validated.data;
+  const { tenantId, userId } = scope.data;
+  const [order] = await db
+    .select({ id: orders.id })
+    .from(orders)
+    .where(and(eq(orders.id, orderId), eq(orders.tenantId, tenantId)))
+    .limit(1);
 
-  // 3. Queue email (Mocked for now since resend is external)
-  await supabase.from('communication_messages').insert({
-    tenant_id: 'galvanik-kreile',
-    order_id: orderId,
-    direction: 'outbound',
-    channel: 'email',
-    template_name: 'versandbereit',
-    subject: 'Ihr Auftrag ist auf dem Weg',
-    status: 'sent'
+  if (!order) {
+    return { success: false, error: "Auftrag nicht gefunden" };
+  }
+
+  await db.transaction(async (tx) => {
+    await tx
+      .update(orders)
+      .set({ status: "shipped" })
+      .where(and(eq(orders.id, orderId), eq(orders.tenantId, tenantId)));
+    await tx.execute(sql`
+      UPDATE public.shipments
+      SET status = 'shipped',
+          shipped_at = now(),
+          updated_at = now()
+      WHERE tenant_id = ${tenantId}
+        AND order_id = ${orderId}
+    `);
+    await tx.insert(events).values({
+      id: createId(),
+      tenantId,
+      orderId,
+      eventType: "SHIPPED",
+      description: `Versand via ${carrier}${trackingNumber ? ` (${trackingNumber})` : ""}`,
+      userId,
+    });
   });
 
   return { success: true };

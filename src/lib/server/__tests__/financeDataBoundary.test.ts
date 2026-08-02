@@ -350,6 +350,112 @@ describe("Finance data server boundary", () => {
     );
   });
 
+  it("does not read or serialize finance fields through the legacy customer list action", async () => {
+    mocks.results.set("customers", [
+      {
+        id: "customer-1",
+        customerNumber: "K-001",
+        name: "Kunde Eins",
+        type: "business",
+        paymentProfile: { paymentBehavior: "slow" },
+        creditRating: "C",
+        tags: [],
+        imageUrls: [],
+        createdAt: new Date("2020-01-01T00:00:00Z"),
+        updatedAt: new Date("2026-08-01T00:00:00Z"),
+      },
+    ]);
+
+    const { getCustomersDb } = await import("@/app/actions/customers.actions");
+    const result = await getCustomersDb();
+    const payload = JSON.stringify(result);
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: [{ id: "customer-1", name: "Kunde Eins" }],
+    });
+    expect(payload).not.toContain("paymentProfile");
+    expect(payload).not.toContain("creditRating");
+    expect(mocks.selectedFieldSets.flat()).not.toContain("paymentProfile");
+    expect(mocks.selectedFieldSets.flat()).not.toContain("creditRating");
+    expect(mocks.eqCalls).toContainEqual([
+      "customers.tenantId",
+      "galvanik-kreile",
+    ]);
+  });
+
+  it("rejects legacy customer finance mutations before database access", async () => {
+    const { updateCustomerDb } = await import("@/app/actions/customers.actions");
+    const result = await updateCustomerDb("customer-1", {
+      paymentProfile: { paymentBehavior: "prepayment_required" },
+      creditRating: "D",
+    });
+
+    expect(result).toMatchObject({ ok: false, error: "FORBIDDEN" });
+    expect(mocks.select).not.toHaveBeenCalled();
+  });
+
+  it("rejects the legacy top-customer finance action without price permission", async () => {
+    mocks.results.set("customers", [
+      { id: "customer-1", name: "Kunde Eins", summe: 1800 },
+    ]);
+
+    const { getTopKunden } = await import("@/app/actions/customers.actions");
+    const result = await getTopKunden();
+
+    expect(result).toEqual([]);
+    expect(mocks.select).not.toHaveBeenCalled();
+  });
+
+  it("preserves legacy customer finance fields for an authorized office viewer", async () => {
+    mocks.resolveAuthorization.mockResolvedValue({
+      ok: true,
+      data: {
+        userId: "user-office",
+        tenantId: "galvanik-kreile",
+        displayName: "Michael",
+        role: "buero",
+        permissions: [
+          "perm_data_customers",
+          "perm_view_customers",
+          "perm_view_prices",
+        ],
+        active: true,
+      },
+    });
+    mocks.results.set("customers", [
+      {
+        id: "customer-1",
+        customerNumber: "K-001",
+        name: "Kunde Eins",
+        type: "business",
+        paymentProfile: { paymentBehavior: "on_time" },
+        creditRating: "A",
+        tags: [],
+        imageUrls: [],
+        createdAt: new Date("2020-01-01T00:00:00Z"),
+        updatedAt: new Date("2026-08-01T00:00:00Z"),
+      },
+    ]);
+
+    const { getCustomerByIdDb } = await import(
+      "@/app/actions/customers.actions"
+    );
+    const result = await getCustomerByIdDb("customer-1");
+
+    expect(result).toMatchObject({
+      ok: true,
+      data: {
+        id: "customer-1",
+        paymentProfile: { paymentBehavior: "on_time" },
+        creditRating: "A",
+      },
+    });
+    expect(mocks.selectedFieldSets.flat()).toEqual(
+      expect.arrayContaining(["paymentProfile", "creditRating"]),
+    );
+  });
+
   it("preserves authorized customer finance and quality collections", async () => {
     mocks.resolveAuthorization.mockResolvedValue({
       ok: true,
@@ -625,6 +731,26 @@ describe("Finance data server boundary", () => {
     expect(mocks.supabaseFrom).not.toHaveBeenCalled();
   });
 
+  it("stops analysis views before the Data API without an authorized app session", async () => {
+    mocks.resolveAuthorization.mockResolvedValue({
+      ok: false,
+      reason: "NO_SESSION",
+      message: "AUTH_ERROR: Nicht angemeldet",
+    });
+
+    const { getAnalyseOverview } = await import(
+      "@/features/analyse/analyse.actions"
+    );
+    const result = await getAnalyseOverview("month");
+
+    expect(result).toEqual({
+      error: "AUTH_ERROR: Nicht angemeldet",
+      data: [],
+    });
+    expect(mocks.supabaseFrom).not.toHaveBeenCalled();
+    expect(mocks.select).not.toHaveBeenCalled();
+  });
+
   it("preserves sanitized benchmark data for an authorized office viewer", async () => {
     mocks.resolveAuthorization.mockResolvedValue({
       ok: true,
@@ -689,5 +815,73 @@ describe("Finance data browser boundary", () => {
     expect(source).toMatch(/variant === ['"]erfassung['"] && canViewFinance/);
     expect(source).toMatch(/tile\.key !== "zahlung" \|\| dossier\.capabilities\.canViewFinance/);
     expect(source).not.toContain("23 €");
+  });
+});
+
+describe("Finance database boundary migration", () => {
+  it("keeps PIN-session order paths off the anonymous Supabase Data API", () => {
+    const files = [
+      "src/features/orders/shipment.actions.ts",
+      "src/app/cockpit/actions.ts",
+      "src/features/analyse/analyse.actions.ts",
+    ];
+
+    for (const file of files) {
+      const source = readFileSync(resolve(process.cwd(), file), "utf8");
+      expect(source, file).not.toContain("@/lib/supabase/server");
+      expect(source, file).not.toMatch(/\.from\(\s*["']orders["']\s*\)/);
+      expect(source, file).not.toMatch(
+        /\.from\(\s*["'](?:v_analyse_termintreue|v_analyse_durchlaufzeit|v_analyse_wochenziel|v_analyse_station_durchlauf|v_analyse_werkstatt_puls_economics|v_auftrag_db|v_kunde_clv|v_engpass|v_pipeline_forecast)["']\s*\)/,
+      );
+    }
+  });
+
+  it("revokes public finance access and replaces the permissive orders policy", () => {
+    const source = readFileSync(
+      resolve(
+        process.cwd(),
+        "supabase/migrations/20260802213450_harden_finance_rls_grants.sql",
+      ),
+      "utf8",
+    );
+
+    expect(source).toContain(
+      "DROP POLICY IF EXISTS public_all_orders_final ON public.orders",
+    );
+    expect(source).toContain(
+      "DROP POLICY IF EXISTS payments_all ON public.payments",
+    );
+    expect(source).toContain(
+      "DROP POLICY IF EXISTS price_lines_all ON public.price_lines",
+    );
+    expect(source).toContain(
+      "REVOKE ALL PRIVILEGES ON TABLE public.payments FROM PUBLIC, anon, authenticated",
+    );
+    expect(source).toContain(
+      "REVOKE ALL PRIVILEGES ON TABLE public.price_lines FROM PUBLIC, anon, authenticated",
+    );
+    expect(source).toContain("CREATE POLICY authenticated_finance_orders_select");
+    expect(source).toMatch(
+      /CREATE POLICY authenticated_finance_orders_select[\s\S]*?FOR SELECT[\s\S]*?TO authenticated/,
+    );
+    expect(source).toContain(
+      "USING (private.current_user_can_view_finance(tenant_id::text))",
+    );
+    expect(source).toContain(
+      "CREATE POLICY authenticated_finance_payments_select",
+    );
+    expect(source).toContain(
+      "USING (private.current_user_can_view_finance(tenant_id))",
+    );
+    expect(source).toContain(
+      "ALTER PUBLICATION supabase_realtime DROP TABLE public.orders",
+    );
+    expect(source).not.toMatch(
+      /CREATE POLICY[\s\S]*?ON public\.(?:orders|payments|price_lines)[\s\S]*?USING\s*\(true\)/i,
+    );
+    expect(source).not.toMatch(/GRANT\s+(?:INSERT|UPDATE|DELETE)[^;]*public\.orders/i);
+    expect(source).not.toMatch(
+      /CREATE POLICY authenticated_finance_orders[^\n]*[\s\S]*?FOR ALL/i,
+    );
   });
 });

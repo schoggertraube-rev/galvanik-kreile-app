@@ -1,9 +1,9 @@
 // --- KONTEXT (vom Server geladen) ---
 export type KontextDaten = {
-  db_marge_je_ks: Record<string, number>;          // kuerzel -> Marge 0..1
+  db_marge_je_ks: Record<string, number | null>;   // kuerzel -> Marge 0..1 oder fehlend
   kostensatz_je_ks: Record<string, number>;         // kuerzel -> EUR/h
   auslastung_je_ks: Record<string, number>;         // kuerzel -> 0..1
-  verfuegbare_stunden_je_ks: Record<string, number>;
+  verfuegbare_stunden_je_ks: Record<string, number | null>;
   umsatz_12m_je_kundengruppe: Record<string, number>;
   db_marge_gesamt: number;
   top_kunden_je_gruppe: Record<string, { name: string; umsatz: number }[]>;

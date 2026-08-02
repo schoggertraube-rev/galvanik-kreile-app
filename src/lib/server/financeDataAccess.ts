@@ -1,8 +1,11 @@
 import type { PermissionKey } from "@/lib/auth/authorizationContract";
+import type { AppRole } from "@/lib/auth/authorizationContract";
 import { resolveAuthorization } from "@/lib/server/authorization";
 
 export type FinanceDataScope = {
+  userId: string;
   tenantId: string;
+  role: AppRole;
   canViewFinance: boolean;
   canViewQuality: boolean;
 };
@@ -46,7 +49,9 @@ export async function resolveFinanceDataScope(
   return {
     ok: true,
     data: {
+      userId: authorization.data.userId,
       tenantId: authorization.data.tenantId,
+      role: authorization.data.role,
       canViewFinance: authorization.data.permissions.includes("perm_view_prices"),
       canViewQuality: authorization.data.permissions.includes("perm_op_qa"),
     },

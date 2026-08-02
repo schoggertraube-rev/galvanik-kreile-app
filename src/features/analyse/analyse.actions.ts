@@ -1,16 +1,78 @@
 "use server";
 
-import { checkAppAuth } from "@/lib/server/authHelper";
-import { createClient } from "@/lib/supabase/server";
 import { db } from "@/db";
-import { sql } from "drizzle-orm";
-import { AnalyseTileKey, AnalyseTileSummary, AnalyseTileDetail, AnalyseEntityLink, AnalyseTileStatus } from "@/lib/analyse/dataContracts";
+import { and, eq, isNotNull, isNull, lt, ne, sql } from "drizzle-orm";
+import { customers, orders } from "@/db/schema";
+import { resolveFinanceDataScope } from "@/lib/server/financeDataAccess";
+import {
+  AnalyseTileKey,
+  AnalyseTileSummary,
+  AnalyseTileDetail,
+  AnalyseEntityLink,
+  AnalyseTileStatus,
+  WerkstattPulsData,
+} from "@/lib/analyse/dataContracts";
 
-async function getWerkstattPulsSummary(supabase: any, period: string): Promise<AnalyseTileSummary> {
-  const { data: t } = await supabase.from('v_analyse_termintreue').select('*').single();
-  const { data: d } = await supabase.from('v_analyse_durchlaufzeit').select('*').single();
-  const { data: w } = await supabase.from('v_analyse_wochenziel').select('*').single();
-  const { data: s } = await supabase.from('v_analyse_station_durchlauf').select('*');
+type StationMetric = {
+  station: string;
+  avg_tage: number;
+  teile_aktuell: number | null;
+};
+type TermintreueMetric = {
+  termintreue_pct: number | null;
+  nenner: number;
+  ohne_zusagetermin: number;
+};
+type DurchlaufMetric = { avg_tage: number | null; n: number };
+type WochenzielMetric = { fertig_diese_woche: number };
+type EconomicsMetric = {
+  engpass_revenue_eur: number | null;
+  engpass_db_eur: number | null;
+  actual_delay_cost_eur: number | null;
+  model_delay_risk_eur: number | null;
+  n_delayed_orders: number;
+  missing_reasons: string[] | null;
+};
+
+function rows<T>(result: unknown): T[] {
+  return Array.from(result as Iterable<T>);
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Unbekannter Analysefehler";
+}
+
+async function getWerkstattPulsSummary(period: string): Promise<AnalyseTileSummary> {
+  const [termintreueResult, durchlaufResult, wochenzielResult, stationResult] =
+    await Promise.all([
+      db.execute(sql`
+        SELECT termintreue_pct::double precision AS termintreue_pct,
+               nenner::int AS nenner,
+               ohne_zusagetermin::int AS ohne_zusagetermin
+        FROM public.v_analyse_termintreue
+        LIMIT 1
+      `),
+      db.execute(sql`
+        SELECT avg_tage::double precision AS avg_tage, n::int AS n
+        FROM public.v_analyse_durchlaufzeit
+        LIMIT 1
+      `),
+      db.execute(sql`
+        SELECT fertig_diese_woche::int AS fertig_diese_woche
+        FROM public.v_analyse_wochenziel
+        LIMIT 1
+      `),
+      db.execute(sql`
+        SELECT station,
+               avg_tage::double precision AS avg_tage,
+               teile_aktuell::int AS teile_aktuell
+        FROM public.v_analyse_station_durchlauf
+      `),
+    ]);
+  const [t] = rows<TermintreueMetric>(termintreueResult);
+  const [d] = rows<DurchlaufMetric>(durchlaufResult);
+  const [w] = rows<WochenzielMetric>(wochenzielResult);
+  const s = rows<StationMetric>(stationResult);
 
   // Ampellogik & Werte
   const termintreue = t?.termintreue_pct ?? 0;
@@ -19,9 +81,6 @@ async function getWerkstattPulsSummary(supabase: any, period: string): Promise<A
   
   // Wochenziel
   const wochenzielIst = w?.fertig_diese_woche ?? 0;
-  const wochenzielSoll = null;
-  const wochenzielPct = 0;
-
   // Status-Logik
   let status: AnalyseTileStatus = "data_missing";
   if (t && d && w) {
@@ -41,10 +100,10 @@ async function getWerkstattPulsSummary(supabase: any, period: string): Promise<A
   }
 
   // Stationen-Minibalken (Top 4 Stationen mit dem höchsten Durchlauf)
-  const progressBars = (s || [])
-    .sort((a: any, b: any) => b.avg_tage - a.avg_tage)
+  const progressBars = s
+    .sort((a, b) => b.avg_tage - a.avg_tage)
     .slice(0, 4)
-    .map((station: any) => ({
+    .map((station) => ({
       label: station.station,
       value: station.avg_tage,
       fillRatio: Math.min(100, (station.avg_tage / 10) * 100), // Angenommen 10 Tage ist max
@@ -81,13 +140,16 @@ async function getWerkstattPulsSummary(supabase: any, period: string): Promise<A
   };
 }
 
-export async function getAnalyseOverview(period: string, filters?: any): Promise<{ data: AnalyseTileSummary[], error?: any }> {
+export async function getAnalyseOverview(
+  period: string,
+  filters?: Record<string, unknown>,
+): Promise<{ data: AnalyseTileSummary[]; error?: string }> {
   try {
-    await checkAppAuth();
-    const supabase = await createClient();
-
+    void filters;
+    const scope = await resolveFinanceDataScope(["perm_view_leitstand"]);
+    if (!scope.ok) return { error: scope.message, data: [] };
     // Werkstatt Puls
-    const werkstattPuls = await getWerkstattPulsSummary(supabase, period);
+    const werkstattPuls = await getWerkstattPulsSummary(period);
 
     const emptyTiles: AnalyseTileSummary[] = [
       {
@@ -168,15 +230,20 @@ export async function getAnalyseOverview(period: string, filters?: any): Promise
     ];
 
     return { data: [werkstattPuls, ...emptyTiles] };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in getAnalyseOverview:", error);
-    return { error: error.message, data: [] };
+    return { error: errorMessage(error), data: [] };
   }
 }
 
-export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: string, filters?: any): Promise<{ data: AnalyseTileDetail | null, error?: any }> {
+export async function getAnalyseTileDetail(
+  tileKey: AnalyseTileKey,
+  period: string,
+  filters?: Record<string, unknown>,
+): Promise<{ data: AnalyseTileDetail | null; error?: string }> {
   try {
-    await checkAppAuth();
+    const scope = await resolveFinanceDataScope(["perm_view_leitstand"]);
+    if (!scope.ok) throw new Error(scope.message);
     
     // We get the summary for this tile
     const { data: overviews } = await getAnalyseOverview(period, filters);
@@ -193,48 +260,133 @@ export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: stri
       dataSources: summary.dataSources
     };
 
-    const supabase = await createClient();
-
     if (tileKey === "werkstatt_puls") {
       // 1. Fetch Views for Level 2 Details
-      const { data: t } = await supabase.from('v_analyse_termintreue').select('*').single();
-      const { data: d } = await supabase.from('v_analyse_durchlaufzeit').select('*').single();
-      const { data: w } = await supabase.from('v_analyse_wochenziel').select('*').single();
-      const { data: s } = await supabase.from('v_analyse_station_durchlauf').select('*');
-      const { data: eco } = await supabase.from('v_analyse_werkstatt_puls_economics').select('*').single();
+      const [termintreueResult, durchlaufResult, wochenzielResult, stationResult] =
+        await Promise.all([
+          db.execute(sql`
+            SELECT termintreue_pct::double precision AS termintreue_pct,
+                   nenner::int AS nenner,
+                   ohne_zusagetermin::int AS ohne_zusagetermin
+            FROM public.v_analyse_termintreue
+            LIMIT 1
+          `),
+          db.execute(sql`
+            SELECT avg_tage::double precision AS avg_tage, n::int AS n
+            FROM public.v_analyse_durchlaufzeit
+            LIMIT 1
+          `),
+          db.execute(sql`
+            SELECT fertig_diese_woche::int AS fertig_diese_woche
+            FROM public.v_analyse_wochenziel
+            LIMIT 1
+          `),
+          db.execute(sql`
+            SELECT station,
+                   avg_tage::double precision AS avg_tage,
+                   teile_aktuell::int AS teile_aktuell
+            FROM public.v_analyse_station_durchlauf
+          `),
+        ]);
+      const [t] = rows<TermintreueMetric>(termintreueResult);
+      const [d] = rows<DurchlaufMetric>(durchlaufResult);
+      const [w] = rows<WochenzielMetric>(wochenzielResult);
+      const s = rows<StationMetric>(stationResult);
+      const [eco] = scope.data.canViewFinance
+        ? rows<EconomicsMetric>(
+            await db.execute(sql`
+              SELECT
+                COALESCE(sum(revenue_reference_eur), 0)::double precision AS engpass_revenue_eur,
+                COALESCE(sum(db_ist), 0)::double precision AS engpass_db_eur,
+                COALESCE(sum(actual_delay_cost_eur), 0)::double precision AS actual_delay_cost_eur,
+                COALESCE(sum(model_delay_risk_eur), 0)::double precision AS model_delay_risk_eur,
+                count(*)::int AS n_delayed_orders,
+                COALESCE(
+                  (
+                    SELECT array_agg(DISTINCT reason)
+                    FROM public.v_analyse_werkstatt_puls_economics AS detail
+                    CROSS JOIN LATERAL unnest(detail.missing_reasons) AS reason
+                    WHERE detail.delay_days > 0
+                  ),
+                  ARRAY[]::text[]
+                ) AS missing_reasons
+              FROM public.v_analyse_werkstatt_puls_economics
+              WHERE delay_days > 0
+            `),
+          )
+        : [];
 
       // Hole echte verspätete Aufträge
-      const { data: delayedOrders } = await supabase.from('orders')
-        .select('id, internal_id, title, customer_id, customers(name), current_station_id, promised_due_date, completed_date, status')
-        .eq('tenant_id', 'galvanik-kreile')
-        .not('promised_due_date', 'is', null)
-        .is('completed_date', null)
-        .lt('promised_due_date', new Date().toISOString())
+      const orderProjection = {
+        id: orders.id,
+        orderNumber: orders.orderNumber,
+        title: orders.title,
+        customerId: orders.customerId,
+        customerName: customers.name,
+        currentStationId: orders.currentStationId,
+        promisedDueDate: orders.promisedDueDate,
+        completedDate: orders.completedDate,
+        status: orders.status,
+      };
+      const delayedOrders = await db
+        .select(orderProjection)
+        .from(orders)
+        .leftJoin(
+          customers,
+          and(
+            eq(customers.id, orders.customerId),
+            eq(customers.tenantId, scope.data.tenantId),
+          ),
+        )
+        .where(
+          and(
+            eq(orders.tenantId, scope.data.tenantId),
+            isNotNull(orders.promisedDueDate),
+            isNull(orders.completedDate),
+            lt(orders.promisedDueDate, new Date()),
+          ),
+        )
         .limit(10);
 
-      const { data: missingDueOrders } = await supabase.from('orders')
-        .select('id, internal_id, title, customer_id, customers(name), current_station_id, promised_due_date, completed_date, status')
-        .eq('tenant_id', 'galvanik-kreile')
-        .is('promised_due_date', null)
-        .neq('status', 'storniert')
+      const missingDueOrders = await db
+        .select(orderProjection)
+        .from(orders)
+        .leftJoin(
+          customers,
+          and(
+            eq(customers.id, orders.customerId),
+            eq(customers.tenantId, scope.data.tenantId),
+          ),
+        )
+        .where(
+          and(
+            eq(orders.tenantId, scope.data.tenantId),
+            isNull(orders.promisedDueDate),
+            ne(orders.status, "storniert"),
+          ),
+        )
         .limit(10);
 
       // Mappings
       const termintreuePct = t?.termintreue_pct ?? null;
       const termintreueMessbarN = t?.nenner ?? 0;
       const ohneZusageterminN = t?.ohne_zusagetermin ?? 0;
-      const { count: openOrdersCount } = await supabase
-        .from('orders')
-        .select('*', { count: 'exact', head: true })
-        .eq('tenant_id', 'galvanik-kreile')
-        .is('completed_date', null);
+      const [openOrders] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(orders)
+        .where(
+          and(
+            eq(orders.tenantId, scope.data.tenantId),
+            isNull(orders.completedDate),
+          ),
+        );
 
       const avgTage = d?.avg_tage ?? null;
       const avgDurchlaufzeitMessbarN = d?.n ?? 0;
       const wochenzielIst = w?.fertig_diese_woche ?? 0;
       const wochenzielSoll = null; 
-      const offeneAuftraegeN = openOrdersCount ?? 0; 
-      const kritischeAuftraegeN = delayedOrders ? delayedOrders.length : 0;
+      const offeneAuftraegeN = openOrders?.count ?? 0;
+      const kritischeAuftraegeN = delayedOrders.length;
       const dokumentationsquotePct = null; // not in view yet
       const dokumentationsquoteMessbarN = 0;
       
@@ -248,7 +400,7 @@ export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: stri
       const scoreRing = termintreuePct !== null ? termintreuePct : null;
 
       // Stations
-      const stations = (s || []).map((st: any) => ({
+      const stations: WerkstattPulsData["stations"] = s.map((st) => ({
         stationId: st.station,
         stationName: st.station,
         status: (st.avg_tage > 5 ? "critical" : (st.avg_tage > 2 ? "watch" : "ok")) as "critical" | "watch" | "ok" | "free",
@@ -261,33 +413,35 @@ export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: stri
       }));
 
       // Affected Orders
-      const affectedOrdersMapped: any[] = [];
-      (delayedOrders || []).forEach((o: any) => {
+      const affectedOrdersMapped: WerkstattPulsData["affectedOrders"] = [];
+      delayedOrders.forEach((o) => {
         affectedOrdersMapped.push({
           orderId: o.id,
-          orderNumber: o.internal_id,
+          orderNumber: o.orderNumber,
           title: o.title || 'Ohne Titel',
-          customerId: o.customer_id,
-          customerName: o.customers?.name || 'Unbekannt',
-          stationName: o.current_station_id || 'Unbekannt',
-          promisedDueDate: o.promised_due_date,
-          completedDate: o.completed_date,
-          delayDays: Math.round((new Date().getTime() - new Date(o.promised_due_date).getTime()) / (1000 * 3600 * 24)),
+          customerId: o.customerId,
+          customerName: o.customerName || 'Unbekannt',
+          stationName: o.currentStationId || 'Unbekannt',
+          promisedDueDate: o.promisedDueDate?.toISOString() ?? null,
+          completedDate: o.completedDate?.toISOString() ?? null,
+          delayDays: o.promisedDueDate
+            ? Math.round((Date.now() - o.promisedDueDate.getTime()) / (1000 * 3600 * 24))
+            : null,
           status: "critical",
           priority: o.status,
           openUrl: `/orders/${o.id}?returnTo=/performance?tile=werkstatt_puls`
         });
       });
-      (missingDueOrders || []).forEach((o: any) => {
+      missingDueOrders.forEach((o) => {
         affectedOrdersMapped.push({
           orderId: o.id,
-          orderNumber: o.internal_id,
+          orderNumber: o.orderNumber,
           title: o.title || 'Ohne Titel',
-          customerId: o.customer_id,
-          customerName: o.customers?.name || 'Unbekannt',
-          stationName: o.current_station_id || 'Unbekannt',
-          promisedDueDate: o.promised_due_date,
-          completedDate: o.completed_date,
+          customerId: o.customerId,
+          customerName: o.customerName || 'Unbekannt',
+          stationName: o.currentStationId || 'Unbekannt',
+          promisedDueDate: o.promisedDueDate?.toISOString() ?? null,
+          completedDate: o.completedDate?.toISOString() ?? null,
           delayDays: null,
           status: "missing_due_date",
           priority: o.status,
@@ -296,17 +450,26 @@ export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: stri
       });
 
       // Data Sources list
-      const ds = [
+      const ds: WerkstattPulsData["dataSources"] = [
         { label: "Termintreue & DQ", sourceName: "v_analyse_termintreue", recordCount: 1, status: t ? "live" : "missing" },
         { label: "Durchlaufzeit", sourceName: "v_analyse_durchlaufzeit", recordCount: 1, status: d ? "live" : "missing" },
         { label: "Wochenziel", sourceName: "v_analyse_wochenziel", recordCount: 1, status: w ? "live" : "missing" },
-        { label: "Stationen Durchlauf", sourceName: "v_analyse_station_durchlauf", recordCount: s ? s.length : 0, status: s ? "live" : "missing" },
-        { label: "Wirtschaftlichkeit", sourceName: "v_analyse_werkstatt_puls_economics", recordCount: 1, status: eco ? "live" : "missing" },
+        { label: "Stationen Durchlauf", sourceName: "v_analyse_station_durchlauf", recordCount: s.length, status: "live" },
+        { label: "Wirtschaftlichkeit", sourceName: "v_analyse_werkstatt_puls_economics", recordCount: eco ? 1 : 0, status: eco ? "live" : "missing" },
         { label: "Verlauf", sourceName: "kpi_snapshots", recordCount: null, status: "missing" }
-      ] as any[];
+      ];
+
+      const normalizedPeriod: WerkstattPulsData["period"] = [
+        "today",
+        "week",
+        "month",
+        "custom",
+      ].includes(period)
+        ? (period as WerkstattPulsData["period"])
+        : "month";
 
       detail.werkstattPulsData = {
-        period: period as any,
+        period: normalizedPeriod,
         dataStatus: {
           isLive: true,
           lastUpdatedAt: new Date().toISOString(),
@@ -329,12 +492,12 @@ export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: stri
         stations,
         affectedOrders: affectedOrdersMapped,
         economics: {
-          engpassRevenueEur: eco?.engpass_revenue_eur ?? 0,
-          engpassDbEur: eco?.engpass_db_eur ?? 0,
-          actualDelayCostEur: eco?.actual_delay_cost_eur ?? 0,
-          modelDelayRiskEur: eco?.model_delay_risk_eur ?? 0,
+          engpassRevenueEur: eco?.engpass_revenue_eur ?? null,
+          engpassDbEur: eco?.engpass_db_eur ?? null,
+          actualDelayCostEur: eco?.actual_delay_cost_eur ?? null,
+          modelDelayRiskEur: eco?.model_delay_risk_eur ?? null,
           confidence: eco ? (eco.n_delayed_orders > 0 ? "high" : "medium") : "none",
-          missingReasons: [],
+          missingReasons: eco?.missing_reasons ?? [],
           affectedOrderCount: eco?.n_delayed_orders ?? 0,
         },
         insight: {
@@ -366,15 +529,20 @@ export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: stri
     }
 
     return { data: detail };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in getAnalyseTileDetail:", error);
-    return { error: error.message, data: null };
+    return { error: errorMessage(error), data: null };
   }
 }
 
-export async function getAnalyseLinkedEntities(tileKey: AnalyseTileKey, filters?: any): Promise<{ data: AnalyseEntityLink[], error?: any }> {
+export async function getAnalyseLinkedEntities(
+  tileKey: AnalyseTileKey,
+  filters?: Record<string, unknown>,
+): Promise<{ data: AnalyseEntityLink[]; error?: string }> {
   try {
-    await checkAppAuth();
+    void filters;
+    const scope = await resolveFinanceDataScope(["perm_view_leitstand"]);
+    if (!scope.ok) return { error: scope.message, data: [] };
     
     if (tileKey === "werkstatt_puls") {
       // In future: load delayed orders
@@ -382,8 +550,8 @@ export async function getAnalyseLinkedEntities(tileKey: AnalyseTileKey, filters?
     }
 
     return { data: [] };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in getAnalyseLinkedEntities:", error);
-    return { error: error.message, data: [] };
+    return { error: errorMessage(error), data: [] };
   }
 }

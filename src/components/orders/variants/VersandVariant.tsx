@@ -25,8 +25,9 @@ export const VersandVariant: React.FC<VersandVariantProps> = ({ orderId, custome
     
     if (!resSave.success) {
       setError(resSave.error || 'Fehler beim Speichern der Versanddaten');
-      // @ts-ignore
-      if (resSave.missingFields) setMissingFields(resSave.missingFields);
+      if ('missingFields' in resSave && resSave.missingFields) {
+        setMissingFields(resSave.missingFields);
+      }
       setSaving(false);
       return;
     }
@@ -84,13 +85,11 @@ export const VersandVariant: React.FC<VersandVariantProps> = ({ orderId, custome
                     <div>
                       <div style={{ fontSize: '10px', color: 'var(--ci-ink-3)', textTransform: 'uppercase' }}>Empfänger</div>
                       <div style={{ marginTop: '2px' }}>{customerName}</div>
-                      <div style={{ fontSize: '11px', color: 'var(--ci-ink-2)' }}>Anschrift 1</div>
-                      <div style={{ fontSize: '11px', color: 'var(--ci-ink-2)' }}>12345 Stadt</div>
+                      <div style={{ fontSize: '11px', color: 'var(--ci-ink-2)' }}>Adresse wird beim Speichern geprüft.</div>
                     </div>
                     <div>
                       <div style={{ fontSize: '10px', color: 'var(--ci-ink-3)', textTransform: 'uppercase' }}>Paket</div>
-                      <div style={{ marginTop: '2px', fontFamily: 'var(--ci-font-serif)' }}>2 Kolli · 12,4 kg</div>
-                      <div style={{ fontSize: '11px', color: 'var(--ci-ink-2)' }}>Versicherung 1.500 €</div>
+                      <div style={{ marginTop: '2px', color: 'var(--ci-ink-2)' }}>Paketdaten noch nicht erfasst.</div>
                     </div>
                   </div>
                 </div>
@@ -106,7 +105,6 @@ export const VersandVariant: React.FC<VersandVariantProps> = ({ orderId, custome
                     onChange={(e) => setTracking(e.target.value)}
                     style={{ flex: 1, border: 'none', background: 'transparent', fontFamily: 'var(--ci-font-sans)', fontSize: '12px', color: 'var(--ci-ink)', outline: 'none' }} 
                   />
-                  <button className="erf-book-btn" style={{ padding: '6px 12px', fontSize: '11px', borderRadius: '8px', background: 'var(--ci-ink)', color: 'var(--ci-surface)', border: 'none', cursor: 'pointer' }}><i className="ti ti-printer" style={{ fontSize: '11px' }}></i> Label drucken</button>
                 </div>
               </div>
             </>
@@ -121,7 +119,7 @@ export const VersandVariant: React.FC<VersandVariantProps> = ({ orderId, custome
                   <ul style={{ margin: 0, paddingLeft: '20px' }}>
                     {missingFields.map(field => <li key={field}>{field}</li>)}
                   </ul>
-                  <p style={{ margin: '6px 0 0', fontWeight: 500 }}>Bitte wählen Sie "Selbstabholung" oder ergänzen Sie die Stammdaten des Kunden.</p>
+                  <p style={{ margin: '6px 0 0', fontWeight: 500 }}>Bitte wählen Sie Selbstabholung oder ergänzen Sie die Stammdaten des Kunden.</p>
                 </div>
               )}
             </div>
@@ -130,8 +128,7 @@ export const VersandVariant: React.FC<VersandVariantProps> = ({ orderId, custome
           <div className="erf-foot" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--ci-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div className="erf-foot-sum" style={{ fontSize: '11px', color: 'var(--ci-ink-3)' }}>
               Versandkosten netto
-              <b style={{ fontFamily: 'var(--ci-font-serif)', fontSize: '16px', color: 'var(--ci-ink)', fontWeight: 500, display: 'block', marginTop: '2px' }}>14,90 €</b>
-              <span style={{ fontSize: '10px' }}>DHL Paket bis 31,5 kg + Versicherung</span>
+              <b style={{ fontFamily: 'var(--ci-font-serif)', fontSize: '16px', color: 'var(--ci-ink)', fontWeight: 500, display: 'block', marginTop: '2px' }}>Nicht erfasst</b>
             </div>
             <button 
               className="erf-book-btn" 
@@ -139,7 +136,7 @@ export const VersandVariant: React.FC<VersandVariantProps> = ({ orderId, custome
               disabled={saving}
               style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: 500, background: 'var(--ci-ink)', color: 'var(--ci-surface)', border: 'none', cursor: 'pointer', opacity: saving ? 0.7 : 1 }}
             >
-              <i className="ti ti-send" style={{ fontSize: '11px' }}></i> {saving ? 'Sendet...' : 'Versandmail senden'}
+              <i className="ti ti-send" style={{ fontSize: '11px' }}></i> {saving ? 'Speichert...' : 'Versand abschließen'}
             </button>
           </div>
         </>
