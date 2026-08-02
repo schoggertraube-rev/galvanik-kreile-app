@@ -1,6 +1,6 @@
 # Non-Loss Register
 
-Stand: 2026-08-01
+Stand: 2026-08-02
 
 Dieses Register schuetzt bestaetigte Produktziele, verschobene Missionen und verwertbare Alt-Arbeit vor stiller Verwerfung. Ein Eintrag darf nur mit belegter Produktentscheidung entfernt werden.
 
@@ -21,8 +21,8 @@ Dieses Register schuetzt bestaetigte Produktziele, verschobene Missionen und ver
 | ID | Ziel | Status | Abhaengigkeit / Nachweis |
 |---|---|---|---|
 | `TRUTH-CLEANUP-001` | Eine kanonische Sicht auf `main`, Vercel, Supabase, PRs und Worktrees. | `DONE_VERIFIED` | PR 25; `main`, Vercel und Archive-Receipts gegengeprueft. |
-| `QUALITY-RATCHET-001` | Globalen Lintbestand maschinenlesbar festhalten und jede Erhoehung blockieren. | `ACTIVE` | Baseline 484/460; Inline-Disable wirkungslos; Base-Judge und GitHub-Enforcement werden gemeinsam abgenommen. |
-| `LINT-DEBT-001` | 484 Fehler und 460 Warnungen in kleinen nichtfachlichen Wellen bis null abbauen. | `READY_AFTER_DEPENDENCY` | Start nach Ratchet; laeuft parallel und blockiert P0-/Auth-/DB-Fixes nicht. |
+| `QUALITY-RATCHET-001` | Globalen Lintbestand maschinenlesbar festhalten und jede Erhoehung blockieren. | `DONE_VERIFIED` | PR 26; Inline-Disable wirkungslos; geschuetzter Base-Judge besteht und `main-protection` verlangt jetzt `quality` und `ratchet`. |
+| `LINT-DEBT-001` | 484 Fehler und 459 Warnungen in kleinen nichtfachlichen Wellen bis null abbauen. | `ACTIVE` | PR 27 senkt die ehrliche Baseline erstmals auf 484/459/279; weitere Wellen laufen parallel und blockieren P0-/Auth-/DB-Fixes nicht. |
 | `DB-TRUTH-001` | 79 lokale Dateien, 92 Production-Ledger-Eintraege und 1 Integration-Eintrag vorwaertsgerichtet versoehnen. | `BLOCKED` | 13 fehlende Quellen und gebrochener Fresh-Replay; keine Alt-Historie umschreiben. |
 | `BRANCH-DISPOSITION-001` | Alte PRs unveraenderlich archivieren, inventarisieren und erst danach schliessen. | `DONE_VERIFIED` | PR 8/15/19/20 einzeln kommentiert und ungemergt geschlossen; Archivrefs, Receipts und Quellbranches erhalten. |
 | `WINDOWS-WORKTREE-AUDIT-001` | Externen Windows-Checkout samt bekannter Diagnose- und nicht versionierter Arbeit inventarisieren und verlustfrei sauberstellen. | `UNKNOWN_EXTERNAL` | Nur im betroffenen Checkout ausfuehrbar; kein Reset/Stash/Delete. Erwartete Quelle: `diagnose/auth-session-permissions-2026-06-17@1621702` sowie Capture-/Foto-/Testarbeit. |
@@ -36,7 +36,7 @@ Dieses Register schuetzt bestaetigte Produktziele, verschobene Missionen und ver
 | `W1-RUNTIME-RECEIPT-001` | Nullable Receipt-Spalten und partielle Unique-Indizes bereitstellen. | `DONE_VERIFIED` | Production/Integration/Postflight und PR 22; Runtime-Nutzung separat offen. |
 | `LIVE-AUTH-001` | Abgelaufene Sitzung schliesst Erfassung, loescht App-Session und fuehrt nach `/start`. | `ACTIVE` | Cookie-/Routengrenzen gehaertet; realer Ablauf mit zuvor gueltiger, dann abgelaufener Sitzung noch vollstaendig zu bestaetigen. |
 | `AUTH-IDENTITY-002` | Benutzerwechsel MK -> Admin -> MK ohne alte Rolle, Initialen, Rechte oder Sessionreste. | `ACTIVE` | `PermissionsProvider` friert Identity-Felder weiterhin aus dem ersten Layout-Mount ein. |
-| `SEC-PIN-002` | PIN-Hashing-Grundlage, kein Default und zentrale Rollen-/Rotationsregeln. | `CANDIDATE_NO_MERGE` | Lokal `d7d2bd342221e4dbfc08be83f1864230dccd7341`; tree-identischer Remote-Checkpoint `dad42eb83e4dc4617291568631dea23f731febaa` auf `checkpoint/sec-pin-002-no-merge-20260801`; bewusst kein PR/Merge. |
+| `SEC-PIN-002` | PIN-Hashing-Grundlage, kein Default und zentrale Rollen-/Rotationsregeln. | `CANDIDATE_NO_MERGE` | Tree-identischer Remote-Checkpoint `dad42eb83e4dc4617291568631dea23f731febaa` zu `d7d2bd342221e4dbfc08be83f1864230dccd7341` auf `checkpoint/sec-pin-002-no-merge-20260801`; bewusst kein PR/Merge. |
 | `SEC-PIN-002B` | Device-/Challenge-Grenze, verteilter Fehlversuchsschutz, Session-Widerruf, Bestandsrotation und finaler Plaintext-Ausschluss. | `BLOCKED` | Security-/Produktvertrag fuer vierstellige Werkstatt-PINs fehlt; baut auf `SEC-PIN-002`-Salvage auf. |
 | `RLS-CONTRACT-001` | Rollen-/Tenant-/Grant-/Relationsvertrag und relationenweise Fail-closed-Policies. | `BLOCKED` | Security Advisor: 27 externe Errors, 31 Warnungen, 11 Infos; zuerst Zugriffsmatrix. |
 | `OFFLINE-SHELL-001` | Eine Service-Worker-Registrierung; App-Shell offline nutzbar. | `READY_AFTER_DEPENDENCY` | Nach Quality-/Identity-Vertrag. |
@@ -63,7 +63,7 @@ Ein geschlossener PR verliert seinen Branch nicht automatisch. PR-Schliessung be
 |---|---|---|
 | lokaler `main`-Worktree | sauber | exakt `origin/main`; keine Mission direkt darin entwickeln |
 | lokaler Truth-Worktree | isolierter Kandidat | nur kanonische Projekt-Dokumente |
-| lokaler PIN-Worktree | `CANDIDATE_NO_MERGE` | lokaler SHA `d7d2bd3...` ist als tree-identischer Remote-Checkpoint `dad42eb...` gesichert; nicht mit Truth-/Lint-Arbeit vermischen |
+| PIN-Checkpoint | `CANDIDATE_NO_MERGE` | Tree-identischer Remote-Checkpoint `dad42eb...` zu `d7d2bd3...`; bewusst kein lokaler Worktree und nicht mit Truth-/Lint-Arbeit vermischen |
 | frueher genannter Windows-Dirty-Checkout | `UNKNOWN_EXTERNAL` | bekannte Hinweise: `diagnose/auth-session-permissions-2026-06-17@1621702`, bessere Offline-/Service-Worker-Arbeit sowie nicht versionierte Capture-/Foto-/Testarbeit; read-only inventarisieren, dann gezielt committen; kein Reset/Stash/Delete |
 
 ## Operativer Kern und Erfassung
