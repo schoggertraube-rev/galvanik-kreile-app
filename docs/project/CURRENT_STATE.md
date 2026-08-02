@@ -1,6 +1,6 @@
 # Current State
 
-Stand: 2026-08-01
+Stand: 2026-08-02
 
 Verifiziert gegen GitHub, Vercel, Supabase und einen sauberen lokalen Checkout.
 
@@ -12,7 +12,7 @@ Verifiziert gegen GitHub, Vercel, Supabase und einen sauberen lokalen Checkout.
 | Production-Deployment | `PASS` | Vercel Production laeuft auf demselben Commit wie `main`. |
 | Lokale Worktree-Hygiene | `PASS_LOCAL` | Alle in diesem Arbeitsbereich sichtbaren App-Worktrees sind sauber und voneinander isoliert. |
 | Migrations-/Schemaquelle | `FAIL` | `main` enthaelt 79 Migrationsdateien, Production 92 Ledger-Eintraege, Integration 1. |
-| Quality-Ratchet / Lint-Nullstand | `PASS_RATCHET` / `FAIL_ZERO` | 484 Fehler und 460 Warnungen sind ehrlich inventarisiert; Inline-Disable ist wirkungslos, jede Erhoehung und jede nicht verbuchte Reduktion blockiert. |
+| Quality-Ratchet / Lint-Nullstand | `PASS_RATCHET` / `FAIL_ZERO` | 484 Fehler und 459 Warnungen in 279 Dateien sind ehrlich inventarisiert; Inline-Disable ist wirkungslos, jede Erhoehung und jede nicht verbuchte Reduktion blockiert. `quality` und `ratchet` sind im aktiven `main-protection`-Ruleset verpflichtend. |
 | Produkt-Go-live | `NO_GO` | RLS, PIN-Grenze, Offline-Vertrag und operativer End-to-End-Kern sind nicht vollstaendig abgenommen. |
 
 Ein gruenes Deployment oder ein gemergter Sicherheitsfix ist deshalb kein Gesamt-PASS.
@@ -21,8 +21,8 @@ Ein gruenes Deployment oder ein gemergter Sicherheitsfix ist deshalb kein Gesamt
 
 | Ebene | Autoritaet | Aktueller Stand | Darf nicht ersetzt werden durch |
 |---|---|---|---|
-| Code-Lieferung | GitHub `main` | Vor diesem Quality-Kandidaten verifiziert auf `672ee4c5496324303500b46d9a94b2c70a727aa1` | lokale Branches, offene PRs, alte Uebergaben |
-| Laufende App | Vercel Production | Deployment `dpl_J3wMBows7eQmPnxNPA8AiLTNSLP7`, `READY`, Commit `672ee4c...` | Preview, lokaler Dev-Server |
+| Code-Lieferung | GitHub `main` | Audit-Receipt: `63a7b37a4095e82490716f4f12d9aaa0df8358b7` (PR 27) | lokale Branches, offene PRs, alte Uebergaben |
+| Laufende App | Vercel Production | Audit-Receipt: Deployment `dpl_7TX6br8jHUgx3QHyy3q2gvAGw7Dy`, `READY`, Commit `63a7b37...`; Alias ohne Fehler | Preview, lokaler Dev-Server |
 | Produktive Datenbank | Supabase Production | Projekt `syhaigjhsbpjmtnggqka`, 92 Ledger-Eintraege | lokale SQL-Dateien, Integration |
 | Nichtproduktiver DB-Test | Supabase Integration | Projekt `yroeivcldiphoyfmxuus`, 1 Ledger-Eintrag | Production, Fresh-Replay-Beweis |
 | Kandidaten / Quellen | PRs, Remote-Branches, isolierte Worktrees | nur Salvage oder Review | `main`, Production |
@@ -33,11 +33,11 @@ Bei einem Widerspruch wird nicht still eine Ebene bevorzugt. Der Widerspruch wir
 ## GitHub und Vercel
 
 - GitHub Default Branch: `main`.
-- Vor diesem Quality-Kandidaten verifizierter `main` und `origin/main`: exakt `672ee4c5496324303500b46d9a94b2c70a727aa1`.
+- Audit-Receipt nach PR 27: `main` und `origin/main` exakt `63a7b37a4095e82490716f4f12d9aaa0df8358b7`.
 - Vercel-Projekt: `galvanik-kreile-werkstatt`.
 - Production-URL: `https://galvanik-kreile-werkstatt.vercel.app`.
-- Aktuelles Production-Deployment ist `READY` und nennt exakt denselben GitHub-Commit.
-- Der kombinierte GitHub-Status fuer `main` enthaelt aktuell den erfolgreichen Vercel-Status. Die PR-Gates der gemergten PRs 23 und 24 waren vor Merge gruen; das ersetzt keinen Fresh-Replay- oder Gesamtproduktnachweis.
+- Audit-Receipt: Production-Deployment `dpl_7TX6br8jHUgx3QHyy3q2gvAGw7Dy` ist `READY`, hat `aliasError: null` und nennt exakt denselben GitHub-Commit.
+- Das aktive `main-protection`-Ruleset verlangt Pull Requests, einen aktuellen Branch sowie die Checks `quality` und `ratchet`; Force-Pushes, Loeschung und Bypasses sind gesperrt. Die PR-Gates der gemergten PRs ersetzen keinen Fresh-Replay- oder Gesamtproduktnachweis.
 
 ### Branch-Disposition
 
@@ -54,15 +54,16 @@ Das vollstaendige maschinenlesbare Inventar steht in [`BRANCH_ARCHIVE_RECEIPTS.j
 
 ## Worktree-Audit
 
-Zum Pruefzeitpunkt sind in diesem Arbeitsbereich genau drei App-Worktrees sichtbar:
+Zum Pruefzeitpunkt sind in diesem Arbeitsbereich genau zwei App-Worktrees sichtbar:
 
 | Branch | Commit / Basis | Zustand | Zweck |
 |---|---|---|---|
-| `main` | `672ee4c...` | sauber, exakt `origin/main` | lokale Lieferreferenz |
-| `agent/quality-eslint-ratchet` | Basis `672ee4c...` | sauberer, isolierter Kandidat | Quality-Ratchet; nach Merge entfernen |
-| `agent/p0-pin-hardening` | lokal `d7d2bd342221e4dbfc08be83f1864230dccd7341`; Remote-Checkpoint `dad42eb83e4dc4617291568631dea23f731febaa` | sauber; lokaler und Remote-Tree exakt `04474f3626b45f465242d17936764b7b0117712c` | `checkpoint/sec-pin-002-no-merge-20260801`, ausdruecklich `NO_MERGE` |
+| `main` | `63a7b37...` | sauber, exakt `origin/main` | lokale Lieferreferenz |
+| `agent/truth-maintenance-after-lint-wave-01` | Basis `63a7b37...` | sauberer, isolierter Dokumentationskandidat | Pflege dieses Audit-Receipts |
 
-Damit gibt es hier **null uncommittete App-Aenderungen** ausser dem jeweils aktiv bearbeiteten, vor Commit sichtbaren Missionsdiff.
+Damit gibt es hier **null uncommittete App-Aenderungen** ausser dem jeweils aktiv bearbeiteten, vor Commit sichtbaren Missionsdiff. Der vollstaendig gemergte Lint-Worktree wurde erst nach sauberem Abgleich entfernt; sein Inhalt liegt in `main`.
+
+Der PIN-Kandidat ist aktuell kein lokaler Worktree, sondern bleibt als tree-identischer Remote-Checkpoint `dad42eb83e4dc4617291568631dea23f731febaa` auf `checkpoint/sec-pin-002-no-merge-20260801` erhalten und ausdruecklich `NO_MERGE`.
 
 Der frueher erwaehnte Windows-Checkout ist von diesem Arbeitsbereich aus nicht einsehbar. Sein Zustand ist `UNKNOWN_EXTERNAL`, nicht angeblich bereinigt. Er darf nur in genau diesem Checkout inventarisiert und ohne Reset, Stash oder Loeschung aufgeraeumt werden.
 
@@ -103,7 +104,7 @@ Der frueher erwaehnte Windows-Checkout ist von diesem Arbeitsbereich aus nicht e
 
 - `LIVE-AUTH-001`: Cookie-/Routengrenzen sind gehaertet, der reale Ablauf mit einer zuvor gueltigen und dann abgelaufenen Sitzung ist aber noch nicht als vollstaendiger Benutzerweg belegt.
 - `AUTH-IDENTITY-002`: Benutzerwechsel bleibt P0-offen. `PermissionsProvider` friert Rolle, Name und Initialen aus dem ersten Layout-Mount ein; `refreshPermissions()` aktualisiert nur Permissions und Status. PR 23/24 haben diesen Identity-Switch nicht geloest.
-- `SEC-PIN-002`: der lokale Checkpoint `d7d2bd3...` und sein tree-identischer Remote-Checkpoint `dad42eb...` hashen neue PINs und zentralisieren Rollen-/Rotationsregeln, sind aber bewusst `NO_MERGE`.
+- `SEC-PIN-002`: der remote gesicherte, tree-identische Checkpoint `dad42eb...` zu `d7d2bd3...` hasht neue PINs und zentralisiert Rollen-/Rotationsregeln, ist aber bewusst `NO_MERGE`.
   - Die vierstellige PIN-Zielmenge ist ueber verteilte Quellen weiter online angreifbar.
   - Device-Bindung/Enrollment oder ein gleichwertiger Challenge-/WAF-Vertrag fehlt.
   - Session-Widerruf bei PIN-Rotation fehlt.
@@ -121,13 +122,13 @@ Der frueher erwaehnte Windows-Checkout ist von diesem Arbeitsbereich aus nicht e
 
 Der Quality-Kandidat fuehrt einen maschinenlesbaren Multiset-Ratchet ein. Der Judge, sein direkter Aufruf, die ESLint-Konfiguration, die geschuetzte Node-Auswahl und die vollstaendige transitive Lockfile-Closure der Lint-Einfluesse (`eslint`, `eslint-config-next`, `typescript`, `tsx`, `next`, `react`) sind gehasht. Ein geschuetzter `pull_request_target`-Workflow fuehrt Judge, Config und Abhaengigkeiten aus dem Base-Commit aus; Kandidatencode erhaelt keine Git-Credentials. Datei- und Meldungsschluessel werden unter Linux und Windows identisch kanonisiert.
 
-Inline-ESLint-Konfiguration ist mit `noInlineConfig` vollstaendig wirkungslos. Dadurch wurden 57 bestehende Disable-Direktiven und die zuvor darunter versteckte Schuld erstmals ehrlich sichtbar. Die kanonische Baseline lautet:
+Inline-ESLint-Konfiguration ist mit `noInlineConfig` vollstaendig wirkungslos. Dadurch wurden 57 bestehende Disable-Direktiven und die zuvor darunter versteckte Schuld erstmals ehrlich sichtbar. Die kanonische Baseline nach PR 27 lautet:
 
 | Messwert | Stand |
 |---|---:|
-| Dateien mit Meldungen | 280 |
+| Dateien mit Meldungen | 279 |
 | Fehler | 484 |
-| Warnungen | 460 |
+| Warnungen | 459 |
 | automatisch behebbare Fehler | 6 |
 | automatisch behebbare Warnungen | 0 |
 
@@ -143,11 +144,11 @@ Weitere Luecken:
 ## Unmittelbare Reihenfolge
 
 1. `TRUTH-CLEANUP-001` und `BRANCH-DISPOSITION-001`: abgeschlossen.
-2. `QUALITY-RATCHET-001`: diesen Kandidaten mergen und den geschuetzten Check im aktiven `main`-Ruleset verpflichtend registrieren.
-3. `AUTH-IDENTITY-002`: PR-8-Salvage pruefen, Identity-Snapshot atomar aktualisieren und real im Browser beweisen.
-4. `DB-TRUTH-001`: 79/92-Quellluecke und vorwaertsgerichteten Baseline-/Replay-Vertrag loesen.
-5. `APP-STRUCTURE-001`: Ownership-/Importvertrag festlegen; noch keine Big-Bang-Ordnerumsortierung.
-6. `LINT-DEBT-001`: parallel kleine nichtfachliche Reduktionswellen von 484/460 bis null.
+2. `QUALITY-RATCHET-001`: `DONE_VERIFIED`; PR 26 ist gemergt und `quality` plus `ratchet` sind im aktiven Ruleset verpflichtend.
+3. `LINT-DEBT-001`: `ACTIVE`; erste Welle in PR 27 ist gemergt, weitere kleine nichtfachliche Reduktionen laufen von 484/459 bis null parallel.
+4. `AUTH-IDENTITY-002`: PR-8-Salvage pruefen, Identity-Snapshot atomar aktualisieren und real im Browser beweisen.
+5. `DB-TRUTH-001`: 79/92-Quellluecke und vorwaertsgerichteten Baseline-/Replay-Vertrag loesen.
+6. `APP-STRUCTURE-001`: Ownership-/Importvertrag festlegen; noch keine Big-Bang-Ordnerumsortierung.
 7. `SEC-PIN-002B`: Device-/Challenge-Grenze und Session-Widerruf entscheiden und beweisen; erst dann Bestandsrotation und Merge.
 8. `RLS-CONTRACT-001`: Rollen-, Tenant-, Grant- und Relationmatrix read-only ableiten; relationenweise PRs.
 9. `OFFLINE-SHELL-001`: genau eine sichere Offline-App-Shell herstellen.
