@@ -1,4 +1,24 @@
+import { createHmac } from "node:crypto";
 import { test, expect } from "@playwright/test";
+
+function signedAppSessionCookie(expiresAt: number): string {
+  const payload = JSON.stringify({
+    userId: "expired-user",
+    tenantId: "galvanik-kreile",
+    role: "werkstatt",
+    displayName: "Abgelaufener Benutzer",
+    issuedAt: expiresAt - 60_000,
+    expiresAt,
+  });
+  const signature = createHmac(
+    "sha256",
+    process.env.APP_SESSION_SECRET ?? "playwright-session-secret",
+  )
+    .update(payload)
+    .digest("hex");
+
+  return `${Buffer.from(payload).toString("base64")}.${signature}`;
+}
 
 test.describe("Kreile auth boundary", () => {
   test("redirects anonymous access and keeps the legitimate login surface", async ({ page }) => {
@@ -64,5 +84,39 @@ test.describe("Kreile auth boundary", () => {
         error: "UNAUTHORIZED",
       });
     }
+  });
+
+  test("redirects a validly signed but expired session and clears legacy identity storage", async ({
+    context,
+    page,
+  }) => {
+    await page.goto("/start");
+    await page.evaluate(() => {
+      localStorage.setItem("kreile_user_role", "werkstatt");
+      localStorage.setItem("kreile_user_initials", "MK");
+    });
+
+    await context.addCookies([
+      {
+        name: "kreile_app_session",
+        value: signedAppSessionCookie(Date.now() - 1_000),
+        domain: "localhost",
+        path: "/",
+        expires: Math.floor(Date.now() / 1_000) + 3_600,
+      },
+    ]);
+
+    await page.goto("/");
+
+    await expect(page).toHaveURL(/\/start$/);
+    await expect.poll(async () => page.evaluate(() => [
+      localStorage.getItem("kreile_user_role"),
+      localStorage.getItem("kreile_user_initials"),
+    ])).toEqual([null, null]);
+
+    const remainingCookieNames = (await context.cookies()).map(
+      (cookie) => cookie.name,
+    );
+    expect(remainingCookieNames).not.toContain("kreile_app_session");
   });
 });

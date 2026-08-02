@@ -1,31 +1,125 @@
 process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
 
-import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import React from "react";
-import { PermissionsProvider, usePermissions, deriveInitials } from "../PermissionsContext";
-import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
 import type { AuthorizationResult } from "@/lib/server/authorization";
+import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
+import { deriveInitials, PermissionsProvider, usePermissions } from "../PermissionsContext";
 
-// Mock Supabase client to avoid real network
+const navigation = vi.hoisted(() => ({ pathname: "/" }));
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => navigation.pathname,
+}));
+
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
     auth: {
       onAuthStateChange: () => ({
-        data: { subscription: { unsubscribe: vi.fn() } }
-      })
-    }
-  })
+        data: { subscription: { unsubscribe: vi.fn() } },
+      }),
+    },
+  }),
 }));
 
-// Mock Server Actions to avoid real requests
 vi.mock("@/app/actions/auth.actions", () => ({
   getAuthorizationSnapshotAction: vi.fn(),
 }));
 
+const mkSnapshot: AuthorizationResult = {
+  ok: true,
+  data: {
+    userId: "mk-1",
+    tenantId: "galvanik-kreile",
+    displayName: "Max Karl Kreile",
+    role: "werkstatt",
+    permissions: ["perm_op_status", "perm_op_photos"],
+    active: true,
+  },
+};
+
+const adminSnapshot: AuthorizationResult = {
+  ok: true,
+  data: {
+    userId: "admin-1",
+    tenantId: "galvanik-kreile",
+    displayName: "Rolf Kreile",
+    role: "admin",
+    permissions: ["perm_sys_users", "perm_view_leitstand"],
+    active: true,
+  },
+};
+
+const mkBootstrap: AuthBootstrapState = {
+  status: "authenticated",
+  session: {
+    userId: "mk-1",
+    tenantId: "galvanik-kreile",
+    role: "werkstatt",
+    displayName: "Max Karl Kreile",
+    issuedAt: 1,
+    expiresAt: Date.now() + 60_000,
+  },
+};
+
+function IdentityProbe() {
+  const {
+    userId,
+    tenantId,
+    active,
+    status,
+    initials,
+    name,
+    role,
+    permissions,
+    error,
+    refreshPermissions,
+  } = usePermissions();
+
+  return (
+    <div>
+      <span data-testid="user-id">{userId}</span>
+      <span data-testid="tenant-id">{tenantId}</span>
+      <span data-testid="active">{String(active)}</span>
+      <span data-testid="status">{status}</span>
+      <span data-testid="initials">{initials}</span>
+      <span data-testid="name">{name}</span>
+      <span data-testid="role">{role}</span>
+      <span data-testid="permissions">{permissions.join(",")}</span>
+      <span data-testid="error">{error ?? "no-error"}</span>
+      <button type="button" data-testid="refresh" onClick={() => void refreshPermissions()}>
+        Refresh
+      </button>
+    </div>
+  );
+}
+
+function Provider({ initialAuthState = mkBootstrap }: { initialAuthState?: AuthBootstrapState }) {
+  return (
+    <PermissionsProvider initialAuthState={initialAuthState}>
+      <IdentityProbe />
+    </PermissionsProvider>
+  );
+}
+
+async function expectIdentity(snapshot: Extract<AuthorizationResult, { ok: true }>) {
+  await waitFor(() => {
+    expect(screen.getByTestId("user-id").textContent).toBe(snapshot.data.userId);
+    expect(screen.getByTestId("tenant-id").textContent).toBe(snapshot.data.tenantId);
+    expect(screen.getByTestId("active").textContent).toBe("true");
+    expect(screen.getByTestId("name").textContent).toBe(snapshot.data.displayName);
+    expect(screen.getByTestId("initials").textContent).toBe(deriveInitials(snapshot.data.displayName));
+    expect(screen.getByTestId("role").textContent).toBe(snapshot.data.role);
+    expect(screen.getByTestId("permissions").textContent).toBe(snapshot.data.permissions.join(","));
+    expect(screen.getByTestId("status").textContent).toBe("authenticated");
+    expect(screen.getByTestId("error").textContent).toBe("no-error");
+  });
+}
+
 describe("deriveInitials()", () => {
-  it("5. Initialen werden stabil aus displayName erzeugt", () => {
+  it("erzeugt stabile Initialen aus dem Anzeigenamen", () => {
     expect(deriveInitials("Hans Meister")).toBe("HM");
     expect(deriveInitials("Max Karl Kreile")).toBe("MK");
     expect(deriveInitials("Christian")).toBe("C");
@@ -35,244 +129,164 @@ describe("deriveInitials()", () => {
   });
 });
 
-describe("PermissionsProvider Bootstrap & central resolveAuthorization Protection", () => {
+describe("PermissionsProvider identity snapshot", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    navigation.pathname = "/";
     localStorage.clear();
-    
-    // Default mock response for the single action call
-    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
-      ok: true,
-      data: {
-        userId: "user-1",
-        tenantId: "galvanik-kreile",
-        displayName: "Hans Meister",
-        role: "buero",
-        permissions: ["perm_view_leitstand"],
-        active: true,
-      }
-    } as AuthorizationResult);
+    vi.clearAllMocks();
+    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue(mkSnapshot);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  const TestComponent = () => {
-    const { status, initials, name, role, permissions, error } = usePermissions();
+  it("uebernimmt den serverseitigen Snapshot statt die beim Layout-Mount eingefrorene Identitaet", async () => {
+    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue(adminSnapshot);
 
-    return (
-      <div>
-        <span data-testid="status">{status}</span>
-        <span data-testid="initials">{initials}</span>
-        <span data-testid="name">{name}</span>
-        <span data-testid="role">{role}</span>
-        <span data-testid="permissions">{permissions.join(",")}</span>
-        <span data-testid="error">{error || "no-error"}</span>
-      </div>
-    );
-  };
+    render(<Provider />);
 
-  it("T-01: Sessionidentität bleibt stabil", async () => {
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Christian Dieter",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
-
-    // Client action returns different name, but context must NOT update name or initials
-    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
-      ok: true,
-      data: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Anderer Benutzer",
-        permissions: ["perm_view_leitstand"],
-        active: true,
-      }
-    } as AuthorizationResult);
-
-    await act(async () => {
-      render(
-        <PermissionsProvider initialAuthState={initialState}>
-          <TestComponent />
-        </PermissionsProvider>
-      );
-    });
-
-    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
-    expect(screen.getByTestId("initials").textContent).toBe("CD");
-    expect(screen.getByTestId("role").textContent).toBe("buero");
-    expect(screen.getByTestId("status").textContent).toBe("authenticated");
+    await expectIdentity(adminSnapshot as Extract<AuthorizationResult, { ok: true }>);
   });
 
-  it("T-02: Passende Rolle", async () => {
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Christian Dieter",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
+  it("wechselt im selben Provider MK -> Admin -> MK ohne alte Rollen, Rechte oder Initialen", async () => {
+    vi.mocked(getAuthorizationSnapshotAction)
+      .mockResolvedValueOnce(mkSnapshot)
+      .mockResolvedValueOnce(adminSnapshot)
+      .mockResolvedValueOnce(mkSnapshot);
 
-    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
-      ok: true,
-      data: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Christian Dieter",
-        permissions: ["perm_view_leitstand"],
-        active: true,
-      }
-    } as AuthorizationResult);
+    render(<Provider />);
+    await expectIdentity(mkSnapshot as Extract<AuthorizationResult, { ok: true }>);
 
-    await act(async () => {
-      render(
-        <PermissionsProvider initialAuthState={initialState}>
-          <TestComponent />
-        </PermissionsProvider>
-      );
-    });
+    fireEvent.click(screen.getByTestId("refresh"));
+    await expectIdentity(adminSnapshot as Extract<AuthorizationResult, { ok: true }>);
 
-    expect(screen.getByTestId("status").textContent).toBe("authenticated");
-    expect(screen.getByTestId("role").textContent).toBe("buero");
-    expect(screen.getByTestId("permissions").textContent).toBe("perm_view_leitstand");
+    fireEvent.click(screen.getByTestId("refresh"));
+    await expectIdentity(mkSnapshot as Extract<AuthorizationResult, { ok: true }>);
   });
 
-  it("T-03: Rollenwiderspruch", async () => {
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Christian Dieter",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
+  it("leert bei einer ungueltigen Sitzung den kompletten Snapshot und nur alte Identity-Storage-Schluessel", async () => {
+    vi.mocked(getAuthorizationSnapshotAction)
+      .mockResolvedValueOnce(mkSnapshot)
+      .mockResolvedValueOnce({
+        ok: false,
+        reason: "INVALID_SESSION",
+        message: "AUTH_ERROR: Sitzung abgelaufen",
+      });
 
-    // DB role differs (e.g. resolveAuthorization returns ROLE_MISMATCH error)
-    vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
-      ok: false,
-      reason: "ROLE_MISMATCH",
-      message: "AUTH_ERROR: Sitzung veraltet",
+    render(<Provider />);
+    await expectIdentity(mkSnapshot as Extract<AuthorizationResult, { ok: true }>);
+
+    localStorage.setItem("kreile_user_role", "werkstatt");
+    localStorage.setItem("kreile_user_initials", "MK");
+    localStorage.setItem("unrelated-preference", "kept");
+
+    fireEvent.click(screen.getByTestId("refresh"));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("error");
+      expect(screen.getByTestId("user-id").textContent).toBe("");
+      expect(screen.getByTestId("tenant-id").textContent).toBe("");
+      expect(screen.getByTestId("active").textContent).toBe("false");
+      expect(screen.getByTestId("name").textContent).toBe("");
+      expect(screen.getByTestId("initials").textContent).toBe("");
+      expect(screen.getByTestId("role").textContent).toBe("");
+      expect(screen.getByTestId("permissions").textContent).toBe("");
+      expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Sitzung abgelaufen");
     });
 
-    await act(async () => {
-      render(
-        <PermissionsProvider initialAuthState={initialState}>
-          <TestComponent />
-        </PermissionsProvider>
-      );
-    });
-
-    expect(getAuthorizationSnapshotAction).toHaveBeenCalledTimes(1);
-
-    expect(screen.getByTestId("role").textContent).toBe("buero");
-    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
-    expect(screen.getByTestId("initials").textContent).toBe("CD");
-    expect(screen.getByTestId("permissions").textContent).toBe(""); // Discarded
-    expect(screen.getByTestId("status").textContent).toBe("error");
-    expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Sitzung veraltet");
+    expect(localStorage.getItem("kreile_user_role")).toBeNull();
+    expect(localStorage.getItem("kreile_user_initials")).toBeNull();
+    expect(localStorage.getItem("unrelated-preference")).toBe("kept");
   });
 
-  it("T-04: Permission-Fehler", async () => {
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Christian Dieter",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
+  it("behandelt eine fehlende Sitzung als unauthenticated, nicht als Restidentitaet", async () => {
+    vi.mocked(getAuthorizationSnapshotAction)
+      .mockResolvedValueOnce(mkSnapshot)
+      .mockResolvedValueOnce({
+        ok: false,
+        reason: "NO_SESSION",
+        message: "AUTH_ERROR: Nicht angemeldet",
+      });
 
-    vi.mocked(getAuthorizationSnapshotAction).mockRejectedValue(new Error("Network Failure"));
+    render(<Provider />);
+    await expectIdentity(mkSnapshot as Extract<AuthorizationResult, { ok: true }>);
 
-    await act(async () => {
-      render(
-        <PermissionsProvider initialAuthState={initialState}>
-          <TestComponent />
-        </PermissionsProvider>
-      );
-    });
+    fireEvent.click(screen.getByTestId("refresh"));
 
-    expect(screen.getByTestId("role").textContent).toBe("buero");
-    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
-    expect(screen.getByTestId("initials").textContent).toBe("CD");
-    expect(screen.getByTestId("status").textContent).toBe("error");
-    expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Berechtigungen nicht verfügbar");
-  });
-
-  it("T-05: Kein Local Storage", async () => {
-    const spyGet = vi.spyOn(Storage.prototype, "getItem");
-    const spySet = vi.spyOn(Storage.prototype, "setItem");
-
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "buero",
-        displayName: "Christian Dieter",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
-
-    await act(async () => {
-      render(
-        <PermissionsProvider initialAuthState={initialState}>
-          <TestComponent />
-        </PermissionsProvider>
-      );
-    });
-
-    spyGet.mock.calls.forEach(call => {
-      expect(call[0]).not.toMatch(/role|initial|user/);
-    });
-    spySet.mock.calls.forEach(call => {
-      expect(call[0]).not.toMatch(/role|initial|user/);
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("unauthenticated");
+      expect(screen.getByTestId("error").textContent).toBe("no-error");
+      expect(screen.getByTestId("role").textContent).toBe("");
+      expect(screen.getByTestId("permissions").textContent).toBe("");
     });
   });
 
-  it("4. Provider übernimmt initialAuthState ohne nachträgliches Local-Storage-Überschreiben", () => {
-    const initialState: AuthBootstrapState = {
-      status: "authenticated",
-      session: {
-        userId: "1",
-        tenantId: "t1",
-        role: "admin",
-        displayName: "Peter Pan",
-        issuedAt: 0,
-        expiresAt: 0,
-      }
-    };
+  it("verwirft eine spaete Antwort des vorherigen Benutzers", async () => {
+    let resolveStaleSnapshot: ((value: AuthorizationResult) => void) | undefined;
+    const staleSnapshot = new Promise<AuthorizationResult>((resolve) => {
+      resolveStaleSnapshot = resolve;
+    });
 
-    render(
-      <PermissionsProvider initialAuthState={initialState}>
-        <TestComponent />
-      </PermissionsProvider>
-    );
+    vi.mocked(getAuthorizationSnapshotAction)
+      .mockResolvedValueOnce(mkSnapshot)
+      .mockReturnValueOnce(staleSnapshot)
+      .mockResolvedValueOnce(adminSnapshot);
 
-    expect(screen.getByTestId("status").textContent).toBe("authenticated");
-    expect(screen.getByTestId("name").textContent).toBe("Peter Pan");
-    expect(screen.getByTestId("initials").textContent).toBe("PP");
-    expect(screen.getByTestId("role").textContent).toBe("admin");
+    render(<Provider />);
+    await expectIdentity(mkSnapshot as Extract<AuthorizationResult, { ok: true }>);
+
+    fireEvent.click(screen.getByTestId("refresh"));
+    fireEvent.click(screen.getByTestId("refresh"));
+    await expectIdentity(adminSnapshot as Extract<AuthorizationResult, { ok: true }>);
+
+    await act(async () => {
+      resolveStaleSnapshot?.(mkSnapshot);
+      await staleSnapshot;
+    });
+
+    await expectIdentity(adminSnapshot as Extract<AuthorizationResult, { ok: true }>);
+  });
+
+  it("aktualisiert denselben erhaltenen Layout-Provider beim Start-Login-Wechsel", async () => {
+    vi.mocked(getAuthorizationSnapshotAction)
+      .mockResolvedValueOnce(mkSnapshot)
+      .mockResolvedValueOnce({
+        ok: false,
+        reason: "NO_SESSION",
+        message: "AUTH_ERROR: Nicht angemeldet",
+      })
+      .mockResolvedValueOnce(adminSnapshot);
+
+    const { rerender } = render(<Provider />);
+    await expectIdentity(mkSnapshot as Extract<AuthorizationResult, { ok: true }>);
+
+    localStorage.setItem("kreile_user_role", "werkstatt");
+    localStorage.setItem("kreile_user_initials", "MK");
+    navigation.pathname = "/start";
+    rerender(<Provider />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("status").textContent).toBe("unauthenticated");
+      expect(screen.getByTestId("role").textContent).toBe("");
+    });
+    expect(localStorage.getItem("kreile_user_role")).toBeNull();
+    expect(localStorage.getItem("kreile_user_initials")).toBeNull();
+
+    navigation.pathname = "/";
+    rerender(<Provider />);
+
+    await expectIdentity(adminSnapshot as Extract<AuthorizationResult, { ok: true }>);
+  });
+
+  it("liest oder schreibt keine Identitaet in localStorage", async () => {
+    const getItem = vi.spyOn(Storage.prototype, "getItem");
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+
+    render(<Provider />);
+    await expectIdentity(mkSnapshot as Extract<AuthorizationResult, { ok: true }>);
+
+    expect(getItem).not.toHaveBeenCalled();
+    expect(setItem).not.toHaveBeenCalled();
   });
 });
