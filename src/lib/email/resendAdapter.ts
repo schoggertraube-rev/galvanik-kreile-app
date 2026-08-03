@@ -1,6 +1,19 @@
 import { supabase } from "@/lib/supabase/client";
 import { EmailProvider, EmailProviderOptions } from "./emailProvider";
 
+function getErrorMessage(error: unknown): string | undefined {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const { message } = error as { message?: unknown };
+    return typeof message === "string" ? message : undefined;
+  }
+
+  return undefined;
+}
+
 export class ResendAdapter implements EmailProvider {
   async send(opts: EmailProviderOptions): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
@@ -14,9 +27,9 @@ export class ResendAdapter implements EmailProvider {
       }
 
       return { success: data.success, messageId: data.messageId, error: data.error };
-    } catch (e: any) {
-      console.error("ResendAdapter Exception:", e);
-      return { success: false, error: e.message };
+    } catch (error: unknown) {
+      console.error("ResendAdapter Exception:", error);
+      return { success: false, error: getErrorMessage(error) };
     }
   }
 

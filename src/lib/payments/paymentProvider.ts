@@ -3,8 +3,16 @@ export interface PaymentIntentOptions {
   description: string;
   orderId: string;
   customerId?: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, PaymentMetadataValue>;
 }
+
+export type PaymentMetadataValue =
+  | string
+  | number
+  | boolean
+  | null
+  | PaymentMetadataValue[]
+  | { [key: string]: PaymentMetadataValue };
 
 export interface PaymentProvider {
   createPaymentIntent(opts: PaymentIntentOptions): Promise<{ success: boolean; checkoutUrl?: string; intentId?: string; error?: string }>;

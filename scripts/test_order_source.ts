@@ -8,7 +8,9 @@ async function runTests() {
   let passed = 0;
   let failed = 0;
 
-  const runTest = async (name: string, payload: any, expectedError: boolean, expectedSourceVal?: string) => {
+  type SourceTestPayload = { source?: string | null };
+
+  const runTest = async (name: string, payload: SourceTestPayload, expectedError: boolean, expectedSourceVal?: string) => {
     const result = await createOrderFromErfassung({
       customerId: "test-customer",
       title: "Test Auftrag",

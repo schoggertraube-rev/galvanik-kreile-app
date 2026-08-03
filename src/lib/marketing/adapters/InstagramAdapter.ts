@@ -5,6 +5,19 @@
 
 import type { AktionVorschlag } from "../marketingTypes";
 
+function getErrorMessage(error: unknown): string | undefined {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const { message } = error as { message?: unknown };
+    return typeof message === "string" ? message : undefined;
+  }
+
+  return undefined;
+}
+
 export interface ChannelAdapter {
   id: string;
   isConnected(): Promise<boolean>;
@@ -99,9 +112,9 @@ export class InstagramAdapter implements ChannelAdapter {
         touchpointId: publishData.id
       };
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Instagram API Error:", err);
-      return { success: false, message: `Instagram API Fehler: ${err.message}` };
+      return { success: false, message: `Instagram API Fehler: ${getErrorMessage(err) ?? "undefined"}` };
     }
   }
 }

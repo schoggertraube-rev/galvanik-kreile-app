@@ -1,6 +1,8 @@
 import { getOperationalOrders } from "../src/lib/server/operationalOrders";
 
-function classify(order: any): string {
+type OperationalOrder = Awaited<ReturnType<typeof getOperationalOrders>>[number];
+
+function classify(order: Pick<OperationalOrder, "title" | "customerName" | "orderNumber">): string {
   const title = (order.title || "").toLowerCase();
   const customer = (order.customerName || "").toLowerCase();
   const number = (order.orderNumber || "").toLowerCase();
@@ -17,7 +19,7 @@ function classify(order: any): string {
     orderNumber: o.orderNumber,
     title: o.title,
     customerName: o.customerName,
-    source: (o as any).source,
+    source: undefined,
     createdAt: o.createdAt,
     currentStationId: o.currentStationId,
     status: o.status,

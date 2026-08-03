@@ -76,7 +76,7 @@ async function _fetchAndMap() {
       title: o.title,
       task: o.task,
       itemDescription: o.task || (orderParts.length > 0 ? orderParts[0].name : null),
-      surfaceRequested: orderParts.length > 0 ? (orderParts[0] as any).surfaceRequested || (orderParts[0] as any).finish || null : null,
+      surfaceRequested: orderParts.length > 0 ? orderParts[0].surfaceRequested || null : null,
       station: o.currentStationId || "wareneingang",
       status: o.status,
       risk: o.risk || "green",
@@ -187,7 +187,7 @@ export async function createOperationalOrderService(data: Record<string, unknown
         name: p.name,
         quantity: typeof p.quantity === "number" ? p.quantity : parseInt(p.quantity as string) || 1,
         currentStationId: stationId,
-        surfaceRequested: (p as any).surfaceRequested || (p as any).surface || (p as any).finish || (p as any).verfahren || null,
+        surfaceRequested: p.surfaceRequested || null,
       }));
       await tx.insert(items).values(newItems);
     }

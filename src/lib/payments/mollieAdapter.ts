@@ -1,6 +1,19 @@
 import { supabase } from "@/lib/supabase/client";
 import { PaymentProvider, PaymentIntentOptions } from "./paymentProvider";
 
+function getErrorMessage(error: unknown): string | undefined {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const { message } = error as { message?: unknown };
+    return typeof message === "string" ? message : undefined;
+  }
+
+  return undefined;
+}
+
 export class MollieAdapter implements PaymentProvider {
   async createPaymentIntent(opts: PaymentIntentOptions): Promise<{ success: boolean; checkoutUrl?: string; intentId?: string; error?: string }> {
     try {
@@ -14,9 +27,9 @@ export class MollieAdapter implements PaymentProvider {
       }
 
       return { success: data.success, checkoutUrl: data.checkoutUrl, intentId: data.intentId, error: data.error };
-    } catch (e: any) {
-      console.error("MollieAdapter Exception:", e);
-      return { success: false, error: e.message };
+    } catch (error: unknown) {
+      console.error("MollieAdapter Exception:", error);
+      return { success: false, error: getErrorMessage(error) };
     }
   }
 
@@ -30,8 +43,8 @@ export class MollieAdapter implements PaymentProvider {
 
       if (error) return { success: false, error: error.message };
       return { success: true, status: data.status };
-    } catch (e: any) {
-      return { success: false, error: e.message };
+    } catch (error: unknown) {
+      return { success: false, error: getErrorMessage(error) };
     }
   }
 
@@ -40,6 +53,7 @@ export class MollieAdapter implements PaymentProvider {
   }
 
   async cancelPayment(intentId: string): Promise<{ success: boolean; error?: string }> {
+    void intentId;
     // Basic implementation
     return { success: false, error: "Not implemented in MVP" };
   }
