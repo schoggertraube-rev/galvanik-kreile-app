@@ -3,6 +3,36 @@
 import { createClient } from '@/lib/supabase/server';
 import type { KontextDaten } from '@/lib/whatif/engine';
 
+export interface EngpassStation {
+  kostenstelle_id: string;
+  kuerzel: string;
+  name: string;
+  auslastung_quote: number | null;
+  engpass_score: number | null;
+  warteschlange_aktuell: number | null;
+}
+
+export interface WaitingOrder {
+  id: string;
+  order_number: string;
+  intake_date: string | null;
+  current_station: string | null;
+}
+
+export interface EngpassDetails {
+  waitingOrders: WaitingOrder[];
+}
+
+export interface ActiveWarning {
+  id: string;
+  typ: string;
+  titel: string;
+  beschreibung: string;
+  schwere: string;
+  link: string | null;
+  erzeugt_am: string | null;
+}
+
 export async function getCockpitKpis() {
   const supabase = await createClient();
   
@@ -102,7 +132,7 @@ export async function getInaktiveKunden() {
   return data || [];
 }
 
-export async function getEngpassDaten() {
+export async function getEngpassDaten(): Promise<EngpassStation[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_engpass')
@@ -258,7 +288,7 @@ export async function getWhatIfKontext(): Promise<KontextDaten> {
   return kontext;
 }
 
-export async function getEngpassDetails(station: string) {
+export async function getEngpassDetails(station: string): Promise<EngpassDetails> {
   const supabase = await createClient();
   
   const { data: waitingOrders } = await supabase.from('orders')
@@ -349,7 +379,7 @@ export async function getAgingRechnungen(bucket: string) {
   return data || [];
 }
 
-export async function getAktiveWarnungen() {
+export async function getAktiveWarnungen(): Promise<ActiveWarning[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('warning_event')

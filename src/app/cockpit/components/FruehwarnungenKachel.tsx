@@ -2,12 +2,30 @@
 
 import { useState, useEffect } from "react";
 import { AlertCircle, CheckCircle2, ArrowRight, Loader2, X } from "lucide-react";
-import { getAktiveWarnungen, refreshWarnungen, dismissWarnung } from "../actions";
+import {
+  getAktiveWarnungen,
+  refreshWarnungen,
+  dismissWarnung,
+  type ActiveWarning,
+} from "../actions";
 import Link from "next/link";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 
+function getErrorWithMessage(error: unknown): { message?: string } {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return { message: error.message };
+  }
+
+  return {};
+}
+
 export function FruehwarnungenKachel() {
-  const [warnungen, setWarnungen] = useState<any[]>([]);
+  const [warnungen, setWarnungen] = useState<ActiveWarning[]>([]);
   const [loading, setLoading] = useState(true);
   const [dismissModalOpen, setDismissModalOpen] = useState(false);
   const [selectedWarnungId, setSelectedWarnungId] = useState<string | null>(null);
@@ -25,7 +43,12 @@ export function FruehwarnungenKachel() {
   };
 
   useEffect(() => {
-    loadData();
+    void refreshWarnungen()
+      .then(getAktiveWarnungen)
+      .then(data => {
+        setWarnungen(data);
+        setLoading(false);
+      });
   }, []);
 
   const handleDismissClick = (id: string) => {
@@ -50,7 +73,8 @@ export function FruehwarnungenKachel() {
       await dismissWarnung(selectedWarnungId, begruendung);
       setDismissModalOpen(false);
       await loadData();
-    } catch (err: any) {
+    } catch (caught: unknown) {
+      const err = getErrorWithMessage(caught);
       setError(err.message || "Fehler beim Bestätigen.");
     } finally {
       setSubmitting(false);
@@ -159,7 +183,7 @@ export function FruehwarnungenKachel() {
   );
 }
 
-function WarnungCard({ warnung, onDismiss }: { warnung: any, onDismiss: () => void }) {
+function WarnungCard({ warnung, onDismiss }: { warnung: ActiveWarning; onDismiss: () => void }) {
   let bgColor = 'bg-blue-50 border-blue-200';
   let dotColor = 'bg-blue-500';
   
@@ -179,7 +203,7 @@ function WarnungCard({ warnung, onDismiss }: { warnung: any, onDismiss: () => vo
           <h4 className="font-bold text-navy-900 text-sm">{warnung.titel}</h4>
         </div>
         <span className="text-xs text-neutral-gray-500 whitespace-nowrap">
-          {new Date(warnung.erzeugt_am).toLocaleDateString('de-DE')}
+          {new Date(warnung.erzeugt_am ?? 0).toLocaleDateString('de-DE')}
         </span>
       </div>
       
