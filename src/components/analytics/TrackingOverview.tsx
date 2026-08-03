@@ -5,8 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity } from "lucide-react";
 import { getRecentUiEvents } from "@/app/actions/tracking.actions";
 
+type UiEvent = Awaited<ReturnType<typeof getRecentUiEvents>>[number];
+
 export function TrackingOverview() {
-  const [events, setEvents] = useState<any[]>([]);
+  const [events, setEvents] = useState<UiEvent[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

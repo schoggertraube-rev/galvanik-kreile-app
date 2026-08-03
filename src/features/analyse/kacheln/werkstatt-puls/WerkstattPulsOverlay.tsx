@@ -13,8 +13,11 @@ interface WerkstattPulsOverlayProps {
   data: WerkstattPulsData;
 }
 
+const periodTabs = ['Tag', 'Woche', 'Monat', 'Quartal'] as const;
+type PeriodTab = (typeof periodTabs)[number];
+
 export const WerkstattPulsOverlay: React.FC<WerkstattPulsOverlayProps> = ({ isOpen, onClose, data }) => {
-  const [activeTab, setActiveTab] = useState<'Tag' | 'Woche' | 'Monat' | 'Quartal'>('Woche');
+  const [activeTab, setActiveTab] = useState<PeriodTab>('Woche');
   
   const { termintreue, durchlauf, stationen, engpass, wochenziel, snapshotTrend } = data;
 
@@ -42,10 +45,10 @@ export const WerkstattPulsOverlay: React.FC<WerkstattPulsOverlayProps> = ({ isOp
     <OverlayShell isOpen={isOpen} onClose={onClose} title="Werkstatt-Puls">
       {/* Tabs */}
       <div className="flex border-b border-gray-200 mb-6">
-        {['Tag', 'Woche', 'Monat', 'Quartal'].map(tab => (
+        {periodTabs.map(tab => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab as any)}
+            onClick={() => setActiveTab(tab)}
             className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab 
                 ? 'border-blue-600 text-blue-600' 
