@@ -22,9 +22,6 @@ function WarendurchlaufLeitstandContent() {
   const router = useRouter();
   const { openErfassung } = useErfassung();
   const { openOrder } = useOverlayStore();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
   const [orders, setOrders] = useState<any[]>([]);
   const [stationOrders, setStationOrders] = useState<any[]>([]);
   const [todos, setTodos] = useState<{ id: number; title: string; subtitle: string; tags: string[]; action: string; priority?: string; live?: boolean; targetHref?: string; done: boolean }[]>([]);
