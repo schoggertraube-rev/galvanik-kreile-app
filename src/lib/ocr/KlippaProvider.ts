@@ -26,7 +26,7 @@ export class KlippaProvider implements OcrProvider {
 
       const data = await response.json();
       return this.mapKlippaToOcrErgebnis(data);
-    } catch (e: any) {
+    } catch (e) {
       console.error("Klippa OCR Failed:", e);
       throw e;
     }

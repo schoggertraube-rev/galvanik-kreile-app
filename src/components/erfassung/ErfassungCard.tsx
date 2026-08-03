@@ -9,6 +9,15 @@ import { Button } from "@/components/ui/button";
 import { ErfassungSheet } from "./ErfassungSheet";
 import { Clock, Box } from "lucide-react";
 
+type TimeBooking = {
+  station_kuerzel: string;
+  dauer_minuten: number | null;
+};
+
+type ConsumptionBooking = {
+  station_kuerzel: string;
+};
+
 interface ErfassungCardProps {
   orderId: string;
   tenantId?: string;
@@ -17,8 +26,8 @@ interface ErfassungCardProps {
 export function ErfassungCard({ orderId, tenantId = 'galvanik-kreile' }: ErfassungCardProps) {
   void tenantId;
   const [vorlage, setVorlage] = useState<VorlageResult | null>(null);
-  const [zeitBuchungen, setZeitBuchungen] = useState<any[]>([]);
-  const [verbrauchBuchungen, setVerbrauchBuchungen] = useState<any[]>([]);
+  const [zeitBuchungen, setZeitBuchungen] = useState<TimeBooking[]>([]);
+  const [verbrauchBuchungen, setVerbrauchBuchungen] = useState<ConsumptionBooking[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [employeeId, setEmployeeId] = useState<string>('');
   
