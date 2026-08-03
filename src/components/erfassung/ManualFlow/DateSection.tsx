@@ -4,8 +4,34 @@ import { Truck, PackageSearch, PackageOpen } from "lucide-react";
 import { useState } from "react";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 
-export function DateSection({ dateInfo, onChange, customer }: { dateInfo: any, onChange: (info: any) => void, customer?: any }) {
-  const handleChange = (field: string, value: any) => {
+type ManualCustomer = Record<string, unknown> & {
+  id?: string;
+  isNew?: boolean;
+  name?: string;
+  companyName?: string | null;
+  company?: string | null;
+  customerNumber?: string | null;
+  city?: string | null;
+  ordersCount?: number;
+  street?: string | null;
+  address?: string | null;
+  zipCode?: string | null;
+  postalCode?: string | null;
+  postal_code?: string | null;
+};
+
+type ManualDateInfo = Record<string, unknown> & {
+  priority?: string;
+  dueDate?: string;
+  timeWindow?: string;
+  calendarSync?: boolean;
+  shipping?: string;
+};
+
+type DateField = "dueDate" | "timeWindow" | "calendarSync" | "shipping";
+
+export function DateSection({ dateInfo, onChange, customer }: { dateInfo: ManualDateInfo, onChange: (info: ManualDateInfo) => void, customer?: ManualCustomer | null }) {
+  const handleChange = <Field extends DateField>(field: Field, value: ManualDateInfo[Field]) => {
     onChange({ ...dateInfo, [field]: value });
   };
 
