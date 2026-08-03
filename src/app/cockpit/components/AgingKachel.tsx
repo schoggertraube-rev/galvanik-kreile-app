@@ -37,6 +37,22 @@ const LABELS: Record<string, string> = {
   '>90': '> 90 Tage'
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function getRecordField(value: unknown, field: string): unknown {
+  return isRecord(value) ? value[field] : undefined;
+}
+
+function getAgingBucket(dataPayload: unknown): string | null {
+  if (!isRecord(dataPayload)) return null;
+  const nestedBucket = getRecordField(dataPayload.payload, "bucketId");
+  if (typeof nestedBucket === "string") return nestedBucket;
+  const bucket = dataPayload.bucketId;
+  return typeof bucket === "string" ? bucket : null;
+}
+
 export function AgingKachel() {
   const [data, setData] = useState<AgingData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,8 +79,8 @@ export function AgingKachel() {
     load();
   }, []);
 
-  const handleBarClick = async (dataPayload: any) => {
-    const bucket = dataPayload?.payload?.bucketId || dataPayload?.bucketId;
+  const handleBarClick = async (dataPayload: unknown) => {
+    const bucket = getAgingBucket(dataPayload);
     if (!bucket) return;
     
     setSelectedBucket(bucket);
@@ -188,7 +204,7 @@ export function AgingKachel() {
                     <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} />
                     <YAxis tickFormatter={(val) => `€${(val / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
                     <Tooltip 
-                      formatter={(value: any, name: any, props: any) => [`€ ${Number(value).toLocaleString('de-DE')}`, `Summe (${props.payload.anzahl} Rechnungen)`]}
+                      formatter={(value, _name, props) => [`€ ${Number(value).toLocaleString('de-DE')}`, `Summe (${String(getRecordField(props.payload, "anzahl"))} Rechnungen)`]}
                       cursor={{ fill: 'transparent' }}
                     />
                     <Bar dataKey="value" radius={[4, 4, 0, 0]} onClick={handleBarClick}>
