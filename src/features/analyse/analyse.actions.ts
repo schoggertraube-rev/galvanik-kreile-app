@@ -17,8 +17,6 @@ async function getWerkstattPulsSummary(supabase: any, period: string): Promise<A
   
   // Wochenziel
   const wochenzielIst = w?.fertig_diese_woche ?? 0;
-  const wochenzielSoll = null;
-  const wochenzielPct = 0;
 
   // Status-Logik
   let status: AnalyseTileStatus = "data_missing";
@@ -80,6 +78,7 @@ async function getWerkstattPulsSummary(supabase: any, period: string): Promise<A
 }
 
 export async function getAnalyseOverview(period: string, filters?: any): Promise<{ data: AnalyseTileSummary[], error?: any }> {
+  void filters;
   try {
     await checkAppAuth();
     const supabase = await createClient();
@@ -371,6 +370,7 @@ export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: stri
 }
 
 export async function getAnalyseLinkedEntities(tileKey: AnalyseTileKey, filters?: any): Promise<{ data: AnalyseEntityLink[], error?: any }> {
+  void filters;
   try {
     await checkAppAuth();
     

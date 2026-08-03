@@ -17,7 +17,7 @@ export const WerkstattPulsTile: React.FC = () => {
     return <div className="h-48 bg-red-50 text-red-500 rounded-xl p-6">Fehler beim Laden der Daten.</div>;
   }
 
-  const { termintreue, durchlauf, wochenziel, engpass, snapshotTrend } = data;
+  const { termintreue, durchlauf, wochenziel, snapshotTrend } = data;
 
   const wochenzielSoll = 25; // TODO: configurable
   const wochenzielIst = wochenziel.fertig_diese_woche;
