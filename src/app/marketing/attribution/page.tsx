@@ -6,8 +6,10 @@ import { useEffect, useState } from "react";
 import { getAttributionData } from "./actions";
 import { Activity, ArrowUpRight, TrendingUp, DollarSign } from "lucide-react";
 
+type AttributionData = Awaited<ReturnType<typeof getAttributionData>>[number];
+
 export default function AttributionPage() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<AttributionData[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

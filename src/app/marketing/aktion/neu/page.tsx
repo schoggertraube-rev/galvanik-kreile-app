@@ -8,11 +8,14 @@ import { createAktion } from "../actions";
 import { getKanaele } from "../../kanaele/actions";
 import { getSegments } from "../../segmente/actions";
 
+type Kanal = Awaited<ReturnType<typeof getKanaele>>[number];
+type Segment = Awaited<ReturnType<typeof getSegments>>[number];
+
 export default function NeueAktionPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [kanaele, setKanaele] = useState<any[]>([]);
-  const [segmente, setSegmente] = useState<any[]>([]);
+  const [kanaele, setKanaele] = useState<Kanal[]>([]);
+  const [segmente, setSegmente] = useState<Segment[]>([]);
   const [inhalt, setInhalt] = useState("");
 
   useEffect(() => {
