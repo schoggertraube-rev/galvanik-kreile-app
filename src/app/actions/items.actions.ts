@@ -3,10 +3,26 @@
 import { db } from "@/db";
 import { items, orders } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
+import type { InferInsertModel } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 
 export type ItemResponse = Record<string, unknown>;
+
+export type ItemMutationPayload = {
+  id?: string;
+  orderId?: string;
+  name?: string;
+  quantity?: number | string;
+  material?: string | null;
+  surfaceRequested?: string | null;
+  photoIds?: string[];
+  photo?: string | null;
+  currentStationId?: string | null;
+  [key: string]: unknown;
+};
+
+type DbItemInsert = InferInsertModel<typeof items>;
 
 export async function getItemsDb(): Promise<ActionResult<ItemResponse[]>> {
   const auth = await checkAppAuth();
@@ -66,14 +82,16 @@ export async function getItemsByOrderDb(orderId: string): Promise<ActionResult<I
   }
 }
 
-export async function createItemDb(data: any): Promise<ActionResult<ItemResponse>> {
+export async function createItemDb(data: ItemMutationPayload): Promise<ActionResult<ItemResponse>> {
   const auth = await checkAppAuth("write");
   if (!auth.ok) return auth;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
-    const orderData = await db.select({ customerId: orders.customerId }).from(orders).where(eq(orders.id, data.orderId)).limit(1);
+    const orderId = data.orderId as string;
+    const name = data.name as string;
+    const orderData = await db.select({ customerId: orders.customerId }).from(orders).where(eq(orders.id, orderId)).limit(1);
     
     if (orderData.length === 0) {
       return { ok: false, error: "EMPTY_RESULT", message: "Auftrag nicht gefunden" };
@@ -85,16 +103,16 @@ export async function createItemDb(data: any): Promise<ActionResult<ItemResponse
     const newItem = {
       id,
       tenantId: "galvanik-kreile",
-      orderId: data.orderId,
+      orderId,
       customerId,
-      name: data.name,
-      quantity: typeof data.quantity === "number" ? data.quantity : parseInt(data.quantity) || 1,
+      name,
+      quantity: typeof data.quantity === "number" ? data.quantity : parseInt(data.quantity || "") || 1,
       material: data.material || null,
       surfaceRequested: data.surfaceRequested || null,
       photoIds: data.photoIds || [],
       photo: data.photo || null,
       currentStationId: data.currentStationId || "wareneingang"
-    };
+    } as DbItemInsert;
     
     await db.insert(items).values(newItem);
     
@@ -102,8 +120,8 @@ export async function createItemDb(data: any): Promise<ActionResult<ItemResponse
       ok: true,
       data: {
         id,
-        orderId: data.orderId,
-        name: data.name,
+        orderId,
+        name,
         quantity: data.quantity,
         material: data.material || undefined,
         surfaceRequested: data.surfaceRequested || undefined,
@@ -117,16 +135,16 @@ export async function createItemDb(data: any): Promise<ActionResult<ItemResponse
   }
 }
 
-export async function updateItemDb(id: string, changes: any): Promise<ActionResult<ItemResponse>> {
+export async function updateItemDb(id: string, changes: ItemMutationPayload): Promise<ActionResult<ItemResponse>> {
   const auth = await checkAppAuth("write");
   if (!auth.ok) return auth;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
-    const updateData: any = {};
+    const updateData: Partial<DbItemInsert> = {};
     if (changes.name !== undefined) updateData.name = changes.name;
-    if (changes.quantity !== undefined) updateData.quantity = changes.quantity;
+    if (changes.quantity !== undefined) updateData.quantity = changes.quantity as DbItemInsert["quantity"];
     if (changes.material !== undefined) updateData.material = changes.material;
     if (changes.surfaceRequested !== undefined) updateData.surfaceRequested = changes.surfaceRequested;
     if (changes.photoIds !== undefined) updateData.photoIds = changes.photoIds;

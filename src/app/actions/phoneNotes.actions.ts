@@ -3,6 +3,19 @@
 import { db } from "@/db";
 import { phoneNotes } from "@/db/schema";
 import { desc } from "drizzle-orm";
+import type { InferInsertModel } from "drizzle-orm";
+
+type JsonObject = Record<string, unknown>;
+type PhoneNoteUpdate = Partial<InferInsertModel<typeof phoneNotes>>;
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = error.message;
+    if (typeof message === "string") return message;
+  }
+  return fallback;
+}
 
 export interface CreatePhoneNoteInput {
   rawText: string;
@@ -14,8 +27,8 @@ export interface CreatePhoneNoteInput {
   callerName?: string;
   company?: string;
   phone?: string;
-  extractionJson?: any;
-  linksJson?: any;
+  extractionJson?: JsonObject;
+  linksJson?: unknown[];
 }
 
 export async function createPhoneNote(input: CreatePhoneNoteInput) {
@@ -49,9 +62,10 @@ export async function createPhoneNote(input: CreatePhoneNoteInput) {
     }).returning();
 
     return { success: true, data: inserted[0] };
-  } catch (error: any) {
-    console.error("Failed to insert phone note:", error.message || error);
-    return { success: false, error: error.message || "Failed to save phone note" };
+  } catch (error: unknown) {
+    const message = getErrorMessage(error, "Failed to save phone note");
+    console.error("Failed to insert phone note:", message);
+    return { success: false, error: message };
   }
 }
 
@@ -76,7 +90,7 @@ export async function updatePhoneNote(id: string, input: Partial<CreatePhoneNote
   
   try {
 
-    const updateData: any = {};
+    const updateData: PhoneNoteUpdate = {};
     if (input.rawText) updateData.rawText = input.rawText;
     if (input.generatedAnswer !== undefined) updateData.generatedAnswer = input.generatedAnswer;
     if (input.category) updateData.category = input.category;
@@ -111,9 +125,9 @@ export async function updatePhoneNote(id: string, input: Partial<CreatePhoneNote
       .returning();
 
     return { success: true, data: updated[0] };
-  } catch (error: any) {
-    console.error("Failed to update phone note:", error.message || error);
-    return { success: false, error: error.message || "Failed to update phone note" };
+  } catch (error: unknown) {
+    const message = getErrorMessage(error, "Failed to update phone note");
+    console.error("Failed to update phone note:", message);
+    return { success: false, error: message };
   }
 }
-

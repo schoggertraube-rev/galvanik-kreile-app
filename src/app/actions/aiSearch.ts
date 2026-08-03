@@ -51,7 +51,7 @@ VERGLEICHS-KONTEXT (${context.comparisonZeitraum}):
     
     return JSON.parse(text);
 
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("AI Action Error:", err);
     
     // Use the specific error message if it's one of our custom errors

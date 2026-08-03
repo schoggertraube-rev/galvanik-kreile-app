@@ -3,10 +3,43 @@
 import { db } from "@/db";
 import { priceLines } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
+import type { InferInsertModel } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 
-export async function getPriceLinesDb(orderId: string, itemId?: string | null): Promise<ActionResult<any[]>> {
+type DbPriceLineInsert = InferInsertModel<typeof priceLines>;
+
+type PriceLineListItem = {
+  id: string;
+  positionText: string;
+  qty: number;
+  unitPriceEur: number;
+  unitTotalEur?: number;
+};
+
+type PriceLineMutationResult = {
+  id: string;
+  tenantId: string;
+  orderId: string;
+  itemId: string | null;
+  positionText: string;
+  qty?: number;
+  unitPriceEur: number;
+  unitTotalEur?: number;
+  sortOrder: number;
+};
+
+export type PriceLinePayload = {
+  order_id: string;
+  item_id?: string | null;
+  position_text: string;
+  qty?: number;
+  unit_price_eur: number;
+  unit_total_eur?: number;
+  sort_order?: number;
+};
+
+export async function getPriceLinesDb(orderId: string, itemId?: string | null): Promise<ActionResult<PriceLineListItem[]>> {
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
@@ -25,14 +58,14 @@ export async function getPriceLinesDb(orderId: string, itemId?: string | null): 
     }
     
     const data = await query;
-    return { ok: true, data };
+    return { ok: true, data: data as unknown as PriceLineListItem[] };
   } catch (error) {
     console.error("Failed to get price lines from DB:", error);
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Laden der Preise", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
   }
 }
 
-export async function createPriceLineDb(data: any): Promise<ActionResult<any>> {
+export async function createPriceLineDb(data: PriceLinePayload): Promise<ActionResult<PriceLineMutationResult>> {
   const auth = await checkAppAuth("write");
   if (!auth.ok) return auth;
 
@@ -40,38 +73,51 @@ export async function createPriceLineDb(data: any): Promise<ActionResult<any>> {
   
   try {
     const id = createId();
-    const newLine = {
+    const newLine: DbPriceLineInsert = {
       id,
       tenantId: "galvanik-kreile",
       orderId: data.order_id,
       itemId: data.item_id || null,
       positionText: data.position_text,
-      qty: data.qty,
-      unitPriceEur: data.unit_price_eur,
-      unitTotalEur: data.unit_total_eur,
+      qty: data.qty === undefined ? undefined : String(data.qty),
+      unitPriceEur: String(data.unit_price_eur),
+      unitTotalEur: data.unit_total_eur === undefined ? undefined : String(data.unit_total_eur),
       sortOrder: data.sort_order || 0
     };
     
     await db.insert(priceLines).values(newLine);
-    return { ok: true, data: newLine };
+    return {
+      ok: true,
+      data: {
+        id,
+        tenantId: "galvanik-kreile",
+        orderId: data.order_id,
+        itemId: data.item_id || null,
+        positionText: data.position_text,
+        qty: data.qty,
+        unitPriceEur: data.unit_price_eur,
+        unitTotalEur: data.unit_total_eur,
+        sortOrder: data.sort_order || 0,
+      },
+    };
   } catch (error) {
     console.error("Failed to create price line in DB:", error);
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Erstellen des Preises", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
   }
 }
 
-export async function updatePriceLineDb(id: string, data: any): Promise<ActionResult<any>> {
+export async function updatePriceLineDb(id: string, data: Partial<PriceLinePayload>): Promise<ActionResult<{ id: string }>> {
   const auth = await checkAppAuth("write");
   if (!auth.ok) return auth;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
-    const updateData: any = {};
+    const updateData: Partial<DbPriceLineInsert> = {};
     if (data.position_text !== undefined) updateData.positionText = data.position_text;
-    if (data.qty !== undefined) updateData.qty = data.qty;
-    if (data.unit_price_eur !== undefined) updateData.unitPriceEur = data.unit_price_eur;
-    if (data.unit_total_eur !== undefined) updateData.unitTotalEur = data.unit_total_eur;
+    if (data.qty !== undefined) updateData.qty = String(data.qty);
+    if (data.unit_price_eur !== undefined) updateData.unitPriceEur = String(data.unit_price_eur);
+    if (data.unit_total_eur !== undefined) updateData.unitTotalEur = String(data.unit_total_eur);
     if (data.sort_order !== undefined) updateData.sortOrder = data.sort_order;
     
     if (Object.keys(updateData).length > 0) {

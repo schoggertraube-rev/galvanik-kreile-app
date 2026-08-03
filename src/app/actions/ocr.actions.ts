@@ -14,6 +14,7 @@ export async function processImage(base64Image: string): Promise<OcrResult> {
 
 // DEPRECATED: ersetzt durch processImage
 export async function processImageWithAI(base64Image: string): Promise<OCRScan> {
+  void base64Image;
   console.warn("⚠️ processImageWithAI is deprecated, use processImage instead");
   return await ocrService.simulateScan("document");
 }

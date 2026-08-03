@@ -4,13 +4,14 @@ import { db } from "@/db";
 import { customers } from "@/db/schema";
 import { eq, ilike, or, and, sql } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
-import { InferSelectModel } from "drizzle-orm";
+import type { InferInsertModel, InferSelectModel } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { Customer } from "@/lib/types/customer";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization } from "@/lib/server/authorization";
 
 type DbCustomer = InferSelectModel<typeof customers>;
+type DbCustomerInsert = InferInsertModel<typeof customers>;
 
 function mapDbCustomer(c: DbCustomer): Customer {
   return {
@@ -172,9 +173,9 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
       notes: validData.notes || null,
     };
     
-    const newCustomerDb = sanitizeCustomerPayload(rawCustomerDb, false);
+    const newCustomerDb = sanitizeCustomerPayload(rawCustomerDb, false) as DbCustomerInsert;
     
-    await db.insert(customers).values(newCustomerDb as any);
+    await db.insert(customers).values(newCustomerDb);
     
     const dbCustomers = await db.select().from(customers).where(
       and(
@@ -226,11 +227,11 @@ export async function updateCustomerDb(id: string, changes: Partial<Customer>): 
     if (changes.tags !== undefined) rawUpdateData.tags = changes.tags;
     if (changes.creditRating !== undefined) rawUpdateData.creditRating = changes.creditRating;
     
-    const updateData = sanitizeCustomerPayload(rawUpdateData, true);
+    const updateData = sanitizeCustomerPayload(rawUpdateData, true) as Partial<DbCustomerInsert>;
     
     if (Object.keys(updateData).length > 0) {
       updateData.updatedAt = new Date();
-      await db.update(customers).set(updateData as any).where(eq(customers.id, id));
+      await db.update(customers).set(updateData).where(eq(customers.id, id));
     }
     
     return await getCustomerByIdDb(id);

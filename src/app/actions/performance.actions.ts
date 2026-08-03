@@ -5,6 +5,12 @@ import { orders, inquiries, uiEventsTable } from "@/db/schema";
 import { eq, inArray, notInArray, lt, and, gte, desc, count } from "drizzle-orm";
 import { startOfDay, subDays, startOfWeek, subWeeks } from "date-fns";
 
+type InquiryPricing = NonNullable<typeof inquiries.$inferSelect.pricing>;
+
+function getPayloadText(value: unknown, fallback: string): string {
+  return value ? String(value) : fallback;
+}
+
 export async function getOrdersKPIs() {
   const today = startOfDay(new Date());
   
@@ -119,7 +125,7 @@ export async function getInquiriesFunnel() {
    
    for (const inquiry of allPriced) {
       if (inquiry.pricing) {
-         const p = inquiry.pricing as any;
+         const p: InquiryPricing = inquiry.pricing;
          const sum = (p.grundarbeit || 0) + (p.reinigung || 0) + (p.entmetallisierung || 0) + 
                      (p.schleifaufwand || 0) + (p.badchemie || 0) + (p.risikopuffer || 0) + (p.marge || 0);
          if (sum > 0) {
@@ -188,8 +194,8 @@ export async function getUsageStats() {
 
    let lastActive = "Unbekannt";
    if (lastEvent.length > 0) {
-      const payload = lastEvent[0].payload as any;
-      const user = payload?.user || payload?.userId || "Ein Benutzer";
+       const payload = lastEvent[0].payload;
+       const user = getPayloadText(payload?.user, getPayloadText(payload?.userId, "Ein Benutzer"));
       const time = lastEvent[0].createdAt.toLocaleString('de-DE');
       lastActive = `${user} (${time})`;
    }

@@ -16,6 +16,10 @@ interface UiEventPayload {
   occurred_at?: string;
 }
 
+function getPayloadText(value: unknown, fallback: string): string {
+  return value ? String(value) : fallback;
+}
+
 export async function logUiEvent(event: UiEventPayload): Promise<void> {
   try {
     if (!db) return;
@@ -74,7 +78,7 @@ export async function getRealAnalyticsStats() {
   if (!db) return { topEvents: [], activityData: [], recentEvents: [] };
   try {
     const tenantId = "galvanik-kreile";
-    const { desc, eq, sql } = await import("drizzle-orm");
+    const { desc, eq } = await import("drizzle-orm");
     
     const allEvents = await db
       .select()
@@ -89,8 +93,8 @@ export async function getRealAnalyticsStats() {
     
     allEvents.forEach(evt => {
       // Top Events (by type + route/target)
-      const payload = evt.payload as Record<string, any>;
-      const route = payload?.route || payload?.target || "unknown";
+      const payload = evt.payload;
+      const route = getPayloadText(payload?.route, getPayloadText(payload?.target, "unknown"));
       const key = `${evt.eventType} : ${route}`;
       eventCounts[key] = (eventCounts[key] || 0) + 1;
       
@@ -110,14 +114,14 @@ export async function getRealAnalyticsStats() {
       .slice(-7);
       
     const recentEvents = allEvents.slice(0, 20).map(e => {
-       const p = e.payload as any;
+       const p = e.payload;
        return {
          id: e.id,
          time: new Date(e.createdAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute:'2-digit', second:'2-digit' }),
          type: e.eventType,
-         user: p?.actor_initials || "Anonym",
-         role: p?.actor_role || "-",
-         detail: p?.route || p?.target || JSON.stringify(p?.meta || {})
+          user: getPayloadText(p?.actor_initials, "Anonym"),
+          role: getPayloadText(p?.actor_role, "-"),
+          detail: getPayloadText(p?.route, getPayloadText(p?.target, JSON.stringify(p?.meta || {})))
        };
     });
 

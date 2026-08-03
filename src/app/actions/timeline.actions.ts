@@ -254,11 +254,15 @@ export async function getTimelineForOrderDb(orderId: string): Promise<ActionResu
       if (e.eventType.includes("FAILED")) severity = "critical";
       
       let subtitle = "";
-      const metadata = e.payload as any;
+      const metadata = e.payload;
       if (metadata) {
-        if (metadata.stationId) subtitle += `Station: ${metadata.stationId} `;
-        if (metadata.notes) subtitle += `Notiz: ${metadata.notes} `;
-        if (metadata.material) subtitle += `(${metadata.material}: ${metadata.amount}) `;
+        const stationId = metadata.stationId;
+        const notes = metadata.notes;
+        const material = metadata.material;
+        const amount = metadata.amount;
+        if (stationId) subtitle += `Station: ${String(stationId)} `;
+        if (notes) subtitle += `Notiz: ${String(notes)} `;
+        if (material) subtitle += `(${String(material)}: ${String(amount)}) `;
       }
 
       return {

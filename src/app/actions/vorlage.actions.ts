@@ -3,6 +3,27 @@
 import { createClient } from '@/utils/supabase/server';
 import { bildeSchluessel, klassifiziereTeil } from '@/lib/erfassung/klassifikator';
 
+type VerbrauchVorlage = {
+  station: string;
+  artikel_id: string;
+  artikel_name: string;
+  median_menge: number;
+  einheit: string;
+  haeufigkeit_prozent: number;
+};
+
+type RecentItem = {
+  inventory_item_id: string;
+  last_menge: number;
+};
+
+type SuggestedItem = {
+  id: string;
+  haeufigkeit: number | null;
+  letzte_menge: number | null;
+  source: 'vorlage' | 'recent';
+};
+
 export async function getVorlageFuerAuftrag(auftrag_id: string) {
   const supabase = await createClient();
 
@@ -94,7 +115,7 @@ export async function getVorlageFuerAuftrag(auftrag_id: string) {
   else if (maxRef < 10) konfidenz = 'aktiv';
 
   // Join inventory item names for verbrauch
-  let verbrauchEnhanced: any[] = [];
+  let verbrauchEnhanced: VerbrauchVorlage[] = [];
   if (verbrauchData && verbrauchData.length > 0) {
     const itemIds = verbrauchData.map(v => v.inventory_item_id);
     const { data: invItems } = await supabase
@@ -170,7 +191,7 @@ export async function getWahrscheinlicheArtikel(auftrag_id: string) {
   const { data: authData } = await supabase.auth.getUser();
   const userId = authData.user?.id;
   
-  const recentItems: any[] = [];
+  const recentItems: RecentItem[] = [];
   if (userId) {
     // using distinct not fully supported in supabase js easily, so just select and filter
     const { data: recent } = await supabase
@@ -196,7 +217,7 @@ export async function getWahrscheinlicheArtikel(auftrag_id: string) {
   }
 
   // Combine and deduplicate
-  const combinedMap = new Map();
+  const combinedMap = new Map<string, SuggestedItem>();
 
   for (const v of (vorlageData || [])) {
     combinedMap.set(v.inventory_item_id, {
@@ -217,7 +238,8 @@ export async function getWahrscheinlicheArtikel(auftrag_id: string) {
       });
     } else {
       // update with actual last user quantity if we have it
-      combinedMap.get(r.inventory_item_id).letzte_menge = r.last_menge;
+      const existingItem = combinedMap.get(r.inventory_item_id);
+      if (existingItem) existingItem.letzte_menge = r.last_menge;
     }
   }
 
