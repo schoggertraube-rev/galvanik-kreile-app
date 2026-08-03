@@ -8,10 +8,12 @@ import { ChevronRight, TrendingDown, AlertCircle, CheckCircle2, Wallet } from "l
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { getAusgabenKategorien } from '@/app/buchhaltung/analysis.actions';
 
+type AusgabenKategorie = Awaited<ReturnType<typeof getAusgabenKategorien>>[number];
+
 export default function AusgabenPage() {
   usePageView();
 
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<AusgabenKategorie[]>([]);
 
   useEffect(() => {
     getAusgabenKategorien().then(setCategories);

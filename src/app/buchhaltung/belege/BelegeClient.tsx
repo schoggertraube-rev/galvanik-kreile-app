@@ -3,7 +3,7 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
 import { usePageView } from "@/hooks/usePageView";
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight, Camera, Upload, CheckCircle2, Calendar as CalendarIcon, ReceiptText, WifiOff } from "lucide-react";
@@ -45,6 +45,7 @@ const BELEGART_TO_CATEGORY: Record<string, string> = {
   abo: "buero",
   kassenbon: "buero",
 };
+const EMPTY_BELEGE: Beleg[] = [];
 
 function slugify(name: string): string {
   return name.toLowerCase()
@@ -82,7 +83,7 @@ function mapBelegToEntry(b: Beleg): BelegEntry {
   };
 }
 
-export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }) {
+export function BelegeClient({ initialBelege = EMPTY_BELEGE }: { initialBelege?: Beleg[] }) {
   usePageView();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -109,6 +110,7 @@ export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }
     router.push(`/buchhaltung/belege?${params.toString()}`);
   };
 
+  const [previousInitialBelege, setPreviousInitialBelege] = useState(initialBelege);
   const [belege, setBelege] = useState<Beleg[]>(initialBelege);
   const [overlayOpen, setOverlayOpen] = useState(false);
   const [overlayMode, setOverlayMode] = useState<"foto" | "upload">("upload");
@@ -116,9 +118,10 @@ export function BelegeClient({ initialBelege = [] }: { initialBelege?: Beleg[] }
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [massenzuordnungOpen, setMassenzuordnungOpen] = useState(false);
   
-  useEffect(() => {
+  if (initialBelege !== previousInitialBelege) {
+    setPreviousInitialBelege(initialBelege);
     setBelege(initialBelege);
-  }, [initialBelege]);
+  }
   
   const belegeEntries = useMemo(() => belege.map(mapBelegToEntry), [belege]);
 

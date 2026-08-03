@@ -378,14 +378,13 @@ function FristRow({ titel, frist, status }: { titel: string; frist: string; stat
   );
 }
 
-export function ExportClient({ initialFormat, previewData }: { initialFormat: string, previewData: any }) {
+export function ExportClient({ initialFormat, previewData }: { initialFormat: string, previewData: { header: string; rows: string[]; csv: string } }) {
+  void initialFormat;
   return (
     <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-3 border-accent-orange/20 border-t-accent-orange rounded-full animate-spin" /></div>}>
       <ExportContent previewData={previewData} />
     </Suspense>
   );
 }
-
-
 
 

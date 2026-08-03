@@ -12,14 +12,6 @@ import { runEnergieVerteilungAction, schliessePeriodeAction, finalSchliessePerio
 
 import { useRouter } from "next/navigation";
 
-interface Step {
-  id: number;
-  title: string;
-  description: string;
-  isCompleted: (status: PeriodenabschlussStatus | null) => boolean;
-  requiresAction: (status: PeriodenabschlussStatus | null) => boolean;
-}
-
 export function PeriodenabschlussClient({ initialStatus, userRole }: { initialStatus: PeriodenabschlussStatus | null, userRole?: string }) {
   usePageView();
   const router = useRouter();
@@ -37,7 +29,7 @@ export function PeriodenabschlussClient({ initialStatus, userRole }: { initialSt
       alert("Energie erfolgreich verteilt");
       // Trigger a refresh of the status if needed, but in this case, energy distribution
       // doesn't directly change the view status.
-    } catch (e) {
+    } catch {
       alert("Fehler bei der Energieverteilung");
     } finally {
       setIsProcessing(false);
@@ -52,7 +44,8 @@ export function PeriodenabschlussClient({ initialStatus, userRole }: { initialSt
       alert(`Periode ${periodTitle} vorläufig abgeschlossen!`);
       router.refresh();
       setStatus({ ...status, status: 'vorlaeufig_geschlossen' }); 
-    } catch (e: any) {
+    } catch (caught: unknown) {
+      const e = caught && typeof caught === "object" && "message" in caught ? caught : { message: undefined };
       alert("Fehler beim Schließen: " + (e.message || "Unbekannter Fehler"));
     } finally {
       setIsProcessing(false);
@@ -67,7 +60,8 @@ export function PeriodenabschlussClient({ initialStatus, userRole }: { initialSt
       alert(`Periode ${periodTitle} endgültig abgeschlossen!`);
       router.refresh();
       setStatus(null); // Remove from view
-    } catch (e: any) {
+    } catch (caught: unknown) {
+      const e = caught && typeof caught === "object" && "message" in caught ? caught : { message: undefined };
       alert("Fehler beim finalen Abschließen: " + (e.message || "Unbekannter Fehler"));
     } finally {
       setIsProcessing(false);

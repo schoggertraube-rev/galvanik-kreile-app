@@ -30,7 +30,7 @@ export default function BelegUploadPage() {
       const datePath = new Date().toISOString().substring(0, 7).replace('-', '/'); // YYYY/MM
       const storagePath = `${datePath}/${fileName}`;
       
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from("belege")
         .upload(storagePath, file, { upsert: false });
         
@@ -57,9 +57,10 @@ export default function BelegUploadPage() {
         router.push(`/buchhaltung/belege/${result.belegId}`);
       }, 1000);
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      alert("Fehler: " + err.message);
+      const message = err && typeof err === "object" && "message" in err ? String(err.message) : undefined;
+      alert("Fehler: " + message);
       setStatus("idle");
     }
   };

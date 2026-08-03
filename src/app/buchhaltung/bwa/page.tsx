@@ -55,10 +55,10 @@ export default function BwaPage() {
 
       {/* KPI-Band */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <KPI label="Umsatzerlöse" value={`${bwa.umsatzerloese.toLocaleString("de-DE")} €`} icon={<TrendingUp className="w-5 h-5 text-emerald-500" />} positive />
-        <KPI label="Deckungsbeitrag" value={`${bwa.deckungsbeitrag.toLocaleString("de-DE")} €`} icon={<BarChart3 className="w-5 h-5 text-blue-500" />} positive />
+        <KPI label="Umsatzerlöse" value={`${bwa.umsatzerloese.toLocaleString("de-DE")} €`} icon={<TrendingUp className="w-5 h-5 text-emerald-500" />} />
+        <KPI label="Deckungsbeitrag" value={`${bwa.deckungsbeitrag.toLocaleString("de-DE")} €`} icon={<BarChart3 className="w-5 h-5 text-blue-500" />} />
         <KPI label="Fixkosten" value={`${bwa.fixkosten.toLocaleString("de-DE")} €`} icon={<TrendingDown className="w-5 h-5 text-red-500" />} />
-        <KPI label="Betriebsergebnis" value={`${bwa.betriebsergebnis.toLocaleString("de-DE")} €`} icon={<TrendingUp className="w-5 h-5 text-emerald-500" />} positive highlight />
+        <KPI label="Betriebsergebnis" value={`${bwa.betriebsergebnis.toLocaleString("de-DE")} €`} icon={<TrendingUp className="w-5 h-5 text-emerald-500" />} highlight />
       </div>
 
       {/* Positionen */}
@@ -91,7 +91,7 @@ export default function BwaPage() {
   );
 }
 
-function KPI({ label, value, icon, positive, highlight }: { label: string; value: string; icon: React.ReactNode; positive?: boolean; highlight?: boolean }) {
+function KPI({ label, value, icon, highlight }: { label: string; value: string; icon: React.ReactNode; highlight?: boolean }) {
   return (
     <div className={`rounded-2xl border shadow-sm p-5 flex items-center gap-4 ${highlight ? "bg-emerald-50 border-emerald-200" : "bg-white border-neutral-gray-100"}`}>
       <div className="w-10 h-10 rounded-xl bg-neutral-gray-50 flex items-center justify-center shrink-0">{icon}</div>

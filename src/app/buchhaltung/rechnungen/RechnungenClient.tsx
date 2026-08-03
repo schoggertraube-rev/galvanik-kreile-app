@@ -8,7 +8,9 @@ import { ChevronRight, Filter, AlertTriangle, CheckCircle2, FileText } from "luc
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { Ausgangsrechnung } from "@/lib/buchhaltung/types";
 
-export function RechnungenClient({ initialRechnungen, offeneSumme, ueberfaelligSumme }: { initialRechnungen: Ausgangsrechnung[], offeneSumme: number, ueberfaelligSumme: number, initialFilter: any }) {
+type RechnungenSearchParams = Record<string, string | string[] | undefined>;
+
+export function RechnungenClient({ initialRechnungen, offeneSumme, ueberfaelligSumme }: { initialRechnungen: Ausgangsrechnung[], offeneSumme: number, ueberfaelligSumme: number, initialFilter: RechnungenSearchParams }) {
   usePageView();
   const router = useRouter();
   const searchParams = useSearchParams();

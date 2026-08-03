@@ -1,5 +1,5 @@
 import { listRechnungenAction } from "@/app/buchhaltung/actions";
-import { RechnungFilter } from "@/lib/buchhaltung/types";
+import type { RechnungFilter } from "@/lib/buchhaltung/types";
 import { RechnungenClient } from "./RechnungenClient";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,7 @@ export default async function RechnungenPage({ searchParams }: { searchParams: P
   const sp = await searchParams;
 
   const filter: RechnungFilter = {
-    status: sp.status as any,
+    status: sp.status as RechnungFilter["status"],
     kundeId: sp.kunde as string | undefined,
     ueberfaellig: sp.ueberfaellig === '1',
   };
