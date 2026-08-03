@@ -8,9 +8,11 @@ import { PerformanceDetailLayout } from '../PerformanceDetailLayout';
 import { AnalysisOverlay } from '@/components/ui/AnalysisOverlay';
 import { getTopKunden } from '@/app/actions/customers.actions';
 
+type TopKunde = Awaited<ReturnType<typeof getTopKunden>>[number];
+
 export default function KundenMarktDetail() {
   const [overlay, setOverlay] = useState<string | null>(null);
-  const [topKunden, setTopKunden] = useState<any[]>([]);
+  const [topKunden, setTopKunden] = useState<TopKunde[]>([]);
 
   React.useEffect(() => {
     getTopKunden(5).then(setTopKunden);

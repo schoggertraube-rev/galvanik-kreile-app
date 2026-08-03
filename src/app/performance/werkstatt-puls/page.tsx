@@ -12,9 +12,11 @@ import { AnalyticsDrillDrawer } from '@/components/analytics/AnalyticsDrillDrawe
 import type { PeriodType } from '@/lib/analytics/plainLanguage';
 import { getRiskOrders } from '@/app/actions/orders.actions';
 
+type RiskOrder = Awaited<ReturnType<typeof getRiskOrders>>[number];
+
 export default function WerkstattPulsDetail() {
   const [overlay, setOverlay] = useState<string | null>(null);
-  const [riskOrders, setRiskOrders] = useState<any[]>([]);
+  const [riskOrders, setRiskOrders] = useState<RiskOrder[]>([]);
 
   React.useEffect(() => {
     getRiskOrders(3).then(setRiskOrders);
