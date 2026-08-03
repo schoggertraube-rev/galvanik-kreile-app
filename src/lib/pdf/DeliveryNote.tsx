@@ -202,7 +202,7 @@ export const DeliveryNoteDocument = ({ orders, customer, settings }: DeliveryNot
           </View>
           
           {/* Table Rows */}
-          {orders.map((order, i) => (
+          {orders.map((order) => (
             <View style={styles.tableRow} key={order.id}>
               <View style={styles.tableCol}>
                 <Text style={styles.tableCell}>{order.orderNumber}</Text>

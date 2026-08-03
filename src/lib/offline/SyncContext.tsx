@@ -89,7 +89,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
           await new Promise(r => setTimeout(r, 600));
           // Mock success
           await offlineOutbox.removeItem(item.id);
-        } catch (e) {
+        } catch {
           item.status = "failed";
           item.retryCount += 1;
           await offlineOutbox.saveItem(item);
