@@ -1,17 +1,41 @@
 import { db } from "@/db";
 import { orders, customers, items } from "@/db/schema";
 import { eq, desc, and, notInArray, notIlike, sql, inArray } from "drizzle-orm";
+import type { InferSelectModel } from "drizzle-orm";
+
+export type OperationalOrderItem = InferSelectModel<typeof items>;
+
+export type OperationalOrder = {
+  id: string;
+  orderNumber: string;
+  customerId: string;
+  customerName: string | null;
+  title: string;
+  task: string | null;
+  itemDescription: string | null;
+  surfaceRequested: string | null;
+  station: string;
+  status: string;
+  risk: string;
+  currentStationId: string;
+  parts: OperationalOrderItem[];
+  intakeDate: string;
+  dueDate: string;
+  dueLabel: string;
+  dueValue: string;
+  createdAt: string | undefined;
+};
 
 // Short-lived in-memory cache (5 seconds) — prevents parallel duplicate DB calls
 // during a single page render without blocking real-time updates.
-let _ordersCache: { data: Awaited<ReturnType<typeof _fetchAndMap>>; ts: number } | null = null;
+let _ordersCache: { data: OperationalOrder[]; ts: number } | null = null;
 const CACHE_TTL_MS = 5_000;
 
 export function invalidateOperationalOrdersCache() {
   _ordersCache = null;
 }
 
-export async function getOperationalOrders() {
+export async function getOperationalOrders(): Promise<OperationalOrder[]> {
   const now = Date.now();
   if (_ordersCache && now - _ordersCache.ts < CACHE_TTL_MS) {
     return _ordersCache.data;
@@ -21,7 +45,7 @@ export async function getOperationalOrders() {
   return data;
 }
 
-async function _fetchAndMap() {
+async function _fetchAndMap(): Promise<OperationalOrder[]> {
   if (!db) throw new Error("Database not available");
 
   const results = await db
