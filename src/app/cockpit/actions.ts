@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from '@/lib/supabase/server';
+import type { KontextDaten } from '@/lib/whatif/engine';
 
 export async function getCockpitKpis() {
   const supabase = await createClient();
@@ -169,10 +170,10 @@ export async function getAuftragDbRanking(limit = 10) {
   return data || [];
 }
 
-export async function getWhatIfKontext() {
+export async function getWhatIfKontext(): Promise<KontextDaten> {
   const supabase = await createClient();
   
-  const kontext: any = {
+  const kontext: KontextDaten = {
     db_marge_je_ks: {},
     kostensatz_je_ks: {},
     auslastung_je_ks: {},
@@ -251,7 +252,7 @@ export async function getWhatIfKontext() {
     });
     
     Object.keys(kontext.top_kunden_je_gruppe).forEach(g => {
-      kontext.top_kunden_je_gruppe[g].sort((a: any, b: any) => b.umsatz - a.umsatz);
+      kontext.top_kunden_je_gruppe[g].sort((a, b) => b.umsatz - a.umsatz);
     });
   }
   return kontext;

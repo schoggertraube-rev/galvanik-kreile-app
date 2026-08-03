@@ -3,9 +3,22 @@
 import { useState, useEffect } from "react";
 import { Beaker, Loader2, AlertCircle, Euro, UserPlus, TrendingUp, Handshake } from "lucide-react";
 import { getWhatIfKontext } from "../actions";
-import { berechneInvestition, berechneMitarbeiter, berechnePreis, berechneNeukunde, KontextDaten } from "@/lib/whatif/engine";
+import {
+  berechneInvestition,
+  berechneMitarbeiter,
+  berechnePreis,
+  berechneNeukunde,
+  type KontextDaten,
+  type InvestitionResult,
+  type MitarbeiterResult,
+  type NeukundeResult,
+  type PreisInput,
+  type PreisResult,
+} from "@/lib/whatif/engine";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
+
+type SzenarioErgebnis = InvestitionResult | MitarbeiterResult | PreisResult | NeukundeResult;
 
 export function WhatIfStudio() {
   const [kontext, setKontext] = useState<KontextDaten | null>(null);
@@ -137,7 +150,7 @@ function TabInvestition({ kontext }: { kontext: KontextDaten }) {
   const [zins, setZins] = useState(0);
   const [ersparnis, setErsparnis] = useState(2);
   const [mehrumsatz, setMehrumsatz] = useState(0);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<InvestitionResult | null>(null);
 
   const calculate = () => {
     if (!kostenstelle) return;
@@ -166,7 +179,7 @@ function TabInvestition({ kontext }: { kontext: KontextDaten }) {
             value={kostenstelle} onChange={e => setKostenstelle(e.target.value)}
           >
             <option value="">Bitte wählen...</option>
-            {kostenstellenListe.map((ks: any) => <option key={ks.kuerzel} value={ks.kuerzel}>{ks.kuerzel} — {ks.name}</option>)}
+            {kostenstellenListe.map(ks => <option key={ks.kuerzel} value={ks.kuerzel}>{ks.kuerzel} — {ks.name}</option>)}
           </select>
           {kostenstelle && kontext.db_marge_je_ks[kostenstelle] === null && (
             <p className="text-xs text-danger-red mt-1 flex items-center gap-1">
@@ -241,7 +254,7 @@ function TabMitarbeiter({ kontext }: { kontext: KontextDaten }) {
   const [stunden, setStunden] = useState(40);
   const [produktiv, setProduktiv] = useState(75);
   const [verrechnung, setVerrechnung] = useState(68);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<MitarbeiterResult | null>(null);
 
   const calculate = () => {
     if (!kostenstelle) return;
@@ -272,7 +285,7 @@ function TabMitarbeiter({ kontext }: { kontext: KontextDaten }) {
             value={kostenstelle} onChange={e => setKostenstelle(e.target.value)}
           >
             <option value="">Bitte wählen...</option>
-            {kostenstellenListe.map((ks: any) => <option key={ks.kuerzel} value={ks.kuerzel}>{ks.kuerzel} — {ks.name}</option>)}
+            {kostenstellenListe.map(ks => <option key={ks.kuerzel} value={ks.kuerzel}>{ks.kuerzel} — {ks.name}</option>)}
           </select>
           {kostenstelle && kontext.db_marge_je_ks[kostenstelle] === null && (
             <p className="text-xs text-danger-red mt-1 flex items-center gap-1">
@@ -338,10 +351,10 @@ function TabMitarbeiter({ kontext }: { kontext: KontextDaten }) {
 
 // --- TAB PREIS ---
 function TabPreis({ kontext }: { kontext: KontextDaten }) {
-  const [gruppe, setGruppe] = useState<'alle' | 'stamm' | 'neu' | 'privat' | 'gewerbe'>('alle');
+  const [gruppe, setGruppe] = useState<PreisInput["kundengruppe"]>('alle');
   const [erhoehung, setErhoehung] = useState(10);
   const [abwanderung, setAbwanderung] = useState(5);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<PreisResult | null>(null);
 
   const calculate = () => {
     const res = berechnePreis({
@@ -363,7 +376,7 @@ function TabPreis({ kontext }: { kontext: KontextDaten }) {
           <label className="block text-xs font-semibold text-text-muted mb-1">Kundengruppe</label>
           <select 
             className="w-full border border-neutral-gray-300 rounded-lg p-2 text-sm"
-            value={gruppe} onChange={e => setGruppe(e.target.value as any)}
+            value={gruppe} onChange={e => setGruppe(e.target.value as PreisInput["kundengruppe"])}
           >
             <option value="alle">Alle Kunden</option>
             <option value="stamm">Stammkunden</option>
@@ -419,7 +432,7 @@ function TabPreis({ kontext }: { kontext: KontextDaten }) {
               <div className="mt-2 text-xs text-text-muted">
                 <p className="font-semibold mb-1">Gefährdete Top-Kunden (Umsatz):</p>
                 <ul className="list-disc pl-4">
-                  {result.top_5_gefaehrdet.map((k: any) => (
+                  {result.top_5_gefaehrdet.map(k => (
                     <li key={k.name}>{k.name} - € {k.umsatz?.toLocaleString()}</li>
                   ))}
                 </ul>
@@ -439,7 +452,7 @@ function TabNeukunde({ kontext }: { kontext: KontextDaten }) {
   const [stunden, setStunden] = useState(8);
   const [haeufigkeit, setHaeufigkeit] = useState(6);
   const [zahlungsziel, setZahlungsziel] = useState(30);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<NeukundeResult | null>(null);
 
   const calculate = () => {
     if (!kostenstelle) return;
@@ -467,7 +480,7 @@ function TabNeukunde({ kontext }: { kontext: KontextDaten }) {
             value={kostenstelle} onChange={e => setKostenstelle(e.target.value)}
           >
             <option value="">Bitte wählen...</option>
-            {kostenstellenListe.map((ks: any) => <option key={ks.kuerzel} value={ks.kuerzel}>{ks.kuerzel} — {ks.name}</option>)}
+            {kostenstellenListe.map(ks => <option key={ks.kuerzel} value={ks.kuerzel}>{ks.kuerzel} — {ks.name}</option>)}
           </select>
           {kostenstelle && kontext.db_marge_je_ks[kostenstelle] === null && (
             <p className="text-xs text-danger-red mt-1 flex items-center gap-1">
@@ -531,7 +544,7 @@ function TabNeukunde({ kontext }: { kontext: KontextDaten }) {
 }
 
 // --- Hilfskomponenten ---
-function EmpfehlungsBox({ result }: { result: any }) {
+function EmpfehlungsBox({ result }: { result: SzenarioErgebnis }) {
   let color = 'bg-neutral-gray-100 text-neutral-gray-600 border-neutral-gray-200';
   let titleColor = 'text-navy-900';
   let label = 'Keine Empfehlung';
