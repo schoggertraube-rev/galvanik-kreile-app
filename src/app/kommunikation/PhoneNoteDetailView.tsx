@@ -15,6 +15,11 @@ import { customersRepository } from "@/lib/repositories/customersRepository";
 import { type Customer } from "@/lib/types/customer";
 
 type PhoneNote = Awaited<ReturnType<typeof getRecentPhoneNotes>>[number];
+type MatchSource = {
+  note: PhoneNote;
+  customers: Customer[];
+  orders: Order[];
+};
 
 export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: PhoneNote, onUpdate: () => void, onClose: () => void }) {
   const [matchData, setMatchData] = useState<MatchResult | null>(null);
@@ -25,14 +30,16 @@ export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: PhoneNo
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
+  const [previousMatchSource, setPreviousMatchSource] = useState<MatchSource | null>(null);
 
-  useEffect(() => {
-    ordersRepository.getAll().then(setAllOrders).catch(() => setAllOrders([]));
-    customersRepository.getAll().then(setAllCustomers).catch(() => setAllCustomers([]));
-  }, []);
-
-  useEffect(() => {
-    if (note && note.rawText) {
+  if (
+    previousMatchSource === null ||
+    previousMatchSource.note !== note ||
+    previousMatchSource.customers !== allCustomers ||
+    previousMatchSource.orders !== allOrders
+  ) {
+    setPreviousMatchSource({ note, customers: allCustomers, orders: allOrders });
+    if (note.rawText) {
       const data = smartMatchText(note.rawText, allCustomers, allOrders);
       setMatchData(data);
       setAssignForm({
@@ -40,7 +47,12 @@ export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: PhoneNo
         orderId: note.orderId || data.matchedOrder?.id || ""
       });
     }
-  }, [note, allCustomers, allOrders]);
+  }
+
+  useEffect(() => {
+    ordersRepository.getAll().then(setAllOrders).catch(() => setAllOrders([]));
+    customersRepository.getAll().then(setAllCustomers).catch(() => setAllCustomers([]));
+  }, []);
 
   const handleAssign = async () => {
     setAssignStatus("saving");
