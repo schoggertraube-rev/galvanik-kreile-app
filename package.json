@@ -2,6 +2,9 @@
   "name": "next_app",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "24.18.0"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -15,7 +18,7 @@
     "lint:ratchet:update": "node --import tsx scripts/quality/check-eslint-ratchet.ts --update",
     "lint:staged": "node scripts/verify-staged-files.mjs",
     "test": "vitest run",
-    "test:unit": "vitest run --exclude \"**/*.integration.test.ts\"",
+    "test:unit": "node scripts/run-unit-tests.mjs",
     "test:integration": "vitest run src/test/verify.integration.test.ts",
     "test:e2e": "playwright test",
     "verify:precommit": "npx tsc --noEmit && npm run lint:staged && npm run test:unit",

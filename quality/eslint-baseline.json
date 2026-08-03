@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
   "eslintVersion": "9.39.4",
-  "lintContractHash": "1b2b68e76dd239761610ef33e3b87e8584c3d1191803fba63e2646ff1c624aa1",
-  "judgeContractHash": "cf480b7edaf2923df1ed9ac0b236812e6ad3567cc51f6506870742192e836e5a",
+  "lintContractHash": "3b2b0d898f05512de44df3e999907eb7a9763aaf6adc2461ded43875456073f3",
+  "judgeContractHash": "4ea5120f86092337d49d48850676fc333dfe222e1118663c0087c4922d0ae3dd",
   "totals": {
-    "filesWithIssues": 279,
-    "errors": 484,
-    "warnings": 459
+    "filesWithIssues": 235,
+    "errors": 472,
+    "warnings": 252
   },
   "issues": [
     {
@@ -74,22 +74,6 @@
       "count": 1
     },
     {
-      "file": "scripts/test_order_source.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'VALID_ORDER_SOURCES' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "scripts/test_order_source.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'db' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "seed_channels.js",
       "ruleId": "@typescript-eslint/no-require-imports",
       "severity": 2,
@@ -127,22 +111,6 @@
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
-      "count": 1
-    },
-    {
-      "file": "src/app/actions/baths.actions.ts",
-      "ruleId": "@typescript-eslint/no-explicit-any",
-      "severity": 2,
-      "messageId": "unexpectedAny",
-      "message": "Unexpected any. Specify a different type.",
-      "count": 6
-    },
-    {
-      "file": "src/app/actions/baths.actions.ts",
-      "ruleId": "prefer-const",
-      "severity": 2,
-      "messageId": "useConst",
-      "message": "'query' is never reassigned. Use 'const' instead.",
       "count": 1
     },
     {
@@ -210,36 +178,12 @@
       "count": 2
     },
     {
-      "file": "src/app/actions/performance.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'endOfWeek' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/actions/performance.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'sql' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/app/actions/phoneNotes.actions.ts",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 5
-    },
-    {
-      "file": "src/app/actions/phoneNotes.actions.ts",
-      "ruleId": "prefer-const",
-      "severity": 2,
-      "messageId": "useConst",
-      "message": "'updateData' is never reassigned. Use 'const' instead.",
-      "count": 1
     },
     {
       "file": "src/app/actions/price-lines.actions.ts",
@@ -255,14 +199,6 @@
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
-      "count": 1
-    },
-    {
-      "file": "src/app/actions/search.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'sql' is defined but never used.",
       "count": 1
     },
     {
@@ -298,30 +234,6 @@
       "count": 2
     },
     {
-      "file": "src/app/actions/vorlage.actions.ts",
-      "ruleId": "prefer-const",
-      "severity": 2,
-      "messageId": "useConst",
-      "message": "'recentItems' is never reassigned. Use 'const' instead.",
-      "count": 1
-    },
-    {
-      "file": "src/app/admin/analytics/AnalyticsCockpitClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'BarChart2' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/admin/import/AdminImportClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'AlertTriangle' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/app/admin/import/AdminImportClient.tsx",
       "ruleId": "react/no-unescaped-entities",
       "severity": 2,
@@ -343,14 +255,6 @@
       "severity": 1,
       "messageId": null,
       "message": "'/* eslint-disable-next-line @next/next/no-img-element */' has no effect because you have 'noInlineConfig' setting in your config.",
-      "count": 1
-    },
-    {
-      "file": "src/app/api/cron/send-feedback/route.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'orders' is defined but never used.",
       "count": 1
     },
     {
@@ -386,60 +290,12 @@
       "count": 2
     },
     {
-      "file": "src/app/archive/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ArrowLeft' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/archive/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Link' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/app/baeder/BaederDashboardClient.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 3
-    },
-    {
-      "file": "src/app/baeder/BaederDashboardClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'CheckCircle2' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/baeder/BaederDashboardClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Droplets' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/baeder/BaederDashboardClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Link' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/baeder/actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'eq' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/app/buchhaltung/actions.ts",
@@ -496,14 +352,6 @@
       "messageId": "unusedVar",
       "message": "'urlError' is assigned a value but never used.",
       "count": 1
-    },
-    {
-      "file": "src/app/buchhaltung/actions.ts",
-      "ruleId": "prefer-const",
-      "severity": 2,
-      "messageId": "useConst",
-      "message": "'csvRows' is never reassigned. Use 'const' instead.",
-      "count": 2
     },
     {
       "file": "src/app/buchhaltung/analysis.actions.ts",
@@ -603,22 +451,6 @@
     },
     {
       "file": "src/app/buchhaltung/ausgaben/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ArrowDownRight' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/buchhaltung/ausgaben/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ArrowUpRight' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/buchhaltung/ausgaben/page.tsx",
       "ruleId": "react/no-unescaped-entities",
       "severity": 2,
       "messageId": "unescapedEntityAlts",
@@ -631,22 +463,6 @@
       "severity": 2,
       "messageId": null,
       "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/app/buchhaltung/belege/BelegeClient.tsx:120:5\n  118 |   \n  119 |   useEffect(() => {\n> 120 |     setBelege(initialBelege);\n      |     ^^^^^^^^^ Avoid calling setState() directly within an effect\n  121 |   }, [initialBelege]);\n  122 |   \n  123 |   const belegeEntries = useMemo(() => belege.map(mapBelegToEntry), [belege]);",
-      "count": 1
-    },
-    {
-      "file": "src/app/buchhaltung/belege/[id]/BelegDetailClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Package' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/buchhaltung/belege/[id]/BelegDetailClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'useMemo' is defined but never used.",
       "count": 1
     },
     {
@@ -814,39 +630,7 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'Briefcase' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/buchhaltung/export/ExportClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Table' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/buchhaltung/export/ExportClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'getBuchhaltungProvider' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/buchhaltung/export/ExportClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'initialFormat' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/buchhaltung/fristen/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'CheckCircle2' is defined but never used.",
       "count": 1
     },
     {
@@ -882,44 +666,12 @@
       "count": 1
     },
     {
-      "file": "src/app/buchhaltung/kraftstoff/KraftstoffClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'AlertTriangle' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/buchhaltung/kraftstoff/KraftstoffClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'TrendingUp' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/app/buchhaltung/periodenabschluss/PeriodenabschlussClient.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 2
-    },
-    {
-      "file": "src/app/buchhaltung/periodenabschluss/PeriodenabschlussClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ChevronRight' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/buchhaltung/periodenabschluss/PeriodenabschlussClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Play' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/app/buchhaltung/periodenabschluss/PeriodenabschlussClient.tsx",
@@ -946,36 +698,12 @@
       "count": 1
     },
     {
-      "file": "src/app/buchhaltung/rechnungen/RechnungenClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Download' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/buchhaltung/rechnungen/[id]/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'CheckCircle2' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/app/buchhaltung/rechnungen/neu/RechnungForm.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 2
-    },
-    {
-      "file": "src/app/buchhaltung/rechnungen/neu/RechnungForm.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Send' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/app/buchhaltung/rechnungen/page.tsx",
@@ -986,68 +714,12 @@
       "count": 1
     },
     {
-      "file": "src/app/buchhaltung/steuerprofil/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Banknote' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/app/buchhaltung/zahlung/page.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 4
-    },
-    {
-      "file": "src/app/buchhaltung/zahlung/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'TrendingUp' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/cockpit/CockpitClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'AlertCircle' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/cockpit/CockpitClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'BarChart' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/cockpit/CockpitClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'PlaceholderKachel' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/cockpit/CockpitClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Target' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/cockpit/CockpitClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'TrendingUp' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/app/cockpit/actions.ts",
@@ -1063,14 +735,6 @@
       "severity": 1,
       "messageId": "unusedVar",
       "message": "'currentMonthStr' is assigned a value but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/cockpit/actions.ts",
-      "ruleId": "prefer-const",
-      "severity": 2,
-      "messageId": "useConst",
-      "message": "'details' is never reassigned. Use 'const' instead.",
       "count": 1
     },
     {
@@ -1090,14 +754,6 @@
       "count": 3
     },
     {
-      "file": "src/app/cockpit/components/DbRankingKachel.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Link' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/app/cockpit/components/EngpassKachel.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
@@ -1112,22 +768,6 @@
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 4
-    },
-    {
-      "file": "src/app/cockpit/components/ForecastKachel.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Area' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/cockpit/components/ForecastKachel.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'LineChart' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/app/cockpit/components/FruehwarnungenKachel.tsx",
@@ -1162,14 +802,6 @@
       "count": 4
     },
     {
-      "file": "src/app/cockpit/components/TopKundenKachel.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Link' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/app/cockpit/components/WhatIfStudio.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
@@ -1198,14 +830,6 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'UploadCloud' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/feedback/[token]/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'googleClicked' is assigned a value but never used.",
       "count": 1
     },
@@ -1222,95 +846,7 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'Activity' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/items/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'CardHeader' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/items/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'CardTitle' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/items/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Check' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/items/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'DetailOverlay' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/items/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Droplets' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/items/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Lock' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/items/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Thermometer' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/items/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Unlock' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/items/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'chemicalList' is assigned a value but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/kalender/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Calendar' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/kalender/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Info' is defined but never used.",
       "count": 1
     },
     {
@@ -1328,14 +864,6 @@
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 2
-    },
-    {
-      "file": "src/app/kommunikation/KommunikationClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'OrderModalTrigger' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/app/kommunikation/KommunikationClient.tsx",
@@ -1411,14 +939,6 @@
     },
     {
       "file": "src/app/kontrolle/KontrolleDashboardClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'XCircle' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/kontrolle/KontrolleDashboardClient.tsx",
       "ruleId": "react-hooks/set-state-in-effect",
       "severity": 2,
       "messageId": null,
@@ -1432,14 +952,6 @@
       "messageId": "unescapedEntityAlts",
       "message": "`\"` can be escaped with `&quot;`, `&ldquo;`, `&#34;`, `&rdquo;`.",
       "count": 2
-    },
-    {
-      "file": "src/app/kontrolle/actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'eq' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/app/kvp/KvpClient.tsx",
@@ -1475,50 +987,10 @@
     },
     {
       "file": "src/app/lager/LagerCockpitClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Package' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/lager/LagerCockpitClient.tsx",
       "ruleId": "react-hooks/purity",
       "severity": 2,
       "messageId": null,
       "message": "Error: Cannot call impure function during render\n\n`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).\n\n<repo>/src/app/lager/LagerCockpitClient.tsx:26:18\n  24 |   const recentItems = lagerData.filter(item => {\n  25 |     if (!item.letzterWareneingang) return false;\n> 26 |     const diff = Date.now() - new Date(item.letzterWareneingang).getTime();\n     |                  ^^^^^^^^^^ Cannot call impure function\n  27 |     return diff <= 5 * 24 * 60 * 60 * 1000;\n  28 |   });\n  29 |",
-      "count": 1
-    },
-    {
-      "file": "src/app/lieferanten/[id]/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'AppBackButton' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/lieferanten/[id]/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ArrowLeft' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/lieferanten/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'AppBackButton' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/lieferanten/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Search' is defined but never used.",
       "count": 1
     },
     {
@@ -1571,14 +1043,6 @@
     },
     {
       "file": "src/app/marketing/aktion/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Search' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/aktion/page.tsx",
       "ruleId": "react-hooks/set-state-in-effect",
       "severity": 2,
       "messageId": null,
@@ -1598,63 +1062,7 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'ausgangsrechnung' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/analysis.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'beleg' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/analysis.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'daten' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/analysis.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'desc' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/analysis.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'isNotNull' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/analysis.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ne' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/analysis.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'orders' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/analysis.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'segment' is defined but never used.",
       "count": 1
     },
     {
@@ -1670,55 +1078,7 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'attribution' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/attribution/actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'desc' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/attribution/actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'eq' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/attribution/actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'inArray' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/attribution/actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'o' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/attribution/actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'sum' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/attribution/actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'touchpoint' is defined but never used.",
       "count": 1
     },
     {
@@ -1774,47 +1134,7 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'asc' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/marketing.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'isNull' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/marketing.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'marketingAsset' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/marketing.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'sort' is assigned a value but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/marketing.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'statistikKennzahl' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/marketing/marketing.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'touchpoint' is defined but never used.",
       "count": 1
     },
     {
@@ -1826,172 +1146,12 @@
       "count": 3
     },
     {
-      "file": "src/app/marketing/segmente/actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'sql' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/[id]/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'AppBackButton' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/app/orders/page.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 7
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'AlertTriangle' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ArrowLeft' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Badge' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Button' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Card' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'CardContent' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'CheckCircle2' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ChevronRight' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Edit2' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Input' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Link' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'MapPin' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'OrderResponse' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'PhoneCall' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Search' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'X' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Zap' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/orders/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'getAllStations' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/app/orders/page.tsx",
@@ -2042,43 +1202,11 @@
       "count": 1
     },
     {
-      "file": "src/app/performance/PerformanceDetailLayout.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ArrowLeft' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/performance/PerformanceDetailLayout.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Link' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/performance/actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'baeder' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/app/performance/kunden-markt/page.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
-      "count": 1
-    },
-    {
-      "file": "src/app/performance/kunden-markt/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Map' is defined but never used.",
       "count": 1
     },
     {
@@ -2122,60 +1250,12 @@
       "count": 1
     },
     {
-      "file": "src/app/quotes/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ArrowLeft' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/quotes/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Link' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/settings/SettingsClient.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Smartphone' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/settings/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'hasPermission' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/settings/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'isDeveloper' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/app/station/[slug]/page.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 4
-    },
-    {
-      "file": "src/app/status/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ShieldAlert' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/app/telefonnotiz/layout.tsx",
@@ -2251,10 +1331,10 @@
     },
     {
       "file": "src/app/warendurchlauf/components/DurchlaufzeitKachel.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Link' is defined but never used.",
+      "ruleId": "react-hooks/purity",
+      "severity": 2,
+      "messageId": null,
+      "message": "Error: Cannot call impure function during render\n\n`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).\n\n<repo>/src/app/warendurchlauf/components/DurchlaufzeitKachel.tsx:17:69\n  15 |   const activeOrders = orders.filter((o: any) => o.status !== \"completed\" && o.status !== \"abgeschlossen\");\n  16 |   const sortedLongest = activeOrders.sort((a: any, b: any) => {\n> 17 |     const aDate = a.intakeDate ? new Date(a.intakeDate).getTime() : Date.now();\n     |                                                                     ^^^^^^^^^^ Cannot call impure function\n  18 |     const bDate = b.intakeDate ? new Date(b.intakeDate).getTime() : Date.now();\n  19 |     return aDate - bDate; // Oldest first\n  20 |   }).slice(0, 5);",
       "count": 1
     },
     {
@@ -2262,7 +1342,7 @@
       "ruleId": "react-hooks/purity",
       "severity": 2,
       "messageId": null,
-      "message": "Error: Cannot call impure function during render\n\n`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).\n\n<repo>/src/app/warendurchlauf/components/DurchlaufzeitKachel.tsx:18:69\n  16 |   const activeOrders = orders.filter((o: any) => o.status !== \"completed\" && o.status !== \"abgeschlossen\");\n  17 |   const sortedLongest = activeOrders.sort((a: any, b: any) => {\n> 18 |     const aDate = a.intakeDate ? new Date(a.intakeDate).getTime() : Date.now();\n     |                                                                     ^^^^^^^^^^ Cannot call impure function\n  19 |     const bDate = b.intakeDate ? new Date(b.intakeDate).getTime() : Date.now();\n  20 |     return aDate - bDate; // Oldest first\n  21 |   }).slice(0, 5);",
+      "message": "Error: Cannot call impure function during render\n\n`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).\n\n<repo>/src/app/warendurchlauf/components/DurchlaufzeitKachel.tsx:18:69\n  16 |   const sortedLongest = activeOrders.sort((a: any, b: any) => {\n  17 |     const aDate = a.intakeDate ? new Date(a.intakeDate).getTime() : Date.now();\n> 18 |     const bDate = b.intakeDate ? new Date(b.intakeDate).getTime() : Date.now();\n     |                                                                     ^^^^^^^^^^ Cannot call impure function\n  19 |     return aDate - bDate; // Oldest first\n  20 |   }).slice(0, 5);\n  21 |",
       "count": 1
     },
     {
@@ -2270,15 +1350,7 @@
       "ruleId": "react-hooks/purity",
       "severity": 2,
       "messageId": null,
-      "message": "Error: Cannot call impure function during render\n\n`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).\n\n<repo>/src/app/warendurchlauf/components/DurchlaufzeitKachel.tsx:19:69\n  17 |   const sortedLongest = activeOrders.sort((a: any, b: any) => {\n  18 |     const aDate = a.intakeDate ? new Date(a.intakeDate).getTime() : Date.now();\n> 19 |     const bDate = b.intakeDate ? new Date(b.intakeDate).getTime() : Date.now();\n     |                                                                     ^^^^^^^^^^ Cannot call impure function\n  20 |     return aDate - bDate; // Oldest first\n  21 |   }).slice(0, 5);\n  22 |",
-      "count": 1
-    },
-    {
-      "file": "src/app/warendurchlauf/components/DurchlaufzeitKachel.tsx",
-      "ruleId": "react-hooks/purity",
-      "severity": 2,
-      "messageId": null,
-      "message": "Error: Cannot call impure function during render\n\n`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).\n\n<repo>/src/app/warendurchlauf/components/DurchlaufzeitKachel.tsx:24:41\n  22 |\n  23 |   const compositionRows = sortedLongest.length > 0 ? sortedLongest.map((o: any) => {\n> 24 |     const daysActive = o.intakeDate ? ((Date.now() - new Date(o.intakeDate).getTime()) / (1000 * 60 * 60 * 24)).toFixed(1) : 0;\n     |                                         ^^^^^^^^^^ Cannot call impure function\n  25 |     return {\n  26 |       avatar: o.orderNumber?.charAt(0) || \"A\",\n  27 |       avatarColor: Number(daysActive) > 14 ? \"bg-error-red\" : \"bg-accent-orange\",",
+      "message": "Error: Cannot call impure function during render\n\n`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).\n\n<repo>/src/app/warendurchlauf/components/DurchlaufzeitKachel.tsx:23:41\n  21 |\n  22 |   const compositionRows = sortedLongest.length > 0 ? sortedLongest.map((o: any) => {\n> 23 |     const daysActive = o.intakeDate ? ((Date.now() - new Date(o.intakeDate).getTime()) / (1000 * 60 * 60 * 24)).toFixed(1) : 0;\n     |                                         ^^^^^^^^^^ Cannot call impure function\n  24 |     return {\n  25 |       avatar: o.orderNumber?.charAt(0) || \"A\",\n  26 |       avatarColor: Number(daysActive) > 14 ? \"bg-error-red\" : \"bg-accent-orange\",",
       "count": 1
     },
     {
@@ -2288,14 +1360,6 @@
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 3
-    },
-    {
-      "file": "src/app/warendurchlauf/components/EngpassKachel.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Link' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/app/warendurchlauf/components/OffeneAuftraegeKachel.tsx",
@@ -2315,18 +1379,10 @@
     },
     {
       "file": "src/app/warendurchlauf/components/TermintreueKachel.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Link' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/warendurchlauf/components/TermintreueKachel.tsx",
       "ruleId": "react-hooks/purity",
       "severity": 2,
       "messageId": null,
-      "message": "Error: Cannot call impure function during render\n\n`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).\n\n<repo>/src/app/warendurchlauf/components/TermintreueKachel.tsx:24:67\n  22 |\n  23 |   const compositionRows = sortedCritical.length > 0 ? sortedCritical.map((o: any) => {\n> 24 |     const isOverdue = o.dueDate ? new Date(o.dueDate).getTime() < Date.now() : false;\n     |                                                                   ^^^^^^^^^^ Cannot call impure function\n  25 |     return {\n  26 |       avatar: o.orderNumber?.charAt(0) || \"A\",\n  27 |       avatarColor: isOverdue ? \"bg-error-red\" : \"bg-amber-500\",",
+      "message": "Error: Cannot call impure function during render\n\n`Date.now` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).\n\n<repo>/src/app/warendurchlauf/components/TermintreueKachel.tsx:23:67\n  21 |\n  22 |   const compositionRows = sortedCritical.length > 0 ? sortedCritical.map((o: any) => {\n> 23 |     const isOverdue = o.dueDate ? new Date(o.dueDate).getTime() < Date.now() : false;\n     |                                                                   ^^^^^^^^^^ Cannot call impure function\n  24 |     return {\n  25 |       avatar: o.orderNumber?.charAt(0) || \"A\",\n  26 |       avatarColor: isOverdue ? \"bg-error-red\" : \"bg-amber-500\",",
       "count": 1
     },
     {
@@ -2362,60 +1418,12 @@
       "count": 2
     },
     {
-      "file": "src/app/warendurchlauf/warenausgang/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'BackButton' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/warendurchlauf/warenausgang/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Breadcrumb' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/app/warendurchlauf/wareneingang/page.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 6
-    },
-    {
-      "file": "src/app/warendurchlauf/wareneingang/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'BackButton' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/warendurchlauf/wareneingang/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Breadcrumb' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/warendurchlauf/wareneingang/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Urgency' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/app/warendurchlauf/wareneingang/page.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'createPortal' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/app/warendurchlauf/wareneingang/page.tsx",
@@ -2454,15 +1462,7 @@
       "ruleId": "react-hooks/set-state-in-effect",
       "severity": 2,
       "messageId": null,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/app/warendurchlauf/wareneingang/page.tsx:29:19\n  27 |   const { openOrder } = useOverlayStore();\n  28 |   const [mounted, setMounted] = useState(false);\n> 29 |   useEffect(() => setMounted(true), []);\n     |                   ^^^^^^^^^^ Avoid calling setState() directly within an effect\n  30 |\n  31 |   const [orders, setOrders] = useState<any[]>([]);\n  32 |   const [stationOrders, setStationOrders] = useState<any[]>([]);",
-      "count": 1
-    },
-    {
-      "file": "src/components/admin/AdminDashboard.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Database' is defined but never used.",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/app/warendurchlauf/wareneingang/page.tsx:26:19\n  24 |   const { openOrder } = useOverlayStore();\n  25 |   const [mounted, setMounted] = useState(false);\n> 26 |   useEffect(() => setMounted(true), []);\n     |                   ^^^^^^^^^^ Avoid calling setState() directly within an effect\n  27 |\n  28 |   const [orders, setOrders] = useState<any[]>([]);\n  29 |   const [stationOrders, setStationOrders] = useState<any[]>([]);",
       "count": 1
     },
     {
@@ -2478,71 +1478,7 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'AlertTriangle' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/admin/DataImportCenter.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'CheckCircle2' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/admin/DataImportCenter.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'FileText' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/admin/DataImportCenter.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Loader2' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/admin/DataImportCenter.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'executeImport' is assigned a value but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/admin/FeatureToggles.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Check' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/admin/FeatureToggles.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Loader2' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/admin/FeatureToggles.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Settings' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/admin/FeatureToggles.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'X' is defined but never used.",
       "count": 1
     },
     {
@@ -2563,14 +1499,6 @@
     },
     {
       "file": "src/components/analytics/AnalyticsDrillDrawer.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'PERIOD_LABELS' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/analytics/AnalyticsDrillDrawer.tsx",
       "ruleId": "react-hooks/exhaustive-deps",
       "severity": 1,
       "messageId": null,
@@ -2582,7 +1510,7 @@
       "ruleId": "react-hooks/immutability",
       "severity": 2,
       "messageId": null,
-      "message": "Error: Cannot access variable before it is declared\n\n`handleClose` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.\n\n<repo>/src/components/analytics/AnalyticsDrillDrawer.tsx:82:31\n  80 |   useEffect(() => {\n  81 |     const handler = (e: KeyboardEvent) => {\n> 82 |       if (e.key === \"Escape\") handleClose();\n     |                               ^^^^^^^^^^^ `handleClose` accessed before it is declared\n  83 |     };\n  84 |     document.addEventListener(\"keydown\", handler);\n  85 |     return () => document.removeEventListener(\"keydown\", handler);\n\n<repo>/src/components/analytics/AnalyticsDrillDrawer.tsx:89:3\n  87 |   }, []);\n  88 |\n> 89 |   const handleClose = () => {\n     |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 90 |     setVisible(false);\n     | ^^^^^^^^^^^^^^^^^^^^^^\n> 91 |     setTimeout(onClose, 200);\n     | ^^^^^^^^^^^^^^^^^^^^^^\n> 92 |   };\n     | ^^^^^ `handleClose` is declared here\n  93 |\n  94 |   if (!mounted || !kpi) return null;\n  95 |",
+      "message": "Error: Cannot access variable before it is declared\n\n`handleClose` is accessed before it is declared, which prevents the earlier access from updating when this value changes over time.\n\n<repo>/src/components/analytics/AnalyticsDrillDrawer.tsx:81:31\n  79 |   useEffect(() => {\n  80 |     const handler = (e: KeyboardEvent) => {\n> 81 |       if (e.key === \"Escape\") handleClose();\n     |                               ^^^^^^^^^^^ `handleClose` accessed before it is declared\n  82 |     };\n  83 |     document.addEventListener(\"keydown\", handler);\n  84 |     return () => document.removeEventListener(\"keydown\", handler);\n\n<repo>/src/components/analytics/AnalyticsDrillDrawer.tsx:88:3\n  86 |   }, []);\n  87 |\n> 88 |   const handleClose = () => {\n     |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 89 |     setVisible(false);\n     | ^^^^^^^^^^^^^^^^^^^^^^\n> 90 |     setTimeout(onClose, 200);\n     | ^^^^^^^^^^^^^^^^^^^^^^\n> 91 |   };\n     | ^^^^^ `handleClose` is declared here\n  92 |\n  93 |   if (!mounted || !kpi) return null;\n  94 |",
       "count": 1
     },
     {
@@ -2590,7 +1518,7 @@
       "ruleId": "react-hooks/set-state-in-effect",
       "severity": 2,
       "messageId": null,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/analytics/AnalyticsDrillDrawer.tsx:46:5\n  44 |   // Mount + animate in\n  45 |   useEffect(() => {\n> 46 |     setMounted(true);\n     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect\n  47 |     requestAnimationFrame(() => {\n  48 |       requestAnimationFrame(() => setVisible(true));\n  49 |     });",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/analytics/AnalyticsDrillDrawer.tsx:45:5\n  43 |   // Mount + animate in\n  44 |   useEffect(() => {\n> 45 |     setMounted(true);\n     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect\n  46 |     requestAnimationFrame(() => {\n  47 |       requestAnimationFrame(() => setVisible(true));\n  48 |     });",
       "count": 1
     },
     {
@@ -2598,7 +1526,7 @@
       "ruleId": "react-hooks/set-state-in-effect",
       "severity": 2,
       "messageId": null,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/analytics/AnalyticsDrillDrawer.tsx:56:5\n  54 |   useEffect(() => {\n  55 |     let cancelled = false;\n> 56 |     setStatus(\"loading\");\n     |     ^^^^^^^^^ Avoid calling setState() directly within an effect\n  57 |     setError(null);\n  58 |\n  59 |     fetchKpiSnapshot(kpiId).then((result) => {",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/analytics/AnalyticsDrillDrawer.tsx:55:5\n  53 |   useEffect(() => {\n  54 |     let cancelled = false;\n> 55 |     setStatus(\"loading\");\n     |     ^^^^^^^^^ Avoid calling setState() directly within an effect\n  56 |     setError(null);\n  57 |\n  58 |     fetchKpiSnapshot(kpiId).then((result) => {",
       "count": 1
     },
     {
@@ -2615,30 +1543,6 @@
       "severity": 2,
       "messageId": null,
       "message": "Do not use an `<a>` element to navigate to `/buchhaltung/belege/`. Use `<Link />` from `next/link` instead. See: https://nextjs.org/docs/messages/no-html-link-for-pages",
-      "count": 1
-    },
-    {
-      "file": "src/components/analytics/DrillChart.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'useEffect' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/analytics/DrillChart.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'useRef' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/analytics/DrillComposition.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ExternalLink' is defined but never used.",
       "count": 1
     },
     {
@@ -2682,14 +1586,6 @@
       "count": 1
     },
     {
-      "file": "src/components/customers/CustomerMemoryCard.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'CustomerInsight' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/components/customers/CustomerStammdaten.tsx",
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
@@ -2707,46 +1603,6 @@
     },
     {
       "file": "src/components/customers/NewCustomerForm.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Mail' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/customers/NewCustomerForm.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'MapPin' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/customers/NewCustomerForm.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Phone' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/customers/NewCustomerForm.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'User' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/customers/NewCustomerForm.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'UserPlus' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/customers/NewCustomerForm.tsx",
       "ruleId": "react-hooks/set-state-in-effect",
       "severity": 2,
       "messageId": null,
@@ -2759,14 +1615,6 @@
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
-      "count": 1
-    },
-    {
-      "file": "src/components/customers/tabs/CustomerAnalysisTab.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Customer' is defined but never used.",
       "count": 1
     },
     {
@@ -2846,14 +1694,6 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'Customer' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/customers/tabs/CustomerOverviewTab.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'customerId' is defined but never used.",
       "count": 1
     },
@@ -2890,30 +1730,6 @@
       "count": 1
     },
     {
-      "file": "src/components/customers/useCustomerKpi.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'supabase' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/customers/useCustomerKpi.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'useEffect' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/customers/useCustomerKpi.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'useState' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/components/diagnostics/DiagnosticsWidget.tsx",
       "ruleId": "@next/next/no-img-element",
       "severity": 1,
@@ -2946,46 +1762,6 @@
       "count": 2
     },
     {
-      "file": "src/components/entities/CustomerFocusView.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'customersRepository' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/entities/OrderFocusView.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'AlertTriangle' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/entities/OrderFocusView.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Clock' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/entities/OrderFocusView.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'MapPin' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/entities/OrderFocusView.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Package' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/components/erfassung/ErfassungCard.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
@@ -3007,22 +1783,6 @@
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
-      "count": 1
-    },
-    {
-      "file": "src/components/erfassung/ErfassungSheet.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Search' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/erfassung/ErfassungSheet.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'getVorlageFuerAuftrag' is defined but never used.",
       "count": 1
     },
     {
@@ -3090,14 +1850,6 @@
       "count": 2
     },
     {
-      "file": "src/components/erfassung/PhoneFlow/PhoneExtractionResult.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ArrowRight' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/components/erfassung/ScanFlow/ScanResult.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
@@ -3106,22 +1858,6 @@
       "count": 2
     },
     {
-      "file": "src/components/erfassung/ScanFlow/ScanResult.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ArrowRight' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/erfassung/ScanFlow/ScanResult.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'User' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/components/erfassung/ScanFlow/ScanUpload.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
@@ -3134,23 +1870,7 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'Loader2' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/erfassung/ScanFlow/ScanUpload.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'closeErfassung' is assigned a value but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/erfassung/VorschlagBanner.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'motion' is defined but never used.",
       "count": 1
     },
     {
@@ -3186,75 +1906,11 @@
       "count": 1
     },
     {
-      "file": "src/components/galvanik/GalvanikOrderRow.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'de' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/galvanik/GalvanikOrderRow.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'isBefore' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/galvanik/GalvanikOrderRow.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'isToday' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/galvanik/GalvanikOrderRow.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'isTomorrow' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/galvanik/GalvanikOrderRow.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'startOfDay' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/galvanik/GalvanikQueue.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'isBefore' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/components/galvanik/GalvanikQueue.tsx",
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
       "message": "'today' is assigned a value but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/home/DayTimeline.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ArrowRight' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/home/HomeKpiCard.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ReactNode' is defined but never used.",
       "count": 1
     },
     {
@@ -3282,35 +1938,11 @@
       "count": 1
     },
     {
-      "file": "src/components/intake/IntakeCompletionSummary.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Button' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/components/intake/OcrMatchResult.tsx",
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
       "message": "'attachmentUrl' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'PenLine' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/Kommandozentrale.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Zap' is defined but never used.",
       "count": 1
     },
     {
@@ -3390,31 +2022,7 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'React' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/hooks/useClientDossier.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'buildDossier' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/hooks/useClientDossier.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'useCallback' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/kommunikation/kommandozentrale/hooks/useClientDossier.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'useMemo' is defined but never used.",
       "count": 1
     },
     {
@@ -3430,23 +2038,7 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'User' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/layout/GlobalSearch.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'activeAIQuery' is assigned a value but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/layout/GlobalSearch.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'getRecentSearches' is defined but never used.",
       "count": 1
     },
     {
@@ -3472,22 +2064,6 @@
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 2
-    },
-    {
-      "file": "src/components/layout/GlobalSearchAIResult.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'FileText' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/layout/GlobalSearchAIResult.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'RefreshCw' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/components/layout/GlobalSearchAIResult.tsx",
@@ -3539,14 +2115,6 @@
     },
     {
       "file": "src/components/layout/KreileHeader.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'trackUiEvent' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/layout/KreileHeader.tsx",
       "ruleId": null,
       "severity": 1,
       "messageId": null,
@@ -3586,14 +2154,6 @@
       "count": 1
     },
     {
-      "file": "src/components/layout/TabletTopFlowNav.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Archive' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/components/offline/OfflineSyncBadge.tsx",
       "ruleId": "react-hooks/set-state-in-effect",
       "severity": 2,
@@ -3607,14 +2167,6 @@
       "severity": 1,
       "messageId": null,
       "message": "React Hook useEffect has a missing dependency: 'handleMove'. Either include it or remove the dependency array.",
-      "count": 1
-    },
-    {
-      "file": "src/components/orders/BulkLabelPrintView.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'createPortal' is defined but never used.",
       "count": 1
     },
     {
@@ -3654,7 +2206,7 @@
       "ruleId": "react-hooks/set-state-in-effect",
       "severity": 2,
       "messageId": null,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/orders/BulkLabelPrintView.tsx:33:5\n  31 |\n  32 |   useEffect(() => {\n> 33 |     setMounted(true);\n     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect\n  34 |   }, []);\n  35 |\n  36 |   useEffect(() => {",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/orders/BulkLabelPrintView.tsx:32:5\n  30 |\n  31 |   useEffect(() => {\n> 32 |     setMounted(true);\n     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect\n  33 |   }, []);\n  34 |\n  35 |   useEffect(() => {",
       "count": 1
     },
     {
@@ -3662,7 +2214,7 @@
       "ruleId": "react-hooks/set-state-in-effect",
       "severity": 2,
       "messageId": null,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/orders/BulkLabelPrintView.tsx:37:5\n  35 |\n  36 |   useEffect(() => {\n> 37 |     setMounted(true);\n     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect\n  38 |   }, []);\n  39 |\n  40 |   const handlePrint = async () => {",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/orders/BulkLabelPrintView.tsx:36:5\n  34 |\n  35 |   useEffect(() => {\n> 36 |     setMounted(true);\n     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect\n  37 |   }, []);\n  38 |\n  39 |   const handlePrint = async () => {",
       "count": 1
     },
     {
@@ -3691,18 +2243,10 @@
     },
     {
       "file": "src/components/orders/ItemDrawer.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'supabase' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/orders/ItemDrawer.tsx",
       "ruleId": "react-hooks/set-state-in-effect",
       "severity": 2,
       "messageId": null,
-      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/orders/ItemDrawer.tsx:37:7\n  35 |   useEffect(() => {\n  36 |     if (existingItem) {\n> 37 |       setFormData({\n     |       ^^^^^^^^^^^ Avoid calling setState() directly within an effect\n  38 |         name: existingItem.name || '',\n  39 |         quantity: existingItem.quantity || 1,\n  40 |         material: existingItem.material || '',",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/orders/ItemDrawer.tsx:36:7\n  34 |   useEffect(() => {\n  35 |     if (existingItem) {\n> 36 |       setFormData({\n     |       ^^^^^^^^^^^ Avoid calling setState() directly within an effect\n  37 |         name: existingItem.name || '',\n  38 |         quantity: existingItem.quantity || 1,\n  39 |         material: existingItem.material || '',",
       "count": 1
     },
     {
@@ -3768,14 +2312,6 @@
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 2
-    },
-    {
-      "file": "src/components/orders/PaymentDrawer.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'supabase' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/components/orders/PriceLinesEditor.tsx",
@@ -3854,14 +2390,6 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'X' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/start/EmailLoginDialog.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'err' is defined but never used.",
       "count": 1
     },
@@ -3874,35 +2402,11 @@
       "count": 1
     },
     {
-      "file": "src/components/start/EmailLoginDialog.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'useRouter' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/start/PinDialog.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Lock' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/components/start/StartScreenClient.tsx",
       "ruleId": "@next/next/no-img-element",
       "severity": 1,
       "messageId": null,
       "message": "Using `<img>` could result in slower LCP and higher bandwidth. Consider using `<Image />` from `next/image` or a custom image loader to automatically optimize images. This may incur additional usage or cost from your provider. See: https://nextjs.org/docs/messages/no-img-element",
-      "count": 1
-    },
-    {
-      "file": "src/components/start/WeatherBubble.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'Check' is defined but never used.",
       "count": 1
     },
     {
@@ -4002,14 +2506,6 @@
       "count": 1
     },
     {
-      "file": "src/components/ui/AnalysisChart.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'AreaChart' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/components/ui/AnalysisOverlay.tsx",
       "ruleId": "@typescript-eslint/no-explicit-any",
       "severity": 2,
@@ -4039,14 +2535,6 @@
       "severity": 2,
       "messageId": null,
       "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/components/ui/AppOverlayPortal.tsx:14:5\n  12 |\n  13 |   useEffect(() => {\n> 14 |     setMounted(true);\n     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect\n  15 |     // Overlay open -> body scroll hidden\n  16 |     const previous = document.body.style.overflow;\n  17 |     document.body.style.overflow = \"hidden\";",
-      "count": 1
-    },
-    {
-      "file": "src/components/ui/AppShortcutOverlay.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'FileText' is defined but never used.",
       "count": 1
     },
     {
@@ -4086,14 +2574,6 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'de' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/components/warenausgang/WarenausgangQueue.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'handleSendMail' is assigned a value but never used.",
       "count": 1
     },
@@ -4111,22 +2591,6 @@
       "severity": 2,
       "messageId": null,
       "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\n<repo>/src/contexts/ParkedCallContext.tsx:37:9\n  35 |       const stored = localStorage.getItem(\"kreile_parked_call\");\n  36 |       if (stored) {\n> 37 |         setActiveParkedCall(JSON.parse(stored));\n     |         ^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect\n  38 |       }\n  39 |     } catch (e) {}\n  40 |   }, []);",
-      "count": 1
-    },
-    {
-      "file": "src/db/schema_buchhaltung.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'createId' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/features/analyse/AnalyseDrillOverlay.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ExternalLink' is defined but never used.",
       "count": 1
     },
     {
@@ -4150,24 +2614,8 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'db' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/features/analyse/analyse.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'filters' is defined but never used.",
       "count": 2
-    },
-    {
-      "file": "src/features/analyse/analyse.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'sql' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/features/analyse/analyse.actions.ts",
@@ -4287,14 +2735,6 @@
       "severity": 2,
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
-      "count": 1
-    },
-    {
-      "file": "src/features/orders/orderPhoto.actions.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'createClient' is defined but never used.",
       "count": 1
     },
     {
@@ -4506,22 +2946,6 @@
       "count": 1
     },
     {
-      "file": "src/lib/ocr/Verteilung.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'eq' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/ocr/Verteilung.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'kostenposten' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/lib/offline/SyncContext.tsx",
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
@@ -4551,14 +2975,6 @@
       "severity": 1,
       "messageId": null,
       "message": "'// eslint-disable-next-line react-hooks/exhaustive-deps' has no effect because you have 'noInlineConfig' setting in your config.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/offline/idbSync.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'warningStore' is defined but never used.",
       "count": 1
     },
     {
@@ -4595,14 +3011,6 @@
     },
     {
       "file": "src/lib/pdf/DeliveryNote.tsx",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'path' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/pdf/DeliveryNote.tsx",
       "ruleId": "jsx-a11y/alt-text",
       "severity": 1,
       "messageId": null,
@@ -4630,14 +3038,6 @@
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
       "messageId": "unusedVar",
-      "message": "'createId' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/repositories/bathsRepository.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
       "message": "'data' is defined but never used.",
       "count": 1
     },
@@ -4658,22 +3058,6 @@
       "count": 1
     },
     {
-      "file": "src/lib/repositories/complaintsRepository.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'IndexedDBHelper' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/repositories/complaintsRepository.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'OfflineManager' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/lib/repositories/inventoryRepository.ts",
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
@@ -4690,62 +3074,6 @@
       "count": 1
     },
     {
-      "file": "src/lib/repositories/inventoryRepository.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'OfflineManager' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/repositories/itemsRepository.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'IndexedDBHelper' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/repositories/itemsRepository.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'ItemResponse' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/repositories/itemsRepository.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'OfflineManager' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/repositories/ordersRepository.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'IndexedDBHelper' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/repositories/ordersRepository.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'OfflineManager' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/repositories/ordersRepository.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'createId' is defined but never used.",
-      "count": 1
-    },
-    {
       "file": "src/lib/repositories/ordersRepository.ts",
       "ruleId": "@typescript-eslint/no-unused-vars",
       "severity": 1,
@@ -4759,14 +3087,6 @@
       "severity": 1,
       "messageId": "unusedVar",
       "message": "'intakeDate' is assigned a value but never used.",
-      "count": 1
-    },
-    {
-      "file": "src/lib/search/aiAggregation.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'lieferant' is defined but never used.",
       "count": 1
     },
     {
@@ -4800,14 +3120,6 @@
       "messageId": "unexpectedAny",
       "message": "Unexpected any. Specify a different type.",
       "count": 6
-    },
-    {
-      "file": "src/lib/services/customerInsights.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'CustomerMockOrder' is defined but never used.",
-      "count": 1
     },
     {
       "file": "src/lib/useOrderLive.ts",
@@ -4983,22 +3295,6 @@
       "severity": 1,
       "messageId": "unusedVar",
       "message": "'path' is assigned a value but never used.",
-      "count": 1
-    },
-    {
-      "file": "test_legacy.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'sql' is defined but never used.",
-      "count": 1
-    },
-    {
-      "file": "test_station_counts.ts",
-      "ruleId": "@typescript-eslint/no-unused-vars",
-      "severity": 1,
-      "messageId": "unusedVar",
-      "message": "'orders' is defined but never used.",
       "count": 1
     },
     {
