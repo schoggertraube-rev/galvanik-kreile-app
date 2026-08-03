@@ -8,6 +8,14 @@ interface WareneingangActiveProps {
   orderId: string;
 }
 
+function getCaughtErrorMessage(error: unknown): string | null {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    return typeof error.message === "string" ? error.message : null;
+  }
+  return null;
+}
+
 export const WareneingangActive: React.FC<WareneingangActiveProps> = ({ orderId }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,8 +28,8 @@ export const WareneingangActive: React.FC<WareneingangActiveProps> = ({ orderId 
       if (!res.ok) {
         setError(res.error || res.message || 'Fehler bei der Übergabe');
       }
-    } catch (e: any) {
-      setError(e.message);
+    } catch (error: unknown) {
+      setError(getCaughtErrorMessage(error));
     } finally {
       setLoading(false);
     }

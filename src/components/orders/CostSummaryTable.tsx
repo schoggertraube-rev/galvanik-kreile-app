@@ -56,7 +56,7 @@ export const CostSummaryTable: React.FC<CostSummaryTableProps> = ({
     );
   };
 
-  const activeIndex = Math.max(0, STATION_ORDER.indexOf(activeStation as any));
+  const activeIndex = Math.max(0, STATION_ORDER.findIndex(station => station === activeStation));
 
   let totalMin = 0;
   let totalMat = 0;
