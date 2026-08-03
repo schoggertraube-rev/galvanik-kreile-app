@@ -3,14 +3,16 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, Layers, PlayCircle, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
-import { ordersRepository, Order } from "@/lib/repositories/ordersRepository";
+import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { OrderCompactCard, UrgencyType } from "@/components/orders/OrderCompactCard";
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import { getStationOrders, getStationReadyOrders, startProcessingStation } from "@/app/warendurchlauf/actions";
+import type { WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
 
 type GalvanikBucket = "ready" | "in_progress" | "finished";
+type GalvanikOrder = WarendurchlaufOrder & { statusText?: string };
 
-function sortByUrgency(orders: Order[]) {
+function sortByUrgency(orders: GalvanikOrder[]) {
   const priorityRank: Record<string, number> = {
     red: 0,
     orange: 1,
@@ -34,10 +36,10 @@ function mapRiskToUrgency(risk: string): UrgencyType {
 
 export default function GalvanikPage() {
   const [activeBucket, setActiveBucket] = useState<GalvanikBucket>("ready");
-  const [readyOrders, setReadyOrders] = useState<Order[]>([]);
-  const [inProgressOrders, setInProgressOrders] = useState<Order[]>([]);
-  const [finishedOrders, setFinishedOrders] = useState<Order[]>([]);
-  const [topUrgent, setTopUrgent] = useState<Order[]>([]);
+  const [readyOrders, setReadyOrders] = useState<GalvanikOrder[]>([]);
+  const [inProgressOrders, setInProgressOrders] = useState<GalvanikOrder[]>([]);
+  const [finishedOrders, setFinishedOrders] = useState<GalvanikOrder[]>([]);
+  const [topUrgent, setTopUrgent] = useState<GalvanikOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { openOrder } = useOrderModal();
 
@@ -49,15 +51,15 @@ export default function GalvanikPage() {
           getStationOrders("galvanik")
         ]);
         
-        let ready: any[] = [];
+        let ready: GalvanikOrder[] = [];
         if (resReady.ok && resReady.data) {
-          ready = sortByUrgency(resReady.data as any[]);
+          ready = sortByUrgency(resReady.data);
         }
         
-        let active: any[] = [];
-        let done: any[] = [];
+        let active: GalvanikOrder[] = [];
+        let done: GalvanikOrder[] = [];
         if (resActive.ok && resActive.data) {
-          const allActive = resActive.data as any[];
+          const allActive = resActive.data;
           active = sortByUrgency(allActive.filter(o => o.status === "in_progress"));
           done = sortByUrgency(allActive.filter(o => o.status === "done" || o.status === "quality_check"));
         }
@@ -99,7 +101,7 @@ export default function GalvanikPage() {
     }
   };
 
-  const renderOrderList = (orders: Order[], bucket: GalvanikBucket) => {
+  const renderOrderList = (orders: GalvanikOrder[], bucket: GalvanikBucket) => {
     const isActive = activeBucket === bucket;
     return (
       <div className={`flex flex-col gap-3 transition-all duration-500 ${isActive ? 'opacity-100' : ''}`}>
@@ -263,4 +265,3 @@ export default function GalvanikPage() {
     </div>
   );
 }
-
