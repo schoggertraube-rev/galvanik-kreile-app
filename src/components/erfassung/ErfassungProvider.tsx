@@ -8,7 +8,7 @@ export type ErfassungMode = "gate" | "customer" | "order" | "quote" | "scan" | "
 export interface ErfassungPrefill {
   customer?: Record<string, unknown> | null;
   items?: Record<string, unknown>[];
-  order?: Record<string, unknown>;
+  order?: Record<string, unknown> | null;
   behaviorNote?: string;
   company?: string;
   contactName?: string;

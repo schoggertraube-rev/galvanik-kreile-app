@@ -12,10 +12,9 @@ import {
 import Link from "next/link";
 import { usePageView } from "@/hooks/usePageView";
 import { getRecentPhoneNotes, updatePhoneNote } from "@/app/actions/phoneNotes.actions";
-import { getOrdersDb } from "@/app/actions/orders.actions";
+import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import { getCustomersDb } from "@/app/actions/customers.actions";
 
-type Order = any; // fallback
 import { smartMatchText, MatchResult } from "./smartMatcher";
 import { useParkedCall } from "@/contexts/ParkedCallContext";
 import { ContextAnalysisOverlay, ContextAnalysisOverlayProps } from "@/components/kommunikation/ContextAnalysisOverlay";
@@ -132,7 +131,7 @@ interface PhoneNoteData {
 }
 
   const [recentNotes, setRecentNotes] = useState<PhoneNoteData[]>([]);
-  const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [allOrders, setAllOrders] = useState<OrderResponse[]>([]);
   const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
 
 interface CustomerContact { id: string; name: string; city: string; initials: string; initialsColor: string; latestTime: string; lastChannel: Channel; openTopics: number; priority: "high" | "medium" | "low"; latestContent: string; threads: Thread[]; messages: ChatMessage[]; unread: number; isPhoneNote?: boolean; }
@@ -160,7 +159,7 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
   useEffect(() => { 
     let mounted = true;
     getRecentPhoneNotes(20).then(n => { if(mounted) setRecentNotes(n); }).catch(() => { if(mounted) setRecentNotes([]); }); 
-    getOrdersDb().then(res => { if(mounted && res.ok) setAllOrders(res.data as any); }).catch(() => { if(mounted) setAllOrders([]); });
+    getOrdersDb().then(res => { if(mounted && res.ok) setAllOrders(res.data); }).catch(() => { if(mounted) setAllOrders([]); });
     getCustomersDb().then(res => { if(mounted && res.ok) setAllCustomers(res.data); }).catch(() => { if(mounted) setAllCustomers([]); });
     return () => { mounted = false; };
   }, []);
@@ -803,7 +802,7 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
                     <div style={{ border: "1px solid #E5DFD3", borderRadius: 10, padding: "12px 14px", marginBottom: 8, background: "#fff", cursor: "pointer" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ fontSize: 13, fontWeight: 800 }}>{o.orderNumber}</span>
-                        <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 6px", borderRadius: 4, textTransform: "uppercase", background: o.statusText?.toLowerCase().includes("fertig") ? "#D1FAE5" : "#FEF3C7", color: o.statusText?.toLowerCase().includes("fertig") ? "#059669" : "#92400E" }}>{o.statusText || o.status}</span>
+                        <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 6px", borderRadius: 4, textTransform: "uppercase", background: o.status.toLowerCase().includes("fertig") ? "#D1FAE5" : "#FEF3C7", color: o.status.toLowerCase().includes("fertig") ? "#059669" : "#92400E" }}>{o.status}</span>
                       </div>
                       <div style={{ fontSize: 12, color: "#A09889", marginTop: 4 }}>{o.task}</div>
                     </div>

@@ -8,12 +8,15 @@ import {
 import Link from "next/link";
 import { smartMatchText, MatchResult } from "./smartMatcher";
 import { updatePhoneNote } from "@/app/actions/phoneNotes.actions";
+import type { getRecentPhoneNotes } from "@/app/actions/phoneNotes.actions";
 import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
 import { ordersRepository, type Order } from "@/lib/repositories/ordersRepository";
 import { customersRepository } from "@/lib/repositories/customersRepository";
 import { type Customer } from "@/lib/types/customer";
 
-export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: Record<string, any>, onUpdate: () => void, onClose: () => void }) {
+type PhoneNote = Awaited<ReturnType<typeof getRecentPhoneNotes>>[number];
+
+export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: PhoneNote, onUpdate: () => void, onClose: () => void }) {
   const [matchData, setMatchData] = useState<MatchResult | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
   const [assignForm, setAssignForm] = useState({ customerId: "", orderId: "" });
@@ -73,7 +76,7 @@ export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: Record<
           <div className="flex items-center gap-3 text-sm text-text-muted">
             <span className="font-medium text-navy-900">{note.callerName || "Unbekannter Anrufer"}</span>
             <span>•</span>
-            <span>{new Date(note.createdAt).toLocaleString()}</span>
+            <span>{new Date(note.createdAt ?? 0).toLocaleString()}</span>
           </div>
         </div>
         <div className="flex gap-2">
