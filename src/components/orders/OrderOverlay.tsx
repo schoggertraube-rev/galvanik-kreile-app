@@ -13,6 +13,14 @@ import { HeadCostBadge } from "./HeadCostBadge";
 import { AppOverlayPortal } from "@/components/ui/AppOverlayPortal";
 import { uploadOrderPhotoRecord } from "@/features/orders/orderPhoto.actions";
 import { createClient } from "@/lib/supabase/client";
+import type { getOrderWithDetails } from "@/lib/repositories/orderQueries";
+
+type OrderDetails = NonNullable<Awaited<ReturnType<typeof getOrderWithDetails>>>;
+type OverlayOrderItem = OrderDetails["items"][number] & {
+  price?: string | number | null;
+};
+type OverlayPriceLine = OrderDetails["priceLines"][number];
+type OverlayOrderEvent = OrderDetails["events"][number];
 
 export function OrderOverlay() {
   const stack = useOverlayStore(state => state.stack);
@@ -74,7 +82,11 @@ export function OrderOverlay() {
     );
   }
 
-  const hasItems = orderData.items && orderData.items.length > 0;
+  const orderItems: OverlayOrderItem[] = orderData.items ?? [];
+  const priceLines: OverlayPriceLine[] = orderData.priceLines ?? [];
+  const orderEvents: OverlayOrderEvent[] = orderData.events ?? [];
+  const hasItems = orderItems.length > 0;
+  const totalNet = priceLines.reduce((sum, line) => sum + Number(line.unitTotalEur || 0), 0);
 
   return (
     <AppOverlayPortal>
@@ -333,7 +345,7 @@ export function OrderOverlay() {
                         <span className="text-[var(--ci-ink-3)] text-sm">Noch keine Daten erfasst</span>
                       </div>
                     ) : (
-                      orderData.items.map((item: any, idx: number) => (
+                      orderItems.map((item, idx) => (
                         <div key={item.id || idx} className="ci-item-card cursor-pointer hover:border-[var(--ci-ink-3)] transition-colors" onClick={() => setEditingItemId(item.id)}>
                           <div className={`ci-item-photo ${item.photo ? 'has-photo' : ''}`}>
                             {item.photo ? <Camera className="w-5 h-5"/> : <CameraOff className="w-5 h-5"/>}
@@ -364,7 +376,7 @@ export function OrderOverlay() {
                     <div className="ci-item-sum">
                       <span className="ci-item-sum-label">Summe netto</span>
                       <span className="ci-item-sum-val">
-                        {(orderData.priceLines || []).reduce((sum: number, line: any) => sum + Number(line.unitTotalEur || 0), 0).toFixed(2)} €
+                        {totalNet.toFixed(2)} €
                       </span>
                     </div>
                   </div>
@@ -445,8 +457,8 @@ export function OrderOverlay() {
 
                             if (!dbRes.success) throw new Error(dbRes.error);
                             
-                          } catch (err: any) {
-                            console.error("Foto-Upload fehlgeschlagen:", err);
+                          } catch (error: unknown) {
+                            console.error("Foto-Upload fehlgeschlagen:", error);
                             setUploadError("Fehler beim Upload.");
                           } finally {
                             setIsUploadingPhoto(false);
@@ -473,8 +485,8 @@ export function OrderOverlay() {
                 <div className="ci-section">
                   <div className="ci-section-label">Auftragshistorie</div>
                   <div className="ci-history">
-                    {orderData.events && orderData.events.length > 0 ? (
-                      orderData.events.map((evt: any, i: number) => (
+                    {orderEvents.length > 0 ? (
+                      orderEvents.map((evt, i) => (
                         <div key={evt.id || i} className="ci-h-item">
                           <div className={`ci-h-dot ${evt.status === 'success' ? 'done' : 'info'}`}>
                             {evt.status === 'success' ? <Check className="w-3.5 h-3.5"/> : <Info className="w-3.5 h-3.5"/>}

@@ -5,6 +5,8 @@ export interface WorkEntry {
   step: string;
   minutes: number;
   costPerHour: number;
+  benchmark?: number;
+  sampleSize?: number;
 }
 
 export interface MaterialEntry {
@@ -13,6 +15,7 @@ export interface MaterialEntry {
   unitCostEur: number;
   inventoryItemId?: string;
   vorlageId?: string;
+  benchmarkHint?: string;
 }
 
 export interface ExtraCostEntry {

@@ -40,7 +40,7 @@ export const ErfassungVariant: React.FC<ErfassungVariantProps> = ({
     { name: 'Express-Zuschlag', active: false, minutes: 0, costEur: 50, eventType: 'express_surcharge', causedBy: 'customer_change' },
   ]);
 
-  const [stationCosts, setStationCosts] = useState<any>({});
+  const [stationCosts, setStationCosts] = useState<Awaited<ReturnType<typeof getStationCostSummary>>["stations"]>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -85,7 +85,7 @@ export const ErfassungVariant: React.FC<ErfassungVariantProps> = ({
       setConsumableEntries(initialMat);
 
       // Reset extras
-      setExtras(extras.map(e => ({ ...e, active: false })));
+      setExtras(currentExtras => currentExtras.map(e => ({ ...e, active: false })));
       
       setLoading(false);
     }
@@ -147,8 +147,8 @@ export const ErfassungVariant: React.FC<ErfassungVariantProps> = ({
                 key={i} 
                 name={w.step} 
                 value={w.minutes} 
-                benchmark={(w as any).benchmark}
-                sampleSize={(w as any).sampleSize}
+                benchmark={w.benchmark}
+                sampleSize={w.sampleSize}
                 onChange={(val) => {
                   const newEntries = [...workEntries];
                   newEntries[i].minutes = val;
@@ -174,7 +174,7 @@ export const ErfassungVariant: React.FC<ErfassungVariantProps> = ({
                   name={m.itemName} 
                   count={m.quantity} 
                   unitCostEur={m.unitCostEur} 
-                  benchmarkHint={(m as any).benchmarkHint}
+                  benchmarkHint={m.benchmarkHint}
                   onChange={(val) => {
                     const newMat = [...consumableEntries];
                     newMat[i].quantity = val;
