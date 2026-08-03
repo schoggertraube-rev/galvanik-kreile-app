@@ -6,11 +6,22 @@ import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { getAusgabenAnalysisAction } from "@/app/buchhaltung/analysis.actions";
 import { getL7Daten } from "@/app/buchhaltung/actions";
 
+type AusgabenData = Awaited<ReturnType<typeof getAusgabenAnalysisAction>>;
+type L7Data = {
+  affectedAccounts: { id: string; label: string }[];
+  affectedCostCenters: { id: string; label: string }[];
+  periodImpact: string;
+  liquidityImpact: string;
+  taxImpactEur: number;
+};
+type ExpenseCategory = { name: string; amount: number };
+type InsightAction = { label: string; href?: string };
+
 export function FixkostenKachel({ summe }: { summe: number }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("fix");
-  const [data, setData] = useState<any>(null);
-  const [l7Data, setL7Data] = useState<any>(null);
+  const [data, setData] = useState<AusgabenData | null>(null);
+  const [l7Data, setL7Data] = useState<L7Data>();
 
   useEffect(() => {
     if (!open) return;
@@ -37,7 +48,7 @@ export function FixkostenKachel({ summe }: { summe: number }) {
     trend: { title: "Kostenentwicklung", chartType: "bar" as const, chartData: data.chartData },
     composition: {
       title: "Top 5 Ausgaben-Kategorien",
-      rows: data.topKategorien.map((k: any) => ({
+      rows: data.topKategorien.map((k: ExpenseCategory) => ({
         avatar: k.name.substring(0, 2).toUpperCase(),
         avatarColor: "#64748B",
         name: k.name,
@@ -55,7 +66,7 @@ export function FixkostenKachel({ summe }: { summe: number }) {
     insight: {
       body: data.insightsGesamt.beobachtungen.map((b: string) => `<b>Beobachtung:</b> ${b}`).join('<br/>') + 
             (data.insightsGesamt.vermutungen.length > 0 ? '<br/><br/>' + data.insightsGesamt.vermutungen.map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
-      actions: data.insightsGesamt.vorschlaege.map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
+      actions: data.insightsGesamt.vorschlaege.map((v: InsightAction) => ({ label: v.label, onClick: () => window.location.href = v.href as string }))
     },
     linkedAreas: [
       { label: "Ausgaben nach Kategorie analysieren", href: "/buchhaltung/ausgaben" },
@@ -82,5 +93,3 @@ export function FixkostenKachel({ summe }: { summe: number }) {
     </>
   );
 }
-
-

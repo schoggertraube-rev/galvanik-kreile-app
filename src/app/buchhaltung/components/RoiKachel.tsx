@@ -1,20 +1,46 @@
 
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Calculator } from "lucide-react";
 import { Tile } from "./Tile";
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { getSparzaehlerAnalysisAction } from "@/app/buchhaltung/analysis.actions";
 import { getL7Daten } from "@/app/buchhaltung/actions";
 
+type RoiData = {
+  invest: number;
+  returnVal: number;
+  roi: number;
+  payback: number;
+  ersparnisBetrag: number;
+  marketingUmsatz: number;
+};
+type L7Data = {
+  affectedAccounts: { id: string; label: string }[];
+  affectedCostCenters: { id: string; label: string }[];
+  periodImpact: string;
+  liquidityImpact: string;
+  taxImpactEur: number;
+};
+
 export function RoiKachel() {
   const [open, setOpen] = useState(false);
-  const [data, setData] = useState<any>(null);
-  const [l7Data, setL7Data] = useState<any>(null);
+  const [data, setData] = useState<RoiData | null>(null);
+  const [l7Data, setL7Data] = useState<L7Data>();
+  const dataRef = useRef(data);
+  const l7DataRef = useRef(l7Data);
 
   useEffect(() => {
-    if (!open && data) return;
-    if (open && !l7Data) getL7Daten({}).then(setL7Data);
+    dataRef.current = data;
+  }, [data]);
+
+  useEffect(() => {
+    l7DataRef.current = l7Data;
+  }, [l7Data]);
+
+  useEffect(() => {
+    if (!open && dataRef.current) return;
+    if (open && !l7DataRef.current) getL7Daten({}).then(setL7Data);
     const fetchRoi = async () => {
       const now = new Date();
       const von = `${now.getFullYear()}-01-01`;

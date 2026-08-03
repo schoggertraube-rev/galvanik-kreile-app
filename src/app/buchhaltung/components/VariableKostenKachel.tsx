@@ -6,11 +6,21 @@ import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { getAusgabenAnalysisAction } from "@/app/buchhaltung/analysis.actions";
 import { getL7Daten } from "@/app/buchhaltung/actions";
 
+type AusgabenData = Awaited<ReturnType<typeof getAusgabenAnalysisAction>>;
+type L7Data = {
+  affectedAccounts: { id: string; label: string }[];
+  affectedCostCenters: { id: string; label: string }[];
+  periodImpact: string;
+  liquidityImpact: string;
+  taxImpactEur: number;
+};
+type InsightAction = { label: string; href?: string };
+
 export function VariableKostenKachel({ summe }: { summe: number }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("variabel");
-  const [data, setData] = useState<any>(null);
-  const [l7Data, setL7Data] = useState<any>(null);
+  const [data, setData] = useState<AusgabenData | null>(null);
+  const [l7Data, setL7Data] = useState<L7Data>();
 
   useEffect(() => {
     if (!open) return;
@@ -34,7 +44,7 @@ export function VariableKostenKachel({ summe }: { summe: number }) {
     trend: { title: "Kostenentwicklung", chartType: "bar" as const, chartData: data.chartData },
     insight: {
       body: data.insightsGesamt.beobachtungen.map((b: string) => `<b>Beobachtung:</b> ${b}`).join('<br/>'),
-      actions: data.insightsGesamt.vorschlaege.map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
+      actions: data.insightsGesamt.vorschlaege.map((v: InsightAction) => ({ label: v.label, onClick: () => window.location.href = v.href as string }))
     },
     linkedAreas: [{ label: "Ausgaben nach Kategorie analysieren", href: "/buchhaltung/ausgaben" }]
   };
@@ -56,5 +66,3 @@ export function VariableKostenKachel({ summe }: { summe: number }) {
     </>
   );
 }
-
-

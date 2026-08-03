@@ -6,10 +6,20 @@ import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { getBwaAnalysisAction } from "@/app/buchhaltung/analysis.actions";
 import { getL7Daten } from "@/app/buchhaltung/actions";
 
+type BwaData = Awaited<ReturnType<typeof getBwaAnalysisAction>>;
+type L7Data = {
+  affectedAccounts: { id: string; label: string }[];
+  affectedCostCenters: { id: string; label: string }[];
+  periodImpact: string;
+  liquidityImpact: string;
+  taxImpactEur: number;
+};
+type InsightAction = { label: string; href?: string };
+
 export function BwaKachel() {
   const [open, setOpen] = useState(false);
-  const [data, setData] = useState<any>(null);
-  const [l7Data, setL7Data] = useState<any>(null);
+  const [data, setData] = useState<BwaData | null>(null);
+  const [l7Data, setL7Data] = useState<L7Data>();
 
   useEffect(() => {
     if (!open) return;
@@ -37,7 +47,7 @@ export function BwaKachel() {
     insight: {
       body: (data.insights?.beobachtungen || []).map((b: string) => `<b>Beobachtung:</b> ${b}`).join('<br/>') + 
             ((data.insights?.vermutungen?.length || 0) > 0 ? '<br/><br/>' + data.insights.vermutungen.map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
-      actions: (data.insights?.vorschlaege || []).map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
+      actions: (data.insights?.vorschlaege || []).map((v: InsightAction) => ({ label: v.label, onClick: () => window.location.href = v.href as string }))
     },
     linkedAreas: [{ label: "Umsätze ansehen", href: "/performance/umsatz-marge" }],
     l7Data: l7Data
@@ -60,5 +70,3 @@ export function BwaKachel() {
     </>
   );
 }
-
-

@@ -3,6 +3,71 @@
 import { createClient } from '@/lib/supabase/server'
 import type { Beleg, BelegDetail, BelegFilter, Ausgangsrechnung, RechnungFilter, AusgangsrechnungPosition , Kostenposten, KostenpostenFilter } from '@/lib/buchhaltung/types'
 
+type BelegUpdatePayload = {
+  status?: Beleg['status'];
+  brutto?: number;
+  netto?: number;
+  ust_betrag?: number;
+  lieferant_id?: string;
+  kategorie_id?: string;
+  belegart?: string;
+  belegdatum?: string;
+  konto_id?: string;
+  kostenstelle_id?: string;
+};
+
+type RechnungRow = {
+  id: string;
+  nummer: string;
+  kunde_id?: string;
+  kunde_name?: string;
+  datum: string;
+  faellig_am?: string;
+  brutto: number;
+  netto?: number;
+  ust_satz?: number;
+  ust_betrag?: number;
+  bezahlt_am?: string;
+  status: Ausgangsrechnung['status'];
+  mahnstufe?: number;
+  erechnung_xml?: string;
+};
+
+type BelegRow = {
+  id: string;
+  erfasst_am: string;
+  belegdatum?: string;
+  lieferant_id?: string;
+  lieferant_text?: string;
+  brutto?: number;
+  netto?: number;
+  ust_satz?: number;
+  ust_betrag?: number;
+  vorsteuer_abzug: boolean;
+  kategorie_id?: string;
+  skr_konto?: string;
+  absetzbar_prozent: number;
+  absetzbar_grund?: string;
+  belegart?: Beleg['belegart'];
+  original_datei: string;
+  original_format?: string;
+  ocr_confidence?: number;
+  status: Beleg['status'];
+  rechnungsnummer_extern?: string;
+  storniert_von?: string;
+  bank_zahlung_id?: string;
+  erstellt_von: string;
+  konto_id?: string;
+  kostenstelle_id?: string;
+  periode_id?: string;
+  ist_auf_auftrag_zugeordnet?: boolean;
+  zugeordneter_order_id?: string;
+};
+
+type AffectedReference = { id: string; label: string };
+type KontoReference = { nummer: string; bezeichnung: string };
+type KostenstelleReference = { kuerzel: string; name: string };
+
 /**
  * Ruft die Liste der Belege aus der Datenbank ab.
  */
@@ -62,7 +127,7 @@ export async function getBelegAction(id: string): Promise<BelegDetail> {
   // Wenn der Beleg eine Datei hat, erzeugen wir eine Signed URL für die Vorschau
   let originalDatei = data.original_datei;
   if (originalDatei && !originalDatei.startsWith('http')) {
-    const { data: urlData, error: urlError } = await supabase
+    const { data: urlData } = await supabase
       .storage
       .from('buchhaltung-belege')
       .createSignedUrl(originalDatei, 3600); // 1h gültig
@@ -169,7 +234,7 @@ export async function freigebenBelegAction(id: string, korrektur?: Partial<Beleg
     throw new Error('Dieser Beleg ist bereits festgeschrieben oder storniert und kann nicht freigegeben werden.')
   }
   
-  const payload: any = { status: 'erfasst' }
+  const payload: BelegUpdatePayload = { status: 'erfasst' }
   
   if (korrektur) {
     // Map client fields back to DB schema
@@ -196,6 +261,7 @@ export async function freigebenBelegAction(id: string, korrektur?: Partial<Beleg
  * Storniert einen Beleg.
  */
 export async function stornoBelegAction(id: string, grund: string): Promise<Beleg> {
+  void grund;
   const supabase = await createClient()
   
   const { data: authData } = await supabase.auth.getUser()
@@ -217,7 +283,7 @@ export async function stornoBelegAction(id: string, grund: string): Promise<Bele
 export async function assignBelegeBatchAction(belegIds: string[], updates: { kontoId?: string, kostenstelleId?: string }) {
   if (!belegIds.length) return true;
   const supabase = await createClient();
-  const payload: any = {};
+  const payload: BelegUpdatePayload = {};
   if (updates.kontoId) payload.konto_id = updates.kontoId;
   if (updates.kostenstelleId) payload.kostenstelle_id = updates.kostenstelleId;
 
@@ -250,6 +316,7 @@ export async function getKraftstoffTankungenAction() {
 }
 
 export async function exportBelegeAction(format: "DATEV" | "Lexware" | "CSV") {
+  void format;
   const supabase = await createClient()
   
   const { data, error } = await supabase.from('beleg')
@@ -280,7 +347,7 @@ export async function listRechnungenAction(filter?: RechnungFilter): Promise<Aus
   let query = supabase.from('ausgangsrechnung').select('*').order('datum', { ascending: false });
 
   if (filter?.status) {
-    if (filter.status === 'ueberfaellig' as any) {
+    if (filter.status === 'ueberfaellig') {
       query = query.in('status', ['offen', 'teilbezahlt']).lt('faellig_am', new Date().toISOString());
     } else {
       query = query.eq('status', filter.status);
@@ -330,7 +397,7 @@ export async function listOffenePostenAction(): Promise<Ausgangsrechnung[]> {
 
 // ---------------- Helper -------------------------------------------------------------------
 
-function mapToClientRechnung(dbData: any): Ausgangsrechnung {
+function mapToClientRechnung(dbData: RechnungRow): Ausgangsrechnung {
   return {
     id: dbData.id,
     nummer: dbData.nummer,
@@ -349,7 +416,7 @@ function mapToClientRechnung(dbData: any): Ausgangsrechnung {
   };
 }
 
-function mapToClientBeleg(dbData: any): Beleg {
+function mapToClientBeleg(dbData: BelegRow): Beleg {
   return {
     id: dbData.id,
     erfasstAm: dbData.erfasst_am,
@@ -369,7 +436,7 @@ function mapToClientBeleg(dbData: any): Beleg {
     originalDatei: dbData.original_datei,
     originalFormat: dbData.original_format,
     ocrConfidence: dbData.ocr_confidence,
-    status: dbData.status as any,
+    status: dbData.status,
     rechnungsnummerExtern: dbData.rechnungsnummer_extern,
     storniertVon: dbData.storniert_von,
     bankZahlungId: dbData.bank_zahlung_id,
@@ -737,7 +804,6 @@ export async function generateDatevExportAction(von: string, bis: string): Promi
   const { data: profileData } = await supabase.from('steuerprofil').select('berater_nr, mandanten_nr, sachkontenrahmen').limit(1).single();
   const beraterNr = profileData?.berater_nr || '';
   const mandantenNr = profileData?.mandanten_nr || '';
-  const skr = profileData?.sachkontenrahmen || 'SKR03';
   const { data: belege } = await supabase.from('beleg').select('*').eq('status', 'festgeschrieben').gte('belegdatum', von).lte('belegdatum', bis);
   
   const headerLine = `"EXTF";700;21;"Buchungsstapel";4;` + new Date().toISOString().replace(/[-:T]/g, '').substring(0, 14) + `;"";"";"";"";"${beraterNr}";"${mandantenNr}";` + new Date(von).getFullYear() + `0101;4;` + von.replace(/-/g, '') + `;` + bis.replace(/-/g, '') + `;"";"";"";"";""`;
@@ -758,10 +824,7 @@ export async function generateDatevExportAction(von: string, bis: string): Promi
 
 export async function generateLexwareExportAction(von: string, bis: string): Promise<string> {
   const supabase = await createClient();
-  const { data: profileData } = await supabase.from('steuerprofil').select('berater_nr, mandanten_nr, sachkontenrahmen').limit(1).single();
-  const beraterNr = profileData?.berater_nr || '';
-  const mandantenNr = profileData?.mandanten_nr || '';
-  const skr = profileData?.sachkontenrahmen || 'SKR03';
+  await supabase.from('steuerprofil').select('berater_nr, mandanten_nr, sachkontenrahmen').limit(1).single();
   const { data: belege } = await supabase.from('beleg').select('*').eq('status', 'festgeschrieben').gte('belegdatum', von).lte('belegdatum', bis);
 
   const columnHeaders = `Datum;Belegnummer;Buchungstext;Betrag;USt-Satz;USt-Betrag;Konto;Gegenkonto;S/H`;
@@ -800,17 +863,21 @@ export async function getL7Daten(filter: { belegart?: string, kategorieId?: stri
     return undefined;
   }
 
-  const kontenMap = new Map();
-  const ksMap = new Map();
+  const kontenMap = new Map<string, AffectedReference>();
+  const ksMap = new Map<string, AffectedReference>();
   let ustEffekt = 0;
 
   for (const b of belege || []) {
     ustEffekt += Number(b.ust_betrag || 0);
     if (b.konto) {
-      kontenMap.set((b.konto as any).nummer, { id: (b.konto as any).nummer, label: `${(b.konto as any).nummer} - ${(b.konto as any).bezeichnung}` });
+      // The relationship is selected as one account even though the untyped client exposes an array union.
+      const konto = b.konto as unknown as KontoReference;
+      kontenMap.set(konto.nummer, { id: konto.nummer, label: `${konto.nummer} - ${konto.bezeichnung}` });
     }
     if (b.kostenstelle) {
-      ksMap.set((b.kostenstelle as any).kuerzel, { id: (b.kostenstelle as any).kuerzel, label: `${(b.kostenstelle as any).kuerzel} - ${(b.kostenstelle as any).name}` });
+      // The relationship is selected as one cost center even though the untyped client exposes an array union.
+      const kostenstelle = b.kostenstelle as unknown as KostenstelleReference;
+      ksMap.set(kostenstelle.kuerzel, { id: kostenstelle.kuerzel, label: `${kostenstelle.kuerzel} - ${kostenstelle.name}` });
     }
   }
 

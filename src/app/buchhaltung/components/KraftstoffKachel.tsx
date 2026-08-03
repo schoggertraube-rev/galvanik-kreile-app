@@ -6,14 +6,34 @@ import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { getAusgabenAnalysisAction } from "@/app/buchhaltung/analysis.actions";
 import { getL7Daten } from "@/app/buchhaltung/actions";
 
+type InsightAction = { label: string; href?: string };
+type KraftstoffData = {
+  gesamtKosten?: number;
+  anzahlTankungen?: number;
+  maxKosten?: number;
+  chartData?: unknown[];
+  insights?: {
+    beobachtungen?: string[];
+    vermutungen?: string[];
+    vorschlaege?: InsightAction[];
+  };
+};
+type L7Data = {
+  affectedAccounts: { id: string; label: string }[];
+  affectedCostCenters: { id: string; label: string }[];
+  periodImpact: string;
+  liquidityImpact: string;
+  taxImpactEur: number;
+};
+
 export function KraftstoffKachel() {
   const [open, setOpen] = useState(false);
-  const [data, setData] = useState<any>(null);
-  const [l7Data, setL7Data] = useState<any>(null);
+  const [data, setData] = useState<KraftstoffData | null>(null);
+  const [l7Data, setL7Data] = useState<L7Data>();
 
   useEffect(() => {
     if (!open) return;
-    if (!data) getAusgabenAnalysisAction("2026-06-01", "2026-06-30").then(setData);
+    if (!data) getAusgabenAnalysisAction("2026-06-01", "2026-06-30").then((result) => setData(result));
     if (!l7Data) getL7Daten({ kategorieId: "kraftstoff" }).then(setL7Data);
   }, [open, data, l7Data]);
 
@@ -32,8 +52,8 @@ export function KraftstoffKachel() {
     trend: { title: "Tankkosten Verlauf", chartType: "bar" as const, chartData: data.chartData || [] },
     insight: {
       body: (data.insights?.beobachtungen || []).map((b: string) => `<b>Beobachtung:</b> ${b}`).join('<br/>') + 
-            ((data.insights?.vermutungen?.length || 0) > 0 ? '<br/><br/>' + data.insights.vermutungen.map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
-      actions: (data.insights?.vorschlaege || []).map((v: any) => ({ label: v.label, onClick: () => window.location.href = v.href }))
+            ((data.insights?.vermutungen?.length || 0) > 0 ? '<br/><br/>' + (data.insights?.vermutungen || []).map((v: string) => `<b>Vermutung:</b> ${v}`).join('<br/>') : ''),
+      actions: (data.insights?.vorschlaege || []).map((v: InsightAction) => ({ label: v.label, onClick: () => window.location.href = v.href as string }))
     },
     linkedAreas: [{ label: "Ausgaben nach Kategorie analysieren", href: "/buchhaltung/ausgaben" }],
     l7Data: l7Data
@@ -56,5 +76,3 @@ export function KraftstoffKachel() {
     </>
   );
 }
-
-
