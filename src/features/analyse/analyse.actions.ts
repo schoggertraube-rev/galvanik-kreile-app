@@ -2,13 +2,76 @@
 
 import { checkAppAuth } from "@/lib/server/authHelper";
 import { createClient } from "@/lib/supabase/server";
-import { AnalyseTileKey, AnalyseTileSummary, AnalyseTileDetail, AnalyseEntityLink, AnalyseTileStatus } from "@/lib/analyse/dataContracts";
+import {
+  AnalyseTileKey,
+  AnalyseTileSummary,
+  AnalyseTileDetail,
+  AnalyseEntityLink,
+  AnalyseTileStatus,
+  WerkstattPulsData,
+} from "@/lib/analyse/dataContracts";
 
-async function getWerkstattPulsSummary(supabase: any, period: string): Promise<AnalyseTileSummary> {
-  const { data: t } = await supabase.from('v_analyse_termintreue').select('*').single();
-  const { data: d } = await supabase.from('v_analyse_durchlaufzeit').select('*').single();
-  const { data: w } = await supabase.from('v_analyse_wochenziel').select('*').single();
-  const { data: s } = await supabase.from('v_analyse_station_durchlauf').select('*');
+type AnalyseSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+type TermintreueRow = {
+  termintreue_pct: number | null;
+  ohne_zusagetermin: number;
+  nenner: number;
+};
+
+type DurchlaufzeitRow = {
+  avg_tage: number | null;
+  n: number;
+};
+
+type WochenzielRow = {
+  fertig_diese_woche: number;
+};
+
+type StationDurchlaufRow = {
+  station: string;
+  avg_tage: number | null;
+  teile_aktuell: number;
+};
+
+type AnalyseActionResult<T> = {
+  data: T;
+  error?: string;
+};
+
+type AnalyseQueryResult<T> = {
+  data: T | null;
+};
+
+function getErrorMessage(error: unknown): string | undefined {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string"
+  ) {
+    return error.message;
+  }
+
+  return undefined;
+}
+
+async function getWerkstattPulsSummary(supabase: AnalyseSupabaseClient, period: string): Promise<AnalyseTileSummary> {
+  const { data: t }: AnalyseQueryResult<TermintreueRow> = await supabase
+    .from('v_analyse_termintreue')
+    .select('*')
+    .single();
+  const { data: d }: AnalyseQueryResult<DurchlaufzeitRow> = await supabase
+    .from('v_analyse_durchlaufzeit')
+    .select('*')
+    .single();
+  const { data: w }: AnalyseQueryResult<WochenzielRow> = await supabase
+    .from('v_analyse_wochenziel')
+    .select('*')
+    .single();
+  const { data: s }: AnalyseQueryResult<StationDurchlaufRow[]> = await supabase
+    .from('v_analyse_station_durchlauf')
+    .select('*');
 
   // Ampellogik & Werte
   const termintreue = t?.termintreue_pct ?? 0;
@@ -38,14 +101,18 @@ async function getWerkstattPulsSummary(supabase: any, period: string): Promise<A
 
   // Stationen-Minibalken (Top 4 Stationen mit dem höchsten Durchlauf)
   const progressBars = (s || [])
-    .sort((a: any, b: any) => b.avg_tage - a.avg_tage)
+    .sort((a, b) => (b.avg_tage ?? 0) - (a.avg_tage ?? 0))
     .slice(0, 4)
-    .map((station: any) => ({
-      label: station.station,
-      value: station.avg_tage,
-      fillRatio: Math.min(100, (station.avg_tage / 10) * 100), // Angenommen 10 Tage ist max
-      colorClass: station.avg_tage > 5 ? "bg-red-500" : "bg-blue-500",
-    }));
+    .map(station => {
+      const avgTage = station.avg_tage ?? 0;
+
+      return {
+        label: station.station,
+        value: avgTage,
+        fillRatio: Math.min(100, (avgTage / 10) * 100), // Angenommen 10 Tage ist max
+        colorClass: avgTage > 5 ? "bg-red-500" : "bg-blue-500",
+      };
+    });
 
   return {
     key: "werkstatt_puls",
@@ -77,7 +144,10 @@ async function getWerkstattPulsSummary(supabase: any, period: string): Promise<A
   };
 }
 
-export async function getAnalyseOverview(period: string, filters?: any): Promise<{ data: AnalyseTileSummary[], error?: any }> {
+export async function getAnalyseOverview(
+  period: string,
+  filters?: unknown,
+): Promise<AnalyseActionResult<AnalyseTileSummary[]>> {
   void filters;
   try {
     await checkAppAuth();
@@ -165,13 +235,17 @@ export async function getAnalyseOverview(period: string, filters?: any): Promise
     ];
 
     return { data: [werkstattPuls, ...emptyTiles] };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in getAnalyseOverview:", error);
-    return { error: error.message, data: [] };
+    return { error: getErrorMessage(error), data: [] };
   }
 }
 
-export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: string, filters?: any): Promise<{ data: AnalyseTileDetail | null, error?: any }> {
+export async function getAnalyseTileDetail(
+  tileKey: AnalyseTileKey,
+  period: string,
+  filters?: unknown,
+): Promise<AnalyseActionResult<AnalyseTileDetail | null>> {
   try {
     await checkAppAuth();
     
@@ -194,10 +268,21 @@ export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: stri
 
     if (tileKey === "werkstatt_puls") {
       // 1. Fetch Views for Level 2 Details
-      const { data: t } = await supabase.from('v_analyse_termintreue').select('*').single();
-      const { data: d } = await supabase.from('v_analyse_durchlaufzeit').select('*').single();
-      const { data: w } = await supabase.from('v_analyse_wochenziel').select('*').single();
-      const { data: s } = await supabase.from('v_analyse_station_durchlauf').select('*');
+      const { data: t }: AnalyseQueryResult<TermintreueRow> = await supabase
+        .from('v_analyse_termintreue')
+        .select('*')
+        .single();
+      const { data: d }: AnalyseQueryResult<DurchlaufzeitRow> = await supabase
+        .from('v_analyse_durchlaufzeit')
+        .select('*')
+        .single();
+      const { data: w }: AnalyseQueryResult<WochenzielRow> = await supabase
+        .from('v_analyse_wochenziel')
+        .select('*')
+        .single();
+      const { data: s }: AnalyseQueryResult<StationDurchlaufRow[]> = await supabase
+        .from('v_analyse_station_durchlauf')
+        .select('*');
       const { data: eco } = await supabase.from('v_analyse_werkstatt_puls_economics').select('*').single();
 
       // Hole echte verspätete Aufträge
@@ -245,20 +330,25 @@ export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: stri
       const scoreRing = termintreuePct !== null ? termintreuePct : null;
 
       // Stations
-      const stations = (s || []).map((st: any) => ({
-        stationId: st.station,
-        stationName: st.station,
-        status: (st.avg_tage > 5 ? "critical" : (st.avg_tage > 2 ? "watch" : "ok")) as "critical" | "watch" | "ok" | "free",
-        auslastungPct: Math.min(100, Math.round((st.avg_tage / 10) * 100)),
-        wartendN: st.teile_aktuell ?? 0,
-        avgWartezeitTage: st.avg_tage ?? null,
-        engpassScore: Math.round((st.avg_tage ?? 0) * (st.teile_aktuell ?? 0)),
-        hauptursache: null,
-        openUrl: `/orders?station=${encodeURIComponent(st.station)}&returnTo=/performance?tile=werkstatt_puls`
-      }));
+      const stations = (s || []).map(st => {
+        const avgTage = st.avg_tage ?? 0;
+        const teileAktuell = st.teile_aktuell ?? 0;
+
+        return {
+          stationId: st.station,
+          stationName: st.station,
+          status: (avgTage > 5 ? "critical" : (avgTage > 2 ? "watch" : "ok")) as "critical" | "watch" | "ok" | "free",
+          auslastungPct: Math.min(100, Math.round((avgTage / 10) * 100)),
+          wartendN: teileAktuell,
+          avgWartezeitTage: st.avg_tage ?? null,
+          engpassScore: Math.round(avgTage * teileAktuell),
+          hauptursache: null,
+          openUrl: `/orders?station=${encodeURIComponent(st.station)}&returnTo=/performance?tile=werkstatt_puls`
+        };
+      });
 
       // Affected Orders
-      const affectedOrdersMapped: any[] = [];
+      const affectedOrdersMapped: WerkstattPulsData["affectedOrders"] = [];
       (delayedOrders || []).forEach((o: any) => {
         affectedOrdersMapped.push({
           orderId: o.id,
@@ -293,14 +383,14 @@ export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: stri
       });
 
       // Data Sources list
-      const ds = [
+      const ds: WerkstattPulsData["dataSources"] = [
         { label: "Termintreue & DQ", sourceName: "v_analyse_termintreue", recordCount: 1, status: t ? "live" : "missing" },
         { label: "Durchlaufzeit", sourceName: "v_analyse_durchlaufzeit", recordCount: 1, status: d ? "live" : "missing" },
         { label: "Wochenziel", sourceName: "v_analyse_wochenziel", recordCount: 1, status: w ? "live" : "missing" },
         { label: "Stationen Durchlauf", sourceName: "v_analyse_station_durchlauf", recordCount: s ? s.length : 0, status: s ? "live" : "missing" },
         { label: "Wirtschaftlichkeit", sourceName: "v_analyse_werkstatt_puls_economics", recordCount: 1, status: eco ? "live" : "missing" },
         { label: "Verlauf", sourceName: "kpi_snapshots", recordCount: null, status: "missing" }
-      ] as any[];
+      ];
 
       detail.werkstattPulsData = {
         period: period as any,
@@ -363,13 +453,16 @@ export async function getAnalyseTileDetail(tileKey: AnalyseTileKey, period: stri
     }
 
     return { data: detail };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in getAnalyseTileDetail:", error);
-    return { error: error.message, data: null };
+    return { error: getErrorMessage(error), data: null };
   }
 }
 
-export async function getAnalyseLinkedEntities(tileKey: AnalyseTileKey, filters?: any): Promise<{ data: AnalyseEntityLink[], error?: any }> {
+export async function getAnalyseLinkedEntities(
+  tileKey: AnalyseTileKey,
+  filters?: unknown,
+): Promise<AnalyseActionResult<AnalyseEntityLink[]>> {
   void filters;
   try {
     await checkAppAuth();
@@ -380,8 +473,8 @@ export async function getAnalyseLinkedEntities(tileKey: AnalyseTileKey, filters?
     }
 
     return { data: [] };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error in getAnalyseLinkedEntities:", error);
-    return { error: error.message, data: [] };
+    return { error: getErrorMessage(error), data: [] };
   }
 }
