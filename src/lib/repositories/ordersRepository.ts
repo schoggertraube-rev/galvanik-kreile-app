@@ -1,6 +1,3 @@
-import { createId } from "@paralleldrive/cuid2";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { IndexedDBHelper } from "@/lib/offline/IndexedDBHelper";
 import { getOrdersDb, createOrderDb, updateOrderDb } from "@/app/actions/orders.actions";
 
 export type Order = {

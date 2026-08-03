@@ -2,7 +2,7 @@
 
 import React, { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { X, Camera, Edit3, Upload, Phone, UserPlus, Send, Copy, FileText } from "lucide-react";
+import { X, Camera, Edit3, Upload, Phone, UserPlus, Send, Copy } from "lucide-react";
 import { AppActionTile } from "./AppActionTile";
 import { ShortcutType } from "./AppShortcutContext";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";

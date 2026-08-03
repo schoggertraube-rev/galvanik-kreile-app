@@ -1,6 +1,5 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
 import { db } from '@/db';
 import { scanUploads, events } from '@/db/schema';
 import { getCurrentAppUser } from '@/lib/auth/permissions';

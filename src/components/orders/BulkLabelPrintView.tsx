@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { X, Printer, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { generateOrderLabel } from "@/app/actions/pdf.actions";

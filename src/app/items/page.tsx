@@ -2,7 +2,7 @@
 
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,20 +12,13 @@ import {
   MapPin, 
   Plus, 
   Minus, 
-  Droplets, 
-  Thermometer, 
   FlaskConical, 
-  Check, 
-  History, 
-  Activity, 
-  Lock,
-  Unlock,
+  History,
   User
 } from "lucide-react";
 import { inventoryRepository, InventoryItem, StockMovement } from "@/lib/repositories/inventoryRepository";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { trackUiEvent } from "@/lib/tracking/tracking";
-import { DetailOverlay } from "@/components/ui/DetailOverlay";
 
 export default function ItemsPage() {
   usePageView();

@@ -5,7 +5,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { useEffect, useState } from "react";
 import { getAktionen, changeAktionStatus } from "./actions";
 import Link from "next/link";
-import { PlusCircle, Search, Play, CheckCircle, Clock } from "lucide-react";
+import { PlusCircle, Play, CheckCircle, Clock } from "lucide-react";
 
 export default function AktionenPage() {
   const [aktionen, setAktionen] = useState<any[]>([]);

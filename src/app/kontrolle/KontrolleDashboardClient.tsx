@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { 
   ShieldAlert, Activity, Archive, BarChart3, 
   AlertTriangle, Clock, PackageX, Wrench, 
-  Truck, MailQuestion, ArrowRight, XCircle, Info
+  Truck, MailQuestion, ArrowRight, Info
 } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";

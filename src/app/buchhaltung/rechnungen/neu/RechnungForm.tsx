@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Save, Send } from "lucide-react";
+import { Plus, Trash2, Save } from "lucide-react";
 import { createRechnungAction } from "@/app/buchhaltung/actions";
 import { AusgangsrechnungPosition } from "@/lib/buchhaltung/types";
 

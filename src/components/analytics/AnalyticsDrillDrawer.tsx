@@ -10,7 +10,6 @@ import { createPortal } from "react-dom";
 import { KPI_REGISTRY } from "@/lib/analytics/kpiRegistry";
 import { fetchKpiSnapshot, type KpiSnapshot, type DataStatus } from "@/lib/analytics/analyticsDataService";
 import type { PeriodType } from "@/lib/analytics/plainLanguage";
-import { PERIOD_LABELS } from "@/lib/analytics/plainLanguage";
 import { DrillCategoryHeader } from "./DrillCategoryHeader";
 import { DrillHero } from "./DrillHero";
 import { DrillChart } from "./DrillChart";

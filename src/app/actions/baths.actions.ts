@@ -46,7 +46,7 @@ export async function getBathMeasurementsDb(bathId?: string): Promise<ActionResu
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
 
   try {
-    let query = db.select().from(badMesswerte);
+    const query = db.select().from(badMesswerte);
     
     if (bathId) {
       const data = await query.where(

@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { beleg, ausgangsrechnung, lieferant } from "@/db/schema_buchhaltung";
+import { beleg, ausgangsrechnung } from "@/db/schema_buchhaltung";
 import { orders, customers } from "@/db/schema";
 import { sql, and, gte, lte } from "drizzle-orm";
 

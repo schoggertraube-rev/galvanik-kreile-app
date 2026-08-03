@@ -1,7 +1,7 @@
 "use client";
 
 import { useErfassung } from "../ErfassungProvider";
-import { FileText, UserPlus, PackagePlus, Link, ArrowRight, Building2, User } from "lucide-react";
+import { FileText, UserPlus, PackagePlus, Link, Building2 } from "lucide-react";
 import { AiBadge } from "../shared/AiBadge";
 
 export function ScanResult({ data }: { data: any }) {

@@ -1,5 +1,4 @@
 import React from 'react';
-import { Customer } from '@/lib/types/customer';
 import { Mail, Phone, MapPin, ExternalLink, Calendar, PlusCircle, AlertTriangle } from 'lucide-react';
 import { useOverlayStore } from '@/lib/overlayStore';
 

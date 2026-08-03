@@ -1,9 +1,7 @@
 "use client";
 
-import { X } from "lucide-react";
 import { login } from "@/app/actions/auth";
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 
 export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
   const [isPending, startTransition] = useTransition();

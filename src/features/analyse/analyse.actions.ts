@@ -2,8 +2,6 @@
 
 import { checkAppAuth } from "@/lib/server/authHelper";
 import { createClient } from "@/lib/supabase/server";
-import { db } from "@/db";
-import { sql } from "drizzle-orm";
 import { AnalyseTileKey, AnalyseTileSummary, AnalyseTileDetail, AnalyseEntityLink, AnalyseTileStatus } from "@/lib/analyse/dataContracts";
 
 async function getWerkstattPulsSummary(supabase: any, period: string): Promise<AnalyseTileSummary> {

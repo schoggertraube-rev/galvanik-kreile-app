@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { Order } from "@/lib/repositories/ordersRepository";
 import { format } from "date-fns";
-import { de } from "date-fns/locale";
 import { PackageCheck, Mail, CheckCircle2, AlertCircle, FileText, Loader2 } from "lucide-react";
 
 import { getUrgency } from "@/lib/orders/getUrgency";

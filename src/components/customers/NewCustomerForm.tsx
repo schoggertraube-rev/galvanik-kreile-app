@@ -9,7 +9,7 @@ import { Customer } from "@/lib/types/customer";
 import { createClient } from "@/lib/supabase/client";
 import { createCustomerDb } from "@/app/actions/customers.actions";
 import { Loader } from "@googlemaps/js-api-loader";
-import { Building2, Mail, MapPin, Phone, Save, User, UserPlus, Upload, FilePlus2, Copy, AlertTriangle, Camera, X, CheckCircle2 } from "lucide-react";
+import { Building2, Save, Upload, FilePlus2, Copy, AlertTriangle, Camera, X, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
 
 interface NewCustomerFormProps {

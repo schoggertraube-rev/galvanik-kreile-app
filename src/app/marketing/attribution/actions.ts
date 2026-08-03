@@ -1,9 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { attribution, touchpoint, kanal } from "@/db/schema_marketing";
+import { kanal } from "@/db/schema_marketing";
 import { inquiries, orders } from "@/db/schema";
-import { eq, desc, inArray, sum } from "drizzle-orm";
 
 export async function getAttributionData() {
   // 1. Hole alle Kanäle für die Gruppierung

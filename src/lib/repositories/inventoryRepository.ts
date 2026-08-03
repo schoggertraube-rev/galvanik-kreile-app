@@ -1,5 +1,4 @@
 import { createId } from "@paralleldrive/cuid2";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { createClient } from "@/lib/supabase/client";
 
 export interface InventoryItem {

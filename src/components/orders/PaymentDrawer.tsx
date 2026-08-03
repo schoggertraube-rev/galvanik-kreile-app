@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X, CreditCard, ExternalLink, QrCode } from 'lucide-react';
 import { paymentProvider } from '@/lib/payments/mollieAdapter';
-import { supabase } from '@/lib/supabase/client';
 
 export function PaymentDrawer({ orderData, onClose }: { orderData: any, onClose: () => void }) {
   const [loading, setLoading] = useState(false);

@@ -3,7 +3,7 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
 import React, { useState } from 'react';
-import { Package, AlertTriangle, Box, Truck, FlaskConical, ArrowRight, Info } from 'lucide-react';
+import { AlertTriangle, Box, Truck, FlaskConical, ArrowRight, Info } from 'lucide-react';
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
 

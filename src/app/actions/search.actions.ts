@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { customers, orders, items } from "@/db/schema";
-import { ilike, or, eq, sql } from "drizzle-orm";
+import { ilike, or, eq } from "drizzle-orm";
 import { checkAppAuth } from "@/lib/server/authHelper";
 
 export interface SearchResult {

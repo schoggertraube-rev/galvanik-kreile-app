@@ -4,7 +4,6 @@ import { useState } from "react";
 import { Tile } from "@/app/buchhaltung/components/Tile";
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { Clock } from "lucide-react";
-import Link from "next/link";
 
 export function DurchlaufzeitKachel({ data }: { data: any }) {
   const [overlayOpen, setOverlayOpen] = useState(false);

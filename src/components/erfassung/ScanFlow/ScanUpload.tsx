@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { UploadCloud, Loader2, Camera, FileText } from "lucide-react";
+import { UploadCloud, Camera, FileText } from "lucide-react";
 import { useErfassung } from "../ErfassungProvider";
 
 export function ScanUpload() {

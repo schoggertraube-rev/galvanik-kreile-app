@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Order } from "@/lib/repositories/ordersRepository";
-import { X, Save, Clock, MapPin, Package, AlertTriangle, Printer, Loader2 } from "lucide-react";
+import { X, Save, Printer, Loader2 } from "lucide-react";
 import { generateOrderLabel } from "@/app/actions/pdf.actions";
 
 interface OrderFocusViewProps {

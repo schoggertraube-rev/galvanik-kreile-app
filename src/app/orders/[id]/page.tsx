@@ -15,7 +15,6 @@ import { Clock, Box, PhoneCall, CheckCircle2, AlertTriangle } from "lucide-react
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { getStationConfig } from "@/constants/stations";
-import { AppBackButton } from "@/components/ui/AppBackButton";
 import { customersRepository, Customer } from "@/lib/repositories/customersRepository";
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {

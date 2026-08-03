@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Star, UploadCloud, CheckCircle2 } from "lucide-react";
+import { Star, CheckCircle2 } from "lucide-react";
 
 export default function FeedbackPage({ params }: { params: { token: string } }) {
   const [step, setStep] = useState(1);

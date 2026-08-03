@@ -743,7 +743,7 @@ export async function generateDatevExportAction(von: string, bis: string): Promi
   const headerLine = `"EXTF";700;21;"Buchungsstapel";4;` + new Date().toISOString().replace(/[-:T]/g, '').substring(0, 14) + `;"";"";"";"";"${beraterNr}";"${mandantenNr}";` + new Date(von).getFullYear() + `0101;4;` + von.replace(/-/g, '') + `;` + bis.replace(/-/g, '') + `;"";"";"";"";""`;
   const columnHeaders = `"Umsatz";"S/H";"Konto";"Gegenkonto";"BU-Schlüssel";"Belegdatum";"Belegfeld 1";"Buchungstext";"USt-Satz";"Festschreibung"`;
   
-  let csvRows = [];
+  const csvRows = [];
   if (belege) {
     for (const b of belege) {
       const datum = new Date(b.belegdatum || b.erfasst_am);
@@ -765,7 +765,7 @@ export async function generateLexwareExportAction(von: string, bis: string): Pro
   const { data: belege } = await supabase.from('beleg').select('*').eq('status', 'festgeschrieben').gte('belegdatum', von).lte('belegdatum', bis);
 
   const columnHeaders = `Datum;Belegnummer;Buchungstext;Betrag;USt-Satz;USt-Betrag;Konto;Gegenkonto;S/H`;
-  let csvRows = [];
+  const csvRows = [];
   if (belege) {
     for (const b of belege) {
       const datum = new Date(b.belegdatum || b.erfasst_am).toLocaleDateString('de-DE');

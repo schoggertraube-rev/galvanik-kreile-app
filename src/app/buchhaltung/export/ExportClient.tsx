@@ -6,8 +6,7 @@ import { useState } from "react";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { getBuchhaltungProvider } from "@/lib/buchhaltung";
-import { ChevronRight, Download, FileText, Briefcase, CheckCircle2, ArrowLeft, FolderArchive, Table, FileSpreadsheet, TrendingUp, CalendarClock, Banknote, Info } from "lucide-react";
+import { ChevronRight, Download, FileText, CheckCircle2, ArrowLeft, FolderArchive, FileSpreadsheet, TrendingUp, CalendarClock, Banknote, Info } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 // ── Mock Preview Data ────────────────────────────────────────────────────

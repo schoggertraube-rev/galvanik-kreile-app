@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Sparkles, FileText, Download, RefreshCw, MessageSquare } from 'lucide-react';
+import { Sparkles, Download, MessageSquare } from 'lucide-react';
 import { askGlobalAiAction } from '@/app/actions/aiSearch';
 
 interface AIResultProps {

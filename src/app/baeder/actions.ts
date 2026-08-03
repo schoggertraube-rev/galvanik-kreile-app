@@ -3,7 +3,6 @@
 import { db } from "@/db";
 import { baeder, badMesswerte } from "@/db/schema";
 import { checkAppAuth } from "@/lib/server/authHelper";
-import { eq } from "drizzle-orm";
 
 export async function getBaederListAction() {
   const auth = await checkAppAuth();

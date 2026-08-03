@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Settings, Check, X, Loader2, Power } from "lucide-react";
+import { Power } from "lucide-react";
 import { getFeatureFlags, toggleFeatureFlag, initializeDefaultFlags } from "@/app/actions/admin.actions";
 
 type FeatureFlag = {

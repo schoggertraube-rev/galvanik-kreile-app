@@ -1,6 +1,4 @@
 import { createId } from "@paralleldrive/cuid2";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { IndexedDBHelper } from "@/lib/offline/IndexedDBHelper";
 import { createClient } from "@/lib/supabase/client";
 
 export type Complaint = {

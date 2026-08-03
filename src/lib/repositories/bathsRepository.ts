@@ -1,4 +1,3 @@
-import { createId } from "@paralleldrive/cuid2";
 import { computeBathStatus, BathStatus, BathTargetValues, BathMeasurement } from "@/lib/baths/computeBathStatus";
 import {
   getBathsDb,

@@ -1,6 +1,5 @@
 "use client";
 
-import { ReactNode } from "react";
 
 interface HomeKpiCardProps {
   title: string;

@@ -4,10 +4,9 @@ import { BackButton } from "@/components/ui/BackButton";
 
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import React, { useState } from 'react';
-import Link from 'next/link';
 import { 
   Beaker, AlertTriangle, CalendarDays, FlaskConical, 
-  TrendingDown, DollarSign, ShieldAlert, ArrowRight, Info, CheckCircle2, Droplets
+  TrendingDown, DollarSign, ShieldAlert, ArrowRight, Info
 } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
 

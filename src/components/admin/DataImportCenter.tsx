@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Upload, FileText, CheckCircle2, AlertTriangle, Play, Database, Loader2 } from "lucide-react";
+import { Upload, Play, Database } from "lucide-react";
 
 type ImportRow = {
   id: string;

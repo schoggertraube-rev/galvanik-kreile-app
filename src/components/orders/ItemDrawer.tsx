@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Box, Trash2, Tag } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
 import { PriceLinesEditor } from './PriceLinesEditor';
 import { createItemDb, updateItemDb, deleteItemDb } from '@/app/actions/items.actions';
 

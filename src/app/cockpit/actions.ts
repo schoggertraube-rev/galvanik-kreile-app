@@ -321,7 +321,7 @@ export async function getKundenDetails(customerId: string) {
     .select('order_id, order_number, deckungsbeitrag, erloes_netto, intake_date')
     .eq('customer_id', customerId);
 
-  let details = orders ? await Promise.all(orders.map(async o => {
+  const details = orders ? await Promise.all(orders.map(async o => {
     const dbInfo = auftraegeDb?.find(x => x.order_id === o.id);
     return {
       ...o,

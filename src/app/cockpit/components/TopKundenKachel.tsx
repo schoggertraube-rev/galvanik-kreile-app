@@ -5,7 +5,6 @@ import { Crown, Loader2, Phone, Mail, FileText, ArrowRight, TrendingUp } from "l
 import { getTopKunden, getKundenDetails, getInaktiveKunden } from "../actions";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export function TopKundenKachel() {

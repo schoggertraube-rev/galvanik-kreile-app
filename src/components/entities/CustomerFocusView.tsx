@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { MockCustomer } from "@/lib/mockData";
 import { X, Save, Phone, Mail, MapPin } from "lucide-react";
-import { customersRepository } from "@/lib/repositories/customersRepository";
 
 interface CustomerFocusViewProps {
   customer: MockCustomer;

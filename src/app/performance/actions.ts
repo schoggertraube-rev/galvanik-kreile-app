@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { orders, ausgangsrechnung, qs, baeder } from "@/db/schema";
+import { orders, ausgangsrechnung, qs } from "@/db/schema";
 import { checkAppAuth } from "@/lib/server/authHelper";
 
 export async function getPerformanceKPIsAction() {

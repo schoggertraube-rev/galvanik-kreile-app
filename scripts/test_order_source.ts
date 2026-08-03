@@ -1,8 +1,6 @@
 import { createOrderFromErfassung } from "../src/app/actions/erfassung.actions";
-import { VALID_ORDER_SOURCES } from "../src/lib/validation/orderSchema";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
-import { db } from "../src/db";
 
 async function runTests() {
   console.log("Starte Validierungstests für source-Feld...");

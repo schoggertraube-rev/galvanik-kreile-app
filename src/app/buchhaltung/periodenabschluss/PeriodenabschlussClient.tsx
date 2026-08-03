@@ -6,7 +6,7 @@ import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { usePageView } from "@/hooks/usePageView";
 import { useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ChevronRight, AlertTriangle, Play, Lock, ExternalLink, Zap } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Lock, ExternalLink, Zap } from "lucide-react";
 import type { PeriodenabschlussStatus } from "./actions";
 import { runEnergieVerteilungAction, schliessePeriodeAction, finalSchliessePeriodeAction } from "./actions";
 

@@ -170,7 +170,7 @@ export async function getWahrscheinlicheArtikel(auftrag_id: string) {
   const { data: authData } = await supabase.auth.getUser();
   const userId = authData.user?.id;
   
-  let recentItems: any[] = [];
+  const recentItems: any[] = [];
   if (userId) {
     // using distinct not fully supported in supabase js easily, so just select and filter
     const { data: recent } = await supabase

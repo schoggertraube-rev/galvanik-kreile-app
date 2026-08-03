@@ -2,8 +2,8 @@
 
 import { db } from "@/db";
 import { orders, inquiries, uiEventsTable } from "@/db/schema";
-import { eq, inArray, notInArray, lt, and, gte, sql, desc, count } from "drizzle-orm";
-import { startOfDay, subDays, startOfWeek, subWeeks, endOfWeek } from "date-fns";
+import { eq, inArray, notInArray, lt, and, gte, desc, count } from "drizzle-orm";
+import { startOfDay, subDays, startOfWeek, subWeeks } from "date-fns";
 
 export async function getOrdersKPIs() {
   const today = startOfDay(new Date());

@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, CheckCheck, Sun } from "lucide-react";
+import { CheckCheck, Sun } from "lucide-react";
 
 export function WeatherBubble() {
   const now = new Date();

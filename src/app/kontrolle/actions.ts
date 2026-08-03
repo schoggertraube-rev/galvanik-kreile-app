@@ -3,7 +3,6 @@
 import { db } from "@/db";
 import { qs, orders, customers } from "@/db/schema";
 import { checkAppAuth } from "@/lib/server/authHelper";
-import { eq } from "drizzle-orm";
 
 export async function getQsListenAction() {
   const auth = await checkAppAuth();

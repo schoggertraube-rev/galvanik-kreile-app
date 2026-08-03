@@ -4,7 +4,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ChevronRight, TrendingDown, AlertCircle, CheckCircle2, Wallet, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { ChevronRight, TrendingDown, AlertCircle, CheckCircle2, Wallet } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { getAusgabenKategorien } from '@/app/buchhaltung/analysis.actions';
 

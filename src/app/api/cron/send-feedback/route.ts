@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { eq, lte, and } from 'drizzle-orm';
 import { feedbackMail } from '@/db/schema_marketing';
-import { orders } from '@/db/schema';
 
 export async function GET(request: Request) {
   // Verifying token for cron is good practice, but skipping for demo

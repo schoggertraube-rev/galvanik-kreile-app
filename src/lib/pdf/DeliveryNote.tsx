@@ -4,7 +4,6 @@ import type { Order } from "@/lib/repositories/ordersRepository";
 import type { Customer } from "@/lib/repositories/customersRepository";
 import type { CompanySettings } from "@/lib/repositories/companySettingsRepository";
 import { format } from "date-fns";
-import path from "path";
 
 const styles = StyleSheet.create({
   page: {

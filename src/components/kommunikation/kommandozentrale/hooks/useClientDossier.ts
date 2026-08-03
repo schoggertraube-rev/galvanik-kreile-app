@@ -1,6 +1,5 @@
 "use client";
 
-import React, { useMemo, useCallback } from "react";
 import { MatchResult } from "@/app/kommunikation/smartMatcher";
 import { MockCustomer } from "@/lib/mockData";
 const INITIAL_ORDERS: any[] = [];

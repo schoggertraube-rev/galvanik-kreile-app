@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { 
   RefreshCw, 
   Flame, 
-  ShieldAlert, 
   Phone, 
   ShieldCheck 
 } from "lucide-react";

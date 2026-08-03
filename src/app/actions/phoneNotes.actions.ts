@@ -76,7 +76,7 @@ export async function updatePhoneNote(id: string, input: Partial<CreatePhoneNote
   
   try {
 
-    let updateData: any = {};
+    const updateData: any = {};
     if (input.rawText) updateData.rawText = input.rawText;
     if (input.generatedAnswer !== undefined) updateData.generatedAnswer = input.generatedAnswer;
     if (input.category) updateData.category = input.category;

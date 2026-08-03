@@ -10,7 +10,6 @@ import {
   Archive, PhoneForwarded, CheckSquare, X, Paperclip, Image as ImageIcon, Sparkles
 } from "lucide-react";
 import Link from "next/link";
-import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
 import { usePageView } from "@/hooks/usePageView";
 import { getRecentPhoneNotes, updatePhoneNote } from "@/app/actions/phoneNotes.actions";
 import { getOrdersDb } from "@/app/actions/orders.actions";

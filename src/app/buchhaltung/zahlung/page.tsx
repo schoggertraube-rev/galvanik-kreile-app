@@ -5,7 +5,7 @@ import { usePageView } from "@/hooks/usePageView";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, CreditCard, QrCode, Smartphone, BarChart3, Lock, Info, Globe, Users, TrendingUp, ArrowLeft } from "lucide-react";
+import { ChevronRight, CreditCard, QrCode, Smartphone, BarChart3, Lock, Info, Globe, Users, ArrowLeft } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { useState } from "react";
 import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";

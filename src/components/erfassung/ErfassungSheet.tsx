@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { X, Search } from "lucide-react";
+import { X } from "lucide-react";
 import { VorlageResult } from "./VorschlagBanner";
 import { ZeitSlider } from "./ZeitSlider";
 import { MengenStepper } from "./MengenStepper";
 import { BestaetigenButton } from "./BestaetigenButton";
-import { getWahrscheinlicheArtikel, getVorlageFuerAuftrag } from "@/app/actions/vorlage.actions";
+import { getWahrscheinlicheArtikel } from "@/app/actions/vorlage.actions";
 import { erfasseZeitDirekt, erfasseVerbrauch } from "@/app/actions/erfassung.actions";
 import { getKostensatz } from "@/lib/erfassung/snapshot";
 import { createClient } from "@/utils/supabase/client";

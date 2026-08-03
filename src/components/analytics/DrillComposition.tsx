@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { CompositionRow } from "@/lib/analytics/analyticsDataService";
-import { ExternalLink } from "lucide-react";
 
 interface DrillCompositionProps {
   items: CompositionRow[];

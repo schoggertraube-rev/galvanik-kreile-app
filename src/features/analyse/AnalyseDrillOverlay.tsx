@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { X, ExternalLink } from "lucide-react";
+import { X } from "lucide-react";
 import { AnalyseTileKey, AnalyseTileDetail } from "@/lib/analyse/dataContracts";
 import { getAnalyseTileDetail } from "@/features/analyse/analyse.actions";
 import { WerkstattPulsLevel2 } from "./kacheln/werkstatt-puls/WerkstattPulsLevel2";

@@ -1,7 +1,7 @@
 "use client";
 
 import { useErfassung } from "../ErfassungProvider";
-import { Phone, PackagePlus, UserPlus, ArrowRight, Save } from "lucide-react";
+import { Phone, PackagePlus, UserPlus, Save } from "lucide-react";
 import { AiBadge } from "../shared/AiBadge";
 
 export function PhoneExtractionResult({ data }: { data: any }) {

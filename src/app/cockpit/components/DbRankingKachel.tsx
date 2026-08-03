@@ -6,7 +6,6 @@ import { getAuftragDbRanking, getAuftragDbDetails } from "../actions";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 type DbRankingData = {
   order_id: string;

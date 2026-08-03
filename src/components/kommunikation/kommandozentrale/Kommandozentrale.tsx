@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   ChevronLeft, X, CreditCard, FileText, Activity, AlertTriangle,
-  MessageSquare, User, Edit3, Calendar, Paperclip, Zap, Package,
-  Check, Send, Image as ImageIcon, Phone, Mail, Globe, Smartphone, PenLine
+  MessageSquare, User, Edit3, Calendar, Paperclip, Package,
+  Check, Send, Image as ImageIcon, Phone, Mail, Globe, Smartphone
 } from "lucide-react";
 import { useClientDossier, ClientDossier } from "./hooks/useClientDossier";
 import { useTopicRelevance, TileKey } from "./hooks/useTopicRelevance";

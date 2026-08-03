@@ -3,7 +3,7 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
 import React, { useState } from 'react';
-import { Users, ArrowRight, HeartHandshake, Map, Banknote, Truck, Globe, UserCheck } from 'lucide-react';
+import { Users, ArrowRight, HeartHandshake, Banknote, Truck, Globe, UserCheck } from 'lucide-react';
 import { PerformanceDetailLayout } from '../PerformanceDetailLayout';
 import { AnalysisOverlay } from '@/components/ui/AnalysisOverlay';
 import { getTopKunden } from '@/app/actions/customers.actions';

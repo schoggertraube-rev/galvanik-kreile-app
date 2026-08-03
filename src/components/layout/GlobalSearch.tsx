@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Search, Package, ChevronRight, X, Sparkles, LayoutGrid, Droplets, Activity, FileText, Receipt, Truck, User } from 'lucide-react'
+import { Search, Package, ChevronRight, X, Sparkles, LayoutGrid, Droplets, Activity, FileText, Receipt, Truck } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { findActions, buildFallbackSuggestion } from '@/lib/search/fuzzy'
 import { SEARCH_ACTIONS } from '@/lib/search/actionRegistry'
-import { getRecentSearches, addRecentSearch } from '@/lib/search/recent'
+import { addRecentSearch } from '@/lib/search/recent'
 import type { SearchSuggestion } from '@/types/search'
 import { globalSearch } from '@/app/actions/search.actions'
 import { GlobalSearchAIResult } from './GlobalSearchAIResult'

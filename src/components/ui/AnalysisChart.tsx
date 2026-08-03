@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Line, ComposedChart } from "recharts";
+import { Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Line, ComposedChart } from "recharts";
 
 export interface AnalysisChartProps {
   data: any[];

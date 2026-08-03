@@ -1,8 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { kampagne, kanal, segment, aktion, touchpoint, lernMetrik, statistikKennzahl, marketingAsset } from "@/db/schema_marketing";
-import { eq, desc, asc, isNull } from "drizzle-orm";
+import { kampagne, kanal, segment, aktion, lernMetrik } from "@/db/schema_marketing";
+import { eq, desc } from "drizzle-orm";
 import type { AktionVorschlag, Kampagne as MKampagne, FunnelDaten, Segment as MSegment, LernInsight, WirkungMini, StoryIdee, SortMode } from "@/lib/marketing/marketingTypes";
 
 // Seed if empty

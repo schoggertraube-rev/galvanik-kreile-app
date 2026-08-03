@@ -1,5 +1,4 @@
 import React from 'react';
-import { Customer } from '@/lib/types/customer';
 import { TrendingUp, Award, Clock, DollarSign, Tag } from 'lucide-react';
 
 export function CustomerAnalysisTab({ customerId, customerData }: { customerId: string, customerData: any }) {

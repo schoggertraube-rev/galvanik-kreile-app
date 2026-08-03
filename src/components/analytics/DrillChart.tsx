@@ -5,7 +5,6 @@
  * Uses Chart.js for Donut/Bar, pure SVG for Gauge/Sparkline.
  */
 
-import { useEffect, useRef } from "react";
 import {
   Chart as ChartJS,
   ArcElement,

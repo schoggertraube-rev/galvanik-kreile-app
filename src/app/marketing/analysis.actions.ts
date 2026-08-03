@@ -1,10 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { and, gte, lte, ne, eq, isNotNull, desc, sql } from "drizzle-orm";
-import { segment, aktion, touchpoint, attribution } from "@/db/schema_marketing";
-import { ausgangsrechnung, orders } from "@/db/schema";
-import { beleg } from "@/db/schema_buchhaltung";
+import { and, gte, lte, eq, sql } from "drizzle-orm";
+import { aktion, touchpoint, attribution } from "@/db/schema_marketing";
 
 function generateInsight(typ: string, daten: any) {
   // Simple mock logic as a placeholder for the real insights

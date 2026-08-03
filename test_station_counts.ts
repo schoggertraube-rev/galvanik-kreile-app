@@ -1,5 +1,4 @@
 import { db } from './src/db/index';
-import { orders } from './src/db/schema';
 import { sql } from 'drizzle-orm';
 async function run() {
   console.log('Started');

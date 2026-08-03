@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import { Order } from "@/lib/repositories/ordersRepository";
 import { GalvanikOrderRow } from "./GalvanikOrderRow";
-import { isBefore, startOfDay } from "date-fns";
+import { startOfDay } from "date-fns";
 import { getUrgency } from "@/lib/orders/getUrgency";
 import { ArrowUpDown, Users } from "lucide-react";
 

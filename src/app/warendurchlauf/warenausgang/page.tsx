@@ -1,6 +1,4 @@
 "use client";
-import { Breadcrumb } from "@/components/ui/Breadcrumb";
-import { BackButton } from "@/components/ui/BackButton";
 
 import Link from "next/link";
 import { CheckCircle2, Package, Truck, MessageSquare, CreditCard, Send } from "lucide-react";
