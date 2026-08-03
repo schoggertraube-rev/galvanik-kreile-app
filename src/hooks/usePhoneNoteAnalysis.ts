@@ -14,36 +14,6 @@ export interface AnalysisField {
   type: "kunde" | "auftrag" | "thema" | "material" | "zeit" | "zahlung";
 }
 
-export interface LivePhoneAction {
-  id: string;
-  type:
-    | "create_order"
-    | "create_customer"
-    | "prepare_quote"
-    | "review_email"
-    | "review_attachments"
-    | "review_photos"
-    | "open_customer"
-    | "open_order"
-    | "check_payment"
-    | "schedule_pickup"
-    | "schedule_dropoff"
-    | "clarify_customer"
-    | "clarify_order"
-    | "create_calendar_event"
-    | "update_order_pickup"
-    | "add_customer_note"
-    | "create_complaint";
-
-  title: string;
-  subtitle: string;
-  confidence: number;
-  priority: "low" | "medium" | "high" | "critical";
-  source: "database" | "local" | "ai" | "manual";
-  payload: LivePhoneActionPayload;
-  status: "suggested" | "selected" | "dismissed";
-}
-
 export type PhoneNoteToOrderDraft = {
   source: "phone_note";
   phoneNoteId?: string;
@@ -84,6 +54,47 @@ type LivePhoneActionPayload =
   | { customerId?: string }
   | { orderId?: string }
   | { date: NonNullable<LocalAnalysisResult["matchedTime"]> };
+
+export type LivePhoneActionType =
+  | "create_order"
+  | "create_customer"
+  | "prepare_quote"
+  | "review_email"
+  | "review_attachments"
+  | "review_photos"
+  | "open_customer"
+  | "open_order"
+  | "check_payment"
+  | "schedule_pickup"
+  | "schedule_dropoff"
+  | "clarify_customer"
+  | "clarify_order"
+  | "create_calendar_event"
+  | "update_order_pickup"
+  | "add_customer_note"
+  | "create_complaint";
+
+type LivePhoneActionPayloadFor<T extends LivePhoneActionType> =
+  T extends "create_order" ? PhoneNoteToOrderDraft
+  : T extends "create_customer" ? PhoneNoteToCustomerDraft
+  : T extends "prepare_quote" ? { text: string }
+  : T extends "review_email" | "add_customer_note" ? { customerId?: string }
+  : T extends "create_complaint" | "update_order_pickup" ? { orderId?: string }
+  : T extends "create_calendar_event" ? { date: NonNullable<LocalAnalysisResult["matchedTime"]> }
+  : LivePhoneActionPayload;
+
+export type LivePhoneAction<T extends LivePhoneActionType = LivePhoneActionType> =
+  T extends LivePhoneActionType ? {
+    id: string;
+    type: T;
+    title: string;
+    subtitle: string;
+    confidence: number;
+    priority: "low" | "medium" | "high" | "critical";
+    source: "database" | "local" | "ai" | "manual";
+    payload: LivePhoneActionPayloadFor<T>;
+    status: "suggested" | "selected" | "dismissed";
+  } : never;
 
 export interface CustomerCandidate {
   id: string;
