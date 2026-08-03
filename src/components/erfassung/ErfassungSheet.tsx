@@ -12,6 +12,8 @@ import { erfasseZeitDirekt, erfasseVerbrauch } from "@/app/actions/erfassung.act
 import { getKostensatz } from "@/lib/erfassung/snapshot";
 import { createClient } from "@/utils/supabase/client";
 
+type SuggestedArticle = Awaited<ReturnType<typeof getWahrscheinlicheArtikel>>[number];
+
 interface ErfassungSheetProps {
   orderId: string;
   stationKuerzel?: string;
@@ -35,7 +37,7 @@ export function ErfassungSheet({
   const [employeeId, setEmployeeId] = useState<string>('');
   
   // Material state
-  const [artikelListe, setArtikelListe] = useState<any[]>([]);
+  const [artikelListe, setArtikelListe] = useState<SuggestedArticle[]>([]);
   const [mengen, setMengen] = useState<Record<string, number>>({});
   
   const [loading, setLoading] = useState(false);

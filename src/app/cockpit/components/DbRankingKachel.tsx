@@ -20,7 +20,7 @@ export function DbRankingKachel() {
   const [loading, setLoading] = useState(true);
   
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [selectedOrder, setSelectedOrder] = useState<DbRankingData | null>(null);
   const [details, setDetails] = useState<any>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   
@@ -35,7 +35,7 @@ export function DbRankingKachel() {
     load();
   }, []);
 
-  const handleRowClick = async (row: any) => {
+  const handleRowClick = async (row: DbRankingData) => {
     setSelectedOrder(row);
     setDrawerOpen(true);
     setDetailsLoading(true);

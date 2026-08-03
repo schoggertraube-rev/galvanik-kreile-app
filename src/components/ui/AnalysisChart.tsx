@@ -4,7 +4,7 @@ import React from "react";
 import { Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Line, ComposedChart } from "recharts";
 
 export interface AnalysisChartProps {
-  data: any[];
+  data: unknown[];
   xKey?: string;
   barKey?: string;
   lineKey?: string;
