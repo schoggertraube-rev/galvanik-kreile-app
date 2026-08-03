@@ -3,8 +3,32 @@
 import { db } from "@/db";
 import { customers, orders, events, complaints, priceAgreements, communicationDrafts, phoneNotes } from "@/db/schema";
 import { ausgangsrechnung } from "@/db/schema_buchhaltung";
-import { eq, desc, and, sql } from "drizzle-orm";
+import { eq, desc, and, sql, type InferInsertModel } from "drizzle-orm";
 import { checkAppAuth } from "@/lib/server/authHelper";
+
+export type CustomerTimelineEntry = {
+  id: string;
+  type: "status" | "note" | "email";
+  title: string | null;
+  subtitle: string | null;
+  timestamp: string;
+  relatedOrderId?: string;
+  severity: "critical" | "neutral";
+};
+
+type CustomerCorePatch = Pick<InferInsertModel<typeof customers>,
+  "shippingPreference" | "paymentPreference" | "classification" | "internalNotes" | "tags" | "name" | "contactPerson" | "email" | "phone"
+>;
+
+type CustomerCoreUpdate = Partial<CustomerCorePatch> & Pick<InferInsertModel<typeof customers>, "updatedAt">;
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+  return "Unbekannter Fehler";
+}
 
 // 1. Core Customer Data
 export async function getCustomerCard(customerId: string) {
@@ -45,9 +69,9 @@ export async function getCustomerCard(customerId: string) {
         openOrders
       } 
     };
-  } catch (err: unknown) {
+  } catch (err) {
     console.error("getCustomerCard error", err);
-    return { ok: false, error: (err as Error).message };
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
@@ -63,8 +87,8 @@ export async function getCustomerOrders(customerId: string) {
       .orderBy(desc(orders.createdAt));
 
     return { ok: true, data: allOrders };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (err) {
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
@@ -74,7 +98,7 @@ export async function getCustomerTimeline(customerId: string) {
   if (!auth.ok) return { ok: false, error: auth.error };
 
   try {
-    const timeline: any[] = [];
+    const timeline: CustomerTimelineEntry[] = [];
 
     // Events
     const dbEvents = await db.select().from(events)
@@ -133,8 +157,8 @@ export async function getCustomerTimeline(customerId: string) {
     timeline.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     return { ok: true, data: timeline };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (err) {
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
@@ -150,8 +174,8 @@ export async function getCustomerFinancials(customerId: string) {
 
     // We could fetch payments explicitly, but they might be tied to invoices. For now return invoices
     return { ok: true, data: { invoices } };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (err) {
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
@@ -174,8 +198,8 @@ export async function getCustomerSimilarOrders(customerId: string, orderId?: str
     const filtered = orderId ? similar.filter(o => o.id !== orderId) : similar;
 
     return { ok: true, data: filtered };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (err) {
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
@@ -201,8 +225,8 @@ export async function getCustomerItems(customerId: string) {
     `);
     
     return { ok: true, data: res.rows || res };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (err) {
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
@@ -217,8 +241,8 @@ export async function getCustomerPrices(customerId: string) {
       .orderBy(desc(priceAgreements.date));
     
     return { ok: true, data: prices };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (err) {
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
@@ -234,33 +258,35 @@ export async function getCustomerComplaints(customerId: string) {
       .orderBy(desc(complaints.createdAt));
     
     return { ok: true, data };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (err) {
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
 // 9. Write Functions
-export async function updateCustomerCore(customerId: string, patch: Record<string, any>) {
+export async function updateCustomerCore(customerId: string, patch: Partial<CustomerCorePatch>) {
   const auth = await checkAppAuth("write");
   if (!auth.ok) return { ok: false, error: auth.error };
 
   try {
-    const allowedFields = ['shippingPreference', 'paymentPreference', 'classification', 'internalNotes', 'tags', 'name', 'contactPerson', 'email', 'phone'];
-    const updateData: any = { updatedAt: new Date() };
-    
-    for (const field of allowedFields) {
-      if (patch[field] !== undefined) {
-        updateData[field] = patch[field];
-      }
-    }
+    const updateData: CustomerCoreUpdate = { updatedAt: new Date() };
+    if (patch.shippingPreference !== undefined) updateData.shippingPreference = patch.shippingPreference;
+    if (patch.paymentPreference !== undefined) updateData.paymentPreference = patch.paymentPreference;
+    if (patch.classification !== undefined) updateData.classification = patch.classification;
+    if (patch.internalNotes !== undefined) updateData.internalNotes = patch.internalNotes;
+    if (patch.tags !== undefined) updateData.tags = patch.tags;
+    if (patch.name !== undefined) updateData.name = patch.name;
+    if (patch.contactPerson !== undefined) updateData.contactPerson = patch.contactPerson;
+    if (patch.email !== undefined) updateData.email = patch.email;
+    if (patch.phone !== undefined) updateData.phone = patch.phone;
 
     if (Object.keys(updateData).length > 1) {
       await db.update(customers).set(updateData).where(eq(customers.id, customerId));
     }
     
     return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (err) {
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
@@ -279,8 +305,8 @@ export async function addCustomerTag(customerId: string, tag: string) {
     }
     
     return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (err) {
+    return { ok: false, error: getErrorMessage(err) };
   }
 }
 
@@ -297,7 +323,7 @@ export async function removeCustomerTag(customerId: string, tag: string) {
     await db.update(customers).set({ tags: currentTags, updatedAt: new Date() }).where(eq(customers.id, customerId));
     
     return { ok: true };
-  } catch (err: any) {
-    return { ok: false, error: err.message };
+  } catch (err) {
+    return { ok: false, error: getErrorMessage(err) };
   }
 }

@@ -1,8 +1,15 @@
 import React from 'react';
 import { Mail, Phone, MapPin, ExternalLink, Calendar, PlusCircle, AlertTriangle } from 'lucide-react';
 import { useOverlayStore } from '@/lib/overlayStore';
+import type { InferSelectModel } from 'drizzle-orm';
+import { customers, orders } from '@/db/schema';
 
-export function CustomerOverviewTab({ customerId, customerData }: { customerId: string, customerData: any }) {
+type CustomerOverviewData =
+  Pick<InferSelectModel<typeof customers>, 'phone' | 'email' | 'address' | 'city' | 'zipCode'> & {
+    openOrders: Pick<InferSelectModel<typeof orders>, 'id' | 'orderNumber' | 'task'>[];
+  };
+
+export function CustomerOverviewTab({ customerId, customerData }: { customerId: string, customerData: CustomerOverviewData | null | undefined }) {
   void customerId;
   const openOrder = useOverlayStore(state => state.openOrder);
 
@@ -59,7 +66,7 @@ export function CustomerOverviewTab({ customerId, customerData }: { customerId: 
             <div className="relative z-10">
               <p className="font-semibold mb-2">Aktive Aufträge in Bearbeitung ({openOrders.length})</p>
               <div className="space-y-2 mt-4">
-                {openOrders.slice(0, 2).map((order: any) => (
+                {openOrders.slice(0, 2).map((order) => (
                   <button 
                     key={order.id}
                     onClick={() => openOrder(order.id)}

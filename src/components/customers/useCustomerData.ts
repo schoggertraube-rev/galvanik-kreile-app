@@ -3,8 +3,12 @@
 import { useState, useEffect } from 'react';
 import { getCustomerCard } from '@/features/customers/customer-card/customerCard.actions';
 
+type ActionData<T> = T extends { data: infer Data } ? Data : never;
+
+export type CustomerCardData = ActionData<Awaited<ReturnType<typeof getCustomerCard>>>;
+
 export function useCustomerData(customerId: string | null) {
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<CustomerCardData | null | undefined>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,9 +36,9 @@ export function useCustomerData(customerId: string | null) {
             setError(res.error || 'Fehler beim Laden');
           }
         }
-      } catch (err: any) {
+      } catch (err) {
         if (isMounted) {
-          setError(err.message);
+          setError(err instanceof Error ? err.message : 'Fehler beim Laden');
         }
       } finally {
         if (isMounted) {
