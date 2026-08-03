@@ -45,7 +45,7 @@ export async function getAttributionData() {
     const auftragCount = Math.round(auftraege.length * ratio);
     
     // Umsatz für diesen Kanal (Heuristik oder echte Attribution)
-    const totalUmsatz = auftraege.reduce((sum, o) => {
+    const totalUmsatz = auftraege.reduce((sum) => {
       // Wenn das order item array in db liegt, summiere es. Wir nehmen hier einen Durchschnittswert von 450.
       return sum + 450;
     }, 0);

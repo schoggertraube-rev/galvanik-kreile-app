@@ -76,6 +76,7 @@ export async function getBesteAktionAction(): Promise<AktionVorschlag | null> {
 }
 
 export async function listVorschlaegeAction(sort: SortMode = "output"): Promise<AktionVorschlag[]> {
+  void sort;
   // Empty state for Ideen as requested
   return [];
 }

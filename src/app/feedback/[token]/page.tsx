@@ -5,10 +5,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Star, CheckCircle2 } from "lucide-react";
 
 export default function FeedbackPage({ params }: { params: { token: string } }) {
+  void params;
   const [step, setStep] = useState(1);
   const [rating, setRating] = useState(0);
   const [text, setText] = useState("");
-  const [googleClicked, setGoogleClicked] = useState(false);
+  const [, setGoogleClicked] = useState(false);
 
   const handleSubmit = async () => {
     // In a real implementation this would post the feedback to the API using the token

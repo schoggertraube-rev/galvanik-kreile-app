@@ -21,7 +21,6 @@ import { useParkedCall } from "@/contexts/ParkedCallContext";
 import { ContextAnalysisOverlay, ContextAnalysisOverlayProps } from "@/components/kommunikation/ContextAnalysisOverlay";
 import { ReactivationGeneratorOverlay } from "@/components/kommunikation/ReactivationGeneratorOverlay";
 import { useCustomerOverlay } from "@/components/customers/useCustomerOverlay";
-import type { CustomerLike } from "@/lib/types/customerLike";
 import type { Customer } from "@/lib/types/customer";
 import { supabase } from '@/lib/supabase/client';
 import { Kommandozentrale } from "@/components/kommunikation/kommandozentrale/Kommandozentrale";
@@ -145,7 +144,6 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
   const { activeParkedCall, resumeCall } = useParkedCall();
   const { open: openCustomer } = useCustomerOverlay();
   const [overlayConfig, setOverlayConfig] = useState<ContextAnalysisOverlayProps | null>(null);
-  const [showCustomerOverlay, setShowCustomerOverlay] = useState<CustomerLike | null>(null);
   const [showKommandozentrale, setShowKommandozentrale] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [chatSearch, setChatSearch] = useState("");
@@ -171,7 +169,7 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
   useEffect(() => {
     const channel = supabase
       .channel('communication_messages')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'communication_messages' }, payload => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'communication_messages' }, () => {
         // Refresh recent notes which include new communication messages
         getRecentPhoneNotes(20).then(n => setRecentNotes(n)).catch(() => setRecentNotes([]));
       })

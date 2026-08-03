@@ -47,7 +47,7 @@ function OrdersPageInner() {
 
   const [orders, setOrders] = useState<Order[]>([]);
 
-  const [customersList, setCustomersList] = useState<Customer[]>([]);
+  const [, setCustomersList] = useState<Customer[]>([]);
   
   const { openOrder } = useOrderModal();
 
@@ -169,17 +169,6 @@ function OrdersPageInner() {
       warenausgang: " (Versand & Abholung)"
     };
     return `${config.fullName}${suffixMap[stationFilter] || ""}`;
-  };
-
-  // Find customer information for phone details checking
-  const getCustomerPhoneDetails = (customerName: string, customerId: string) => {
-    const customer = customersList.find(
-      c => c.id === customerId || safe(c?.name).includes(safe(customerName))
-    );
-    if (customer && customer.phone && customer.phone.trim() !== "") {
-      return { hasPhone: true, phone: customer.phone };
-    }
-    return { hasPhone: false, phone: "" };
   };
 
   return (
@@ -359,4 +348,3 @@ export default function OrdersPage() {
     </Suspense>
   );
 }
-

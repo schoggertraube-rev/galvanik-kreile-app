@@ -4,6 +4,7 @@ import { eq, lte, and } from 'drizzle-orm';
 import { feedbackMail } from '@/db/schema_marketing';
 
 export async function GET(request: Request) {
+  void request;
   // Verifying token for cron is good practice, but skipping for demo
   try {
     const now = new Date();

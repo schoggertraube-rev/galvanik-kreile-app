@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     const fileExt = file.name.split('.').pop();
     const fileName = `${tenantId}/${itemId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
 
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from("item-photos")
       .upload(fileName, file, { contentType: file.type });
 

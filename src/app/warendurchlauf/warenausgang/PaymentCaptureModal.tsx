@@ -55,7 +55,7 @@ export function PaymentCaptureModal({ isOpen, onClose }: PaymentCaptureModalProp
            // fallback just in case
            setPaymentStatus("success");
         }
-      } catch (err) {
+      } catch {
         setPaymentStatus("success");
       }
     }, 3000);

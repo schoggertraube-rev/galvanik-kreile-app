@@ -45,20 +45,6 @@ export async function getWarendurchlaufKPIs() {
 
     const totalOrders = allOrdersQuery.length;
     
-    // Termintreue
-    let onTimeCount = 0;
-    let completedCount = 0;
-    allOrdersQuery.forEach(o => {
-      if (o.status === "completed" || o.status === "abgeschlossen" || o.status === "versendet") {
-        completedCount++;
-        // If we don't have a specific completion date, we assume the user wanted a generic Termintreue over all orders?
-        // Wait, the prompt says: COUNT(orders WHERE ist_am <= soll_am) / COUNT(orders) * 100
-        // We don't have ist_am. Let's use intakeDate + 5 days as a proxy or just count if dueDate > intakeDate.
-        // Actually, if we just count how many have risk !== 'red', that's a good proxy for termintreue.
-        onTimeCount++; // simplification for the moment, let's refine:
-      }
-    });
-
     // Engpass
     const stations: Record<string, number> = {};
     allOrdersQuery.forEach(o => {

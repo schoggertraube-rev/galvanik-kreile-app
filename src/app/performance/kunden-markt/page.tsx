@@ -40,7 +40,7 @@ export default function KundenMarktDetail() {
             <div className="pd-tile-name">Top-Kunden</div>
           </div>
           <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {topKunden.length === 0 ? <div style={{fontSize:11, color:'var(--ink3)'}}>Noch keine Kunden</div> : topKunden.map((k, i) => {
+            {topKunden.length === 0 ? <div style={{fontSize:11, color:'var(--ink3)'}}>Noch keine Kunden</div> : topKunden.map((k) => {
               const maxVal = topKunden[0]?.wert || 1;
               const pct = Math.max(5, Math.round((k.wert / maxVal) * 100));
               return (
@@ -244,4 +244,3 @@ export default function KundenMarktDetail() {
     </PerformanceDetailLayout>
   );
 }
-

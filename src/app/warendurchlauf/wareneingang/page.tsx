@@ -19,6 +19,7 @@ import { useOverlayStore } from "@/lib/overlayStore";
 
 function WarendurchlaufLeitstandContent() {
   const searchParams = useSearchParams();
+  void searchParams;
   const router = useRouter();
   const { openErfassung } = useErfassung();
   const { openOrder } = useOverlayStore();
@@ -64,7 +65,7 @@ function WarendurchlaufLeitstandContent() {
         if (resList.ok && resList.data) {
           setStationOrders(resList.data);
         }
-      } catch (err) {}
+      } catch {}
     };
     load();
 
@@ -263,18 +264,6 @@ function WarendurchlaufLeitstandContent() {
                 if (order.risk === "red") urgencyType = "crit";
                 else if (order.risk === "orange" || u === "gefaehrdet") urgencyType = "soon";
                 else if (order.risk === "blocked") urgencyType = "wait";
-
-                const textForSurface = (order.task + " " + (order.parts?.map((p: any) => p.surfaceRequested || p.finish).join(" ") || "")).toLowerCase();
-                let surfaceKey: "chrom" | "nickel" | "gold" | "kupfer" | "zink" | "offen" = "offen";
-                if (textForSurface.includes("chrom")) surfaceKey = "chrom";
-                else if (textForSurface.includes("nickel")) surfaceKey = "nickel";
-                else if (textForSurface.includes("gold")) surfaceKey = "gold";
-                else if (textForSurface.includes("kupfer")) surfaceKey = "kupfer";
-                else if (textForSurface.includes("zink")) surfaceKey = "zink";
-
-                let surfaceLabel = surfaceKey !== "offen" ? surfaceKey.charAt(0).toUpperCase() + surfaceKey.slice(1) : "Oberfläche offen";
-                if (surfaceKey === "chrom") surfaceLabel = "Vernickeln → Chrom";
-                if (surfaceKey === "zink") surfaceLabel = "Verzinken";
 
                 return (
                   <OrderCompactCard

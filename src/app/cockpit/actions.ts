@@ -6,7 +6,6 @@ export async function getCockpitKpis() {
   const supabase = await createClient();
   
   // v_monatsergebnis for current month
-  const currentMonthStr = new Date().toISOString().substring(0, 7) + '-01'; // 'YYYY-MM-01'
   const { data: monatsergebnis } = await supabase
     .from('v_monatsergebnis')
     .select('erloes_netto, ergebnis, monat')

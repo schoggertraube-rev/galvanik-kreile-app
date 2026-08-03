@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { and, gte, lte, eq, sql } from "drizzle-orm";
 import { aktion, touchpoint, attribution } from "@/db/schema_marketing";
 
-function generateInsight(typ: string, daten: any) {
+function generateInsight() {
   // Simple mock logic as a placeholder for the real insights
   return {
     beobachtungen: [
@@ -43,7 +43,7 @@ export async function getMarketingAnfragenAnalysisAction(von: string, bis: strin
     gesamt,
     chartData,
     topKategorien,
-    insights: generateInsight('anfragen', {}),
+    insights: generateInsight(),
     topAnfragen: anfragen.slice(0, 5)
   };
 }
@@ -64,7 +64,7 @@ export async function getMarketingUmsatzAnalysisAction(von: string, bis: string)
   return {
     gesamt: umsatz,
     chartData,
-    insights: generateInsight('umsatz', {}),
+    insights: generateInsight(),
     topAuftraege: []
   };
 }
@@ -90,6 +90,6 @@ export async function getMarketingRoiAnalysisAction(von: string, bis: string) {
   return {
     gesamt: roi,
     chartData,
-    insights: generateInsight('roi', {})
+    insights: generateInsight()
   };
 }

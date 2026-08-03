@@ -83,17 +83,9 @@ export default function TodayDashboard() {
   // Dynamic status counts based ONLY on today's orders
   const countRed = todayOrders.filter(o => o.risk === "red").length;
   const countOrange = todayOrders.filter(o => o.risk === "orange" || o.risk === "yellow").length;
-  const countGreen = todayOrders.filter(o => o.risk === "green").length;
-
   // Central workshop station names helper
   const getStationName = (station: string) => {
     return getStationConfig(station).fullName || station;
-  };
-
-  const getPartsCountForStation = (stationKey: string) => {
-    return todayOrders
-      .filter(o => o.station === stationKey)
-      .reduce((sum, o) => sum + o.parts.length, 0);
   };
 
   const handleAction = (orderId: string) => {

@@ -101,7 +101,7 @@ export function KvpClient() {
       try {
         const parsed = JSON.parse(saved);
         setItems([...parsed, ...DEMO_ITEMS]);
-      } catch(e) {
+      } catch {
         setItems(DEMO_ITEMS);
       }
     }
@@ -129,7 +129,7 @@ export function KvpClient() {
     const currentSaved = localStorage.getItem("kreile_kvp_items");
     let currentArr = [];
     if (currentSaved) {
-      try { currentArr = JSON.parse(currentSaved); } catch(e) {}
+      try { currentArr = JSON.parse(currentSaved); } catch {}
     }
     currentArr.unshift(newItem);
     localStorage.setItem("kreile_kvp_items", JSON.stringify(currentArr));

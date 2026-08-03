@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { AlertCircle, CheckCircle2, ArrowRight, Loader2, X } from "lucide-react";
 import { getAktiveWarnungen, refreshWarnungen, dismissWarnung } from "../actions";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 
@@ -16,7 +15,6 @@ export function FruehwarnungenKachel() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   
-  const router = useRouter();
 
   const loadData = async () => {
     setLoading(true);

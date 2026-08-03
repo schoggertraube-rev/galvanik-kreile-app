@@ -132,9 +132,6 @@ export default function ItemsPage() {
   const selectedItem = inventoryItems.find(i => i.id === selectedItemId) || null;
   const selectedItemMovements = selectedItemId ? stockMovements.filter(m => m.inventoryItemId === selectedItemId) : [];
 
-  // Chemistry materials lists for chemical addition options in dropdown
-  const chemicalList = inventoryItems.filter(item => item.category === "chemical");
-
   return (
     <div className="space-y-6 pb-12 font-sans antialiased text-navy-900">
       
