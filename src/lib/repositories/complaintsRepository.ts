@@ -26,8 +26,6 @@ export type Complaint = {
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
-const INITIAL_COMPLAINTS: Complaint[] = [];
-
 export const complaintsRepository = {
   async getAll(): Promise<Complaint[]> {
     if (isSupabase) {

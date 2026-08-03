@@ -148,6 +148,7 @@ export const bathsRepository = {
   },
 
   async getAdditionsByBath(bathId: string): Promise<BathAddition[]> {
+    void bathId;
     return [];
   },
 
@@ -186,10 +187,13 @@ export const bathsRepository = {
   },
 
   async addAddition(bathId: string, data: Omit<BathAddition, "id" | "bathId" | "createdAt">): Promise<BathAddition> {
+    void bathId;
+    void data;
     throw new Error("addAddition not implemented in DB schema yet.");
   },
 
   async updateBathStatusManual(bathId: string, status: BathStatus, notes: string): Promise<Bath> {
+    void notes;
     const res = await updateBathDb(bathId, { status });
     if (!res.ok) throw new Error(res.message);
 
