@@ -6,10 +6,15 @@ import React, { useState } from 'react';
 import { AlertTriangle, Box, Truck, FlaskConical, ArrowRight, Info } from 'lucide-react';
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
+import type { LagerArtikel } from "./actions";
 
 interface Props {
-  lagerData?: any[];
+  lagerData?: LagerArtikel[];
 }
+
+type LagerArtikelMitWareneingang = LagerArtikel & {
+  letzterWareneingang: Date;
+};
 
 export function LagerCockpitClient({ lagerData = [] }: Props) {
   const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
@@ -21,7 +26,7 @@ export function LagerCockpitClient({ lagerData = [] }: Props) {
   const verpackungItems = lagerData.filter(item => item.kategorie === 'verpackung');
   
   // Letzte Zugänge: Letzte 5 Tage
-  const recentItems = lagerData.filter(item => {
+  const recentItems = lagerData.filter((item): item is LagerArtikelMitWareneingang => {
     if (!item.letzterWareneingang) return false;
     const diff = Date.now() - new Date(item.letzterWareneingang).getTime();
     return diff <= 5 * 24 * 60 * 60 * 1000;
@@ -121,7 +126,7 @@ export function LagerCockpitClient({ lagerData = [] }: Props) {
           </div>
           {criticalItems.length > 0 && (
             <ul className="space-y-3">
-              {criticalItems.map((item: any) => (
+              {criticalItems.map(item => (
                 <li key={item.id} className="bg-white p-3 rounded-lg flex justify-between items-center border border-error-red/20">
                   <div>
                     <p className="font-bold">{item.name}</p>
@@ -149,7 +154,7 @@ export function LagerCockpitClient({ lagerData = [] }: Props) {
           </div>
           {chemieItems.length > 0 && (
             <ul className="space-y-3">
-              {chemieItems.map((item: any) => (
+              {chemieItems.map(item => (
                 <li key={item.id} className="bg-white p-3 rounded-lg flex justify-between items-center border border-neutral-gray-200">
                   <div>
                     <p className="font-bold">{item.name}</p>
@@ -176,7 +181,7 @@ export function LagerCockpitClient({ lagerData = [] }: Props) {
           </div>
           {verpackungItems.length > 0 && (
             <ul className="space-y-3">
-              {verpackungItems.map((item: any) => (
+              {verpackungItems.map(item => (
                 <li key={item.id} className="bg-white p-3 rounded-lg flex justify-between items-center border border-neutral-gray-200">
                   <div>
                     <p className="font-bold">{item.name}</p>
@@ -203,7 +208,7 @@ export function LagerCockpitClient({ lagerData = [] }: Props) {
           </div>
           {recentItems.length > 0 && (
             <ul className="space-y-3">
-              {recentItems.map((item: any) => (
+              {recentItems.map(item => (
                 <li key={item.id} className="bg-white p-3 rounded-lg flex justify-between items-center border border-success-green/20">
                   <div>
                     <p className="font-bold">{item.name}</p>

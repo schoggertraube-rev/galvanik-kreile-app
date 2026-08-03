@@ -9,16 +9,17 @@ import {
   TrendingDown, DollarSign, ShieldAlert, ArrowRight, Info
 } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
+import type { BaederListItem } from "./actions";
 
 interface Props {
-  baederData?: any[];
+  baederData?: BaederListItem[];
 }
 
 export function BaederDashboardClient({ baederData = [] }: Props) {
   const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
 
   const baederCount = baederData.length;
-  const kritischeCount = baederData.filter((b: any) => b.status === "kritisch").length;
+  const kritischeCount = baederData.filter(b => b.status === "kritisch").length;
   const messungenCount = baederData.reduce((acc, b) => acc + (b.messwerte?.length || 0), 0);
 
   const closeOverlay = () => setActiveOverlay(null);
@@ -177,7 +178,7 @@ export function BaederDashboardClient({ baederData = [] }: Props) {
       </div>
       {baederCount > 0 && (
         <ul className="space-y-3">
-          {baederData.map((b: any) => (
+          {baederData.map(b => (
              <li key={b.id} className="bg-white p-3 rounded-lg border border-neutral-gray-100">
                <p className="font-bold">{b.name} <span className="text-xs text-text-muted ml-2">Status: {b.status}</span></p>
              </li>

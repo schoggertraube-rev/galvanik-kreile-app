@@ -12,10 +12,11 @@ import {
 } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
+import type { QsListItem } from "./actions";
 
 interface Props {
   isDevOrAdmin: boolean;
-  qsData?: any[];
+  qsData?: QsListItem[];
 }
 
 export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
@@ -23,7 +24,7 @@ export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
   const [isAdminOrDevLocal, setIsAdminOrDevLocal] = useState(isDevOrAdmin);
 
   const qsCount = qsData.length;
-  const qsRows = qsCount > 0 ? qsData.map((q: any) => ({
+  const qsRows = qsCount > 0 ? qsData.map(q => ({
     avatar: q.ergebnis === "ausschuss" ? "A" : "N",
     avatarColor: q.ergebnis === "ausschuss" ? "bg-error-red" : "bg-warning-yellow",
     name: `${q.orderNumber} (${q.bemerkung || q.ergebnis})`,

@@ -3,8 +3,16 @@
 import { db } from "@/db";
 import { baeder, badMesswerte } from "@/db/schema";
 import { checkAppAuth } from "@/lib/server/authHelper";
+import type { InferSelectModel } from "drizzle-orm";
 
-export async function getBaederListAction() {
+export type Bad = InferSelectModel<typeof baeder>;
+export type BadMesswert = InferSelectModel<typeof badMesswerte>;
+export type BaederListItem = Bad & { messwerte: BadMesswert[] };
+export type BaederListActionResult =
+  | { ok: true; data: BaederListItem[] }
+  | { ok: false; error: string; message: string };
+
+export async function getBaederListAction(): Promise<BaederListActionResult> {
   const auth = await checkAppAuth();
   if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
 

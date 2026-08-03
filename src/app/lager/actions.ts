@@ -3,8 +3,14 @@
 import { db } from "@/db";
 import { lagerArtikel } from "@/db/schema";
 import { checkAppAuth } from "@/lib/server/authHelper";
+import type { InferSelectModel } from "drizzle-orm";
 
-export async function getLagerbestandAction() {
+export type LagerArtikel = InferSelectModel<typeof lagerArtikel>;
+export type LagerbestandActionResult =
+  | { ok: true; data: LagerArtikel[] }
+  | { ok: false; error: string; message: string };
+
+export async function getLagerbestandAction(): Promise<LagerbestandActionResult> {
   const auth = await checkAppAuth();
   if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
 

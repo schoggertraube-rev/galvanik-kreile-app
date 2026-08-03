@@ -3,8 +3,18 @@
 import { db } from "@/db";
 import { qs, orders, customers } from "@/db/schema";
 import { checkAppAuth } from "@/lib/server/authHelper";
+import type { InferSelectModel } from "drizzle-orm";
 
-export async function getQsListenAction() {
+export type QsListItem = InferSelectModel<typeof qs> & {
+  orderNumber: string;
+  customerName: string;
+  task: string;
+};
+export type QsListenActionResult =
+  | { ok: true; data: QsListItem[] }
+  | { ok: false; error: string; message: string };
+
+export async function getQsListenAction(): Promise<QsListenActionResult> {
   const auth = await checkAppAuth();
   if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
 
