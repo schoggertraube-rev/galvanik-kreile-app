@@ -5,16 +5,28 @@ import Image from "next/image";
 import { UploadCloud, X, Loader2 } from "lucide-react";
 import { AiBadge } from "./AiBadge";
 
+type ItemPhotoAnalysis = {
+  material: string | null;
+  schaeden: string | null;
+  masse: string | null;
+  confidence: number;
+};
+
+type ItemPhotoUploadResponse = {
+  url: string;
+  analysis: ItemPhotoAnalysis | null;
+};
+
 interface ItemPhotoUploaderProps {
   itemId: string;
-  onUploadComplete: (url: string, analysis?: any) => void;
+  onUploadComplete: (url: string, analysis?: ItemPhotoAnalysis | null) => void;
   onRemove: (url: string) => void;
   photos: string[];
 }
 
 export function ItemPhotoUploader({ itemId, onUploadComplete, onRemove, photos }: ItemPhotoUploaderProps) {
   const [isUploading, setIsUploading] = useState(false);
-  const [analysisHint, setAnalysisHint] = useState<any>(null);
+  const [analysisHint, setAnalysisHint] = useState<ItemPhotoAnalysis | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -43,7 +55,7 @@ export function ItemPhotoUploader({ itemId, onUploadComplete, onRemove, photos }
 
       if (!res.ok) throw new Error("Upload failed");
 
-      const data = await res.json();
+      const data: ItemPhotoUploadResponse = await res.json();
       
       if (data.analysis) {
         setAnalysisHint(data.analysis);

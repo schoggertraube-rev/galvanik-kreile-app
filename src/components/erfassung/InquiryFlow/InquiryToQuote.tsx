@@ -3,22 +3,49 @@
 import { useErfassung } from "../ErfassungProvider";
 import { Mail, ArrowRight, User, Package } from "lucide-react";
 import { AiBadge } from "../shared/AiBadge";
+import type { ErfassungPrefill } from "../ErfassungProvider";
 
-export function InquiryToQuote({ data }: { data: any }) {
+type InquiryItem = {
+  quantity?: number | string;
+  name?: string;
+  surfaceRequested?: string;
+};
+
+type InquiryExtraction = {
+  customer?: (Record<string, unknown> & {
+    companyName?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+  }) | null;
+  items?: InquiryItem[] | null;
+  behaviorNote?: { text?: string } | null;
+};
+
+type InquiryToQuoteData = ErfassungPrefill & {
+  id?: string | null;
+  text?: string;
+  customer?: Record<string, unknown> | null;
+  extracted?: InquiryExtraction | null;
+};
+
+export function InquiryToQuote({ data }: { data?: InquiryToQuoteData }) {
   const { openErfassung, closeErfassung } = useErfassung();
+  const inquiryData = data!;
 
   const handleCreateQuote = () => {
     // Open manual wizard prefilled with inquiry extraction and isQuote = true
     openErfassung({
       mode: "order",
       intent: "create_quote",
-      prefill: { customer: data.customer, order: { title: "KV-Anfrage aus Web" }, rawText: data.text },
+      prefill: { customer: inquiryData.customer, order: { title: "KV-Anfrage aus Web" }, rawText: inquiryData.text },
       source: "inquiry",
-      sourceRef: data.id
+      sourceRef: inquiryData.id
     });
   };
 
-  const ext = data?.extracted || {};
+  const ext: InquiryExtraction = data?.extracted ?? {};
+  const items = ext.items ?? [];
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
@@ -56,9 +83,9 @@ export function InquiryToQuote({ data }: { data: any }) {
             <Package className="w-5 h-5 text-gray-400 mt-0.5" />
             <div className="w-full">
               <div className="text-sm font-medium text-gray-900 mb-2">Teile</div>
-              {ext.items?.length > 0 ? (
+              {items.length > 0 ? (
                 <ul className="space-y-2">
-                  {ext.items.map((item: any, i: number) => (
+                  {items.map((item, i) => (
                     <li key={i} className="text-sm text-gray-700 bg-gray-50 p-2 rounded flex justify-between">
                       <span>{item.quantity}x {item.name}</span>
                       <span className="text-gray-500">{item.surfaceRequested}</span>
