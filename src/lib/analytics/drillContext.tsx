@@ -51,7 +51,6 @@ export function DrillProvider({ children }: { children: ReactNode }) {
     if (urlPeriod && urlPeriod !== period) {
       setPeriodState(urlPeriod);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlDrill, urlPeriod]);
 
   const updateUrl = useCallback(

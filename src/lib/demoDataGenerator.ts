@@ -115,15 +115,10 @@ export function generateDemoData() {
   ];
 
   // --- ORDERS ---
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const orders: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const items: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const events: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const complaints: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const phoneNotes: any[] = [];
 
   type OrderConfig = {

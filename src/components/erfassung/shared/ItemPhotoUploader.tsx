@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { UploadCloud, X, Loader2 } from "lucide-react";
 import { AiBadge } from "./AiBadge";
 
@@ -67,7 +68,7 @@ export function ItemPhotoUploader({ itemId, onUploadComplete, onRemove, photos }
         <div className="flex flex-wrap gap-2">
           {photos.map((url, i) => (
             <div key={i} className="relative group w-16 h-16 rounded-md border border-gray-200 overflow-hidden">
-              <img src={url} alt="Teile Foto" className="w-full h-full object-cover" />
+              <Image src={url} alt="Teile Foto" fill unoptimized sizes="64px" className="object-cover" />
               <button
                 type="button"
                 onClick={() => onRemove(url)}

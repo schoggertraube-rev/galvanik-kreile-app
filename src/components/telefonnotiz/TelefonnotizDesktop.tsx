@@ -67,7 +67,6 @@ export function TelefonnotizDesktop() {
   const [showSaveSheet, setShowSaveSheet] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [isSaving, setIsSaving] = useState(false);
   const [showUndo, setShowUndo] = useState(false);
   const [showReminder, setShowReminder] = useState(false);
@@ -93,11 +92,9 @@ export function TelefonnotizDesktop() {
   const [speechError, setSpeechError] = useState<string | null>(null);
   const [speechSupported] = useState(() => {
     if (typeof window === "undefined") return false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
   });
   const recordingWantedRef = useRef(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null);
 
   function startRecognitionSafely() {
@@ -113,7 +110,6 @@ export function TelefonnotizDesktop() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (!SpeechRecognition) {
         return;
@@ -124,7 +120,6 @@ export function TelefonnotizDesktop() {
       recognition.interimResults = true;
       recognition.lang = "de-DE";
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       recognition.onresult = (event: any) => {
         let finalTranscript = "";
         for (let i = event.resultIndex; i < event.results.length; ++i) {
@@ -148,7 +143,6 @@ export function TelefonnotizDesktop() {
         }
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       recognition.onerror = (event: any) => {
         console.error("Speech recognition error:", event.error);
         if (event.error === "not-allowed" || event.error === "audio-capture") {
@@ -960,7 +954,7 @@ export function TelefonnotizDesktop() {
               <div style={{ background: "white", border: "1px solid var(--tn-line)", borderRadius: 8, padding: 12 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Bilder zum Auftrag</div>
                 <div style={{ fontSize: 11, color: "var(--tn-ink-soft)", marginBottom: 10, lineHeight: 1.4 }}>
-                  "Guten Tag, anbei wie besprochen die Bilder der Teile. Können Sie diese noch retten?"
+                  &quot;Guten Tag, anbei wie besprochen die Bilder der Teile. Können Sie diese noch retten?&quot;
                 </div>
                 
                 {/* Mock Attachment */}
@@ -1284,7 +1278,7 @@ export function TelefonnotizDesktop() {
                   <div style={{ background: "var(--tn-blue-soft)", color: "var(--tn-blue)", padding: "4px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, alignSelf: "flex-start" }}>Posteingang</div>
                 </div>
                 <p style={{ fontSize: 13, lineHeight: 1.5, color: "var(--tn-ink)", margin: 0 }}>
-                  "Guten Tag, anbei wie telefonisch besprochen die Bilder der beschädigten Teile. Können Sie diese noch retten und neu versilbern? Bitte um kurze Rückmeldung bezüglich Preis und Dauer."
+                  &quot;Guten Tag, anbei wie telefonisch besprochen die Bilder der beschädigten Teile. Können Sie diese noch retten und neu versilbern? Bitte um kurze Rückmeldung bezüglich Preis und Dauer.&quot;
                 </p>
                 <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
                   <button onClick={() => alert("Bildvorschau öffnet sich")} style={{ display: "flex", alignItems: "center", gap: 8, background: "white", border: "1px solid var(--tn-line)", borderRadius: 6, padding: "8px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>

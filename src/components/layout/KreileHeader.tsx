@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-// Image from next/image available but not used for dynamic logo URLs
+import Image from "next/image";
 import { Search, Camera, Bell, Calendar, Menu, Plus } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { useState, useEffect, useRef } from "react";
@@ -112,20 +112,24 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
       {/* LEFT: GK Monogram + Brand */}
       <Link href="/" className="hidden md:flex items-center gap-3 shrink-0 group">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <Image
           src={logoUrl}
           alt="Firmenlogo"
+          width={200}
+          height={79}
+          unoptimized
           className="h-10 w-auto object-contain max-w-[200px]"
         />
       </Link>
 
       {/* Mobile Logo Only */}
       <Link href="/" className="md:hidden flex items-center shrink-0">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <Image
           src={logoUrl}
           alt="Firmenlogo"
+          width={140}
+          height={55}
+          unoptimized
           className="h-7 w-auto object-contain kreile-logo max-w-[140px]"
         />
       </Link>

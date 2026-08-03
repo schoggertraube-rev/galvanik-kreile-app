@@ -279,7 +279,7 @@ export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
               <ul className="list-disc pl-5 space-y-1 text-sm text-text-muted">
                 <li><strong className="text-navy-900">3x</strong> Neukunden-Anfragen (Preisanfragen)</li>
                 <li><strong className="text-navy-900">2x</strong> Statusnachfragen zu laufenden Aufträgen</li>
-                <li><strong className="text-error-red">1x</strong> Reklamationsverdacht ("Teile sehen fleckig aus")</li>
+                <li><strong className="text-error-red">1x</strong> Reklamationsverdacht (&quot;Teile sehen fleckig aus&quot;)</li>
                 <li><strong className="text-navy-900">1x</strong> Änderung der Lieferadresse</li>
               </ul>
             </div>

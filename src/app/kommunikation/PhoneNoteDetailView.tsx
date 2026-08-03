@@ -31,9 +31,7 @@ export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: Record<
   useEffect(() => {
     if (note && note.rawText) {
       const data = smartMatchText(note.rawText, allCustomers, allOrders);
-      // eslint-disable-next-line
       setMatchData(data);
-      // eslint-disable-next-line
       setAssignForm({
         customerId: note.customerId || data.matchedCustomer?.id || "",
         orderId: note.orderId || data.matchedOrder?.id || ""

@@ -69,7 +69,7 @@ export default function AusgabenPage() {
               <span className="text-[10px] font-bold text-amber-600 tracking-wider bg-amber-50 px-2 py-0.5 rounded">WARNUNG</span>
             </div>
             <p className="text-xs text-neutral-600 leading-relaxed">
-              Die Ausgaben für <strong className="text-[#1e1b18]">Kfz & Wartung (2.100 €)</strong> liegen diesen Monat <strong className="text-rose-600">+40 %</strong> über dem historischen Durchschnitt. Ursache ist primär die Rechnung von "Reifen Müller" über 420 €.
+              Die Ausgaben für <strong className="text-[#1e1b18]">Kfz & Wartung (2.100 €)</strong> liegen diesen Monat <strong className="text-rose-600">+40 %</strong> über dem historischen Durchschnitt. Ursache ist primär die Rechnung von &quot;Reifen Müller&quot; über 420 €.
             </p>
           </div>
         </div>

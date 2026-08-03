@@ -54,7 +54,6 @@ export function CameraCapture({
       }
       stopCamera();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCapture = async () => {

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useState, useEffect } from "react";
 import { PieChart } from "lucide-react";
@@ -57,6 +56,5 @@ export function VariableKostenKachel({ summe }: { summe: number }) {
     </>
   );
 }
-
 
 

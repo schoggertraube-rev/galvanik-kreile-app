@@ -696,7 +696,6 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
                   </div>
                   <div style={{ display: "flex", gap: 12 }}>
                     <div style={{ marginTop: 20 }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src="/kreile_mockup_v2_bg.png" alt="" style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,.1)" }} />
                     </div>
                     <button onClick={() => setToastMessage("Backend Aktion vorbereitet.")} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all .1s" }} onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.15)")} onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,.1)")}>Alle {actionCards.length} anwenden</button>

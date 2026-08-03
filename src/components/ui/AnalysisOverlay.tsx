@@ -557,7 +557,7 @@ export function AnalysisOverlay({
               </>
             )}
             <p className="text-xs text-text-muted mt-2 border-t pt-4">
-              Für tiefere Analysen und Bearbeitungsmöglichkeiten klicken Sie bitte auf "Vollständig öffnen".
+              Für tiefere Analysen und Bearbeitungsmöglichkeiten klicken Sie bitte auf &quot;Vollständig öffnen&quot;.
             </p>
           </div>
         </PreviewDrawer>

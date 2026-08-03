@@ -104,7 +104,6 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     if (isOnline && outboxItems.length > 0) {
       syncNow();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline]);
 
   return (

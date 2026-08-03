@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useState, useEffect } from "react";
 import { Wallet } from "lucide-react";
@@ -83,6 +82,5 @@ export function FixkostenKachel({ summe }: { summe: number }) {
     </>
   );
 }
-
 
 

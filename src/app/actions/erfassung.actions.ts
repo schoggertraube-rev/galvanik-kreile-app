@@ -342,7 +342,6 @@ import { checkAppAuth } from "@/lib/server/authHelper";
 import { revalidatePath } from "next/cache";
 import { VALID_ORDER_SOURCES } from "@/lib/validation/orderSchema";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function createCustomerFromErfassung(input: Record<string, any>) {
   console.info("[CAPTURE_CUSTOMER_START]", {
     hasInput: Boolean(input),
@@ -429,16 +428,13 @@ export async function createCustomerFromErfassung(input: Record<string, any>) {
   } catch (err: unknown) {
     console.error("Failed to create customer:", {
       message: (err as Error).message,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       details: (err as Record<string, any>).details,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       hint: (err as Record<string, any>).hint,
     });
     return { ok: false, error: (err as Error).message || "Failed to create customer" };
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function createOrderFromErfassung(input: Record<string, any>) {
   // Check write permissions
   const auth = await checkAppAuth("write");
@@ -526,7 +522,6 @@ export async function createOrderFromErfassung(input: Record<string, any>) {
     }
 
     if (input.items && Array.isArray(input.items) && input.items.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const newItems = input.items.map((p: Record<string, any>) => ({
         id: createId(),
         tenantId: "galvanik-kreile",
@@ -566,9 +561,7 @@ export async function createOrderFromErfassung(input: Record<string, any>) {
   } catch (err: unknown) {
     console.error("Failed to create order:", {
       message: (err as Error).message,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       details: (err as Record<string, any>).details,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       hint: (err as Record<string, any>).hint,
     });
     return { ok: false, error: (err as Error).message || "Failed to create order" };

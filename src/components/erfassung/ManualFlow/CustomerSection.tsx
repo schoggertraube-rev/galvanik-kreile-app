@@ -88,7 +88,7 @@ export function CustomerSection({ customer, onChange, onCreateNew }: { customer:
             className="w-full text-left px-4 py-3 bg-[#fcfaf6] hover:bg-gray-100 text-[#1a1c23] font-medium flex items-center gap-2 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            Als neuen Kunden "{search}" anlegen
+            Als neuen Kunden &quot;{search}&quot; anlegen
           </button>
         </div>
       )}
@@ -100,7 +100,7 @@ export function CustomerSection({ customer, onChange, onCreateNew }: { customer:
             className="w-full py-3 bg-[#fcfaf6] border-2 border-dashed border-[#e5dcd0] hover:border-gray-400 hover:bg-white rounded-lg text-gray-600 font-medium flex items-center justify-center gap-2 transition-all"
           >
             <Plus className="w-5 h-5" />
-            Neuen Kunden "{search}" anlegen
+            Neuen Kunden &quot;{search}&quot; anlegen
           </button>
         </div>
       )}

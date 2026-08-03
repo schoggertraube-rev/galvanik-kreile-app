@@ -48,7 +48,7 @@ export function FloatingParkedCall() {
               </p>
               
               <div className="bg-[#F5F1EB] p-4 rounded-xl text-sm italic text-[#A09889] mb-6 line-clamp-2">
-                "{activeParkedCall.rawText}"
+                &quot;{activeParkedCall.rawText}&quot;
               </div>
               
               <div className="flex flex-col gap-3">

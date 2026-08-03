@@ -25,8 +25,9 @@ export const VersandVariant: React.FC<VersandVariantProps> = ({ orderId, custome
     
     if (!resSave.success) {
       setError(resSave.error || 'Fehler beim Speichern der Versanddaten');
-      // @ts-ignore
-      if (resSave.missingFields) setMissingFields(resSave.missingFields);
+      if ("missingFields" in resSave && Array.isArray(resSave.missingFields)) {
+        setMissingFields(resSave.missingFields);
+      }
       setSaving(false);
       return;
     }
@@ -121,7 +122,7 @@ export const VersandVariant: React.FC<VersandVariantProps> = ({ orderId, custome
                   <ul style={{ margin: 0, paddingLeft: '20px' }}>
                     {missingFields.map(field => <li key={field}>{field}</li>)}
                   </ul>
-                  <p style={{ margin: '6px 0 0', fontWeight: 500 }}>Bitte wählen Sie "Selbstabholung" oder ergänzen Sie die Stammdaten des Kunden.</p>
+                  <p style={{ margin: '6px 0 0', fontWeight: 500 }}>Bitte wählen Sie &quot;Selbstabholung&quot; oder ergänzen Sie die Stammdaten des Kunden.</p>
                 </div>
               )}
             </div>

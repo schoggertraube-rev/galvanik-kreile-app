@@ -252,7 +252,7 @@ export function KvpClient() {
             <ul className="space-y-3 mb-6">
               <li className="flex justify-between items-center border-b border-neutral-gray-100 pb-2">
                 <span className="text-sm font-medium text-navy-900">Häufigste Suche ohne Treffer</span>
-                <span className="text-xs font-bold text-error-red">"Urlaub"</span>
+                <span className="text-xs font-bold text-error-red">&quot;Urlaub&quot;</span>
               </li>
               <li className="flex justify-between items-center border-b border-neutral-gray-100 pb-2">
                 <span className="text-sm font-medium text-navy-900">Rollenblockaden (Woche)</span>

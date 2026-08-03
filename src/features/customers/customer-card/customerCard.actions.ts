@@ -20,9 +20,7 @@ export async function getCustomerCard(customerId: string) {
     // 2. KPI aus View (Raw SQL fallback if view not directly accessible via drizzle-orm object without defining it, but we can use sql helper)
     let kpi = null;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const kpiRows: any = await db.execute(sql`SELECT * FROM v_analyse_kunden_kpi WHERE customer_id = ${customerId}`);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       kpi = (kpiRows.rows ? kpiRows.rows[0] : kpiRows[0]) || null;
     } catch (e) {
       console.warn("Could not fetch KPI view for customer", customerId, e);

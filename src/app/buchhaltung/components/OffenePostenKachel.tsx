@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 import { useState, useEffect } from "react";
 import { AlertCircle } from "lucide-react";
@@ -61,6 +60,5 @@ export function OffenePostenKachel() {
     </>
   );
 }
-
 
 

@@ -174,7 +174,6 @@ export async function createCustomerDb(data: Record<string, unknown>): Promise<A
     
     const newCustomerDb = sanitizeCustomerPayload(rawCustomerDb, false);
     
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await db.insert(customers).values(newCustomerDb as any);
     
     const dbCustomers = await db.select().from(customers).where(
@@ -231,7 +230,6 @@ export async function updateCustomerDb(id: string, changes: Partial<Customer>): 
     
     if (Object.keys(updateData).length > 0) {
       updateData.updatedAt = new Date();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       await db.update(customers).set(updateData as any).where(eq(customers.id, id));
     }
     

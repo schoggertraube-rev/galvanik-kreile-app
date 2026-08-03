@@ -31,7 +31,6 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
         }
       }).catch(() => setIsDemoMode(true));
     } else {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setIsDemoMode(false);
     }
   }, []);

@@ -216,7 +216,7 @@ function renderTileContent(key: TileKey, dossier: ClientDossier): React.ReactNod
     case "notizen":
       return (
         <div style={{ fontSize: 12, color: "var(--kz-ink-mute)" }}>
-          „{dossier.stamm.notes.slice(0, 80)}{dossier.stamm.notes.length > 80 ? "…" : ""}"
+          „{dossier.stamm.notes.slice(0, 80)}{dossier.stamm.notes.length > 80 ? "…" : ""}&quot;
         </div>
       );
 
@@ -607,7 +607,7 @@ function renderDetailBody(key: TileKey, dossier: ClientDossier): React.ReactNode
         <>
           <div className="kz-chart-card">
             <div style={{ fontSize: 13, color: "var(--kz-ink-soft)", lineHeight: 1.6 }}>
-              „{dossier.stamm.notes}"
+              „{dossier.stamm.notes}&quot;
             </div>
           </div>
           <div className="kz-chart-card">
@@ -651,7 +651,7 @@ export function Kommandozentrale({
     if (dossier.suggestedAnswer && !composerText) {
       setComposerText(dossier.suggestedAnswer);
     }
-  }, [dossier.suggestedAnswer]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dossier.suggestedAnswer]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -672,7 +672,7 @@ export function Kommandozentrale({
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open, activeDetail]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, activeDetail]);
 
   const handleClose = useCallback(() => {
     if (!actionsApplied && dossier.preparedActions.length > 0) {
@@ -917,7 +917,7 @@ export function Kommandozentrale({
             {/* Answer suggestion (cream card) */}
             <div className="kz-sug cream" data-testid="kz-answer-suggestion">
               <div className="sl">Antwort-Vorschlag</div>
-              <p>„{dossier.suggestedAnswer}"</p>
+              <p>„{dossier.suggestedAnswer}&quot;</p>
               <div className="kz-sug-actions">
                 <button className="kz-sug-btn primary" onClick={() => setComposerText(dossier.suggestedAnswer)}>Übernehmen</button>
               </div>

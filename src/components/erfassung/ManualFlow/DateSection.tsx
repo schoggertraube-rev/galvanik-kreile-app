@@ -4,9 +4,7 @@ import { Truck, PackageSearch, PackageOpen } from "lucide-react";
 import { useState } from "react";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function DateSection({ dateInfo, onChange, customer }: { dateInfo: any, onChange: (info: any) => void, customer?: any }) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const handleChange = (field: string, value: any) => {
     onChange({ ...dateInfo, [field]: value });
   };

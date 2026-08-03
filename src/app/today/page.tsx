@@ -83,7 +83,6 @@ export default function TodayDashboard() {
   // Dynamic status counts based ONLY on today's orders
   const countRed = todayOrders.filter(o => o.risk === "red").length;
   const countOrange = todayOrders.filter(o => o.risk === "orange" || o.risk === "yellow").length;
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const countGreen = todayOrders.filter(o => o.risk === "green").length;
 
   // Central workshop station names helper
@@ -91,7 +90,6 @@ export default function TodayDashboard() {
     return getStationConfig(station).fullName || station;
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const getPartsCountForStation = (stationKey: string) => {
     return todayOrders
       .filter(o => o.station === stationKey)

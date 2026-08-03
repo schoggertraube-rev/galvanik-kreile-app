@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { useTestpilot } from '@/components/testpilot/TestpilotProvider';
 import { usePathname } from 'next/navigation';
 import { TestpilotCanvas } from '@/components/testpilot/TestpilotCanvas';
+import { getPngDataUrlDimensions } from '@/lib/images/pngDimensions';
 
 interface TestpilotOverlayProps {
   onClose: () => void;
@@ -33,6 +35,7 @@ export function TestpilotOverlay({ onClose }: TestpilotOverlayProps) {
   const [expected, setExpected] = useState("");
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
+  const screenshotDimensions = getPngDataUrlDimensions(screenshot ?? "");
 
   const handleSave = () => {
     addMarker({
@@ -111,8 +114,7 @@ export function TestpilotOverlay({ onClose }: TestpilotOverlayProps) {
             <label className="block text-sm font-medium mb-1">Visuelle Markierung</label>
             {screenshot ? (
               <div className="relative border rounded-md overflow-hidden dark:border-slate-700 mt-1">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={screenshot} alt="Screenshot" className="w-full h-auto max-h-[160px] object-cover" />
+                <Image src={screenshot} alt="Screenshot" width={screenshotDimensions.width} height={screenshotDimensions.height} unoptimized className="w-full h-auto max-h-[160px] object-cover" />
                 <button 
                   onClick={() => setScreenshot(null)}
                   className="absolute top-2 right-2 bg-red-600/90 text-white p-1 rounded-full hover:bg-red-700 backdrop-blur-sm"

@@ -1,5 +1,5 @@
 import React from "react";
-import { Page, Text, View, Document, StyleSheet, Image } from "@react-pdf/renderer";
+import { Page, Text, View, Document, StyleSheet, Image as PdfImage } from "@react-pdf/renderer";
 import type { Order } from "@/lib/repositories/ordersRepository";
 import type { Customer } from "@/lib/repositories/customersRepository";
 import type { CompanySettings } from "@/lib/repositories/companySettingsRepository";
@@ -156,7 +156,7 @@ export const DeliveryNoteDocument = ({ orders, customer, settings }: DeliveryNot
         {/* Header */}
         <View style={styles.header}>
           {settings.logoUrl && !settings.logoUrl.endsWith(".svg") ? (
-            <Image src={settings.logoUrl} style={{ width: 120, objectFit: "contain" }} />
+            <PdfImage src={settings.logoUrl} style={{ width: 120, objectFit: "contain" }} />
           ) : (
             <View style={styles.logoPlaceholder}>
               <Text style={styles.logoText}>{settings.companyName.toUpperCase()}</Text>

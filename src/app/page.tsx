@@ -4,7 +4,6 @@ import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, useRef } from "react";
 import { getOrdersDb } from "@/app/actions/orders.actions";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository"; // Will keep this if no actions exist
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Order = any;
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
@@ -96,7 +95,6 @@ export default function HomeDashboard() {
   const [feedbackSent, setFeedbackSent] = useState(false);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
@@ -604,4 +602,3 @@ export default function HomeDashboard() {
     </>
   );
 }
-

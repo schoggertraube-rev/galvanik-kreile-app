@@ -59,7 +59,6 @@ export default function MarketingStudioClient({
   const [showToast, setShowToast] = useState(false);
   const [funnelKey, setFunnelKey] = useState(0);
   const [analysisOpen, setAnalysisOpen] = useState<string | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [analysisDataMap, setAnalysisDataMap] = useState<Record<string, any>>({});
   const [igConnected, setIgConnected] = useState(false);
 
@@ -91,7 +90,6 @@ export default function MarketingStudioClient({
         });
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisOpen]);
 
   useEffect(() => {
@@ -129,7 +127,6 @@ export default function MarketingStudioClient({
 
   const handlePost = useCallback(async () => {
     if (!besteAktion) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const res = await instagramAdapter.publish(besteAktion as any);
     setToastMsg(res.message);
     setShowToast(true);
@@ -171,7 +168,6 @@ export default function MarketingStudioClient({
     setBesteAktion(p => p ? { ...p, titel: v.titel, caption: v.caption, hashtags: v.hashtags } : p);
   }, [besteAktion, varianteIdx]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getAnalysisProps = (key: string | null): any => {
     // Keep it minimal for now, logic preserved from original
     if (!key) return {};
