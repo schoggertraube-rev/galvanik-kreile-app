@@ -12,6 +12,20 @@ import { OrderCompactCard } from "@/components/orders/OrderCompactCard";
 import { OrderEditModal } from "@/components/orders/OrderEditModal";
 import { getUrgency } from "@/lib/orders/getUrgency";
 import { useOverlayStore } from "@/lib/overlayStore";
+import type { WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
+import type { Order } from "@/lib/repositories/ordersRepository";
+
+function getLegacyStatusText(order: WarendurchlaufOrder) {
+  if (
+    typeof order === "object" &&
+    "statusText" in order &&
+    typeof order.statusText === "string"
+  ) {
+    return order.statusText;
+  }
+
+  return undefined;
+}
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    Warendurchlauf Leitstand — v4 Layout
@@ -23,10 +37,10 @@ function WarendurchlaufLeitstandContent() {
   const router = useRouter();
   const { openErfassung } = useErfassung();
   const { openOrder } = useOverlayStore();
-  const [orders, setOrders] = useState<any[]>([]);
-  const [stationOrders, setStationOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<WarendurchlaufOrder[]>([]);
+  const [stationOrders, setStationOrders] = useState<WarendurchlaufOrder[]>([]);
   const [todos, setTodos] = useState<{ id: number; title: string; subtitle: string; tags: string[]; action: string; priority?: string; live?: boolean; targetHref?: string; done: boolean }[]>([]);
-  const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<any>(null);
+  const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<Order | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -41,7 +55,7 @@ function WarendurchlaufLeitstandContent() {
 
           // Build dynamic checklist
           const newTodos = [];
-          const kritisch = typedOrders.filter((o: any) => o.risk === 'red' || o.risk === 'orange');
+          const kritisch = typedOrders.filter(o => o.risk === 'red' || o.risk === 'orange');
           if (kritisch.length > 0) {
              newTodos.push({
                 id: 1, title: `Kritische Aufträge (${kritisch.length})`, subtitle: "Aufträge mit hohem Risiko",
@@ -49,7 +63,7 @@ function WarendurchlaufLeitstandContent() {
                 live: true, done: false
              });
           }
-          const auslieferungen = typedOrders.filter((o: any) => o.currentStationId === 'warenausgang' || o.station === 'warenausgang');
+          const auslieferungen = typedOrders.filter(o => o.currentStationId === 'warenausgang' || o.station === 'warenausgang');
           if (auslieferungen.length > 0) {
              newTodos.push({
                 id: 2, title: `Auslieferungen klären (${auslieferungen.length})`, subtitle: "Aufträge im Warenausgang",
@@ -276,7 +290,7 @@ function WarendurchlaufLeitstandContent() {
                     urgency={urgencyType}
                     dueValue={order.dueValue || "14 T"}
                     dueLabel={order.dueLabel || "Fällig in"}
-                    badgeText={order.statusText || "Wartend"}
+                    badgeText={getLegacyStatusText(order) || "Wartend"}
                     onClick={() => openOrder(order.id)}
                   />
                 );

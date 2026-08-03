@@ -6,17 +6,31 @@ import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import { ListTodo } from "lucide-react";
 import { OrderWideCard, UrgencyType } from "@/components/orders/OrderWideCard";
 import { useOverlayStore } from "@/lib/overlayStore";
+import type { WarendurchlaufKpiData, WarendurchlaufOrder } from "../actions";
 
-export function OffeneAuftraegeKachel({ data }: { data: any }) {
+function getLegacySurface(part: WarendurchlaufOrder["parts"][number] | undefined) {
+  if (
+    part &&
+    typeof part === "object" &&
+    "surface" in part &&
+    typeof part.surface === "string"
+  ) {
+    return part.surface;
+  }
+
+  return undefined;
+}
+
+export function OffeneAuftraegeKachel({ data }: { data: WarendurchlaufKpiData | null }) {
   const [overlayOpen, setOverlayOpen] = useState(false);
-  const openOrder = useOverlayStore((state: any) => state.openOrder);
+  const openOrder = useOverlayStore(state => state.openOrder);
 
   const offeneCount = data?.offeneAuftraege ?? 0;
   const orders = data?.orders || [];
 
   // Get all active orders
-  const activeOrders = orders.filter((o: any) => o.status !== "completed" && o.status !== "abgeschlossen" && o.status !== "versendet");
-  const sortedRecent = activeOrders.sort((a: any, b: any) => {
+  const activeOrders = orders.filter(o => o.status !== "completed" && o.status !== "abgeschlossen" && o.status !== "versendet");
+  const sortedRecent = activeOrders.sort((a, b) => {
     const aDate = a.intakeDate ? new Date(a.intakeDate).getTime() : 0;
     const bDate = b.intakeDate ? new Date(b.intakeDate).getTime() : 0;
     return bDate - aDate; // Newest first
@@ -43,12 +57,12 @@ export function OffeneAuftraegeKachel({ data }: { data: any }) {
       >
         <div className="flex flex-col gap-3">
           {sortedRecent.length > 0 ? (
-            sortedRecent.map((o: any) => {
+            sortedRecent.map(o => {
               const dueValue = o.dueValue || "---";
               const dueLabel = o.dueLabel || "Fällig";
               const urgency: UrgencyType = o.risk === "red" ? "crit" : (o.risk === "yellow" ? "soon" : "ok");
-              const partsStr = o.parts?.length > 0 ? o.parts.map((p: any) => p.name).join(", ") : "Artikel nicht hinterlegt";
-              const surfaceStr = o.parts?.[0]?.surface || "Oberfläche nicht hinterlegt";
+              const partsStr = o.parts.length > 0 ? o.parts.map(p => p.name).join(", ") : "Artikel nicht hinterlegt";
+              const surfaceStr = getLegacySurface(o.parts[0]) || "Oberfläche nicht hinterlegt";
 
               return (
                 <OrderWideCard
