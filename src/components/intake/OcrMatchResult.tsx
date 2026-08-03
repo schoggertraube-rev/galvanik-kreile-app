@@ -18,6 +18,7 @@ interface OcrMatchResultProps {
 }
 
 export function OcrMatchResult({ ocrData, attachmentUrl, previewUrl, onComplete }: OcrMatchResultProps) {
+  void attachmentUrl;
   const [matches, setMatches] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   

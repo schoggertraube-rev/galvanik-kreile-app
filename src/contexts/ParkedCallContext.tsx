@@ -36,7 +36,7 @@ export function ParkedCallProvider({ children }: { children: React.ReactNode }) 
       if (stored) {
         setActiveParkedCall(JSON.parse(stored));
       }
-    } catch (e) {}
+    } catch {}
   }, []);
 
   const parkCall = useCallback((data: ParkedCallData) => {

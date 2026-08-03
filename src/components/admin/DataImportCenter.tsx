@@ -69,10 +69,6 @@ export function DataImportCenter() {
     reader.readAsText(file);
   };
 
-  const executeImport = () => {
-    // Disabled in UI
-  };
-
   const pendingCount = rows.filter(r => r.status === 'pending').length;
   const duplicateCount = rows.filter(r => r.status === 'duplicate').length;
 

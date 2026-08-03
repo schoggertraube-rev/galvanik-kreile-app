@@ -15,6 +15,7 @@ interface ErfassungCardProps {
 }
 
 export function ErfassungCard({ orderId, tenantId = 'galvanik-kreile' }: ErfassungCardProps) {
+  void tenantId;
   const [vorlage, setVorlage] = useState<VorlageResult | null>(null);
   const [zeitBuchungen, setZeitBuchungen] = useState<any[]>([]);
   const [verbrauchBuchungen, setVerbrauchBuchungen] = useState<any[]>([]);

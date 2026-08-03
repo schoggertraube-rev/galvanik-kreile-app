@@ -2,6 +2,7 @@ import React from 'react';
 import { TrendingUp, Award, Clock, DollarSign, Tag } from 'lucide-react';
 
 export function CustomerAnalysisTab({ customerId, customerData }: { customerId: string, customerData: any }) {
+  void customerId;
   if (!customerData) return <div className="p-4 text-gray-500">Lade Analyse...</div>;
 
   const kpi = customerData.kpi;

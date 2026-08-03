@@ -83,10 +83,6 @@ export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
     }
   };
 
-  const handleSendMail = (customerName: string) => {
-    alert(`Platzhalter: E-Mail mit Zahlungs-QR für ${customerName} generiert und versendet.`);
-  };
-
   return (
     <div className="flex flex-col gap-6 w-full max-w-4xl mx-auto">
       <div className="flex items-center justify-between text-xs text-text-muted font-semibold px-1">

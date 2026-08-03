@@ -67,7 +67,7 @@ export function TelefonnotizDesktop() {
   const [showSaveSheet, setShowSaveSheet] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [, setIsSaving] = useState(false);
   const [showUndo, setShowUndo] = useState(false);
   const [showReminder, setShowReminder] = useState(false);
   const [reminderTime, setReminderTime] = useState("Heute 17:00");
@@ -266,11 +266,6 @@ export function TelefonnotizDesktop() {
       
       sessionStorage.setItem(draftId, JSON.stringify(draftPayload));
       
-      const query = new URLSearchParams({
-        mode: "new-order",
-        source: "phone-note",
-        draftId
-      });
       openErfassung({ mode: "order", intent: "create_order", source: "phone", prefill: { rawText: text } });
     } else if (action.type === "create_customer") {
       openErfassung({ mode: "customer", intent: "create_customer", source: "phone", prefill: { rawText: text } });

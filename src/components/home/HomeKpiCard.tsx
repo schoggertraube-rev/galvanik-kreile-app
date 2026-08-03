@@ -11,16 +11,6 @@ interface HomeKpiCardProps {
 }
 
 export function HomeKpiCard({ title, value, subtitle, status, onClick, progress }: HomeKpiCardProps) {
-  const getStatusColors = () => {
-    switch (status) {
-      case "success": return "text-success-green bg-success-green/20";
-      case "warning": return "text-accent-orange bg-accent-orange/20";
-      case "danger": return "text-danger-red bg-danger-red/20";
-      case "info": return "text-navy-900 bg-navy-900/10";
-      default: return "text-text-muted bg-neutral-gray-100";
-    }
-  };
-
   const getProgressColor = () => {
     switch (status) {
       case "success": return "bg-success-green";

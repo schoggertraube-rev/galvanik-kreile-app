@@ -5,7 +5,7 @@ import { UploadCloud, Camera, FileText } from "lucide-react";
 import { useErfassung } from "../ErfassungProvider";
 
 export function ScanUpload() {
-  const { openErfassung, closeErfassung } = useErfassung();
+  const { openErfassung } = useErfassung();
   const [isUploading, setIsUploading] = useState(false);
   const [statusText, setStatusText] = useState("");
   const [fallbackState, setFallbackState] = useState<{ type: "ai_failed" | "storage_failed", record?: any } | null>(null);

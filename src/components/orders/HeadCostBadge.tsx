@@ -10,7 +10,6 @@ interface HeadCostBadgeProps {
 
 export const HeadCostBadge: React.FC<HeadCostBadgeProps> = ({ currentCostEur, benchmarkEur, onClick }) => {
   const showBench = typeof benchmarkEur === 'number' && benchmarkEur > 0;
-  const isOver = showBench && currentCostEur > benchmarkEur;
   let overText = null;
 
   if (showBench && benchmarkEur) {

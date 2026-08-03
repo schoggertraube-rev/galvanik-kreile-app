@@ -329,7 +329,7 @@ export function AnalysisOverlay({
                 );
               }
               return (
-                <div key={i} style={wrapperStyle} onClick={(e) => {
+                <div key={i} style={wrapperStyle} onClick={() => {
                   if (row.previewText) {
                     setPreviewDrawer({ open: true, href: row.href || "", label: row.name, previewText: row.previewText });
                   } else if (row.onClick) {

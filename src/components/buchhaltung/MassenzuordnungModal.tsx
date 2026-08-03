@@ -24,7 +24,7 @@ export function MassenzuordnungModal({ isOpen, onClose, onAssign, count }: Masse
     try {
       await onAssign(konto, kostenstelle);
       onClose();
-    } catch (e) {
+    } catch {
       alert("Fehler bei der Zuordnung");
     } finally {
       setIsSubmitting(false);

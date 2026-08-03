@@ -19,7 +19,6 @@ import { useGlobalSearch } from '@/features/analyse/hooks/useGlobalSearch';
 export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChange: (v: boolean) => void }) {
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
-  const [activeAIQuery, setActiveAIQuery] = useState("");
   const { openOrder } = useOrderModal();
   const { open: openCustomer } = useCustomerOverlay();
   const { openErfassung } = useErfassung();

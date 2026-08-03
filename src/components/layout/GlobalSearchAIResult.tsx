@@ -10,6 +10,7 @@ interface AIResultProps {
 }
 
 export function GlobalSearchAIResult({ query, onClose }: AIResultProps) {
+  void onClose;
   const [loading, setLoading] = useState(true);
   const [result, setResult] = useState<Record<string, any> | null>(null);
   

@@ -26,8 +26,6 @@ interface BulkLabelPrintViewProps {
 export function BulkLabelPrintView({ orders, onClose, onPrintComplete }: BulkLabelPrintViewProps) {
   const mounted = useHydrated();
   const [printing, setPrinting] = useState(false);
-  const [customerMap, setCustomerMap] = useState<Record<string, string>>({});
-  const [qrCodes, setQrCodes] = useState<Record<string, string>>({});
 
   const handlePrint = async () => {
     setPrinting(true);

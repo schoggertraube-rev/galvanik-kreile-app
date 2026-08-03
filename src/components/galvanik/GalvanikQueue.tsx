@@ -3,7 +3,6 @@
 import { useState, useMemo } from "react";
 import { Order } from "@/lib/repositories/ordersRepository";
 import { GalvanikOrderRow } from "./GalvanikOrderRow";
-import { startOfDay } from "date-fns";
 import { getUrgency } from "@/lib/orders/getUrgency";
 import { ArrowUpDown, Users } from "lucide-react";
 
@@ -27,8 +26,6 @@ export function GalvanikQueue({ orders }: GalvanikQueueProps) {
   }, [orders, search]);
 
   const sortedOrders = useMemo(() => {
-    const today = startOfDay(new Date());
-
     return [...filteredOrders].sort((a, b) => {
       if (sortMode === "dueDate") {
         // Sort: critical -> warning -> ok, dann nach Datum aufsteigend

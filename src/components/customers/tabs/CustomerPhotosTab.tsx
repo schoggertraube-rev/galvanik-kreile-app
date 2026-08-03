@@ -2,6 +2,7 @@ import React from 'react';
 import { Camera, UploadCloud } from 'lucide-react';
 
 export function CustomerPhotosTab({ customerId }: { customerId: string }) {
+  void customerId;
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex justify-between items-center">

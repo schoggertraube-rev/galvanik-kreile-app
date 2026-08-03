@@ -30,6 +30,7 @@ export function OrderCompactCard({
   onClick,
   onAdvance
 }: OrderCompactCardProps) {
+  void id;
   const isCrit = urgency === "crit";
   const isWait = urgency === "wait";
 

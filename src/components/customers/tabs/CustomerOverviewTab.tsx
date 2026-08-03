@@ -3,6 +3,7 @@ import { Mail, Phone, MapPin, ExternalLink, Calendar, PlusCircle, AlertTriangle 
 import { useOverlayStore } from '@/lib/overlayStore';
 
 export function CustomerOverviewTab({ customerId, customerData }: { customerId: string, customerData: any }) {
+  void customerId;
   const openOrder = useOverlayStore(state => state.openOrder);
 
   if (!customerData) return <div className="p-4 text-gray-500">Lade Übersicht...</div>;
