@@ -658,6 +658,19 @@ export function Kommandozentrale({
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
+  const handleClose = useCallback(() => {
+    if (!actionsApplied && dossier.preparedActions.length > 0) {
+      // Anti-Sackgasse: show toast
+      setShowToast(true);
+      setTimeout(() => {
+        setShowToast(false);
+        onClose();
+      }, 2500);
+    } else {
+      onClose();
+    }
+  }, [actionsApplied, dossier.preparedActions.length, onClose]);
+
   // ESC handler — layer-aware
   useEffect(() => {
     if (!open) return;
@@ -673,19 +686,6 @@ export function Kommandozentrale({
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [open, activeDetail]);
-
-  const handleClose = useCallback(() => {
-    if (!actionsApplied && dossier.preparedActions.length > 0) {
-      // Anti-Sackgasse: show toast
-      setShowToast(true);
-      setTimeout(() => {
-        setShowToast(false);
-        onClose();
-      }, 2500);
-    } else {
-      onClose();
-    }
-  }, [actionsApplied, dossier.preparedActions.length, onClose]);
 
   const handleApplyAll = useCallback(() => {
     // Phase 4: Route to central flow for quotes
