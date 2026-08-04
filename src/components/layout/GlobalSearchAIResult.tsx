@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Download, MessageSquare } from 'lucide-react';
-import { askGlobalAiAction } from '@/app/actions/aiSearch';
+import { askGlobalAiAction, type GlobalAiResponse } from '@/app/actions/aiSearch';
 
 interface AIResultProps {
   query: string;
@@ -12,7 +12,7 @@ interface AIResultProps {
 export function GlobalSearchAIResult({ query, onClose }: AIResultProps) {
   void onClose;
   const [loading, setLoading] = useState(true);
-  const [result, setResult] = useState<Record<string, any> | null>(null);
+  const [result, setResult] = useState<GlobalAiResponse | null>(null);
   
   useEffect(() => {
     let active = true;
@@ -83,7 +83,7 @@ export function GlobalSearchAIResult({ query, onClose }: AIResultProps) {
                 </tr>
               </thead>
               <tbody>
-                {result.kernzahlen.map((kz: Record<string, any>, i: number) => (
+                {result.kernzahlen.map((kz, i) => (
                   <tr key={i} className="border-b border-teal-50 last:border-0 hover:bg-teal-50/30 cursor-pointer transition-colors">
                     <td className="px-3 py-2.5 font-semibold text-navy-900">{kz.label}</td>
                     <td className="px-3 py-2.5 text-right font-bold">{kz.wert}</td>

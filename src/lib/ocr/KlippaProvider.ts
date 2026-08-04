@@ -1,5 +1,42 @@
 import { OcrProvider, OcrErgebnis } from "./types";
 
+type JsonRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function numberValue(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value.replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function parsedDocument(data: unknown): JsonRecord {
+  if (!isRecord(data) || !isRecord(data.data) || !isRecord(data.data.parsed)) {
+    return {};
+  }
+
+  return data.data.parsed;
+}
+
+function documentText(data: unknown): string | null {
+  if (!isRecord(data) || !isRecord(data.data)) return null;
+
+  return stringValue(data.data.text);
+}
+
 export class KlippaProvider implements OcrProvider {
   async extractBeleg(imageUrl: string): Promise<OcrErgebnis> {
     if (!process.env.KLIPPA_API_KEY) {
@@ -24,7 +61,7 @@ export class KlippaProvider implements OcrProvider {
         throw new Error(`Klippa API Error: ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data: unknown = await response.json();
       return this.mapKlippaToOcrErgebnis(data);
     } catch (e) {
       console.error("Klippa OCR Failed:", e);
@@ -32,29 +69,31 @@ export class KlippaProvider implements OcrProvider {
     }
   }
 
-  private mapKlippaToOcrErgebnis(data: any): OcrErgebnis {
-    // Basic mapping, assuming standard response structure or mocking it if missing
-    // Since we don't have exact Klippa payload type here, we do best-effort mapping
-    const parsed = data.data?.parsed || {};
+  private mapKlippaToOcrErgebnis(data: unknown): OcrErgebnis {
+    const parsed = parsedDocument(data);
+    const lines = Array.isArray(parsed.lines) ? parsed.lines : [];
     
     return {
-      lieferant: parsed.merchant_name || null,
-      datum: parsed.date || null,
-      brutto: parsed.amount || null,
-      netto: parsed.amount_net || null,
-      ustSatz: parsed.vat_rate || null,
-      ustBetrag: parsed.vat_amount || null,
-      belegart: parsed.document_type || 'quittung',
-      zahlungsart: parsed.payment_method || null,
-      rechnungsnummer: parsed.invoice_number || null,
-      confidence: parsed.confidence || 0.85,
-      rohtext: data.data?.text || JSON.stringify(parsed),
-      positionen: (parsed.lines || []).map((line: any) => ({
-        beschreibung: line.description || "Unbekannt",
-        menge: line.quantity || 1,
-        einzelpreis: line.price_per_unit || line.amount,
-        betrag: line.amount || 0
-      }))
+      lieferant: stringValue(parsed.merchant_name),
+      datum: stringValue(parsed.date),
+      brutto: numberValue(parsed.amount),
+      netto: numberValue(parsed.amount_net),
+      ustSatz: numberValue(parsed.vat_rate),
+      ustBetrag: numberValue(parsed.vat_amount),
+      belegart: stringValue(parsed.document_type) ?? 'quittung',
+      zahlungsart: stringValue(parsed.payment_method),
+      rechnungsnummer: stringValue(parsed.invoice_number),
+      confidence: numberValue(parsed.confidence) ?? 0.85,
+      rohtext: documentText(data) ?? JSON.stringify(parsed),
+      positionen: lines.map((line) => {
+        const fields = isRecord(line) ? line : {};
+        return {
+          beschreibung: stringValue(fields.description) ?? "Unbekannt",
+          menge: numberValue(fields.quantity) ?? 1,
+          einzelpreis: numberValue(fields.price_per_unit) ?? numberValue(fields.amount),
+          betrag: numberValue(fields.amount) ?? 0,
+        };
+      }),
     };
   }
 }

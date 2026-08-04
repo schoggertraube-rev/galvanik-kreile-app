@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { OverlayShell } from '../../components/OverlayShell';
 import { WerkstattPulsData } from '../../hooks/useWerkstattPuls';
 import { StationDurchlaufList } from './StationDurchlaufList';
@@ -29,15 +29,22 @@ export const WerkstattPulsOverlay: React.FC<WerkstattPulsOverlayProps> = ({ isOp
     ? engpass.reduce((acc, curr) => acc + curr.teile_wartend, 0)
     : 0;
 
-  const kiQueryData = {
+  const kiQueryData = useMemo(() => ({
     termintreue_pct: termintreue.termintreue_pct,
     trend_vorjahr: snapshotTrend?.vorjahr ?? null,
     durchlaufzeit_avg: durchlauf.avg_tage,
     schwachste_station: schwachsteStation,
     teile_im_stau: teileImStau,
     wochenziel_ist: wochenziel.fertig_diese_woche,
-    wochenziel_soll: 25 // Configurable later
-  };
+    wochenziel_soll: 25,
+  }), [
+    durchlauf.avg_tage,
+    schwachsteStation,
+    snapshotTrend?.vorjahr,
+    teileImStau,
+    termintreue.termintreue_pct,
+    wochenziel.fertig_diese_woche,
+  ]);
 
   const { data: kiData, isLoading: kiLoading, error: kiError } = useKiInsight('werkstatt-puls', kiQueryData);
 

@@ -3,7 +3,59 @@
 import { extractZeitraum, buildDataContext } from "@/lib/search/aiAggregation";
 import { generateAiResponse, GeminiConfigError, GeminiQuotaError } from "@/lib/ai/geminiClient";
 
-export async function askGlobalAiAction(query: string) {
+export type GlobalAiMetric = {
+  label: string;
+  wert: string;
+  trend: string;
+  delta: string;
+};
+
+export type GlobalAiResponse = {
+  zusammenfassung: string;
+  kernzahlen: GlobalAiMetric[];
+  auffaelligkeiten: string[];
+  empfehlungen: string[];
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return value.filter((entry): entry is string => typeof entry === "string");
+}
+
+function parseMetric(value: unknown): GlobalAiMetric | null {
+  if (!isRecord(value)) return null;
+
+  const { label, wert, trend, delta } = value;
+  if (typeof label !== "string" || typeof wert !== "string" || typeof trend !== "string" || typeof delta !== "string") {
+    return null;
+  }
+
+  return { label, wert, trend, delta };
+}
+
+function parseGlobalAiResponse(value: unknown): GlobalAiResponse {
+  if (!isRecord(value) || typeof value.zusammenfassung !== "string") {
+    throw new Error("Ungültige Antwort des KI-Dienstes");
+  }
+
+  const kernzahlen = Array.isArray(value.kernzahlen)
+    ? value.kernzahlen.map(parseMetric).filter((metric): metric is GlobalAiMetric => metric !== null)
+    : [];
+
+  return {
+    zusammenfassung: value.zusammenfassung,
+    kernzahlen,
+    auffaelligkeiten: stringArray(value.auffaelligkeiten),
+    empfehlungen: stringArray(value.empfehlungen),
+  };
+}
+
+export async function askGlobalAiAction(query: string): Promise<GlobalAiResponse> {
   try {
     const zeitraum = extractZeitraum(query);
     const context = await buildDataContext(zeitraum);
@@ -49,7 +101,8 @@ VERGLEICHS-KONTEXT (${context.comparisonZeitraum}):
 
     const text = await generateAiResponse(prompt, needsWebSearch);
     
-    return JSON.parse(text);
+    const response: unknown = JSON.parse(text);
+    return parseGlobalAiResponse(response);
 
   } catch (err: unknown) {
     console.error("AI Action Error:", err);
@@ -62,11 +115,11 @@ VERGLEICHS-KONTEXT (${context.comparisonZeitraum}):
       errorMsg = err.message;
     }
     
-    return fallbackAiResponse(query, errorMsg);
+    return fallbackAiResponse(errorMsg);
   }
 }
 
-function fallbackAiResponse(query: string, errorMsg: string) {
+function fallbackAiResponse(errorMsg: string): GlobalAiResponse {
   return {
     zusammenfassung: `⚠️ KI-Dienst nicht verfügbar: ${errorMsg}`,
     kernzahlen: [],
