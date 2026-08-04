@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Crown, Loader2, Phone, Mail, FileText, ArrowRight, TrendingUp } from "lucide-react";
-import { getTopKunden, getKundenDetails, getInaktiveKunden, type KundeClvKachelRow, type KundenDetailAuftrag } from "../actions";
+import { getTopKunden, getKundenDetails, getInaktiveKunden, type KundeClvDetail, type KundeClvKachelRow, type KundenDetailAuftrag } from "../actions";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
 import { useRouter } from "next/navigation";
@@ -12,7 +12,7 @@ export function TopKundenKachel() {
   const [loading, setLoading] = useState(true);
   
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const [customerDetails, setCustomerDetails] = useState<any>(null);
+  const [customerDetails, setCustomerDetails] = useState<{ clv: KundeClvDetail | null; letzeAuftraege: KundenDetailAuftrag[] } | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   
   const [inaktiveDrawerOpen, setInaktiveDrawerOpen] = useState(false);
@@ -122,7 +122,7 @@ export function TopKundenKachel() {
         onClose={() => setSelectedCustomerId(null)}
         title={customerDetails?.clv?.name || "Kundenprofil laden..."}
       >
-        {detailsLoading || !customerDetails ? (
+        {detailsLoading || !customerDetails || !customerDetails.clv ? (
           <div className="flex h-40 items-center justify-center">
             <Loader2 className="w-8 h-8 animate-spin text-navy-500" />
           </div>
@@ -151,7 +151,7 @@ export function TopKundenKachel() {
                 </div>
                 <div>
                   <div className="text-xs text-text-muted mb-1">DB-Marge</div>
-                  <div className="font-bold text-lg">{(customerDetails.clv.db_marge_prozent * 100).toFixed(1)} %</div>
+                  <div className="font-bold text-lg">{customerDetails.clv.db_marge === null ? '—' : `${(customerDetails.clv.db_marge * 100).toFixed(1)} %`}</div>
                 </div>
                 <div>
                   <div className="text-xs text-text-muted mb-1">Aufträge gesamt</div>

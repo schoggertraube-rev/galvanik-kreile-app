@@ -41,6 +41,64 @@ export interface KundeClvKachelRow {
   letzter_auftrag: string | null;
 }
 
+export interface KundeClvDetail extends KundeClvKachelRow {
+  company_name: string | null;
+  kundentyp: string | null;
+  db_marge: number | null;
+  auftraege_gesamt: number;
+  email: string | null;
+}
+
+export interface AgingData {
+  aging_bucket: string;
+  anzahl: number;
+  summe: number;
+}
+
+export interface AgingInvoiceRow {
+  id: string;
+  rechnungsnummer: string;
+  customer_id: string | null;
+  kunde_name: string | null;
+  netto: number | null;
+  faellig_am: string | null;
+  tage_ueberfaellig: number | null;
+  mahnstufe: number | null;
+}
+
+export interface AuftragDbRankingRow {
+  order_id: string;
+  order_number: string;
+  kunde_name: string | null;
+  erloes_netto: number;
+  deckungsbeitrag: number;
+}
+
+export interface AuftragDbDetails extends AuftragDbRankingRow {
+  customer_id: string;
+  material_kosten: number;
+  arbeitszeit_kosten: number;
+  energie_anteil_kosten: number;
+}
+
+export interface ForecastMonat {
+  monat: string;
+  erloes_netto: number;
+  ergebnis: number;
+}
+
+export interface PipelineForecastRow {
+  erwarteter_monat: string;
+  pipeline_wert_gewichtet: number;
+  pipeline_wert_ungewichtet: number;
+}
+
+export interface ForecastDaten {
+  monate: ForecastMonat[];
+  pipeline: PipelineForecastRow[];
+  plan: Record<string, number> | null;
+}
+
 export interface KundenDetailAuftrag {
   id: string;
   order_number: string;
@@ -164,7 +222,7 @@ export async function getEngpassDaten(): Promise<EngpassStation[]> {
   return data || [];
 }
 
-export async function getAgingDaten() {
+export async function getAgingDaten(): Promise<AgingData[]> {
   const supabase = await createClient();
   
   const { data, error } = await supabase
@@ -202,7 +260,7 @@ export async function getAgingDaten() {
   }));
 }
 
-export async function getAuftragDbRanking(limit = 10) {
+export async function getAuftragDbRanking(limit = 10): Promise<AuftragDbRankingRow[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_auftrag_db')
@@ -321,21 +379,21 @@ export async function getEngpassDetails(station: string): Promise<EngpassDetails
   };
 }
 
-export async function getAuftragDbDetails(orderId: string) {
+export async function getAuftragDbDetails(orderId: string): Promise<AuftragDbDetails | null> {
   const supabase = await createClient();
   const { data } = await supabase.from('v_auftrag_db').select('*').eq('order_id', orderId).single();
   return data;
 }
 
-export async function getForecastDaten() {
+export async function getForecastDaten(): Promise<ForecastDaten> {
   const supabase = await createClient();
   const { data: results, error } = await supabase.from('v_monatsergebnis')
-    .select('monat, umsatz, db, db_marge_prozent')
+    .select('monat, erloes_netto, ergebnis')
     .order('monat', { ascending: true })
     .limit(12);
     
   const { data: pipeline } = await supabase.from('v_pipeline_forecast')
-    .select('*')
+    .select('erwarteter_monat, pipeline_wert_gewichtet, pipeline_wert_ungewichtet')
     .order('erwarteter_monat', { ascending: true });
 
   const currentYear = new Date().getFullYear();
@@ -354,10 +412,11 @@ export async function getForecastDaten() {
   return { monate: results || [], pipeline: pipeline || [], plan: plan?.werte || null };
 }
 
-export async function getKundenDetails(customerId: string): Promise<{ clv: unknown; letzeAuftraege: KundenDetailAuftrag[] }> {
+export async function getKundenDetails(customerId: string): Promise<{ clv: KundeClvDetail | null; letzeAuftraege: KundenDetailAuftrag[] }> {
   const supabase = await createClient();
   
   const { data: clv } = await supabase.from('v_kunde_clv').select('*').eq('customer_id', customerId).single();
+  const { data: customer } = await supabase.from('customers').select('email').eq('id', customerId).maybeSingle();
   
   const { data: orders } = await supabase.from('orders')
     .select('id, order_number, intake_date, due_date, status')
@@ -378,17 +437,17 @@ export async function getKundenDetails(customerId: string): Promise<{ clv: unkno
     };
   })) : [];
 
-  return { clv, letzeAuftraege: details };
+  return { clv: clv ? { ...clv, email: customer?.email ?? null } : null, letzeAuftraege: details };
 }
 
 
-export async function getAgingRechnungen(bucket: string) {
+export async function getAgingRechnungen(bucket: string): Promise<AgingInvoiceRow[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_aging')
-    .select('order_id, invoice_id, rechnung_nummer, kunde_name, netto, faellig_seit_tagen, faellig_am')
+    .select('id, rechnungsnummer, customer_id, kunde_name, netto, faellig_am, tage_ueberfaellig, mahnstufe')
     .eq('aging_bucket', bucket)
-    .order('faellig_seit_tagen', { ascending: false });
+    .order('tage_ueberfaellig', { ascending: false });
 
   if (error) {
     console.error("Error getAgingRechnungen:", error);

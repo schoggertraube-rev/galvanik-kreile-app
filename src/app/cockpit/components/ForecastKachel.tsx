@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart, Bar, Legend } from "recharts";
-import { getForecastDaten } from "../actions";
+import { getForecastDaten, type ForecastDaten } from "../actions";
 import { Calendar, Loader2, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 
 export function ForecastKachel() {
-  const [data, setData] = useState<{ monate: any[], pipeline: any[], plan?: Record<string, number> | null } | null>(null);
+  const [data, setData] = useState<ForecastDaten | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,7 +35,7 @@ export function ForecastKachel() {
     const monatIdx = monatDate.getMonth() + 1;
     return {
       monat: monatDate.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' }),
-      umsatz: m.umsatz,
+      umsatz: m.erloes_netto,
       istWert: true,
       pipelineGewichtet: 0,
       pipelineUngewichtet: 0,

@@ -2,18 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { TrendingUp, Loader2, ArrowRight, Bell, Phone, FileText, X } from "lucide-react";
-import { getAgingDaten, getAgingRechnungen, savePhoneNote } from "../actions";
+import { getAgingDaten, getAgingRechnungen, savePhoneNote, type AgingData, type AgingInvoiceRow } from "../actions";
 import { sendeZahlungserinnerung, sendeMahnung } from "@/app/actions/mahnung.actions";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import Link from "next/link";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
-
-type AgingData = {
-  aging_bucket: string;
-  anzahl: number;
-  summe: number;
-};
 
 const BUCKET_ORDER = ['nicht_faellig', '1-14', '15-30', '31-60', '61-90', '>90'];
 
@@ -59,14 +53,14 @@ export function AgingKachel() {
   
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
-  const [rechnungen, setRechnungen] = useState<any[]>([]);
+  const [rechnungen, setRechnungen] = useState<AgingInvoiceRow[]>([]);
   const [rechnungenLoading, setRechnungenLoading] = useState(false);
   const [actionStatus, setActionStatus] = useState<Record<string, 'idle'|'loading'|'done'>>({});
   
   const [phoneModalOpen, setPhoneModalOpen] = useState(false);
   const [phoneNote, setPhoneNote] = useState("");
   const [phoneSaving, setPhoneSaving] = useState(false);
-  const [phoneTargetRechnung, setPhoneTargetRechnung] = useState<any>(null);
+  const [phoneTargetRechnung, setPhoneTargetRechnung] = useState<AgingInvoiceRow | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -117,7 +111,7 @@ export function AgingKachel() {
         alert(`Text in Zwischenablage kopiert. Kein Mail-Provider angebunden.\n\n${res.hinweis}`);
       }
       setActionStatus(prev => ({ ...prev, [id]: 'done' }));
-      setRechnungen(prev => prev.map(r => r.invoice_id === id ? { ...r, mahnstufe: res.neueMahnstufe } : r));
+      setRechnungen(prev => prev.map(r => r.id === id ? { ...r, mahnstufe: res.neueMahnstufe } : r));
       setTimeout(() => setActionStatus(prev => ({ ...prev, [id]: 'idle' })), 3000);
     } catch (e) {
       alert("Fehler: " + (e as Error).message);
@@ -125,9 +119,9 @@ export function AgingKachel() {
     }
   };
 
-  const handlePhoneClick = (rechnung: any) => {
+  const handlePhoneClick = (rechnung: AgingInvoiceRow) => {
     setPhoneTargetRechnung(rechnung);
-    setPhoneNote(`Zahlungserinnerung RE-${rechnung.rechnung_nummer}\n\n`);
+    setPhoneNote(`Zahlungserinnerung RE-${rechnung.rechnungsnummer}\n\n`);
     setPhoneModalOpen(true);
   };
 
@@ -136,8 +130,8 @@ export function AgingKachel() {
     setPhoneSaving(true);
     try {
       await savePhoneNote({
-        customer_id: phoneTargetRechnung?.kunde_name, // fallback as we might not have customer_id directly here
-        caller_name: phoneTargetRechnung?.kunde_name,
+        customer_id: phoneTargetRechnung?.customer_id ?? undefined,
+        caller_name: phoneTargetRechnung?.kunde_name ?? undefined,
         raw_text: phoneNote,
         category: "Buchhaltung",
         urgency: "Normal"
@@ -241,15 +235,15 @@ export function AgingKachel() {
             ) : (
               <div className="flex flex-col gap-4">
                 {rechnungen.map((r) => (
-                  <div key={r.invoice_id} className="p-4 border border-neutral-gray-200 rounded-xl hover:border-navy-300 transition-colors">
+                  <div key={r.id} className="p-4 border border-neutral-gray-200 rounded-xl hover:border-navy-300 transition-colors">
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-navy-900">{r.rechnung_nummer}</h4>
+                          <h4 className="font-bold text-navy-900">{r.rechnungsnummer}</h4>
                           <span className="text-navy-600 font-medium">{r.kunde_name}</span>
                         </div>
                         <div className="text-sm text-danger-red font-medium flex items-center gap-1 mt-1">
-                          Überfällig seit {r.faellig_seit_tagen} Tagen
+                          Überfällig seit {r.tage_ueberfaellig ?? 0} Tagen
                         </div>
                       </div>
                       <div className="text-right flex flex-col items-end">
@@ -266,11 +260,11 @@ export function AgingKachel() {
                     
                     <div className="flex flex-wrap gap-2">
                       <button 
-                        onClick={() => handleErinnerung(r.invoice_id)}
-                        disabled={actionStatus[r.invoice_id] === 'loading'}
-                        className={`px-3 py-1.5 font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50 ${actionStatus[r.invoice_id] === 'done' ? 'bg-success-green text-white' : 'bg-navy-600 hover:bg-navy-700 text-white'}`}
+                        onClick={() => handleErinnerung(r.id)}
+                        disabled={actionStatus[r.id] === 'loading'}
+                        className={`px-3 py-1.5 font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50 ${actionStatus[r.id] === 'done' ? 'bg-success-green text-white' : 'bg-navy-600 hover:bg-navy-700 text-white'}`}
                       >
-                        <Bell className="w-3 h-3" /> {actionStatus[r.invoice_id] === 'done' ? 'Kopiert!' : 'Zahlungserinnerung'}
+                        <Bell className="w-3 h-3" /> {actionStatus[r.id] === 'done' ? 'Kopiert!' : 'Zahlungserinnerung'}
                       </button>
                       <button 
                         onClick={() => handlePhoneClick(r)}
@@ -279,11 +273,11 @@ export function AgingKachel() {
                         <Phone className="w-3 h-3" /> Anrufen
                       </button>
                       <button 
-                        onClick={() => handleMahnung(r.invoice_id)}
-                        disabled={actionStatus[r.invoice_id] === 'loading'}
-                        className={`px-3 py-1.5 font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50 ${actionStatus[r.invoice_id] === 'done' ? 'bg-success-green text-white' : 'bg-danger-red/10 hover:bg-danger-red/20 text-danger-red'}`}
+                        onClick={() => handleMahnung(r.id)}
+                        disabled={actionStatus[r.id] === 'loading'}
+                        className={`px-3 py-1.5 font-semibold rounded-md transition-colors text-xs flex items-center gap-1 disabled:opacity-50 ${actionStatus[r.id] === 'done' ? 'bg-success-green text-white' : 'bg-danger-red/10 hover:bg-danger-red/20 text-danger-red'}`}
                       >
-                        <Bell className="w-3 h-3" /> {actionStatus[r.invoice_id] === 'done' ? 'Kopiert!' : `Mahnung (Stufe ${(r.mahnstufe || 0) + 1})`}
+                        <Bell className="w-3 h-3" /> {actionStatus[r.id] === 'done' ? 'Kopiert!' : `Mahnung (Stufe ${(r.mahnstufe || 0) + 1})`}
                       </button>
                     </div>
                   </div>

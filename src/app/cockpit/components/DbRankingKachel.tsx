@@ -2,26 +2,18 @@
 
 import { useEffect, useState } from "react";
 import { Target, Loader2, ArrowRight, FileText, User } from "lucide-react";
-import { getAuftragDbRanking, getAuftragDbDetails } from "../actions";
+import { getAuftragDbRanking, getAuftragDbDetails, type AuftragDbDetails, type AuftragDbRankingRow } from "../actions";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
 import { useRouter } from "next/navigation";
 
-type DbRankingData = {
-  order_id: string;
-  order_number: string;
-  kunde_name: string;
-  erloes_netto: number;
-  deckungsbeitrag: number;
-};
-
 export function DbRankingKachel() {
-  const [data, setData] = useState<DbRankingData[]>([]);
+  const [data, setData] = useState<AuftragDbRankingRow[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selectedOrder, setSelectedOrder] = useState<DbRankingData | null>(null);
-  const [details, setDetails] = useState<any>(null);
+  const [selectedOrder, setSelectedOrder] = useState<AuftragDbRankingRow | null>(null);
+  const [details, setDetails] = useState<AuftragDbDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   
   const router = useRouter();
@@ -35,7 +27,7 @@ export function DbRankingKachel() {
     load();
   }, []);
 
-  const handleRowClick = async (row: DbRankingData) => {
+  const handleRowClick = async (row: AuftragDbRankingRow) => {
     setSelectedOrder(row);
     setDrawerOpen(true);
     setDetailsLoading(true);
@@ -101,7 +93,7 @@ export function DbRankingKachel() {
                           <ArrowRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-navy-400" />
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-text-muted truncate max-w-[120px]" title={row.kunde_name}>{row.kunde_name}</td>
+                      <td className="px-4 py-3 text-text-muted truncate max-w-[120px]" title={row.kunde_name ?? undefined}>{row.kunde_name}</td>
                       <td className="px-4 py-3 text-right font-medium whitespace-nowrap">€ {row.erloes_netto.toLocaleString('de-DE', { maximumFractionDigits: 0 })}</td>
                       <td className={`px-4 py-3 text-right font-bold whitespace-nowrap ${isNegative ? 'text-danger-red' : 'text-emerald-600'}`}>
                         € {row.deckungsbeitrag.toLocaleString('de-DE', { maximumFractionDigits: 0 })}
@@ -136,8 +128,8 @@ export function DbRankingKachel() {
                 </h4>
                 <p className="text-sm">
                   {details.erloes_netto === 0 ? "Keine Rechnung gestellt oder Erlös = 0." :
-                   details.kosten_zeit > details.erloes_netto * 0.6 ? "Überdurchschnittliche Arbeitszeit erfasst." :
-                   details.kosten_verbrauch > details.erloes_netto * 0.4 ? "Hoher Materialverbrauch." :
+                   details.arbeitszeit_kosten > details.erloes_netto * 0.6 ? "Überdurchschnittliche Arbeitszeit erfasst." :
+                   details.material_kosten > details.erloes_netto * 0.4 ? "Hoher Materialverbrauch." :
                    "Allgemein zu geringer Erlös für die angefallenen Kosten."}
                 </p>
               </div>
@@ -151,15 +143,15 @@ export function DbRankingKachel() {
                 </div>
                 <div className="flex justify-between text-danger-red">
                   <span>Material:</span>
-                  <span>− € {details.kosten_verbrauch?.toLocaleString('de-DE', {maximumFractionDigits:0}) || 0}</span>
+                  <span>− € {details.material_kosten.toLocaleString('de-DE', {maximumFractionDigits:0})}</span>
                 </div>
                 <div className="flex justify-between text-danger-red">
                   <span>Arbeitszeit:</span>
-                  <span>− € {details.kosten_zeit?.toLocaleString('de-DE', {maximumFractionDigits:0}) || 0}</span>
+                  <span>− € {details.arbeitszeit_kosten.toLocaleString('de-DE', {maximumFractionDigits:0})}</span>
                 </div>
                 <div className="flex justify-between text-danger-red">
                   <span>Energie:</span>
-                  <span>− € {details.kosten_energie?.toLocaleString('de-DE', {maximumFractionDigits:0}) || 0}</span>
+                  <span>− € {details.energie_anteil_kosten.toLocaleString('de-DE', {maximumFractionDigits:0})}</span>
                 </div>
                 <div className="border-t border-neutral-gray-300 my-1 pt-2 flex justify-between font-bold text-base">
                   <span>Deckungsbeitrag:</span>
