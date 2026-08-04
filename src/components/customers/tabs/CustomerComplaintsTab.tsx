@@ -3,8 +3,10 @@ import { getCustomerComplaints } from '@/features/customers/customer-card/custom
 import { Loader2, FileWarning, ExternalLink, MessageSquareWarning } from 'lucide-react';
 import { useOverlayStore } from '@/lib/overlayStore';
 
+type ComplaintItem = { complaints: { id: string; reason: string; createdAt: Date | string; description: string; status: string | null; resolution: string | null }; orders: { id: string; orderNumber: string } | null };
+
 export function CustomerComplaintsTab({ customerId }: { customerId: string }) {
-  const [complaints, setComplaints] = useState<any[]>([]);
+  const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const openOrder = useOverlayStore(state => state.openOrder);
 
@@ -51,9 +53,9 @@ export function CustomerComplaintsTab({ customerId }: { customerId: string }) {
                 <div className="flex-1 space-y-2">
                   <div className="flex flex-wrap justify-between items-start gap-2">
                     <div>
-                      <h4 className="font-bold text-gray-900">{complaint.issue || 'Ohne Titel'}</h4>
+                      <h4 className="font-bold text-gray-900">{complaint.reason || 'Ohne Titel'}</h4>
                       <div className="flex items-center gap-2 text-xs mt-1">
-                        <span className="font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded">{complaint.type || 'Reklamation'}</span>
+                        <span className="font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded">Reklamation</span>
                         <span className="text-gray-500">{new Date(complaint.createdAt).toLocaleDateString('de-DE')}</span>
                       </div>
                     </div>

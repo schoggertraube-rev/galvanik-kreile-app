@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { getCustomerFinancials } from '@/features/customers/customer-card/customerCard.actions';
+import { getCustomerFinancials, type CustomerFinancials } from '@/features/customers/customer-card/customerCard.actions';
 import { Loader2, Receipt, Search, ExternalLink } from 'lucide-react';
 
 export function CustomerInvoicesTab({ customerId }: { customerId: string }) {
-  const [financials, setFinancials] = useState<any>(null);
+  const [financials, setFinancials] = useState<CustomerFinancials | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
     getCustomerFinancials(customerId).then(res => {
       if (isMounted) {
-        if (res.ok) setFinancials(res.data);
+        if (res.ok) setFinancials(res.data ?? null);
         setIsLoading(false);
       }
     });
@@ -40,7 +40,7 @@ export function CustomerInvoicesTab({ customerId }: { customerId: string }) {
         </div>
       ) : (
         <div className="space-y-3">
-          {invoices.map((inv: any) => {
+          {invoices.map((inv) => {
             const isPaid = inv.status === 'bezahlt';
             const isOverdue = inv.status === 'ueberfaellig';
             
@@ -52,14 +52,14 @@ export function CustomerInvoicesTab({ customerId }: { customerId: string }) {
               <div key={inv.id} className="bg-white border border-gray-200 hover:border-[var(--ci-blue)] transition-colors rounded-xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-[var(--ci-blue)]">{inv.belegnr}</span>
+                    <span className="font-mono font-bold text-[var(--ci-blue)]">{inv.nummer}</span>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${badgeColor}`}>
                       {inv.status.toUpperCase()}
                     </span>
                   </div>
                   <p className="text-sm text-gray-600">
                     Datum: {new Date(inv.datum).toLocaleDateString('de-DE')} 
-                    {inv.faellig_am && ` • Fällig: ${new Date(inv.faellig_am).toLocaleDateString('de-DE')}`}
+                    {inv.faelligAm && ` • Fällig: ${new Date(inv.faelligAm).toLocaleDateString('de-DE')}`}
                   </p>
                 </div>
                 

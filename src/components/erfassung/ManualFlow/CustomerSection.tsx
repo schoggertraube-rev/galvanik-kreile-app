@@ -4,25 +4,49 @@ import { useState, useEffect } from "react";
 import { Plus, CheckCircle2 } from "lucide-react";
 import { DuplicateWarning } from "../shared/DuplicateWarning";
 
-export function CustomerSection({ customer, onChange, onCreateNew }: { customer: any, onChange: (c: any) => void, onCreateNew?: (name: string) => void }) {
-  const [search, setSearch] = useState(customer?.name || customer?.companyName || "");
-  const [results, setResults] = useState<any[]>([]);
+export type CustomerSearchResult = Record<string, unknown> & { id: string; name: string; companyName: string | null; customerNumber: string | null; city: string | null; ordersCount: number };
+
+function textField(value: Record<string, unknown> | null | undefined, key: string): string | null {
+  const field = value?.[key];
+  return typeof field === 'string' ? field : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isCustomerSearchResult(value: unknown): value is CustomerSearchResult {
+  if (!isRecord(value)) return false;
+  return (
+    typeof value.id === "string" &&
+    typeof value.name === "string" &&
+    (typeof value.companyName === "string" || value.companyName === null) &&
+    (typeof value.customerNumber === "string" || value.customerNumber === null) &&
+    (typeof value.city === "string" || value.city === null) &&
+    typeof value.ordersCount === "number"
+  );
+}
+
+export function CustomerSection({ customer, onChange, onCreateNew }: { customer: Record<string, unknown> | null; onChange: (c: Record<string, unknown> | null) => void; onCreateNew?: (name: string) => void }) {
+  const [search, setSearch] = useState(textField(customer, 'name') || textField(customer, 'companyName') || "");
+  const [results, setResults] = useState<CustomerSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const selectedCustomerId = textField(customer, 'id');
+  const normalizedSearch = search.trim();
+  const isSearchEligible = normalizedSearch.length >= 2 && !selectedCustomerId;
+  const visibleResults = isSearchEligible ? results : [];
 
   useEffect(() => {
-    if (!search || search.length < 2 || customer?.id) {
-      setResults([]);
-      return;
-    }
+    if (!isSearchEligible) return;
 
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const res = await fetch(`/api/erfassung/customer-search?q=${encodeURIComponent(search)}`);
+        const res = await fetch(`/api/erfassung/customer-search?q=${encodeURIComponent(normalizedSearch)}`);
         if (res.ok) {
-          const data = await res.json();
-          setResults(data);
+          const data: unknown = await res.json();
+          setResults(Array.isArray(data) ? data.filter(isCustomerSearchResult) : []);
         }
       } finally {
         setIsSearching(false);
@@ -30,25 +54,31 @@ export function CustomerSection({ customer, onChange, onCreateNew }: { customer:
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [search, customer?.id]);
+  }, [isSearchEligible, normalizedSearch]);
 
-  const handleSelect = (c: any) => {
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setResults([]);
+    setShowDuplicateWarning(false);
+  };
+
+  const handleSelect = (c: CustomerSearchResult) => {
     onChange(c);
     setSearch(c.companyName || c.name);
     setResults([]);
     setShowDuplicateWarning(false);
   };
 
-  if (customer?.id || customer?.isNew) {
+  if (selectedCustomerId || customer?.isNew === true) {
     return (
       <div className="space-y-1.5">
         <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide">Kunde suchen oder neu anlegen</label>
         <div className="w-full px-4 py-2.5 bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg text-sm text-gray-900">
-           {customer.companyName || customer.name}
+           {textField(customer, 'companyName') || textField(customer, 'name')}
         </div>
         <div className="mt-2 flex items-center gap-2 bg-[#eaf4eb] text-[#2c6e39] px-4 py-2.5 rounded-lg text-xs font-medium border border-[#c3e2c6]">
           <CheckCircle2 className="w-4 h-4" />
-          <span>Gefunden: {customer.companyName || customer.name} · {customer.customerNumber || "K-NEU"}{typeof customer.ordersCount === 'number' ? ` · ${customer.ordersCount} Aufträge` : ''}</span>
+          <span>Gefunden: {textField(customer, 'companyName') || textField(customer, 'name')} · {textField(customer, 'customerNumber') || "K-NEU"}{typeof customer?.ordersCount === 'number' ? ` · ${customer.ordersCount} Aufträge` : ''}</span>
           <button onClick={() => { onChange(null); setSearch(""); }} className="ml-auto underline">Ändern</button>
         </div>
       </div>
@@ -64,16 +94,16 @@ export function CustomerSection({ customer, onChange, onCreateNew }: { customer:
           placeholder="Galvanik-Bürkle"
           className="w-full px-4 py-2.5 bg-[#fcfaf6] border border-[#e5dcd0] rounded-lg focus:bg-white focus:ring-2 focus:ring-[#e5dcd0] focus:border-[#e5dcd0] transition-colors outline-none text-sm placeholder:text-gray-400"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => handleSearchChange(e.target.value)}
         />
         {isSearching && (
           <div className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 border-2 border-[#e5dcd0] border-t-[#1a1c23] rounded-full animate-spin" />
         )}
       </div>
 
-      {results.length > 0 && !showDuplicateWarning && (
+      {visibleResults.length > 0 && !showDuplicateWarning && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5dcd0] shadow-lg rounded-lg overflow-hidden z-20">
-          {results.map((c) => (
+          {visibleResults.map((c) => (
             <button
               key={c.id}
               onClick={() => handleSelect(c)}
@@ -93,7 +123,7 @@ export function CustomerSection({ customer, onChange, onCreateNew }: { customer:
         </div>
       )}
 
-      {search.length > 2 && results.length === 0 && !isSearching && !showDuplicateWarning && (
+      {normalizedSearch.length > 2 && visibleResults.length === 0 && !isSearching && !showDuplicateWarning && (
         <div className="mt-3">
           <button
             onClick={() => onCreateNew ? onCreateNew(search) : onChange({ isNew: true, name: search })}
@@ -107,7 +137,7 @@ export function CustomerSection({ customer, onChange, onCreateNew }: { customer:
 
       {showDuplicateWarning && (
         <DuplicateWarning
-          duplicates={results}
+          duplicates={visibleResults}
           onSelect={handleSelect}
           onIgnore={() => {
             if (onCreateNew) {

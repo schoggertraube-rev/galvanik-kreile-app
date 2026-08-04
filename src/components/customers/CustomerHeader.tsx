@@ -3,7 +3,9 @@ import { CustomerKpi } from './useCustomerKpi';
 import { Mail, Phone, PlusSquare, FileText, AlertCircle } from 'lucide-react';
 import { useErfassung } from '@/components/erfassung/ErfassungProvider';
 
-export function CustomerHeader({ data }: { data: CustomerKpi }) {
+type CustomerHeaderData = Pick<CustomerKpi, "customer_id" | "kunde" | "classification" | "kunde_seit">;
+
+export function CustomerHeader({ data }: { data: CustomerHeaderData }) {
   const { openErfassung } = useErfassung();
 
   return (

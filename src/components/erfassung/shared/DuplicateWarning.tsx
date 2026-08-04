@@ -1,8 +1,9 @@
 import { AlertTriangle } from "lucide-react";
+import type { CustomerSearchResult } from "../ManualFlow/CustomerSection";
 
 interface DuplicateWarningProps {
-  duplicates: { id: string; name: string; city: string | null }[];
-  onSelect: (id: string) => void;
+  duplicates: CustomerSearchResult[];
+  onSelect: (customer: CustomerSearchResult) => void;
   onIgnore: () => void;
 }
 
@@ -29,7 +30,7 @@ export function DuplicateWarning({ duplicates, onSelect, onIgnore }: DuplicateWa
                 </div>
                 <button
                   type="button"
-                  onClick={() => onSelect(d.id)}
+                  onClick={() => onSelect(d)}
                   className="px-3 py-1 text-xs font-medium text-orange-700 bg-orange-100 rounded hover:bg-orange-200 transition-colors"
                 >
                   Übernehmen
