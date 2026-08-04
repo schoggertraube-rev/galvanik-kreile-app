@@ -61,9 +61,6 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     if (isLoggingOut) return; // Doppel-Aufruf verhindern
     setIsLoggingOut(true);
     setUserDropdownOpen(false);
-    // Entferne nicht-autoritative UI-Cachewerte (localStorage)
-    localStorage.removeItem("kreile_user_role");
-    localStorage.removeItem("kreile_user_initials");
     // Dev-Bypass-Cookie löschen: StartScreenClient.tsx schreibt ihn,
     // proxy.ts und roles.ts lesen ihn – konsistente Bereinigung erforderlich.
     // Sicherheitsauftrag: vollständige Migration auf kreile_app_session ist geplant.

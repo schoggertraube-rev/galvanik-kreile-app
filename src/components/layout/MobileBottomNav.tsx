@@ -3,19 +3,14 @@
 import { Home, PackageCheck, Scan, Search, Menu, Users, ClipboardList, TrendingUp, Settings, MessageSquare, ShieldCheck, Lightbulb, HeartHandshake, Beaker, Warehouse, Database } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 export function MobileBottomNav({ className = "" }: { className?: string }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
-  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
-
-  useEffect(() => {
-    const role = localStorage.getItem("kreile_user_role");
-    if (role === "admin" || role === "developer") {
-      setTimeout(() => setIsAdminOrDev(true), 0);
-    }
-  }, []);
+  const { role } = usePermissions();
+  const isAdminOrDev = role === "admin" || role === "developer";
 
   const isActive = (path: string) =>
     path === "/" ? pathname === "/" : pathname === path || pathname.startsWith(path + "/");
