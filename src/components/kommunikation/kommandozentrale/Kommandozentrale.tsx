@@ -638,20 +638,14 @@ export function Kommandozentrale({
   const [activeDetail, setActiveDetail] = useState<TileKey | null>(null);
   const [actionsApplied, setActionsApplied] = useState(false);
   const [showToast, setShowToast] = useState(false);
-  const [composerText, setComposerText] = useState("");
+  const [composerOverride, setComposerOverride] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const { openErfassung } = useErfassung();
 
   const dossier = useClientDossier(customerId, matchData);
+  const composerText = composerOverride ?? dossier.suggestedAnswer;
   const messageTexts = useMemo(() => messages.map(m => m.text), [messages]);
   const { relevantKeys } = useTopicRelevance(messageTexts, matchData);
-
-  // Pre-fill composer with suggested answer
-  useEffect(() => {
-    if (dossier.suggestedAnswer && !composerText) {
-      setComposerText(dossier.suggestedAnswer);
-    }
-  }, [dossier.suggestedAnswer]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -685,7 +679,7 @@ export function Kommandozentrale({
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open, activeDetail]);
+  }, [open, activeDetail, handleClose]);
 
   const handleApplyAll = useCallback(() => {
     // Phase 4: Route to central flow for quotes
@@ -846,7 +840,7 @@ export function Kommandozentrale({
               <input
                 className="kz-cc-input"
                 value={composerText}
-                onChange={e => setComposerText(e.target.value)}
+                onChange={e => setComposerOverride(e.target.value)}
                 placeholder="Antwort schreiben…"
               />
               <button className="kz-cc-send">
@@ -919,7 +913,7 @@ export function Kommandozentrale({
               <div className="sl">Antwort-Vorschlag</div>
               <p>„{dossier.suggestedAnswer}&quot;</p>
               <div className="kz-sug-actions">
-                <button className="kz-sug-btn primary" onClick={() => setComposerText(dossier.suggestedAnswer)}>Übernehmen</button>
+                <button className="kz-sug-btn primary" onClick={() => setComposerOverride(dossier.suggestedAnswer)}>Übernehmen</button>
               </div>
             </div>
           </div>
