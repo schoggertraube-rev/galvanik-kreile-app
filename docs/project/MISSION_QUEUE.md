@@ -68,8 +68,14 @@ Priorisierte, sofort umsetzbare Missionspakete fuer das Galvanik-Kreile Werkstat
 - Risiko-Tiers definiert: P0 (12 mit tenant_id), P1 (6 ohne tenant_id), P2 (8 System)
 - 9 schwache `USING (true)` Policies identifiziert
 
+**BLOCKER (2026-08-04):** `app.tenant_id` wird nie gesetzt. Alle `tenant_isolation`
+Policies sind No-Ops (bestehende Tabellen haben Catch-all `USING(true)` als Fallback).
+P0-Migration (PR #35, auf main) darf NICHT auf Production angewandt werden — wuerde
+App-Queries fuer Erfassung, Cockpit und Kostenkalkulation brechen.
+
 **Offen:**
-- P0-Migration: 12 Tabellen RLS + tenant_isolation Policy (eine Migration, kein Schema-Change)
+- **Produktentscheidung:** Tenant-Isolation-Mechanismus waehlen (JWT-Claims vs. DB-Trigger vs. Catch-all)
+- P0-Migration anpassen je nach gewaehltem Mechanismus
 - P1: `tenant_id`-Spalte ergaenzen fuer 6 Tabellen (Produktentscheidung fuer Backfill)
 - P2: service_role-only Policies fuer 8 Systemtabellen
 
@@ -80,8 +86,8 @@ Priorisierte, sofort umsetzbare Missionspakete fuer das Galvanik-Kreile Werkstat
 1. ~~Lint-PR mergen~~ **DONE** (PR #31)
 2. ~~M1 (AUTH-IDENTITY-002)~~ **DONE** (PR #33)
 3. **M2 (DB-TRUTH-001)** — PR offen (16 Stubs + CI-Check)
-4. **M5 (RLS-CONTRACT-001)** — Analyse fertig, P0-Migration als naechstes
-5. **M3 (APP-STRUCTURE-001)** — sofort machbar
+4. **M5 (RLS-CONTRACT-001)** — BLOCKED: Tenant-Mechanismus-Entscheidung noetig
+5. **M3 (APP-STRUCTURE-001)** — sofort machbar, naechste aktive Mission
 6. **M4 (SEC-PIN-002B)** — nach Produktentscheidung
 
 ## Codex-Eignung

@@ -124,8 +124,11 @@ PR 19, PR 20 oder PR 21 duerfen nicht wholesale gemergt werden. Vor jeder DB-Aen
 - RLS-Analyse abgeschlossen (siehe `docs/project/RLS_ANALYSIS.md`):
   - 26 Tabellen ohne RLS, davon 12 mit `tenant_id` (P0-Risiko),
   - 7 Tabellen mit `rls_forced` + keine Policies (korrekt: nur service_role),
-  - 9 Tabellen mit schwachen `USING (true)` Policies,
-  - Relationenweise PRs geplant, P0-Tabellen zuerst.
+  - 9 Tabellen mit schwachen `USING (true)` Policies.
+  - **KRITISCH (2026-08-04):** `app.tenant_id` wird nie gesetzt — alle bestehenden
+    `tenant_isolation` Policies sind No-Ops (Catch-all `USING(true)` macht sie wirkungslos).
+    P0-Migration (PR #35, auf main) darf NICHT auf Production angewandt werden.
+    Status: `BLOCKED_PRODUCT_DECISION` — Tenant-Isolation-Mechanismus muss gewaehlt werden.
 - Referenz: [Supabase Database Linter](https://supabase.com/docs/guides/database/database-linter), insbesondere [RLS disabled in public](https://supabase.com/docs/guides/database/database-linter?lint=0013_rls_disabled_in_public) und [Security Definer View](https://supabase.com/docs/guides/database/database-linter?lint=0010_security_definer_view).
 - Jeder Advisor-Befund muss relationenweise nach realem Zugriffspfad, Rolle, Grant und Tenant-Vertrag bewertet werden. Ein pauschaler Policy-PR ist verboten.
 
