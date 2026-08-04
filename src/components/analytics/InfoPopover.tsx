@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { INFO_TEXTS } from "@/lib/analytics/plainLanguage";
 
@@ -8,16 +8,21 @@ interface InfoPopoverProps {
   infoKey: string;
 }
 
+const subscribeToNothing = () => () => {};
+const getClientMountState = () => true;
+const getServerMountState = () => false;
+
 export function InfoPopover({ infoKey }: InfoPopoverProps) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const btnRef = useRef<HTMLButtonElement>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => { setMounted(true); }, []);
+  const mounted = useSyncExternalStore(
+    subscribeToNothing,
+    getClientMountState,
+    getServerMountState,
+  );
 
   const info = INFO_TEXTS[infoKey];
-  if (!info) return null;
 
   const toggle = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -36,11 +41,13 @@ export function InfoPopover({ infoKey }: InfoPopoverProps) {
 
   // Close on click outside
   useEffect(() => {
-    if (!open) return;
+    if (!info || !open) return;
     const close = () => setOpen(false);
     document.addEventListener("click", close);
     return () => document.removeEventListener("click", close);
-  }, [open]);
+  }, [info, open]);
+
+  if (!info) return null;
 
   return (
     <>

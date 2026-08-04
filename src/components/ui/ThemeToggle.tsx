@@ -1,21 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Moon, Sun } from "lucide-react";
 
-export function ThemeToggle() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
-  const [mounted, setMounted] = useState(false);
+const subscribeToNothing = () => () => {};
+const getClientMountState = () => true;
+const getServerMountState = () => false;
 
-  useEffect(() => {
-    setMounted(true);
-    const savedTheme = localStorage.getItem("kreile-theme");
-    if (savedTheme === "dark") {
-      setTheme("dark");
-    } else {
-      setTheme("light");
-    }
-  }, []);
+export function ThemeToggle() {
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window === "undefined") return "light";
+    return localStorage.getItem("kreile-theme") === "dark" ? "dark" : "light";
+  });
+  const mounted = useSyncExternalStore(
+    subscribeToNothing,
+    getClientMountState,
+    getServerMountState,
+  );
 
   const toggleTheme = () => {
     const nextTheme = theme === "light" ? "dark" : "light";
