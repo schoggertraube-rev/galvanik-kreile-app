@@ -33,6 +33,24 @@ export interface ActiveWarning {
   erzeugt_am: string | null;
 }
 
+export interface KundeClvKachelRow {
+  customer_id: string;
+  name: string;
+  umsatz_gesamt: number;
+  db_gesamt: number;
+  letzter_auftrag: string | null;
+}
+
+export interface KundenDetailAuftrag {
+  id: string;
+  order_number: string;
+  intake_date: string | null;
+  due_date: string | null;
+  status: string;
+  umsatz: number;
+  db: number;
+}
+
 export async function getCockpitKpis() {
   const supabase = await createClient();
   
@@ -98,7 +116,7 @@ export async function getCockpitKpis() {
   };
 }
 
-export async function getTopKunden(limit = 10) {
+export async function getTopKunden(limit = 10): Promise<KundeClvKachelRow[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_kunde_clv')
@@ -113,7 +131,7 @@ export async function getTopKunden(limit = 10) {
   return data || [];
 }
 
-export async function getInaktiveKunden() {
+export async function getInaktiveKunden(): Promise<KundeClvKachelRow[]> {
   const supabase = await createClient();
   
   const nineMonthsAgo = new Date();
@@ -336,7 +354,7 @@ export async function getForecastDaten() {
   return { monate: results || [], pipeline: pipeline || [], plan: plan?.werte || null };
 }
 
-export async function getKundenDetails(customerId: string) {
+export async function getKundenDetails(customerId: string): Promise<{ clv: unknown; letzeAuftraege: KundenDetailAuftrag[] }> {
   const supabase = await createClient();
   
   const { data: clv } = await supabase.from('v_kunde_clv').select('*').eq('customer_id', customerId).single();
@@ -351,7 +369,7 @@ export async function getKundenDetails(customerId: string) {
     .select('order_id, order_number, deckungsbeitrag, erloes_netto, intake_date')
     .eq('customer_id', customerId);
 
-  const details = orders ? await Promise.all(orders.map(async o => {
+  const details: KundenDetailAuftrag[] = orders ? await Promise.all(orders.map(async o => {
     const dbInfo = auftraegeDb?.find(x => x.order_id === o.id);
     return {
       ...o,
