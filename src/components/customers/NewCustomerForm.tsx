@@ -8,7 +8,7 @@ import { customersRepository } from "@/lib/repositories/customersRepository";
 import { Customer } from "@/lib/types/customer";
 import { createClient } from "@/lib/supabase/client";
 import { createCustomerDb } from "@/app/actions/customers.actions";
-import { Loader } from "@googlemaps/js-api-loader";
+import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { Building2, Save, Upload, FilePlus2, Copy, AlertTriangle, Camera, X, CheckCircle2 } from "lucide-react";
 import Image from "next/image";
 
@@ -19,6 +19,8 @@ interface NewCustomerFormProps {
   onSave?: (customerId: string) => void;
   inline?: boolean; // If true, renders without the modal/drawer wrapper
 }
+
+let googlePlacesConfigured = false;
 
 export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inline = false }: NewCustomerFormProps) {
   const [loading, setLoading] = useState(false);
@@ -34,7 +36,6 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
-  const [customerNumber, setCustomerNumber] = useState("");
   
   // Images
   const [files, setFiles] = useState<File[]>([]);
@@ -59,14 +60,8 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
           setEmail(data.email || "");
           setNotes(data.notes || "");
           setImageUrls(data.imageUrls || []);
-          setCustomerNumber(data.customerNumber || "");
         }
       });
-    } else {
-      // Auto-generate new customer number
-      const year = new Date().getFullYear();
-      const randomId = Math.floor(Math.random() * 10000).toString().padStart(4, "0");
-      setCustomerNumber(`K-${year}-${randomId}`);
     }
     
     // Autofocus
@@ -83,15 +78,17 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
         return;
       }
       
-      const loader = new Loader({
-        apiKey: process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY,
-        version: "weekly",
-        libraries: ["places"],
-      });
-
       try {
-        // @ts-expect-error - Type definition for loader might be outdated but importLibrary exists at runtime
-        const { Autocomplete } = await loader.importLibrary("places");
+        if (!googlePlacesConfigured) {
+          setOptions({
+            key: process.env.NEXT_PUBLIC_GOOGLE_PLACES_API_KEY,
+            v: "weekly",
+            libraries: ["places"],
+          });
+          googlePlacesConfigured = true;
+        }
+
+        const { Autocomplete } = await importLibrary("places");
         if (streetInputRef.current) {
           const autocomplete = new Autocomplete(streetInputRef.current, {
             fields: ["address_components", "geometry", "name"],
@@ -277,7 +274,7 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
         {/* Left Column: Form */}
         <div className="flex-1 flex flex-col gap-6">
           <p className="text-xs text-text-muted font-bold -mt-2 mb-2">
-            Kundennummer: <span className="font-mono text-navy-900 bg-neutral-gray-100 px-2 py-0.5 rounded border">{customerNumber}</span>
+            Kundennummer: <span className="font-mono text-navy-900 bg-neutral-gray-100 px-2 py-0.5 rounded border">{customer?.customerNumber ?? "Noch nicht vergeben"}</span>
           </p>
 
           {/* Body */}
