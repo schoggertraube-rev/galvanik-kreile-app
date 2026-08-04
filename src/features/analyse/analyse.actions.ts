@@ -34,6 +34,22 @@ type StationDurchlaufRow = {
   teile_aktuell: number;
 };
 
+type CustomerNameRow = {
+  name: string | null;
+};
+
+type AffectedOrderRow = {
+  id: string;
+  order_number: string;
+  title: string | null;
+  customer_id: string;
+  customers: CustomerNameRow | CustomerNameRow[] | null;
+  station: string | null;
+  promised_due_date: string | null;
+  completed_date: string | null;
+  status: string | null;
+};
+
 type AnalyseActionResult<T> = {
   data: T;
   error?: string;
@@ -54,6 +70,51 @@ function getErrorMessage(error: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+function getCustomerName(customer: AffectedOrderRow["customers"]): string {
+  if (Array.isArray(customer)) return customer[0]?.name ?? "Unbekannt";
+  return customer?.name ?? "Unbekannt";
+}
+
+function toWerkstattPulsPeriod(period: string): WerkstattPulsData["period"] {
+  switch (period.toLowerCase()) {
+    case "today":
+    case "heute":
+      return "today";
+    case "week":
+    case "woche":
+      return "week";
+    case "month":
+    case "monat":
+      return "month";
+    default:
+      return "custom";
+  }
+}
+
+function toAffectedOrder(
+  order: AffectedOrderRow,
+  status: "critical" | "missing_due_date",
+): WerkstattPulsData["affectedOrders"][number] {
+  const delayDays = order.promised_due_date
+    ? Math.round((new Date().getTime() - new Date(order.promised_due_date).getTime()) / (1000 * 3600 * 24))
+    : null;
+
+  return {
+    orderId: order.id,
+    orderNumber: order.order_number,
+    title: order.title || "Ohne Titel",
+    customerId: order.customer_id,
+    customerName: getCustomerName(order.customers),
+    stationName: order.station || "Unbekannt",
+    promisedDueDate: order.promised_due_date,
+    completedDate: order.completed_date,
+    delayDays: status === "critical" ? delayDays : null,
+    status,
+    priority: order.status,
+    openUrl: `/orders/${order.id}?returnTo=/performance?tile=werkstatt_puls`,
+  };
 }
 
 async function getWerkstattPulsSummary(supabase: AnalyseSupabaseClient, period: string): Promise<AnalyseTileSummary> {
@@ -286,16 +347,16 @@ export async function getAnalyseTileDetail(
       const { data: eco } = await supabase.from('v_analyse_werkstatt_puls_economics').select('*').single();
 
       // Hole echte verspätete Aufträge
-      const { data: delayedOrders } = await supabase.from('orders')
-        .select('id, internal_id, title, customer_id, customers(name), current_station_id, promised_due_date, completed_date, status')
+      const { data: delayedOrders }: AnalyseQueryResult<AffectedOrderRow[]> = await supabase.from('orders')
+        .select('id, order_number, title, customer_id, customers(name), station, promised_due_date, completed_date, status')
         .eq('tenant_id', 'galvanik-kreile')
         .not('promised_due_date', 'is', null)
         .is('completed_date', null)
         .lt('promised_due_date', new Date().toISOString())
         .limit(10);
 
-      const { data: missingDueOrders } = await supabase.from('orders')
-        .select('id, internal_id, title, customer_id, customers(name), current_station_id, promised_due_date, completed_date, status')
+      const { data: missingDueOrders }: AnalyseQueryResult<AffectedOrderRow[]> = await supabase.from('orders')
+        .select('id, order_number, title, customer_id, customers(name), station, promised_due_date, completed_date, status')
         .eq('tenant_id', 'galvanik-kreile')
         .is('promised_due_date', null)
         .neq('status', 'storniert')
@@ -349,37 +410,11 @@ export async function getAnalyseTileDetail(
 
       // Affected Orders
       const affectedOrdersMapped: WerkstattPulsData["affectedOrders"] = [];
-      (delayedOrders || []).forEach((o: any) => {
-        affectedOrdersMapped.push({
-          orderId: o.id,
-          orderNumber: o.internal_id,
-          title: o.title || 'Ohne Titel',
-          customerId: o.customer_id,
-          customerName: o.customers?.name || 'Unbekannt',
-          stationName: o.current_station_id || 'Unbekannt',
-          promisedDueDate: o.promised_due_date,
-          completedDate: o.completed_date,
-          delayDays: Math.round((new Date().getTime() - new Date(o.promised_due_date).getTime()) / (1000 * 3600 * 24)),
-          status: "critical",
-          priority: o.status,
-          openUrl: `/orders/${o.id}?returnTo=/performance?tile=werkstatt_puls`
-        });
+      (delayedOrders || []).forEach(order => {
+        affectedOrdersMapped.push(toAffectedOrder(order, "critical"));
       });
-      (missingDueOrders || []).forEach((o: any) => {
-        affectedOrdersMapped.push({
-          orderId: o.id,
-          orderNumber: o.internal_id,
-          title: o.title || 'Ohne Titel',
-          customerId: o.customer_id,
-          customerName: o.customers?.name || 'Unbekannt',
-          stationName: o.current_station_id || 'Unbekannt',
-          promisedDueDate: o.promised_due_date,
-          completedDate: o.completed_date,
-          delayDays: null,
-          status: "missing_due_date",
-          priority: o.status,
-          openUrl: `/orders/${o.id}?returnTo=/performance?tile=werkstatt_puls`
-        });
+      (missingDueOrders || []).forEach(order => {
+        affectedOrdersMapped.push(toAffectedOrder(order, "missing_due_date"));
       });
 
       // Data Sources list
@@ -393,7 +428,7 @@ export async function getAnalyseTileDetail(
       ];
 
       detail.werkstattPulsData = {
-        period: period as any,
+        period: toWerkstattPulsPeriod(period),
         dataStatus: {
           isLive: true,
           lastUpdatedAt: new Date().toISOString(),
