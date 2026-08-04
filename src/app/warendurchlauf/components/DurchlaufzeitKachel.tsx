@@ -8,6 +8,7 @@ import type { WarendurchlaufKpiData } from "../actions";
 
 export function DurchlaufzeitKachel({ data }: { data: WarendurchlaufKpiData | null }) {
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const [referenceTime] = useState(() => Date.now());
 
   const dlz = data?.durchlaufzeitTage ?? 0;
   const orders = data?.orders || [];
@@ -15,13 +16,13 @@ export function DurchlaufzeitKachel({ data }: { data: WarendurchlaufKpiData | nu
   // Find longest running active orders
   const activeOrders = orders.filter(o => o.status !== "completed" && o.status !== "abgeschlossen");
   const sortedLongest = activeOrders.sort((a, b) => {
-    const aDate = a.intakeDate ? new Date(a.intakeDate).getTime() : Date.now();
-    const bDate = b.intakeDate ? new Date(b.intakeDate).getTime() : Date.now();
+    const aDate = a.intakeDate ? new Date(a.intakeDate).getTime() : referenceTime;
+    const bDate = b.intakeDate ? new Date(b.intakeDate).getTime() : referenceTime;
     return aDate - bDate; // Oldest first
   }).slice(0, 5);
 
   const compositionRows = sortedLongest.length > 0 ? sortedLongest.map(o => {
-    const daysActive = o.intakeDate ? ((Date.now() - new Date(o.intakeDate).getTime()) / (1000 * 60 * 60 * 24)).toFixed(1) : 0;
+    const daysActive = o.intakeDate ? ((referenceTime - new Date(o.intakeDate).getTime()) / (1000 * 60 * 60 * 24)).toFixed(1) : 0;
     return {
       avatar: o.orderNumber?.charAt(0) || "A",
       avatarColor: Number(daysActive) > 14 ? "bg-error-red" : "bg-accent-orange",

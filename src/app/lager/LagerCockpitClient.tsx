@@ -18,6 +18,7 @@ type LagerArtikelMitWareneingang = LagerArtikel & {
 
 export function LagerCockpitClient({ lagerData = [] }: Props) {
   const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
+  const [referenceTime] = useState(() => Date.now());
   const closeOverlay = () => setActiveOverlay(null);
 
   // Kacheln Metrics
@@ -28,7 +29,7 @@ export function LagerCockpitClient({ lagerData = [] }: Props) {
   // Letzte Zugänge: Letzte 5 Tage
   const recentItems = lagerData.filter((item): item is LagerArtikelMitWareneingang => {
     if (!item.letzterWareneingang) return false;
-    const diff = Date.now() - new Date(item.letzterWareneingang).getTime();
+    const diff = referenceTime - new Date(item.letzterWareneingang).getTime();
     return diff <= 5 * 24 * 60 * 60 * 1000;
   });
 

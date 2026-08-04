@@ -8,6 +8,7 @@ import type { WarendurchlaufKpiData } from "../actions";
 
 export function TermintreueKachel({ data }: { data: WarendurchlaufKpiData | null }) {
   const [overlayOpen, setOverlayOpen] = useState(false);
+  const [referenceTime] = useState(() => Date.now());
 
   const termintreue = data?.termintreue ?? 0;
   const orders = data?.orders || [];
@@ -21,7 +22,7 @@ export function TermintreueKachel({ data }: { data: WarendurchlaufKpiData | null
   }).slice(0, 5); // top 5 critical
 
   const compositionRows = sortedCritical.length > 0 ? sortedCritical.map(o => {
-    const isOverdue = o.dueDate ? new Date(o.dueDate).getTime() < Date.now() : false;
+    const isOverdue = o.dueDate ? new Date(o.dueDate).getTime() < referenceTime : false;
     return {
       avatar: o.orderNumber?.charAt(0) || "A",
       avatarColor: isOverdue ? "bg-error-red" : "bg-amber-500",
