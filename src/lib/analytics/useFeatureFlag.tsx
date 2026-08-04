@@ -14,9 +14,8 @@
 import {
   createContext,
   useContext,
-  useState,
-  useEffect,
   useCallback,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -51,22 +50,68 @@ export const FLAG_DEFS: FlagDef[] = [
 ];
 
 const STORAGE_KEY = "kreile_feature_flags_v2";
+const STORAGE_EVENT = "kreile-feature-flags-change";
+const EMPTY_OVERRIDES: Record<string, boolean> = {};
+let cachedOverridesRaw: string | null | undefined;
+let cachedOverrides: Record<string, boolean> = EMPTY_OVERRIDES;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
 
 // ── Storage helpers ───────────────────────────────────────────────────
 
 function readOverrides(): Record<string, boolean> {
-  if (typeof window === "undefined") return {};
+  if (typeof window === "undefined") return EMPTY_OVERRIDES;
+
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw === cachedOverridesRaw) return cachedOverrides;
+
+  cachedOverridesRaw = raw;
+  if (!raw) {
+    cachedOverrides = EMPTY_OVERRIDES;
+    return cachedOverrides;
+  }
+
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!isRecord(parsed)) {
+      cachedOverrides = EMPTY_OVERRIDES;
+      return cachedOverrides;
+    }
+
+    cachedOverrides = Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean")
+    );
+    return cachedOverrides;
   } catch {
-    return {};
+    cachedOverrides = EMPTY_OVERRIDES;
+    return cachedOverrides;
   }
 }
 
 function writeOverrides(overrides: Record<string, boolean>): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides));
+  const raw = JSON.stringify(overrides);
+  cachedOverridesRaw = raw;
+  cachedOverrides = overrides;
+  localStorage.setItem(STORAGE_KEY, raw);
+  window.dispatchEvent(new Event(STORAGE_EVENT));
+}
+
+function subscribeToOverrides(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === STORAGE_KEY) onStoreChange();
+  };
+
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(STORAGE_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(STORAGE_EVENT, onStoreChange);
+  };
 }
 
 function resolveFlag(name: string, overrides: Record<string, boolean>): boolean {
@@ -98,42 +143,30 @@ const FlagContext = createContext<FlagContextValue>({
 // ── Provider ──────────────────────────────────────────────────────────
 
 export function FeatureFlagProvider({ children }: { children: ReactNode }) {
-  const [overrides, setOverridesState] = useState<Record<string, boolean>>({});
-  const [hydrated, setHydrated] = useState(false);
-
-  // Hydrate from localStorage on mount
-  useEffect(() => {
-    setOverridesState(readOverrides());
-    setHydrated(true);
-  }, []);
+  const overrides = useSyncExternalStore(subscribeToOverrides, readOverrides, () => EMPTY_OVERRIDES);
 
   // Resolve all flags
   const flags: Record<string, boolean> = {};
   for (const def of FLAG_DEFS) {
-    flags[def.name] = hydrated ? resolveFlag(def.name, overrides) : def.default;
+    flags[def.name] = resolveFlag(def.name, overrides);
   }
 
   const setOverride = useCallback((name: string, value: boolean) => {
-    setOverridesState((prev) => {
-      const next = { ...prev, [name]: value };
-      writeOverrides(next);
-      return next;
-    });
+    writeOverrides({ ...readOverrides(), [name]: value });
   }, []);
 
   const removeOverride = useCallback((name: string) => {
-    setOverridesState((prev) => {
-      const next = { ...prev };
-      delete next[name];
-      writeOverrides(next);
-      return next;
-    });
+    const next = { ...readOverrides() };
+    delete next[name];
+    writeOverrides(next);
   }, []);
 
   const resetAll = useCallback(() => {
-    setOverridesState({});
     if (typeof window !== "undefined") {
+      cachedOverridesRaw = null;
+      cachedOverrides = EMPTY_OVERRIDES;
       localStorage.removeItem(STORAGE_KEY);
+      window.dispatchEvent(new Event(STORAGE_EVENT));
     }
   }, []);
 
