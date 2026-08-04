@@ -1,6 +1,6 @@
 # Current State
 
-Stand: 2026-08-02
+Stand: 2026-08-04
 
 Verifiziert gegen GitHub, Vercel, Supabase und einen sauberen lokalen Checkout.
 
@@ -12,7 +12,7 @@ Verifiziert gegen GitHub, Vercel, Supabase und einen sauberen lokalen Checkout.
 | Production-Deployment | `PASS` | Vercel Production laeuft auf demselben Commit wie `main`. |
 | Lokale Worktree-Hygiene | `PASS_LOCAL` | Alle in diesem Arbeitsbereich sichtbaren App-Worktrees sind sauber und voneinander isoliert. |
 | Migrations-/Schemaquelle | `FAIL` | `main` enthaelt 79 Migrationsdateien, Production 92 Ledger-Eintraege, Integration 1. |
-| Quality-Ratchet / Lint-Nullstand | `PASS_RATCHET` / `FAIL_ZERO` | 484 Fehler und 459 Warnungen in 279 Dateien sind ehrlich inventarisiert; Inline-Disable ist wirkungslos, jede Erhoehung und jede nicht verbuchte Reduktion blockiert. `quality` und `ratchet` sind im aktiven `main-protection`-Ruleset verpflichtend. |
+| Quality-Ratchet / Lint-Nullstand | `PASS_RATCHET` / `PASS_ZERO` (PR offen) | PR `agent/fnd-p0-01-lint-wave-2` reduziert 484/459 auf 0/0 ueber 668 Dateien. Lokal verifiziert: ESLint 0/0, tsc sauber, Ratchet PASS. PR wartet auf Merge. |
 | Produkt-Go-live | `NO_GO` | RLS, PIN-Grenze, Offline-Vertrag und operativer End-to-End-Kern sind nicht vollstaendig abgenommen. |
 
 Ein gruenes Deployment oder ein gemergter Sicherheitsfix ist deshalb kein Gesamt-PASS.
@@ -54,18 +54,17 @@ Das vollstaendige maschinenlesbare Inventar steht in [`BRANCH_ARCHIVE_RECEIPTS.j
 
 ## Worktree-Audit
 
-Zum Pruefzeitpunkt sind in diesem Arbeitsbereich genau zwei App-Worktrees sichtbar:
+Stand: 2026-08-04. Friedhof-Bereinigung durchgefuehrt: 32 Worktrees auf 3 reduziert.
 
-| Branch | Commit / Basis | Zustand | Zweck |
+| Branch | Pfad | Zustand | Zweck |
 |---|---|---|---|
-| `main` | `63a7b37...` | sauber, exakt `origin/main` | lokale Lieferreferenz |
-| `agent/truth-maintenance-after-lint-wave-01` | Basis `63a7b37...` | sauberer, isolierter Dokumentationskandidat | Pflege dieses Audit-Receipts |
+| `feature/capture-auth-tenant` | `02_app` | dirty, read-only | erhaltener Windows-Dirty-Worktree, nie aendern |
+| `agent/fnd-p0-01-lint-wave-2` | `_agent_worktrees/lint-wave2` | sauber, 83 Commits ahead | Lint-0/0-PR, wartet auf Merge |
+| `agent/truth-maintenance-002` | `_agent_worktrees/truth-maintenance` | aktiv | Pflege dieses Dokuments |
 
-Damit gibt es hier **null uncommittete App-Aenderungen** ausser dem jeweils aktiv bearbeiteten, vor Commit sichtbaren Missionsdiff. Der vollstaendig gemergte Lint-Worktree wurde erst nach sauberem Abgleich entfernt; sein Inhalt liegt in `main`.
+Entfernt: 29 tote Worktrees in `_agent_worktrees/`, `_worktrees/`, `02_app/.agents/`, `02_app/.claude/worktrees/`, `C:\tmp\` und angrenzende Klone. Alle Remote-Branches bleiben erhalten. Hintergrund-Cleanup-Skript `_cleanup_tmp.cmd` laeuft fuer die `C:\tmp`-Verzeichnisse mit `node_modules`.
 
-Der PIN-Kandidat ist aktuell kein lokaler Worktree, sondern bleibt als tree-identischer Remote-Checkpoint `dad42eb83e4dc4617291568631dea23f731febaa` auf `checkpoint/sec-pin-002-no-merge-20260801` erhalten und ausdruecklich `NO_MERGE`.
-
-Der frueher erwaehnte Windows-Checkout ist von diesem Arbeitsbereich aus nicht einsehbar. Sein Zustand ist `UNKNOWN_EXTERNAL`, nicht angeblich bereinigt. Er darf nur in genau diesem Checkout inventarisiert und ohne Reset, Stash oder Loeschung aufgeraeumt werden.
+Der PIN-Kandidat bleibt als Remote-Checkpoint `checkpoint/sec-pin-002-no-merge-20260801` erhalten (`NO_MERGE`).
 
 ## Supabase- und Migrationswahrheit
 
@@ -88,9 +87,24 @@ Der frueher erwaehnte Windows-Checkout ist von diesem Arbeitsbereich aus nicht e
 - Das Integration-Projekt hat genau einen eigenen Ledger-Eintrag fuer die W1-Validierung.
 - Es ist kein Spiegel von Production und kein Beweis, dass die 79/92-Historie frisch wiederholbar ist.
 
-### Konsequenz
+### Analyse (2026-08-04)
 
-`DB-TRUTH-001` muss einen vorwaertsgerichteten Baseline-/Quellenvertrag schaffen. PR 19, PR 20 oder der geschlossene Replay-Kandidat PR 21 duerfen nicht wholesale gemergt werden. Vor jeder DB-Aenderung sind Produktionskatalog, Ledger, lokaler Quellstand und Drizzle-Vertrag read-only gegenzupruefen.
+Die 13 fehlenden Versionen fallen in ein enges Fenster (6.–13. Juli 2026). Die lokale `main`-Historie springt direkt von `20260627000001` zu `20260801100027`. Die alte Git-Historie wurde nach Ausfuehrung mehrfach umgeschrieben (Commits wie "restore executed migration sources", "reconcile applied migration history" auf Archiv-Branches belegen fehlgeschlagene Rekonstruktionsversuche).
+
+Zusaetzlich existieren zwei parallele Migrationsoberflaechen: `supabase/migrations/` (79 Rohdateien) und `src/db/migrations/` (Drizzle, nur `meta/`-Ordner, kein generiertes SQL eingecheckt). Diese sind nicht aufeinander abgestimmt.
+
+### Konsequenz und Vorwaerts-Strategie
+
+`DB-TRUTH-001` muss einen vorwaertsgerichteten Baseline-/Quellenvertrag schaffen:
+
+1. Das Juli-Fenster wird als permanent opak behandelt; keine Rekonstruktion.
+2. Production-Schema via `supabase db dump --schema-only` als Ist-Wahrheit sichern.
+3. Eine einzige Baseline-Migration (z.B. `20260805000000_baseline_post_gap.sql`) den Production-Schema-Stand festhalten und Ledger/Dateianzahl synchronisieren.
+4. Die 79 Pre-Baseline-Dateien werden archiviert (read-only, nicht wiederholbar).
+5. Kuenftige Migrationen erfordern: lokale Datei + Ledger-Eintrag + Drizzle-Schema-Abgleich, alle drei vor Merge.
+6. CI-Check: lokale Dateianzahl vs. Production-Ledger bei jeder PR, die `supabase/migrations/` beruehrt.
+
+PR 19, PR 20 oder PR 21 duerfen nicht wholesale gemergt werden. Vor jeder DB-Aenderung sind Produktionskatalog, Ledger, lokaler Quellstand und Drizzle-Vertrag read-only gegenzupruefen.
 
 ## Security-Stand
 
@@ -103,7 +117,7 @@ Der frueher erwaehnte Windows-Checkout ist von diesem Arbeitsbereich aus nicht e
 ### Offen
 
 - `LIVE-AUTH-001`: Cookie-/Routengrenzen sind gehaertet, der reale Ablauf mit einer zuvor gueltigen und dann abgelaufenen Sitzung ist aber noch nicht als vollstaendiger Benutzerweg belegt.
-- `AUTH-IDENTITY-002`: Benutzerwechsel bleibt P0-offen. `PermissionsProvider` friert Rolle, Name und Initialen aus dem ersten Layout-Mount ein; `refreshPermissions()` aktualisiert nur Permissions und Status. PR 23/24 haben diesen Identity-Switch nicht geloest.
+- `AUTH-IDENTITY-002`: Benutzerwechsel bleibt P0-offen. Root Cause bestaetigt: `PermissionsProvider` setzt `role`, `name`, `initials` ueber `useState(initialAuthState)` ohne Setter; `refreshPermissions()` schreibt nur `setPermissions`/`setStatus`/`setError` und verwirft die Identity-Felder aus `getAuthorizationSnapshotAction()` still. Zweiter Vektor: `KontrolleDashboardClient`, `KvpClient`, `MobileBottomNav` lesen `localStorage("kreile_user_role")` direkt am Context vorbei. PR-8-Salvage (`archive/pr-8-auth-identity-002-007b85b`) ist wiederverwendbar: atomares `AuthState`-Objekt mit Seq-Guard, alle localStorage-Reads entfernt. Nur der `proxy.ts`-Teil ist durch PR 23 ueberholt. Naechste Mission: PR-8-Kern portieren, Consumer-localStorage entfernen, Test mit MK->Admin->MK-Wechsel.
 - `SEC-PIN-002`: der remote gesicherte, tree-identische Checkpoint `dad42eb...` zu `d7d2bd3...` hasht neue PINs und zentralisiert Rollen-/Rotationsregeln, ist aber bewusst `NO_MERGE`.
   - Die vierstellige PIN-Zielmenge ist ueber verteilte Quellen weiter online angreifbar.
   - Device-Bindung/Enrollment oder ein gleichwertiger Challenge-/WAF-Vertrag fehlt.
@@ -122,19 +136,25 @@ Der frueher erwaehnte Windows-Checkout ist von diesem Arbeitsbereich aus nicht e
 
 Der Quality-Kandidat fuehrt einen maschinenlesbaren Multiset-Ratchet ein. Der Judge, sein direkter Aufruf, die ESLint-Konfiguration, die geschuetzte Node-Auswahl und die vollstaendige transitive Lockfile-Closure der Lint-Einfluesse (`eslint`, `eslint-config-next`, `typescript`, `tsx`, `next`, `react`) sind gehasht. Ein geschuetzter `pull_request_target`-Workflow fuehrt Judge, Config und Abhaengigkeiten aus dem Base-Commit aus; Kandidatencode erhaelt keine Git-Credentials. Datei- und Meldungsschluessel werden unter Linux und Windows identisch kanonisiert.
 
-Inline-ESLint-Konfiguration ist mit `noInlineConfig` vollstaendig wirkungslos. Dadurch wurden 57 bestehende Disable-Direktiven und die zuvor darunter versteckte Schuld erstmals ehrlich sichtbar. Die kanonische Baseline nach PR 27 lautet:
+Inline-ESLint-Konfiguration ist mit `noInlineConfig` vollstaendig wirkungslos.
 
-| Messwert | Stand |
-|---|---:|
-| Dateien mit Meldungen | 279 |
-| Fehler | 484 |
-| Warnungen | 459 |
-| automatisch behebbare Fehler | 6 |
-| automatisch behebbare Warnungen | 0 |
+### Lint-Nullstand (PR offen)
 
-Der Workflow blockiert weiterhin jede Meldung in geaenderten TypeScript-/TSX-Dateien. Zusaetzlich blockiert der globale Ratchet jedes neue Finding, jede Baseline-Erhoehung, Regel-/Dependency-/Judge-Drift, neue oder veraenderte Git-getrackte Code-Dateien unter ESLint-Ignores sowie eine Reduktion ohne mitgesenkte Baseline. Ein gruener Ratchet bedeutet weiterhin nicht `0` globale Lintfehler.
+PR `agent/fnd-p0-01-lint-wave-2` (83 Commits, Welle 2+3 via Codex + Baseline-Update) erreicht:
 
-Weitere Luecken:
+| Messwert | Vorher (PR 27) | Nachher (PR offen) |
+|---|---:|---:|
+| Dateien mit Meldungen | 279 | 0 |
+| Fehler | 484 | 0 |
+| Warnungen | 459 | 0 |
+
+Lokal verifiziert: ESLint 0/0 ueber 668 Dateien, `tsc --noEmit` sauber, 100/103 vitest bestanden (3 Fails = DB-Integrationstests mit Dummy-Credentials, kein Zusammenhang mit Lint-Aenderungen), Ratchet-Baseline aktualisiert und verifiziert.
+
+Behobene Regelklassen: `no-explicit-any` (typisierte DTOs und Type Guards), `react-hooks/exhaustive-deps` (vollstaendige Dependency-Arrays), `no-unused-vars`, `@next/next/no-img-element` (optimierte Images), `@next/next/no-page-custom-font` (next/font-Integration), `no-empty`, `prefer-const` und weitere.
+
+Der Workflow blockiert weiterhin jede Meldung in geaenderten TypeScript-/TSX-Dateien. Zusaetzlich blockiert der globale Ratchet jedes neue Finding, jede Baseline-Erhoehung, Regel-/Dependency-/Judge-Drift, neue oder veraenderte Git-getrackte Code-Dateien unter ESLint-Ignores sowie eine Reduktion ohne mitgesenkte Baseline. Nach Merge ist der Ratchet bei echtem Nullstand.
+
+### Weitere Luecken
 
 - Integrationstests laufen nicht im normalen CI-Vertrag.
 - Playwright prueft aktuell die Auth-Grenze, nicht den operativen Kernweg.
@@ -145,8 +165,8 @@ Weitere Luecken:
 
 1. `TRUTH-CLEANUP-001` und `BRANCH-DISPOSITION-001`: abgeschlossen.
 2. `QUALITY-RATCHET-001`: `DONE_VERIFIED`; PR 26 ist gemergt und `quality` plus `ratchet` sind im aktiven Ruleset verpflichtend.
-3. `LINT-DEBT-001`: `ACTIVE`; erste Welle in PR 27 ist gemergt, weitere kleine nichtfachliche Reduktionen laufen von 484/459 bis null parallel.
-4. `AUTH-IDENTITY-002`: PR-8-Salvage pruefen, Identity-Snapshot atomar aktualisieren und real im Browser beweisen.
+3. `LINT-DEBT-001`: `DONE_PENDING_MERGE`; PR `agent/fnd-p0-01-lint-wave-2` erreicht 0/0 (lokal verifiziert: ESLint, tsc, vitest, Ratchet). Wartet auf Merge.
+4. `AUTH-IDENTITY-002`: Root-Cause bestaetigt, PR-8-Salvage analysiert und wiederverwendbar. Naechste Aktion: atomaren Identity-Snapshot portieren, localStorage-Reads entfernen, MK->Admin->MK beweisen.
 5. `DB-TRUTH-001`: 79/92-Quellluecke und vorwaertsgerichteten Baseline-/Replay-Vertrag loesen.
 6. `APP-STRUCTURE-001`: Ownership-/Importvertrag festlegen; noch keine Big-Bang-Ordnerumsortierung.
 7. `SEC-PIN-002B`: Device-/Challenge-Grenze und Session-Widerruf entscheiden und beweisen; erst dann Bestandsrotation und Merge.
