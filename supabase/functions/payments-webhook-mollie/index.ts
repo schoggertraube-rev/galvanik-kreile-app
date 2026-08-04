@@ -3,6 +3,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.6";
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error";
+}
+
 serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -71,6 +75,14 @@ serve(async (req) => {
         .select('id')
         .single();
 
+      if (invError) {
+        console.error("Error creating invoice:", {
+          message: invError.message,
+          details: invError.details,
+          hint: invError.hint,
+        });
+      }
+
       // 2. Link payment to invoice
       if (invData?.id) {
         await supabase
@@ -99,8 +111,8 @@ serve(async (req) => {
     }
 
     return new Response("OK", { status: 200 });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Webhook Error:", err);
-    return new Response(JSON.stringify({ error: err.message }), { status: 500 });
+    return new Response(JSON.stringify({ error: getErrorMessage(err) }), { status: 500 });
   }
 });

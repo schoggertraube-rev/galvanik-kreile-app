@@ -6,13 +6,34 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+type ScanAnalyzeRequest = {
+  file_url?: string
+  base64_data?: string
+  mime_type?: string
+}
+
+type GeminiGenerateContentRequest = {
+  contents: Array<{
+    role: "user"
+    parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>
+  }>
+  generationConfig: {
+    temperature: number
+    responseMimeType: "application/json"
+  }
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown error"
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
   try {
-    const { scan_upload_id, file_url, base64_data, mime_type } = await req.json()
+    const { file_url, base64_data, mime_type }: ScanAnalyzeRequest = await req.json()
 
     if (!file_url && !base64_data) {
       throw new Error("Missing 'file_url' or 'base64_data' in request body.")
@@ -65,7 +86,7 @@ Antworte ausschließlich im JSON Format nach folgendem Schema:
   }
 }`
 
-    const payload: any = {
+    const payload: GeminiGenerateContentRequest = {
       contents: [
         { 
           role: "user", 
@@ -109,7 +130,7 @@ Antworte ausschließlich im JSON Format nach folgendem Schema:
     let result
     try {
       result = JSON.parse(content);
-    } catch (e) {
+    } catch {
       const match = content.match(/\{[\s\S]*\}/);
       if (match) {
          result = JSON.parse(match[0]);
@@ -126,7 +147,7 @@ Antworte ausschließlich im JSON Format nach folgendem Schema:
   } catch (error) {
     console.error(error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: getErrorMessage(error) }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
     )
   }
