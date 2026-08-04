@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useCallback, useSyncExternalStore } from "react";
 import { offlineOutbox, OfflineOutboxItem } from "./OfflineOutbox";
 import { createId } from "@paralleldrive/cuid2";
 
@@ -13,6 +13,42 @@ interface SyncContextValue {
 }
 
 const SyncContext = createContext<SyncContextValue | null>(null);
+const EMPTY_OUTBOX: OfflineOutboxItem[] = [];
+let outboxSnapshot: OfflineOutboxItem[] = EMPTY_OUTBOX;
+const outboxListeners = new Set<() => void>();
+
+function subscribeToNetworkStatus(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  window.addEventListener("online", onStoreChange);
+  window.addEventListener("offline", onStoreChange);
+  return () => {
+    window.removeEventListener("online", onStoreChange);
+    window.removeEventListener("offline", onStoreChange);
+  };
+}
+
+function getOnlineSnapshot(): boolean {
+  return typeof window === "undefined" || navigator.onLine;
+}
+
+function subscribeToOutbox(onStoreChange: () => void): () => void {
+  outboxListeners.add(onStoreChange);
+  return () => outboxListeners.delete(onStoreChange);
+}
+
+function getOutboxSnapshot(): OfflineOutboxItem[] {
+  return outboxSnapshot;
+}
+
+async function refreshOutboxSnapshot(): Promise<void> {
+  try {
+    outboxSnapshot = await offlineOutbox.getAllItems();
+    outboxListeners.forEach((listener) => listener());
+  } catch (error) {
+    console.error("Failed to load outbox", error);
+  }
+}
 
 export function useSync() {
   const ctx = useContext(SyncContext);
@@ -23,37 +59,33 @@ export function useSync() {
 }
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  const [isOnline, setIsOnline] = useState(true);
-  const [outboxItems, setOutboxItems] = useState<OfflineOutboxItem[]>([]);
-
-  const loadOutbox = useCallback(async () => {
-    try {
-      const items = await offlineOutbox.getAllItems();
-      setOutboxItems(items);
-    } catch (err) {
-      console.error("Failed to load outbox", err);
-    }
-  }, []);
+  const isOnline = useSyncExternalStore(subscribeToNetworkStatus, getOnlineSnapshot, () => true);
+  const outboxItems = useSyncExternalStore(subscribeToOutbox, getOutboxSnapshot, () => EMPTY_OUTBOX);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setIsOnline(navigator.onLine);
-      const handleOnline = () => setIsOnline(true);
-      const handleOffline = () => setIsOnline(false);
+    void refreshOutboxSnapshot();
+  }, []);
 
-      window.addEventListener("online", handleOnline);
-      window.addEventListener("offline", handleOffline);
+  const syncNow = useCallback(async () => {
+    if (!isOnline) return;
 
-      loadOutbox();
-
-      return () => {
-        window.removeEventListener("online", handleOnline);
-        window.removeEventListener("offline", handleOffline);
-      };
+    const items = await offlineOutbox.getAllItems();
+    for (const item of items) {
+      if (item.status === "draft" || item.status === "queued" || item.status === "failed") {
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 600));
+          await offlineOutbox.removeItem(item.id);
+        } catch {
+          item.status = "failed";
+          item.retryCount += 1;
+          await offlineOutbox.saveItem(item);
+        }
+      }
     }
-  }, [loadOutbox]);
+    await refreshOutboxSnapshot();
+  }, [isOnline]);
 
-  const addToOutbox = async (itemData: Omit<OfflineOutboxItem, "id" | "status" | "retryCount" | "createdAt" | "updatedAt">) => {
+  const addToOutbox = useCallback(async (itemData: Omit<OfflineOutboxItem, "id" | "status" | "retryCount" | "createdAt" | "updatedAt">) => {
     const newItem: OfflineOutboxItem = {
       ...itemData,
       id: createId(),
@@ -63,48 +95,20 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       updatedAt: new Date().toISOString()
     };
     await offlineOutbox.saveItem(newItem);
-    await loadOutbox();
-    
-    if (isOnline) {
-      // Trigger sync
-      syncNow();
-    }
-  };
+    await refreshOutboxSnapshot();
+  }, [isOnline]);
 
-  const removeItem = async (id: string) => {
+  const removeItem = useCallback(async (id: string) => {
     await offlineOutbox.removeItem(id);
-    await loadOutbox();
-  };
-
-  const syncNow = async () => {
-    if (!isOnline) return;
-    
-    // Detailed Sync logic goes here.
-    // For Phase 2, we just mark as "synced" or remove them if mock successful.
-    const items = await offlineOutbox.getAllItems();
-    for (const item of items) {
-      if (item.status === "draft" || item.status === "queued" || item.status === "failed") {
-        try {
-          // Simulate network delay
-          await new Promise(r => setTimeout(r, 600));
-          // Mock success
-          await offlineOutbox.removeItem(item.id);
-        } catch {
-          item.status = "failed";
-          item.retryCount += 1;
-          await offlineOutbox.saveItem(item);
-        }
-      }
-    }
-    await loadOutbox();
-  };
+    await refreshOutboxSnapshot();
+  }, []);
 
   // Auto sync when coming online
   useEffect(() => {
     if (isOnline && outboxItems.length > 0) {
-      syncNow();
+      void syncNow();
     }
-  }, [isOnline]);
+  }, [isOnline, outboxItems.length, syncNow]);
 
   return (
     <SyncContext.Provider value={{ isOnline, outboxItems, addToOutbox, removeItem, syncNow }}>
