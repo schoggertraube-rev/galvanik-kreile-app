@@ -5,33 +5,17 @@ import { trackUiEvent } from "@/lib/tracking/tracking";
 
 import { useState, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { 
-  AlertTriangle, 
-  ChevronRight, 
-  PhoneCall, 
   RefreshCw, 
-  Search, 
-  X, 
-  Package, 
-  MapPin, 
-  Zap,
-  ArrowLeft,
-  CheckCircle2,
-  Edit2
+  Package
 } from "lucide-react";
 // Mock data removed
-import { getStationConfig, getAllStations } from "@/constants/stations";
+import { getStationConfig } from "@/constants/stations";
 import { getOrdersDb } from "@/app/actions/orders.actions";
 import { getCustomersDb } from "@/app/actions/customers.actions";
 import type { Customer } from "@/lib/types/customer";
-import type { OrderResponse } from "@/app/actions/orders.actions";
+import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
-type Order = any; // Fallback since Order was from repo
 import { usePageView } from "@/hooks/usePageView";
 import { OrderWideCard, type UrgencyType } from "@/components/orders/OrderWideCard";
 import { useAppShortcut } from "@/components/ui/AppShortcutContext";
@@ -61,9 +45,9 @@ function OrdersPageInner() {
     }
   }
 
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<OperationalOrder[]>([]);
 
-  const [customersList, setCustomersList] = useState<Customer[]>([]);
+  const [, setCustomersList] = useState<Customer[]>([]);
   
   const { openOrder } = useOrderModal();
 
@@ -78,8 +62,8 @@ function OrdersPageInner() {
           return;
         }
         if (isMounted && dbOrdersResult.ok) {
-          setOrders(dbOrdersResult.data as any);
-      console.log("[ORDERS_CLIENT]", (dbOrdersResult.data as any).map((o:any)=>({id:o.id, number:o.orderNumber, source:o.source})) );
+          setOrders(dbOrdersResult.data);
+          console.log("[ORDERS_CLIENT]", dbOrdersResult.data.map(o => ({ id: o.id, number: o.orderNumber, source: undefined })));
         }
         
         const dbCustomersResult = await getCustomersDb();
@@ -88,7 +72,7 @@ function OrdersPageInner() {
           return;
         }
         if (isMounted && dbCustomersResult.ok) {
-          setCustomersList(dbCustomersResult.data as any);
+          setCustomersList(dbCustomersResult.data);
         }
       } catch (e) {
         console.error("Fehler beim Laden aus Repositories", e);
@@ -147,7 +131,7 @@ function OrdersPageInner() {
 
     // 5. Surface filter
     if (surfaceFilter) {
-      const text = (o.task + " " + (o.parts?.map((p: any) => p.surfaceRequested || p.finish).join(" ") || "")).toLowerCase();
+      const text = (String(o.task) + " " + o.parts.map(p => p.surfaceRequested || "").join(" ")).toLowerCase();
       if (!text.includes(surfaceFilter.toLowerCase())) return false;
     }
 
@@ -185,17 +169,6 @@ function OrdersPageInner() {
       warenausgang: " (Versand & Abholung)"
     };
     return `${config.fullName}${suffixMap[stationFilter] || ""}`;
-  };
-
-  // Find customer information for phone details checking
-  const getCustomerPhoneDetails = (customerName: string, customerId: string) => {
-    const customer = customersList.find(
-      c => c.id === customerId || safe(c?.name).includes(safe(customerName))
-    );
-    if (customer && customer.phone && customer.phone.trim() !== "") {
-      return { hasPhone: true, phone: customer.phone };
-    }
-    return { hasPhone: false, phone: "" };
   };
 
   return (
@@ -316,7 +289,7 @@ function OrdersPageInner() {
             else if (order.risk === "orange" || u === "gefaehrdet") urgencyType = "soon";
             else if (order.risk === "blocked") urgencyType = "wait";
 
-            const textForSurface = (order.task + " " + (order.parts?.map((p: any) => p.surfaceRequested || p.finish).join(" ") || "")).toLowerCase();
+            const textForSurface = (String(order.task) + " " + order.parts.map(p => p.surfaceRequested || "").join(" ")).toLowerCase();
             let surfaceKey: "chrom" | "nickel" | "gold" | "kupfer" | "zink" | "offen" = "offen";
             if (textForSurface.includes("chrom")) surfaceKey = "chrom";
             else if (textForSurface.includes("nickel")) surfaceKey = "nickel";
@@ -337,7 +310,7 @@ function OrdersPageInner() {
                 article={order.task || ""}
                 surface={surfaceLabel}
                 surfaceKey={surfaceKey}
-                badgeText={order.statusText}
+                badgeText={undefined}
                 urgency={urgencyType}
                 dueValue={order.dueValue || "14 T"}
                 dueLabel={order.dueLabel || "Fällig in"}
@@ -375,4 +348,3 @@ export default function OrdersPage() {
     </Suspense>
   );
 }
-

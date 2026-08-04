@@ -44,7 +44,7 @@
 .tn-editor-backdrop {
   position: absolute;
   inset: 16px 18px;
-  font-family: 'Fraunces', serif;
+  font-family: var(--font-telefonnotiz-fraunces), serif;
   font-size: 16px;
   line-height: 1.6;
   color: var(--tn-ink);
@@ -71,7 +71,7 @@
   background: transparent;
   border: none;
   resize: vertical;
-  font-family: 'Fraunces', serif;
+  font-family: var(--font-telefonnotiz-fraunces), serif;
   font-size: 16px;
   line-height: 1.6;
   color: rgba(0,0,0,0);
@@ -146,7 +146,7 @@
   background: linear-gradient(135deg, #1B1B1B, #2D2D2D);
   color: var(--tn-cream);
   border: none;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--font-telefonnotiz-manrope), sans-serif;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -209,7 +209,7 @@
   border: 1px solid var(--tn-line);
   border-radius: 9px;
   padding: 9px 10px;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--font-telefonnotiz-manrope), sans-serif;
   font-size: 11px;
   font-weight: 600;
   color: var(--tn-ink);
@@ -233,7 +233,7 @@
   padding: 13px 15px;
 }
 .tn-suggest p {
-  font-family: 'Fraunces', serif;
+  font-family: var(--font-telefonnotiz-fraunces), serif;
   font-size: 13px;
   line-height: 1.5;
 }
@@ -259,7 +259,7 @@
   border-radius: 9px;
   border: none;
   background: transparent;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--font-telefonnotiz-manrope), sans-serif;
   font-size: 13px;
   font-weight: 600;
   color: var(--tn-ink-mute);
@@ -418,7 +418,7 @@
 .tn-appointment-card.free .tn-appt-label { color: var(--tn-green); }
 .tn-appointment-card.conflict .tn-appt-label { color: var(--tn-yellow); }
 .tn-appointment-card .tn-appt-value {
-  font-family: 'Fraunces', serif;
+  font-family: var(--font-telefonnotiz-fraunces), serif;
   font-size: 20px;
   font-weight: 500;
   color: var(--tn-ink);
@@ -433,7 +433,7 @@
 
 /* ===== Suggest card enlarged ===== */
 .tn-suggest p {
-  font-family: 'Fraunces', serif;
+  font-family: var(--font-telefonnotiz-fraunces), serif;
   font-size: 14.5px;
   line-height: 1.55;
 }

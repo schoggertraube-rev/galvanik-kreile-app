@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { AppOverlayPortal } from "./AppOverlayPortal";
+import { useHydrated } from "@/hooks/useHydrated";
 
 interface ResponsiveDetailDrawerProps {
   isOpen: boolean;
@@ -14,15 +14,7 @@ interface ResponsiveDetailDrawerProps {
 }
 
 export function ResponsiveDetailDrawer({ isOpen, onClose, title, children, centered = false, zIndex = 1010 }: ResponsiveDetailDrawerProps) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    // Body scroll locking is now handled by AppOverlayPortal
-  }, [isOpen]);
+  const mounted = useHydrated();
 
   if (!isOpen || !mounted) return null;
 

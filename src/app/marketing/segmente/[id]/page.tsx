@@ -8,10 +8,27 @@ import Link from "next/link";
 import { ArrowLeft, Save, Trash2, AlertTriangle } from "lucide-react";
 import { useState, useEffect } from "react";
 
+type Segment = NonNullable<Awaited<ReturnType<typeof getSegmentById>>>;
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error.message;
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message
+  ) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 export default function SegmentDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [segment, setSegment] = useState<any>(null);
+  const [segment, setSegment] = useState<Segment | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -25,9 +42,9 @@ export default function SegmentDetailPage({ params }: { params: { id: string } }
     try {
       await updateSegment(params.id, formData);
       router.push("/marketing/segmente");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Fehler beim Aktualisieren");
+      setError(getErrorMessage(err, "Fehler beim Aktualisieren"));
       setLoading(false);
     }
   }
@@ -38,9 +55,9 @@ export default function SegmentDetailPage({ params }: { params: { id: string } }
     try {
       await deleteSegment(params.id);
       router.push("/marketing/segmente");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setError(err.message || "Fehler beim Löschen");
+      setError(getErrorMessage(err, "Fehler beim Löschen"));
       setLoading(false);
     }
   }
@@ -89,7 +106,7 @@ export default function SegmentDetailPage({ params }: { params: { id: string } }
               <input 
                 type="text" 
                 name="icon" 
-                defaultValue={segment.icon}
+                defaultValue={segment.icon ?? undefined}
                 className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
@@ -109,7 +126,7 @@ export default function SegmentDetailPage({ params }: { params: { id: string } }
             <textarea 
               name="beschreibung" 
               rows={4}
-              defaultValue={segment.beschreibung}
+              defaultValue={segment.beschreibung ?? undefined}
               className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

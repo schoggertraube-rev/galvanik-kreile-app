@@ -2,9 +2,14 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Save, Send } from "lucide-react";
+import { Plus, Trash2, Save } from "lucide-react";
 import { createRechnungAction } from "@/app/buchhaltung/actions";
 import { AusgangsrechnungPosition } from "@/lib/buchhaltung/types";
+
+type EditablePositionChange =
+  | { field: "beschreibung"; value: string }
+  | { field: "menge"; value: number }
+  | { field: "einzelpreisNetto"; value: number };
 
 export function RechnungForm() {
   const router = useRouter();
@@ -42,9 +47,16 @@ export function RechnungForm() {
     }
   };
 
-  const handleChangePosition = (index: number, field: keyof AusgangsrechnungPosition, value: any) => {
+  const handleChangePosition = (index: number, change: EditablePositionChange) => {
     const newPos = [...positionen];
-    newPos[index] = { ...newPos[index], [field]: value };
+    const position = newPos[index];
+    if (change.field === "beschreibung") {
+      newPos[index] = { ...position, beschreibung: change.value };
+    } else if (change.field === "menge") {
+      newPos[index] = { ...position, menge: change.value };
+    } else {
+      newPos[index] = { ...position, einzelpreisNetto: change.value };
+    }
     setPositionen(newPos);
   };
 
@@ -87,8 +99,9 @@ export function RechnungForm() {
 
         await createRechnungAction(fd, positionen);
         router.push("/buchhaltung/rechnungen");
-      } catch (err: any) {
-        setError(err.message || "Fehler beim Speichern der Rechnung.");
+      } catch (err: unknown) {
+        const message = err && typeof err === "object" && "message" in err ? String(err.message) : undefined;
+        setError(message || "Fehler beim Speichern der Rechnung.");
       }
     });
   };
@@ -191,7 +204,7 @@ export function RechnungForm() {
               <input
                 type="text"
                 value={pos.beschreibung}
-                onChange={e => handleChangePosition(index, "beschreibung", e.target.value)}
+                onChange={e => handleChangePosition(index, { field: "beschreibung", value: e.target.value })}
                 placeholder="Beschreibung..."
                 className="w-full bg-white border border-neutral-200 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-navy-900"
                 required
@@ -202,7 +215,7 @@ export function RechnungForm() {
                 min="0.01"
                 step="0.01"
                 value={pos.menge}
-                onChange={e => handleChangePosition(index, "menge", Number(e.target.value))}
+                onChange={e => handleChangePosition(index, { field: "menge", value: Number(e.target.value) })}
                 className="w-full bg-white border border-neutral-200 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-navy-900"
                 required
               />
@@ -211,7 +224,7 @@ export function RechnungForm() {
                 min="0.01"
                 step="0.01"
                 value={pos.einzelpreisNetto}
-                onChange={e => handleChangePosition(index, "einzelpreisNetto", Number(e.target.value))}
+                onChange={e => handleChangePosition(index, { field: "einzelpreisNetto", value: Number(e.target.value) })}
                 className="w-full bg-white border border-neutral-200 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-navy-900"
                 required
               />

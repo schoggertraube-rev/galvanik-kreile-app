@@ -5,7 +5,7 @@ import { useState, useCallback } from 'react'
 export interface OfflineAction {
   id: string
   type: string
-  payload: any
+  payload: unknown
   timestamp: string
   status: 'pending' | 'syncing' | 'failed' | 'completed'
 }

@@ -6,8 +6,7 @@ import { useState } from "react";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { getBuchhaltungProvider } from "@/lib/buchhaltung";
-import { ChevronRight, Download, FileText, Briefcase, CheckCircle2, ArrowLeft, FolderArchive, Table, FileSpreadsheet, TrendingUp, CalendarClock, Banknote, Info } from "lucide-react";
+import { ChevronRight, Download, FileText, CheckCircle2, ArrowLeft, FolderArchive, FileSpreadsheet, TrendingUp, CalendarClock, Banknote, Info } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 // ── Mock Preview Data ────────────────────────────────────────────────────
@@ -379,14 +378,13 @@ function FristRow({ titel, frist, status }: { titel: string; frist: string; stat
   );
 }
 
-export function ExportClient({ initialFormat, previewData }: { initialFormat: string, previewData: any }) {
+export function ExportClient({ initialFormat, previewData }: { initialFormat: string, previewData: { header: string; rows: string[]; csv: string } }) {
+  void initialFormat;
   return (
     <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><div className="w-8 h-8 border-3 border-accent-orange/20 border-t-accent-orange rounded-full animate-spin" /></div>}>
       <ExportContent previewData={previewData} />
     </Suspense>
   );
 }
-
-
 
 

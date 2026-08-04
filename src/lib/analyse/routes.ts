@@ -1,7 +1,9 @@
 import { AnalyseEntityLink, AnalyseTileKey } from "./dataContracts";
 
+type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
 // URL builder for returns
-export function getAnalyseReturnTo(tileKey: AnalyseTileKey, period: string, filters?: any): string {
+export function getAnalyseReturnTo(tileKey: AnalyseTileKey, period: string, filters?: Record<string, JsonValue>): string {
   const searchParams = new URLSearchParams();
   searchParams.set("tile", tileKey);
   searchParams.set("period", period);

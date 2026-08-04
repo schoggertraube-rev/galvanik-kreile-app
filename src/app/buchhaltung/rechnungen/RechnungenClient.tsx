@@ -4,11 +4,13 @@ import { BackButton } from "@/components/ui/BackButton";
 import { usePageView } from "@/hooks/usePageView";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, Filter, AlertTriangle, CheckCircle2, FileText, Download } from "lucide-react";
+import { ChevronRight, Filter, AlertTriangle, CheckCircle2, FileText } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { Ausgangsrechnung } from "@/lib/buchhaltung/types";
 
-export function RechnungenClient({ initialRechnungen, offeneSumme, ueberfaelligSumme }: { initialRechnungen: Ausgangsrechnung[], offeneSumme: number, ueberfaelligSumme: number, initialFilter: any }) {
+type RechnungenSearchParams = Record<string, string | string[] | undefined>;
+
+export function RechnungenClient({ initialRechnungen, offeneSumme, ueberfaelligSumme }: { initialRechnungen: Ausgangsrechnung[], offeneSumme: number, ueberfaelligSumme: number, initialFilter: RechnungenSearchParams }) {
   usePageView();
   const router = useRouter();
   const searchParams = useSearchParams();

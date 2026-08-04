@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { getCompanySettings, updateCompanySettings } from "@/app/actions/company.actions";
 import { CompanySettings } from "@/lib/repositories/companySettingsRepository";
 import { Loader2, Save, Upload, Building2, Mail } from "lucide-react";
@@ -89,7 +90,7 @@ export function CompanySettingsForm() {
           <div className="md:col-span-2 flex flex-col sm:flex-row items-center sm:items-start gap-6 bg-neutral-gray-50 p-6 rounded-2xl border border-neutral-gray-100">
             <div className="w-32 h-32 bg-white rounded-xl border border-neutral-gray-200 flex items-center justify-center shrink-0 overflow-hidden shadow-sm p-2">
               {logoUrl ? (
-                <img src={logoUrl} alt="Firmenlogo" className="w-full h-full object-contain" />
+                <Image src={logoUrl} alt="Firmenlogo" width={128} height={128} unoptimized className="w-full h-full object-contain" />
               ) : (
                 <span className="text-xs text-text-muted">Kein Logo</span>
               )}

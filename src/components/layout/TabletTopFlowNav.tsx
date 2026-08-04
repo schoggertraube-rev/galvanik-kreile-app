@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { Home, PackageCheck, ClipboardList, Users, ShieldCheck, Factory, Archive, BarChart3 } from "lucide-react";
+import { Home, PackageCheck, ClipboardList, Users, ShieldCheck, Factory, BarChart3 } from "lucide-react";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 export function TabletTopFlowNav({ className = "" }: { className?: string }) {

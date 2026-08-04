@@ -26,6 +26,7 @@ export type TileProps = {
 };
 
 export function Tile({ title, description, icon, iconColor, href, kpi, status, footer, analyseLink, onClick, datenherkunft }: TileProps) {
+  void iconColor;
   const router = useRouter();
   const statusColors = {
     action: "bg-red-50 text-red-600 border-red-100",
@@ -92,7 +93,7 @@ export function Tile({ title, description, icon, iconColor, href, kpi, status, f
 
   if (href && analyseLink) {
     return (
-      <div className={cls} onClick={(e) => { if (onClick) onClick(); else router.push(href); }}>
+      <div className={cls} onClick={() => { if (onClick) onClick(); else router.push(href); }}>
         <div className="absolute -right-2 -bottom-2 pointer-events-none opacity-[0.06] transform scale-[7] -rotate-12 origin-bottom-right">
           {icon}
         </div>

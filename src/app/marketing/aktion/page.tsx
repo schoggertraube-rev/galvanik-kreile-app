@@ -5,10 +5,12 @@ import { BackButton } from "@/components/ui/BackButton";
 import { useEffect, useState } from "react";
 import { getAktionen, changeAktionStatus } from "./actions";
 import Link from "next/link";
-import { PlusCircle, Search, Play, CheckCircle, Clock } from "lucide-react";
+import { PlusCircle, Play, CheckCircle, Clock } from "lucide-react";
+
+type Aktion = Awaited<ReturnType<typeof getAktionen>>[number];
 
 export default function AktionenPage() {
-  const [aktionen, setAktionen] = useState<any[]>([]);
+  const [aktionen, setAktionen] = useState<Aktion[]>([]);
   const [loading, setLoading] = useState(true);
 
   async function loadData() {
@@ -23,7 +25,10 @@ export default function AktionenPage() {
   }
 
   useEffect(() => {
-    loadData();
+    void getAktionen()
+      .then(setAktionen)
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, []);
 
   async function updateStatus(id: string, status: string) {

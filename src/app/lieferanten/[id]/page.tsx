@@ -5,8 +5,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import React from 'react';
 import { use } from 'react';
 import Link from 'next/link';
-import { AppBackButton } from '@/components/ui/AppBackButton';
-import { Building2, Package, FileText, ArrowLeft } from 'lucide-react';
+import { Building2, Package, FileText } from 'lucide-react';
 
 export default function LieferantenDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);

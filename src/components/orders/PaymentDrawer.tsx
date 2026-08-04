@@ -1,16 +1,32 @@
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { X, CreditCard, ExternalLink, QrCode } from 'lucide-react';
 import { paymentProvider } from '@/lib/payments/mollieAdapter';
-import { supabase } from '@/lib/supabase/client';
 
-export function PaymentDrawer({ orderData, onClose }: { orderData: any, onClose: () => void }) {
+type PaymentLine = {
+  unitTotalEur?: number | string | null;
+};
+
+type PaymentOrderData = {
+  id?: string;
+  orderNumber?: string;
+  customerId?: string;
+  priceLines?: PaymentLine[];
+};
+
+export function PaymentDrawer({ orderData, onClose }: { orderData: PaymentOrderData; onClose: () => void }) {
   const [loading, setLoading] = useState(false);
   const [checkoutUrl, setCheckoutUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const totalValue = (orderData.priceLines || []).reduce((sum: number, line: any) => sum + Number(line.unitTotalEur || 0), 0);
+  const totalValue = (orderData.priceLines ?? []).reduce((sum, line) => sum + Number(line.unitTotalEur || 0), 0);
 
   const handleGenerateLink = async () => {
+    if (!orderData.id) {
+      setError("Für diese Zahlung fehlt eine Auftragsreferenz.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     const res = await paymentProvider.createPaymentIntent({
@@ -75,7 +91,7 @@ export function PaymentDrawer({ orderData, onClose }: { orderData: any, onClose:
             <div className="space-y-4 animate-in fade-in zoom-in duration-300">
               <div className="p-4 bg-white rounded-xl border border-[var(--ci-border)] flex items-center justify-center">
                 {/* Fallback QR if no library used, just showing a placeholder or linking to a free API for now */}
-                <img src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(checkoutUrl)}`} alt="Zahlung QR Code" className="w-48 h-48"/>
+                <Image src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(checkoutUrl)}`} alt="Zahlung QR Code" width={200} height={200} unoptimized className="w-48 h-48"/>
               </div>
               <p className="text-center text-sm text-[var(--ci-ink-3)]">
                 Kunde scannt den Code mit seinem Smartphone.

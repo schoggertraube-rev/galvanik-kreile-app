@@ -7,9 +7,10 @@ import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { unstable_noStore as noStore } from "next/cache";
+import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
 // DTO Typen (zur Vereinfachung)
-export type OrderResponse = Record<string, unknown>;
+export type OrderResponse = OperationalOrder;
 
 export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
   noStore();
@@ -19,7 +20,7 @@ export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
   try {
     const { getOperationalOrders } = await import("@/lib/server/operationalOrders");
     const data = await getOperationalOrders();
-    return { ok: true, data: data as OrderResponse[] };
+    return { ok: true, data };
   } catch (error: unknown) {
     console.error("[DB_ERROR_DETAIL]", error);
     return { ok: false, error: "DB_ERROR", message: "Fehler beim Laden der Aufträge", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
@@ -496,4 +497,3 @@ export async function createOrderFromScan(params: {
     };
   }
 }
-

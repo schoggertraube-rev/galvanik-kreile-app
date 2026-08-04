@@ -2,22 +2,21 @@
 
 import { useState, useEffect } from "react";
 import { Crown, Loader2, Phone, Mail, FileText, ArrowRight, TrendingUp } from "lucide-react";
-import { getTopKunden, getKundenDetails, getInaktiveKunden } from "../actions";
+import { getTopKunden, getKundenDetails, getInaktiveKunden, type KundeClvDetail, type KundeClvKachelRow, type KundenDetailAuftrag } from "../actions";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 export function TopKundenKachel() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<KundeClvKachelRow[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
-  const [customerDetails, setCustomerDetails] = useState<any>(null);
+  const [customerDetails, setCustomerDetails] = useState<{ clv: KundeClvDetail | null; letzeAuftraege: KundenDetailAuftrag[] } | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   
   const [inaktiveDrawerOpen, setInaktiveDrawerOpen] = useState(false);
-  const [inaktiveKunden, setInaktiveKunden] = useState<any[]>([]);
+  const [inaktiveKunden, setInaktiveKunden] = useState<KundeClvKachelRow[]>([]);
   const [inaktiveLoading, setInaktiveLoading] = useState(false);
   
   const router = useRouter();
@@ -123,7 +122,7 @@ export function TopKundenKachel() {
         onClose={() => setSelectedCustomerId(null)}
         title={customerDetails?.clv?.name || "Kundenprofil laden..."}
       >
-        {detailsLoading || !customerDetails ? (
+        {detailsLoading || !customerDetails || !customerDetails.clv ? (
           <div className="flex h-40 items-center justify-center">
             <Loader2 className="w-8 h-8 animate-spin text-navy-500" />
           </div>
@@ -152,7 +151,7 @@ export function TopKundenKachel() {
                 </div>
                 <div>
                   <div className="text-xs text-text-muted mb-1">DB-Marge</div>
-                  <div className="font-bold text-lg">{(customerDetails.clv.db_marge_prozent * 100).toFixed(1)} %</div>
+                  <div className="font-bold text-lg">{customerDetails.clv.db_marge === null ? '—' : `${(customerDetails.clv.db_marge * 100).toFixed(1)} %`}</div>
                 </div>
                 <div>
                   <div className="text-xs text-text-muted mb-1">Aufträge gesamt</div>
@@ -167,12 +166,12 @@ export function TopKundenKachel() {
                 <p className="text-sm text-text-muted">Keine Aufträge vorhanden.</p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {customerDetails.letzeAuftraege.map((o: any) => (
+                  {customerDetails.letzeAuftraege.map((o: KundenDetailAuftrag) => (
                     <div key={o.id} className="flex justify-between items-center p-3 hover:bg-neutral-gray-50 rounded-lg cursor-pointer border border-transparent hover:border-neutral-gray-200"
                       onClick={() => router.push(`/orders/${o.id}`)}>
                       <div className="flex flex-col">
                         <span className="font-bold text-navy-900 text-sm">{o.order_number}</span>
-                        <span className="text-xs text-text-muted">{new Date(o.intake_date).toLocaleDateString()}</span>
+                        <span className="text-xs text-text-muted">{new Date(o.intake_date ?? 0).toLocaleDateString()}</span>
                       </div>
                       <div className="flex items-center gap-4">
                         <span className="font-semibold text-sm">€ {o.umsatz.toLocaleString('de-DE', { maximumFractionDigits: 0 })}</span>
@@ -231,7 +230,7 @@ export function TopKundenKachel() {
                     <div className="flex justify-between items-start">
                       <div>
                         <h4 className="font-bold text-navy-900">{k.name}</h4>
-                        <p className="text-xs text-text-muted">Letzter Auftrag: {new Date(k.letzter_auftrag).toLocaleDateString()}</p>
+                        <p className="text-xs text-text-muted">Letzter Auftrag: {new Date(k.letzter_auftrag ?? 0).toLocaleDateString()}</p>
                       </div>
                       <div className="text-right">
                         <div className="font-semibold text-sm">€ {k.umsatz_gesamt?.toLocaleString('de-DE', { maximumFractionDigits: 0 })}</div>

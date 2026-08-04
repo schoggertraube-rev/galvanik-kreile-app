@@ -2,9 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { getCustomerSimilarOrders } from '@/features/customers/customer-card/customerCard.actions';
 import { useOverlayStore } from '@/lib/overlayStore';
 import { Loader2, History, ChevronRight } from 'lucide-react';
+import type { InferSelectModel } from 'drizzle-orm';
+import { orders } from '@/db/schema';
+
+type CustomerOrder = InferSelectModel<typeof orders>;
 
 export function CustomerHistorySimilarTab({ customerId }: { customerId: string }) {
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<CustomerOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const openOrder = useOverlayStore(state => state.openOrder);
 

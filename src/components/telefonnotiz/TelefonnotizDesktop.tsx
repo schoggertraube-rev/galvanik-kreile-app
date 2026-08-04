@@ -4,12 +4,45 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Phone, Edit2, Mic, MicOff, X, Check, ChevronRight, Clock, Zap, AlertTriangle, Package, CreditCard, Calendar, User, FileText, Activity, ArrowLeft, Mail, Image as ImageIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePhoneNoteAnalysis, AnalysisResult } from "@/hooks/usePhoneNoteAnalysis";
+import { usePhoneNoteAnalysis, type AnalysisResult, type LivePhoneAction } from "@/hooks/usePhoneNoteAnalysis";
 import { useLiveContext } from "@/hooks/useLiveContext";
 import { useAutosaveDraft } from "@/hooks/useAutosaveDraft";
 import { createPhoneNote } from "@/app/actions/phoneNotes.actions";
 import { useParkedCall } from "@/contexts/ParkedCallContext";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
+
+type BrowserSpeechRecognitionResultEvent = {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+};
+
+type BrowserSpeechRecognitionErrorEvent = {
+  error: string;
+};
+
+type BrowserSpeechRecognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: BrowserSpeechRecognitionResultEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: BrowserSpeechRecognitionErrorEvent) => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type BrowserSpeechRecognitionConstructor = new () => BrowserSpeechRecognition;
+
+type SpeechRecognitionWindow = Window & {
+  SpeechRecognition?: BrowserSpeechRecognitionConstructor;
+  webkitSpeechRecognition?: BrowserSpeechRecognitionConstructor;
+};
+
+function getSpeechRecognitionConstructor(): BrowserSpeechRecognitionConstructor | undefined {
+  if (typeof window === "undefined") return undefined;
+  const speechWindow = window as SpeechRecognitionWindow;
+  return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+}
 
 /* ===== Step definitions ===== */
 const STEPS = [
@@ -67,8 +100,7 @@ export function TelefonnotizDesktop() {
   const [showSaveSheet, setShowSaveSheet] = useState(false);
   const [showExitDialog, setShowExitDialog] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [isSaving, setIsSaving] = useState(false);
+  const [, setIsSaving] = useState(false);
   const [showUndo, setShowUndo] = useState(false);
   const [showReminder, setShowReminder] = useState(false);
   const [reminderTime, setReminderTime] = useState("Heute 17:00");
@@ -91,14 +123,9 @@ export function TelefonnotizDesktop() {
   // ===== SPEECH RECOGNITION (Stable) =====
   const [recordingWanted, setRecordingWanted] = useState(false);
   const [speechError, setSpeechError] = useState<string | null>(null);
-  const [speechSupported] = useState(() => {
-    if (typeof window === "undefined") return false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
-  });
+  const [speechSupported] = useState(() => Boolean(getSpeechRecognitionConstructor()));
   const recordingWantedRef = useRef(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
 
   function startRecognitionSafely() {
     if (!recognitionRef.current) return;
@@ -113,8 +140,7 @@ export function TelefonnotizDesktop() {
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const SpeechRecognition = getSpeechRecognitionConstructor();
       if (!SpeechRecognition) {
         return;
       }
@@ -124,8 +150,7 @@ export function TelefonnotizDesktop() {
       recognition.interimResults = true;
       recognition.lang = "de-DE";
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: BrowserSpeechRecognitionResultEvent) => {
         let finalTranscript = "";
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
@@ -148,8 +173,7 @@ export function TelefonnotizDesktop() {
         }
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      recognition.onerror = (event: any) => {
+      recognition.onerror = (event: BrowserSpeechRecognitionErrorEvent) => {
         console.error("Speech recognition error:", event.error);
         if (event.error === "not-allowed" || event.error === "audio-capture") {
           recordingWantedRef.current = false;
@@ -253,7 +277,7 @@ export function TelefonnotizDesktop() {
     setStep(3);
   }, [text]);
 
-  const handleLiveActionClick = useCallback((action: any) => {
+  const handleLiveActionClick = useCallback((action: LivePhoneAction) => {
     if (action.type === "create_order") {
       const draftId = `draft_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       
@@ -272,11 +296,6 @@ export function TelefonnotizDesktop() {
       
       sessionStorage.setItem(draftId, JSON.stringify(draftPayload));
       
-      const query = new URLSearchParams({
-        mode: "new-order",
-        source: "phone-note",
-        draftId
-      });
       openErfassung({ mode: "order", intent: "create_order", source: "phone", prefill: { rawText: text } });
     } else if (action.type === "create_customer") {
       openErfassung({ mode: "customer", intent: "create_customer", source: "phone", prefill: { rawText: text } });
@@ -285,7 +304,7 @@ export function TelefonnotizDesktop() {
     } else if (action.type === "prepare_quote") {
       alert("Angebotsmodul öffnet sich (Mock)");
     }
-  }, [router]);
+  }, [openErfassung, text]);
 
   const handleSave = useCallback(async (saveMode: "auto" | "park") => {
     setIsSaving(true);
@@ -333,7 +352,7 @@ export function TelefonnotizDesktop() {
     } finally {
       setIsSaving(false);
     }
-  }, [text, result, clearDraft, parkCall, returnPath, router]);
+  }, [text, result, clearDraft, parkCall, returnPath, router, quelleTyp]);
 
   const handleExit = useCallback(() => {
     if (text.trim() && step < 4) {
@@ -960,7 +979,7 @@ export function TelefonnotizDesktop() {
               <div style={{ background: "white", border: "1px solid var(--tn-line)", borderRadius: 8, padding: 12 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>Bilder zum Auftrag</div>
                 <div style={{ fontSize: 11, color: "var(--tn-ink-soft)", marginBottom: 10, lineHeight: 1.4 }}>
-                  "Guten Tag, anbei wie besprochen die Bilder der Teile. Können Sie diese noch retten?"
+                  &quot;Guten Tag, anbei wie besprochen die Bilder der Teile. Können Sie diese noch retten?&quot;
                 </div>
                 
                 {/* Mock Attachment */}
@@ -1129,7 +1148,7 @@ export function TelefonnotizDesktop() {
               <div>
                 <h4 style={{ fontFamily: "'Manrope', sans-serif", fontSize: 13, fontWeight: 600, margin: 0, marginBottom: 2 }}>Automatisch verarbeiten</h4>
                 <div style={{ fontSize: 11, color: "rgba(250,246,238,0.6)", lineHeight: 1.4 }}>
-                  {result?.liveActions.filter((a: any) => a.source === "database" || a.priority === "high").length || 0} grüne Aktionen sofort anwenden
+                  {result?.liveActions.filter((action) => action.source === "database" || action.priority === "high").length || 0} grüne Aktionen sofort anwenden
                 </div>
               </div>
               <ChevronRight size={14} style={{ opacity: 0.5 }} />
@@ -1284,7 +1303,7 @@ export function TelefonnotizDesktop() {
                   <div style={{ background: "var(--tn-blue-soft)", color: "var(--tn-blue)", padding: "4px 8px", borderRadius: 4, fontSize: 10, fontWeight: 700, alignSelf: "flex-start" }}>Posteingang</div>
                 </div>
                 <p style={{ fontSize: 13, lineHeight: 1.5, color: "var(--tn-ink)", margin: 0 }}>
-                  "Guten Tag, anbei wie telefonisch besprochen die Bilder der beschädigten Teile. Können Sie diese noch retten und neu versilbern? Bitte um kurze Rückmeldung bezüglich Preis und Dauer."
+                  &quot;Guten Tag, anbei wie telefonisch besprochen die Bilder der beschädigten Teile. Können Sie diese noch retten und neu versilbern? Bitte um kurze Rückmeldung bezüglich Preis und Dauer.&quot;
                 </p>
                 <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
                   <button onClick={() => alert("Bildvorschau öffnet sich")} style={{ display: "flex", alignItems: "center", gap: 8, background: "white", border: "1px solid var(--tn-line)", borderRadius: 6, padding: "8px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>

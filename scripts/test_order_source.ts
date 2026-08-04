@@ -1,8 +1,6 @@
 import { createOrderFromErfassung } from "../src/app/actions/erfassung.actions";
-import { VALID_ORDER_SOURCES } from "../src/lib/validation/orderSchema";
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
-import { db } from "../src/db";
 
 async function runTests() {
   console.log("Starte Validierungstests für source-Feld...");
@@ -10,7 +8,9 @@ async function runTests() {
   let passed = 0;
   let failed = 0;
 
-  const runTest = async (name: string, payload: any, expectedError: boolean, expectedSourceVal?: string) => {
+  type SourceTestPayload = { source?: string | null };
+
+  const runTest = async (name: string, payload: SourceTestPayload, expectedError: boolean, expectedSourceVal?: string) => {
     const result = await createOrderFromErfassung({
       customerId: "test-customer",
       title: "Test Auftrag",

@@ -5,7 +5,7 @@ import { usePageView } from "@/hooks/usePageView";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ChevronRight, CreditCard, QrCode, Smartphone, BarChart3, Lock, Info, Globe, Users, TrendingUp, ArrowLeft } from "lucide-react";
+import { ChevronRight, CreditCard, QrCode, Smartphone, BarChart3, Lock, Info, Globe, Users, ArrowLeft } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { useState } from "react";
 import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
@@ -18,12 +18,24 @@ const TABS = [
   { id: "statistik", label: "Statistik", icon: Globe },
 ];
 
-const MOCK_MORAL: any[] = [];
+type ZahlungsmoralRow = {
+  kundeId: string;
+  kunde: string;
+  auftragId: string;
+  letzteRechnung: string;
+  tage: number;
+  color: string;
+  status: string;
+};
+type ZahlungsartenRow = { icon: string; art: string; betrag: number; anteil: number };
+type DienstleisterRow = { name: string; anteil: number; volumen: string };
+type HerkunftRow = { land: string; kunden: number; anteil: number };
 
+const MOCK_MORAL: ZahlungsmoralRow[] = [];
 const MOCK_STATISTIK = {
-  zahlungsarten: [] as any[],
-  herkunft: [] as any[],
-  dienstleister: [] as any[],
+  zahlungsarten: [] as ZahlungsartenRow[],
+  herkunft: [] as HerkunftRow[],
+  dienstleister: [] as DienstleisterRow[],
 };
 
 function ZahlungContent() {

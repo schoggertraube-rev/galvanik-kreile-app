@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Link from 'next/link';
 import { Database, ChevronRight } from 'lucide-react';
 import { createPortal } from 'react-dom';
 
@@ -86,7 +87,7 @@ export function DatenherkunftZeile({
               {!hasData ? (
                 <div className="text-center py-12 text-neutral-400 text-sm">
                   Noch keine Daten erfasst. <br /><br />
-                  <a href="/buchhaltung/belege" className="text-blue-600 underline font-medium">Neuen Beleg hinzufügen</a>
+                  <Link href="/buchhaltung/belege" className="text-blue-600 underline font-medium">Neuen Beleg hinzufügen</Link>
                 </div>
               ) : (
                 <div>

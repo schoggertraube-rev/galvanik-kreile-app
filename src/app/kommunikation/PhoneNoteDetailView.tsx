@@ -8,12 +8,20 @@ import {
 import Link from "next/link";
 import { smartMatchText, MatchResult } from "./smartMatcher";
 import { updatePhoneNote } from "@/app/actions/phoneNotes.actions";
+import type { getRecentPhoneNotes } from "@/app/actions/phoneNotes.actions";
 import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
 import { ordersRepository, type Order } from "@/lib/repositories/ordersRepository";
 import { customersRepository } from "@/lib/repositories/customersRepository";
 import { type Customer } from "@/lib/types/customer";
 
-export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: Record<string, any>, onUpdate: () => void, onClose: () => void }) {
+type PhoneNote = Awaited<ReturnType<typeof getRecentPhoneNotes>>[number];
+type MatchSource = {
+  note: PhoneNote;
+  customers: Customer[];
+  orders: Order[];
+};
+
+export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: PhoneNote, onUpdate: () => void, onClose: () => void }) {
   const [matchData, setMatchData] = useState<MatchResult | null>(null);
   const [isAssigning, setIsAssigning] = useState(false);
   const [assignForm, setAssignForm] = useState({ customerId: "", orderId: "" });
@@ -22,24 +30,29 @@ export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: Record<
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [allOrders, setAllOrders] = useState<Order[]>([]);
   const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
+  const [previousMatchSource, setPreviousMatchSource] = useState<MatchSource | null>(null);
 
-  useEffect(() => {
-    ordersRepository.getAll().then(setAllOrders).catch(() => setAllOrders([]));
-    customersRepository.getAll().then(setAllCustomers).catch(() => setAllCustomers([]));
-  }, []);
-
-  useEffect(() => {
-    if (note && note.rawText) {
+  if (
+    previousMatchSource === null ||
+    previousMatchSource.note !== note ||
+    previousMatchSource.customers !== allCustomers ||
+    previousMatchSource.orders !== allOrders
+  ) {
+    setPreviousMatchSource({ note, customers: allCustomers, orders: allOrders });
+    if (note.rawText) {
       const data = smartMatchText(note.rawText, allCustomers, allOrders);
-      // eslint-disable-next-line
       setMatchData(data);
-      // eslint-disable-next-line
       setAssignForm({
         customerId: note.customerId || data.matchedCustomer?.id || "",
         orderId: note.orderId || data.matchedOrder?.id || ""
       });
     }
-  }, [note, allCustomers, allOrders]);
+  }
+
+  useEffect(() => {
+    ordersRepository.getAll().then(setAllOrders).catch(() => setAllOrders([]));
+    customersRepository.getAll().then(setAllCustomers).catch(() => setAllCustomers([]));
+  }, []);
 
   const handleAssign = async () => {
     setAssignStatus("saving");
@@ -75,7 +88,7 @@ export function PhoneNoteDetailView({ note, onUpdate, onClose }: { note: Record<
           <div className="flex items-center gap-3 text-sm text-text-muted">
             <span className="font-medium text-navy-900">{note.callerName || "Unbekannter Anrufer"}</span>
             <span>•</span>
-            <span>{new Date(note.createdAt).toLocaleString()}</span>
+            <span>{new Date(note.createdAt ?? 0).toLocaleString()}</span>
           </div>
         </div>
         <div className="flex gap-2">

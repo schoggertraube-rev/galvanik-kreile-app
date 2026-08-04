@@ -342,8 +342,66 @@ import { checkAppAuth } from "@/lib/server/authHelper";
 import { revalidatePath } from "next/cache";
 import { VALID_ORDER_SOURCES } from "@/lib/validation/orderSchema";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function createCustomerFromErfassung(input: Record<string, any>) {
+type ErfassungCustomerInput = {
+  customerType?: string;
+  customer_type?: string;
+  name?: string;
+  firstName?: string;
+  first_name?: string;
+  lastName?: string;
+  last_name?: string;
+  company?: string;
+  contactName?: string;
+  source?: string;
+  type?: string;
+  isLead?: boolean;
+  email?: string;
+  phone?: string;
+  street?: string;
+  zipCode?: string;
+  city?: string;
+  country?: string;
+  address?: string;
+  sourceRef?: string | null;
+  notes?: string;
+  behaviorNote?: string;
+};
+
+type ErfassungOrderInput = Record<string, unknown>;
+
+type CustomerNumberRow = {
+  id: string;
+  customerNumber: string | null;
+  source: string | null;
+};
+
+function getErrorContext(error: unknown) {
+  if (typeof error !== "object" || error === null) {
+    return { message: undefined, details: undefined, hint: undefined };
+  }
+
+  const message = error instanceof Error
+    ? error.message
+    : "message" in error && typeof error.message === "string"
+      ? error.message
+      : undefined;
+
+  return {
+    message,
+    details: "details" in error ? error.details : undefined,
+    hint: "hint" in error ? error.hint : undefined,
+  };
+}
+
+function getInputString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function isInputRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export async function createCustomerFromErfassung(input: ErfassungCustomerInput) {
   console.info("[CAPTURE_CUSTOMER_START]", {
     hasInput: Boolean(input),
     customerType: input?.customerType ?? input?.customer_type,
@@ -380,7 +438,7 @@ export async function createCustomerFromErfassung(input: Record<string, any>) {
     // const pattern = `${prefix}-${year}-%`; // unused pattern removed
     const result = await db.execute(sql`SELECT id, customer_number, source FROM customers WHERE source = ${input.source}`);
     // rows are typed as any – map to expected shape
-    const allCustomers = (result as any).rows as Array<{id:string;customerNumber:string;source:string}>;
+    const allCustomers = (result as unknown as { rows: CustomerNumberRow[] }).rows;
     const existingCustomers = allCustomers.filter(c => c.customerNumber?.startsWith(`${prefix}-${year}-`));
 
     let maxNum = 0;
@@ -427,19 +485,17 @@ export async function createCustomerFromErfassung(input: Record<string, any>) {
     try { revalidatePath("/"); } catch { /* ignore when not in Next runtime */ }
     return { ok: true, customer: verify[0] };
   } catch (err: unknown) {
+    const error = getErrorContext(err);
     console.error("Failed to create customer:", {
-      message: (err as Error).message,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      details: (err as Record<string, any>).details,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      hint: (err as Record<string, any>).hint,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
     });
-    return { ok: false, error: (err as Error).message || "Failed to create customer" };
+    return { ok: false, error: error.message || "Failed to create customer" };
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function createOrderFromErfassung(input: Record<string, any>) {
+export async function createOrderFromErfassung(input: ErfassungOrderInput) {
   // Check write permissions
   const auth = await checkAppAuth("write");
   if (!auth.ok) return { ok: false, error: auth.message };
@@ -448,16 +504,26 @@ export async function createOrderFromErfassung(input: Record<string, any>) {
 
   // Validate required fields per spec
   const validationErrors: string[] = [];
-  if (!input.customerId) validationErrors.push("Kunden-ID ist erforderlich");
-  if (!input.title) validationErrors.push("Titel ist erforderlich");
+  const customerId = getInputString(input.customerId);
+  const title = getInputString(input.title);
+  const source = getInputString(input.source);
+  const priority = getInputString(input.priority);
+  const timeWindow = getInputString(input.timeWindow);
+  const freetextOriginal = getInputString(input.freetextOriginal);
+  const sourceRef = getInputString(input.sourceRef);
+  const dueDate = getInputString(input.dueDate);
+  const isQuote = input.isQuote === true;
+  const calendarSync = input.calendarSync === true;
+  if (!customerId) validationErrors.push("Kunden-ID ist erforderlich");
+  if (!title) validationErrors.push("Titel ist erforderlich");
   
-  if (!input.source) {
+  if (!source) {
     validationErrors.push("Quelle (source) ist erforderlich");
-  } else if (!VALID_ORDER_SOURCES.includes(input.source)) {
-    validationErrors.push("Ungültiger Source-Wert: " + input.source);
+  } else if (!VALID_ORDER_SOURCES.includes(source as (typeof VALID_ORDER_SOURCES)[number])) {
+    validationErrors.push("Ungültiger Source-Wert: " + source);
   }
 
-  if (validationErrors.length) {
+  if (validationErrors.length || !customerId || !title || !source) {
     return { ok: false, error: validationErrors.join(", ") };
   }
 
@@ -466,7 +532,7 @@ export async function createOrderFromErfassung(input: Record<string, any>) {
     const year = new Date().getFullYear();
 
     // Generate robust order number
-    const prefix = input.isQuote ? "KV" : "A";
+    const prefix = isQuote ? "KV" : "A";
     const pattern = `${prefix}-${year}-%`;
     const existingOrders = await db
       .select({ orderNumber: orders.orderNumber })
@@ -487,56 +553,59 @@ export async function createOrderFromErfassung(input: Record<string, any>) {
     const sequenceString = sequenceNum.toString().padStart(4, "0");
     const orderNumber = `${prefix}-${year}-${sequenceString}`;
 
-    const timeWindowStr = input.timeWindow && input.timeWindow !== 'ganztaegig' ? `\n[Termin: ${input.timeWindow}]` : '';
-    const calSyncStr = input.calendarSync ? ` [Kalender-Sync aktiv]` : '';
-    const combinedFreetext = `${input.freetextOriginal || ''}${timeWindowStr}${calSyncStr}`.trim();
+    const timeWindowStr = timeWindow && timeWindow !== 'ganztaegig' ? `\n[Termin: ${timeWindow}]` : '';
+    const calSyncStr = calendarSync ? ` [Kalender-Sync aktiv]` : '';
+    const combinedFreetext = `${freetextOriginal || ''}${timeWindowStr}${calSyncStr}`.trim();
 
     const newOrder = {
       id: orderId,
       tenantId: "galvanik-kreile",
       orderNumber,
-      customerId: input.customerId,
-      title: input.title,
+      customerId,
+      title,
       currentStationId: "wareneingang",
       status: "in_progress",
-      priorityComputed: input.priority || "green",
-      isQuote: input.isQuote || false,
-      quoteStatus: input.isQuote ? "offen" : null,
-      source: input.source,
-      sourceRef: input.sourceRef || null,
+      priorityComputed: priority || "green",
+      isQuote,
+      quoteStatus: isQuote ? "offen" : null,
+      source,
+      sourceRef: sourceRef || null,
       freetextOriginal: combinedFreetext || null,
-      dueDate: input.dueDate ? new Date(input.dueDate) : null,
+      dueDate: dueDate ? new Date(dueDate) : null,
     };
 
     await db.insert(orders).values(newOrder);
 
-    if (input.calendarSync && input.dueDate) {
+    if (calendarSync && dueDate) {
       await db.insert(calendarEvents).values({
         id: createId(),
         tenantId: "galvanik-kreile",
         orderId: orderId,
-        customerId: input.customerId,
-        title: `Abgabe/Lieferung: ${input.title}`,
+        customerId,
+        title: `Abgabe/Lieferung: ${title}`,
         eventType: "delivery",
-        startsAt: new Date(input.dueDate),
-        timeSlot: input.timeWindow || "ganztaegig",
+        startsAt: new Date(dueDate),
+        timeSlot: timeWindow || "ganztaegig",
         status: "planned",
-        source: input.source,
+        source,
       });
     }
 
-    if (input.items && Array.isArray(input.items) && input.items.length > 0) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const newItems = input.items.map((p: Record<string, any>) => ({
+    const inputItems = Array.isArray(input.items) ? input.items : [];
+    if (inputItems.length > 0) {
+      const newItems = inputItems.map((item) => {
+        const p = isInputRecord(item) ? item : {};
+        return {
         id: createId(),
         tenantId: "galvanik-kreile",
         orderId,
-        customerId: input.customerId,
-        name: p.name || "Unbekanntes Teil",
-        quantity: parseInt(p.quantity) || 1,
+        customerId,
+        name: getInputString(p.name) || "Unbekanntes Teil",
+        quantity: parseInt(String(p.quantity)) || 1,
         currentStationId: "wareneingang",
-        surfaceRequested: p.surfaceRequested || p.surface || p.finish || p.verfahren || null,
-      }));
+        surfaceRequested: getInputString(p.surfaceRequested) || getInputString(p.surface) || getInputString(p.finish) || getInputString(p.verfahren) || null,
+      };
+      });
       await db.insert(items).values(newItems);
     }
 
@@ -545,7 +614,7 @@ export async function createOrderFromErfassung(input: Record<string, any>) {
       tenantId: "galvanik-kreile",
       orderId,
       eventType: "ORDER_CREATED",
-      description: input.isQuote ? "KV erstellt" : "Auftrag erstellt",
+      description: isQuote ? "KV erstellt" : "Auftrag erstellt",
       station: "wareneingang",
     });
 
@@ -564,13 +633,12 @@ export async function createOrderFromErfassung(input: Record<string, any>) {
 
     return { ok: true, order: verify[0] };
   } catch (err: unknown) {
+    const error = getErrorContext(err);
     console.error("Failed to create order:", {
-      message: (err as Error).message,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      details: (err as Record<string, any>).details,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      hint: (err as Record<string, any>).hint,
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
     });
-    return { ok: false, error: (err as Error).message || "Failed to create order" };
+    return { ok: false, error: error.message || "Failed to create order" };
   }
 }

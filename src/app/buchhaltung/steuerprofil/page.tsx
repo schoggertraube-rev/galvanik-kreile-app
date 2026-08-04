@@ -6,7 +6,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { getBuchhaltungProvider } from "@/lib/buchhaltung";
 import type { Steuerprofil, UstvaWerte } from "@/lib/buchhaltung/types";
-import { ChevronRight, Banknote, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
+import { ChevronRight, CheckCircle2, AlertCircle, ArrowRight } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 export default function SteuerprofilPage() {

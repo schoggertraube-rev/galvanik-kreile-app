@@ -5,12 +5,11 @@
  * Desktop: right-docked 720px. Tablet: 70%. Mobile: fullscreen.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { KPI_REGISTRY } from "@/lib/analytics/kpiRegistry";
 import { fetchKpiSnapshot, type KpiSnapshot, type DataStatus } from "@/lib/analytics/analyticsDataService";
 import type { PeriodType } from "@/lib/analytics/plainLanguage";
-import { PERIOD_LABELS } from "@/lib/analytics/plainLanguage";
 import { DrillCategoryHeader } from "./DrillCategoryHeader";
 import { DrillHero } from "./DrillHero";
 import { DrillChart } from "./DrillChart";
@@ -26,49 +25,68 @@ interface AnalyticsDrillDrawerProps {
   onPeriodChange: (p: PeriodType) => void;
 }
 
+interface KpiRequestSnapshot {
+  key: string;
+  status: DataStatus;
+  snapshot: KpiSnapshot | null;
+  error: string | null;
+}
+
+const subscribeToBrowser = () => () => {};
+const getBrowserSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 export function AnalyticsDrillDrawer({
   kpiId,
   period,
   onClose,
   onPeriodChange,
 }: AnalyticsDrillDrawerProps) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(subscribeToBrowser, getBrowserSnapshot, getServerSnapshot);
   const [visible, setVisible] = useState(false);
-  const [status, setStatus] = useState<DataStatus>("loading");
-  const [snapshot, setSnapshot] = useState<KpiSnapshot | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [request, setRequest] = useState<KpiRequestSnapshot | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
   const drawerRef = useRef<HTMLDivElement>(null);
 
   const kpi = KPI_REGISTRY[kpiId];
+  const requestKey = `${kpiId}:${period}:${retryNonce}`;
+  const activeRequest = request?.key === requestKey ? request : null;
+  const status = activeRequest?.status ?? "loading";
+  const snapshot = activeRequest?.snapshot ?? null;
+  const error = activeRequest?.error ?? null;
 
   // Mount + animate in
   useEffect(() => {
-    setMounted(true);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => setVisible(true));
+    let innerFrame: number | undefined;
+    const outerFrame = requestAnimationFrame(() => {
+      innerFrame = requestAnimationFrame(() => setVisible(true));
     });
-    return () => setMounted(false);
+    return () => {
+      cancelAnimationFrame(outerFrame);
+      if (innerFrame !== undefined) cancelAnimationFrame(innerFrame);
+    };
   }, []);
 
   // Fetch real data
   useEffect(() => {
     let cancelled = false;
-    setStatus("loading");
-    setError(null);
 
-    fetchKpiSnapshot(kpiId).then((result) => {
+    void fetchKpiSnapshot(kpiId).then((result) => {
       if (cancelled) return;
       if (result.status === "ok" && result.data) {
-        setSnapshot(result.data);
-        setStatus("ok");
+        setRequest({ key: requestKey, status: "ok", snapshot: result.data, error: null });
       } else {
-        setError(result.message || "Daten konnten nicht geladen werden.");
-        setStatus(result.status);
+        setRequest({
+          key: requestKey,
+          status: result.status,
+          snapshot: null,
+          error: result.message || "Daten konnten nicht geladen werden.",
+        });
       }
     });
 
     return () => { cancelled = true; };
-  }, [kpiId, period]);
+  }, [kpiId, requestKey]);
 
   // Lock body scroll
   useEffect(() => {
@@ -76,20 +94,23 @@ export function AnalyticsDrillDrawer({
     return () => { document.body.style.overflow = ""; };
   }, []);
 
+  const handleClose = useCallback(() => {
+    setVisible(false);
+    setTimeout(onClose, 200);
+  }, [onClose]);
+
   // ESC to close
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
+      if (e.key === "Escape") {
+        handleClose();
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [handleClose]);
 
-  const handleClose = () => {
-    setVisible(false);
-    setTimeout(onClose, 200);
-  };
+  const retry = () => setRetryNonce(nonce => nonce + 1);
 
   if (!mounted || !kpi) return null;
 
@@ -170,7 +191,7 @@ export function AnalyticsDrillDrawer({
               }}>
                 <strong>Fehler:</strong> {error}
                 <button
-                  onClick={() => { setStatus("loading"); fetchKpiSnapshot(kpiId).then((r) => { if (r.status === "ok" && r.data) { setSnapshot(r.data); setStatus("ok"); } }); }}
+                  onClick={retry}
                   style={{
                     marginTop: 8, display: "block",
                     padding: "6px 14px", borderRadius: 7,

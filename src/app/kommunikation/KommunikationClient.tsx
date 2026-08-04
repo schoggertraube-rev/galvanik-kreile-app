@@ -10,19 +10,17 @@ import {
   Archive, PhoneForwarded, CheckSquare, X, Paperclip, Image as ImageIcon, Sparkles
 } from "lucide-react";
 import Link from "next/link";
-import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
+import Image from "next/image";
 import { usePageView } from "@/hooks/usePageView";
 import { getRecentPhoneNotes, updatePhoneNote } from "@/app/actions/phoneNotes.actions";
-import { getOrdersDb } from "@/app/actions/orders.actions";
+import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import { getCustomersDb } from "@/app/actions/customers.actions";
 
-type Order = any; // fallback
 import { smartMatchText, MatchResult } from "./smartMatcher";
 import { useParkedCall } from "@/contexts/ParkedCallContext";
 import { ContextAnalysisOverlay, ContextAnalysisOverlayProps } from "@/components/kommunikation/ContextAnalysisOverlay";
 import { ReactivationGeneratorOverlay } from "@/components/kommunikation/ReactivationGeneratorOverlay";
 import { useCustomerOverlay } from "@/components/customers/useCustomerOverlay";
-import type { CustomerLike } from "@/lib/types/customerLike";
 import type { Customer } from "@/lib/types/customer";
 import { supabase } from '@/lib/supabase/client';
 import { Kommandozentrale } from "@/components/kommunikation/kommandozentrale/Kommandozentrale";
@@ -134,7 +132,7 @@ interface PhoneNoteData {
 }
 
   const [recentNotes, setRecentNotes] = useState<PhoneNoteData[]>([]);
-  const [allOrders, setAllOrders] = useState<Order[]>([]);
+  const [allOrders, setAllOrders] = useState<OrderResponse[]>([]);
   const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
 
 interface CustomerContact { id: string; name: string; city: string; initials: string; initialsColor: string; latestTime: string; lastChannel: Channel; openTopics: number; priority: "high" | "medium" | "low"; latestContent: string; threads: Thread[]; messages: ChatMessage[]; unread: number; isPhoneNote?: boolean; }
@@ -146,7 +144,6 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
   const { activeParkedCall, resumeCall } = useParkedCall();
   const { open: openCustomer } = useCustomerOverlay();
   const [overlayConfig, setOverlayConfig] = useState<ContextAnalysisOverlayProps | null>(null);
-  const [showCustomerOverlay, setShowCustomerOverlay] = useState<CustomerLike | null>(null);
   const [showKommandozentrale, setShowKommandozentrale] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [chatSearch, setChatSearch] = useState("");
@@ -163,7 +160,7 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
   useEffect(() => { 
     let mounted = true;
     getRecentPhoneNotes(20).then(n => { if(mounted) setRecentNotes(n); }).catch(() => { if(mounted) setRecentNotes([]); }); 
-    getOrdersDb().then(res => { if(mounted && res.ok) setAllOrders(res.data as any); }).catch(() => { if(mounted) setAllOrders([]); });
+    getOrdersDb().then(res => { if(mounted && res.ok) setAllOrders(res.data); }).catch(() => { if(mounted) setAllOrders([]); });
     getCustomersDb().then(res => { if(mounted && res.ok) setAllCustomers(res.data); }).catch(() => { if(mounted) setAllCustomers([]); });
     return () => { mounted = false; };
   }, []);
@@ -172,7 +169,7 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
   useEffect(() => {
     const channel = supabase
       .channel('communication_messages')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'communication_messages' }, payload => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'communication_messages' }, () => {
         // Refresh recent notes which include new communication messages
         getRecentPhoneNotes(20).then(n => setRecentNotes(n)).catch(() => setRecentNotes([]));
       })
@@ -696,9 +693,8 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
                     ))}
                   </div>
                   <div style={{ display: "flex", gap: 12 }}>
-                    <div style={{ marginTop: 20 }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src="/kreile_mockup_v2_bg.png" alt="" style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,.1)" }} />
+                    <div style={{ marginTop: 20, position: "relative", width: "100%", aspectRatio: "16 / 9" }}>
+                      <Image src="/kreile_mockup_v2_bg.png" alt="" fill sizes="(max-width: 768px) 100vw, 50vw" style={{ objectFit: "cover", borderRadius: 12, border: "1px solid rgba(255,255,255,.1)" }} />
                     </div>
                     <button onClick={() => setToastMessage("Backend Aktion vorbereitet.")} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all .1s" }} onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.15)")} onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,.1)")}>Alle {actionCards.length} anwenden</button>
                     <button style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.1)", background: "transparent", color: "#EDE8DD", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Einzeln prüfen</button>
@@ -807,7 +803,7 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
                     <div style={{ border: "1px solid #E5DFD3", borderRadius: 10, padding: "12px 14px", marginBottom: 8, background: "#fff", cursor: "pointer" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <span style={{ fontSize: 13, fontWeight: 800 }}>{o.orderNumber}</span>
-                        <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 6px", borderRadius: 4, textTransform: "uppercase", background: o.statusText?.toLowerCase().includes("fertig") ? "#D1FAE5" : "#FEF3C7", color: o.statusText?.toLowerCase().includes("fertig") ? "#059669" : "#92400E" }}>{o.statusText || o.status}</span>
+                        <span style={{ fontSize: 10, fontWeight: 800, padding: "2px 6px", borderRadius: 4, textTransform: "uppercase", background: o.status.toLowerCase().includes("fertig") ? "#D1FAE5" : "#FEF3C7", color: o.status.toLowerCase().includes("fertig") ? "#059669" : "#92400E" }}>{o.status}</span>
                       </div>
                       <div style={{ fontSize: 12, color: "#A09889", marginTop: 4 }}>{o.task}</div>
                     </div>

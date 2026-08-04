@@ -2,10 +2,10 @@
 
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, useRef } from "react";
-import { getOrdersDb } from "@/app/actions/orders.actions";
+import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository"; // Will keep this if no actions exist
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Order = any;
+import { useHydrated } from "@/hooks/useHydrated";
+type Order = OrderResponse;
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -76,7 +76,7 @@ export default function HomeDashboard() {
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
   const [openQuotes, setOpenQuotes] = useState(0);
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
   
   // Drilldown Overlay State
   const [activeOverlay, setActiveOverlay] = useState<{title: string, desc: string, targetLink?: string} | null>(null);
@@ -94,11 +94,6 @@ export default function HomeDashboard() {
 
   const [feedback, setFeedback] = useState("");
   const [feedbackSent, setFeedbackSent] = useState(false);
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -126,7 +121,7 @@ export default function HomeDashboard() {
       
       setTodos(newTodos);
 
-      if (dbOrders) setOrders(dbOrders as unknown as Order[]);
+      if (dbOrders) setOrders(dbOrders);
       const qCount = await inquiriesRepository.getOpenCount();
       setOpenQuotes(qCount);
     };
@@ -582,7 +577,7 @@ export default function HomeDashboard() {
                   <div className="flex-1">
                     <div className="flex justify-between items-start">
                       <button onClick={() => { openOrder(o.id); setShowCriticalOrders(false); }} className="font-bold text-navy-900 text-base hover:underline text-left">
-                        {(o as Record<string, unknown>).title || o.task || "Unbekannter Auftrag"}
+                        {o.title || o.task || "Unbekannter Auftrag"}
                       </button>
                       <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full ${o.risk === 'red' ? 'bg-red-100 text-red-700' : 'bg-gold-200 text-gold-800'}`}>
                         {o.risk === 'red' ? 'Kritisch' : 'Warnung'}
@@ -604,4 +599,3 @@ export default function HomeDashboard() {
     </>
   );
 }
-

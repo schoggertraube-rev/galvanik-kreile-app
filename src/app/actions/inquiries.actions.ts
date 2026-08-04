@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import { inquiries } from "@/db/schema";
 import { eq, count } from "drizzle-orm";
+import type { InferInsertModel } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
 import type { QuoteRequest } from "@/lib/repositories/inquiriesRepository";
 
@@ -113,7 +114,7 @@ export async function createInquiry(data: Record<string, unknown>) {
 export async function updateInquiry(id: string, changes: Partial<QuoteRequest>): Promise<QuoteRequest | null> {
   if (!db) return null;
   try {
-    const updateData: Record<string, any> = {};
+    const updateData: Partial<InferInsertModel<typeof inquiries>> = {};
     if (changes.status !== undefined) updateData.status = changes.status;
     if (changes.pricing !== undefined) updateData.pricing = changes.pricing;
     if (changes.customerName !== undefined) updateData.customerName = changes.customerName;

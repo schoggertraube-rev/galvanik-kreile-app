@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { X, Home, PackageCheck, Archive, Users, MessageSquare, ChevronDown, ChevronRight, BarChart3, Settings } from "lucide-react";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
@@ -123,8 +124,7 @@ export function MobileNav({ open, onClose }: MobileNavProps) {
         className={`fixed left-0 top-0 h-full w-72 bg-white z-50 transform transition-transform duration-300 shadow-2xl flex flex-col ${open ? 'translate-x-0' : '-translate-x-full'}`}
       >
         <div className="flex items-center justify-between p-4 px-6 border-b border-neutral-gray-100 min-h-[72px]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/assets/logo/kreile-wordmark-skyline.svg" alt="Kreile" className="h-8 w-auto" />
+          <Image src="/assets/logo/kreile-wordmark-skyline.svg" alt="Kreile" width={560} height={220} unoptimized className="h-8 w-auto" />
           <button 
             onClick={onClose}
             className="p-2 -mr-2 text-navy-500 hover:bg-neutral-gray-100 rounded-full min-h-[48px] min-w-[48px] flex items-center justify-center"

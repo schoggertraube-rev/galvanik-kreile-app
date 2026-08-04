@@ -9,7 +9,7 @@ export async function getKanaele() {
   return await db.select().from(kanal).orderBy(kanal.typ);
 }
 
-export async function updateKanalConfig(id: string, verbunden: boolean, config: any) {
+export async function updateKanalConfig(id: string, verbunden: boolean, config: Record<string, unknown>) {
   await db.update(kanal).set({
     verbunden,
     config,

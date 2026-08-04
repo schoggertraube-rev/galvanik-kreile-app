@@ -5,7 +5,7 @@ import React, { useState, useRef } from 'react';
 import Link from 'next/link';
 import { 
   Database, Users, History, FileText, FlaskConical, 
-  ScanLine, Camera, CheckCircle2, AlertTriangle, ArrowRight, Upload, Info
+  ScanLine, Camera, CheckCircle2, ArrowRight, Upload, Info
 } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
 
@@ -368,7 +368,7 @@ export function AdminImportClient() {
             className="w-full border-2 border-dashed border-navy-900/30 rounded-xl p-8 flex flex-col items-center justify-center text-navy-900 hover:bg-white hover:border-navy-900/60 transition-colors"
           >
             <Upload className="w-8 h-8 text-navy-900 mb-3" />
-            <span className="font-bold text-lg">Dateien als "{selectedCategory}" laden</span>
+            <span className="font-bold text-lg">Dateien als &quot;{selectedCategory}&quot; laden</span>
             <span className="text-sm text-text-muted mt-1">Die Dateien landen in der Warteschlange.</span>
           </button>
         </div>

@@ -6,9 +6,17 @@ import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { getL7Daten } from "@/app/buchhaltung/actions";
 import { useEffect } from "react";
 
+type L7Data = {
+  affectedAccounts: { id: string; label: string }[];
+  affectedCostCenters: { id: string; label: string }[];
+  periodImpact: string;
+  liquidityImpact: string;
+  taxImpactEur: number;
+};
+
 export function ZahlungKachel() {
   const [open, setOpen] = useState(false);
-  const [l7Data, setL7Data] = useState<any>(null);
+  const [l7Data, setL7Data] = useState<L7Data>();
 
   useEffect(() => {
     if (!open || l7Data) return;

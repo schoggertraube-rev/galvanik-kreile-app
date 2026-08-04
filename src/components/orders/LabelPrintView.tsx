@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { createPortal } from "react-dom";
 import { X, Printer, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -246,8 +247,7 @@ const QRCodeImage = ({ orderId, orderNumber }: { orderId: string; orderNumber: s
 
   return (
     <div className="flex flex-col items-center gap-0.5">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={dataUrl} alt={`QR Code for ${orderNumber}`} className="w-[80px] h-[80px] object-contain" />
+      <Image src={dataUrl} alt={`QR Code for ${orderNumber}`} width={150} height={150} unoptimized className="w-[80px] h-[80px] object-contain" />
       <span className="font-mono text-[8px] font-bold text-black">{orderNumber}</span>
     </div>
   );

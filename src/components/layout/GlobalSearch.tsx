@@ -2,13 +2,13 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { Search, Package, ChevronRight, X, Sparkles, LayoutGrid, Droplets, Activity, FileText, Receipt, Truck, User } from 'lucide-react'
+import { Search, Package, ChevronRight, X, Sparkles, LayoutGrid, Droplets, Activity, FileText, Receipt, Truck } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { findActions, buildFallbackSuggestion } from '@/lib/search/fuzzy'
 import { SEARCH_ACTIONS } from '@/lib/search/actionRegistry'
-import { getRecentSearches, addRecentSearch } from '@/lib/search/recent'
+import { addRecentSearch } from '@/lib/search/recent'
 import type { SearchSuggestion } from '@/types/search'
-import { globalSearch } from '@/app/actions/search.actions'
+import { globalSearch, type SearchResult } from '@/app/actions/search.actions'
 import { GlobalSearchAIResult } from './GlobalSearchAIResult'
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import { useCustomerOverlay } from "@/components/customers/useCustomerOverlay";
@@ -17,42 +17,45 @@ import { motion } from 'framer-motion';
 import { useGlobalSearch } from '@/features/analyse/hooks/useGlobalSearch';
 
 export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChange: (v: boolean) => void }) {
-  const router = useRouter()
-  const [searchTerm, setSearchTerm] = useState('')
-  const [activeAIQuery, setActiveAIQuery] = useState("");
-  const { openOrder } = useOrderModal();
-  const { open: openCustomer } = useCustomerOverlay();
-  const { openErfassung } = useErfassung();
-  const [globalResults, setGlobalResults] = useState<Record<string, any>[]>([]);
-  const [prevOpen, setPrevOpen] = useState(open)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  if (open !== prevOpen) {
-    setPrevOpen(open)
-    if (!open) {
-      setSearchTerm('')
-    }
-  }
-
   useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 50)
-    }
-  }, [open])
-
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
-      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
+    const down = (event: KeyboardEvent) => {
+      if (event.key === 'k' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault()
         onOpenChange(!open)
-      }
-      if (e.key === 'Escape' && open) {
-        onOpenChange(false)
       }
     }
     document.addEventListener('keydown', down)
     return () => document.removeEventListener('keydown', down)
   }, [open, onOpenChange])
+
+  if (!open) return null;
+
+  return <GlobalSearchDialog onOpenChange={onOpenChange} />;
+}
+
+function GlobalSearchDialog({ onOpenChange }: { onOpenChange: (v: boolean) => void }) {
+  const router = useRouter()
+  const [searchTerm, setSearchTerm] = useState('')
+  const { openOrder } = useOrderModal();
+  const { open: openCustomer } = useCustomerOverlay();
+  const { openErfassung } = useErfassung();
+  const [globalResults, setGlobalResults] = useState<SearchResult[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const focusTimer = setTimeout(() => inputRef.current?.focus(), 50)
+    return () => clearTimeout(focusTimer)
+  }, [])
+
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onOpenChange(false)
+      }
+    }
+    document.addEventListener('keydown', down)
+    return () => document.removeEventListener('keydown', down)
+  }, [onOpenChange])
 
   useEffect(() => {
     if (searchTerm.length > 2) {
@@ -83,27 +86,19 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   }, [searchTerm]);
   const { data: hookResults = [] } = useGlobalSearch(debouncedTerm);
 
-  // Reset forceAiMode when searchTerm changes
-  useEffect(() => {
-    // Only reset if forceAiMode is true and it's not naturally aiMode
-    const isNaturallyAiMode = /^(wie|was|wo|warum|welche|zeige|vergleiche|analysiere)/i.test(searchTerm.trim().toLowerCase()) || searchTerm.trim().toLowerCase().endsWith("?");
-    if (forceAiMode && !isNaturallyAiMode) setForceAiMode(false);
-  }, [searchTerm, forceAiMode]);
-
-  if (!open) return null
-
   const cleanTerm = searchTerm.trim().toLowerCase()
   const isAiMode = forceAiMode || /^(wie|was|wo|warum|welche|zeige|vergleiche|analysiere)/i.test(cleanTerm) || cleanTerm.endsWith("?");
 
-  const filteredOrders = globalResults.filter(r => r.type === 'order')
-  const filteredCustomers = globalResults.filter(r => r.type === 'customer')
-  const filteredItems = globalResults.filter(r => r.type === 'item')
-  const filteredBelege = globalResults.filter(r => r.type === 'beleg')
-  const filteredRechnungen = globalResults.filter(r => r.type === 'rechnung')
-  const filteredLieferanten = globalResults.filter(r => r.type === 'lieferant')
-  const filteredBaeder = globalResults.filter(r => r.type === 'bad')
-  const filteredLager = globalResults.filter(r => r.type === 'lager')
-  const filteredKosten = globalResults.filter(r => r.type === 'kostenposten')
+  const filterResultsByType = (type: string) => globalResults.filter(result => result.type === type)
+  const filteredOrders = filterResultsByType('order')
+  const filteredCustomers = filterResultsByType('customer')
+  const filteredItems = filterResultsByType('item')
+  const filteredBelege = filterResultsByType('beleg')
+  const filteredRechnungen = filterResultsByType('rechnung')
+  const filteredLieferanten = filterResultsByType('lieferant')
+  const filteredBaeder = filterResultsByType('bad')
+  const filteredLager = filterResultsByType('lager')
+  const filteredKosten = filterResultsByType('kostenposten')
 
   // Hook results
   const hookTeile = hookResults.filter(r => r.typ === 'teil');
@@ -128,6 +123,13 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   const handleClose = () => {
     if (searchTerm.trim().length > 1) addRecentSearch(searchTerm.trim())
     onOpenChange(false)
+  }
+
+  const handleSearchTermChange = (value: string) => {
+    setSearchTerm(value)
+    const normalizedValue = value.trim().toLowerCase()
+    const isNaturallyAiMode = /^(wie|was|wo|warum|welche|zeige|vergleiche|analysiere)/i.test(normalizedValue) || normalizedValue.endsWith("?")
+    if (!isNaturallyAiMode) setForceAiMode(false)
   }
   
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -205,14 +207,14 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
             ref={inputRef}
             autoFocus
             value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
+            onChange={e => handleSearchTermChange(e.target.value)}
             onKeyDown={handleKeyDown}
             className="flex-1 bg-transparent outline-none placeholder:text-text-muted text-base font-medium" 
             placeholder="Nach Aufträgen, Kunden, Belegen, Rechnungen..." 
           />
           {searchTerm && (
             <button 
-              onClick={() => setSearchTerm('')} 
+              onClick={() => handleSearchTermChange('')}
               className="p-1 hover:bg-neutral-gray-100 rounded-lg text-text-muted hover:text-slate-650 transition-colors"
             >
               <X className="w-4 h-4" />

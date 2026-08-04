@@ -2,10 +2,10 @@
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { AnimatePresence } from "framer-motion";
 import { Settings } from "lucide-react";
-import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
+import { AnalysisOverlay, type AnalysisOverlayProps } from "@/components/ui/AnalysisOverlay";
 import "./marketing.css";
 
 import { SubNav, TabName } from "./components/SubNav";
@@ -18,11 +18,31 @@ import { WirkungView } from "./components/WirkungView";
 
 import { listVorschlaegeAction } from "@/app/marketing/marketing.actions";
 import { instagramAdapter } from "@/lib/marketing/adapters/InstagramAdapter";
+import type {
+  getMarketingAnfragenAnalysisAction,
+  getMarketingRoiAnalysisAction,
+  getMarketingUmsatzAnalysisAction,
+} from "@/app/marketing/analysis.actions";
 
 import type {
   AktionVorschlag, Kampagne, FunnelDaten,
   Segment, LernInsight, WirkungMini, StoryIdee, SortMode
 } from "@/lib/marketing/marketingTypes";
+
+type MarketingAnfragenAnalysis = Awaited<ReturnType<typeof getMarketingAnfragenAnalysisAction>>;
+type MarketingUmsatzAnalysis = Awaited<ReturnType<typeof getMarketingUmsatzAnalysisAction>>;
+type MarketingRoiAnalysis = Awaited<ReturnType<typeof getMarketingRoiAnalysisAction>>;
+type AnalysisDataMap = {
+  "Anfragen aus Marketing"?: MarketingAnfragenAnalysis;
+  "Umsatz daraus"?: MarketingUmsatzAnalysis;
+  "Return on Invest"?: MarketingRoiAnalysis;
+};
+type AnalysisProps = Partial<Omit<AnalysisOverlayProps, "open" | "onClose" | "insight">> & {
+  insight?: {
+    body: string;
+    actions?: Array<{ label: string; onClick?: () => void }>;
+  };
+};
 
 export default function MarketingStudioClient({
   initialBesteAktion,
@@ -59,8 +79,8 @@ export default function MarketingStudioClient({
   const [showToast, setShowToast] = useState(false);
   const [funnelKey, setFunnelKey] = useState(0);
   const [analysisOpen, setAnalysisOpen] = useState<string | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [analysisDataMap, setAnalysisDataMap] = useState<Record<string, any>>({});
+  const [analysisDataMap, setAnalysisDataMap] = useState<AnalysisDataMap>({});
+  const analysisDataRef = useRef<AnalysisDataMap>({});
   const [igConnected, setIgConnected] = useState(false);
 
   useEffect(() => {
@@ -68,30 +88,41 @@ export default function MarketingStudioClient({
     const firstDay = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().substring(0, 10);
     const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().substring(0, 10);
     
-    if (analysisOpen === "Anfragen aus Marketing" && !analysisDataMap["Anfragen aus Marketing"]) {
+    if (analysisOpen === "Anfragen aus Marketing" && !analysisDataRef.current["Anfragen aus Marketing"]) {
       import("@/app/marketing/analysis.actions").then(m => {
         m.getMarketingAnfragenAnalysisAction(firstDay, lastDay).then(res => {
-          setAnalysisDataMap(p => ({ ...p, "Anfragen aus Marketing": res }));
+          setAnalysisDataMap(current => {
+            const next = { ...current, "Anfragen aus Marketing": res };
+            analysisDataRef.current = next;
+            return next;
+          });
         });
       });
     }
 
-    if (analysisOpen === "Umsatz daraus" && !analysisDataMap["Umsatz daraus"]) {
+    if (analysisOpen === "Umsatz daraus" && !analysisDataRef.current["Umsatz daraus"]) {
       import("@/app/marketing/analysis.actions").then(m => {
         m.getMarketingUmsatzAnalysisAction(firstDay, lastDay).then(res => {
-          setAnalysisDataMap(p => ({ ...p, "Umsatz daraus": res }));
+          setAnalysisDataMap(current => {
+            const next = { ...current, "Umsatz daraus": res };
+            analysisDataRef.current = next;
+            return next;
+          });
         });
       });
     }
 
-    if (analysisOpen === "Return on Invest" && !analysisDataMap["Return on Invest"]) {
+    if (analysisOpen === "Return on Invest" && !analysisDataRef.current["Return on Invest"]) {
       import("@/app/marketing/analysis.actions").then(m => {
         m.getMarketingRoiAnalysisAction(firstDay, lastDay).then(res => {
-          setAnalysisDataMap(p => ({ ...p, "Return on Invest": res }));
+          setAnalysisDataMap(current => {
+            const next = { ...current, "Return on Invest": res };
+            analysisDataRef.current = next;
+            return next;
+          });
         });
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisOpen]);
 
   useEffect(() => {
@@ -129,8 +160,7 @@ export default function MarketingStudioClient({
 
   const handlePost = useCallback(async () => {
     if (!besteAktion) return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const res = await instagramAdapter.publish(besteAktion as any);
+    const res = await instagramAdapter.publish(besteAktion);
     setToastMsg(res.message);
     setShowToast(true);
     setTimeout(() => setShowToast(false), 5000);
@@ -171,14 +201,15 @@ export default function MarketingStudioClient({
     setBesteAktion(p => p ? { ...p, titel: v.titel, caption: v.caption, hashtags: v.hashtags } : p);
   }, [besteAktion, varianteIdx]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const getAnalysisProps = (key: string | null): any => {
+  const getAnalysisProps = (key: string | null): AnalysisProps => {
     // Keep it minimal for now, logic preserved from original
     if (!key) return {};
-    const data = analysisDataMap[key];
-    if (!data) return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
+    if (key === "Kampagnen") return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
 
     if (key === "Anfragen aus Marketing") {
+      const data = analysisDataMap[key];
+      if (!data) return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
+
       return {
         icon: <svg viewBox="0 0 24 24" width={24} height={24} stroke="currentColor" strokeWidth={2} fill="none"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>,
         title: "Anfragen aus Marketing",
@@ -219,6 +250,9 @@ export default function MarketingStudioClient({
     }
 
     if (key === "Umsatz daraus") {
+      const data = analysisDataMap[key];
+      if (!data) return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
+
       return {
         icon: <svg viewBox="0 0 24 24" width={24} height={24} stroke="currentColor" strokeWidth={2} fill="none"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>,
         title: "Umsatz aus Marketing",
@@ -256,6 +290,9 @@ export default function MarketingStudioClient({
     }
 
     if (key === "Return on Invest") {
+      const data = analysisDataMap[key];
+      if (!data) return { title: "Lade...", subtitle: "Daten werden live berechnet..." };
+
       return {
         icon: <svg viewBox="0 0 24 24" width={24} height={24} stroke="currentColor" strokeWidth={2} fill="none"><path d="M23 6l-9.5 9.5-5-5L1 18"/></svg>,
         title: "Return on Invest & Lead-Kosten",

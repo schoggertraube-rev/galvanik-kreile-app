@@ -2,7 +2,7 @@
 
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,20 +12,13 @@ import {
   MapPin, 
   Plus, 
   Minus, 
-  Droplets, 
-  Thermometer, 
   FlaskConical, 
-  Check, 
-  History, 
-  Activity, 
-  Lock,
-  Unlock,
+  History,
   User
 } from "lucide-react";
 import { inventoryRepository, InventoryItem, StockMovement } from "@/lib/repositories/inventoryRepository";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { trackUiEvent } from "@/lib/tracking/tracking";
-import { DetailOverlay } from "@/components/ui/DetailOverlay";
 
 export default function ItemsPage() {
   usePageView();
@@ -138,9 +131,6 @@ export default function ItemsPage() {
 
   const selectedItem = inventoryItems.find(i => i.id === selectedItemId) || null;
   const selectedItemMovements = selectedItemId ? stockMovements.filter(m => m.inventoryItemId === selectedItemId) : [];
-
-  // Chemistry materials lists for chemical addition options in dropdown
-  const chemicalList = inventoryItems.filter(item => item.category === "chemical");
 
   return (
     <div className="space-y-6 pb-12 font-sans antialiased text-navy-900">

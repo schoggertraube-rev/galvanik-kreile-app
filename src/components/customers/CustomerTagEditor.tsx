@@ -2,6 +2,7 @@ import React from 'react';
 import { Tag } from 'lucide-react';
 
 export function CustomerTagEditor({ customerId }: { customerId: string }) {
+  void customerId;
   return (
     <div className="space-y-4">
       <h3 className="font-semibold text-lg text-[var(--ci-ink)] flex items-center gap-2">

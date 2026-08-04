@@ -42,16 +42,6 @@ export function PerformanceCockpitClient({ overviews }: Props) {
     localStorage.setItem('perfTheme', t);
   };
 
-  const getDeltaText = (rawDataset: string) => {
-    if (!cmpOn) return null;
-    const parts = rawDataset.split('|');
-    for (const p of parts) {
-      const [k, v] = p.split(':');
-      if (k === cmpPer) return `${v} vs. ${cmpPer.charAt(0).toUpperCase() + cmpPer.slice(1)}`;
-    }
-    return null;
-  };
-
   return (
     <div className={`perf-wrapper ${theme === 'light' ? 'light' : ''}`}>
       <div className="mb-6">

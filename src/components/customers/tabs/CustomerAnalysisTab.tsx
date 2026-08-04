@@ -1,12 +1,12 @@
 import React from 'react';
-import { Customer } from '@/lib/types/customer';
 import { TrendingUp, Award, Clock, DollarSign, Tag } from 'lucide-react';
+import type { CustomerCardData } from '../useCustomerData';
 
-export function CustomerAnalysisTab({ customerId, customerData }: { customerId: string, customerData: any }) {
+export function CustomerAnalysisTab({ customerData }: { customerData: CustomerCardData | null }) {
   if (!customerData) return <div className="p-4 text-gray-500">Lade Analyse...</div>;
 
   const kpi = customerData.kpi;
-  const tags = customerData.tags || [];
+  const tags = Array.isArray(customerData.tags) ? customerData.tags.filter((tag): tag is string => typeof tag === 'string') : [];
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -35,7 +35,7 @@ export function CustomerAnalysisTab({ customerId, customerData }: { customerId: 
             <Clock className="w-4 h-4" />
             <span className="text-xs font-bold uppercase tracking-wider">Pünktlichkeit</span>
           </div>
-          <span className="text-xl font-bold text-gray-900">{kpi?.puenktlichkeit_pct !== null ? `${kpi.puenktlichkeit_pct} %` : 'N/A'}</span>
+          <span className="text-xl font-bold text-gray-900">{kpi?.puenktlichkeit_pct !== null && kpi?.puenktlichkeit_pct !== undefined ? `${kpi.puenktlichkeit_pct} %` : 'N/A'}</span>
         </div>
         
         <div className="bg-gray-50 border border-gray-200 p-4 rounded-xl">
@@ -43,7 +43,7 @@ export function CustomerAnalysisTab({ customerId, customerData }: { customerId: 
             <Award className="w-4 h-4" />
             <span className="text-xs font-bold uppercase tracking-wider">Klasse</span>
           </div>
-          <span className="text-xl font-bold text-[var(--ci-blue)]">{customerData.classification || 'B'}</span>
+          <span className="text-xl font-bold text-[var(--ci-blue)]">{typeof customerData.classification === 'string' ? customerData.classification : 'B'}</span>
         </div>
       </div>
 

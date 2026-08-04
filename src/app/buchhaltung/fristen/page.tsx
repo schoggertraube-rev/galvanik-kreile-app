@@ -4,7 +4,7 @@ import { BackButton } from "@/components/ui/BackButton";
 import { usePageView } from "@/hooks/usePageView";
 import Link from "next/link";
 import { pruefeFristen } from "@/lib/buchhaltung/regeln";
-import { ChevronRight, CalendarClock, AlertCircle, CheckCircle2, Calendar } from "lucide-react";
+import { ChevronRight, CalendarClock, AlertCircle, Calendar } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 
 const FESTEN_FRISTEN = [

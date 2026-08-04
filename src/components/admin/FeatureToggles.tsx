@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Settings, Check, X, Loader2, Power } from "lucide-react";
+import { Power } from "lucide-react";
 import { getFeatureFlags, toggleFeatureFlag, initializeDefaultFlags } from "@/app/actions/admin.actions";
 
 type FeatureFlag = {
@@ -35,7 +35,22 @@ export function FeatureToggles() {
   };
 
   useEffect(() => {
-    fetchFlags();
+    void getFeatureFlags()
+      .then(async (data) => {
+        if (data.length === 0) {
+          await initializeDefaultFlags();
+          return getFeatureFlags();
+        }
+
+        return data;
+      })
+      .then(setFlags)
+      .catch((err) => {
+        console.error("Failed to load feature flags", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   const handleToggle = async (id: string, current: boolean) => {

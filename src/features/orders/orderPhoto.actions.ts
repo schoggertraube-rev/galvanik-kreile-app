@@ -1,10 +1,17 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
 import { db } from '@/db';
 import { scanUploads, events } from '@/db/schema';
 import { getCurrentAppUser } from '@/lib/auth/permissions';
 import { revalidatePath } from 'next/cache';
+
+function getErrorMessage(error: unknown): string | null {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string" && error.message) {
+    return error.message;
+  }
+  return null;
+}
 
 export async function uploadOrderPhotoRecord(params: {
   orderId: string;
@@ -43,8 +50,8 @@ export async function uploadOrderPhotoRecord(params: {
     revalidatePath('/warendurchlauf');
 
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to insert photo record:", error);
-    return { success: false, error: error.message || 'Database error' };
+    return { success: false, error: getErrorMessage(error) || 'Database error' };
   }
 }

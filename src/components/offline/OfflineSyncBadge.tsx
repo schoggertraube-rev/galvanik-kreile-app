@@ -9,13 +9,13 @@ export function OfflineSyncBadge() {
   const [pendingCount, setPendingCount] = useState(0);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
-  const updateState = async () => {
-    setIsOffline(OfflineManager.isOffline());
-    const count = await OfflineManager.getPendingCount();
-    setPendingCount(count);
-  };
-
   useEffect(() => {
+    const updateState = async () => {
+      setIsOffline(OfflineManager.isOffline());
+      const count = await OfflineManager.getPendingCount();
+      setPendingCount(count);
+    };
+
     updateState();
 
     const handleOffline = () => updateState();

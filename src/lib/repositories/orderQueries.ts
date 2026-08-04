@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { orders, items, events, customers, priceLines, payments, communications } from "@/db/schema";
+import { orders, items, events, customers, priceLines, payments, communications, orderCostPositions } from "@/db/schema";
 import { eq, desc, asc } from "drizzle-orm";
 
 export async function getOrderWithDetails(orderId: string) {
@@ -20,10 +20,11 @@ export async function getOrderWithDetails(orderId: string) {
     const eventsData = await db.select().from(events).where(eq(events.orderId, orderId)).orderBy(desc(events.createdAt));
 
     // Phase 2 additions: Parallel queries
-    const [priceLinesData, paymentsData, communicationsData] = await Promise.all([
+    const [priceLinesData, paymentsData, communicationsData, costPositionsData] = await Promise.all([
       db.select().from(priceLines).where(eq(priceLines.orderId, orderId)).orderBy(asc(priceLines.sortOrder)),
       db.select().from(payments).where(eq(payments.orderId, orderId)).orderBy(desc(payments.createdAt)),
       db.select().from(communications).where(eq(communications.orderId, orderId)).orderBy(desc(communications.createdAt)),
+      db.select().from(orderCostPositions).where(eq(orderCostPositions.orderId, orderId)).orderBy(asc(orderCostPositions.createdAt)),
     ]);
 
     let ltv = 0;
@@ -61,6 +62,7 @@ export async function getOrderWithDetails(orderId: string) {
       priceLines: priceLinesData,
       payments: paymentsData,
       communications: communicationsData,
+      costPositions: costPositionsData,
       customerKpis: {
         ltv,
         activeOrdersCount

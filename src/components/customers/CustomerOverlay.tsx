@@ -69,13 +69,7 @@ export function CustomerOverlay() {
                 customer_id: customerData.id,
                 kunde: customerData.name,
                 classification: customerData.classification || 'B',
-                kunde_seit: customerData.createdAt || new Date().toISOString(),
-                umsatz_ltv: 0,
-                gewinn_ltv: 0,
-                offene_posten: 0,
-                aktive_auftraege: 0,
-                puenktlichkeit_pct: null,
-                reklamationen: 0
+                kunde_seit: customerData.createdAt.toISOString(),
               }} />
             ) : (
               <div className="h-16 flex items-center justify-center text-red-500">Kunde nicht gefunden.</div>
@@ -124,7 +118,7 @@ export function CustomerOverlay() {
                 {activeTab === 'reklamationen' && <CustomerComplaintsTab customerId={customerId!} />}
                 {activeTab === 'rechnungen' && <CustomerInvoicesTab customerId={customerId!} />}
                 {activeTab === 'fotos' && <CustomerPhotosTab customerId={customerId!} />}
-                {activeTab === 'analyse' && <CustomerAnalysisTab customerId={customerId!} customerData={customerData} />}
+                {activeTab === 'analyse' && <CustomerAnalysisTab customerData={customerData} />}
                 {activeTab === 'notizen' && <CustomerNotesTab customerId={customerId!} customerData={customerData} />}
               </div>
             </div>

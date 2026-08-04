@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 
+type LegacyWeekDateFormatOptions = Intl.DateTimeFormatOptions & {
+  week?: 'numeric';
+};
+
 export interface WerkstattPulsData {
   termintreue: {
     puenktlich: number;
@@ -34,7 +38,7 @@ export interface WerkstattPulsData {
 export function useWerkstattPuls() {
   const [data, setData] = useState<WerkstattPulsData | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -64,11 +68,15 @@ export function useWerkstattPuls() {
         const chartSnapshots = (kpiSnapshots.data || [])
           .slice(0, 12)
           .reverse()
-          .map(s => ({
-            kw: 'KW ' + new Date(s.periode_start).toLocaleDateString('de-DE', { week: 'numeric' } as any), // Fallback formatting for demo
-            wert: s.wert ? Number(s.wert) : null,
-            vorjahr: null // Would need a self-join for true last year
-          }));
+          .map(s => {
+            const dateFormatOptions: LegacyWeekDateFormatOptions = { week: 'numeric' };
+
+            return {
+              kw: 'KW ' + new Date(s.periode_start).toLocaleDateString('de-DE', dateFormatOptions), // Fallback formatting for demo
+              wert: s.wert ? Number(s.wert) : null,
+              vorjahr: null // Would need a self-join for true last year
+            };
+          });
 
         if (isMounted) {
           setData({
@@ -81,7 +89,7 @@ export function useWerkstattPuls() {
             snapshots: chartSnapshots
           });
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (isMounted) setError(err);
       } finally {
         if (isMounted) setIsLoading(false);

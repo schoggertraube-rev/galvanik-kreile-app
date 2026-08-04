@@ -15,10 +15,10 @@ export function KostenForm() {
   const [kategorie, setKategorie] = useState("");
   const [betrag, setBetrag] = useState("");
   const [intervall, setIntervall] = useState<"einmalig" | "monatlich" | "jaehrlich">("monatlich");
-  const [belegId, setBelegId] = useState("");
-  const [kampagneId, setKampagneId] = useState("");
+  const [belegId] = useState("");
+  const [kampagneId] = useState("");
   const [giltAb, setGiltAb] = useState("");
-  const [giltBis, setGiltBis] = useState("");
+  const [giltBis] = useState("");
   const [isDemo, setIsDemo] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -45,8 +45,9 @@ export function KostenForm() {
 
         await createKostenpostenAction(fd);
         router.push("/buchhaltung/kosten");
-      } catch (err: any) {
-        setError(err.message || "Fehler beim Speichern des Kostenpostens.");
+      } catch (err: unknown) {
+        const message = err && typeof err === "object" && "message" in err ? String(err.message) : undefined;
+        setError(message || "Fehler beim Speichern des Kostenpostens.");
       }
     });
   };

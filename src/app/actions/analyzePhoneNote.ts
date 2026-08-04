@@ -35,7 +35,68 @@ export interface AIAnalysisInput {
   };
 }
 
-export async function analyzePhoneNoteWithAI(input: AIAnalysisInput) {
+export interface PhoneNoteAiAnalysis {
+  category: PhoneNoteCategory;
+  material: string | null;
+  surfaceRequested: string | null;
+  suggestedAnswer: string;
+  overallConfidence: number;
+}
+
+const phoneNoteCategories: readonly string[] = [
+  "pickup_request",
+  "status_question",
+  "payment_question",
+  "complaint",
+  "callback",
+  "new_order_intake",
+  "new_customer_request",
+  "quote_request",
+  "email_review",
+  "attachment_review",
+  "photo_review",
+  "document_review",
+  "appointment_request",
+  "deadline_request",
+  "material_or_surface_info",
+  "shipping_question",
+  "technical_question",
+  "general",
+];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isPhoneNoteCategory(value: unknown): value is PhoneNoteCategory {
+  return typeof value === "string" && phoneNoteCategories.includes(value);
+}
+
+function toNullableString(value: unknown): string | null {
+  return typeof value === "string" ? value : null;
+}
+
+function parsePhoneNoteAiAnalysis(value: unknown): PhoneNoteAiAnalysis | null {
+  if (
+    !isRecord(value) ||
+    !isPhoneNoteCategory(value.category) ||
+    typeof value.suggestedAnswer !== "string" ||
+    typeof value.overallConfidence !== "number" ||
+    !Number.isInteger(value.overallConfidence)
+  ) {
+    return null;
+  }
+
+  return {
+    category: value.category,
+    material: toNullableString(value.material),
+    surfaceRequested: toNullableString(value.surfaceRequested),
+    suggestedAnswer: value.suggestedAnswer,
+    overallConfidence: value.overallConfidence,
+  };
+}
+
+export async function analyzePhoneNoteWithAI(input: AIAnalysisInput): Promise<PhoneNoteAiAnalysis | null> {
   if (!input.text || input.text.trim().length < 3) return null;
 
   const schema = {
@@ -108,14 +169,12 @@ REGELN FÜR DEN ANTWORTVORSCHLAG:
     });
 
     if (!response.text) return null;
-    const parsed = JSON.parse(response.text);
-    return {
-      category: parsed.category,
-      material: parsed.material,
-      surfaceRequested: parsed.surfaceRequested,
-      suggestedAnswer: parsed.suggestedAnswer,
-      overallConfidence: parsed.overallConfidence
-    };
+    const analysis = parsePhoneNoteAiAnalysis(JSON.parse(response.text) as unknown);
+    if (!analysis) {
+      throw new Error("Gemini AI analysis did not match the requested response schema.");
+    }
+
+    return analysis;
 
   } catch (error) {
     console.error("Gemini AI Analysis Error:", error);

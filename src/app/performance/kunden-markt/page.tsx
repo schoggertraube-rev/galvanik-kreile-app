@@ -3,14 +3,16 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
 import React, { useState } from 'react';
-import { Users, ArrowRight, HeartHandshake, Map, Banknote, Truck, Globe, UserCheck } from 'lucide-react';
+import { Users, ArrowRight, HeartHandshake, Banknote, Truck, Globe, UserCheck } from 'lucide-react';
 import { PerformanceDetailLayout } from '../PerformanceDetailLayout';
 import { AnalysisOverlay } from '@/components/ui/AnalysisOverlay';
 import { getTopKunden } from '@/app/actions/customers.actions';
 
+type TopKunde = Awaited<ReturnType<typeof getTopKunden>>[number];
+
 export default function KundenMarktDetail() {
   const [overlay, setOverlay] = useState<string | null>(null);
-  const [topKunden, setTopKunden] = useState<any[]>([]);
+  const [topKunden, setTopKunden] = useState<TopKunde[]>([]);
 
   React.useEffect(() => {
     getTopKunden(5).then(setTopKunden);
@@ -40,7 +42,7 @@ export default function KundenMarktDetail() {
             <div className="pd-tile-name">Top-Kunden</div>
           </div>
           <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            {topKunden.length === 0 ? <div style={{fontSize:11, color:'var(--ink3)'}}>Noch keine Kunden</div> : topKunden.map((k, i) => {
+            {topKunden.length === 0 ? <div style={{fontSize:11, color:'var(--ink3)'}}>Noch keine Kunden</div> : topKunden.map((k) => {
               const maxVal = topKunden[0]?.wert || 1;
               const pct = Math.max(5, Math.round((k.wert / maxVal) * 100));
               return (
@@ -244,4 +246,3 @@ export default function KundenMarktDetail() {
     </PerformanceDetailLayout>
   );
 }
-

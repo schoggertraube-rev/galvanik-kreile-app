@@ -2,13 +2,16 @@
 
 import { db } from "@/db";
 import { baeder, badMesswerte } from "@/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, type InferInsertModel, type InferSelectModel } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { createId } from "@paralleldrive/cuid2";
 
 // Server-side actions for galvanik baths and bath measurements access.
 
-export async function getBathsDb(): Promise<ActionResult<any[]>> {
+type Bath = InferSelectModel<typeof baeder>;
+type BathMeasurement = InferSelectModel<typeof badMesswerte>;
+type BathUpdate = Pick<InferInsertModel<typeof baeder>, "status" | "letzteWartung">;
+export async function getBathsDb(): Promise<ActionResult<Bath[]>> {
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
@@ -23,7 +26,7 @@ export async function getBathsDb(): Promise<ActionResult<any[]>> {
   }
 }
 
-export async function getBathByIdDb(id: string): Promise<ActionResult<any | null>> {
+export async function getBathByIdDb(id: string): Promise<ActionResult<Bath | null>> {
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
@@ -39,14 +42,14 @@ export async function getBathByIdDb(id: string): Promise<ActionResult<any | null
   }
 }
 
-export async function getBathMeasurementsDb(bathId?: string): Promise<ActionResult<any[]>> {
+export async function getBathMeasurementsDb(bathId?: string): Promise<ActionResult<BathMeasurement[]>> {
   const auth = await checkAppAuth();
   if (!auth.ok) return auth;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
 
   try {
-    let query = db.select().from(badMesswerte);
+    const query = db.select().from(badMesswerte);
     
     if (bathId) {
       const data = await query.where(
@@ -74,7 +77,7 @@ export async function createBathMeasurementDb(payload: {
   phValue?: number | null;
   notes?: string;
   measuredAt?: string;
-}): Promise<ActionResult<any>> {
+}): Promise<ActionResult<BathMeasurement>> {
   const auth = await checkAppAuth("write");
   if (!auth.ok) return auth;
 
@@ -106,14 +109,14 @@ export async function createBathMeasurementDb(payload: {
 export async function updateBathDb(id: string, payload: {
   status?: string;
   letzteWartung?: string;
-}): Promise<ActionResult<any>> {
+}): Promise<ActionResult<Bath | null>> {
   const auth = await checkAppAuth("write");
   if (!auth.ok) return auth;
 
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
 
   try {
-    const updateData: Record<string, any> = {};
+    const updateData: BathUpdate = {};
     if (payload.status !== undefined) updateData.status = payload.status;
     if (payload.letzteWartung !== undefined) updateData.letzteWartung = payload.letzteWartung ? new Date(payload.letzteWartung) : null;
 

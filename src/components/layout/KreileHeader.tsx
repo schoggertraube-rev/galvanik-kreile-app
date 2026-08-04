@@ -1,14 +1,13 @@
 "use client";
 
 import Link from "next/link";
-// Image from next/image available but not used for dynamic logo URLs
+import Image from "next/image";
 import { Search, Camera, Bell, Calendar, Menu, Plus } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { useState, useEffect, useRef } from "react";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { getOrderCountDb } from "@/app/actions/orders.actions";
 import { logout } from "@/app/actions/auth";
-import { trackUiEvent } from "@/lib/tracking/tracking";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { getCompanySettings } from "@/app/actions/company.actions";
@@ -25,8 +24,8 @@ interface KreileHeaderProps {
 export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [isOffline, setIsOffline] = useState(false);
-  const [orderCount, setOrderCount] = useState(0);
+  const [, setIsOffline] = useState(false);
+  const [, setOrderCount] = useState(0);
   const [logoUrl, setLogoUrl] = useState("/assets/logo/kreile-wordmark-skyline.svg");
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
@@ -113,20 +112,24 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
       {/* LEFT: GK Monogram + Brand */}
       <Link href="/" className="hidden md:flex items-center gap-3 shrink-0 group">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <Image
           src={logoUrl}
           alt="Firmenlogo"
+          width={200}
+          height={79}
+          unoptimized
           className="h-10 w-auto object-contain max-w-[200px]"
         />
       </Link>
 
       {/* Mobile Logo Only */}
       <Link href="/" className="md:hidden flex items-center shrink-0">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
+        <Image
           src={logoUrl}
           alt="Firmenlogo"
+          width={140}
+          height={55}
+          unoptimized
           className="h-7 w-auto object-contain kreile-logo max-w-[140px]"
         />
       </Link>

@@ -3,8 +3,8 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   ChevronLeft, X, CreditCard, FileText, Activity, AlertTriangle,
-  MessageSquare, User, Edit3, Calendar, Paperclip, Zap, Package,
-  Check, Send, Image as ImageIcon, Phone, Mail, Globe, Smartphone, PenLine
+  MessageSquare, User, Edit3, Calendar, Paperclip, Package,
+  Check, Send, Image as ImageIcon, Phone, Mail, Globe, Smartphone
 } from "lucide-react";
 import { useClientDossier, ClientDossier } from "./hooks/useClientDossier";
 import { useTopicRelevance, TileKey } from "./hooks/useTopicRelevance";
@@ -216,7 +216,7 @@ function renderTileContent(key: TileKey, dossier: ClientDossier): React.ReactNod
     case "notizen":
       return (
         <div style={{ fontSize: 12, color: "var(--kz-ink-mute)" }}>
-          „{dossier.stamm.notes.slice(0, 80)}{dossier.stamm.notes.length > 80 ? "…" : ""}"
+          „{dossier.stamm.notes.slice(0, 80)}{dossier.stamm.notes.length > 80 ? "…" : ""}&quot;
         </div>
       );
 
@@ -607,7 +607,7 @@ function renderDetailBody(key: TileKey, dossier: ClientDossier): React.ReactNode
         <>
           <div className="kz-chart-card">
             <div style={{ fontSize: 13, color: "var(--kz-ink-soft)", lineHeight: 1.6 }}>
-              „{dossier.stamm.notes}"
+              „{dossier.stamm.notes}&quot;
             </div>
           </div>
           <div className="kz-chart-card">
@@ -638,25 +638,32 @@ export function Kommandozentrale({
   const [activeDetail, setActiveDetail] = useState<TileKey | null>(null);
   const [actionsApplied, setActionsApplied] = useState(false);
   const [showToast, setShowToast] = useState(false);
-  const [composerText, setComposerText] = useState("");
+  const [composerOverride, setComposerOverride] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const { openErfassung } = useErfassung();
 
   const dossier = useClientDossier(customerId, matchData);
+  const composerText = composerOverride ?? dossier.suggestedAnswer;
   const messageTexts = useMemo(() => messages.map(m => m.text), [messages]);
   const { relevantKeys } = useTopicRelevance(messageTexts, matchData);
-
-  // Pre-fill composer with suggested answer
-  useEffect(() => {
-    if (dossier.suggestedAnswer && !composerText) {
-      setComposerText(dossier.suggestedAnswer);
-    }
-  }, [dossier.suggestedAnswer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
+
+  const handleClose = useCallback(() => {
+    if (!actionsApplied && dossier.preparedActions.length > 0) {
+      // Anti-Sackgasse: show toast
+      setShowToast(true);
+      setTimeout(() => {
+        setShowToast(false);
+        onClose();
+      }, 2500);
+    } else {
+      onClose();
+    }
+  }, [actionsApplied, dossier.preparedActions.length, onClose]);
 
   // ESC handler — layer-aware
   useEffect(() => {
@@ -672,20 +679,7 @@ export function Kommandozentrale({
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [open, activeDetail]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const handleClose = useCallback(() => {
-    if (!actionsApplied && dossier.preparedActions.length > 0) {
-      // Anti-Sackgasse: show toast
-      setShowToast(true);
-      setTimeout(() => {
-        setShowToast(false);
-        onClose();
-      }, 2500);
-    } else {
-      onClose();
-    }
-  }, [actionsApplied, dossier.preparedActions.length, onClose]);
+  }, [open, activeDetail, handleClose]);
 
   const handleApplyAll = useCallback(() => {
     // Phase 4: Route to central flow for quotes
@@ -846,7 +840,7 @@ export function Kommandozentrale({
               <input
                 className="kz-cc-input"
                 value={composerText}
-                onChange={e => setComposerText(e.target.value)}
+                onChange={e => setComposerOverride(e.target.value)}
                 placeholder="Antwort schreiben…"
               />
               <button className="kz-cc-send">
@@ -917,9 +911,9 @@ export function Kommandozentrale({
             {/* Answer suggestion (cream card) */}
             <div className="kz-sug cream" data-testid="kz-answer-suggestion">
               <div className="sl">Antwort-Vorschlag</div>
-              <p>„{dossier.suggestedAnswer}"</p>
+              <p>„{dossier.suggestedAnswer}&quot;</p>
               <div className="kz-sug-actions">
-                <button className="kz-sug-btn primary" onClick={() => setComposerText(dossier.suggestedAnswer)}>Übernehmen</button>
+                <button className="kz-sug-btn primary" onClick={() => setComposerOverride(dossier.suggestedAnswer)}>Übernehmen</button>
               </div>
             </div>
           </div>

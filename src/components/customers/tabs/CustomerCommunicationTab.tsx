@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { getCustomerTimeline } from '@/features/customers/customer-card/customerCard.actions';
+import { getCustomerTimeline, type CustomerTimelineEntry } from '@/features/customers/customer-card/customerCard.actions';
 import { Loader2, MessageSquare, Phone, Mail, Activity, ExternalLink } from 'lucide-react';
 import { useOverlayStore } from '@/lib/overlayStore';
 
 export function CustomerCommunicationTab({ customerId }: { customerId: string }) {
-  const [timeline, setTimeline] = useState<any[]>([]);
+  const [timeline, setTimeline] = useState<CustomerTimelineEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const openOrder = useOverlayStore(state => state.openOrder);
 
@@ -41,6 +41,7 @@ export function CustomerCommunicationTab({ customerId }: { customerId: string })
       ) : (
         <div className="relative pl-6 border-l-2 border-gray-100 space-y-6 ml-2 mt-4">
           {timeline.map((event, idx) => {
+            const relatedOrderId = event.relatedOrderId;
             let Icon = Activity;
             let iconColor = "bg-gray-100 text-gray-500";
             
@@ -69,9 +70,9 @@ export function CustomerCommunicationTab({ customerId }: { customerId: string })
                   </div>
                   <p className="text-sm text-gray-600 whitespace-pre-wrap">{event.subtitle}</p>
                   
-                  {event.relatedOrderId && (
+                  {relatedOrderId && (
                     <button 
-                      onClick={() => openOrder(event.relatedOrderId)}
+                      onClick={() => openOrder(relatedOrderId)}
                       className="mt-3 text-xs font-bold text-[var(--ci-blue)] hover:underline flex items-center gap-1"
                     >
                       Zum Auftrag <ExternalLink className="w-3 h-3" />

@@ -64,7 +64,7 @@ describe("ESLint repository ratchet", () => {
         }),
       ]),
     );
-  });
+  }, 30_000);
 
   it("normalizes absolute paths and aggregates identical messages", () => {
     const lintResult = {

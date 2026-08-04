@@ -27,7 +27,26 @@ export function PriceLinesEditor({ orderId, itemId }: PriceLinesEditorProps) {
   });
 
   useEffect(() => {
-    loadLines();
+    const loadInitialLines = async () => {
+      setLoading(true);
+      const result = await getPriceLinesDb(orderId, itemId);
+      if (result.ok && result.data) {
+        // Map from DB schema format (camelCase) back to component format (snake_case)
+        const mapped = result.data.map(r => ({
+          id: r.id,
+          position_text: r.positionText,
+          qty: r.qty,
+          unit_price_eur: r.unitPriceEur,
+          unit_total_eur: r.unitTotalEur
+        }));
+        setLines(mapped);
+      } else {
+        setLines([]);
+      }
+      setLoading(false);
+    };
+
+    loadInitialLines();
   }, [orderId, itemId]);
 
   const loadLines = async () => {

@@ -1,14 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { UploadCloud, Loader2, Camera, FileText } from "lucide-react";
+import { UploadCloud, Camera, FileText } from "lucide-react";
 import { useErfassung } from "../ErfassungProvider";
 
+type ScanUploadResponse = {
+  id: string;
+};
+
+type ScanStatusRecord = {
+  id: string;
+  status: string;
+  [key: string]: unknown;
+};
+
 export function ScanUpload() {
-  const { openErfassung, closeErfassung } = useErfassung();
+  const { openErfassung } = useErfassung();
   const [isUploading, setIsUploading] = useState(false);
   const [statusText, setStatusText] = useState("");
-  const [fallbackState, setFallbackState] = useState<{ type: "ai_failed" | "storage_failed", record?: any } | null>(null);
+  const [fallbackState, setFallbackState] = useState<{ type: "ai_failed" | "storage_failed"; record?: ScanStatusRecord | null } | null>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -32,16 +42,16 @@ export function ScanUpload() {
 
       // We wait for the background edge function to complete. We could poll here.
       // But let's assume the API route returns the ID, we then poll scan-status.
-      const data = await res.json();
+      const data: ScanUploadResponse = await res.json();
       
       // Polling for status
       let attempts = 0;
-      let scanRecord = null;
+      let scanRecord: ScanStatusRecord | null = null;
       while (attempts < 20) {
         await new Promise(r => setTimeout(r, 1500));
         const statusRes = await fetch(`/api/erfassung/scan-status/${data.id}`);
         if (statusRes.ok) {
-          const statusData = await statusRes.json();
+          const statusData: ScanStatusRecord = await statusRes.json();
           if (statusData.status === "processed" || statusData.status === "error") {
             scanRecord = statusData;
             break;

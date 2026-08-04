@@ -1,10 +1,33 @@
 "use client";
 
-import { useErfassung } from "../ErfassungProvider";
-import { FileText, UserPlus, PackagePlus, Link, ArrowRight, Building2, User } from "lucide-react";
+import { type ErfassungPrefill, useErfassung } from "../ErfassungProvider";
+import { FileText, UserPlus, PackagePlus, Link, Building2 } from "lucide-react";
 import { AiBadge } from "../shared/AiBadge";
 
-export function ScanResult({ data }: { data: any }) {
+type ScanItem = {
+  quantity?: number | string;
+  name?: string;
+  material?: string;
+};
+
+type ScanExtractedData = {
+  customer?: {
+    companyName?: string;
+    name?: string;
+    address?: string;
+  };
+  items?: ScanItem[];
+};
+
+type ScanData = {
+  id?: string | null;
+  detectedType?: string;
+  detectionConfidence?: number;
+  extracted?: ErfassungPrefill;
+  extractedData?: ScanExtractedData;
+};
+
+export function ScanResult({ data }: { data: ScanData }) {
   const { openErfassung, closeErfassung } = useErfassung();
 
   const handleNewOrder = () => {
@@ -44,7 +67,7 @@ export function ScanResult({ data }: { data: any }) {
 
   const detectedType = data.detectedType || "unbekannt";
   const confidence = data.detectionConfidence ? Math.round(data.detectionConfidence * 100) : 0;
-  const ext = data.extractedData || {};
+  const ext: ScanExtractedData = data.extractedData ?? {};
 
   return (
     <div className="p-8">
@@ -88,7 +111,7 @@ export function ScanResult({ data }: { data: any }) {
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <div className="text-xs font-semibold text-gray-500 mb-2">ERFASSTE TEILE ({ext.items.length})</div>
                 <ul className="space-y-2">
-                  {ext.items.map((item: any, i: number) => (
+                  {ext.items.map((item, i) => (
                     <li key={i} className="text-sm text-gray-700 flex justify-between">
                       <span>{item.quantity}x {item.name}</span>
                       <span className="text-gray-500">{item.material}</span>

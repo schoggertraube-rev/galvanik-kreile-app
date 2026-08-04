@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { customers, orders, items } from "@/db/schema";
-import { ilike, or, eq, sql } from "drizzle-orm";
+import { ilike, or, eq } from "drizzle-orm";
 import { checkAppAuth } from "@/lib/server/authHelper";
 
 export interface SearchResult {
@@ -89,8 +89,8 @@ export async function globalSearch(query: string): Promise<{ ok: boolean; result
     }
 
     return { ok: true, results };
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Global search failed:", err);
-    return { ok: false, error: err.message || "Suche fehlgeschlagen" };
+    return { ok: false, error: err instanceof Error ? err.message : "Suche fehlgeschlagen" };
   }
 }

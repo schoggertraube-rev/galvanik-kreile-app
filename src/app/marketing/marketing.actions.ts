@@ -1,9 +1,35 @@
 "use server";
 
 import { db } from "@/db";
-import { kampagne, kanal, segment, aktion, touchpoint, lernMetrik, statistikKennzahl, marketingAsset } from "@/db/schema_marketing";
-import { eq, desc, asc, isNull } from "drizzle-orm";
+import { kampagne, kanal, segment, aktion, lernMetrik } from "@/db/schema_marketing";
+import { eq, desc } from "drizzle-orm";
 import type { AktionVorschlag, Kampagne as MKampagne, FunnelDaten, Segment as MSegment, LernInsight, WirkungMini, StoryIdee, SortMode } from "@/lib/marketing/marketingTypes";
+
+type AktionInhalt = {
+  caption?: string;
+  hashtags?: string;
+};
+
+function isUnverifiedAktionInhalt(value: unknown): value is {
+  caption?: unknown;
+  hashtags?: unknown;
+} {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getAktionInhalt(value: unknown): AktionInhalt {
+  if (!isUnverifiedAktionInhalt(value)) return {};
+
+  return {
+    caption: typeof value.caption === "string" ? value.caption : undefined,
+    hashtags: typeof value.hashtags === "string" ? value.hashtags : undefined,
+  };
+}
+
+function getKampagnenStatus(status: string): MKampagne["status"] {
+  if (status === "aktiv" || status === "abgeschlossen") return status;
+  return "geplant";
+}
 
 // Seed if empty
 async function ensureMarketingData() {
@@ -55,27 +81,29 @@ export async function getBesteAktionAction(): Promise<AktionVorschlag | null> {
   const res = await db.select().from(aktion).where(eq(aktion.status, "vorschlag")).orderBy(desc(aktion.score)).limit(1);
   if (!res.length) return null;
   const a = res[0];
-  const chanId = a.typ === "post" ? "instagram" : a.typ === "mail" ? "email" : "google";
+  const chanId: AktionVorschlag["kanal"] = a.typ === "post" ? "instagram" : a.typ === "mail" ? "email" : "google";
+  const inhalt = getAktionInhalt(a.inhalt);
   return {
     id: a.id,
     titel: a.titel,
-    kanal: chanId as any,
+    kanal: chanId,
     kanalLabel: chanId === "instagram" ? "Instagram" : chanId === "email" ? "E-Mail" : "Google",
     score: Number(a.score),
-    caption: (a.inhalt as any)?.caption || "",
-    hashtags: (a.inhalt as any)?.hashtags || "",
+    caption: inhalt.caption || "",
+    hashtags: inhalt.hashtags || "",
     begruendung: "Basierend auf bisheriger Performance.",
     erwarteterOutput: `~${a.erwarteterOutput} Anfragen`,
     aufwand: `${a.aufwandMin} Min`,
     kosten: `${a.kostenBudget} €`,
     varianten: [
-      { titel: a.titel, caption: (a.inhalt as any)?.caption || "", hashtags: (a.inhalt as any)?.hashtags || "" }
+      { titel: a.titel, caption: inhalt.caption || "", hashtags: inhalt.hashtags || "" }
     ],
     segment: ""
   };
 }
 
 export async function listVorschlaegeAction(sort: SortMode = "output"): Promise<AktionVorschlag[]> {
+  void sort;
   // Empty state for Ideen as requested
   return [];
 }
@@ -87,7 +115,7 @@ export async function getKampagnenAction(): Promise<MKampagne[]> {
     id: k.id,
     titel: k.name,
     kanal: "Multi-Kanal",
-    status: k.status as any,
+    status: getKampagnenStatus(k.status),
     statusLabel: k.status === "aktiv" ? "läuft" : "geplant",
     fortschritt: k.status === "aktiv" ? 66 : 25,
     ergebnis: k.status === "aktiv" ? "+3.200 €" : "Prognose +1.800 €",

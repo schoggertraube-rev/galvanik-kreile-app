@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { getCustomerItems } from '@/features/customers/customer-card/customerCard.actions';
+import { getCustomerItems, type CustomerItemProfileRow } from '@/features/customers/customer-card/customerCard.actions';
 import { Box, Loader2, AlertTriangle, FileText } from 'lucide-react';
 
 export function CustomerItemsProfileTab({ customerId }: { customerId: string }) {
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<CustomerItemProfileRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {

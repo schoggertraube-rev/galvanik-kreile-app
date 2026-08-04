@@ -1,6 +1,6 @@
 import { db } from './src/db/index';
 import { orders } from './src/db/schema';
-import { sql, inArray, like, or } from 'drizzle-orm';
+import { inArray, like, or } from 'drizzle-orm';
 async function run() {
   try {
     const checkNumbers = ['A-207018', 'A-202650', 'A-204405'];

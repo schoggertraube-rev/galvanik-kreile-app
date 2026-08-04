@@ -1,17 +1,20 @@
 import { db } from "@/db";
 import { orders, customers, items } from "@/db/schema";
 import { eq, desc, and, notInArray, notIlike, sql, inArray } from "drizzle-orm";
+import type { OperationalOrder, OperationalOrderItem } from "@/lib/types/operationalOrder";
+
+export type { OperationalOrder, OperationalOrderItem } from "@/lib/types/operationalOrder";
 
 // Short-lived in-memory cache (5 seconds) — prevents parallel duplicate DB calls
 // during a single page render without blocking real-time updates.
-let _ordersCache: { data: Awaited<ReturnType<typeof _fetchAndMap>>; ts: number } | null = null;
+let _ordersCache: { data: OperationalOrder[]; ts: number } | null = null;
 const CACHE_TTL_MS = 5_000;
 
 export function invalidateOperationalOrdersCache() {
   _ordersCache = null;
 }
 
-export async function getOperationalOrders() {
+export async function getOperationalOrders(): Promise<OperationalOrder[]> {
   const now = Date.now();
   if (_ordersCache && now - _ordersCache.ts < CACHE_TTL_MS) {
     return _ordersCache.data;
@@ -21,7 +24,7 @@ export async function getOperationalOrders() {
   return data;
 }
 
-async function _fetchAndMap() {
+async function _fetchAndMap(): Promise<OperationalOrder[]> {
   if (!db) throw new Error("Database not available");
 
   const results = await db
@@ -64,7 +67,7 @@ async function _fetchAndMap() {
     : [];
 
   return results.map((o) => {
-    const orderParts = allParts.filter((p) => p.orderId === o.id);
+    const orderParts: OperationalOrderItem[] = allParts.filter((p) => p.orderId === o.id);
     const intakeDate = o.intakeDate ? new Date(o.intakeDate).toISOString() : (o.createdAt ? new Date(o.createdAt).toISOString() : new Date().toISOString());
     const dueDate = o.dueDate ? new Date(o.dueDate).toISOString() : new Date(new Date(intakeDate).getTime() + 10 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -76,7 +79,7 @@ async function _fetchAndMap() {
       title: o.title,
       task: o.task,
       itemDescription: o.task || (orderParts.length > 0 ? orderParts[0].name : null),
-      surfaceRequested: orderParts.length > 0 ? (orderParts[0] as any).surfaceRequested || (orderParts[0] as any).finish || null : null,
+      surfaceRequested: orderParts.length > 0 ? orderParts[0].surfaceRequested || null : null,
       station: o.currentStationId || "wareneingang",
       status: o.status,
       risk: o.risk || "green",
@@ -187,7 +190,7 @@ export async function createOperationalOrderService(data: Record<string, unknown
         name: p.name,
         quantity: typeof p.quantity === "number" ? p.quantity : parseInt(p.quantity as string) || 1,
         currentStationId: stationId,
-        surfaceRequested: (p as any).surfaceRequested || (p as any).surface || (p as any).finish || (p as any).verfahren || null,
+        surfaceRequested: p.surfaceRequested || null,
       }));
       await tx.insert(items).values(newItems);
     }

@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Area, ComposedChart, Bar, Legend } from "recharts";
-import { getForecastDaten } from "../actions";
+import { Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart, Bar, Legend } from "recharts";
+import { getForecastDaten, type ForecastDaten } from "../actions";
 import { Calendar, Loader2, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 
 export function ForecastKachel() {
-  const [data, setData] = useState<{ monate: any[], pipeline: any[], plan?: Record<string, number> | null } | null>(null);
+  const [data, setData] = useState<ForecastDaten | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -35,11 +35,11 @@ export function ForecastKachel() {
     const monatIdx = monatDate.getMonth() + 1;
     return {
       monat: monatDate.toLocaleDateString('de-DE', { month: 'short', year: '2-digit' }),
-      umsatz: m.umsatz,
+      umsatz: m.erloes_netto,
       istWert: true,
       pipelineGewichtet: 0,
       pipelineUngewichtet: 0,
-      plan: data?.plan ? (data.plan[String(monatIdx)] || 0) : 0
+      plan: data?.plan ? (data.plan.monate[String(monatIdx)] || 0) : 0
     };
   });
 
@@ -51,7 +51,7 @@ export function ForecastKachel() {
     if (existing) {
       existing.pipelineGewichtet += p.pipeline_wert_gewichtet;
       existing.pipelineUngewichtet += p.pipeline_wert_ungewichtet;
-      existing.plan = data?.plan ? (data.plan[String(pDate.getMonth() + 1)] || 0) : 0;
+      existing.plan = data?.plan ? (data.plan.monate[String(pDate.getMonth() + 1)] || 0) : 0;
     } else {
       chartData.push({
         monat: mStr,
@@ -59,7 +59,7 @@ export function ForecastKachel() {
         istWert: false,
         pipelineGewichtet: p.pipeline_wert_gewichtet,
         pipelineUngewichtet: p.pipeline_wert_ungewichtet,
-        plan: data?.plan ? (data.plan[String(pDate.getMonth() + 1)] || 0) : 0
+        plan: data?.plan ? (data.plan.monate[String(pDate.getMonth() + 1)] || 0) : 0
       });
     }
   });
@@ -107,7 +107,7 @@ export function ForecastKachel() {
                 <XAxis dataKey="monat" tick={{ fontSize: 11 }} tickMargin={10} />
                 <YAxis tickFormatter={(val) => `€${(val / 1000).toFixed(0)}k`} tick={{ fontSize: 11 }} />
                 <Tooltip 
-                  formatter={(value: any, name: any) => {
+                  formatter={(value, name) => {
                     if (name === "Umsatz (Ist)") return [`€ ${Number(value).toLocaleString('de-DE')}`, name];
                     if (name === "Pipeline (Gewichtet)") return [`€ ${Number(value).toLocaleString('de-DE')}`, name];
                     return [value, name];

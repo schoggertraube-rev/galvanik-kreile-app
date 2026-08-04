@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
 import { updateCustomerCore } from '@/features/customers/customer-card/customerCard.actions';
 import { Edit2, Save, FileText } from 'lucide-react';
+import type { InferSelectModel } from 'drizzle-orm';
+import { customers } from '@/db/schema';
 
-export function CustomerNotesTab({ customerId, customerData }: { customerId: string, customerData: any }) {
+type CustomerNotesData = Pick<InferSelectModel<typeof customers>, 'internalNotes'>;
+
+export function CustomerNotesTab({ customerId, customerData }: { customerId: string, customerData: CustomerNotesData | null | undefined }) {
   const [isEditing, setIsEditing] = useState(false);
   const [notes, setNotes] = useState(customerData?.internalNotes || '');
   const [isSaving, setIsSaving] = useState(false);

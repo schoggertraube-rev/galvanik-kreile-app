@@ -2,15 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { X, Search } from "lucide-react";
+import { X } from "lucide-react";
 import { VorlageResult } from "./VorschlagBanner";
 import { ZeitSlider } from "./ZeitSlider";
 import { MengenStepper } from "./MengenStepper";
 import { BestaetigenButton } from "./BestaetigenButton";
-import { getWahrscheinlicheArtikel, getVorlageFuerAuftrag } from "@/app/actions/vorlage.actions";
+import { getWahrscheinlicheArtikel } from "@/app/actions/vorlage.actions";
 import { erfasseZeitDirekt, erfasseVerbrauch } from "@/app/actions/erfassung.actions";
 import { getKostensatz } from "@/lib/erfassung/snapshot";
 import { createClient } from "@/utils/supabase/client";
+
+type SuggestedArticle = Awaited<ReturnType<typeof getWahrscheinlicheArtikel>>[number];
 
 interface ErfassungSheetProps {
   orderId: string;
@@ -35,7 +37,7 @@ export function ErfassungSheet({
   const [employeeId, setEmployeeId] = useState<string>('');
   
   // Material state
-  const [artikelListe, setArtikelListe] = useState<any[]>([]);
+  const [artikelListe, setArtikelListe] = useState<SuggestedArticle[]>([]);
   const [mengen, setMengen] = useState<Record<string, number>>({});
   
   const [loading, setLoading] = useState(false);

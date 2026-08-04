@@ -6,6 +6,14 @@ import { db } from "@/db";
 import { arbeitszeitBuchung, events } from "@/db/schema";
 import { getCurrentAppUser } from "@/lib/auth/permissions";
 
+function getErrorText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string" && error.message) {
+    return error.message;
+  }
+  return String(error);
+}
+
 // ─────────────────────────────────────────────
 // Book station costs (Erfassung buchen)
 // ─────────────────────────────────────────────
@@ -31,7 +39,7 @@ export async function bookStationCosts(params: {
         return { success: false, errors: ['Für den angemeldeten Benutzer ist kein Mitarbeiterkonto hinterlegt.'] };
       }
       realEmployeeId = user.id;
-    } catch (authError) {
+    } catch {
       return { success: false, errors: ['Für den angemeldeten Benutzer ist kein Mitarbeiterkonto hinterlegt.'] };
     }
   }
@@ -65,9 +73,9 @@ export async function bookStationCosts(params: {
         userId: realEmployeeId,
       });
     });
-  } catch (txError: any) {
+  } catch (txError: unknown) {
     console.error("Drizzle transaction failed in bookStationCosts:", txError);
-    return { success: false, errors: [`Datenbankfehler bei der Buchung: ${txError.message || txError}`] };
+    return { success: false, errors: [`Datenbankfehler bei der Buchung: ${getErrorText(txError)}`] };
   }
 
   // 2) Material → consumable_uses (inserted via Supabase client, since table is not in Drizzle schema)

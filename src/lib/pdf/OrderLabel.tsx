@@ -1,5 +1,5 @@
 import React from "react";
-import { Page, Text, View, Document, StyleSheet, Image } from "@react-pdf/renderer";
+import { Page, Text, View, Document, StyleSheet, Image as PdfImage } from "@react-pdf/renderer";
 import type { Order } from "@/lib/repositories/ordersRepository";
 import { getUrgency } from "@/lib/orders/getUrgency";
 import { format } from "date-fns";
@@ -202,7 +202,7 @@ export const OrderLabelDocument = ({ data, settings }: OrderLabelProps) => {
             <View style={styles.footer}>
               {qrCodeBase64 ? (
                 <View style={{ alignItems: "center" }}>
-                  <Image src={qrCodeBase64} style={styles.qrCode} />
+                  <PdfImage src={qrCodeBase64} style={styles.qrCode} />
                   <Text style={styles.qrText}>{order.orderNumber}</Text>
                 </View>
               ) : null}

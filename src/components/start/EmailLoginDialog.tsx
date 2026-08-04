@@ -1,13 +1,11 @@
 "use client";
 
-import { X } from "lucide-react";
 import { login } from "@/app/actions/auth";
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 
 export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
   const [isPending, startTransition] = useTransition();
-  const [errorMsg, setErrorMsg] = useState("");
+  const [errorMsg] = useState("");
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -16,7 +14,7 @@ export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
       // Direct call to the server action
       try {
         await login(formData);
-      } catch (err) {
+      } catch {
         // If redirect happens it throws an error in nextjs, which is normal
         // but if it doesn't redirect, maybe we can catch a standard error?
         // Actually, the server action does `redirect('/start?message=...')` on error.

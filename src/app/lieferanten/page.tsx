@@ -4,8 +4,7 @@ import { BackButton } from "@/components/ui/BackButton";
 
 import React from 'react';
 import Link from 'next/link';
-import { AppBackButton } from '@/components/ui/AppBackButton';
-import { Building2, Search, ArrowRight } from 'lucide-react';
+import { Building2, ArrowRight } from 'lucide-react';
 
 export default function LieferantenPage() {
   return (

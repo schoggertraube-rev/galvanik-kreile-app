@@ -1,8 +1,10 @@
 "use client";
 import React, { useState, useCallback, useRef, useEffect } from "react";
+import Image from "next/image";
 import { useDiagnostics, DiagEvent } from "@/lib/diagnostics/DiagnosticsContext";
 import { Bug, X, Flag, Trash2, Download, ChevronDown, ChevronUp, AlertTriangle, AlertCircle, Info, Camera } from "lucide-react";
 import { TestpilotCanvas } from "@/components/testpilot/TestpilotCanvas";
+import { getPngDataUrlDimensions } from "@/lib/images/pngDimensions";
 
 /* ===== Severity Icon ===== */
 function SevIcon({ severity }: { severity: DiagEvent["severity"] }) {
@@ -45,16 +47,10 @@ export function DiagnosticsWidget() {
   const [isDraggingDialog, setIsDraggingDialog] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0, initialX: 0, initialY: 0 });
 
-  useEffect(() => {
+  const openMarkDialog = useCallback(() => {
     setDialogPos({ x: window.innerWidth / 2 - 190, y: window.innerHeight / 2 - 150 });
+    setShowMarkDialog(true);
   }, []);
-
-  // Center dialog on mount if showMarkDialog becomes true
-  useEffect(() => {
-    if (showMarkDialog) {
-      setDialogPos({ x: window.innerWidth / 2 - 190, y: window.innerHeight / 2 - 150 });
-    }
-  }, [showMarkDialog]);
 
   // Drag handlers
   const onPointerDown = (e: React.PointerEvent) => {
@@ -138,8 +134,8 @@ export function DiagnosticsWidget() {
     <>
       {isDrawing && (
         <TestpilotCanvas 
-          onSave={(b64) => { setScreenshot(b64); setIsDrawing(false); setShowMarkDialog(true); }} 
-          onCancel={() => { setIsDrawing(false); setShowMarkDialog(true); }} 
+          onSave={(b64) => { setScreenshot(b64); setIsDrawing(false); openMarkDialog(); }}
+          onCancel={() => { setIsDrawing(false); openMarkDialog(); }}
         />
       )}
       
@@ -175,7 +171,7 @@ export function DiagnosticsWidget() {
           <div style={{ flex: 1 }} />
 
           {/* Action buttons */}
-          <button onClick={() => setShowMarkDialog(true)} title="Problem markieren" style={btnStyle}>
+          <button onClick={openMarkDialog} title="Problem markieren" style={btnStyle}>
             <Flag size={13} />
           </button>
           <button onClick={handleExport} title="Bericht exportieren" style={btnStyle}>
@@ -221,8 +217,7 @@ export function DiagnosticsWidget() {
                       {ev.screenshot && (
                         <div style={{ marginTop: 6 }}>
                           <span style={{ fontSize: 9, color: "#475569", display: "block", marginBottom: 2 }}>Screenshot:</span>
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={ev.screenshot} alt="Screenshot" style={{ maxWidth: '100%', maxHeight: 150, borderRadius: 4, border: "1px solid #334155" }} />
+                          <Image src={ev.screenshot} alt="Screenshot" width={getPngDataUrlDimensions(ev.screenshot).width} height={getPngDataUrlDimensions(ev.screenshot).height} unoptimized style={{ maxWidth: '100%', height: 'auto', maxHeight: 150, borderRadius: 4, border: "1px solid #334155" }} />
                         </div>
                       )}
                     </div>
@@ -290,8 +285,7 @@ export function DiagnosticsWidget() {
           
           {screenshot ? (
             <div style={{ position: "relative", marginTop: 12, borderRadius: 8, overflow: "hidden", border: "1px solid #334155" }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={screenshot} alt="Screenshot" style={{ width: "100%", maxHeight: 150, objectFit: "cover", display: "block" }} />
+              <Image src={screenshot} alt="Screenshot" width={getPngDataUrlDimensions(screenshot).width} height={getPngDataUrlDimensions(screenshot).height} unoptimized style={{ width: "100%", height: 'auto', maxHeight: 150, objectFit: "cover", display: "block" }} />
               <button 
                 onClick={() => setScreenshot(null)}
                 style={{ position: "absolute", top: 4, right: 4, background: "rgba(220,38,38,0.9)", color: "white", border: "none", borderRadius: "50%", width: 20, height: 20, display: "grid", placeItems: "center", cursor: "pointer" }}

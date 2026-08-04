@@ -1,6 +1,4 @@
 "use client";
-import { Breadcrumb } from "@/components/ui/Breadcrumb";
-import { BackButton } from "@/components/ui/BackButton";
 
 import Link from "next/link";
 import {
@@ -8,13 +6,26 @@ import {
   ChevronRight, Zap
 } from "lucide-react";
 import { useState, Suspense, useEffect } from "react";
-import { createPortal } from "react-dom";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 import { OrderCompactCard } from "@/components/orders/OrderCompactCard";
 import { OrderEditModal } from "@/components/orders/OrderEditModal";
-import { getUrgency, Urgency } from "@/lib/orders/getUrgency";
+import { getUrgency } from "@/lib/orders/getUrgency";
 import { useOverlayStore } from "@/lib/overlayStore";
+import type { WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
+import type { Order } from "@/lib/repositories/ordersRepository";
+
+function getLegacyStatusText(order: WarendurchlaufOrder) {
+  if (
+    typeof order === "object" &&
+    "statusText" in order &&
+    typeof order.statusText === "string"
+  ) {
+    return order.statusText;
+  }
+
+  return undefined;
+}
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    Warendurchlauf Leitstand — v4 Layout
@@ -22,16 +33,14 @@ import { useOverlayStore } from "@/lib/overlayStore";
 
 function WarendurchlaufLeitstandContent() {
   const searchParams = useSearchParams();
+  void searchParams;
   const router = useRouter();
   const { openErfassung } = useErfassung();
   const { openOrder } = useOverlayStore();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const [orders, setOrders] = useState<any[]>([]);
-  const [stationOrders, setStationOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<WarendurchlaufOrder[]>([]);
+  const [stationOrders, setStationOrders] = useState<WarendurchlaufOrder[]>([]);
   const [todos, setTodos] = useState<{ id: number; title: string; subtitle: string; tags: string[]; action: string; priority?: string; live?: boolean; targetHref?: string; done: boolean }[]>([]);
-  const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<any>(null);
+  const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<Order | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -46,7 +55,7 @@ function WarendurchlaufLeitstandContent() {
 
           // Build dynamic checklist
           const newTodos = [];
-          const kritisch = typedOrders.filter((o: any) => o.risk === 'red' || o.risk === 'orange');
+          const kritisch = typedOrders.filter(o => o.risk === 'red' || o.risk === 'orange');
           if (kritisch.length > 0) {
              newTodos.push({
                 id: 1, title: `Kritische Aufträge (${kritisch.length})`, subtitle: "Aufträge mit hohem Risiko",
@@ -54,7 +63,7 @@ function WarendurchlaufLeitstandContent() {
                 live: true, done: false
              });
           }
-          const auslieferungen = typedOrders.filter((o: any) => o.currentStationId === 'warenausgang' || o.station === 'warenausgang');
+          const auslieferungen = typedOrders.filter(o => o.currentStationId === 'warenausgang' || o.station === 'warenausgang');
           if (auslieferungen.length > 0) {
              newTodos.push({
                 id: 2, title: `Auslieferungen klären (${auslieferungen.length})`, subtitle: "Aufträge im Warenausgang",
@@ -70,7 +79,7 @@ function WarendurchlaufLeitstandContent() {
         if (resList.ok && resList.data) {
           setStationOrders(resList.data);
         }
-      } catch (err) {}
+      } catch {}
     };
     load();
 
@@ -270,18 +279,6 @@ function WarendurchlaufLeitstandContent() {
                 else if (order.risk === "orange" || u === "gefaehrdet") urgencyType = "soon";
                 else if (order.risk === "blocked") urgencyType = "wait";
 
-                const textForSurface = (order.task + " " + (order.parts?.map((p: any) => p.surfaceRequested || p.finish).join(" ") || "")).toLowerCase();
-                let surfaceKey: "chrom" | "nickel" | "gold" | "kupfer" | "zink" | "offen" = "offen";
-                if (textForSurface.includes("chrom")) surfaceKey = "chrom";
-                else if (textForSurface.includes("nickel")) surfaceKey = "nickel";
-                else if (textForSurface.includes("gold")) surfaceKey = "gold";
-                else if (textForSurface.includes("kupfer")) surfaceKey = "kupfer";
-                else if (textForSurface.includes("zink")) surfaceKey = "zink";
-
-                let surfaceLabel = surfaceKey !== "offen" ? surfaceKey.charAt(0).toUpperCase() + surfaceKey.slice(1) : "Oberfläche offen";
-                if (surfaceKey === "chrom") surfaceLabel = "Vernickeln → Chrom";
-                if (surfaceKey === "zink") surfaceLabel = "Verzinken";
-
                 return (
                   <OrderCompactCard
                     key={order.id}
@@ -293,7 +290,7 @@ function WarendurchlaufLeitstandContent() {
                     urgency={urgencyType}
                     dueValue={order.dueValue || "14 T"}
                     dueLabel={order.dueLabel || "Fällig in"}
-                    badgeText={order.statusText || "Wartend"}
+                    badgeText={getLegacyStatusText(order) || "Wartend"}
                     onClick={() => openOrder(order.id)}
                   />
                 );

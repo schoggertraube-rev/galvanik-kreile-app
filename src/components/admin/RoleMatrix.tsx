@@ -27,7 +27,20 @@ export function RoleMatrix() {
   const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchData();
+    void getFeatureFlags()
+      .then((flags) => {
+        const perms = flags
+          .filter(f => f.id.startsWith("perm_"))
+          .map(f => ({
+            id: f.id,
+            name: f.name,
+            description: f.description || "Allgemein",
+            rolesAllowed: f.rolesAllowed || []
+          }));
+        setPermissions(perms);
+      })
+      .catch((err) => console.error("Failed to fetch permissions", err))
+      .finally(() => setLoading(false));
   }, []);
 
   const fetchData = async () => {

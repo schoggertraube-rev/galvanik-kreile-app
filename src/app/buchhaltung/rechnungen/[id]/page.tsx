@@ -2,7 +2,7 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 import { getRechnungAction } from "@/app/buchhaltung/actions";
 import Link from "next/link";
-import { ChevronRight, FileText, CheckCircle2, AlertTriangle, Euro, Anchor, Briefcase, User } from "lucide-react";
+import { ChevronRight, FileText, AlertTriangle, Euro, Anchor, Briefcase, User } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { OrderModalTrigger } from "@/components/orders/OrderModalTrigger";
 

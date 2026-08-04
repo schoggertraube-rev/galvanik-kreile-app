@@ -8,6 +8,6 @@ try {
     stdio: "inherit",
     env: { ...process.env }
   });
-} catch (e) {
+} catch {
   process.exit(1);
 }

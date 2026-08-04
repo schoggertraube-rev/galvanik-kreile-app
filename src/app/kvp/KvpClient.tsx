@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Lightbulb, PlusCircle, Target, Activity, AlertOctagon, CheckCircle2, ListFilter, PlayCircle, BarChart3, Info, Lock } from "lucide-react";
 import { usePageView } from "@/hooks/usePageView";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
@@ -22,6 +22,108 @@ interface KvpItem {
   affectedPage: string;
   nextAction: string;
   isDemo?: boolean;
+}
+
+const KVP_STORAGE_KEY = "kreile_kvp_items";
+const KVP_STORAGE_EVENT = "kreile-kvp-items-change";
+const USER_ROLE_STORAGE_KEY = "kreile_user_role";
+const EMPTY_KVP_ITEMS: KvpItem[] = [];
+let cachedKvpItemsRaw: string | null | undefined;
+let cachedKvpItems: KvpItem[] = EMPTY_KVP_ITEMS;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isKvpItem(value: unknown): value is KvpItem {
+  if (!isRecord(value)) return false;
+
+  const requiredTextFields = [
+    value.id,
+    value.title,
+    value.category,
+    value.benefit,
+    value.problemDesc,
+    value.observedSignal,
+    value.expectedBenefit,
+    value.affectedPage,
+    value.nextAction,
+  ];
+  const isTextFieldsValid = requiredTextFields.every((field) => typeof field === "string");
+  const isEffortValid = value.effort === "klein" || value.effort === "mittel" || value.effort === "groß";
+  const isPriorityValid = value.priority === "hoch" || value.priority === "mittel" || value.priority === "niedrig";
+  const isStatusValid = value.status === "neu" || value.status === "prüfen" || value.status === "geplant" || value.status === "erledigt";
+
+  return isTextFieldsValid
+    && isEffortValid
+    && isPriorityValid
+    && isStatusValid
+    && (value.isDemo === undefined || typeof value.isDemo === "boolean");
+}
+
+function getKvpItemsSnapshot(): KvpItem[] {
+  if (typeof window === "undefined") return EMPTY_KVP_ITEMS;
+
+  const raw = localStorage.getItem(KVP_STORAGE_KEY);
+  if (raw === cachedKvpItemsRaw) return cachedKvpItems;
+
+  cachedKvpItemsRaw = raw;
+  if (!raw) {
+    cachedKvpItems = EMPTY_KVP_ITEMS;
+    return cachedKvpItems;
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    cachedKvpItems = Array.isArray(parsed) ? parsed.filter(isKvpItem) : EMPTY_KVP_ITEMS;
+  } catch {
+    cachedKvpItems = EMPTY_KVP_ITEMS;
+  }
+
+  return cachedKvpItems;
+}
+
+function subscribeToKvpItems(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === KVP_STORAGE_KEY) onStoreChange();
+  };
+
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(KVP_STORAGE_EVENT, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(KVP_STORAGE_EVENT, onStoreChange);
+  };
+}
+
+function saveKvpItems(items: KvpItem[]): void {
+  if (typeof window === "undefined") return;
+
+  const raw = JSON.stringify(items);
+  cachedKvpItemsRaw = raw;
+  cachedKvpItems = items;
+  localStorage.setItem(KVP_STORAGE_KEY, raw);
+  window.dispatchEvent(new Event(KVP_STORAGE_EVENT));
+}
+
+function subscribeToLocalRole(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === USER_ROLE_STORAGE_KEY) onStoreChange();
+  };
+
+  window.addEventListener("storage", onStorage);
+  return () => window.removeEventListener("storage", onStorage);
+}
+
+function getLocalAdminSnapshot(): boolean {
+  if (typeof window === "undefined") return false;
+
+  const role = localStorage.getItem(USER_ROLE_STORAGE_KEY);
+  return role === "admin" || role === "developer";
 }
 
 const CATEGORIES = ["Bedienung", "Kommunikation", "Warendurchlauf", "Performance", "Kundenservice", "Bäder/Chemie", "Finanzen", "Sonstiges"];
@@ -82,8 +184,9 @@ const DEMO_ITEMS: KvpItem[] = [
 export function KvpClient() {
   usePageView();
 
-  const [items, setItems] = useState<KvpItem[]>(DEMO_ITEMS);
-  const [isAdminOrDev, setIsAdminOrDev] = useState(false);
+  const savedItems = useSyncExternalStore(subscribeToKvpItems, getKvpItemsSnapshot, () => EMPTY_KVP_ITEMS);
+  const items = [...savedItems, ...DEMO_ITEMS];
+  const isAdminOrDev = useSyncExternalStore(subscribeToLocalRole, getLocalAdminSnapshot, () => false);
   const [activeItem, setActiveItem] = useState<KvpItem | null>(null);
 
   // Form State
@@ -91,21 +194,6 @@ export function KvpClient() {
   const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
   const [newBenefit, setNewBenefit] = useState(BENEFITS[0]);
   const [newProblem, setNewProblem] = useState("");
-
-  useEffect(() => {
-    const role = localStorage.getItem("kreile_user_role");
-    if (role === "admin" || role === "developer") setIsAdminOrDev(true);
-
-    const saved = localStorage.getItem("kreile_kvp_items");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setItems([...parsed, ...DEMO_ITEMS]);
-      } catch(e) {
-        setItems(DEMO_ITEMS);
-      }
-    }
-  }, []);
 
   const handleSave = () => {
     if (!newTitle.trim()) return;
@@ -126,17 +214,10 @@ export function KvpClient() {
       isDemo: false
     };
 
-    const currentSaved = localStorage.getItem("kreile_kvp_items");
-    let currentArr = [];
-    if (currentSaved) {
-      try { currentArr = JSON.parse(currentSaved); } catch(e) {}
-    }
-    currentArr.unshift(newItem);
-    localStorage.setItem("kreile_kvp_items", JSON.stringify(currentArr));
+    saveKvpItems([newItem, ...getKvpItemsSnapshot()]);
 
     OfflineManager.enqueueAction("APP_KVP_CREATE", newItem).catch(console.error);
 
-    setItems([newItem, ...items]);
     setNewTitle("");
     setNewProblem("");
   };
@@ -252,7 +333,7 @@ export function KvpClient() {
             <ul className="space-y-3 mb-6">
               <li className="flex justify-between items-center border-b border-neutral-gray-100 pb-2">
                 <span className="text-sm font-medium text-navy-900">Häufigste Suche ohne Treffer</span>
-                <span className="text-xs font-bold text-error-red">"Urlaub"</span>
+                <span className="text-xs font-bold text-error-red">&quot;Urlaub&quot;</span>
               </li>
               <li className="flex justify-between items-center border-b border-neutral-gray-100 pb-2">
                 <span className="text-sm font-medium text-navy-900">Rollenblockaden (Woche)</span>

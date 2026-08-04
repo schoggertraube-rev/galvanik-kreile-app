@@ -52,9 +52,7 @@ export function CameraCapture({
       if (activeStream) {
         activeStream.getTracks().forEach((track) => track.stop());
       }
-      stopCamera();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleCapture = async () => {

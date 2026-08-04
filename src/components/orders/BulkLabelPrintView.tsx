@@ -1,9 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
+import { useState } from "react";
 import { X, Printer, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { generateOrderLabel } from "@/app/actions/pdf.actions";
+import { useHydrated } from "@/hooks/useHydrated";
 
 interface Order {
   id: string;
@@ -24,18 +24,8 @@ interface BulkLabelPrintViewProps {
 }
 
 export function BulkLabelPrintView({ orders, onClose, onPrintComplete }: BulkLabelPrintViewProps) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
   const [printing, setPrinting] = useState(false);
-  const [customerMap, setCustomerMap] = useState<Record<string, string>>({});
-  const [qrCodes, setQrCodes] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const handlePrint = async () => {
     setPrinting(true);

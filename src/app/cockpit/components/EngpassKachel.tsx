@@ -2,19 +2,24 @@
 
 import { useState, useEffect } from "react";
 import { Activity, Loader2, ArrowRight, Beaker, GitPullRequest } from "lucide-react";
-import { getEngpassDaten, getEngpassDetails } from "../actions";
+import {
+  getEngpassDaten,
+  getEngpassDetails,
+  type EngpassDetails,
+  type EngpassStation,
+} from "../actions";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 import { ResponsiveDetailDrawer } from "@/components/ui/ResponsiveDetailDrawer";
 import Link from "next/link";
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 
 export function EngpassKachel() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<EngpassStation[]>([]);
   const [loading, setLoading] = useState(true);
   
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selectedStation, setSelectedStation] = useState<any>(null);
-  const [details, setDetails] = useState<any>(null);
+  const [selectedStation, setSelectedStation] = useState<EngpassStation | null>(null);
+  const [details, setDetails] = useState<EngpassDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const { openOrder } = useOrderModal();
 
@@ -27,7 +32,7 @@ export function EngpassKachel() {
     load();
   }, []);
 
-  const openDrawer = async (station: any) => {
+  const openDrawer = async (station: EngpassStation) => {
     setSelectedStation(station);
     setDrawerOpen(true);
     setDetailsLoading(true);
@@ -148,13 +153,13 @@ export function EngpassKachel() {
                 <p className="text-sm text-text-muted">Keine wartenden Aufträge.</p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {details?.waitingOrders?.map((o: any) => (
+                  {details?.waitingOrders?.map(o => (
                     <button key={o.id} onClick={() => { openOrder(o.id); setDrawerOpen(false); }} className="w-full text-left flex justify-between items-center p-3 hover:bg-neutral-gray-50 rounded-lg border border-transparent hover:border-neutral-gray-200">
                       <div className="flex flex-col">
                         <span className="font-bold text-navy-900 text-sm">{o.order_number}</span>
                       </div>
                       <div className="flex items-center gap-4">
-                        <span className="text-xs text-text-muted">Eingang: {new Date(o.intake_date).toLocaleDateString()}</span>
+                        <span className="text-xs text-text-muted">Eingang: {new Date(o.intake_date ?? 0).toLocaleDateString()}</span>
                         <ArrowRight className="w-4 h-4 text-neutral-gray-400" />
                       </div>
                     </button>

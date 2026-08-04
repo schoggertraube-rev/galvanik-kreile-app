@@ -1,6 +1,7 @@
 "use client";
 
 import { usePageView } from "@/hooks/usePageView";
+import Image from "next/image";
 import { useState, useEffect, useEffectEvent } from "react";
 import { Delete, Clock, Wrench, Calculator, Sun } from "lucide-react";
 import { getGreeting } from "@/lib/greeting";
@@ -291,9 +292,12 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
 
       {/* Skyline Logo wordmark block */}
       <div className="flex flex-col items-center mb-8 animate-in fade-in slide-in-from-bottom-6 duration-700 fill-mode-both">
-        <img
+        <Image
           src="/assets/logo/kreile-wordmark-skyline.svg"
           alt="Kreile Wortmarke Skyline"
+          width={560}
+          height={220}
+          unoptimized
           className="w-[360px] md:w-[480px] h-auto object-contain"
         />
       </div>

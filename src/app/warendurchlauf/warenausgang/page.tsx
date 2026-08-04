@@ -1,17 +1,15 @@
 "use client";
-import { Breadcrumb } from "@/components/ui/Breadcrumb";
-import { BackButton } from "@/components/ui/BackButton";
 
 import Link from "next/link";
 import { CheckCircle2, Package, Truck, MessageSquare, CreditCard, Send } from "lucide-react";
 import { useState, useEffect } from "react";
 import { PaymentDrawer } from "@/components/orders/PaymentDrawer";
-import { getOrdersDb } from "@/app/actions/orders.actions";
+import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 
 export default function WarenausgangPage() {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<OrderResponse[]>([]);
   const [sendingInvoice, setSendingInvoice] = useState<string | null>(null);
   const { openOrder } = useOrderModal();
 
@@ -19,7 +17,7 @@ export default function WarenausgangPage() {
     const fetchOrders = async () => {
       const res = await getOrdersDb();
       if (res.ok && res.data) {
-        setOrders(res.data.filter((o: any) => o.station === "warenausgang" || o.currentStationId === "warenausgang"));
+        setOrders(res.data.filter((order) => order.station === "warenausgang" || order.currentStationId === "warenausgang"));
       }
     };
     fetchOrders();

@@ -3,7 +3,22 @@
 import { getOperationalOrders, getOperationalOrdersByStation, getOperationalOrdersReadyForStation, startProcessingStationService } from "@/lib/server/operationalOrders";
 import { checkAppAuth } from "@/lib/server/authHelper";
 
-export async function getStationOrders(stationId: string) {
+export type WarendurchlaufOrder = Awaited<ReturnType<typeof getOperationalOrders>>[number];
+
+export interface WarendurchlaufKpiData {
+  termintreue: number;
+  durchlaufzeitTage: number;
+  engpassStation: string;
+  engpassCount: number;
+  offeneAuftraege: number;
+  orders: WarendurchlaufOrder[];
+}
+
+export type WarendurchlaufActionResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: "AUTH_ERROR" | "QUERY_ERROR"; message: string };
+
+export async function getStationOrders(stationId: string): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
   const auth = await checkAppAuth();
   if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
   try {
@@ -14,7 +29,7 @@ export async function getStationOrders(stationId: string) {
   }
 }
 
-export async function getStationReadyOrders(stationId: string) {
+export async function getStationReadyOrders(stationId: string): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
   const auth = await checkAppAuth();
   if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
   try {
@@ -36,7 +51,7 @@ export async function startProcessingStation(orderId: string, stationId: string)
   }
 }
 
-export async function getWarendurchlaufKPIs() {
+export async function getWarendurchlaufKPIs(): Promise<WarendurchlaufActionResult<WarendurchlaufKpiData>> {
   const auth = await checkAppAuth();
   if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
 
@@ -45,20 +60,6 @@ export async function getWarendurchlaufKPIs() {
 
     const totalOrders = allOrdersQuery.length;
     
-    // Termintreue
-    let onTimeCount = 0;
-    let completedCount = 0;
-    allOrdersQuery.forEach(o => {
-      if (o.status === "completed" || o.status === "abgeschlossen" || o.status === "versendet") {
-        completedCount++;
-        // If we don't have a specific completion date, we assume the user wanted a generic Termintreue over all orders?
-        // Wait, the prompt says: COUNT(orders WHERE ist_am <= soll_am) / COUNT(orders) * 100
-        // We don't have ist_am. Let's use intakeDate + 5 days as a proxy or just count if dueDate > intakeDate.
-        // Actually, if we just count how many have risk !== 'red', that's a good proxy for termintreue.
-        onTimeCount++; // simplification for the moment, let's refine:
-      }
-    });
-
     // Engpass
     const stations: Record<string, number> = {};
     allOrdersQuery.forEach(o => {

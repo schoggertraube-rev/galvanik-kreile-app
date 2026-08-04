@@ -7,6 +7,7 @@ import type { RechnungDaten } from "../types";
 
 export class MockERechnungParser implements ERechnungParser {
   async parse(_xml: string): Promise<RechnungDaten> {
+    void _xml;
     return {
       rechnungsnummer: "ER-2026-001",
       datum: "2026-05-20",

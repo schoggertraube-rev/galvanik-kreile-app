@@ -1,4 +1,21 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, type ContentListUnion, type GenerateContentConfig } from "@google/genai";
+
+interface GeminiErrorDetails {
+  status?: number;
+  message?: string;
+}
+
+function getGeminiErrorDetails(error: unknown): GeminiErrorDetails {
+  if (typeof error !== "object" || error === null) {
+    return {};
+  }
+
+  const details = error as Record<string, unknown>;
+  return {
+    status: typeof details.status === "number" ? details.status : undefined,
+    message: typeof details.message === "string" ? details.message : undefined,
+  };
+}
 
 export class GeminiQuotaError extends Error {
   constructor(message: string) {
@@ -31,8 +48,8 @@ export function getFallbackGeminiModel() {
 }
 
 export async function generateGeminiContentWithFallback(options: {
-  contents: any;
-  config?: any;
+  contents: ContentListUnion;
+  config?: GenerateContentConfig;
 }) {
   const ai = getGeminiClient();
   const primaryModel = getPrimaryGeminiModel();
@@ -45,17 +62,18 @@ export async function generateGeminiContentWithFallback(options: {
       config: options.config,
     });
     return response;
-  } catch (error: any) {
-    const isOverloadedOrQuota = 
-      error?.status === 429 || 
-      error?.status === 503 || 
-      error?.message?.includes("Quota exceeded") || 
-      error?.message?.includes("RESOURCE_EXHAUSTED") ||
-      error?.message?.includes("high demand") ||
-      error?.message?.includes("UNAVAILABLE");
+  } catch (error: unknown) {
+    const primaryError = getGeminiErrorDetails(error);
+    const isOverloadedOrQuota =
+      primaryError.status === 429 ||
+      primaryError.status === 503 ||
+      primaryError.message?.includes("Quota exceeded") ||
+      primaryError.message?.includes("RESOURCE_EXHAUSTED") ||
+      primaryError.message?.includes("high demand") ||
+      primaryError.message?.includes("UNAVAILABLE");
 
     if (isOverloadedOrQuota && primaryModel !== fallbackModel) {
-      console.warn(`[Gemini] Primary model ${primaryModel} failed (${error?.status || 'Overloaded'}). Falling back to ${fallbackModel}...`);
+      console.warn(`[Gemini] Primary model ${primaryModel} failed (${primaryError.status || 'Overloaded'}). Falling back to ${fallbackModel}...`);
       
       // Remove Google Search tools in fallback to ensure it succeeds if Search was the issue
       const fallbackConfig = { ...options.config };
@@ -70,8 +88,8 @@ export async function generateGeminiContentWithFallback(options: {
           config: fallbackConfig,
         });
         return fallbackResponse;
-      } catch (fallbackError: any) {
-        console.error(`[Gemini] Fallback model ${fallbackModel} also failed:`, fallbackError.message);
+      } catch (fallbackError: unknown) {
+        console.error(`[Gemini] Fallback model ${fallbackModel} also failed:`, getGeminiErrorDetails(fallbackError).message);
         throw new GeminiQuotaError("Gemini-Kontingent erreicht. Analyse aktuell nicht möglich.");
       }
     }
@@ -105,11 +123,12 @@ export async function generateAiResponse(prompt: string, requireWebSearch: boole
     if (!text) throw new Error("No response from Gemini");
 
     return text;
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const geminiError = getGeminiErrorDetails(error);
     if (error instanceof GeminiQuotaError) {
       throw error;
     }
-    if (error?.status === 429 || error?.message?.includes("Quota exceeded")) {
+    if (geminiError.status === 429 || geminiError.message?.includes("Quota exceeded")) {
       throw new GeminiQuotaError("Gemini-Kontingent erreicht. Analyse ohne Websuche oder später erneut versuchen.");
     }
     throw error;

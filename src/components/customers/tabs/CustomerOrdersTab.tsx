@@ -4,9 +4,13 @@ import { useOverlayStore } from '@/lib/overlayStore';
 import { useErfassung } from '@/components/erfassung/ErfassungProvider';
 import { FileSearch, Sparkles, Loader2 } from 'lucide-react';
 import { OrderWideCard, UrgencyType } from '@/components/orders/OrderWideCard';
+import type { InferSelectModel } from 'drizzle-orm';
+import { orders } from '@/db/schema';
+
+type CustomerOrder = InferSelectModel<typeof orders>;
 
 export function CustomerOrdersTab({ customerId }: { customerId: string }) {
-  const [orders, setOrders] = useState<Record<string, any>[]>([]);
+  const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const openOrder = useOverlayStore(state => state.openOrder);
   const { openErfassung } = useErfassung();

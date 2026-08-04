@@ -1,6 +1,4 @@
 import { createId } from "@paralleldrive/cuid2";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { IndexedDBHelper } from "@/lib/offline/IndexedDBHelper";
 import { createClient } from "@/lib/supabase/client";
 
 export type Complaint = {
@@ -27,8 +25,6 @@ export type Complaint = {
 };
 
 const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
-
-const INITIAL_COMPLAINTS: Complaint[] = [];
 
 export const complaintsRepository = {
   async getAll(): Promise<Complaint[]> {

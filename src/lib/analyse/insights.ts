@@ -1,7 +1,26 @@
 export interface KachelDaten {
   trend?: { prozent: number; positivIstGut: boolean };
-  vormonat?: any;
-  [key: string]: any;
+  vormonat?: {
+    tankungenCount?: number;
+    materialQuote?: number;
+  };
+  offeneBelege?: number;
+  tankungenCount?: number;
+  ueberfaelligCount?: number;
+  materialQuote?: number;
+  stromGestiegen?: boolean;
+  bewirtungDelta?: number;
+  quoteAutomatisch?: number;
+  fehlendeLieferantenMappings?: number;
+  instaCount?: number;
+  mailCount?: number;
+  topSegment?: string;
+  topSegmentShare?: number;
+  emailRoi?: number;
+  instaRoi?: number;
+  topSegmentScore?: number;
+  topSegmentName?: string;
+  [key: string]: unknown;
 }
 
 export interface InsightAction {
@@ -26,7 +45,7 @@ export function generateInsight(kachel: string, daten: KachelDaten): Insight {
   switch (kachel) {
     case 'ustva':
       if (delta > 10) beobachtungen.push(`Zahllast ${delta}% über Vormonat.`);
-      if (daten.offeneBelege > 0) {
+      if ((daten.offeneBelege ?? 0) > 0) {
         vermutungen.push(`Es gibt noch ${daten.offeneBelege} Belege, die die Zahllast mindern könnten.`);
         vorschlaege.push({ label: 'Ausstehende Belege prüfen', href: '/buchhaltung/belege' });
       }
@@ -46,7 +65,7 @@ export function generateInsight(kachel: string, daten: KachelDaten): Insight {
       break;
 
     case 'offene_posten':
-      if (daten.ueberfaelligCount > 0) {
+      if ((daten.ueberfaelligCount ?? 0) > 0) {
         beobachtungen.push(`${daten.ueberfaelligCount} Posten sind aktuell überfällig.`);
         vermutungen.push('Erfahrungsgemäß zahlen einige Kunden erst nach der ersten Mahnung.');
         vorschlaege.push({ label: 'Zahlungserinnerungen senden', href: '/buchhaltung/zahlung' });
@@ -76,7 +95,7 @@ export function generateInsight(kachel: string, daten: KachelDaten): Insight {
       break;
 
     case 'ausgaben_gesamt':
-      if (daten.bewirtungDelta > 20) {
+      if ((daten.bewirtungDelta ?? 0) > 20) {
         beobachtungen.push(`Bewirtungskosten ${daten.bewirtungDelta}% über Vormonat.`);
         vermutungen.push('Vermutlich gab es mehrere Kundenevents.');
         vorschlaege.push({ label: 'Anlass ergänzen (§4 Abs.5 Nr.2)', href: '/buchhaltung/belege' });
@@ -84,16 +103,16 @@ export function generateInsight(kachel: string, daten: KachelDaten): Insight {
       break;
 
     case 'sparzaehler':
-      if (daten.quoteAutomatisch > 90) {
-        beobachtungen.push(`${Math.round(daten.quoteAutomatisch)}% automatisch kontiert.`);
-        if (daten.fehlendeLieferantenMappings > 0) {
+      if ((daten.quoteAutomatisch ?? 0) > 90) {
+        beobachtungen.push(`${Math.round(daten.quoteAutomatisch ?? 0)}% automatisch kontiert.`);
+        if ((daten.fehlendeLieferantenMappings ?? 0) > 0) {
           vorschlaege.push({ label: `${daten.fehlendeLieferantenMappings} Lieferanten ohne Mapping ergänzen`, href: '/buchhaltung/steuerprofil' });
         }
       }
       break;
 
     case 'anfragen_marketing':
-      if (daten.instaCount > daten.mailCount * 2) {
+      if ((daten.instaCount ?? 0) > (daten.mailCount ?? 0) * 2) {
         beobachtungen.push('Instagram bringt mehr als doppelt so viele Anfragen wie E-Mail.');
         vorschlaege.push({ label: 'Vorher/Nachher-Post diese Woche planen', href: '/marketing' });
       }
@@ -107,14 +126,14 @@ export function generateInsight(kachel: string, daten: KachelDaten): Insight {
       break;
 
     case 'roi_marketing':
-      if (daten.emailRoi > daten.instaRoi) {
+      if ((daten.emailRoi ?? 0) > (daten.instaRoi ?? 0)) {
         beobachtungen.push(`E-Mail ROI (${daten.emailRoi}x) schlägt Instagram (${daten.instaRoi}x).`);
         vorschlaege.push({ label: 'E-Mail-Budget erhöhen', href: '/marketing' });
       }
       break;
 
     case 'zufriedenheit':
-      if (daten.topSegmentScore > 4.5) {
+      if ((daten.topSegmentScore ?? 0) > 4.5) {
         beobachtungen.push(`${daten.topSegmentName}-Segment hat extrem hohe Zufriedenheit (${daten.topSegmentScore}/5).`);
         vorschlaege.push({ label: 'Dieses Segment für Referenzfotos ansprechen', href: '/marketing' });
       }

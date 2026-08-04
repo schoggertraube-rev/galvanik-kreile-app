@@ -5,14 +5,15 @@ import { useOverlayStore } from "@/lib/overlayStore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
+import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
 interface OrderTileProps {
-  order: any;
+  order: Pick<OperationalOrder, "id" | "orderNumber" | "station" | "title" | "task" | "dueDate" | "risk" | "status"> | null | undefined;
   className?: string;
 }
 
 export function OrderTile({ order, className = "" }: OrderTileProps) {
-  const pushOrder = useOverlayStore((state: any) => state.pushOrder);
+  const pushOrder = useOverlayStore(state => state.pushOrder);
 
   if (!order) return <div className="p-4 text-center text-gray-500">Noch keine Daten erfasst</div>;
 

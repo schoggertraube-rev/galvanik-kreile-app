@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Clock, ArrowRight } from "lucide-react";
+import { Check, Clock } from "lucide-react";
 
 export type TimelineItem = {
   id: string;

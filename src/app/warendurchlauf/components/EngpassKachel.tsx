@@ -4,9 +4,9 @@ import { useState } from "react";
 import { Tile } from "@/app/buchhaltung/components/Tile";
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import { AlertTriangle } from "lucide-react";
-import Link from "next/link";
+import type { WarendurchlaufKpiData } from "../actions";
 
-export function EngpassKachel({ data }: { data: any }) {
+export function EngpassKachel({ data }: { data: WarendurchlaufKpiData | null }) {
   const [overlayOpen, setOverlayOpen] = useState(false);
 
   const engpassStation = data?.engpassStation || "Kein Engpass";
@@ -15,7 +15,7 @@ export function EngpassKachel({ data }: { data: any }) {
 
   // Group by station
   const stations: Record<string, number> = {};
-  orders.filter((o: any) => o.status !== "completed" && o.status !== "abgeschlossen").forEach((o: any) => {
+  orders.filter(o => o.status !== "completed" && o.status !== "abgeschlossen").forEach(o => {
     const s = o.currentStationId || "wareneingang";
     stations[s] = (stations[s] || 0) + 1;
   });

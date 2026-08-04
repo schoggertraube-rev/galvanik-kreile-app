@@ -4,14 +4,16 @@ import { BackButton } from "@/components/ui/BackButton";
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ChevronRight, TrendingDown, AlertCircle, CheckCircle2, Wallet, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { ChevronRight, TrendingDown, AlertCircle, CheckCircle2, Wallet } from "lucide-react";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
 import { getAusgabenKategorien } from '@/app/buchhaltung/analysis.actions';
+
+type AusgabenKategorie = Awaited<ReturnType<typeof getAusgabenKategorien>>[number];
 
 export default function AusgabenPage() {
   usePageView();
 
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<AusgabenKategorie[]>([]);
 
   useEffect(() => {
     getAusgabenKategorien().then(setCategories);
@@ -69,7 +71,7 @@ export default function AusgabenPage() {
               <span className="text-[10px] font-bold text-amber-600 tracking-wider bg-amber-50 px-2 py-0.5 rounded">WARNUNG</span>
             </div>
             <p className="text-xs text-neutral-600 leading-relaxed">
-              Die Ausgaben für <strong className="text-[#1e1b18]">Kfz & Wartung (2.100 €)</strong> liegen diesen Monat <strong className="text-rose-600">+40 %</strong> über dem historischen Durchschnitt. Ursache ist primär die Rechnung von "Reifen Müller" über 420 €.
+              Die Ausgaben für <strong className="text-[#1e1b18]">Kfz & Wartung (2.100 €)</strong> liegen diesen Monat <strong className="text-rose-600">+40 %</strong> über dem historischen Durchschnitt. Ursache ist primär die Rechnung von &quot;Reifen Müller&quot; über 420 €.
             </p>
           </div>
         </div>

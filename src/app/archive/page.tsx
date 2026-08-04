@@ -4,14 +4,13 @@ import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Archive as ArchiveIcon, ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { Archive as ArchiveIcon } from "lucide-react";
 import { getStationConfig } from "@/constants/stations";
-import { getOrdersDb } from "@/app/actions/orders.actions";
+import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AppBackButton } from "@/components/ui/AppBackButton";
 
-type Order = any; // fallback
+type Order = OrderResponse & { statusText?: unknown };
 
 export default function ArchivePage() {
   usePageView();
@@ -22,7 +21,11 @@ export default function ArchivePage() {
       try {
         const dbOrdersRes = await getOrdersDb();
         if (dbOrdersRes.ok && dbOrdersRes.data && dbOrdersRes.data.length > 0) {
-          setOrders(dbOrdersRes.data.filter((o: any) => o.status === "done" || o.statusText === "closed" || o.statusText === "completed" || o.statusText === "shipped"));
+          setOrders(dbOrdersRes.data.filter((order) => {
+            const legacyOrder = order as Order;
+            const statusText = typeof legacyOrder.statusText === "string" ? legacyOrder.statusText : undefined;
+            return order.status === "done" || statusText === "closed" || statusText === "completed" || statusText === "shipped";
+          }));
         } else {
            setOrders([]);
         }

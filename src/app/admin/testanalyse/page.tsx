@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useTestpilot, TestpilotSession } from '@/components/testpilot/TestpilotProvider';
 import { AppBackButton } from '@/components/ui/AppBackButton';
+import { getPngDataUrlDimensions } from '@/lib/images/pngDimensions';
 
 export default function TestanalyseDashboard() {
   const { session, clearSession, exportSessionJSON, exportSessionMarkdown } = useTestpilot();
@@ -152,8 +154,7 @@ export default function TestanalyseDashboard() {
                         {ev.screenshot && (
                           <div className="mt-3">
                             <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1 block">Angehängter Screenshot</span>
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={ev.screenshot} alt="Screenshot Marker" className="max-w-full h-auto rounded border border-slate-300 dark:border-slate-700 shadow-sm" style={{ maxHeight: '300px' }} />
+                            <Image src={ev.screenshot} alt="Screenshot Marker" width={getPngDataUrlDimensions(ev.screenshot).width} height={getPngDataUrlDimensions(ev.screenshot).height} unoptimized className="max-w-full h-auto rounded border border-slate-300 dark:border-slate-700 shadow-sm" style={{ maxHeight: '300px' }} />
                           </div>
                         )}
                       </div>

@@ -1,14 +1,13 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Order } from "@/lib/repositories/ordersRepository";
+import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import { GalvanikOrderRow } from "./GalvanikOrderRow";
-import { isBefore, startOfDay } from "date-fns";
 import { getUrgency } from "@/lib/orders/getUrgency";
 import { ArrowUpDown, Users } from "lucide-react";
 
 interface GalvanikQueueProps {
-  orders: Order[];
+  orders: OperationalOrder[];
 }
 
 type SortMode = "dueDate" | "customer";
@@ -27,12 +26,10 @@ export function GalvanikQueue({ orders }: GalvanikQueueProps) {
   }, [orders, search]);
 
   const sortedOrders = useMemo(() => {
-    const today = startOfDay(new Date());
-
     return [...filteredOrders].sort((a, b) => {
       if (sortMode === "dueDate") {
         // Sort: critical -> warning -> ok, dann nach Datum aufsteigend
-        const getUrgencyScore = (o: Order) => {
+        const getUrgencyScore = (o: OperationalOrder) => {
           const u = getUrgency(o.dueDate);
           return { "kritisch": 1, "gefaehrdet": 2, "im_plan": 3 }[u] || 3;
         };
@@ -115,7 +112,7 @@ export function GalvanikQueue({ orders }: GalvanikQueueProps) {
               if (!acc[cust]) acc[cust] = [];
               acc[cust].push(order);
               return acc;
-            }, {} as Record<string, Order[]>)
+            }, {} as Record<string, OperationalOrder[]>)
           ).map(([customer, custOrders]) => (
             <div key={customer} className="space-y-3 mb-4">
               <h3 className="font-bold text-lg text-navy-900 border-b-2 border-neutral-gray-100 pb-2 pl-2">{customer}</h3>

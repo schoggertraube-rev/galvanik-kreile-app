@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { getCustomerPrices } from '@/features/customers/customer-card/customerCard.actions';
+import { getCustomerPrices, type CustomerPriceAgreement } from '@/features/customers/customer-card/customerCard.actions';
 import { Loader2, Euro, PlusCircle } from 'lucide-react';
 
 export function CustomerPricesTab({ customerId }: { customerId: string }) {
-  const [prices, setPrices] = useState<any[]>([]);
+  const [prices, setPrices] = useState<CustomerPriceAgreement[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ export function CustomerPricesTab({ customerId }: { customerId: string }) {
           {prices.map((price) => (
             <div key={price.id} className="bg-white border border-gray-200 rounded-xl p-5 hover:border-[var(--ci-blue)] transition-colors">
               <div className="flex justify-between items-start mb-3">
-                <h4 className="font-bold text-gray-900 text-sm">{price.title || 'Preisvereinbarung'}</h4>
+                <h4 className="font-bold text-gray-900 text-sm">Preisvereinbarung</h4>
                 <span className="text-xs bg-green-50 text-green-700 font-bold px-2 py-0.5 rounded border border-green-200">Aktiv</span>
               </div>
               <div className="flex justify-between items-end border-t border-gray-100 pt-3">

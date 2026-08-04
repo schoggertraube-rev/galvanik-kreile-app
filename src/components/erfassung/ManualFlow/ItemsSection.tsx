@@ -2,12 +2,23 @@
 
 import { Plus, Trash2 } from "lucide-react";
 
-export function ItemsSection({ items, onChange }: { items: any[], onChange: (items: any[]) => void }) {
+type ManualItem = Record<string, unknown> & {
+  id?: string | number;
+  name?: string;
+  quantity?: string | number;
+  material?: string;
+  target?: string;
+  surfaceRequested?: string;
+};
+
+type EditableItemField = "name" | "material" | "target" | "quantity";
+
+export function ItemsSection({ items, onChange }: { items: ManualItem[], onChange: (items: ManualItem[]) => void }) {
   const handleAddItem = () => {
     onChange([...items, { id: `temp_${Date.now()}`, name: "", quantity: 1, material: "", target: "" }]);
   };
 
-  const handleUpdateItem = (index: number, field: string, value: any) => {
+  const handleUpdateItem = <Field extends EditableItemField>(index: number, field: Field, value: ManualItem[Field]) => {
     const newItems = [...items];
     newItems[index][field] = value;
     onChange(newItems);

@@ -1,5 +1,74 @@
 import { createId } from "@paralleldrive/cuid2";
 
+type DemoCustomer = {
+  id: string;
+  name: string;
+  type: string;
+  city: string;
+  address: string;
+  phone: string;
+  email: string;
+  notes: string;
+};
+
+type DemoOrder = {
+  id: string;
+  orderNumber: string;
+  customerId: string;
+  title: string;
+  task: string;
+  station: string;
+  status: string;
+  risk: string;
+  intakeDate: Date;
+  dueDate: Date;
+  delayReason: string | null;
+  statusText: string | null;
+  attachmentUrl: string | null;
+  createdAt: Date;
+};
+
+type DemoItem = {
+  id: string;
+  orderId: string;
+  customerId: string;
+  name: string;
+  quantity: number;
+  material: string;
+  surfaceRequested: string;
+  currentStationId: string;
+};
+
+type DemoEvent = {
+  id: string;
+  orderId: string;
+  itemId?: string;
+  eventType: "received" | "completed";
+  description: string;
+  createdAt: Date;
+};
+
+type DemoComplaint = {
+  id: string;
+  orderId: string;
+  customerId: string;
+  reason: string;
+  description: string;
+  status: string;
+  createdAt: Date;
+};
+
+type DemoPhoneNote = {
+  tenantId: string;
+  customerId: string;
+  orderId: string | null;
+  rawText: string;
+  category: string;
+  status: string;
+  urgency?: string;
+  createdAt: Date;
+};
+
 // Utility to ensure a clean demo ID
 export const demoId = (prefix: string) => `demo_${prefix}_${createId()}`;
 
@@ -11,7 +80,7 @@ export function generateDemoData() {
   const daysAhead = (days: number) => new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
   // --- CUSTOMERS ---
-  const customers = [
+  const customers: DemoCustomer[] = [
     {
       id: demoId("cust_schmid"),
       name: "Schmid GmbH",
@@ -115,16 +184,11 @@ export function generateDemoData() {
   ];
 
   // --- ORDERS ---
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const orders: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const events: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const complaints: any[] = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const phoneNotes: any[] = [];
+  const orders: DemoOrder[] = [];
+  const items: DemoItem[] = [];
+  const events: DemoEvent[] = [];
+  const complaints: DemoComplaint[] = [];
+  const phoneNotes: DemoPhoneNote[] = [];
 
   type OrderConfig = {
     orderNumber: string;

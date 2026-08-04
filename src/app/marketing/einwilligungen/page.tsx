@@ -6,8 +6,10 @@ import { useEffect, useState } from "react";
 import { getEinwilligungen } from "./actions";
 import { CheckCircle, XCircle, Search, Upload } from "lucide-react";
 
+type Einwilligung = Awaited<ReturnType<typeof getEinwilligungen>>[number];
+
 export default function EinwilligungenPage() {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<Einwilligung[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
 

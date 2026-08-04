@@ -6,8 +6,10 @@ import { useEffect, useState } from "react";
 import { getKanaele, updateKanalConfig } from "./actions";
 import { CheckCircle, XCircle, Settings, Mail, Camera, Globe, LayoutTemplate } from "lucide-react";
 
+type Kanal = Awaited<ReturnType<typeof getKanaele>>[number];
+
 export default function KanaelePage() {
-  const [kanaele, setKanaele] = useState<any[]>([]);
+  const [kanaele, setKanaele] = useState<Kanal[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {

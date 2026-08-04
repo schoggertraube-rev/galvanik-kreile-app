@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { X, Lock, Delete } from "lucide-react";
+import { X, Delete } from "lucide-react";
 
 interface PinDialogProps {
   initials: string;

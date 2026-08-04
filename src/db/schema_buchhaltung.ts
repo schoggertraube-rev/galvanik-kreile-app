@@ -1,5 +1,4 @@
 import { pgTable, text, timestamp, date, numeric, boolean, integer, jsonb, uuid } from "drizzle-orm/pg-core";
-import { createId } from "@paralleldrive/cuid2";
 
 // ============================================================================
 // Buchhaltung & Finanzen: Drizzle Schema

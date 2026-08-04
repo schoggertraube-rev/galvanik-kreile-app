@@ -4,12 +4,12 @@ import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect } from "react";
 import { Printer, Loader2, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
+import { ordersRepository, type Order } from "@/lib/repositories/ordersRepository";
 import { BulkLabelPrintView } from "@/components/orders/BulkLabelPrintView";
 
 export default function PrintQueuePage() {
   usePageView();
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [showBulkPrint, setShowBulkPrint] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

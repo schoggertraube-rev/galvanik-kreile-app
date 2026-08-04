@@ -3,9 +3,29 @@ import { X, Send, Mail, RefreshCw } from 'lucide-react';
 import { emailProvider } from '@/lib/email/resendAdapter';
 import { supabase } from '@/lib/supabase/client';
 
-export function StatusMailDrawer({ orderData, onClose }: { orderData: any, onClose: () => void }) {
+type StatusMailOrder = {
+  id: string;
+  orderNumber?: string | null;
+  status?: string | null;
+  statusText?: string | null;
+  customerId?: string | null;
+  customer?: {
+    id: string;
+    email?: string | null;
+    name?: string | null;
+  } | null;
+  customerEmail?: string | null;
+};
+
+type EmailTemplate = {
+  id: string;
+  template_key: string;
+  name: string;
+};
+
+export function StatusMailDrawer({ orderData, onClose }: { orderData: StatusMailOrder; onClose: () => void }) {
   const [loading, setLoading] = useState(false);
-  const [templates, setTemplates] = useState<any[]>([]);
+  const [templates, setTemplates] = useState<EmailTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

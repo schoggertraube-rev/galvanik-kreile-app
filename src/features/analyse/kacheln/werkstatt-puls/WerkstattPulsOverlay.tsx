@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { OverlayShell } from '../../components/OverlayShell';
 import { WerkstattPulsData } from '../../hooks/useWerkstattPuls';
 import { StationDurchlaufList } from './StationDurchlaufList';
@@ -13,8 +13,11 @@ interface WerkstattPulsOverlayProps {
   data: WerkstattPulsData;
 }
 
+const periodTabs = ['Tag', 'Woche', 'Monat', 'Quartal'] as const;
+type PeriodTab = (typeof periodTabs)[number];
+
 export const WerkstattPulsOverlay: React.FC<WerkstattPulsOverlayProps> = ({ isOpen, onClose, data }) => {
-  const [activeTab, setActiveTab] = useState<'Tag' | 'Woche' | 'Monat' | 'Quartal'>('Woche');
+  const [activeTab, setActiveTab] = useState<PeriodTab>('Woche');
   
   const { termintreue, durchlauf, stationen, engpass, wochenziel, snapshotTrend } = data;
 
@@ -26,15 +29,22 @@ export const WerkstattPulsOverlay: React.FC<WerkstattPulsOverlayProps> = ({ isOp
     ? engpass.reduce((acc, curr) => acc + curr.teile_wartend, 0)
     : 0;
 
-  const kiQueryData = {
+  const kiQueryData = useMemo(() => ({
     termintreue_pct: termintreue.termintreue_pct,
     trend_vorjahr: snapshotTrend?.vorjahr ?? null,
     durchlaufzeit_avg: durchlauf.avg_tage,
     schwachste_station: schwachsteStation,
     teile_im_stau: teileImStau,
     wochenziel_ist: wochenziel.fertig_diese_woche,
-    wochenziel_soll: 25 // Configurable later
-  };
+    wochenziel_soll: 25,
+  }), [
+    durchlauf.avg_tage,
+    schwachsteStation,
+    snapshotTrend?.vorjahr,
+    teileImStau,
+    termintreue.termintreue_pct,
+    wochenziel.fertig_diese_woche,
+  ]);
 
   const { data: kiData, isLoading: kiLoading, error: kiError } = useKiInsight('werkstatt-puls', kiQueryData);
 
@@ -42,10 +52,10 @@ export const WerkstattPulsOverlay: React.FC<WerkstattPulsOverlayProps> = ({ isOp
     <OverlayShell isOpen={isOpen} onClose={onClose} title="Werkstatt-Puls">
       {/* Tabs */}
       <div className="flex border-b border-gray-200 mb-6">
-        {['Tag', 'Woche', 'Monat', 'Quartal'].map(tab => (
+        {periodTabs.map(tab => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab as any)}
+            onClick={() => setActiveTab(tab)}
             className={`py-2 px-4 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab 
                 ? 'border-blue-600 text-blue-600' 

@@ -1,5 +1,6 @@
 import { BelegeClient } from "./BelegeClient";
 import { getBuchhaltungProvider } from "@/lib/buchhaltung";
+import type { BelegFilter } from "@/lib/buchhaltung/types";
 
 export const dynamic = "force-dynamic";
 
@@ -7,10 +8,10 @@ export default async function BelegePage({ searchParams }: { searchParams: Promi
   const provider = getBuchhaltungProvider();
   const sp = await searchParams;
   
-  const filter = {
+  const filter: BelegFilter = {
     kategorieId: sp.kategorie as string | undefined,
-    status: sp.status as any,
-    belegart: sp.belegart as any,
+    status: sp.status as BelegFilter["status"],
+    belegart: sp.belegart as BelegFilter["belegart"],
     missingKonto: sp.view === "missingKonto" ? true : undefined,
     missingKostenstelle: sp.view === "missingKostenstelle" ? true : undefined,
     nichtAufAuftrag: sp.view === "nichtAufAuftrag" ? true : undefined,
@@ -20,5 +21,4 @@ export default async function BelegePage({ searchParams }: { searchParams: Promi
   
   return <BelegeClient initialBelege={belege} />;
 }
-
 
