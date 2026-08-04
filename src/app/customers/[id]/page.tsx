@@ -12,7 +12,6 @@ import { Customer } from "@/lib/repositories/customersRepository";
 import { PriceAgreement } from "@/lib/repositories/priceAgreementsRepository";
 import { TimelineEntry } from "@/lib/repositories/timelineRepository";
 import { Order } from "@/lib/repositories/ordersRepository";
-import { Complaint } from "@/lib/repositories/complaintsRepository";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,6 +31,17 @@ import {
 } from "lucide-react";
 import { useAppShortcut } from "@/components/ui/AppShortcutContext";
 
+type CustomerQualityCheck = {
+  id: string;
+  customerId: string;
+  orderId: string;
+  result: string;
+  description: string;
+  createdAt: string;
+  resolvedAt?: string;
+  resolution?: string;
+};
+
 export default function CustomerProfilePage({ params }: { params: Promise<{ id: string }> }) {
   usePageView();
   const { id } = use(params);
@@ -39,7 +49,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
   const [agreements, setAgreements] = useState<PriceAgreement[]>([]);
   const [timeline, setTimeline] = useState<TimelineEntry[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [complaints, setComplaints] = useState<CustomerQualityCheck[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { openShortcut } = useAppShortcut();
 
@@ -53,27 +63,13 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
       
       try {
         const { getCustomerDetailsAction } = await import("./actions");
-        const res = await getCustomerDetailsAction(id as string);
+        const res = await getCustomerDetailsAction(id);
         
         if (res.ok && res.data) {
-          setCustomer(res.data.customer as unknown as Customer);
-          setAgreements(res.data.agreements as unknown as PriceAgreement[]);
-          setOrders(res.data.orders.map((o: Record<string, any>) => ({
-             ...o,
-             statusText: o.status === "completed" ? "ERLEDIGT" : "IN ARBEIT",
-             title: o.title || "Auftrag " + o.orderNumber
-          })) as Order[]);
-          setComplaints(res.data.complaints.map((c: Record<string, any>) => ({
-             id: c.id,
-             orderId: c.orderId,
-             reason: c.ergebnis,
-             description: c.bemerkung || "Qualitätsprüfung",
-             createdAt: c.createdAt,
-             resolvedAt: c.ergebnis === 'bestanden' ? c.datum : null,
-             resolution: c.ergebnis === 'bestanden' ? 'OK' : 'Nacharbeit nötig',
-             customerId: id,
-             photoIds: []
-          })) as Complaint[]);
+          setCustomer(res.data.customer);
+          setAgreements(res.data.agreements);
+          setOrders(res.data.orders);
+          setComplaints(res.data.complaints);
           setTimeline([]);
         } else {
            setCustomer(null);
@@ -119,10 +115,16 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
 
   // Top 5 parts
   const allParts = orders.flatMap(o => o.parts || []);
-  const partFreq = allParts.reduce<Record<string, number>>((acc, p) => {
-    const pObj = p as { name?: string; quantity?: number | string };
-    const name = String(pObj.name || "Unbekanntes Teil");
-    acc[name] = (acc[name] || 0) + Number(pObj.quantity || 1);
+  const partFreq = allParts.reduce<Record<string, number>>((acc, part) => {
+    const nameValue = part.name;
+    const quantityValue = part.quantity;
+    const name = typeof nameValue === "string" && nameValue.length > 0 ? nameValue : "Unbekanntes Teil";
+    const quantity = typeof quantityValue === "number"
+      ? quantityValue
+      : typeof quantityValue === "string"
+        ? Number(quantityValue)
+        : 1;
+    acc[name] = (acc[name] || 0) + (Number.isFinite(quantity) ? quantity : 1);
     return acc;
   }, {});
   const topParts = Object.entries(partFreq)
@@ -309,7 +311,7 @@ export default function CustomerProfilePage({ params }: { params: Promise<{ id: 
                       <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-danger-red pb-2">
                         <div className="flex items-center gap-2">
                           <span className="px-2 py-0.5 bg-danger-red text-danger-red font-bold rounded text-[10px] uppercase">
-                            {mapComplaintReason(c.reason)}
+                            {mapComplaintReason(c.result)}
                           </span>
                           <span className="text-xs text-slate-450 font-bold">Erfasst: {new Date(c.createdAt).toLocaleDateString("de-DE")}</span>
                         </div>
