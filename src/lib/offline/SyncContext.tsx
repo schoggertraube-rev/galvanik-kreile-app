@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback, useEffectEvent, useSyncExternalStore } from "react";
 import { offlineOutbox, OfflineOutboxItem } from "./OfflineOutbox";
 import { createId } from "@paralleldrive/cuid2";
 
@@ -14,6 +14,24 @@ interface SyncContextValue {
 
 const SyncContext = createContext<SyncContextValue | null>(null);
 
+function subscribeToOnlineStatus(callback: () => void) {
+  if (typeof window === "undefined") return () => {};
+
+  window.addEventListener("online", callback);
+  window.addEventListener("offline", callback);
+
+  return () => {
+    window.removeEventListener("online", callback);
+    window.removeEventListener("offline", callback);
+  };
+}
+
+function getOnlineStatus() {
+  return typeof navigator === "undefined" ? true : navigator.onLine;
+}
+
+const getServerOnlineStatus = () => true;
+
 export function useSync() {
   const ctx = useContext(SyncContext);
   if (!ctx) {
@@ -23,7 +41,11 @@ export function useSync() {
 }
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  const [isOnline, setIsOnline] = useState(true);
+  const isOnline = useSyncExternalStore(
+    subscribeToOnlineStatus,
+    getOnlineStatus,
+    getServerOnlineStatus,
+  );
   const [outboxItems, setOutboxItems] = useState<OfflineOutboxItem[]>([]);
 
   const loadOutbox = useCallback(async () => {
@@ -36,22 +58,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      setIsOnline(navigator.onLine);
-      const handleOnline = () => setIsOnline(true);
-      const handleOffline = () => setIsOnline(false);
-      
-      window.addEventListener("online", handleOnline);
-      window.addEventListener("offline", handleOffline);
-      
-      loadOutbox();
-
-      return () => {
-        window.removeEventListener("online", handleOnline);
-        window.removeEventListener("offline", handleOffline);
-      };
-    }
-  }, [loadOutbox]);
+    void offlineOutbox.getAllItems()
+      .then(setOutboxItems)
+      .catch((err) => console.error("Failed to load outbox", err));
+  }, []);
 
   const addToOutbox = async (itemData: Omit<OfflineOutboxItem, "id" | "status" | "retryCount" | "createdAt" | "updatedAt">) => {
     const newItem: OfflineOutboxItem = {
@@ -99,10 +109,16 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     await loadOutbox();
   };
 
+  const autoSyncWhenOnline = useEffectEvent(() => {
+    if (outboxItems.length > 0) {
+      void syncNow();
+    }
+  });
+
   // Auto sync when coming online
   useEffect(() => {
-    if (isOnline && outboxItems.length > 0) {
-      syncNow();
+    if (isOnline) {
+      autoSyncWhenOnline();
     }
   }, [isOnline]);
 
