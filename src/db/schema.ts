@@ -23,6 +23,17 @@ export const appUsers = pgTable("app_users", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const pinRateLimits = pgTable("pin_rate_limits", {
+  operatorId: uuid("operator_id")
+    .primaryKey()
+    .references(() => appUsers.id, { onDelete: "cascade" }),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  lastFailedAt: timestamp("last_failed_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  tenantId: text("tenant_id").notNull().default("galvanik-kreile"),
+});
+
 // 2. Customers
 export const customers = pgTable("customers", {
   id: cuidPrimaryKey("id"),
