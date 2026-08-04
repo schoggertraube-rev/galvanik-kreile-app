@@ -1,12 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { X, Save, Box, Trash2, Tag } from 'lucide-react';
 import { PriceLinesEditor } from './PriceLinesEditor';
-import { createItemDb, updateItemDb, deleteItemDb } from '@/app/actions/items.actions';
+import { createItemDb, updateItemDb, deleteItemDb, type ItemMutationPayload } from '@/app/actions/items.actions';
+import type { getOrderWithDetails } from '@/lib/repositories/orderQueries';
+
+type OrderDetails = NonNullable<Awaited<ReturnType<typeof getOrderWithDetails>>>;
+type EditableOrderItem = OrderDetails['items'][number];
+
+interface ItemFormData {
+  name: string;
+  quantity: number;
+  material: string;
+  surfaceRequested: string;
+  stationSequence: string[];
+  internalNotes: string;
+}
 
 interface ItemDrawerProps {
   orderId: string;
   itemId: string | 'new' | null;
-  existingItems: any[];
+  existingItems: EditableOrderItem[];
   onClose: () => void;
   onSaved: () => void;
 }
@@ -17,50 +30,59 @@ const WORKFLOW_TEMPLATES = [
   { label: 'Nur Entlacken', sequence: ['wareneingang', 'entlackung', 'warenausgang'] }
 ];
 
+function toStationSequence(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((station): station is string => typeof station === 'string') : [];
+}
+
+function toItemForm(item: EditableOrderItem | undefined): ItemFormData {
+  if (!item) {
+    return {
+      name: '',
+      quantity: 1,
+      material: '',
+      surfaceRequested: '',
+      stationSequence: [],
+      internalNotes: '',
+    };
+  }
+
+  return {
+    name: item.name,
+    quantity: item.quantity,
+    material: item.material ?? '',
+    surfaceRequested: item.surfaceRequested ?? '',
+    stationSequence: toStationSequence(item.stationSequence),
+    internalNotes: item.internalNotes ?? '',
+  };
+}
+
 export function ItemDrawer({ orderId, itemId, existingItems, onClose, onSaved }: ItemDrawerProps) {
   const isNew = itemId === 'new';
   const existingItem = isNew ? null : existingItems.find(i => i.id === itemId);
 
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    quantity: 1,
-    material: '',
-    surfaceRequested: '',
-    stationSequence: [] as string[],
-    internalNotes: ''
-  });
-
-  useEffect(() => {
-    if (existingItem) {
-      setFormData({
-        name: existingItem.name || '',
-        quantity: existingItem.quantity || 1,
-        material: existingItem.material || '',
-        surfaceRequested: existingItem.surfaceRequested || '',
-        stationSequence: existingItem.stationSequence || [],
-        internalNotes: existingItem.internalNotes || ''
-      });
-    }
-  }, [existingItem]);
+  const [formData, setFormData] = useState<ItemFormData>(() => toItemForm(existingItem ?? undefined));
 
   const handleSave = async () => {
     setLoading(true);
     
-    const payload = {
-      order_id: orderId,
+    const payload: ItemMutationPayload = {
+      orderId,
       name: formData.name,
       quantity: formData.quantity,
       material: formData.material,
-      surface_requested: formData.surfaceRequested,
-      station_sequence: formData.stationSequence,
-      internal_notes: formData.internalNotes
+      surfaceRequested: formData.surfaceRequested,
+      stationSequence: formData.stationSequence,
+      internalNotes: formData.internalNotes,
     };
 
     if (isNew) {
-      await createItemDb({ ...payload, current_station_id: 'wareneingang' });
+      await createItemDb({ ...payload, currentStationId: 'wareneingang' });
+    } else if (existingItem) {
+      await updateItemDb(existingItem.id, payload);
     } else {
-      await updateItemDb(itemId as string, payload);
+      setLoading(false);
+      return;
     }
     
     setLoading(false);
@@ -69,10 +91,10 @@ export function ItemDrawer({ orderId, itemId, existingItems, onClose, onSaved }:
   };
 
   const handleDelete = async () => {
-    if (isNew) return;
+    if (isNew || !existingItem) return;
     if (confirm('Dieses Teil wirklich löschen?')) {
       setLoading(true);
-      await deleteItemDb(itemId as string);
+      await deleteItemDb(existingItem.id);
       setLoading(false);
       onSaved();
       onClose();

@@ -19,7 +19,8 @@ export type ItemMutationPayload = {
   photoIds?: string[];
   photo?: string | null;
   currentStationId?: string | null;
-  [key: string]: unknown;
+  stationSequence?: string[];
+  internalNotes?: string | null;
 };
 
 type DbItemInsert = InferInsertModel<typeof items>;
@@ -89,8 +90,10 @@ export async function createItemDb(data: ItemMutationPayload): Promise<ActionRes
   if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
   
   try {
-    const orderId = data.orderId as string;
-    const name = data.name as string;
+    const { orderId, name } = data;
+    if (!orderId || !name) {
+      return { ok: false, error: "EMPTY_RESULT", message: "Auftrags-ID und Bezeichnung sind erforderlich" };
+    }
     const orderData = await db.select({ customerId: orders.customerId }).from(orders).where(eq(orders.id, orderId)).limit(1);
     
     if (orderData.length === 0) {
@@ -100,7 +103,7 @@ export async function createItemDb(data: ItemMutationPayload): Promise<ActionRes
     const customerId = orderData[0].customerId;
     const id = data.id || createId();
     
-    const newItem = {
+    const newItem: DbItemInsert = {
       id,
       tenantId: "galvanik-kreile",
       orderId,
@@ -111,8 +114,10 @@ export async function createItemDb(data: ItemMutationPayload): Promise<ActionRes
       surfaceRequested: data.surfaceRequested || null,
       photoIds: data.photoIds || [],
       photo: data.photo || null,
-      currentStationId: data.currentStationId || "wareneingang"
-    } as DbItemInsert;
+      currentStationId: data.currentStationId || "wareneingang",
+      stationSequence: data.stationSequence || [],
+      internalNotes: data.internalNotes || null,
+    };
     
     await db.insert(items).values(newItem);
     
@@ -149,6 +154,9 @@ export async function updateItemDb(id: string, changes: ItemMutationPayload): Pr
     if (changes.surfaceRequested !== undefined) updateData.surfaceRequested = changes.surfaceRequested;
     if (changes.photoIds !== undefined) updateData.photoIds = changes.photoIds;
     if (changes.photo !== undefined) updateData.photo = changes.photo;
+    if (changes.currentStationId !== undefined) updateData.currentStationId = changes.currentStationId;
+    if (changes.stationSequence !== undefined) updateData.stationSequence = changes.stationSequence;
+    if (changes.internalNotes !== undefined) updateData.internalNotes = changes.internalNotes;
     
     if (Object.keys(updateData).length > 0) {
       await db.update(items).set(updateData).where(eq(items.id, id));

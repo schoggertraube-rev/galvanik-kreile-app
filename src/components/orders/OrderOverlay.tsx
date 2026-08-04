@@ -526,9 +526,10 @@ export function OrderOverlay() {
       {showMail && <StatusMailDrawer orderData={orderData} onClose={() => setShowMail(false)} />}
       {editingItemId && (
         <ItemDrawer 
+          key={editingItemId}
           orderId={orderData.id} 
           itemId={editingItemId} 
-          existingItems={orderData.items || []} 
+          existingItems={orderItems}
           onClose={() => setEditingItemId(null)}
           onSaved={() => {}} 
         />
