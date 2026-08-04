@@ -109,6 +109,43 @@ export interface ClientDossier {
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 
+type DossierQueryResult<T> = {
+  data: T | null;
+};
+
+type DossierCustomerRow = {
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  city: string | null;
+  pref_comm: string | null;
+  type: string | null;
+  risk: string | null;
+  notes: string | null;
+};
+
+type DossierOrderRow = {
+  id: string;
+  order_number: string | null;
+  task: string | null;
+  status: string | null;
+  status_text: string | null;
+  due_date: string | null;
+};
+
+type DossierPaymentRow = {
+  status: string | null;
+  amount_eur: number | string | null;
+  provider_intent_id: string | null;
+  created_at: string | null;
+};
+
+type DossierCommunicationRow = {
+  channel_type: string | null;
+  type: string | null;
+};
+
 export function useClientDossier(customerId: string | null, matchData: MatchResult | null): ClientDossier {
   const [dossier, setDossier] = useState<ClientDossier>(buildEmptyDossier());
 
@@ -119,17 +156,30 @@ export function useClientDossier(customerId: string | null, matchData: MatchResu
       if (!targetId) return;
 
       // Fetch customer
-      const { data: customer } = await supabase.from('customers').select('*').eq('id', targetId).single();
+      const { data: customer }: DossierQueryResult<DossierCustomerRow> = await supabase
+        .from('customers')
+        .select('name, phone, email, address, city, pref_comm, type, risk, notes')
+        .eq('id', targetId)
+        .single();
       if (!customer) return;
 
       // Fetch orders
-      const { data: orders } = await supabase.from('orders').select('*').eq('customer_id', targetId);
+      const { data: orders }: DossierQueryResult<DossierOrderRow[]> = await supabase
+        .from('orders')
+        .select('id, order_number, task, status, status_text, due_date')
+        .eq('customer_id', targetId);
       
       // Fetch payments
-      const { data: payments } = await supabase.from('payments').select('*').in('order_id', (orders || []).map(o => o.id));
+      const { data: payments }: DossierQueryResult<DossierPaymentRow[]> = await supabase
+        .from('payments')
+        .select('status, amount_eur, provider_intent_id, created_at')
+        .in('order_id', (orders || []).map(order => order.id));
 
       // Fetch communications
-      const { data: communications } = await supabase.from('communications').select('*').eq('customer_id', targetId);
+      const { data: communications }: DossierQueryResult<DossierCommunicationRow[]> = await supabase
+        .from('communications')
+        .select('channel_type, type')
+        .eq('customer_id', targetId);
 
       // Build dossier
       if (isMounted) {
@@ -172,9 +222,15 @@ function buildEmptyDossier(): ClientDossier {
   };
 }
 
-function buildDossierFromRealData(cust: any, custOrders: any[], custPayments: any[], comms: any[], matchData: MatchResult | null): ClientDossier {
+function buildDossierFromRealData(
+  cust: DossierCustomerRow,
+  custOrders: DossierOrderRow[],
+  custPayments: DossierPaymentRow[],
+  comms: DossierCommunicationRow[],
+  matchData: MatchResult | null,
+): ClientDossier {
   const openOrdersData = custOrders.filter(o => o.status !== 'completed' && o.status !== 'delivered');
-  const openTotal = custPayments.filter(p => p.status === 'pending').reduce((sum, p) => sum + Number(p.amount_eur || 0), 0);
+  const openTotal = custPayments.filter(p => p.status === 'pending').reduce((sum, p) => sum + Number(p.amount_eur ?? 0), 0);
 
   return {
     stamm: {
@@ -191,18 +247,18 @@ function buildDossierFromRealData(cust: any, custOrders: any[], custPayments: an
       notes: cust.notes || "Keine Notizen vorhanden.",
       tags: ["Real-Data"],
     },
-    openOrders: openOrdersData.slice(0, 4).map((o: any) => ({
+    openOrders: openOrdersData.slice(0, 4).map(o => ({
       id: o.id,
       orderNumber: o.order_number || o.id.substring(0,8),
       description: o.task || "Keine Beschreibung",
-      material: o.material || "—",
+      material: "—",
       status: o.status || "in_progress",
       statusLabel: o.status_text || "In Bearbeitung",
-      dueDate: o.due_date,
+      dueDate: o.due_date || "",
     })),
     orderStats: {
       total: custOrders.length,
-      revenue: custPayments.filter(p => p.status === 'completed').reduce((sum, p) => sum + Number(p.amount_eur || 0), 0),
+      revenue: custPayments.filter(p => p.status === 'completed').reduce((sum, p) => sum + Number(p.amount_eur ?? 0), 0),
       vsLastYear: "+0 %",
       yearlyTrend: [],
       materialBreakdown: [],
@@ -215,8 +271,8 @@ function buildDossierFromRealData(cust: any, custOrders: any[], custPayments: an
       preferredMethod: "Mollie",
       invoices: custPayments.filter(p => p.status === 'pending').map(p => ({
         number: p.provider_intent_id || "Offen",
-        date: p.created_at?.substring(0, 10),
-        amount: Number(p.amount_eur),
+        date: p.created_at?.substring(0, 10) || "",
+        amount: Number(p.amount_eur ?? 0),
         status: "offen",
         daysOpen: 0
       })),
