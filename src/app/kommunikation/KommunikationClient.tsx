@@ -10,6 +10,7 @@ import {
   Archive, PhoneForwarded, CheckSquare, X, Paperclip, Image as ImageIcon, Sparkles
 } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePageView } from "@/hooks/usePageView";
 import { getRecentPhoneNotes, updatePhoneNote } from "@/app/actions/phoneNotes.actions";
 import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
@@ -692,8 +693,8 @@ interface CustomerContact { id: string; name: string; city: string; initials: st
                     ))}
                   </div>
                   <div style={{ display: "flex", gap: 12 }}>
-                    <div style={{ marginTop: 20 }}>
-                      <img src="/kreile_mockup_v2_bg.png" alt="" style={{ width: "100%", borderRadius: 12, border: "1px solid rgba(255,255,255,.1)" }} />
+                    <div style={{ marginTop: 20, position: "relative", width: "100%", aspectRatio: "16 / 9" }}>
+                      <Image src="/kreile_mockup_v2_bg.png" alt="" fill sizes="(max-width: 768px) 100vw, 50vw" style={{ objectFit: "cover", borderRadius: 12, border: "1px solid rgba(255,255,255,.1)" }} />
                     </div>
                     <button onClick={() => setToastMessage("Backend Aktion vorbereitet.")} style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.2)", background: "rgba(255,255,255,.1)", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", transition: "all .1s" }} onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,.15)")} onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,.1)")}>Alle {actionCards.length} anwenden</button>
                     <button style={{ padding: "10px 20px", borderRadius: 8, border: "1px solid rgba(255,255,255,.1)", background: "transparent", color: "#EDE8DD", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Einzeln prüfen</button>
