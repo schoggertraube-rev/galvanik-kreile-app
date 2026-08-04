@@ -17,41 +17,45 @@ import { motion } from 'framer-motion';
 import { useGlobalSearch } from '@/features/analyse/hooks/useGlobalSearch';
 
 export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChange: (v: boolean) => void }) {
+  useEffect(() => {
+    const down = (event: KeyboardEvent) => {
+      if (event.key === 'k' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault()
+        onOpenChange(!open)
+      }
+    }
+    document.addEventListener('keydown', down)
+    return () => document.removeEventListener('keydown', down)
+  }, [open, onOpenChange])
+
+  if (!open) return null;
+
+  return <GlobalSearchDialog onOpenChange={onOpenChange} />;
+}
+
+function GlobalSearchDialog({ onOpenChange }: { onOpenChange: (v: boolean) => void }) {
   const router = useRouter()
   const [searchTerm, setSearchTerm] = useState('')
   const { openOrder } = useOrderModal();
   const { open: openCustomer } = useCustomerOverlay();
   const { openErfassung } = useErfassung();
   const [globalResults, setGlobalResults] = useState<SearchResult[]>([]);
-  const [prevOpen, setPrevOpen] = useState(open)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  if (open !== prevOpen) {
-    setPrevOpen(open)
-    if (!open) {
-      setSearchTerm('')
-    }
-  }
-
   useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 50)
-    }
-  }, [open])
+    const focusTimer = setTimeout(() => inputRef.current?.focus(), 50)
+    return () => clearTimeout(focusTimer)
+  }, [])
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
-        e.preventDefault()
-        onOpenChange(!open)
-      }
-      if (e.key === 'Escape' && open) {
+      if (e.key === 'Escape') {
         onOpenChange(false)
       }
     }
     document.addEventListener('keydown', down)
     return () => document.removeEventListener('keydown', down)
-  }, [open, onOpenChange])
+  }, [onOpenChange])
 
   useEffect(() => {
     if (searchTerm.length > 2) {
@@ -81,15 +85,6 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
     return () => clearTimeout(timer);
   }, [searchTerm]);
   const { data: hookResults = [] } = useGlobalSearch(debouncedTerm);
-
-  // Reset forceAiMode when searchTerm changes
-  useEffect(() => {
-    // Only reset if forceAiMode is true and it's not naturally aiMode
-    const isNaturallyAiMode = /^(wie|was|wo|warum|welche|zeige|vergleiche|analysiere)/i.test(searchTerm.trim().toLowerCase()) || searchTerm.trim().toLowerCase().endsWith("?");
-    if (forceAiMode && !isNaturallyAiMode) setForceAiMode(false);
-  }, [searchTerm, forceAiMode]);
-
-  if (!open) return null
 
   const cleanTerm = searchTerm.trim().toLowerCase()
   const isAiMode = forceAiMode || /^(wie|was|wo|warum|welche|zeige|vergleiche|analysiere)/i.test(cleanTerm) || cleanTerm.endsWith("?");
@@ -128,6 +123,13 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   const handleClose = () => {
     if (searchTerm.trim().length > 1) addRecentSearch(searchTerm.trim())
     onOpenChange(false)
+  }
+
+  const handleSearchTermChange = (value: string) => {
+    setSearchTerm(value)
+    const normalizedValue = value.trim().toLowerCase()
+    const isNaturallyAiMode = /^(wie|was|wo|warum|welche|zeige|vergleiche|analysiere)/i.test(normalizedValue) || normalizedValue.endsWith("?")
+    if (!isNaturallyAiMode) setForceAiMode(false)
   }
   
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -205,14 +207,14 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
             ref={inputRef}
             autoFocus
             value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
+            onChange={e => handleSearchTermChange(e.target.value)}
             onKeyDown={handleKeyDown}
             className="flex-1 bg-transparent outline-none placeholder:text-text-muted text-base font-medium" 
             placeholder="Nach Aufträgen, Kunden, Belegen, Rechnungen..." 
           />
           {searchTerm && (
             <button 
-              onClick={() => setSearchTerm('')} 
+              onClick={() => handleSearchTermChange('')}
               className="p-1 hover:bg-neutral-gray-100 rounded-lg text-text-muted hover:text-slate-650 transition-colors"
             >
               <X className="w-4 h-4" />

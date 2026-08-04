@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useCallback, useRef, useState, useEffect } from 'react';
 import '@/styles/ci-tokens.css'; // Assume we have CI tokens globally available
 
 interface BenchmarkSliderProps {
@@ -27,13 +27,13 @@ export const BenchmarkSlider: React.FC<BenchmarkSliderProps> = ({
 
   const getPercent = (v: number) => Math.max(0, Math.min(100, ((v - min) / (max - min)) * 100));
 
-  const handleMove = (clientX: number) => {
+  const handleMove = useCallback((clientX: number) => {
     if (!trackRef.current) return;
     const rect = trackRef.current.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const rawVal = min + pct * (max - min);
     onChange(Math.round(rawVal));
-  };
+  }, [onChange]);
 
   useEffect(() => {
     const onMouseUp = () => setIsDragging(false);
@@ -49,7 +49,7 @@ export const BenchmarkSlider: React.FC<BenchmarkSliderProps> = ({
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup', onMouseUp);
     };
-  }, [isDragging]);
+  }, [handleMove, isDragging]);
 
   const valPercent = getPercent(value);
   const benchPercent = benchmark ? getPercent(benchmark) : 0;
