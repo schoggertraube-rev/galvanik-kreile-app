@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 
 interface ZeitSliderProps {
@@ -23,14 +23,14 @@ export function ZeitSlider({
   const containerRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  const calculateValueFromClientX = (clientX: number) => {
+  const calculateValueFromClientX = useCallback((clientX: number) => {
     if (!containerRef.current) return value;
     const rect = containerRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
     const percentage = x / rect.width;
     const rawValue = min + percentage * (max - min);
     return Math.round(rawValue / step) * step;
-  };
+  }, [max, min, step, value]);
 
   const handlePointerDown = (e: React.PointerEvent) => {
     setIsDragging(true);
@@ -69,7 +69,7 @@ export function ZeitSlider({
         window.removeEventListener('pointerup', handleGlobalPointerUp);
       };
     }
-  }, [isDragging, value, min, max, step, onChange]);
+  }, [calculateValueFromClientX, isDragging, onChange, value]);
 
   const percentage = Math.max(0, Math.min(((value - min) / (max - min)) * 100, 100));
   const vorschlagPercentage = vorschlagWert !== undefined 

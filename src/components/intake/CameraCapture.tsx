@@ -52,7 +52,6 @@ export function CameraCapture({
       if (activeStream) {
         activeStream.getTracks().forEach((track) => track.stop());
       }
-      stopCamera();
     };
   }, []);
 
