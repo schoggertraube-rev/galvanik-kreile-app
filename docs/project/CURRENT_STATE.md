@@ -1,6 +1,6 @@
 # Current State
 
-Stand: 2026-08-04
+Stand: 2026-08-04 (Update nach PR #31, #32, #33, M2/M5-Analyse)
 
 Verifiziert gegen GitHub, Vercel, Supabase und einen sauberen lokalen Checkout.
 
@@ -8,11 +8,12 @@ Verifiziert gegen GitHub, Vercel, Supabase und einen sauberen lokalen Checkout.
 
 | Vertrag | Status | Beleg |
 |---|---|---|
-| Lieferquelle | `PASS` | GitHub `main` ist die einzige Code-Lieferwahrheit. |
+| Lieferquelle | `PASS` | GitHub `main` ist die einzige Code-Lieferwahrheit. HEAD: `a87f979`. |
 | Production-Deployment | `PASS` | Vercel Production laeuft auf demselben Commit wie `main`. |
 | Lokale Worktree-Hygiene | `PASS_LOCAL` | Alle in diesem Arbeitsbereich sichtbaren App-Worktrees sind sauber und voneinander isoliert. |
-| Migrations-/Schemaquelle | `FAIL` | `main` enthaelt 79 Migrationsdateien, Production 92 Ledger-Eintraege, Integration 1. |
-| Quality-Ratchet / Lint-Nullstand | `PASS_RATCHET` / `PASS_ZERO` (PR offen) | PR `agent/fnd-p0-01-lint-wave-2` reduziert 484/459 auf 0/0 ueber 668 Dateien. Lokal verifiziert: ESLint 0/0, tsc sauber, Ratchet PASS. PR wartet auf Merge. |
+| Migrations-/Schemaquelle | `PASS (PR offen)` | Stub-Dateien erstellt: 95 SQL-Dateien = 95 Ledger-Eintraege. CI-Check-Skript hinzugefuegt. PR ausstehend. |
+| Quality-Ratchet / Lint-Nullstand | `PASS` | PR #31 gemergt. ESLint 0/0 ueber 668 Dateien, tsc sauber, Ratchet enforced. |
+| Auth-Identity | `PASS` | PR #33 gemergt. Atomarer AuthState, keine localStorage-Reads mehr, alle Tests bestehen. |
 | Produkt-Go-live | `NO_GO` | RLS, PIN-Grenze, Offline-Vertrag und operativer End-to-End-Kern sind nicht vollstaendig abgenommen. |
 
 Ein gruenes Deployment oder ein gemergter Sicherheitsfix ist deshalb kein Gesamt-PASS.
@@ -70,15 +71,12 @@ Der PIN-Kandidat bleibt als Remote-Checkpoint `checkpoint/sec-pin-002-no-merge-2
 
 ### Production
 
-- 92 Eintraege im produktiven Migrationsledger.
-- 79 `.sql`-Migrationsdateien in `main`.
-- Folgende 13 produktiv registrierte Versionen fehlen als Quellen in `main`:
-  - `20260706213500`
-  - `20260708195800`
-  - `20260709071600`
-  - `20260710143540`
-  - `20260712154103`
-  - `20260713000100` bis `20260713000800`
+- 95 Eintraege im produktiven Migrationsledger.
+- Nach Stub-Erstellung: 95 `.sql`-Migrationsdateien (PR offen).
+- 16 ehemals fehlende Versionen als kommentierte Stubs ergaenzt:
+  - Juli-Fenster (13 Stk.): `20260706213500` bis `20260713000800`
+  - August-Security (3 Stk.): `20260802213450`, `20260802220519`, `20260802221310`
+- CI-Check-Skript (`scripts/check-migration-count.sh`) prueft Dateianzahl vs. Ledger.
 - Der W1-Receipt-Schritt ist als `20260801100027` im Production-Ledger und als ledger-ausgerichtete Datei in `main` vorhanden.
 - Ein frischer Replay der historischen lokalen Kette ist gescheitert. Die alte Historie wurde nach Ausfuehrung mehrfach umgeschrieben und darf nicht erneut pauschal rekonstruiert oder umgedeutet werden.
 
@@ -89,7 +87,7 @@ Der PIN-Kandidat bleibt als Remote-Checkpoint `checkpoint/sec-pin-002-no-merge-2
 
 ### Analyse (2026-08-04)
 
-Die 13 fehlenden Versionen fallen in ein enges Fenster (6.–13. Juli 2026). Die lokale `main`-Historie springt direkt von `20260627000001` zu `20260801100027`. Die alte Git-Historie wurde nach Ausfuehrung mehrfach umgeschrieben (Commits wie "restore executed migration sources", "reconcile applied migration history" auf Archiv-Branches belegen fehlgeschlagene Rekonstruktionsversuche).
+Die 16 fehlenden Versionen fallen in zwei Fenster: 13 aus Juli (6.–13. Juli 2026) und 3 August-Security-Migrationen (2. August 2026). Alle 16 wurden als kommentierte Stub-Dateien ergaenzt. Die alte Git-Historie wurde nach Ausfuehrung mehrfach umgeschrieben (Commits wie "restore executed migration sources", "reconcile applied migration history" auf Archiv-Branches belegen fehlgeschlagene Rekonstruktionsversuche).
 
 Zusaetzlich existieren zwei parallele Migrationsoberflaechen: `supabase/migrations/` (79 Rohdateien) und `src/db/migrations/` (Drizzle, nur `meta/`-Ordner, kein generiertes SQL eingecheckt). Diese sind nicht aufeinander abgestimmt.
 
@@ -117,18 +115,17 @@ PR 19, PR 20 oder PR 21 duerfen nicht wholesale gemergt werden. Vor jeder DB-Aen
 ### Offen
 
 - `LIVE-AUTH-001`: Cookie-/Routengrenzen sind gehaertet, der reale Ablauf mit einer zuvor gueltigen und dann abgelaufenen Sitzung ist aber noch nicht als vollstaendiger Benutzerweg belegt.
-- `AUTH-IDENTITY-002`: Benutzerwechsel bleibt P0-offen. Root Cause bestaetigt: `PermissionsProvider` setzt `role`, `name`, `initials` ueber `useState(initialAuthState)` ohne Setter; `refreshPermissions()` schreibt nur `setPermissions`/`setStatus`/`setError` und verwirft die Identity-Felder aus `getAuthorizationSnapshotAction()` still. Zweiter Vektor: `KontrolleDashboardClient`, `KvpClient`, `MobileBottomNav` lesen `localStorage("kreile_user_role")` direkt am Context vorbei. PR-8-Salvage (`archive/pr-8-auth-identity-002-007b85b`) ist wiederverwendbar: atomares `AuthState`-Objekt mit Seq-Guard, alle localStorage-Reads entfernt. Nur der `proxy.ts`-Teil ist durch PR 23 ueberholt. Naechste Mission: PR-8-Kern portieren, Consumer-localStorage entfernen, Test mit MK->Admin->MK-Wechsel.
+- `AUTH-IDENTITY-002`: **DONE** (PR #33, gemergt 2026-08-04). PermissionsContext nutzt jetzt ein einziges atomares `AuthState`-Objekt mit Sequence-Guard (`refreshSeqRef`). Alle `localStorage`-Reads/Writes fuer Identity entfernt (`MobileBottomNav`, `KontrolleDashboardClient`, `KvpClient`, `StartScreenClient`, `KreileHeader`). Tests aktualisiert und bestanden (7/7). Verbleibend: `loginWithPin` ruft kein `signOut` vor neuem Login auf — kein aktiver Bug (Cookie wird ueberschrieben), aber Defense-in-Depth-Verbesserung fuer spaeter.
 - `SEC-PIN-002`: der remote gesicherte, tree-identische Checkpoint `dad42eb...` zu `d7d2bd3...` hasht neue PINs und zentralisiert Rollen-/Rotationsregeln, ist aber bewusst `NO_MERGE`.
   - Die vierstellige PIN-Zielmenge ist ueber verteilte Quellen weiter online angreifbar.
   - Device-Bindung/Enrollment oder ein gleichwertiger Challenge-/WAF-Vertrag fehlt.
   - Session-Widerruf bei PIN-Rotation fehlt.
   - Bestands-PINs und der abschliessende Plaintext-Ausschluss sind noch kontrolliert zu migrieren.
-- Der aktuelle Supabase Security Advisor meldet 69 Hinweise:
-  - 26 Tabellen im exponierten `public`-Schema ohne aktiviertes RLS (`ERROR`),
-  - 1 `SECURITY DEFINER`-View (`ERROR`),
-  - 29 immer wahre RLS-Policies (`WARN`),
-  - 11 RLS-Tabellen ohne Policy (`INFO`),
-  - 2 weitere Warnungen.
+- RLS-Analyse abgeschlossen (siehe `docs/project/RLS_ANALYSIS.md`):
+  - 26 Tabellen ohne RLS, davon 12 mit `tenant_id` (P0-Risiko),
+  - 7 Tabellen mit `rls_forced` + keine Policies (korrekt: nur service_role),
+  - 9 Tabellen mit schwachen `USING (true)` Policies,
+  - Relationenweise PRs geplant, P0-Tabellen zuerst.
 - Referenz: [Supabase Database Linter](https://supabase.com/docs/guides/database/database-linter), insbesondere [RLS disabled in public](https://supabase.com/docs/guides/database/database-linter?lint=0013_rls_disabled_in_public) und [Security Definer View](https://supabase.com/docs/guides/database/database-linter?lint=0010_security_definer_view).
 - Jeder Advisor-Befund muss relationenweise nach realem Zugriffspfad, Rolle, Grant und Tenant-Vertrag bewertet werden. Ein pauschaler Policy-PR ist verboten.
 
@@ -138,9 +135,9 @@ Der Quality-Kandidat fuehrt einen maschinenlesbaren Multiset-Ratchet ein. Der Ju
 
 Inline-ESLint-Konfiguration ist mit `noInlineConfig` vollstaendig wirkungslos.
 
-### Lint-Nullstand (PR offen)
+### Lint-Nullstand (gemergt)
 
-PR `agent/fnd-p0-01-lint-wave-2` (83 Commits, Welle 2+3 via Codex + Baseline-Update) erreicht:
+PR #31 (`agent/fnd-p0-01-lint-wave-2`, 83 Commits squash-merged) erreicht:
 
 | Messwert | Vorher (PR 27) | Nachher (PR offen) |
 |---|---:|---:|
@@ -164,9 +161,9 @@ Der Workflow blockiert weiterhin jede Meldung in geaenderten TypeScript-/TSX-Dat
 ## Unmittelbare Reihenfolge
 
 1. `TRUTH-CLEANUP-001` und `BRANCH-DISPOSITION-001`: abgeschlossen.
-2. `QUALITY-RATCHET-001`: `DONE_VERIFIED`; PR 26 ist gemergt und `quality` plus `ratchet` sind im aktiven Ruleset verpflichtend.
-3. `LINT-DEBT-001`: `DONE_PENDING_MERGE`; PR `agent/fnd-p0-01-lint-wave-2` erreicht 0/0 (lokal verifiziert: ESLint, tsc, vitest, Ratchet). Wartet auf Merge.
-4. `AUTH-IDENTITY-002`: Root-Cause bestaetigt, PR-8-Salvage analysiert und wiederverwendbar. Naechste Aktion: atomaren Identity-Snapshot portieren, localStorage-Reads entfernen, MK->Admin->MK beweisen.
+2. `QUALITY-RATCHET-001`: `DONE`; PR 26 gemergt, `quality` plus `ratchet` im aktiven Ruleset verpflichtend.
+3. `LINT-DEBT-001`: `DONE`; PR #31 gemergt. ESLint 0/0, tsc sauber, Ratchet enforced.
+4. `AUTH-IDENTITY-002`: `DONE`; PR #33 gemergt. Atomarer AuthState, localStorage-Reads entfernt, 7/7 Tests bestanden.
 5. `DB-TRUTH-001`: 79/92-Quellluecke und vorwaertsgerichteten Baseline-/Replay-Vertrag loesen.
 6. `APP-STRUCTURE-001`: Ownership-/Importvertrag festlegen; noch keine Big-Bang-Ordnerumsortierung.
 7. `SEC-PIN-002B`: Device-/Challenge-Grenze und Session-Widerruf entscheiden und beweisen; erst dann Bestandsrotation und Merge.

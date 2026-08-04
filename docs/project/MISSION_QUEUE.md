@@ -1,6 +1,6 @@
 # Mission Queue
 
-Stand: 2026-08-04
+Stand: 2026-08-04 (Update M2/M5)
 
 Priorisierte, sofort umsetzbare Missionspakete fuer das Galvanik-Kreile WerkstattCockpit.
 
@@ -10,68 +10,28 @@ Priorisierte, sofort umsetzbare Missionspakete fuer das Galvanik-Kreile Werkstat
 |---|---|---|---|
 | `TRUTH-CLEANUP-001` | Worktree-Inventar, Branch-Disposition | `DONE` | PR 26, PR 27 |
 | `QUALITY-RATCHET-001` | Maschinenlesbarer ESLint-Ratchet | `DONE` | PR 26 |
-| `LINT-DEBT-001` | ESLint 484/459 auf 0/0 | `DONE_PENDING_MERGE` | `agent/fnd-p0-01-lint-wave-2` |
+| `LINT-DEBT-001` | ESLint 484/459 auf 0/0 | `DONE` | PR #31 |
 | `WORKTREE-CLEANUP-002` | 32 Worktrees auf 3 reduziert | `DONE` | — |
+| `AUTH-IDENTITY-002` | Atomarer Identity-Snapshot, localStorage entfernt | `DONE` | PR #33 |
 
 ## Naechste Missionen (bereit)
 
-### M1: AUTH-IDENTITY-002 — Atomarer Identity-Snapshot
-
-**Prioritaet:** P0 (Benutzerwechsel ist kaputt)
-
-**Root Cause (bestaetigt):**
-- `PermissionsProvider` setzt `role`, `name`, `initials` ueber `useState(initialAuthState)` ohne Setter.
-- `refreshPermissions()` verwirft Identity-Felder aus `getAuthorizationSnapshotAction()`.
-- Zweiter Vektor: `KontrolleDashboardClient`, `KvpClient`, `MobileBottomNav` lesen `localStorage("kreile_user_role")` direkt.
-
-**Salvage-Quelle:** `archive/pr-8-auth-identity-002-007b85b` (3 Commits, 15 Dateien)
-
-**Wiederverwendbar:**
-- Atomares `AuthState`-Objekt mit allen Identity-Feldern
-- `refreshSeqRef` Sequence-Guard gegen Race Conditions
-- `loginWithPin`: `signOut({scope:"local"})` vor neuem PIN-Login
-- Alle Consumer-localStorage-Entfernungen
-
-**Nicht wiederverwendbar (durch PR 23 ueberholt):**
-- `proxy.ts` bypass-auth Aenderung
-
-**Dateien:**
-1. `src/lib/auth/PermissionsContext.tsx` — atomares AuthState + Seq-Guard
-2. `src/app/actions/auth.actions.ts` — signOut vor loginWithPin
-3. `src/app/kontrolle/KontrolleDashboardClient.tsx` — localStorage entfernen
-4. `src/app/kvp/KvpClient.tsx` — localStorage entfernen
-5. `src/components/layout/MobileBottomNav.tsx` — localStorage entfernen
-6. `src/components/start/StartScreenClient.tsx` — localStorage-Writes entfernen
-7. `src/components/layout/KreileHeader.tsx` — localStorage-Writes entfernen
-
-**Akzeptanz:**
-- MK -> Admin -> MK Wechsel ohne stale Identity im Browser bewiesen
-- Kein `localStorage("kreile_user_role")` oder `kreile_user_initials` mehr im Code
-- Alle bestehenden Unit-Tests bestehen
-
-**Geschaetzter Aufwand:** Klein (Cherry-Pick + Consumer-Cleanup). Codex-faehig mit kleinem Modell.
-
----
-
 ### M2: DB-TRUTH-001 — Vorwaertsgerichtete Schema-Baseline
 
-**Prioritaet:** P0 (79/92-Luecke blockiert sichere Migrationen)
+**Prioritaet:** P0
 
-**Problem:**
-- Production: 92 Ledger-Eintraege, main: 79 SQL-Dateien
-- 13 fehlende Versionen (6.–13. Juli 2026) — permanent opak
-- Zwei unabgestimmte Migrationsoberflaechen: `supabase/migrations/` und `src/db/migrations/`
+**Status:** PR offen — 16 Stub-Dateien + CI-Check erstellt.
 
-**Strategie:**
-1. Production-Schema via `supabase db dump --schema-only` sichern
-2. Baseline-Migration `20260805000000_baseline_post_gap.sql` erstellen
-3. Pre-Baseline-Dateien als archiviert/read-only markieren
-4. CI-Check: Dateianzahl vs. Ledger-Count
-5. Drizzle-Schema gegen Baseline abgleichen
+**Erledigt:**
+- Production-Ledger: 95 Eintraege verifiziert
+- 16 fehlende Stub-SQL-Dateien erstellt (13 Juli + 3 August-Security)
+- Dateianzahl synchronisiert: 95 Dateien = 95 Ledger-Eintraege
+- CI-Check-Skript `scripts/check-migration-count.sh` + Referenzdatei erstellt
+- Production-Schema (92 Tabellen) vollstaendig gesichert via `list_tables --verbose`
 
-**Blocker:** Braucht Supabase-Production-Zugriff (read-only Schema-Dump). Kein Code-Risiko.
-
-**Geschaetzter Aufwand:** Mittel (Schema-Dump + Baseline-Datei + CI-Skript). Teils Codex-faehig.
+**Offen:**
+- PR mergen
+- Drizzle-Schema-Abgleich (Folgemission)
 
 ---
 
@@ -99,23 +59,36 @@ Priorisierte, sofort umsetzbare Missionspakete fuer das Galvanik-Kreile Werkstat
 
 **Prioritaet:** P1
 
-**Ziel:** Alle 26 Tabellen ohne RLS read-only kartieren, dann relationenweise PRs.
+**Status:** Analyse abgeschlossen, siehe `docs/project/RLS_ANALYSIS.md`.
+
+**Erledigt:**
+- 26 ungeschuetzte Tabellen inventarisiert
+- 66 geschuetzte Tabellen mit allen Policies erfasst
+- 7 `rls_forced`-Tabellen verifiziert (korrekt konfiguriert)
+- Risiko-Tiers definiert: P0 (12 mit tenant_id), P1 (6 ohne tenant_id), P2 (8 System)
+- 9 schwache `USING (true)` Policies identifiziert
+
+**Offen:**
+- P0-Migration: 12 Tabellen RLS + tenant_isolation Policy (eine Migration, kein Schema-Change)
+- P1: `tenant_id`-Spalte ergaenzen fuer 6 Tabellen (Produktentscheidung fuer Backfill)
+- P2: service_role-only Policies fuer 8 Systemtabellen
 
 ---
 
 ## Empfohlene Reihenfolge
 
-1. **Lint-PR mergen** (User-Aktion)
-2. **M1 (AUTH-IDENTITY-002)** starten — klein, gut definiert, Codex-faehig
-3. **M2 (DB-TRUTH-001)** parallel — braucht Schema-Dump-Freigabe
-4. **M3 (APP-STRUCTURE-001)** — nach M1
-5. **M4/M5** — nach Produktentscheidungen
+1. ~~Lint-PR mergen~~ **DONE** (PR #31)
+2. ~~M1 (AUTH-IDENTITY-002)~~ **DONE** (PR #33)
+3. **M2 (DB-TRUTH-001)** — PR offen (16 Stubs + CI-Check)
+4. **M5 (RLS-CONTRACT-001)** — Analyse fertig, P0-Migration als naechstes
+5. **M3 (APP-STRUCTURE-001)** — sofort machbar
+6. **M4 (SEC-PIN-002B)** — nach Produktentscheidung
 
 ## Codex-Eignung
 
 | Mission | Codex-tauglich | Modell |
 |---|---|---|
-| M1 AUTH-IDENTITY | ja, Cherry-Pick + Cleanup | kleines Modell |
+| ~~M1 AUTH-IDENTITY~~ | ~~ja~~ | **DONE** |
 | M2 DB-TRUTH | teilweise (Baseline-Datei, CI-Skript) | kleines Modell |
 | M3 APP-STRUCTURE | ja (ESLint-Config) | kleines Modell |
 | M4 SEC-PIN | nein (Produktentscheidung noetig) | — |
