@@ -1,6 +1,6 @@
 # Current State
 
-Stand: 2026-08-04 (Update nach PR #31, #32, #33, M2/M5-Analyse)
+Stand: 2026-08-05 (Update nach PR #35, #36, #37 — M4 done, RLS-Architektur-Befund)
 
 Verifiziert gegen GitHub, Vercel, Supabase und einen sauberen lokalen Checkout.
 
@@ -8,13 +8,15 @@ Verifiziert gegen GitHub, Vercel, Supabase und einen sauberen lokalen Checkout.
 
 | Vertrag | Status | Beleg |
 |---|---|---|
-| Lieferquelle | `PASS` | GitHub `main` ist die einzige Code-Lieferwahrheit. HEAD: `a87f979`. |
+| Lieferquelle | `PASS` | GitHub `main` ist die einzige Code-Lieferwahrheit. HEAD: `59e4d64`. |
 | Production-Deployment | `PASS` | Vercel Production laeuft auf demselben Commit wie `main`. |
 | Lokale Worktree-Hygiene | `PASS_LOCAL` | Alle in diesem Arbeitsbereich sichtbaren App-Worktrees sind sauber und voneinander isoliert. |
-| Migrations-/Schemaquelle | `PASS (PR offen)` | Stub-Dateien erstellt: 95 SQL-Dateien = 95 Ledger-Eintraege. CI-Check-Skript hinzugefuegt. PR ausstehend. |
+| Migrations-/Schemaquelle | `PASS` | PR #35 gemergt. 96 SQL-Dateien (inkl. pin_rate_limits). CI-Check aktiv. |
 | Quality-Ratchet / Lint-Nullstand | `PASS` | PR #31 gemergt. ESLint 0/0 ueber 668 Dateien, tsc sauber, Ratchet enforced. |
 | Auth-Identity | `PASS` | PR #33 gemergt. Atomarer AuthState, keine localStorage-Reads mehr, alle Tests bestehen. |
-| Produkt-Go-live | `NO_GO` | RLS, PIN-Grenze, Offline-Vertrag und operativer End-to-End-Kern sind nicht vollstaendig abgenommen. |
+| PIN-Security | `PASS` | PR #37 gemergt. bcrypt-Hashing, 3-Stufen-Rate-Limiting, 109 Tests bestehen. |
+| Tenant-Isolation (RLS) | `ENTFAELLT_PHASE_1` | postgres-Rolle umgeht RLS. Single-Tenant = App-Layer-Filter ausreichend. Siehe DECISION_TENANT_ISOLATION.md. |
+| Produkt-Go-live | `NO_GO` | Offline-Vertrag und operativer End-to-End-Kern sind nicht vollstaendig abgenommen. |
 
 Ein gruenes Deployment oder ein gemergter Sicherheitsfix ist deshalb kein Gesamt-PASS.
 
@@ -116,21 +118,20 @@ PR 19, PR 20 oder PR 21 duerfen nicht wholesale gemergt werden. Vor jeder DB-Aen
 
 - `LIVE-AUTH-001`: Cookie-/Routengrenzen sind gehaertet, der reale Ablauf mit einer zuvor gueltigen und dann abgelaufenen Sitzung ist aber noch nicht als vollstaendiger Benutzerweg belegt.
 - `AUTH-IDENTITY-002`: **DONE** (PR #33, gemergt 2026-08-04). PermissionsContext nutzt jetzt ein einziges atomares `AuthState`-Objekt mit Sequence-Guard (`refreshSeqRef`). Alle `localStorage`-Reads/Writes fuer Identity entfernt (`MobileBottomNav`, `KontrolleDashboardClient`, `KvpClient`, `StartScreenClient`, `KreileHeader`). Tests aktualisiert und bestanden (7/7). Verbleibend: `loginWithPin` ruft kein `signOut` vor neuem Login auf — kein aktiver Bug (Cookie wird ueberschrieben), aber Defense-in-Depth-Verbesserung fuer spaeter.
-- `SEC-PIN-002`: der remote gesicherte, tree-identische Checkpoint `dad42eb...` zu `d7d2bd3...` hasht neue PINs und zentralisiert Rollen-/Rotationsregeln, ist aber bewusst `NO_MERGE`.
-  - Die vierstellige PIN-Zielmenge ist ueber verteilte Quellen weiter online angreifbar.
-  - Device-Bindung/Enrollment oder ein gleichwertiger Challenge-/WAF-Vertrag fehlt.
-  - Session-Widerruf bei PIN-Rotation fehlt.
-  - Bestands-PINs und der abschliessende Plaintext-Ausschluss sind noch kontrolliert zu migrieren.
-- RLS-Analyse abgeschlossen (siehe `docs/project/RLS_ANALYSIS.md`):
-  - 26 Tabellen ohne RLS, davon 12 mit `tenant_id` (P0-Risiko),
-  - 7 Tabellen mit `rls_forced` + keine Policies (korrekt: nur service_role),
-  - 9 Tabellen mit schwachen `USING (true)` Policies.
-  - **KRITISCH (2026-08-04):** `app.tenant_id` wird nie gesetzt — alle bestehenden
-    `tenant_isolation` Policies sind No-Ops (Catch-all `USING(true)` macht sie wirkungslos).
-    P0-Migration (PR #35, auf main) darf NICHT auf Production angewandt werden.
-    Status: `BLOCKED_PRODUCT_DECISION` — Tenant-Isolation-Mechanismus muss gewaehlt werden.
-- Referenz: [Supabase Database Linter](https://supabase.com/docs/guides/database/database-linter), insbesondere [RLS disabled in public](https://supabase.com/docs/guides/database/database-linter?lint=0013_rls_disabled_in_public) und [Security Definer View](https://supabase.com/docs/guides/database/database-linter?lint=0010_security_definer_view).
-- Jeder Advisor-Befund muss relationenweise nach realem Zugriffspfad, Rolle, Grant und Tenant-Vertrag bewertet werden. Ein pauschaler Policy-PR ist verboten.
+- `SEC-PIN-002B`: **DONE** (PR #37, gemergt 2026-08-05). bcrypt-Hashing mit transparenter
+  Legacy-Migration, 3-Stufen-Rate-Limiting (5→15min, 10→60min, 20→permanent lock).
+  Supabase-Migration `pin_rate_limits` auf Production angewandt. 11 Tests (6+5).
+  - Verbleibend P1: Device-Binding, Session-Widerruf bei PIN-Rotation.
+  - Alter Checkpoint `checkpoint/sec-pin-002-no-merge-20260801` ist durch PR #37 abgeloest.
+- RLS-Architektur-Entscheidung (2026-08-05, siehe `docs/project/DECISION_TENANT_ISOLATION.md`):
+  - **Kernbefund:** App verbindet als `postgres`-Superuser via Drizzle ORM → alle RLS-Policies
+    werden umgangen. JWT Custom Claims sind nicht anwendbar (kein Supabase Auth, PIN-Login).
+  - **Entscheidung Phase 1 (Single-Tenant):** Tenant-Isolation ueber Application-Layer-Filter
+    in Drizzle-Queries. RLS-CONTRACT-001 (M5) ist entfallen.
+  - **Upgrade-Pfad Phase 2:** Eigene DB-Rolle mit eingeschraenkten Rechten + RLS.
+  - P0-Migration (PR #35, Stubs) ist als DB-TRUTH-001-Ledger-Baseline gemergt, nicht als
+    RLS-Enforcement. Die RLS-Policies darin sind No-Ops und das ist bekannt.
+- Referenz: `docs/project/RLS_ANALYSIS.md` fuer die vollstaendige Tabellen-Analyse.
 
 ## Quality-Stand
 
@@ -167,10 +168,12 @@ Der Workflow blockiert weiterhin jede Meldung in geaenderten TypeScript-/TSX-Dat
 2. `QUALITY-RATCHET-001`: `DONE`; PR 26 gemergt, `quality` plus `ratchet` im aktiven Ruleset verpflichtend.
 3. `LINT-DEBT-001`: `DONE`; PR #31 gemergt. ESLint 0/0, tsc sauber, Ratchet enforced.
 4. `AUTH-IDENTITY-002`: `DONE`; PR #33 gemergt. Atomarer AuthState, localStorage-Reads entfernt, 7/7 Tests bestanden.
-5. `DB-TRUTH-001`: 79/92-Quellluecke und vorwaertsgerichteten Baseline-/Replay-Vertrag loesen.
+5. `DB-TRUTH-001`: `DONE`; PR #35 gemergt. Migrations-/Schemaquelle synchronisiert, CI-Ledger-Check aktiv.
 6. `APP-STRUCTURE-001`: Ownership-/Importvertrag festlegen; noch keine Big-Bang-Ordnerumsortierung.
-7. `SEC-PIN-002B`: Device-/Challenge-Grenze und Session-Widerruf entscheiden und beweisen; erst dann Bestandsrotation und Merge.
-8. `RLS-CONTRACT-001`: Rollen-, Tenant-, Grant- und Relationmatrix read-only ableiten; relationenweise PRs.
+7. `SEC-PIN-002B`: `DONE`; PR #37 gemergt. bcrypt + Rate-Limiting + Supabase-Migration.
+   Verbleibend P1: Device-Binding, Session-Widerruf.
+8. `RLS-CONTRACT-001`: `ENTFAELLT_PHASE_1` — postgres-Rolle umgeht alle RLS-Policies.
+   Tenant-Isolation ueber Application-Layer-Filter (Drizzle-Queries). Siehe `DECISION_TENANT_ISOLATION.md`.
 9. `OFFLINE-SHELL-001`: genau eine sichere Offline-App-Shell herstellen.
 10. `OPERATIVE-SLICE-001`: den Online-Kernweg entlang der Zielstruktur bauen und belegen.
 11. `OFFLINE-48H-001`: denselben Kernweg ueber eine einzige Outbox und 48 Stunden nachweisen.
