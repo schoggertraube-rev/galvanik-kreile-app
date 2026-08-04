@@ -14,7 +14,7 @@ import { getStationConfig } from "@/constants/stations";
 import { getOrdersDb } from "@/app/actions/orders.actions";
 import { getCustomersDb } from "@/app/actions/customers.actions";
 import type { Customer } from "@/lib/types/customer";
-import type { OperationalOrder } from "@/lib/server/operationalOrders";
+import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
 import { usePageView } from "@/hooks/usePageView";
 import { OrderWideCard, type UrgencyType } from "@/components/orders/OrderWideCard";

@@ -12,13 +12,11 @@ import { ChevronRight, Package, ArrowLeft, X } from "lucide-react";
 // Mock data removed
 import { getStationConfig } from "@/constants/stations";
 import { evaluateOrderPriority } from "@/lib/priority";
-import { getOrdersDb } from "@/app/actions/orders.actions";
+import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import { GalvanikQueue } from "@/components/galvanik/GalvanikQueue";
 import { WarenausgangQueue } from "@/components/warenausgang/WarenausgangQueue";
 
 const VALID_SLUGS = ["wareneingang", "entmetallisierung", "schleiferei", "beschichtung", "warenausgang"];
-
-type Order = any; // Fallback since it was from repo
 
 export default function StationPage({ params }: { params: Promise<{ slug: string }> }) {
   usePageView();
@@ -29,7 +27,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
     notFound();
   }
 
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<OrderResponse[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,7 +39,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
           return;
         }
         if (dbOrdersRes.ok && dbOrdersRes.data && dbOrdersRes.data.length > 0) {
-          setOrders(dbOrdersRes.data as any);
+          setOrders(dbOrdersRes.data);
         }
       } catch (e) {
         console.error("Fehler beim Laden aus dem Repository", e);
@@ -84,9 +82,9 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
       </div>
 
       {slug === "beschichtung" ? (
-        <GalvanikQueue orders={filteredOrders as unknown as Order[]} />
+        <GalvanikQueue orders={filteredOrders} />
       ) : slug === "warenausgang" ? (
-        <WarenausgangQueue allOrders={orders as unknown as Order[]} />
+        <WarenausgangQueue allOrders={orders} />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           <div className="lg:col-span-2 space-y-3">
@@ -207,13 +205,12 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
 
                   <div className="space-y-2 pt-2">
                     <span className="text-[10px] font-bold uppercase text-text-muted tracking-wider">Erfasste Werkstücke</span>
-                    {(selectedOrder.parts || []).map((p: any, i: number) => {
-                      const part = p as any;
+                    {selectedOrder.parts.map((part, i) => {
                       return (
                     <div key={part.id ?? `part-${i}`} className="p-2.5 bg-bg-app-soft border border-neutral-gray-100 rounded-lg flex items-center justify-between text-xs">
                       <div>
                         <span className="font-bold text-navy-900 block">{part.name}</span>
-                        <span className="text-text-muted text-[10px]">Material: {part.material} | Finish: {part.finish}</span>
+                        <span className="text-text-muted text-[10px]">Material: {part.material} | Oberfläche: {part.surfaceRequested}</span>
                       </div>
                       <Badge variant="outline" className="font-mono text-[9px] bg-white text-text-muted">
                         {part.id ?? `part-${i}`}

@@ -5,7 +5,7 @@ import { useOverlayStore } from "@/lib/overlayStore";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, AlertTriangle, CheckCircle2 } from "lucide-react";
-import type { OperationalOrder } from "@/lib/server/operationalOrders";
+import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
 interface OrderTileProps {
   order: Pick<OperationalOrder, "id" | "orderNumber" | "station" | "title" | "task" | "dueDate" | "risk" | "status"> | null | undefined;

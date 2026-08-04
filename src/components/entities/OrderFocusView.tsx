@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Order } from "@/lib/repositories/ordersRepository";
+import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import { X, Save, Printer, Loader2 } from "lucide-react";
 import { generateOrderLabel } from "@/app/actions/pdf.actions";
 
 interface OrderFocusViewProps {
-  order: Order;
+  order: OperationalOrder;
   onClose: () => void;
-  onSave: (changes: Partial<Order>) => Promise<void>;
+  onSave: (changes: Partial<Pick<OperationalOrder, "risk" | "station">>) => Promise<void>;
 }
 
 export function OrderFocusView({ order, onClose, onSave }: OrderFocusViewProps) {

@@ -7,7 +7,7 @@ import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { unstable_noStore as noStore } from "next/cache";
-import type { OperationalOrder } from "@/lib/server/operationalOrders";
+import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
 // DTO Typen (zur Vereinfachung)
 export type OrderResponse = OperationalOrder;

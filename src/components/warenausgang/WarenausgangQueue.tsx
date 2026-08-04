@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Order } from "@/lib/repositories/ordersRepository";
+import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import { format } from "date-fns";
 import { PackageCheck, Mail, CheckCircle2, AlertCircle, FileText, Loader2 } from "lucide-react";
 
@@ -9,7 +9,7 @@ import { getUrgency } from "@/lib/orders/getUrgency";
 import { generateDeliveryNote } from "@/app/actions/pdf.actions";
 
 interface WarenausgangQueueProps {
-  allOrders: Order[]; // Receives all orders to determine completeness
+  allOrders: OperationalOrder[]; // Receives all orders to determine completeness
 }
 
 export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
@@ -26,7 +26,7 @@ export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
 
   // Gruppiere die fertigen Aufträge nach Kunde und sortiere die Gruppen (Vollständige zuerst)
   const groupedOrders = useMemo(() => {
-    const groups: Record<string, { orders: Order[], isComplete: boolean }> = {};
+    const groups: Record<string, { orders: OperationalOrder[], isComplete: boolean }> = {};
     
     // 1. Fertige Aufträge gruppieren
     finishedOrders.forEach(o => {
@@ -59,7 +59,7 @@ export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
 
   const [isGeneratingNote, setIsGeneratingNote] = useState<string | null>(null);
 
-  const handleGenerateNote = async (customerName: string, custOrders: Order[]) => {
+  const handleGenerateNote = async (customerName: string, custOrders: OperationalOrder[]) => {
     setIsGeneratingNote(customerName);
     try {
       const orderIds = custOrders.map(o => o.id);

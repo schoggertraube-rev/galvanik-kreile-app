@@ -6,11 +6,11 @@ import { EntityDecisionOverlay } from "@/components/entities/EntityDecisionOverl
 import { FocusOverlay } from "@/components/entities/FocusOverlay";
 import { OrderFocusView } from "@/components/entities/OrderFocusView";
 import { CustomerFocusView } from "@/components/entities/CustomerFocusView";
-import type { Order } from "@/lib/repositories/ordersRepository";
+import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import { getUrgency } from "@/lib/orders/getUrgency";
 
 interface GalvanikOrderRowProps {
-  order: Order;
+  order: OperationalOrder;
 }
 
 export function GalvanikOrderRow({ order }: GalvanikOrderRowProps) {

@@ -1,30 +1,9 @@
 import { db } from "@/db";
 import { orders, customers, items } from "@/db/schema";
 import { eq, desc, and, notInArray, notIlike, sql, inArray } from "drizzle-orm";
-import type { InferSelectModel } from "drizzle-orm";
+import type { OperationalOrder, OperationalOrderItem } from "@/lib/types/operationalOrder";
 
-export type OperationalOrderItem = InferSelectModel<typeof items>;
-
-export type OperationalOrder = {
-  id: string;
-  orderNumber: string;
-  customerId: string;
-  customerName: string | null;
-  title: string;
-  task: string | null;
-  itemDescription: string | null;
-  surfaceRequested: string | null;
-  station: string;
-  status: string;
-  risk: string;
-  currentStationId: string;
-  parts: OperationalOrderItem[];
-  intakeDate: string;
-  dueDate: string;
-  dueLabel: string;
-  dueValue: string;
-  createdAt: string | undefined;
-};
+export type { OperationalOrder, OperationalOrderItem } from "@/lib/types/operationalOrder";
 
 // Short-lived in-memory cache (5 seconds) — prevents parallel duplicate DB calls
 // during a single page render without blocking real-time updates.
@@ -88,7 +67,7 @@ async function _fetchAndMap(): Promise<OperationalOrder[]> {
     : [];
 
   return results.map((o) => {
-    const orderParts = allParts.filter((p) => p.orderId === o.id);
+    const orderParts: OperationalOrderItem[] = allParts.filter((p) => p.orderId === o.id);
     const intakeDate = o.intakeDate ? new Date(o.intakeDate).toISOString() : (o.createdAt ? new Date(o.createdAt).toISOString() : new Date().toISOString());
     const dueDate = o.dueDate ? new Date(o.dueDate).toISOString() : new Date(new Date(intakeDate).getTime() + 10 * 24 * 60 * 60 * 1000).toISOString();
 
