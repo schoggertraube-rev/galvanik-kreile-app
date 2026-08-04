@@ -4,7 +4,8 @@ import { supabase } from '@/lib/supabase/client';
 export function useKiInsight(kachel: string, daten: Record<string, number | string | null>) {
   const [data, setData] = useState<{ beobachtung: string; achtung?: string; empfehlung: string } | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const datenKey = JSON.stringify(daten);
 
   useEffect(() => {
     let isMounted = true;
@@ -17,7 +18,7 @@ export function useKiInsight(kachel: string, daten: Record<string, number | stri
         });
         if (fetchError) throw fetchError;
         if (isMounted) setData(result as any);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (isMounted) setError(err);
       } finally {
         if (isMounted) setIsLoading(false);
@@ -28,7 +29,7 @@ export function useKiInsight(kachel: string, daten: Record<string, number | stri
     fetchInsight();
     
     return () => { isMounted = false; };
-  }, [kachel, JSON.stringify(daten)]);
+  }, [kachel, datenKey]);
 
   return { data, isLoading, error };
 }

@@ -30,8 +30,6 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
           setIsDemoMode(true);
         }
       }).catch(() => setIsDemoMode(true));
-    } else {
-      setIsDemoMode(false);
     }
   }, []);
 

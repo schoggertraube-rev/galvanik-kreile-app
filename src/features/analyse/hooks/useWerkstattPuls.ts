@@ -34,7 +34,7 @@ export interface WerkstattPulsData {
 export function useWerkstattPuls() {
   const [data, setData] = useState<WerkstattPulsData | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -81,7 +81,7 @@ export function useWerkstattPuls() {
             snapshots: chartSnapshots
           });
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (isMounted) setError(err);
       } finally {
         if (isMounted) setIsLoading(false);

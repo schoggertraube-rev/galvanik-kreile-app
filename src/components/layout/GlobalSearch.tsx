@@ -8,7 +8,7 @@ import { findActions, buildFallbackSuggestion } from '@/lib/search/fuzzy'
 import { SEARCH_ACTIONS } from '@/lib/search/actionRegistry'
 import { addRecentSearch } from '@/lib/search/recent'
 import type { SearchSuggestion } from '@/types/search'
-import { globalSearch } from '@/app/actions/search.actions'
+import { globalSearch, type SearchResult } from '@/app/actions/search.actions'
 import { GlobalSearchAIResult } from './GlobalSearchAIResult'
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import { useCustomerOverlay } from "@/components/customers/useCustomerOverlay";
@@ -22,7 +22,7 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   const { openOrder } = useOrderModal();
   const { open: openCustomer } = useCustomerOverlay();
   const { openErfassung } = useErfassung();
-  const [globalResults, setGlobalResults] = useState<Record<string, any>[]>([]);
+  const [globalResults, setGlobalResults] = useState<SearchResult[]>([]);
   const [prevOpen, setPrevOpen] = useState(open)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -94,15 +94,16 @@ export function GlobalSearch({ open, onOpenChange }: { open: boolean, onOpenChan
   const cleanTerm = searchTerm.trim().toLowerCase()
   const isAiMode = forceAiMode || /^(wie|was|wo|warum|welche|zeige|vergleiche|analysiere)/i.test(cleanTerm) || cleanTerm.endsWith("?");
 
-  const filteredOrders = globalResults.filter(r => r.type === 'order')
-  const filteredCustomers = globalResults.filter(r => r.type === 'customer')
-  const filteredItems = globalResults.filter(r => r.type === 'item')
-  const filteredBelege = globalResults.filter(r => r.type === 'beleg')
-  const filteredRechnungen = globalResults.filter(r => r.type === 'rechnung')
-  const filteredLieferanten = globalResults.filter(r => r.type === 'lieferant')
-  const filteredBaeder = globalResults.filter(r => r.type === 'bad')
-  const filteredLager = globalResults.filter(r => r.type === 'lager')
-  const filteredKosten = globalResults.filter(r => r.type === 'kostenposten')
+  const filterResultsByType = (type: string) => globalResults.filter(result => result.type === type)
+  const filteredOrders = filterResultsByType('order')
+  const filteredCustomers = filterResultsByType('customer')
+  const filteredItems = filterResultsByType('item')
+  const filteredBelege = filterResultsByType('beleg')
+  const filteredRechnungen = filterResultsByType('rechnung')
+  const filteredLieferanten = filterResultsByType('lieferant')
+  const filteredBaeder = filterResultsByType('bad')
+  const filteredLager = filterResultsByType('lager')
+  const filteredKosten = filterResultsByType('kostenposten')
 
   // Hook results
   const hookTeile = hookResults.filter(r => r.typ === 'teil');

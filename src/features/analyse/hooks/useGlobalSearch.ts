@@ -11,7 +11,7 @@ export interface GlobalSearchResult {
 export function useGlobalSearch(query: string) {
   const [data, setData] = useState<GlobalSearchResult[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   useEffect(() => {
     if (!query || query.length < 2) {
@@ -29,7 +29,7 @@ export function useGlobalSearch(query: string) {
           
         if (fetchError) throw fetchError;
         if (isMounted) setData(result as GlobalSearchResult[]);
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (isMounted) setError(err);
       } finally {
         if (isMounted) setIsLoading(false);

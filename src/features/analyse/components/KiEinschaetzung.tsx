@@ -3,7 +3,7 @@ import { LeerzustandHinweis } from './LeerzustandHinweis';
 
 export interface KiEinschaetzungProps {
   isLoading: boolean;
-  error?: Error | null;
+  error?: unknown;
   data?: {
     beobachtung: string;
     achtung?: string;
