@@ -1,52 +1,41 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState } from "react";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { Cloud, CloudOff, RefreshCw, AlertCircle } from "lucide-react";
 
-function subscribeToOfflineStatus(callback: () => void) {
-  if (typeof window === "undefined") return () => {};
-
-  window.addEventListener("offline", callback);
-  window.addEventListener("online", callback);
-  window.addEventListener("kreile-network-change", callback);
-
-  return () => {
-    window.removeEventListener("offline", callback);
-    window.removeEventListener("online", callback);
-    window.removeEventListener("kreile-network-change", callback);
-  };
-}
-
-const getOfflineStatus = () => OfflineManager.isOffline();
-const getServerOfflineStatus = () => false;
-
 export function OfflineSyncBadge() {
-  const isOffline = useSyncExternalStore(
-    subscribeToOfflineStatus,
-    getOfflineStatus,
-    getServerOfflineStatus,
-  );
+  const [isOffline, setIsOffline] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
-  const updatePendingCount = () => {
-    void OfflineManager.getPendingCount().then(setPendingCount);
+  const updateState = async () => {
+    setIsOffline(OfflineManager.isOffline());
+    const count = await OfflineManager.getPendingCount();
+    setPendingCount(count);
   };
 
   useEffect(() => {
-    updatePendingCount();
+    updateState();
 
-    const handleSyncUpdate = () => updatePendingCount();
+    const handleOffline = () => updateState();
+    const handleOnline = () => updateState();
+    const handleSyncUpdate = () => updateState();
     const handleSyncSuccess = () => {
       setLastSync(new Date().toLocaleTimeString());
-      updatePendingCount();
+      updateState();
     };
 
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("kreile-network-change", handleOffline);
     window.addEventListener("kreile-sync-queue-updated", handleSyncUpdate);
     window.addEventListener("kreile-sync-success", handleSyncSuccess);
 
     return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("kreile-network-change", handleOffline);
       window.removeEventListener("kreile-sync-queue-updated", handleSyncUpdate);
       window.removeEventListener("kreile-sync-success", handleSyncSuccess);
     };
