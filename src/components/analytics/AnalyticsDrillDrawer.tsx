@@ -37,6 +37,7 @@ export function AnalyticsDrillDrawer({
   const [snapshot, setSnapshot] = useState<KpiSnapshot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const drawerRef = useRef<HTMLDivElement>(null);
+  const escapeOnCloseRef = useRef(onClose);
 
   const kpi = KPI_REGISTRY[kpiId];
 
@@ -78,7 +79,10 @@ export function AnalyticsDrillDrawer({
   // ESC to close
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") handleClose();
+      if (e.key === "Escape") {
+        setVisible(false);
+        setTimeout(escapeOnCloseRef.current, 200);
+      }
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
