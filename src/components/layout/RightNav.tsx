@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { RightNavItem } from "./RightNavItem";
 import { Home, PackageCheck, Archive, Users, Settings, BarChart3, Menu } from "lucide-react";
 import { trackUiEvent } from "@/lib/tracking/tracking";
@@ -35,19 +35,25 @@ function SubMenuLink({ label, href, isAvailable, expanded }: { label: string, hr
   );
 }
 
+function subscribeToPointerMode(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  const mediaQuery = window.matchMedia("(pointer: coarse)");
+  mediaQuery.addEventListener("change", onStoreChange);
+  return () => mediaQuery.removeEventListener("change", onStoreChange);
+}
+
+function getTouchSnapshot(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+}
+
 export function RightNav() {
   const pathname = usePathname();
   const { hasPermission, role } = usePermissions();
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [pinned, setPinned] = useState(false);
-  const [isTouch, setIsTouch] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      setIsTouch(window.matchMedia("(pointer: coarse)").matches);
-    }
-  }, []);
+  const isTouch = useSyncExternalStore(subscribeToPointerMode, getTouchSnapshot, () => false);
 
   const expanded = pinned || isHovered || isTouch;
 

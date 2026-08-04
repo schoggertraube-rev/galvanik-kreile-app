@@ -3,7 +3,7 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { 
   ShieldAlert, Activity, Archive, BarChart3, 
@@ -19,9 +19,28 @@ interface Props {
   qsData?: QsListItem[];
 }
 
+function subscribeToLocalRole(onStoreChange: () => void): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === "kreile_user_role") onStoreChange();
+  };
+
+  window.addEventListener("storage", onStorage);
+  return () => window.removeEventListener("storage", onStorage);
+}
+
+function getLocalAdminSnapshot(): boolean {
+  if (typeof window === "undefined") return false;
+
+  const role = localStorage.getItem("kreile_user_role");
+  return role === "admin" || role === "developer";
+}
+
 export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
   const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
-  const [isAdminOrDevLocal, setIsAdminOrDevLocal] = useState(isDevOrAdmin);
+  const hasLocalAdminRole = useSyncExternalStore(subscribeToLocalRole, getLocalAdminSnapshot, () => false);
+  const isAdminOrDevLocal = isDevOrAdmin || hasLocalAdminRole;
 
   const qsCount = qsData.length;
   const qsRows = qsCount > 0 ? qsData.map(q => ({
@@ -31,13 +50,6 @@ export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
     amount: q.pruefer || "Unbekannt",
     href: `/orders/${q.orderId}`
   })) : [{ avatar: "✓", avatarColor: "bg-success-green", name: "Keine Qualitätsmängel", amount: "-", href: "#" }];
-
-  useEffect(() => {
-    const role = localStorage.getItem("kreile_user_role");
-    if (role === "admin" || role === "developer" || isDevOrAdmin) {
-      setIsAdminOrDevLocal(true);
-    }
-  }, [isDevOrAdmin]);
 
   const closeOverlay = () => setActiveOverlay(null);
 
