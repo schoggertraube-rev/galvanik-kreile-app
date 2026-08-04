@@ -3,44 +3,27 @@ import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
-import React, { useState, useSyncExternalStore } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
-import { 
-  ShieldAlert, Activity, Archive, BarChart3, 
-  AlertTriangle, Clock, PackageX, Wrench, 
+import {
+  ShieldAlert, Activity, Archive, BarChart3,
+  AlertTriangle, Clock, PackageX, Wrench,
   Truck, MailQuestion, ArrowRight, Info
 } from 'lucide-react';
 import { DetailOverlay } from '@/components/ui/DetailOverlay';
 import { AnalysisOverlay } from "@/components/ui/AnalysisOverlay";
 import type { QsListItem } from "./actions";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 interface Props {
   isDevOrAdmin: boolean;
   qsData?: QsListItem[];
 }
 
-function subscribeToLocalRole(onStoreChange: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-
-  const onStorage = (event: StorageEvent) => {
-    if (event.key === "kreile_user_role") onStoreChange();
-  };
-
-  window.addEventListener("storage", onStorage);
-  return () => window.removeEventListener("storage", onStorage);
-}
-
-function getLocalAdminSnapshot(): boolean {
-  if (typeof window === "undefined") return false;
-
-  const role = localStorage.getItem("kreile_user_role");
-  return role === "admin" || role === "developer";
-}
-
 export function KontrolleDashboardClient({ isDevOrAdmin, qsData = [] }: Props) {
   const [activeOverlay, setActiveOverlay] = useState<string | null>(null);
-  const hasLocalAdminRole = useSyncExternalStore(subscribeToLocalRole, getLocalAdminSnapshot, () => false);
-  const isAdminOrDevLocal = isDevOrAdmin || hasLocalAdminRole;
+  const { role } = usePermissions();
+  const isAdminOrDevLocal = isDevOrAdmin || role === "admin" || role === "developer";
 
   const qsCount = qsData.length;
   const qsRows = qsCount > 0 ? qsData.map(q => ({

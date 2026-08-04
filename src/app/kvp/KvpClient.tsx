@@ -7,6 +7,7 @@ import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
 import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { OfflineSyncBadge } from "@/components/offline/OfflineSyncBadge";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 interface KvpItem {
   id: string;
@@ -26,7 +27,6 @@ interface KvpItem {
 
 const KVP_STORAGE_KEY = "kreile_kvp_items";
 const KVP_STORAGE_EVENT = "kreile-kvp-items-change";
-const USER_ROLE_STORAGE_KEY = "kreile_user_role";
 const EMPTY_KVP_ITEMS: KvpItem[] = [];
 let cachedKvpItemsRaw: string | null | undefined;
 let cachedKvpItems: KvpItem[] = EMPTY_KVP_ITEMS;
@@ -108,24 +108,6 @@ function saveKvpItems(items: KvpItem[]): void {
   window.dispatchEvent(new Event(KVP_STORAGE_EVENT));
 }
 
-function subscribeToLocalRole(onStoreChange: () => void): () => void {
-  if (typeof window === "undefined") return () => {};
-
-  const onStorage = (event: StorageEvent) => {
-    if (event.key === USER_ROLE_STORAGE_KEY) onStoreChange();
-  };
-
-  window.addEventListener("storage", onStorage);
-  return () => window.removeEventListener("storage", onStorage);
-}
-
-function getLocalAdminSnapshot(): boolean {
-  if (typeof window === "undefined") return false;
-
-  const role = localStorage.getItem(USER_ROLE_STORAGE_KEY);
-  return role === "admin" || role === "developer";
-}
-
 const CATEGORIES = ["Bedienung", "Kommunikation", "Warendurchlauf", "Performance", "Kundenservice", "Bäder/Chemie", "Finanzen", "Sonstiges"];
 const BENEFITS = ["Zeit sparen", "Fehler vermeiden", "Kunde zufriedener", "Kosten senken", "Übersicht verbessern"];
 
@@ -186,7 +168,8 @@ export function KvpClient() {
 
   const savedItems = useSyncExternalStore(subscribeToKvpItems, getKvpItemsSnapshot, () => EMPTY_KVP_ITEMS);
   const items = [...savedItems, ...DEMO_ITEMS];
-  const isAdminOrDev = useSyncExternalStore(subscribeToLocalRole, getLocalAdminSnapshot, () => false);
+  const { role } = usePermissions();
+  const isAdminOrDev = role === "admin" || role === "developer";
   const [activeItem, setActiveItem] = useState<KvpItem | null>(null);
 
   // Form State

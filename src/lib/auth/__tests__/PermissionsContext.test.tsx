@@ -1,7 +1,8 @@
 process.env.DATABASE_URL = "postgres://mock:mock@localhost:5432/mock";
 
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { render, screen, act } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
+import { act } from "react";
 import React from "react";
 import { PermissionsProvider, usePermissions, deriveInitials } from "../PermissionsContext";
 import type { AuthBootstrapState } from "@/lib/server/authBootstrap";
@@ -73,7 +74,7 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
     );
   };
 
-  it("T-01: Sessionidentität bleibt stabil", async () => {
+  it("T-01: Identität wird atomar aus Server-Antwort aktualisiert", async () => {
     const initialState: AuthBootstrapState = {
       status: "authenticated",
       session: {
@@ -86,7 +87,7 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       }
     };
 
-    // Client action returns different name, but context must NOT update name or initials
+    // Server returns different name → context MUST update name + initials atomically
     vi.mocked(getAuthorizationSnapshotAction).mockResolvedValue({
       ok: true,
       data: {
@@ -107,8 +108,8 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       );
     });
 
-    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
-    expect(screen.getByTestId("initials").textContent).toBe("CD");
+    expect(screen.getByTestId("name").textContent).toBe("Anderer Benutzer");
+    expect(screen.getByTestId("initials").textContent).toBe("AB");
     expect(screen.getByTestId("role").textContent).toBe("buero");
     expect(screen.getByTestId("status").textContent).toBe("authenticated");
   });
@@ -181,10 +182,11 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
 
     expect(getAuthorizationSnapshotAction).toHaveBeenCalledTimes(1);
 
-    expect(screen.getByTestId("role").textContent).toBe("buero");
-    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
-    expect(screen.getByTestId("initials").textContent).toBe("CD");
-    expect(screen.getByTestId("permissions").textContent).toBe(""); // Discarded
+    // Error clears identity atomically — no stale role/name kept
+    expect(screen.getByTestId("role").textContent).toBe("");
+    expect(screen.getByTestId("name").textContent).toBe("");
+    expect(screen.getByTestId("initials").textContent).toBe("");
+    expect(screen.getByTestId("permissions").textContent).toBe("");
     expect(screen.getByTestId("status").textContent).toBe("error");
     expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Sitzung veraltet");
   });
@@ -212,9 +214,10 @@ describe("PermissionsProvider Bootstrap & central resolveAuthorization Protectio
       );
     });
 
-    expect(screen.getByTestId("role").textContent).toBe("buero");
-    expect(screen.getByTestId("name").textContent).toBe("Christian Dieter");
-    expect(screen.getByTestId("initials").textContent).toBe("CD");
+    // Network error clears identity atomically — no stale role/name kept
+    expect(screen.getByTestId("role").textContent).toBe("");
+    expect(screen.getByTestId("name").textContent).toBe("");
+    expect(screen.getByTestId("initials").textContent).toBe("");
     expect(screen.getByTestId("status").textContent).toBe("error");
     expect(screen.getByTestId("error").textContent).toBe("AUTH_ERROR: Berechtigungen nicht verfügbar");
   });

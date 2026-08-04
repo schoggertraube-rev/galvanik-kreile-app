@@ -142,15 +142,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
             }
           }
 
-          // UI state in localStorage (not auth relevant)
-          try {
-            localStorage.setItem("kreile_user_role", res.role || user.role);
-            localStorage.setItem("kreile_user_initials", user.initials);
-          } catch (e) {
-            console.warn("localStorage is blocked, skipping user info storage", e);
-          }
-
-          // Redirect to home
+          // Redirect to home — PermissionsContext picks up identity atomically via server action
           window.location.href = "/";
         } else {
           setError(true);
