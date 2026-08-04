@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase/client';
 
+type LegacyWeekDateFormatOptions = Intl.DateTimeFormatOptions & {
+  week?: 'numeric';
+};
+
 export interface WerkstattPulsData {
   termintreue: {
     puenktlich: number;
@@ -64,11 +68,15 @@ export function useWerkstattPuls() {
         const chartSnapshots = (kpiSnapshots.data || [])
           .slice(0, 12)
           .reverse()
-          .map(s => ({
-            kw: 'KW ' + new Date(s.periode_start).toLocaleDateString('de-DE', { week: 'numeric' } as any), // Fallback formatting for demo
-            wert: s.wert ? Number(s.wert) : null,
-            vorjahr: null // Would need a self-join for true last year
-          }));
+          .map(s => {
+            const dateFormatOptions: LegacyWeekDateFormatOptions = { week: 'numeric' };
+
+            return {
+              kw: 'KW ' + new Date(s.periode_start).toLocaleDateString('de-DE', dateFormatOptions), // Fallback formatting for demo
+              wert: s.wert ? Number(s.wert) : null,
+              vorjahr: null // Would need a self-join for true last year
+            };
+          });
 
         if (isMounted) {
           setData({
