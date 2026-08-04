@@ -12,33 +12,45 @@ interface Props {
   onClose: () => void;
 }
 
+interface AnalyseDetailSnapshot {
+  key: string;
+  detail: AnalyseTileDetail | null;
+  error: string | null;
+}
+
 export function AnalyseDrillOverlay({ tileKey, period, onClose }: Props) {
-  const [detail, setDetail] = useState<AnalyseTileDetail | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const requestKey = tileKey ? `${tileKey}:${period}` : null;
+  const [snapshot, setSnapshot] = useState<AnalyseDetailSnapshot | null>(null);
+  const matchingSnapshot = snapshot?.key === requestKey ? snapshot : null;
+  const detail = matchingSnapshot?.detail ?? null;
+  const isLoading = requestKey !== null && matchingSnapshot === null;
+  const error = matchingSnapshot?.error ?? null;
 
   useEffect(() => {
-    if (!tileKey) return;
+    if (!tileKey || !requestKey) return;
     
     let mounted = true;
-    setIsLoading(true);
-    setError(null);
-
-    async function load() {
-      const res = await getAnalyseTileDetail(tileKey!, period);
-      if (!mounted) return;
-      if (res.error) {
-        setError(res.error);
-      } else {
-        setDetail(res.data);
+    void (async () => {
+      try {
+        const res = await getAnalyseTileDetail(tileKey, period);
+        if (!mounted) return;
+        setSnapshot({
+          key: requestKey,
+          detail: res.error ? null : res.data,
+          error: res.error ?? null,
+        });
+      } catch (loadError: unknown) {
+        if (!mounted) return;
+        setSnapshot({
+          key: requestKey,
+          detail: null,
+          error: loadError instanceof Error ? loadError.message : 'Details konnten nicht geladen werden.',
+        });
       }
-      setIsLoading(false);
-    }
-
-    load();
+    })();
 
     return () => { mounted = false; };
-  }, [tileKey, period]);
+  }, [period, requestKey, tileKey]);
 
   if (!tileKey) return null;
 

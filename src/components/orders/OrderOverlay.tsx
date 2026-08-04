@@ -21,6 +21,7 @@ type OverlayOrderItem = OrderDetails["items"][number] & {
 };
 type OverlayPriceLine = OrderDetails["priceLines"][number];
 type OverlayOrderEvent = OrderDetails["events"][number];
+type OverlayCostPosition = OrderDetails["costPositions"][number];
 
 export function OrderOverlay() {
   const stack = useOverlayStore(state => state.stack);
@@ -85,8 +86,11 @@ export function OrderOverlay() {
   const orderItems: OverlayOrderItem[] = orderData.items ?? [];
   const priceLines: OverlayPriceLine[] = orderData.priceLines ?? [];
   const orderEvents: OverlayOrderEvent[] = orderData.events ?? [];
+  const costPositions: OverlayCostPosition[] = orderData.costPositions ?? [];
   const hasItems = orderItems.length > 0;
   const totalNet = priceLines.reduce((sum, line) => sum + Number(line.unitTotalEur || 0), 0);
+  const totalCostEur = costPositions.reduce((sum, position) => sum + position.amountCents / 100, 0);
+  const customerName = orderData.customer?.name || "Unbekannter Kunde";
 
   return (
     <AppOverlayPortal>
@@ -241,14 +245,13 @@ export function OrderOverlay() {
                       if (cid) openCustomer(cid);
                     }}
                   >
-                    <Info className="w-3 h-3"/> {orderData.customer?.name || orderData.customerName || "Unbekannter Kunde"} <ArrowRight className="w-3 h-3"/>
+                    <Info className="w-3 h-3"/> {customerName} <ArrowRight className="w-3 h-3"/>
                   </button>
                 </div>
               </div>
 
               <HeadCostBadge 
-                currentCostEur={orderData.cost_ist || 0}
-                benchmarkEur={orderData.cost_benchmark || undefined}
+                currentCostEur={totalCostEur}
                 onClick={() => {
                   document.getElementById('station-context-block')?.scrollIntoView({ behavior: 'smooth' });
                 }}
@@ -307,10 +310,10 @@ export function OrderOverlay() {
                   orderId={orderData.id}
                   activeStation={activeStation}
                   orderCurrentStation={orderData.station || 'wareneingang'}
-                  orderRevenue={orderData.quoteTotalGross || orderData.dbGeplant || 0}
+                  orderRevenue={totalNet}
                   orderMargin={0} // Needs actual margin data
                   orderMarginPercent={0} // Needs actual margin data
-                  customerName={orderData.customer?.name || orderData.customerName || "Kunde"}
+                  customerName={customerName}
                   isOrderCompleted={orderData.status === 'completed'}
                 />
 
