@@ -1,0 +1,8 @@
+-- ============================================================
+-- STUB — Diese Migration wurde direkt auf Production angewandt.
+-- Quelldatei war zum Zeitpunkt der Anwendung nicht auf main.
+-- Dieser Stub synchronisiert die lokale Dateianzahl mit dem
+-- Supabase-Migrations-Ledger (Projekt syhaigjhsbpjmtnggqka).
+--
+-- NICHT erneut ausfuehren. Bereits im Ledger vorhanden.
+-- ============================================================

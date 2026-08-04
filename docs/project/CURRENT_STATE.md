@@ -1,6 +1,6 @@
 # Current State
 
-Stand: 2026-08-04 (Update nach PR #31, #32, #33)
+Stand: 2026-08-04 (Update nach PR #31, #32, #33, M2/M5-Analyse)
 
 Verifiziert gegen GitHub, Vercel, Supabase und einen sauberen lokalen Checkout.
 
@@ -11,7 +11,7 @@ Verifiziert gegen GitHub, Vercel, Supabase und einen sauberen lokalen Checkout.
 | Lieferquelle | `PASS` | GitHub `main` ist die einzige Code-Lieferwahrheit. HEAD: `a87f979`. |
 | Production-Deployment | `PASS` | Vercel Production laeuft auf demselben Commit wie `main`. |
 | Lokale Worktree-Hygiene | `PASS_LOCAL` | Alle in diesem Arbeitsbereich sichtbaren App-Worktrees sind sauber und voneinander isoliert. |
-| Migrations-/Schemaquelle | `FAIL` | `main` enthaelt 79 Migrationsdateien, Production 92 Ledger-Eintraege, Integration 1. |
+| Migrations-/Schemaquelle | `PASS (PR offen)` | Stub-Dateien erstellt: 95 SQL-Dateien = 95 Ledger-Eintraege. CI-Check-Skript hinzugefuegt. PR ausstehend. |
 | Quality-Ratchet / Lint-Nullstand | `PASS` | PR #31 gemergt. ESLint 0/0 ueber 668 Dateien, tsc sauber, Ratchet enforced. |
 | Auth-Identity | `PASS` | PR #33 gemergt. Atomarer AuthState, keine localStorage-Reads mehr, alle Tests bestehen. |
 | Produkt-Go-live | `NO_GO` | RLS, PIN-Grenze, Offline-Vertrag und operativer End-to-End-Kern sind nicht vollstaendig abgenommen. |
@@ -71,15 +71,12 @@ Der PIN-Kandidat bleibt als Remote-Checkpoint `checkpoint/sec-pin-002-no-merge-2
 
 ### Production
 
-- 92 Eintraege im produktiven Migrationsledger.
-- 79 `.sql`-Migrationsdateien in `main`.
-- Folgende 13 produktiv registrierte Versionen fehlen als Quellen in `main`:
-  - `20260706213500`
-  - `20260708195800`
-  - `20260709071600`
-  - `20260710143540`
-  - `20260712154103`
-  - `20260713000100` bis `20260713000800`
+- 95 Eintraege im produktiven Migrationsledger.
+- Nach Stub-Erstellung: 95 `.sql`-Migrationsdateien (PR offen).
+- 16 ehemals fehlende Versionen als kommentierte Stubs ergaenzt:
+  - Juli-Fenster (13 Stk.): `20260706213500` bis `20260713000800`
+  - August-Security (3 Stk.): `20260802213450`, `20260802220519`, `20260802221310`
+- CI-Check-Skript (`scripts/check-migration-count.sh`) prueft Dateianzahl vs. Ledger.
 - Der W1-Receipt-Schritt ist als `20260801100027` im Production-Ledger und als ledger-ausgerichtete Datei in `main` vorhanden.
 - Ein frischer Replay der historischen lokalen Kette ist gescheitert. Die alte Historie wurde nach Ausfuehrung mehrfach umgeschrieben und darf nicht erneut pauschal rekonstruiert oder umgedeutet werden.
 
@@ -90,7 +87,7 @@ Der PIN-Kandidat bleibt als Remote-Checkpoint `checkpoint/sec-pin-002-no-merge-2
 
 ### Analyse (2026-08-04)
 
-Die 13 fehlenden Versionen fallen in ein enges Fenster (6.–13. Juli 2026). Die lokale `main`-Historie springt direkt von `20260627000001` zu `20260801100027`. Die alte Git-Historie wurde nach Ausfuehrung mehrfach umgeschrieben (Commits wie "restore executed migration sources", "reconcile applied migration history" auf Archiv-Branches belegen fehlgeschlagene Rekonstruktionsversuche).
+Die 16 fehlenden Versionen fallen in zwei Fenster: 13 aus Juli (6.–13. Juli 2026) und 3 August-Security-Migrationen (2. August 2026). Alle 16 wurden als kommentierte Stub-Dateien ergaenzt. Die alte Git-Historie wurde nach Ausfuehrung mehrfach umgeschrieben (Commits wie "restore executed migration sources", "reconcile applied migration history" auf Archiv-Branches belegen fehlgeschlagene Rekonstruktionsversuche).
 
 Zusaetzlich existieren zwei parallele Migrationsoberflaechen: `supabase/migrations/` (79 Rohdateien) und `src/db/migrations/` (Drizzle, nur `meta/`-Ordner, kein generiertes SQL eingecheckt). Diese sind nicht aufeinander abgestimmt.
 
@@ -124,12 +121,11 @@ PR 19, PR 20 oder PR 21 duerfen nicht wholesale gemergt werden. Vor jeder DB-Aen
   - Device-Bindung/Enrollment oder ein gleichwertiger Challenge-/WAF-Vertrag fehlt.
   - Session-Widerruf bei PIN-Rotation fehlt.
   - Bestands-PINs und der abschliessende Plaintext-Ausschluss sind noch kontrolliert zu migrieren.
-- Der aktuelle Supabase Security Advisor meldet 69 Hinweise:
-  - 26 Tabellen im exponierten `public`-Schema ohne aktiviertes RLS (`ERROR`),
-  - 1 `SECURITY DEFINER`-View (`ERROR`),
-  - 29 immer wahre RLS-Policies (`WARN`),
-  - 11 RLS-Tabellen ohne Policy (`INFO`),
-  - 2 weitere Warnungen.
+- RLS-Analyse abgeschlossen (siehe `docs/project/RLS_ANALYSIS.md`):
+  - 26 Tabellen ohne RLS, davon 12 mit `tenant_id` (P0-Risiko),
+  - 7 Tabellen mit `rls_forced` + keine Policies (korrekt: nur service_role),
+  - 9 Tabellen mit schwachen `USING (true)` Policies,
+  - Relationenweise PRs geplant, P0-Tabellen zuerst.
 - Referenz: [Supabase Database Linter](https://supabase.com/docs/guides/database/database-linter), insbesondere [RLS disabled in public](https://supabase.com/docs/guides/database/database-linter?lint=0013_rls_disabled_in_public) und [Security Definer View](https://supabase.com/docs/guides/database/database-linter?lint=0010_security_definer_view).
 - Jeder Advisor-Befund muss relationenweise nach realem Zugriffspfad, Rolle, Grant und Tenant-Vertrag bewertet werden. Ein pauschaler Policy-PR ist verboten.
 

@@ -1,6 +1,6 @@
 # Mission Queue
 
-Stand: 2026-08-04
+Stand: 2026-08-04 (Update M2/M5)
 
 Priorisierte, sofort umsetzbare Missionspakete fuer das Galvanik-Kreile WerkstattCockpit.
 
@@ -18,23 +18,20 @@ Priorisierte, sofort umsetzbare Missionspakete fuer das Galvanik-Kreile Werkstat
 
 ### M2: DB-TRUTH-001 — Vorwaertsgerichtete Schema-Baseline
 
-**Prioritaet:** P0 (79/92-Luecke blockiert sichere Migrationen)
+**Prioritaet:** P0
 
-**Problem:**
-- Production: 92 Ledger-Eintraege, main: 79 SQL-Dateien
-- 13 fehlende Versionen (6.–13. Juli 2026) — permanent opak
-- Zwei unabgestimmte Migrationsoberflaechen: `supabase/migrations/` und `src/db/migrations/`
+**Status:** PR offen — 16 Stub-Dateien + CI-Check erstellt.
 
-**Strategie:**
-1. Production-Schema via `supabase db dump --schema-only` sichern
-2. Baseline-Migration `20260805000000_baseline_post_gap.sql` erstellen
-3. Pre-Baseline-Dateien als archiviert/read-only markieren
-4. CI-Check: Dateianzahl vs. Ledger-Count
-5. Drizzle-Schema gegen Baseline abgleichen
+**Erledigt:**
+- Production-Ledger: 95 Eintraege verifiziert
+- 16 fehlende Stub-SQL-Dateien erstellt (13 Juli + 3 August-Security)
+- Dateianzahl synchronisiert: 95 Dateien = 95 Ledger-Eintraege
+- CI-Check-Skript `scripts/check-migration-count.sh` + Referenzdatei erstellt
+- Production-Schema (92 Tabellen) vollstaendig gesichert via `list_tables --verbose`
 
-**Blocker:** Braucht Supabase-Production-Zugriff (read-only Schema-Dump). Kein Code-Risiko.
-
-**Geschaetzter Aufwand:** Mittel (Schema-Dump + Baseline-Datei + CI-Skript). Teils Codex-faehig.
+**Offen:**
+- PR mergen
+- Drizzle-Schema-Abgleich (Folgemission)
 
 ---
 
@@ -62,7 +59,19 @@ Priorisierte, sofort umsetzbare Missionspakete fuer das Galvanik-Kreile Werkstat
 
 **Prioritaet:** P1
 
-**Ziel:** Alle 26 Tabellen ohne RLS read-only kartieren, dann relationenweise PRs.
+**Status:** Analyse abgeschlossen, siehe `docs/project/RLS_ANALYSIS.md`.
+
+**Erledigt:**
+- 26 ungeschuetzte Tabellen inventarisiert
+- 66 geschuetzte Tabellen mit allen Policies erfasst
+- 7 `rls_forced`-Tabellen verifiziert (korrekt konfiguriert)
+- Risiko-Tiers definiert: P0 (12 mit tenant_id), P1 (6 ohne tenant_id), P2 (8 System)
+- 9 schwache `USING (true)` Policies identifiziert
+
+**Offen:**
+- P0-Migration: 12 Tabellen RLS + tenant_isolation Policy (eine Migration, kein Schema-Change)
+- P1: `tenant_id`-Spalte ergaenzen fuer 6 Tabellen (Produktentscheidung fuer Backfill)
+- P2: service_role-only Policies fuer 8 Systemtabellen
 
 ---
 
@@ -70,9 +79,10 @@ Priorisierte, sofort umsetzbare Missionspakete fuer das Galvanik-Kreile Werkstat
 
 1. ~~Lint-PR mergen~~ **DONE** (PR #31)
 2. ~~M1 (AUTH-IDENTITY-002)~~ **DONE** (PR #33)
-3. **M2 (DB-TRUTH-001)** — braucht Supabase-Production-Schema-Dump-Freigabe
-4. **M3 (APP-STRUCTURE-001)** — sofort machbar
-5. **M4/M5** — nach Produktentscheidungen
+3. **M2 (DB-TRUTH-001)** — PR offen (16 Stubs + CI-Check)
+4. **M5 (RLS-CONTRACT-001)** — Analyse fertig, P0-Migration als naechstes
+5. **M3 (APP-STRUCTURE-001)** — sofort machbar
+6. **M4 (SEC-PIN-002B)** — nach Produktentscheidung
 
 ## Codex-Eignung
 
