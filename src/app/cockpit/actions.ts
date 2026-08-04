@@ -93,10 +93,14 @@ export interface PipelineForecastRow {
   pipeline_wert_ungewichtet: number;
 }
 
+export interface JahresplanWerte {
+  monate: Record<string, number>;
+}
+
 export interface ForecastDaten {
   monate: ForecastMonat[];
   pipeline: PipelineForecastRow[];
-  plan: Record<string, number> | null;
+  plan: JahresplanWerte | null;
 }
 
 export interface KundenDetailAuftrag {

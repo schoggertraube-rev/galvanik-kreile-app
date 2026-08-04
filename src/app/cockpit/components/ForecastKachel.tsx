@@ -39,7 +39,7 @@ export function ForecastKachel() {
       istWert: true,
       pipelineGewichtet: 0,
       pipelineUngewichtet: 0,
-      plan: data?.plan ? (data.plan[String(monatIdx)] || 0) : 0
+      plan: data?.plan ? (data.plan.monate[String(monatIdx)] || 0) : 0
     };
   });
 
@@ -51,7 +51,7 @@ export function ForecastKachel() {
     if (existing) {
       existing.pipelineGewichtet += p.pipeline_wert_gewichtet;
       existing.pipelineUngewichtet += p.pipeline_wert_ungewichtet;
-      existing.plan = data?.plan ? (data.plan[String(pDate.getMonth() + 1)] || 0) : 0;
+      existing.plan = data?.plan ? (data.plan.monate[String(pDate.getMonth() + 1)] || 0) : 0;
     } else {
       chartData.push({
         monat: mStr,
@@ -59,7 +59,7 @@ export function ForecastKachel() {
         istWert: false,
         pipelineGewichtet: p.pipeline_wert_gewichtet,
         pipelineUngewichtet: p.pipeline_wert_ungewichtet,
-        plan: data?.plan ? (data.plan[String(pDate.getMonth() + 1)] || 0) : 0
+        plan: data?.plan ? (data.plan.monate[String(pDate.getMonth() + 1)] || 0) : 0
       });
     }
   });
