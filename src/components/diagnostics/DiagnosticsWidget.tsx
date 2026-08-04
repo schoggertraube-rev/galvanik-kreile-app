@@ -47,16 +47,10 @@ export function DiagnosticsWidget() {
   const [isDraggingDialog, setIsDraggingDialog] = useState(false);
   const dragStartRef = useRef({ x: 0, y: 0, initialX: 0, initialY: 0 });
 
-  useEffect(() => {
+  const openMarkDialog = useCallback(() => {
     setDialogPos({ x: window.innerWidth / 2 - 190, y: window.innerHeight / 2 - 150 });
+    setShowMarkDialog(true);
   }, []);
-
-  // Center dialog on mount if showMarkDialog becomes true
-  useEffect(() => {
-    if (showMarkDialog) {
-      setDialogPos({ x: window.innerWidth / 2 - 190, y: window.innerHeight / 2 - 150 });
-    }
-  }, [showMarkDialog]);
 
   // Drag handlers
   const onPointerDown = (e: React.PointerEvent) => {
@@ -140,8 +134,8 @@ export function DiagnosticsWidget() {
     <>
       {isDrawing && (
         <TestpilotCanvas 
-          onSave={(b64) => { setScreenshot(b64); setIsDrawing(false); setShowMarkDialog(true); }} 
-          onCancel={() => { setIsDrawing(false); setShowMarkDialog(true); }} 
+          onSave={(b64) => { setScreenshot(b64); setIsDrawing(false); openMarkDialog(); }}
+          onCancel={() => { setIsDrawing(false); openMarkDialog(); }}
         />
       )}
       
@@ -177,7 +171,7 @@ export function DiagnosticsWidget() {
           <div style={{ flex: 1 }} />
 
           {/* Action buttons */}
-          <button onClick={() => setShowMarkDialog(true)} title="Problem markieren" style={btnStyle}>
+          <button onClick={openMarkDialog} title="Problem markieren" style={btnStyle}>
             <Flag size={13} />
           </button>
           <button onClick={handleExport} title="Bericht exportieren" style={btnStyle}>
