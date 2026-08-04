@@ -35,7 +35,22 @@ export function FeatureToggles() {
   };
 
   useEffect(() => {
-    fetchFlags();
+    void getFeatureFlags()
+      .then(async (data) => {
+        if (data.length === 0) {
+          await initializeDefaultFlags();
+          return getFeatureFlags();
+        }
+
+        return data;
+      })
+      .then(setFlags)
+      .catch((err) => {
+        console.error("Failed to load feature flags", err);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   const handleToggle = async (id: string, current: boolean) => {
