@@ -39,7 +39,7 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
   // Filter list of additions matching search
   const filteredSearchList = allConsumables.filter(item => {
     const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          item.sku.toLowerCase().includes(searchTerm.toLowerCase());
+                          (item.sku ?? "").toLowerCase().includes(searchTerm.toLowerCase());
     const isAlreadyBooked = bookedMaterials.some(m => m.id === item.id);
     return matchesSearch && !isAlreadyBooked;
   });
@@ -74,10 +74,8 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
           inventoryItemId: mat.id,
           movementType: "consumption",
           quantity: mat.qty,
-          unit: mat.unit,
           orderId: orderId,
           reason: `Verbrauchsbuchung in Auftrag ${orderId}`,
-          createdBy: "meister@kreile.de"
         });
 
         // Add timeline status event for stock deduction
@@ -221,7 +219,7 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
                         onClick={() => handleAddMaterial(item)}
                         className="p-3 hover:bg-bg-app-soft cursor-pointer text-xs font-bold text-slate-850 flex justify-between items-center"
                       >
-                        <span>{item.name} ({item.sku})</span>
+                        <span>{item.name}{item.sku ? ` (${item.sku})` : ""}</span>
                         <span className="text-[10px] text-text-muted bg-neutral-gray-100 border border-neutral-gray-100 px-2 py-0.5 rounded font-mono">
                           Lager: {item.currentStock} {item.unit}
                         </span>

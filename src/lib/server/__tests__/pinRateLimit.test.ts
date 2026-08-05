@@ -1,13 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const mockDbExecute = vi.fn();
+const mockDbTransaction = vi.fn();
+const mockTxExecute = vi.fn();
 const mockSql = vi.fn(
-  (strings: TemplateStringsArray, ...values: unknown[]) => ({ strings, values }),
+  (strings: TemplateStringsArray, ...values: unknown[]) => ({
+    strings: [...strings],
+    values,
+  }),
 );
+const executeResults: unknown[][] = [];
+
+const tx = {
+  execute: mockTxExecute,
+};
 
 vi.mock("@/db", () => ({
   db: {
-    execute: mockDbExecute,
+    transaction: mockDbTransaction,
   },
 }));
 
@@ -20,68 +29,94 @@ type RateLimitRow = {
   last_failed_at: Date;
 };
 
-function makeRow(
-  failedAttempts: number,
-  minutesAgo: number,
-): RateLimitRow {
+function makeRow(failedAttempts: number, minutesAgo: number): RateLimitRow {
   return {
     failed_attempts: failedAttempts,
     last_failed_at: new Date(Date.now() - minutesAgo * 60_000),
   };
 }
 
-describe("pinRateLimit", () => {
+describe("runPinAttempt", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockDbExecute.mockResolvedValue([]);
+    executeResults.length = 0;
+    mockDbTransaction.mockImplementation(async (callback) => callback(tx));
+    mockTxExecute.mockImplementation(async () => executeResults.shift() ?? []);
   });
 
-  it("erlaubt einen Operator ohne Fehlversuche", async () => {
-    const { checkPinRateLimit } = await import("@/lib/server/pinRateLimit");
+  it("serialisiert bereits den ersten Versuch mit einem transaktionalen Advisory-Lock", async () => {
+    executeResults.push([], [], []);
+    const verifyPin = vi.fn().mockResolvedValue(true);
+    const { runPinAttempt } = await import("@/lib/server/pinRateLimit");
 
-    await expect(checkPinRateLimit("operator-1")).resolves.toEqual({
-      allowed: true,
+    await expect(runPinAttempt("operator-1", verifyPin)).resolves.toEqual({
+      status: "valid",
     });
+
+    expect(mockDbTransaction).toHaveBeenCalledOnce();
+    expect(mockTxExecute).toHaveBeenCalledTimes(3);
+    expect(mockTxExecute.mock.calls[0][0].strings.join(" ")).toContain(
+      "pg_advisory_xact_lock",
+    );
+    expect(mockTxExecute.mock.calls[1][0].strings.join(" ")).toContain(
+      "FROM pin_rate_limits",
+    );
+    expect(mockTxExecute.mock.calls[2][0].strings.join(" ")).toContain(
+      "DELETE FROM pin_rate_limits",
+    );
+    expect(verifyPin).toHaveBeenCalledOnce();
   });
 
-  it("blockiert nach fünf frischen Fehlversuchen für 15 Minuten", async () => {
-    mockDbExecute.mockResolvedValue([makeRow(5, 5)]);
-    const { checkPinRateLimit } = await import("@/lib/server/pinRateLimit");
+  it("zählt einen falschen PIN innerhalb derselben Transaktion", async () => {
+    executeResults.push([], [], []);
+    const verifyPin = vi.fn().mockResolvedValue(false);
+    const { runPinAttempt } = await import("@/lib/server/pinRateLimit");
 
-    const result = await checkPinRateLimit("operator-1");
+    await expect(runPinAttempt("operator-1", verifyPin)).resolves.toEqual({
+      status: "invalid",
+    });
 
-    expect(result.allowed).toBe(false);
-    expect(result.retryAfterMinutes).toBeGreaterThan(0);
-    expect(result.retryAfterMinutes).toBeLessThanOrEqual(10);
+    expect(mockTxExecute).toHaveBeenCalledTimes(3);
+    expect(mockTxExecute.mock.calls[2][0].strings.join(" ")).toContain(
+      "ON CONFLICT (operator_id)",
+    );
+  });
+
+  it("blockiert nach fünf frischen Fehlversuchen vor dem PIN-Vergleich", async () => {
+    executeResults.push([], [makeRow(5, 5)]);
+    const verifyPin = vi.fn().mockResolvedValue(true);
+    const { runPinAttempt } = await import("@/lib/server/pinRateLimit");
+
+    const result = await runPinAttempt("operator-1", verifyPin);
+
+    expect(result.status).toBe("blocked");
+    expect(result).toEqual(
+      expect.objectContaining({ retryAfterMinutes: expect.any(Number) }),
+    );
+    expect(verifyPin).not.toHaveBeenCalled();
+    expect(mockTxExecute).toHaveBeenCalledTimes(2);
   });
 
   it("sperrt ab zwanzig Fehlversuchen dauerhaft", async () => {
-    mockDbExecute.mockResolvedValue([makeRow(20, 120)]);
-    const { checkPinRateLimit } = await import("@/lib/server/pinRateLimit");
+    executeResults.push([], [makeRow(20, 120)]);
+    const verifyPin = vi.fn().mockResolvedValue(true);
+    const { runPinAttempt } = await import("@/lib/server/pinRateLimit");
 
-    await expect(checkPinRateLimit("operator-1")).resolves.toEqual({
-      allowed: false,
+    await expect(runPinAttempt("operator-1", verifyPin)).resolves.toEqual({
+      status: "blocked",
       locked: true,
     });
+    expect(verifyPin).not.toHaveBeenCalled();
   });
 
-  it("lässt nach Ablauf der temporären Sperre wieder einen Versuch zu", async () => {
-    mockDbExecute.mockResolvedValue([makeRow(5, 15)]);
-    const { checkPinRateLimit } = await import("@/lib/server/pinRateLimit");
+  it("lässt nach Ablauf der temporären Sperre genau den serialisierten Versuch zu", async () => {
+    executeResults.push([], [makeRow(5, 15)], []);
+    const verifyPin = vi.fn().mockResolvedValue(true);
+    const { runPinAttempt } = await import("@/lib/server/pinRateLimit");
 
-    await expect(checkPinRateLimit("operator-1")).resolves.toEqual({
-      allowed: true,
+    await expect(runPinAttempt("operator-1", verifyPin)).resolves.toEqual({
+      status: "valid",
     });
-  });
-
-  it("schreibt Fehlversuche atomar und löscht sie nach Erfolg", async () => {
-    const { recordFailedPinAttempt, resetPinRateLimit } = await import(
-      "@/lib/server/pinRateLimit"
-    );
-
-    await recordFailedPinAttempt("operator-1");
-    await resetPinRateLimit("operator-1");
-
-    expect(mockDbExecute).toHaveBeenCalledTimes(2);
+    expect(verifyPin).toHaveBeenCalledOnce();
   });
 });

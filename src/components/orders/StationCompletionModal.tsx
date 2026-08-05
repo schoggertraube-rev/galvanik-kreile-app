@@ -86,10 +86,8 @@ export function StationCompletionModal({
           inventoryItemId: mat.inventoryItemId,
           movementType: "consumption",
           quantity: mat.quantity,
-          unit: mat.unit,
           orderId: orderId,
           reason: `Verbrauchsbuchung in ${currentStationLabel}`,
-          createdBy: "meister@kreile.de"
         });
       }
 

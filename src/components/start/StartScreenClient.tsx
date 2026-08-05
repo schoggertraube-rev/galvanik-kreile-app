@@ -127,7 +127,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
       setIsInitializing(true);
 
       try {
-        const res = await loginWithPin(user.id, newPin);
+        const res = await loginWithPin(user.loginHandle, newPin);
 
         if (res.ok) {
           // Setup / Initialisierung nur im echten Demo-Modus
@@ -213,7 +213,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
         {error && (
           <p className="text-center text-danger-red text-xs font-semibold -mt-4 mb-3">
             Falscher PIN. <button onClick={async () => {
-              const res = await notifyAdminPinReset(user.id);
+              const res = await notifyAdminPinReset(user.loginHandle);
               if (res.success) {
                 alert("Der Administrator wurde benachrichtigt und wird sich bei Ihnen melden.");
               } else {
@@ -259,7 +259,13 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
 
 import { Suspense } from "react";
 
-function StartScreenContent({ users }: { users: StartUserDto[] }) {
+function StartScreenContent({
+  users,
+  loginUnavailable,
+}: {
+  users: StartUserDto[];
+  loginUnavailable: boolean;
+}) {
   const [selectedUser, setSelectedUser] = useState<StartUserDto | null>(null);
   const [showEmailLogin, setShowEmailLogin] = useState(false);
   const [greetingInfo, setGreetingInfo] = useState({ text: "Guten Morgen, Meister!", emoji: "👋" });
@@ -327,10 +333,10 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
       {/* User Avatar Kacheln */}
       <div className="flex gap-5 md:gap-7 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-300 fill-mode-both overflow-x-auto pb-4 snap-x">
         {users.map((user) => {
-          const Icon = user.role === "buero" ? Calculator : Wrench;
+          const Icon = user.tileKind === "office" ? Calculator : Wrench;
           return (
             <button
-              key={user.id}
+              key={user.loginHandle}
               onClick={() => setSelectedUser(user)}
               className="w-[220px] h-[260px] shrink-0 snap-center bg-bg-app-soft rounded-[28px] border border-neutral-gray-100 shadow-card hover:shadow-md hover:-translate-y-1 transition-all duration-300 active:scale-95 flex flex-col items-center justify-center gap-6 p-6 group cursor-pointer"
             >
@@ -345,6 +351,11 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
             </button>
           );
         })}
+        {loginUnavailable && (
+          <div className="rounded-2xl border border-danger-red/20 bg-danger-red/10 px-6 py-5 text-center text-sm font-semibold text-danger-red">
+            PIN-Anmeldung ist momentan nicht verfügbar. Bitte Administrator kontaktieren.
+          </div>
+        )}
       </div>
 
       {/* Admin Login Trigger & Error Messages */}
@@ -373,7 +384,13 @@ function StartScreenContent({ users }: { users: StartUserDto[] }) {
   );
 }
 
-export function StartScreenClient({ users }: { users: StartUserDto[] }) {
+export function StartScreenClient({
+  users,
+  loginUnavailable = false,
+}: {
+  users: StartUserDto[];
+  loginUnavailable?: boolean;
+}) {
   usePageView();
   return (
     <Suspense fallback={
@@ -381,7 +398,10 @@ export function StartScreenClient({ users }: { users: StartUserDto[] }) {
         <div className="text-text-muted font-bold animate-pulse text-lg">Lade Startbildschirm...</div>
       </div>
     }>
-      <StartScreenContent users={users} />
+      <StartScreenContent
+        users={users}
+        loginUnavailable={loginUnavailable}
+      />
     </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 # RLS-Analyse — Galvanik Kreile
 
-Stand: 2026-08-04 | Production-Projekt: `syhaigjhsbpjmtnggqka`
+Stand: 2026-08-05 | Production-Projekt: `syhaigjhsbpjmtnggqka`
 
 ## Zusammenfassung
 
@@ -10,6 +10,10 @@ Stand: 2026-08-04 | Production-Projekt: `syhaigjhsbpjmtnggqka`
 | RLS aktiviert | 66 |
 | RLS aktiviert + forced | 7 |
 | **RLS deaktiviert** | **26** |
+
+Auf allen 26 Tabellen besitzen `anon` und `authenticated` in Production jeweils
+SELECT, INSERT, UPDATE und DELETE. Das ist der akute Befund; RLS-Status und Grants
+muessen getrennt bewertet werden.
 
 ## P0 — Tabellen MIT tenant_id OHNE RLS (12)
 
@@ -31,9 +35,8 @@ Daten aller Tenants lesen/schreiben.
 | `vorlage_zeit` | Zeitvorlagen | `tenant_id = current_setting('app.tenant_id')` |
 | `warning_event` | Systemwarnungen | `tenant_id = current_setting('app.tenant_id')` |
 
-**Aktion:** Eine Migration mit 12x `ALTER TABLE ... ENABLE ROW LEVEL SECURITY`
-und je einer `tenant_isolation` PERMISSIVE Policy fuer `service_role` (ALL, true)
-und eine fuer alle Rollen (ALL, tenant_id-Filter).
+**Akute Aktion:** Data-API-Grants entziehen. RLS erst nach bewiesenem
+Relations-/Tenant-Vertrag separat entscheiden.
 
 ## P1 — Tabellen OHNE tenant_id mit Kundendaten (6)
 
@@ -49,8 +52,8 @@ nur ueber FK-Join moeglich oder `tenant_id`-Spalte nachtragen.
 | `attribution` | `touchpoint_id`, `auftrag_id` | `tenant_id` ergaenzen |
 | `marketing_asset` | `auftrag_id`, `kunde_id` | `tenant_id` ergaenzen |
 
-**Aktion:** Zuerst `tenant_id`-Spalte per Migration ergaenzen und backfill,
-dann RLS aktivieren. Produktentscheidung noetig fuer Backfill-Logik.
+**Akute Aktion:** Data-API-Grants entziehen. `tenant_id`-Backfill und RLS bleiben
+eine eigene, relationenweise Produkt- und Datenentscheidung.
 
 ## P2 — Marketing/System-Tabellen ohne sensible Daten (8)
 
@@ -68,8 +71,8 @@ Demo-Daten.
 | `lern_metrik` | KI-Lernmetriken | service_role-only |
 | `telemetrie_event` | Telemetrie (anonym) | service_role-only |
 
-**Aktion:** RLS aktivieren mit service_role-only Policies.
-Kein Risiko fuer Tenant-Isolation, aber Defense-in-Depth.
+**Akute Aktion:** Data-API-Grants entziehen. Eine spaetere Policy darf nicht
+pauschal `USING (true)` verwenden.
 
 ## RLS-Forced Tabellen (7) — korrekt konfiguriert
 
@@ -102,65 +105,26 @@ effektiv kein Schutz. Diese sollten nachgeschaerft werden:
 | `kvp_items` | Enable all for public | `USING (true)` fuer alle Rollen |
 | `zahlung` | Allow all for public | `USING (true)` fuer alle Rollen |
 
-## KRITISCH: app.tenant_id wird nie gesetzt (2026-08-04)
+## Korrigierter Zugriffsbefund (2026-08-05)
 
-### Befund
+1. `app.tenant_id` wird weiterhin nicht gesetzt; darauf basierende Policies sind
+   ohne zusaetzlichen Vertrag nicht belastbar.
+2. Die App besitzt sowohl Drizzle-/Serverzugriffe als auch Browser-Supabase-Pfade.
+   Die fruehere Aussage „kein Clientzugriff“ war falsch.
+3. Die nicht angewandte Datei `20260804200000_rls_p0_tenant_isolation.sql` wurde
+   im Recovery-Kandidaten aus `supabase/migrations/` quarantainiert. Sie darf nicht
+   auf Production angewandt werden.
+4. Serverseitige Zugriffe auf die grantlosen Tabellen werden im Kandidaten erst
+   nach der kanonischen App-Autorisierung privilegiert und tenantgebunden
+   ausgefuehrt. Andere sitzungsgebundene Supabase-Pfade werden nicht pauschal auf
+   Service Role umgestellt.
+5. Die akute Migration entzieht auf den 26 Tabellen nur Grants. RLS-/Policy-Arbeit
+   bleibt separat freigabepflichtig.
 
-Die gesamte Tenant-Isolation ueber `current_setting('app.tenant_id', true)` ist
-**nicht funktional**. Verifiziert in Production:
+## Empfohlene Reihenfolge
 
-1. `current_setting('app.tenant_id', true)` gibt `NULL` zurueck
-2. Kein Code in `src/` setzt `app.tenant_id` (0 Treffer)
-3. Keine Datenbank-Funktion setzt `app.tenant_id` (0 Treffer in `pg_proc`)
-4. Kein Next.js-Middleware aktiv (`middleware.ts` ist deaktiviert)
-5. Beide Supabase-Clients (`client.ts`, `server.ts`) nutzen `ANON_KEY` — RLS gilt
-
-### Warum die App trotzdem funktioniert
-
-Bestehende Tabellen mit `tenant_isolation` Policy (z.B. `inquiries`) haben
-**zusaetzlich** `USING (true)` Catch-all Policies (`auth_all_*`, `public_all_*`).
-Da alle Policies PERMISSIVE sind, werden sie ge-OR-t:
-
-    true OR (tenant_id = NULL) → true
-
-Die Catch-all Policy hebt die Tenant-Isolation komplett auf. Tenant-Isolation
-ist somit auf **keiner** Tabelle tatsaechlich wirksam.
-
-### Konsequenz fuer P0-Migration (PR #35)
-
-Die Migration `20260804200000_rls_p0_tenant_isolation.sql` erstellt **nur**:
-- `service_role_all_*` — `USING(true)` fuer `service_role`
-- `tenant_isolation` — `USING(tenant_id = current_setting(...))` fuer alle Rollen
-
-**KEINE** Catch-all `USING(true)` Policy fuer `authenticated`/`public`.
-
-Wenn die Migration auf Production angewandt wird:
-- `service_role` Queries funktionieren (BYPASSRLS)
-- Alle `anon`/`authenticated` Queries geben **0 Zeilen** zurueck
-- Betroffene Server-Actions: `vorlage.actions.ts`, `orderCost.actions.ts`,
-  `erfassung.actions.ts`, `cockpit/actions.ts`, `snapshot.ts`
-- **Die App waere fuer Erfassung, Cockpit und Kostenkalkulation unbenutzbar**
-
-### Status
-
-**BLOCKED_PRODUCT_DECISION** — Die Migration darf NICHT auf Production angewandt
-werden, bis eine Entscheidung fuer den Tenant-Isolation-Mechanismus getroffen ist.
-
-Optionen:
-1. **Datenbank-Funktion**: `ON LOGIN`-Trigger oder PostgREST-Hook, der
-   `set_config('app.tenant_id', ...)` basierend auf JWT-Claims setzt
-2. **JWT Custom Claims**: `tenant_id` in Supabase-Auth-JWT speichern,
-   Policy aendern auf `auth.jwt() ->> 'tenant_id'`
-3. **Catch-all + App-Filter**: `USING(true)` Policies + Tenant-Filterung
-   im App-Code (aktueller De-facto-Zustand, aber explizit machen)
-
-Option 2 ist die sauberste Loesung fuer Supabase-basierte Projekte.
-
-## Empfohlene Reihenfolge (aktualisiert)
-
-1. **Zuerst:** Tenant-Isolation-Mechanismus entscheiden (Produktentscheidung)
-2. **Dann P0:** 12 Tabellen mit `tenant_id` — Migration anpassen je nach Mechanismus
-3. **P1:** 6 Tabellen — braucht `tenant_id`-Spalte + Backfill
-4. **P2:** 8 Tabellen — service_role-only Policies
-5. **Nachschaerfung:** 9 Tabellen mit schwachen `USING (true)` Policies
-   + bestehende Catch-all Policies entfernen sobald Mechanismus greift
+1. Direkte Browserkonsumenten der 26 Tabellen entfernen.
+2. `anon`-/`authenticated`-Grants entziehen und negativ pruefen.
+3. Legitime Serverpfade positiv pruefen.
+4. Danach pro Relation Tenant, Eigentuemer, Rollen, Grants und Policy bestimmen.
+5. Schwache Catch-all-Policies nur zusammen mit negativen Integrationstests entfernen.

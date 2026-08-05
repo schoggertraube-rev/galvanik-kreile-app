@@ -1,101 +1,52 @@
 # Mission Queue
 
-Stand: 2026-08-04 (Update M2/M5)
+Stand: 2026-08-05 — korrigiert nach Live-Audit
 
-Priorisierte, sofort umsetzbare Missionspakete fuer das Galvanik-Kreile WerkstattCockpit.
+## Abgeschlossen und belegt
 
-## Abgeschlossen
+| ID | Ergebnis |
+|---|---|
+| `TRUTH-CLEANUP-001` | Kanonische Lieferquelle und Branch-Disposition hergestellt. |
+| `QUALITY-RATCHET-001` | Geschuetzter Quality-/Ratchet-Vertrag aktiv. |
+| `LINT-DEBT-001` | PR #31, ESLint 0/0. |
+| `AUTH-IDENTITY-002` | PR #33, atomarer Auth-State ohne localStorage-Identitaet. |
+| `APP-STRUCTURE-001-A` | PR #36, erste Ownership-/Importregeln; Gesamtmission bleibt partiell. |
 
-| ID | Mission | Status | PR |
-|---|---|---|---|
-| `TRUTH-CLEANUP-001` | Worktree-Inventar, Branch-Disposition | `DONE` | PR 26, PR 27 |
-| `QUALITY-RATCHET-001` | Maschinenlesbarer ESLint-Ratchet | `DONE` | PR 26 |
-| `LINT-DEBT-001` | ESLint 484/459 auf 0/0 | `DONE` | PR #31 |
-| `WORKTREE-CLEANUP-002` | 32 Worktrees auf 3 reduziert | `DONE` | — |
-| `AUTH-IDENTITY-002` | Atomarer Identity-Snapshot, localStorage entfernt | `DONE` | PR #33 |
+## Aktiv
 
-## Naechste Missionen (bereit)
-
-### M2: DB-TRUTH-001 — Vorwaertsgerichtete Schema-Baseline
+### `FOUNDATION-RECOVERY-001` — nur die verifizierten Luecken
 
 **Prioritaet:** P0
+**Status:** isolierter Kandidat; kein Merge, Deploy oder Remote-DB-Write
 
-**Status:** PR offen — 16 Stub-Dateien + CI-Check erstellt.
+Akzeptanz:
 
-**Erledigt:**
-- Production-Ledger: 95 Eintraege verifiziert
-- 16 fehlende Stub-SQL-Dateien erstellt (13 Juli + 3 August-Security)
-- Dateianzahl synchronisiert: 95 Dateien = 95 Ledger-Eintraege
-- CI-Check-Skript `scripts/check-migration-count.sh` + Referenzdatei erstellt
-- Production-Schema (92 Tabellen) vollstaendig gesichert via `list_tables --verbose`
+1. Production-Ledger mit exakten Versionen, Namen und Hashes pruefen.
+2. Ledger-Vertrag tatsaechlich in CI ausfuehren.
+3. Falsch versionierte PIN-Migration an Production angleichen und nicht angewandte
+   RLS-Datei aus dem automatischen Pfad quarantainieren.
+4. Direkte Browserzugriffe auf die 26 offenen Tabellen entfernen.
+5. `anon`/`authenticated`-Grants als separate, noch nicht angewandte Migration entziehen.
+6. PIN-Race, Klartext-Neuschreibpfade, Bestandsrotation und Session-Widerruf schliessen.
+7. Namen, Rollen und UUIDs aus dem oeffentlichen Start-Payload entfernen.
+8. Vollstaendige Gates, Draft-PR, Preview und unabhaengige Review.
 
-**Offen:**
-- PR mergen
-- Drizzle-Schema-Abgleich (Folgemission)
+## Danach
 
----
+| Reihenfolge | ID | Status / Grenze |
+|---:|---|---|
+| 1 | `FOUNDATION-RECOVERY-001` | Kandidat pruefen; Production bleibt bis Freigabe unveraendert. |
+| 2 | `RLS-CONTRACT-001` | Relationenspezifische Matrix und negative Tests; keine pauschale Policy. |
+| 3 | `SEC-PIN-DEVICE-001` | Device-Challenge nach Produktentscheidung. |
+| 4 | `OFFLINE-SHELL-001` | Eine sichere Offline-Shell und eine Registrierungswahrheit. |
+| 5 | `APP-STRUCTURE-001-B` | Verbleibender Vertrag, keine Ordner-Grossoperation. |
+| 6 | `OPERATIVE-SLICE-001` | Kunde -> Auftrag -> Behaelter/QR -> Teil -> Aktion -> Today -> Receipt -> Reload. |
+| 7 | `OFFLINE-48H-001` | Derselbe Kernweg ueber eine Outbox mit Restart-, Idempotenz- und Konfliktnachweis. |
 
-### M3: APP-STRUCTURE-001 — Import-/Ownership-Vertrag
+## Freigabepunkte
 
-**Prioritaet:** P1
-
-**Ziel:** Modulgrenzen aus `MODULARITY_STRATEGY.md` als ESLint-Import-Regeln festlegen. Keine Ordnerverschiebung.
-
-**Geschaetzter Aufwand:** Klein (Analyse + Regelkonfiguration).
-
----
-
-### M4: SEC-PIN-002B — Device-Challenge und Session-Widerruf
-
-**Prioritaet:** P0 (Security)
-
-**Ziel:** Device-Binding oder Challenge fuer vierstellige PIN, Session-Widerruf bei Rollenwechsel, Plaintext-Ausschluss.
-
-**Blocker:** Produktentscheidung zum Challenge-Mechanismus.
-
----
-
-### M5: RLS-CONTRACT-001 — Relationenweise RLS-Matrix
-
-**Prioritaet:** P1
-
-**Status:** Analyse abgeschlossen, siehe `docs/project/RLS_ANALYSIS.md`.
-
-**Erledigt:**
-- 26 ungeschuetzte Tabellen inventarisiert
-- 66 geschuetzte Tabellen mit allen Policies erfasst
-- 7 `rls_forced`-Tabellen verifiziert (korrekt konfiguriert)
-- Risiko-Tiers definiert: P0 (12 mit tenant_id), P1 (6 ohne tenant_id), P2 (8 System)
-- 9 schwache `USING (true)` Policies identifiziert
-
-**BLOCKER (2026-08-04):** `app.tenant_id` wird nie gesetzt. Alle `tenant_isolation`
-Policies sind No-Ops (bestehende Tabellen haben Catch-all `USING(true)` als Fallback).
-P0-Migration (PR #35, auf main) darf NICHT auf Production angewandt werden — wuerde
-App-Queries fuer Erfassung, Cockpit und Kostenkalkulation brechen.
-
-**Offen:**
-- **Produktentscheidung:** Tenant-Isolation-Mechanismus waehlen (JWT-Claims vs. DB-Trigger vs. Catch-all)
-- P0-Migration anpassen je nach gewaehltem Mechanismus
-- P1: `tenant_id`-Spalte ergaenzen fuer 6 Tabellen (Produktentscheidung fuer Backfill)
-- P2: service_role-only Policies fuer 8 Systemtabellen
-
----
-
-## Empfohlene Reihenfolge
-
-1. ~~Lint-PR mergen~~ **DONE** (PR #31)
-2. ~~M1 (AUTH-IDENTITY-002)~~ **DONE** (PR #33)
-3. **M2 (DB-TRUTH-001)** — PR offen (16 Stubs + CI-Check)
-4. **M5 (RLS-CONTRACT-001)** — BLOCKED: Tenant-Mechanismus-Entscheidung noetig
-5. **M3 (APP-STRUCTURE-001)** — sofort machbar, naechste aktive Mission
-6. **M4 (SEC-PIN-002B)** — nach Produktentscheidung
-
-## Codex-Eignung
-
-| Mission | Codex-tauglich | Modell |
-|---|---|---|
-| ~~M1 AUTH-IDENTITY~~ | ~~ja~~ | **DONE** |
-| M2 DB-TRUTH | teilweise (Baseline-Datei, CI-Skript) | kleines Modell |
-| M3 APP-STRUCTURE | ja (ESLint-Config) | kleines Modell |
-| M4 SEC-PIN | nein (Produktentscheidung noetig) | — |
-| M5 RLS-CONTRACT | nein (Read-only-Analyse zuerst) | — |
+- Merge nach `main`: separat.
+- Vercel Production: separat.
+- Remote-Supabase-Migrationen: separat und in Reihenfolge Grant-Entzug, PIN-Bestand,
+  danach Postflight.
+- RLS-/Policy-Aenderungen: eigene Mission und separate Freigabe.

@@ -28,6 +28,10 @@ const mockSql = vi.fn(
 );
 const selectResults: unknown[][] = [];
 
+function handleFor(userId: string): string {
+  return `handle-${userId}`;
+}
+
 const mockTxSelect = vi.fn(() => {
   const result = selectResults.shift() ?? [];
   return {
@@ -76,6 +80,19 @@ vi.mock("drizzle-orm", () => ({
   sql: mockSql,
 }));
 
+vi.mock("@/lib/server/appSession", () => ({
+  APP_TENANT_ID: "galvanik-kreile",
+}));
+
+vi.mock("@/lib/server/pinLoginHandle", () => ({
+  isValidPinLoginHandle: (value: unknown) =>
+    typeof value === "string" && value.startsWith("handle-"),
+  resolvePinLoginCandidate: (
+    handle: string,
+    candidates: Array<{ id: string }>,
+  ) => candidates.find((candidate) => handleFor(candidate.id) === handle),
+}));
+
 describe("public start actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -111,12 +128,12 @@ describe("public start actions", () => {
     expect(mockTransaction).not.toHaveBeenCalled();
   });
 
-  it("returns the neutral response for an unknown valid user id", async () => {
+  it("returns the neutral response for an unknown valid login handle", async () => {
     selectResults.push([]);
     const { notifyAdminPinReset } = await import("@/app/actions/start.actions");
 
     await expect(
-      notifyAdminPinReset("323e4567-e89b-42d3-a456-426614174002"),
+      notifyAdminPinReset("handle-unknown-user"),
     ).resolves.toEqual({ success: true });
 
     expect(mockTransaction).toHaveBeenCalledOnce();
@@ -137,7 +154,7 @@ describe("public start actions", () => {
     ) => Promise<{ success: boolean }>;
 
     await expect(
-      invokeLikeTransport(canonicalUser.id, "Attacker Controlled Name"),
+      invokeLikeTransport(handleFor(canonicalUser.id), "Attacker Controlled Name"),
     ).resolves.toEqual({ success: true });
 
     expect(mockTxValues).toHaveBeenCalledOnce();
@@ -154,7 +171,6 @@ describe("public start actions", () => {
     expect(JSON.stringify(mockTxValues.mock.calls)).not.toContain(
       "Attacker Controlled Name",
     );
-    expect(mockEq).toHaveBeenCalledWith("id", canonicalUser.id);
     expect(mockEq).toHaveBeenCalledWith("tenant_id", "galvanik-kreile");
     expect(mockEq).toHaveBeenCalledWith("active", true);
     expect(mockNe).toHaveBeenCalledWith("role", "developer");
@@ -181,7 +197,7 @@ describe("public start actions", () => {
 
     const { notifyAdminPinReset } = await import("@/app/actions/start.actions");
 
-    await expect(notifyAdminPinReset(userId)).resolves.toEqual({
+    await expect(notifyAdminPinReset(handleFor(userId))).resolves.toEqual({
       success: true,
     });
 

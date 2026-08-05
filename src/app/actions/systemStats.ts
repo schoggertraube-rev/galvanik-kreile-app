@@ -4,8 +4,14 @@ import { db } from '@/db'
 import { orders, customers, appUsers } from '@/db/schema'
 import { count } from 'drizzle-orm'
 import { createClient } from '@/lib/supabase/server'
+import { checkAppAuthorization } from '@/lib/server/authHelper'
 
 export async function getSystemStats() {
+  const authorization = await checkAppAuthorization('read')
+  if (!authorization.ok) {
+    throw new Error(authorization.message)
+  }
+
   const provider = process.env.NEXT_PUBLIC_DATA_PROVIDER || 'local'
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
   

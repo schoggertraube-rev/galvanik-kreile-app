@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const mockRequireAdminOrDeveloper = vi.fn();
-const mockFrom = vi.fn();
+const mockWhere = vi.fn();
 
 vi.mock("@/lib/auth/permissions", () => ({
   requireAdminOrDeveloper: mockRequireAdminOrDeveloper,
@@ -10,7 +10,7 @@ vi.mock("@/lib/auth/permissions", () => ({
 vi.mock("@/db", () => ({
   db: {
     select: () => ({
-      from: mockFrom,
+      from: () => ({ where: mockWhere }),
     }),
   },
 }));
@@ -31,7 +31,7 @@ describe("getUsers() payload sanitization", () => {
   });
 
   it("omits pinHash and auth secrets from admin client DTOs", async () => {
-    mockFrom.mockResolvedValue([
+    mockWhere.mockResolvedValue([
       {
         id: "user-1",
         email: "max@kreile.de",

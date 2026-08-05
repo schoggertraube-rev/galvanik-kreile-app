@@ -1,6 +1,6 @@
 import { IndexedDBHelper, OfflineAction } from "./IndexedDBHelper";
 import type { Order } from "@/lib/repositories/ordersRepository";
-import type { StockMovement } from "@/lib/repositories/inventoryRepository";
+import type { CreateStockMovementInput } from "@/lib/repositories/inventoryRepository";
 
 export const OfflineManager = {
   isOffline(): boolean {
@@ -130,7 +130,7 @@ export const OfflineManager = {
           }
           
           case "MATERIAL_BOOKING": {
-            await inventoryRepository.createMovement(item.payload as Omit<StockMovement, "id" | "createdAt">);
+            await inventoryRepository.createMovement(item.payload as CreateStockMovementInput);
             break;
           }
           

@@ -1,6 +1,6 @@
 "use server"
 
-import { createClient } from '@/utils/supabase/server';
+import { createAuthorizedDataContext, createClient } from '@/lib/supabase/server';
 import { bildeSchluessel, klassifiziereTeil } from '@/lib/erfassung/klassifikator';
 
 type VerbrauchVorlage = {
@@ -25,13 +25,15 @@ type SuggestedItem = {
 };
 
 export async function getVorlageFuerAuftrag(auftrag_id: string) {
-  const supabase = await createClient();
+  const { client: supabase, authorization } = await createAuthorizedDataContext('read');
+  const sessionClient = await createClient();
 
   // 1. Get items for the order to get the name and surface_requested
-  const { data: itemsData, error: itemsError } = await supabase
+  const { data: itemsData, error: itemsError } = await sessionClient
     .from('items')
     .select('name, surface_requested')
-    .eq('order_id', auftrag_id);
+    .eq('order_id', auftrag_id)
+    .eq('tenant_id', authorization.tenantId);
 
   if (itemsError || !itemsData || itemsData.length === 0) {
     return { hat_vorlage: false, error: 'Keine Positionen im Auftrag gefunden' };
@@ -45,7 +47,7 @@ export async function getVorlageFuerAuftrag(auftrag_id: string) {
   const { data: klassifikatorData } = await supabase
     .from('teile_klassifikator')
     .select('klasse, keywords')
-    .eq('tenant_id', 'galvanik-kreile');
+    .eq('tenant_id', authorization.tenantId);
 
   const klassifikatorListe = klassifikatorData || [];
   
@@ -57,13 +59,13 @@ export async function getVorlageFuerAuftrag(auftrag_id: string) {
   let { data: zeitData } = await supabase
     .from('vorlage_zeit')
     .select('station_kuerzel, median_minuten, p25_minuten, p75_minuten, n_referenzauftraege')
-    .eq('tenant_id', 'galvanik-kreile')
+    .eq('tenant_id', authorization.tenantId)
     .eq('schluessel', schluessel);
 
   let { data: verbrauchData } = await supabase
     .from('vorlage_verbrauch')
     .select('station_kuerzel, inventory_item_id, median_menge, einheit_normiert, haeufigkeit_prozent, n_referenzauftraege')
-    .eq('tenant_id', 'galvanik-kreile')
+    .eq('tenant_id', authorization.tenantId)
     .eq('schluessel', schluessel);
 
   let finalSchluessel = schluessel;
@@ -76,7 +78,7 @@ export async function getVorlageFuerAuftrag(auftrag_id: string) {
     const { data: fallbackZeit } = await supabase
       .from('vorlage_zeit')
       .select('station_kuerzel, median_minuten, p25_minuten, p75_minuten, n_referenzauftraege')
-      .eq('tenant_id', 'galvanik-kreile')
+      .eq('tenant_id', authorization.tenantId)
       .eq('schluessel', fallbackSchluessel)
       .gte('n_referenzauftraege', 5);
 
@@ -84,7 +86,7 @@ export async function getVorlageFuerAuftrag(auftrag_id: string) {
     const { data: fallbackVerbrauch } = await supabase
       .from('vorlage_verbrauch')
       .select('station_kuerzel, inventory_item_id, median_menge, einheit_normiert, haeufigkeit_prozent, n_referenzauftraege')
-      .eq('tenant_id', 'galvanik-kreile')
+      .eq('tenant_id', authorization.tenantId)
       .eq('schluessel', fallbackSchluessel)
       .gte('n_referenzauftraege', 5);
 
@@ -121,7 +123,8 @@ export async function getVorlageFuerAuftrag(auftrag_id: string) {
     const { data: invItems } = await supabase
       .from('inventory_items')
       .select('id, name')
-      .in('id', itemIds);
+      .in('id', itemIds)
+      .eq('tenant_id', authorization.tenantId);
 
     verbrauchEnhanced = verbrauchData.map(v => {
       const invItem = invItems?.find(i => i.id === v.inventory_item_id);
@@ -156,13 +159,15 @@ export async function getVorlageFuerAuftrag(auftrag_id: string) {
 }
 
 export async function getWahrscheinlicheArtikel(auftrag_id: string) {
-  const supabase = await createClient();
+  const { client: supabase, authorization } = await createAuthorizedDataContext('read');
+  const sessionClient = await createClient();
 
   // Get surface and name
-  const { data: itemsData } = await supabase
+  const { data: itemsData } = await sessionClient
     .from('items')
     .select('name, surface_requested')
-    .eq('order_id', auftrag_id);
+    .eq('order_id', auftrag_id)
+    .eq('tenant_id', authorization.tenantId);
 
   let schluessel = '*|*';
   if (itemsData && itemsData.length > 0) {
@@ -172,7 +177,7 @@ export async function getWahrscheinlicheArtikel(auftrag_id: string) {
     const { data: klassifikatorData } = await supabase
       .from('teile_klassifikator')
       .select('klasse, keywords')
-      .eq('tenant_id', 'galvanik-kreile');
+      .eq('tenant_id', authorization.tenantId);
 
     const klasse = klassifiziereTeil(item.name, klassifikatorData || []);
     schluessel = bildeSchluessel(klasse, surface);
@@ -182,22 +187,22 @@ export async function getWahrscheinlicheArtikel(auftrag_id: string) {
   const { data: vorlageData } = await supabase
     .from('vorlage_verbrauch')
     .select('inventory_item_id, haeufigkeit_prozent, median_menge')
-    .eq('tenant_id', 'galvanik-kreile')
+    .eq('tenant_id', authorization.tenantId)
     .eq('schluessel', schluessel)
     .order('haeufigkeit_prozent', { ascending: false })
     .limit(10);
 
   // 2. Recent items by same user
-  const { data: authData } = await supabase.auth.getUser();
-  const userId = authData.user?.id;
+  const userId = authorization.userId;
   
   const recentItems: RecentItem[] = [];
   if (userId) {
     // using distinct not fully supported in supabase js easily, so just select and filter
-    const { data: recent } = await supabase
+    const { data: recent } = await sessionClient
       .from('stock_movements')
       .select('inventory_item_id, quantity')
       .eq('erfasst_von', userId)
+      .eq('tenant_id', authorization.tenantId)
       .eq('movement_type', 'verbrauch')
       .order('created_at', { ascending: false })
       .limit(20);
@@ -249,7 +254,8 @@ export async function getWahrscheinlicheArtikel(auftrag_id: string) {
     const { data: items } = await supabase
       .from('inventory_items')
       .select('id, name, unit')
-      .in('id', itemIds);
+      .in('id', itemIds)
+      .eq('tenant_id', authorization.tenantId);
 
     const result = Array.from(combinedMap.values()).map(c => {
       const it = items?.find(i => i.id === c.id);

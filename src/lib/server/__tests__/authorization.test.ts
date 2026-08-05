@@ -321,4 +321,39 @@ describe("resolveAuthorization() & centralized Auth-Source", () => {
     const result = await getAuthorizationSnapshotAction();
     expect(result.ok).toBe(false);
   });
+
+  it("14. Sicherheitsänderung nach Session-Ausstellung widerruft die Sitzung", async () => {
+    const issuedAt = Date.now() - 60_000;
+    vi.spyOn(appSessionModule, "readAppSession").mockResolvedValue({
+      ok: true,
+      session: {
+        userId: "user-1",
+        tenantId: "galvanik-kreile",
+        role: "admin",
+        displayName: "Max Kreile",
+        issuedAt,
+        expiresAt: Date.now() + 10_000,
+      },
+    });
+
+    vi.mocked(db.select().from(appUsers).where).mockResolvedValue([
+      {
+        id: "user-1",
+        tenantId: "galvanik-kreile",
+        email: "max@example.test",
+        fullName: "Max Kreile",
+        role: "admin",
+        active: true,
+        updatedAt: new Date(issuedAt + 1_000),
+      },
+    ] as unknown as Array<typeof appUsers.$inferSelect>);
+
+    const result = await resolveAuthorization();
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "SESSION_REVOKED",
+      message: "AUTH_ERROR: Sitzung widerrufen",
+    });
+  });
 });

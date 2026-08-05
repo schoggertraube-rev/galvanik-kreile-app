@@ -1,56 +1,51 @@
-# Produktentscheidung: Tenant-Isolation-Mechanismus
+# Produktentscheidung: Datenzugriffs- und Tenant-Grenze
 
-Stand: 2026-08-04 | Korrektur: 2026-08-05
+Stand: 2026-08-05 — Korrektur des unvollstaendigen Architekturentscheids
 
-## Architektur-Befund (2026-08-05)
+## Korrigierter Befund
 
-Die App verbindet via Drizzle ORM direkt mit PostgreSQL als `postgres`-Rolle
-(Superuser). Diese Rolle umgeht **alle RLS-Policies**. Die bisherige Planung
-(JWT Custom Claims + RLS-Policies) ist fuer diese Architektur **wirkungslos**.
+Die fruehere Aussage „kein clientseitiger Supabase-Zugriff“ war falsch. Der reale
+Code besitzt drei Datenpfade:
 
-Zusaetzlich nutzt die App **kein Supabase Auth** fuer den Login — der
-Login erfolgt via 4-stelliger PIN mit eigener Session-Verwaltung (Cookie).
-Es gibt keinen Supabase-JWT, in den ein Custom Claim injiziert werden koennte.
-
-### Konsequenz
-
-| Ansatz | Funktioniert? | Grund |
+| Pfad | Rolle / Schutzwirkung | Konsequenz |
 |---|---|---|
-| JWT Custom Claims + RLS | Nein | Kein Supabase Auth JWT vorhanden; `postgres`-Rolle umgeht RLS |
-| `set_config('app.tenant_id')` + RLS | Nein | `postgres`-Rolle umgeht RLS |
-| Separate DB-Rolle + RLS | Moeglich, aber aufwaendig | Erfordert Umbau der DB-Verbindung + neuen PostgreSQL-User |
-| Application-Layer-Filter | Ja (aktueller Zustand) | Drizzle-Queries filtern nach `tenant_id` im App-Code |
+| Drizzle ueber `DATABASE_URL` | privilegierter serverseitiger PostgreSQL-Zugriff; RLS kann umgangen werden | Jede Query braucht Autorisierung und Tenant-Filter. |
+| Supabase Data API im Server | fuer grantlose Tabellen im Recovery-Kandidaten erst nach App-Autorisierung mit serverseitigem Schluessel; andere RLS-Pfade bleiben sitzungsgebunden | Server-Action ist die Trust-Boundary; privilegierte Zugriffe muessen eng und tenantgebunden bleiben. |
+| Supabase Data API im Browser | oeffentlicher Anon-Key; kein Kreile-App-Cookie wird von PostgREST ausgewertet | Kein direkter Zugriff auf fachliche Tabellen zulaessig. |
 
-## Revidierte Entscheidung
+Production hat 26 Tabellen ohne RLS, auf denen `anon` und `authenticated` jeweils
+SELECT, INSERT, UPDATE und DELETE besitzen. Application-Layer-Filter allein koennen
+diesen Browser-/Data-API-Pfad nicht schuetzen.
 
-**Application-Layer Tenant-Filter** fuer Phase 1 (Single-Tenant Galvanik Kreile).
+## Entscheidung fuer die Recovery-Phase
 
-Begruendung:
-- Galvanik Kreile ist ein **Einzel-Tenant-System** — es gibt nur den Tenant `galvanik-kreile`
-- Die App laeuft auf Vercel als Server-Side-Rendered Next.js — es gibt keinen Client-seitigen
-  Supabase-Zugriff, der abgesichert werden muesste
-- Alle DB-Zugriffe laufen ueber Server Actions mit service_role — die Trust-Boundary ist der App-Code
-- RLS wuerde nur schuetzen, wenn ein nicht vertrauenswuerdiger Client direkt auf die DB zugreift — das passiert hier nicht
+1. Direkte Browserzugriffe auf die 26 offenen fachlichen Tabellen werden entfernt.
+2. `anon` und `authenticated` verlieren auf diesen Tabellen alle Tabellenrechte.
+3. Legitime Serverpfade zu den grantlosen Tabellen werden vor Erstellung eines
+   privilegierten Clients ueber die kanonische App-Autorisierung geprueft; es
+   erfolgt keine pauschale Umstellung aller Server-Actions auf Service Role.
+4. Drizzle- und Service-Role-Zugriffe bleiben fuer jeden fachlichen Pfad zu
+   Tenant-Filtern verpflichtet; Service Role ist kein Autorisierungsersatz.
+5. Es wird in dieser Mission keine pauschale RLS-Policy erfunden. Tabellen ohne
+   bewiesenes Tenant-/Ownership-Modell bleiben fuer Data-API-Rollen grantlos.
 
-### Massnahmen Phase 1 (Single-Tenant, Live-faehig)
+## RLS-Status
 
-1. **Kein RLS-Umbau** — spart Komplexitaet, keine falsche Sicherheit
-2. **Bestehende `tenant_id`-Filterung** im App-Code beibehalten und auditieren
-3. **Supabase Dashboard-Zugang** auf den Betreiber beschraenken (bereits der Fall)
-4. **`DATABASE_URL`** als Vercel Environment Variable geschuetzt (bereits der Fall)
+`RLS-CONTRACT-001` ist **nicht entfallen**. Es folgt relationenweise nach Schliessung
+der akuten Grants:
 
-### Upgrade-Pfad Phase 2 (Multi-Tenant, spaeter)
+- existierende schwache Policies und Grants inventarisieren,
+- pro Relation Eigentuemer, Tenant-Spalte und erlaubte Operationen bestimmen,
+- negative Tests fuer anonymen und falschen Tenant-Zugriff,
+- erst dann kleine RLS-/Policy-Aenderungen mit separater Freigabe.
 
-Wenn Multi-Tenant benoetigt wird:
-1. Separate PostgreSQL-Rolle `app_user` erstellen (kein Superuser)
-2. `DATABASE_URL` auf diese Rolle umstellen
-3. RLS-Policies mit `current_setting('app.tenant_id')` aktivieren
-4. Drizzle-Middleware: `SET LOCAL app.tenant_id = ...` pro Request
+Eine spaetere nichtprivilegierte PostgreSQL-App-Rolle bleibt der bevorzugte
+Defense-in-Depth-Pfad. Sie ersetzt jedoch weder Server-Autorisierung noch
+Tenant-Filter.
 
-## Status
+## Aktueller Lieferstatus
 
-- M5 (RLS-CONTRACT-001) wird **zurueckgestellt** — kein Nutzen bei aktueller Architektur
-- Bestehende RLS-Policies auf Production sind No-Ops (richtig erkannt in CURRENT_STATE)
-- Die P0-RLS-Migrationen aus PR #35 sind gemergt aber haben **keine reale Schutzwirkung**
-  (postgres-Rolle umgeht sie). Sie schaden nicht, schuetzen aber nicht.
-- Fokus verschiebt sich auf **operativen End-to-End-Kern** fuer Live-Faehigkeit
+- Production: akute Grants weiterhin offen; keine Remote-Aenderung erfolgt.
+- Recovery-Kandidat: zentral autorisierte Server-Data-API und ausstehende
+  Grant-Revoke-Migration.
+- RLS-/Policy-Aenderungen: nicht Teil dieses Kandidaten.

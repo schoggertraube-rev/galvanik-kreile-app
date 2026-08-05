@@ -1,50 +1,38 @@
 # Produktentscheidung: PIN-Sicherheitsstrategie
 
-Stand: 2026-08-04 | Update: 2026-08-05
+Stand: 2026-08-05 — korrigierter Live- und Recovery-Status
 
 ## Entscheidung
 
-**Dreischichtiger Schutz:** Rate-Limiting + Device-Binding + optionaler Upgrade-Pfad.
+Dreischichtiger Schutz: serverseitiges Hashing, serialisiertes Rate-Limiting und
+eine noch festzulegende Device-Challenge. Sitzungen muessen nach einer
+sicherheitsrelevanten Benutzeraenderung widerrufbar sein.
 
 ## Status der Schichten
 
-| Schicht | Prio | Status | PR |
-|---|---|---|---|
-| Rate-Limiting (3-Stufen) | P0 | **DONE** | PR #37 (gemergt) |
-| bcrypt PIN-Hashing | P0 | **DONE** | PR #37 (gemergt) |
-| Plaintext-Migration | P0 | **DONE** | Transparente Migration bei Login |
-| Device-Binding | P1 | Offen | — |
-| Session-Widerruf | P1 | Offen | — |
-| 6-stellige PIN / WebAuthn | P2 | Offen | — |
+| Schicht | Production | Recovery-Kandidat |
+|---|---|---|
+| Rate-Limiting-Tabelle | vorhanden | unveraendert |
+| Rate-Limiting-Logik | gestuft, aber Check und Zaehler nicht gemeinsam serialisiert | Advisory-Lock sowie Check, Vergleich und Zaehler in einer Transaktion |
+| bcrypt-Code | Lazy-Migration vorhanden | neue und rotierte PINs immer bcrypt cost 12 |
+| PIN-Bestand | 0 bcrypt / 6 Legacy | In-place-Migration ausstehend; keine Werte werden ausgelesen |
+| Session-Widerruf | nur Rolle/Aktivstatus indirekt geprueft | `updated_at` widerruft aeltere Sitzungen nach Rolle, Status oder PIN-Aenderung |
+| Device-Binding / Challenge | offen | offen |
+| 6-stellige PIN / WebAuthn | offen | offen |
 
-## Implementierte Details (M4: SEC-PIN-002B)
+## Vertraege
 
-### bcrypt-Hashing
-- PINs werden mit `bcryptjs` (cost factor 10) gehasht
-- Legacy-Klartext-PINs werden beim naechsten Login transparent migriert
-- Funktion `verifyAndMigratePin()` in `src/app/actions/auth.actions.ts`
-- PIN-Werte werden NIEMALS geloggt
+- PIN-Eingaben bestehen aus genau vier Ziffern.
+- PIN-Werte werden nie geloggt, nie im DTO geliefert und nie als Klartext gespeichert.
+- Admin-Neuanlage und PIN-Rotation hashen ausschliesslich serverseitig.
+- PIN-Rotation und Lock-Reset sind atomar.
+- Parallele Versuche desselben Operators werden vor der Sperrpruefung serialisiert.
+- 5 Fehlversuche sperren 15 Minuten, 10 sperren 60 Minuten, 20 dauerhaft.
+- Die Bestandsmigration bricht bei einem unbekannten Altformat ab, statt Werte
+  still umzudeuten.
 
-### Rate-Limiting
-- Tabelle `pin_rate_limits` (Production-Migration angewandt)
-- 5 Fehlversuche → 15 Minuten Sperre
-- 10 Fehlversuche → 60 Minuten Sperre
-- 20 Fehlversuche → permanente Sperre (nur DB-Reset hebt auf)
-- Counter wird bei erfolgreichem Login zurueckgesetzt
-- Modul: `src/lib/server/pinRateLimit.ts`
+## Noch offene Produktentscheidung
 
-### Tests
-- 6 loginWithPin-Tests + 5 pinRateLimit-Tests
-- Alle 109 Unit-Tests bestanden
-
-## Offene P1-Massnahmen
-
-### Device-Binding
-- Browser-Fingerprint bei erstem Login registrieren
-- Login von unbekanntem Geraet erfordert Chef-PIN
-- Max 3 vertrauenswuerdige Geraete pro Operator
-
-### Session-Widerruf bei PIN-Rotation
-- Bei PIN-Aenderung: alle Sessions invalidieren
-- Trusted Devices zuruecksetzen
-- Audit-Log-Eintrag
+Device-Binding bleibt P1. Vor Implementierung sind Enrollment, Verlust/Wechsel des
+Geraets, maximale Geraetezahl und Chef-Freigabe als Werkstattablauf festzulegen.
+Der Recovery-Kandidat behauptet diesen Teil nicht als erledigt.

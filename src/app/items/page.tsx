@@ -81,9 +81,7 @@ export default function ItemsPage() {
         inventoryItemId: itemId,
         movementType: direction === "plus" ? "stock_in" : "stock_out",
         quantity: 1,
-        unit: targetItem.unit,
         reason: direction === "plus" ? "Schnellbuchung Zugang" : "Schnellbuchung Entnahme",
-        createdBy: "meister@kreile.de"
       });
       loadData();
     } catch (e) {
@@ -103,9 +101,7 @@ export default function ItemsPage() {
         inventoryItemId: selectedItemId,
         movementType: bookingType,
         quantity: bookingQty,
-        unit: targetItem.unit,
         reason: bookingReason || (bookingType === "stock_in" ? "Bestandserhöhung" : "Bestandsminderung"),
-        createdBy: "meister@kreile.de"
       });
       setBookingQty(5);
       setBookingReason("");
@@ -119,9 +115,9 @@ export default function ItemsPage() {
 
   // Category and Search Filtering for Inventory Items
   const filteredInventoryItems = inventoryItems.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          item.sku.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          item.storageLocation.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (item.sku ?? "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (item.storageLocation ?? "").toLowerCase().includes(searchTerm.toLowerCase());
     
     if (!matchesSearch) return false;
     if (filterCategory === "all") return true;
@@ -223,9 +219,11 @@ export default function ItemsPage() {
                             <div>
                               <h4 className="font-extrabold text-navy-900 flex items-center gap-2 flex-wrap text-base">
                                 {item.name}
-                                <Badge variant="outline" className="font-mono text-[10px] bg-bg-app-soft py-0 text-text-muted font-bold">
-                                  {item.sku}
-                                </Badge>
+                                {item.sku && (
+                                  <Badge variant="outline" className="font-mono text-[10px] bg-bg-app-soft py-0 text-text-muted font-bold">
+                                    {item.sku}
+                                  </Badge>
+                                )}
                                 {isCritical && (
                                   <Badge className="bg-danger-red text-white text-[9px] uppercase tracking-wider font-extrabold px-2 py-0.5 border border-danger-red animate-pulse">
                                     Mindestbestand unterschritten
@@ -234,7 +232,7 @@ export default function ItemsPage() {
                               </h4>
                               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted mt-1 font-semibold">
                                 <span className="text-navy-900 flex items-center gap-1">
-                                  <MapPin className="h-3.5 w-3.5 text-accent-orange" /> {item.storageLocation}
+                                  <MapPin className="h-3.5 w-3.5 text-accent-orange" /> {item.storageLocation ?? "Nicht hinterlegt"}
                                 </span>
                                 <span>•</span>
                                 <span>Min-Soll: {item.minStock} {item.unit}</span>
@@ -303,15 +301,17 @@ export default function ItemsPage() {
                 <span className="text-[9px] uppercase font-black text-text-muted tracking-widest font-mono">Lager-Akte</span>
                 <h3 className="font-black text-2xl leading-none mt-1.5 font-serif text-white">{selectedItem.name}</h3>
                 <div className="flex gap-2 items-center mt-2.5">
-                  <Badge variant="outline" className="text-[10px] border-navy-700 bg-navy-900 text-text-muted font-mono font-bold">
-                    SKU: {selectedItem.sku}
-                  </Badge>
+                  {selectedItem.sku && (
+                    <Badge variant="outline" className="text-[10px] border-navy-700 bg-navy-900 text-text-muted font-mono font-bold">
+                      SKU: {selectedItem.sku}
+                    </Badge>
+                  )}
                   <Badge className={`text-[9px] uppercase tracking-wider font-extrabold py-0.5 px-2.5 ${
                     selectedItem.category === "chemical" 
                       ? "bg-navy-700 text-white border-navy-500" 
                       : "bg-gold-600 text-white border-gold-600"
                   }`}>
-                    {selectedItem.category === "chemical" ? "Chemie" : selectedItem.category === "consumable" ? "Verbrauchsmaterial" : selectedItem.category === "tooling" ? "Werkzeuge" : "Verpackung"}
+                    {selectedItem.category === "chemical" ? "Chemie" : selectedItem.category === "consumable" ? "Verbrauchsmaterial" : selectedItem.category === "tooling" ? "Werkzeuge" : selectedItem.category === "packaging" ? "Verpackung" : "Nicht kategorisiert"}
                   </Badge>
                 </div>
               </div>
@@ -322,7 +322,7 @@ export default function ItemsPage() {
                   <div>
                     <span className="text-[9px] font-black text-text-muted uppercase tracking-wider block">Lagerort</span>
                     <p className="text-sm font-extrabold text-navy-900 flex items-center gap-1 mt-0.5">
-                      <MapPin className="h-4 w-4 text-accent-orange shrink-0" /> {selectedItem.storageLocation}
+                      <MapPin className="h-4 w-4 text-accent-orange shrink-0" /> {selectedItem.storageLocation ?? "Nicht hinterlegt"}
                     </p>
                   </div>
                   <div>

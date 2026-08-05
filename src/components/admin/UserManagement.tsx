@@ -19,7 +19,7 @@ export function UserManagement() {
   const [showCreate, setShowCreate] = useState(false);
   const [newEmail, setNewEmail] = useState("");
   const [newName, setNewName] = useState("");
-  const [newPin, setNewPin] = useState("1234");
+  const [newPin, setNewPin] = useState("");
   const [newRole, setNewRole] = useState("werkstatt");
   const [isCreating, setIsCreating] = useState(false);
 
@@ -46,11 +46,11 @@ export function UserManagement() {
     setIsCreating(true);
     setError(null);
     try {
-      await createUser({ email: newEmail, fullName: newName, role: newRole, pinHash: newPin });
+      await createUser({ email: newEmail, fullName: newName, role: newRole, pin: newPin });
       setShowCreate(false);
       setNewEmail("");
       setNewName("");
-      setNewPin("1234");
+      setNewPin("");
       await fetchUsers();
     } catch (err) {
       setError(String(err));
@@ -142,7 +142,14 @@ export function UserManagement() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-navy-700">Tablet-PIN (4 Ziffern)</label>
-                <Input value={newPin} onChange={e => setNewPin(e.target.value)} maxLength={4} placeholder="1234" />
+                <Input
+                  type="password"
+                  inputMode="numeric"
+                  value={newPin}
+                  onChange={e => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  maxLength={4}
+                  placeholder="••••"
+                />
               </div>
             </div>
             <Button onClick={handleCreateUser} disabled={isCreating || !newEmail || !newName || newPin.length !== 4} className="w-full md:w-auto">

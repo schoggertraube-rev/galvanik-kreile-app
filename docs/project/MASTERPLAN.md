@@ -1,6 +1,6 @@
 # Masterplan
 
-Stand: 2026-08-01
+Stand: 2026-08-05
 
 ## North Star
 
@@ -25,6 +25,11 @@ Primaerer Kundennutzen:
 
 ## Verbindliche aktive Reihenfolge
 
+**Recovery-Gate 2026-08-05:** Vor weiterer Struktur- oder Offline-Arbeit schliesst
+`FOUNDATION-RECOVERY-001` ausschliesslich die live verifizierten Luecken in
+Migrationswahrheit, Data-API-Grants, PIN-Bestand/Rate-Limit und oeffentlichem
+Start-Payload. Das ist kein neuer Masterplan und keine Ordner-Grossoperation.
+
 ### Phase 0 - Wahrheiten und Arbeitsflaeche
 
 1. `TRUTH-CLEANUP-001`
@@ -39,7 +44,8 @@ Primaerer Kundennutzen:
    - jede Erhoehung in CI blockieren,
    - keine `eslint-disable`-, Ignore- oder Regelabsenkungs-Abkuerzung.
 
-`LINT-DEBT-001` laeuft als parallele, nichtfachliche Begleitspur: 484 Fehler und 459 Warnungen werden in kleinen unabhaengigen Wellen bis null abgebaut. Die hoehere ehrliche Baseline entstand durch `noInlineConfig`: 57 bestehende Disable-Direktiven koennen Schuld nicht mehr verstecken. Die erste Welle hat eine unbenutzte Catch-Bindung entfernt und die Baseline um eine Warnung gesenkt. Diese Altlast darf P0-, Auth- oder DB-Fixes nicht blockieren; jede Welle muss den Ratchet samt Baseline senken und darf keine fachliche Umstrukturierung verstecken. Eine `continue-on-error`-Ausnahme fuer neue globale Schuld existiert nicht mehr.
+`LINT-DEBT-001` ist mit PR #31 bei ESLint 0/0 abgeschlossen. Der Ratchet bleibt
+verbindlich und darf fuer Recovery-, Security- oder DB-Arbeit nicht abgesenkt werden.
 
 3. `BRANCH-DISPOSITION-001`
    - fuer PR 8, 15, 19 und 20 exakten Head, historischen PR-Base und aktuellen Merge-Base erfassen,
@@ -55,8 +61,8 @@ Primaerer Kundennutzen:
    - echten Benutzerwechsel und abgelaufene Sitzung im Browser pruefen.
 
 5. `DB-TRUTH-001`
-   - die 13 fehlenden Produktions-Ledger-Quellen dispositionieren,
-   - einen vorwaertsgerichteten Baseline-/Replay-Vertrag definieren,
+   - alle 96 angewandten Production-Versionen mit Name und Statement-Hash abbilden,
+   - einen vorwaertsgerichteten Manifest-/Replay-Vertrag definieren,
    - Production, Integration, Drizzle und lokale Migrationen vor jeder Mutation vergleichen,
    - keine alte, nachtraeglich umgeschriebene Historie als neue Wahrheit ausgeben.
 
