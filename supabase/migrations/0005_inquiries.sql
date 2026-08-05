@@ -1,9 +1,3 @@
--- Fresh-replay reconciliation: migration 0001 creates the legacy table and
--- migration 0002 attaches policies to it. No seed data exists at this point.
--- Production already records 0005 as applied, so this replacement is never
--- executed against the live relation.
-DROP TABLE IF EXISTS public.inquiries;
-
 CREATE TABLE inquiries (
   id            text PRIMARY KEY DEFAULT (gen_random_uuid()::text),
   tenant_id     text NOT NULL,
