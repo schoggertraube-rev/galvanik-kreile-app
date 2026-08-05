@@ -89,6 +89,11 @@ for (const filePath of files) {
   if (normalizedPath === "scripts/quality/check-forbidden-patterns.mjs") {
     continue;
   }
+  // The preceding ledger gate verifies every archived path and SHA-256 hash.
+  // Archived SQL is retained as evidence and is never part of the active chain.
+  if (normalizedPath.startsWith("supabase/migrations_legacy/")) {
+    continue;
+  }
 
   const lines = readLines(filePath);
   const content = lines.join("\n");
