@@ -56,7 +56,8 @@ Ein gruener Build oder ein aktuelles Deployment ist kein Gesamt-PASS.
   sitzungsgebundene Supabase-Pfade auf anderen Relationen bleiben unveraendert.
 - Die ausstehende Migration `20260805070750_revoke_public_data_api_grants.sql`
   entzieht `anon` und `authenticated` auf exakt den 26 live verifizierten Tabellen
-  alle Tabellenrechte. Sie aendert keine RLS-Policy.
+  alle Tabellenrechte und setzt fuer kuenftige, von `postgres` angelegte `public`-
+  Tabellen denselben fail-closed-Default. Sie aendert keine RLS-Policy.
 
 ### 3. PIN und Sitzungen
 
@@ -70,8 +71,10 @@ Ein gruener Build oder ein aktuelles Deployment ist kein Gesamt-PASS.
 - Rollen-, Status- und PIN-Aenderungen aktualisieren `app_users.updated_at`;
   aeltere signierte App-Sitzungen werden dadurch abgewiesen.
 - Die ausstehende Migration `20260805071504_hash_legacy_pins.sql` konvertiert die
-  sechs vierstelligen Legacy-Werte innerhalb von PostgreSQL. Kein PIN-Wert wird
-  ausgelesen oder in einen Client uebertragen.
+  sechs vierstelligen Legacy-Werte innerhalb von PostgreSQL und setzt dabei
+  `app_users.updated_at`, damit vor der Umstellung ausgestellte Sitzungen
+  widerrufen werden. Kein PIN-Wert wird ausgelesen oder in einen Client
+  uebertragen.
 - Device-Binding bleibt offen und wird nicht als erledigt dargestellt.
 
 ### 4. Oeffentliche Startseite
