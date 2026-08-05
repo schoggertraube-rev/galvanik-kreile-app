@@ -103,3 +103,28 @@ jobs:
 
       - name: Forbidden pattern gate
         run: node scripts/quality/check-forbidden-patterns.mjs --base "${{ steps.diff.outputs.base }}" --head "${{ steps.diff.outputs.head }}"
+
+  fresh-supabase-replay:
+    name: Fresh Supabase replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+
+      - name: Start isolated local Supabase
+        run: npx --yes supabase@2.111.0 start
+
+      - name: Replay every migration from zero
+        run: npx --yes supabase@2.111.0 db reset --local
+
+      - name: Stop isolated local Supabase
+        if: always()
+        run: npx --yes supabase@2.111.0 stop --no-backup
