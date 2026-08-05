@@ -1,11 +1,23 @@
 import { readAppSession, type AppSession, type SessionReadResult } from "@/lib/server/appSession";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import {
+  resolveAuthorization,
+  type AuthorizationSnapshot,
+} from "@/lib/server/authorization";
 
 export type ActionResult<T> =
   | { ok: true; data: T }
   | {
       ok: false;
-      error: "UNAUTHORIZED" | "FORBIDDEN" | "DB_ERROR" | "NETWORK_ERROR" | "UNKNOWN" | "EMPTY_RESULT";
+      error:
+        | "UNAUTHORIZED"
+        | "FORBIDDEN"
+        | "DB_ERROR"
+        | "NETWORK_ERROR"
+        | "UNKNOWN"
+        | "EMPTY_RESULT"
+        | "VALIDATION_ERROR"
+        | "NOT_FOUND"
+        | "CONFLICT";
       message: string;
       details?: unknown;
     };
@@ -75,7 +87,9 @@ export async function checkAppSession(): Promise<ActionResult<AppSession>> {
 /**
  * Kompatibler Rollen-Guard auf Basis von resolveAuthorization().
  */
-export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<ActionResult<string>> {
+export async function checkAppAuthorization(
+  mode: "read" | "write" = "read",
+): Promise<ActionResult<AuthorizationSnapshot>> {
   const result = await resolveAuthorization();
 
   if (!result.ok) {
@@ -85,6 +99,7 @@ export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<Act
       USER_NOT_FOUND: "UNAUTHORIZED",
       USER_INACTIVE: "UNAUTHORIZED",
       ROLE_MISMATCH: "UNAUTHORIZED",
+      SESSION_REVOKED: "UNAUTHORIZED",
       UNKNOWN_ROLE: "UNAUTHORIZED",
       AUTHORIZATION_UNAVAILABLE: "DB_ERROR",
     };
@@ -107,5 +122,15 @@ export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<Act
     };
   }
 
-  return { ok: true, data: roleLower };
+  return { ok: true, data: result.data };
+}
+
+export async function checkAppAuth(mode: "read" | "write" = "read"): Promise<ActionResult<string>> {
+  const result = await checkAppAuthorization(mode);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  return { ok: true, data: result.data.role.toLowerCase() };
 }

@@ -14,6 +14,7 @@ import {
   INITIAL_ORDERS, 
   INITIAL_COMPLAINTS, 
 } from "../lib/mockData";
+import bcrypt from "bcryptjs";
 
 export async function seedDatabase({ safeMode = false } = {}) {
   console.log("🌱 Starte Datenbank-Seeding für V2...");
@@ -36,6 +37,15 @@ export async function seedDatabase({ safeMode = false } = {}) {
 
     // 2. Create appUsers
     console.log("👤 Lege Benutzer an...");
+    const seedPin = process.env.SEED_TABLET_PIN;
+    if (!seedPin || !/^\d{4}$/.test(seedPin)) {
+      throw new Error("SEED_TABLET_PIN must contain exactly four digits.");
+    }
+    const [adminPinHash, workshopPinHash, officePinHash] = await Promise.all([
+      bcrypt.hash(seedPin, 12),
+      bcrypt.hash(seedPin, 12),
+      bcrypt.hash(seedPin, 12),
+    ]);
     await db.insert(appUsers).values([
       {
         id: "123e4567-e89b-12d3-a456-426614174000",
@@ -51,7 +61,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
         email: "admin@kreile.de",
         fullName: "Max Kreile",
         role: "admin",
-        pinHash: "1234",
+        pinHash: adminPinHash,
         active: true,
       },
       {
@@ -60,7 +70,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
         email: "werkstatt@kreile.de",
         fullName: "Christian Dieter",
         role: "werkstatt",
-        pinHash: "1234",
+        pinHash: workshopPinHash,
         active: true,
       },
       {
@@ -69,7 +79,7 @@ export async function seedDatabase({ safeMode = false } = {}) {
         email: "buero@kreile.de",
         fullName: "Reiner Schmitt",
         role: "buero",
-        pinHash: "1234",
+        pinHash: officePinHash,
         active: true,
       }
     ]);

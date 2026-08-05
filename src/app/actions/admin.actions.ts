@@ -1,11 +1,23 @@
 'use server'
 
 import { db } from '@/db'
-import { appUsers, featureFlags } from '@/db/schema'
-import { eq } from 'drizzle-orm'
+import { appUsers, featureFlags, pinRateLimits } from '@/db/schema'
+import { and, eq } from 'drizzle-orm'
 import { createClient } from '@supabase/supabase-js'
+import bcrypt from 'bcryptjs'
 import { requireAdminOrDeveloper } from '@/lib/auth/permissions'
+import { isAppRole } from '@/lib/auth/authorizationContract'
 import { toAdminUserDto } from '@/lib/auth/userDtos'
+import { APP_TENANT_ID } from '@/lib/server/appSession'
+
+const PIN_HASH_ROUNDS = 12
+
+function validatePin(pin: unknown): string {
+  if (typeof pin !== 'string' || !/^\d{4}$/.test(pin)) {
+    throw new Error('PIN muss aus genau vier Ziffern bestehen.')
+  }
+  return pin
+}
 
 // Admin client using Service Role Key (MUST ONLY BE USED IN SERVER ACTIONS)
 const getAdminSupabase = () => {
@@ -28,19 +40,32 @@ const getAdminSupabase = () => {
 
 export async function getUsers() {
   await requireAdminOrDeveloper();
-  const users = await db.select().from(appUsers)
+  const users = await db
+    .select()
+    .from(appUsers)
+    .where(eq(appUsers.tenantId, APP_TENANT_ID))
   return users.map(toAdminUserDto)
 }
 
-export async function createUser(data: { email: string, fullName: string, role: string, location?: string, language?: string, pinHash?: string }) {
+export async function createUser(data: { email: string, fullName: string, role: string, location?: string, language?: string, pin: string }) {
   await requireAdminOrDeveloper();
+  const pin = validatePin(data.pin)
+  if (!isAppRole(data.role)) {
+    throw new Error('Ungültige Benutzerrolle.')
+  }
+  const email = data.email.trim()
+  const fullName = data.fullName.trim()
+  if (!email || !fullName) {
+    throw new Error('Name und E-Mail sind erforderlich.')
+  }
+  const pinHash = await bcrypt.hash(pin, PIN_HASH_ROUNDS)
   const supabase = getAdminSupabase()
   
   // 1. Create user in Supabase Auth
   // We use admin.createUser which also skips email confirmation if desired.
   // For production, you might want email_confirm: true to send a Magic Link.
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-    email: data.email,
+    email,
     email_confirm: true,
   })
 
@@ -55,13 +80,13 @@ export async function createUser(data: { email: string, fullName: string, role: 
   try {
     await db.insert(appUsers).values({
       id: userId,
-      tenantId: "galvanik-kreile",
-      email: data.email,
-      fullName: data.fullName,
+      tenantId: APP_TENANT_ID,
+      email,
+      fullName,
       role: data.role,
       location: data.location || null,
       language: data.language || 'de',
-      pinHash: data.pinHash || '1234',
+      pinHash,
       active: true,
     })
     return { success: true, userId }
@@ -74,19 +99,45 @@ export async function createUser(data: { email: string, fullName: string, role: 
 
 export async function updateUserRole(userId: string, newRole: string) {
   await requireAdminOrDeveloper();
-  await db.update(appUsers).set({ role: newRole }).where(eq(appUsers.id, userId))
+  if (!isAppRole(newRole)) {
+    throw new Error('Ungültige Benutzerrolle.')
+  }
+  await db
+    .update(appUsers)
+    .set({ role: newRole, updatedAt: new Date() })
+    .where(and(eq(appUsers.id, userId), eq(appUsers.tenantId, APP_TENANT_ID)))
   return { success: true }
 }
 
 export async function updateUserPin(userId: string, newPin: string) {
   await requireAdminOrDeveloper();
-  await db.update(appUsers).set({ pinHash: newPin }).where(eq(appUsers.id, userId))
+  const pinHash = await bcrypt.hash(validatePin(newPin), PIN_HASH_ROUNDS)
+  const updatedAt = new Date()
+
+  await db.transaction(async (tx) => {
+    const [updatedUser] = await tx
+      .update(appUsers)
+      .set({ pinHash, updatedAt })
+      .where(and(eq(appUsers.id, userId), eq(appUsers.tenantId, APP_TENANT_ID)))
+      .returning({ id: appUsers.id })
+
+    if (!updatedUser) {
+      throw new Error('Benutzer nicht gefunden.')
+    }
+
+    await tx
+      .delete(pinRateLimits)
+      .where(eq(pinRateLimits.operatorId, updatedUser.id))
+  })
   return { success: true }
 }
 
 export async function toggleUserStatus(userId: string, active: boolean) {
   await requireAdminOrDeveloper();
-  await db.update(appUsers).set({ active }).where(eq(appUsers.id, userId))
+  await db
+    .update(appUsers)
+    .set({ active, updatedAt: new Date() })
+    .where(and(eq(appUsers.id, userId), eq(appUsers.tenantId, APP_TENANT_ID)))
   return { success: true }
 }
 

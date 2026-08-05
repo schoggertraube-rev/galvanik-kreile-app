@@ -1,6 +1,10 @@
 "use server"
 
-import { createClient } from '@/utils/supabase/server';
+import {
+  createAuthorizedDataContext,
+  createAuthorizedSessionContext,
+  createClient,
+} from '@/lib/supabase/server';
 import { getKostensatz, getEinkaufspreis } from '@/lib/erfassung/snapshot';
 
 export async function startZeit(input: {
@@ -8,6 +12,7 @@ export async function startZeit(input: {
   employee_id: string;
   station_kuerzel: string;
 }) {
+  const { client: privileged, authorization } = await createAuthorizedDataContext('write');
   const supabase = await createClient();
 
   // 1. Check existing timer
@@ -23,7 +28,12 @@ export async function startZeit(input: {
   }
 
   // 2. Get kostensatz
-  const { kostensatz } = await getKostensatz(supabase, input.employee_id, input.station_kuerzel, 'galvanik-kreile');
+  const { kostensatz } = await getKostensatz(
+    privileged,
+    input.employee_id,
+    input.station_kuerzel,
+    authorization.tenantId,
+  );
 
   if (kostensatz === null) {
     return {
@@ -36,7 +46,7 @@ export async function startZeit(input: {
   const { data: buchung, error } = await supabase
     .from('arbeitszeit_buchung')
     .insert({
-      tenant_id: 'galvanik-kreile',
+      tenant_id: authorization.tenantId,
       auftrag_id: input.auftrag_id,
       employee_id: input.employee_id,
       kostenstelle_kuerzel: input.station_kuerzel,
@@ -69,13 +79,14 @@ export async function stopZeit(input: {
   buchung_id: string;
   korrektur_minuten?: number;
 }) {
-  const supabase = await createClient();
+  const { client: supabase, authorization } = await createAuthorizedSessionContext('write');
 
   // 1. Get running timer
   const { data: timer, error: timerError } = await supabase
     .from('arbeitszeit_buchung')
     .select('id, start_zeit, kostensatz_eur_pro_stunde, employee_id')
     .eq('id', input.buchung_id)
+    .eq('tenant_id', authorization.tenantId)
     .is('end_zeit', null)
     .single();
 
@@ -96,7 +107,8 @@ export async function stopZeit(input: {
       end_zeit: now.toISOString(),
       dauer_minuten: dauer
     })
-    .eq('id', input.buchung_id);
+    .eq('id', input.buchung_id)
+    .eq('tenant_id', authorization.tenantId);
 
   if (updateError) {
     return { error: 'Fehler beim Stoppen des Timers: ' + updateError.message };
@@ -124,10 +136,16 @@ export async function erfasseZeitDirekt(input: {
   war_aus_vorlage?: boolean;
   vorlage_id?: string;
 }) {
+  const { client: privileged, authorization } = await createAuthorizedDataContext('write');
   const supabase = await createClient();
 
   // 1. Get kostensatz
-  const { kostensatz } = await getKostensatz(supabase, input.employee_id, input.station_kuerzel, 'galvanik-kreile');
+  const { kostensatz } = await getKostensatz(
+    privileged,
+    input.employee_id,
+    input.station_kuerzel,
+    authorization.tenantId,
+  );
 
   if (kostensatz === null) {
     return {
@@ -143,7 +161,7 @@ export async function erfasseZeitDirekt(input: {
   const { data: buchung, error } = await supabase
     .from('arbeitszeit_buchung')
     .insert({
-      tenant_id: 'galvanik-kreile',
+      tenant_id: authorization.tenantId,
       auftrag_id: input.auftrag_id,
       employee_id: input.employee_id,
       kostenstelle_kuerzel: input.station_kuerzel,
@@ -185,10 +203,15 @@ export async function erfasseVerbrauch(input: {
   war_aus_vorlage?: boolean;
   vorlage_id?: string;
 }) {
+  const { client: privileged, authorization } = await createAuthorizedDataContext('write');
   const supabase = await createClient();
 
   // 1. Get einkaufspreis
-  const einkaufspreis = await getEinkaufspreis(supabase, input.inventory_item_id);
+  const einkaufspreis = await getEinkaufspreis(
+    privileged,
+    input.inventory_item_id,
+    authorization.tenantId,
+  );
 
   if (einkaufspreis === null) {
     return {
@@ -201,7 +224,7 @@ export async function erfasseVerbrauch(input: {
   const { data: movement, error } = await supabase
     .from('stock_movements')
     .insert({
-      tenant_id: 'galvanik-kreile',
+      tenant_id: authorization.tenantId,
       order_id: input.auftrag_id,
       inventory_item_id: input.inventory_item_id,
       quantity: -input.menge, // negative for consumption
@@ -222,24 +245,26 @@ export async function erfasseVerbrauch(input: {
   }
 
   // 3. Update inventory_items
-  const { error: stockError } = await supabase.rpc('decrement_inventory_stock', {
+  const { error: stockError } = await privileged.rpc('decrement_inventory_stock', {
     item_id: input.inventory_item_id,
     amount: input.menge
   });
   
   // If no RPC exists, we do a raw select and update (assuming optimistic UI or simple environment)
   if (stockError) {
-    const { data: itemData } = await supabase
+    const { data: itemData } = await privileged
       .from('inventory_items')
       .select('current_stock')
       .eq('id', input.inventory_item_id)
+      .eq('tenant_id', authorization.tenantId)
       .single();
       
     if (itemData) {
-      await supabase
+      await privileged
         .from('inventory_items')
         .update({ current_stock: itemData.current_stock - input.menge })
-        .eq('id', input.inventory_item_id);
+        .eq('id', input.inventory_item_id)
+        .eq('tenant_id', authorization.tenantId);
     }
   }
 
@@ -261,12 +286,13 @@ export async function uebernehmeVorlage(input: {
   employee_id: string;
   schluessel: string;
 }) {
-  const supabase = await createClient();
+  const { client: supabase, authorization } = await createAuthorizedDataContext('write');
+  const sessionClient = await createClient();
 
   // 1 & 2. Load templates
   const [zeitRes, verbrauchRes] = await Promise.all([
-    supabase.from('vorlage_zeit').select('id, station_kuerzel, median_minuten').eq('schluessel', input.schluessel).eq('tenant_id', 'galvanik-kreile'),
-    supabase.from('vorlage_verbrauch').select('id, station_kuerzel, inventory_item_id, median_menge').eq('schluessel', input.schluessel).eq('tenant_id', 'galvanik-kreile')
+    supabase.from('vorlage_zeit').select('id, station_kuerzel, median_minuten').eq('schluessel', input.schluessel).eq('tenant_id', authorization.tenantId),
+    supabase.from('vorlage_verbrauch').select('id, station_kuerzel, inventory_item_id, median_menge').eq('schluessel', input.schluessel).eq('tenant_id', authorization.tenantId)
   ]);
 
   if ((!zeitRes.data || zeitRes.data.length === 0) && (!verbrauchRes.data || verbrauchRes.data.length === 0)) {
@@ -320,7 +346,7 @@ export async function uebernehmeVorlage(input: {
   }
 
   // 7. Audit log
-  await supabase.from('audit_log').insert({
+  await sessionClient.from('audit_log').insert({
     action: 'vorlage_uebernommen',
     table_name: 'vorlagen',
     actor_id: input.employee_id,

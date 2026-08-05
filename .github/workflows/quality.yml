@@ -66,6 +66,9 @@ jobs:
           echo "base=$base" >> "$GITHUB_OUTPUT"
           echo "head=$head" >> "$GITHUB_OUTPUT"
 
+      - name: Production migration ledger contract
+        run: node scripts/check-migration-ledger.mjs --base "${{ steps.diff.outputs.base }}"
+
       - name: TypeScript
         run: npx tsc --noEmit --incremental false
 

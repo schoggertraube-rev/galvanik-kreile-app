@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 // ─── Konstanten ─────────────────────────────────────────────────────────────
 export const COOKIE_NAME = "kreile_app_session";
 export const SESSION_TTL_MS = 12 * 60 * 60 * 1000; // 12 Stunden
-const TENANT_ID = "galvanik-kreile";
+export const APP_TENANT_ID = "galvanik-kreile";
 
 // ─── Secret Key ──────────────────────────────────────────────────────────────
 export function getSecretKey(): string {
@@ -138,7 +138,7 @@ export function verifyAppSessionToken(
     return { ok: false, reason: "MALFORMED" };
   }
 
-  if (session.tenantId !== TENANT_ID) {
+  if (session.tenantId !== APP_TENANT_ID) {
     return { ok: false, reason: "INVALID_TENANT" };
   }
 
@@ -187,7 +187,7 @@ export async function createAppSessionCookie(role: string, userId?: string): Pro
   const now = Date.now();
   await setAppSession({
     userId: userId ?? "",
-    tenantId: TENANT_ID,
+    tenantId: APP_TENANT_ID,
     role,
     displayName: userId ?? "",
     issuedAt: now,

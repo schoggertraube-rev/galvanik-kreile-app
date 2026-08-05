@@ -116,7 +116,9 @@ for (const filePath of files) {
     );
   }
 
-  if (clientFacingPath) {
+  // Test fixtures may name fields that production code must never serialize.
+  // Apply client-boundary rules only to deployable source paths.
+  if (clientFacingPath && productionPath) {
     addViolations(
       violations,
       filePath,

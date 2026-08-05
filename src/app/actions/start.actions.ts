@@ -3,13 +3,15 @@
 import { db } from "@/db";
 import { appUsers, uiEventsTable } from "@/db/schema";
 import { and, eq, gte, ne, sql } from "drizzle-orm";
+import { APP_TENANT_ID } from "@/lib/server/appSession";
+import {
+  isValidPinLoginHandle,
+  resolvePinLoginCandidate,
+} from "@/lib/server/pinLoginHandle";
 
-const TENANT_ID = "galvanik-kreile";
 const RESET_EVENT_TYPE = "pin_reset_requested";
 const RESET_RATE_LIMIT = 3;
 const RESET_RATE_WINDOW_MS = 15 * 60 * 1000;
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export async function getFeierabendEvents() {
   try {
@@ -38,36 +40,36 @@ export async function getFeierabendEvents() {
   };
 }
 
-export async function notifyAdminPinReset(userId: string) {
+export async function notifyAdminPinReset(loginHandle: string) {
   // Public login action: malformed, unknown and throttled targets deliberately
   // receive the same response so the endpoint cannot enumerate users.
-  if (typeof userId !== "string" || !UUID_PATTERN.test(userId)) {
+  if (!isValidPinLoginHandle(loginHandle)) {
     return { success: true };
   }
 
   try {
     await db.transaction(async (tx) => {
-      const throttleKey = `${TENANT_ID}:${userId}`;
-      await tx.execute(
-        sql`SELECT pg_advisory_xact_lock(hashtextextended(${throttleKey}, 0))`,
-      );
-
-      const [user] = await tx
+      const candidates = await tx
         .select({ id: appUsers.id, fullName: appUsers.fullName })
         .from(appUsers)
         .where(
           and(
-            eq(appUsers.id, userId),
-            eq(appUsers.tenantId, TENANT_ID),
+            eq(appUsers.tenantId, APP_TENANT_ID),
             eq(appUsers.active, true),
             ne(appUsers.role, "developer"),
           ),
         )
-        .limit(1);
+        .limit(32);
+      const user = resolvePinLoginCandidate(loginHandle, candidates);
 
       if (!user) {
         return;
       }
+
+      const throttleKey = `${APP_TENANT_ID}:${user.id}`;
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${throttleKey}, 0))`,
+      );
 
       const windowStart = new Date(Date.now() - RESET_RATE_WINDOW_MS);
       const recentRequests = await tx
@@ -75,7 +77,7 @@ export async function notifyAdminPinReset(userId: string) {
         .from(uiEventsTable)
         .where(
           and(
-            eq(uiEventsTable.tenantId, TENANT_ID),
+            eq(uiEventsTable.tenantId, APP_TENANT_ID),
             eq(uiEventsTable.eventType, RESET_EVENT_TYPE),
             gte(uiEventsTable.createdAt, windowStart),
             sql`${uiEventsTable.payload}->>'userId' = ${user.id}`,
@@ -88,7 +90,7 @@ export async function notifyAdminPinReset(userId: string) {
       }
 
       await tx.insert(uiEventsTable).values({
-        tenantId: TENANT_ID,
+        tenantId: APP_TENANT_ID,
         eventType: RESET_EVENT_TYPE,
         payload: {
           userId: user.id,

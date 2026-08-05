@@ -1,6 +1,7 @@
 'use server'
 
-import { createClient } from '@/lib/supabase/server'
+import { createAuthorizedDataClient } from '@/lib/supabase/server'
+import { APP_TENANT_ID } from '@/lib/server/appSession'
 
 export interface PeriodenabschlussStatus {
   id: string;
@@ -16,7 +17,7 @@ export interface PeriodenabschlussStatus {
 }
 
 export async function getPeriodenabschlussStatusAction(): Promise<PeriodenabschlussStatus | null> {
-  const supabase = await createClient();
+  const supabase = await createAuthorizedDataClient('read');
   const { data, error } = await supabase
     .from('v_periodenabschluss_status')
     .select('*')
@@ -35,8 +36,12 @@ export async function getPeriodenabschlussStatusAction(): Promise<Periodenabschl
 }
 
 export async function runEnergieVerteilungAction(jahr: number, monat: number) {
-  const supabase = await createClient();
-  const { error } = await supabase.rpc('fn_verteile_energiekosten', { p_jahr: jahr, p_monat: monat, p_tenant: 'galvanik-kreile' });
+  const supabase = await createAuthorizedDataClient('write');
+  const { error } = await supabase.rpc('fn_verteile_energiekosten', {
+    p_jahr: jahr,
+    p_monat: monat,
+    p_tenant: APP_TENANT_ID,
+  });
   if (error) {
     console.error("Fehler bei der Energie-Verteilung:", error);
     throw new Error('Fehler bei der Energie-Verteilung.');
@@ -45,7 +50,7 @@ export async function runEnergieVerteilungAction(jahr: number, monat: number) {
 }
 
 export async function schliessePeriodeAction(periodeId: string) {
-  const supabase = await createClient();
+  const supabase = await createAuthorizedDataClient('write');
 
   // 1. Serverseitige Blocker-Prüfung
   const { data: statusData, error: statusError } = await supabase
@@ -71,7 +76,9 @@ export async function schliessePeriodeAction(periodeId: string) {
   const { error } = await supabase.from('periode').update({ 
     status: 'vorlaeufig_geschlossen', 
     geschlossen_am: new Date().toISOString() 
-  }).eq('id', periodeId);
+  })
+    .eq('id', periodeId)
+    .eq('tenant_id', APP_TENANT_ID);
   
   if (error) {
     console.error("Fehler beim Schließen der Periode:", error);
@@ -81,11 +88,13 @@ export async function schliessePeriodeAction(periodeId: string) {
 }
 
 export async function finalSchliessePeriodeAction(periodeId: string) {
-  const supabase = await createClient();
+  const supabase = await createAuthorizedDataClient('write');
   const { error } = await supabase.from('periode').update({ 
     status: 'final_geschlossen', 
     geschlossen_am: new Date().toISOString() 
-  }).eq('id', periodeId);
+  })
+    .eq('id', periodeId)
+    .eq('tenant_id', APP_TENANT_ID);
   
   if (error) {
     console.error("Fehler beim finalen Schließen der Periode:", error);

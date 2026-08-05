@@ -24,6 +24,7 @@ export type AuthorizationFailureReason =
   | "USER_NOT_FOUND"
   | "USER_INACTIVE"
   | "ROLE_MISMATCH"
+  | "SESSION_REVOKED"
   | "UNKNOWN_ROLE"
   | "AUTHORIZATION_UNAVAILABLE";
 
@@ -155,6 +156,17 @@ export async function resolveAuthorization(): Promise<AuthorizationResult> {
       ok: false,
       reason: "ROLE_MISMATCH",
       message: "AUTH_ERROR: Sitzung veraltet",
+    };
+  }
+
+  if (
+    dbUser.updatedAt instanceof Date &&
+    dbUser.updatedAt.getTime() > sessionResult.session.issuedAt
+  ) {
+    return {
+      ok: false,
+      reason: "SESSION_REVOKED",
+      message: "AUTH_ERROR: Sitzung widerrufen",
     };
   }
 

@@ -1,16 +1,20 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
-import { setAppSession, SESSION_TTL_MS } from "@/lib/server/appSession";
-import { resolveAuthorization, type AuthorizationResult } from "@/lib/server/authorization";
 import {
-  checkPinRateLimit,
-  recordFailedPinAttempt,
-  resetPinRateLimit,
-} from "@/lib/server/pinRateLimit";
+  APP_TENANT_ID,
+  setAppSession,
+  SESSION_TTL_MS,
+} from "@/lib/server/appSession";
+import { resolveAuthorization, type AuthorizationResult } from "@/lib/server/authorization";
+import { runPinAttempt } from "@/lib/server/pinRateLimit";
+import {
+  isValidPinLoginHandle,
+  resolvePinLoginCandidate,
+} from "@/lib/server/pinLoginHandle";
 
 export async function getAuthorizationSnapshotAction(): Promise<AuthorizationResult> {
   return await resolveAuthorization();
@@ -54,11 +58,18 @@ async function verifyAndMigratePin(
 
   if (user.pinHash !== pin) return false;
 
-  const hashed = await bcrypt.hash(pin, 10);
+  const hashed = await bcrypt.hash(pin, 12);
+  const updatedAt = new Date();
   await db
     .update(appUsers)
-    .set({ pinHash: hashed })
-    .where(eq(appUsers.id, user.id));
+    .set({ pinHash: hashed, updatedAt })
+    .where(
+      and(
+        eq(appUsers.id, user.id),
+        eq(appUsers.tenantId, APP_TENANT_ID),
+        eq(appUsers.pinHash, user.pinHash),
+      ),
+    );
 
   return true;
 }
@@ -68,13 +79,43 @@ async function verifyAndMigratePin(
  * Setzt eine vollständige kanonische AppSession.
  */
 export async function loginWithPin(
-  userId: string,
+  loginHandle: string,
   pin: string,
 ): Promise<{ ok: true; role: string } | { ok: false; message: string }> {
   try {
-    const rateLimit = await checkPinRateLimit(userId);
-    if (!rateLimit.allowed) {
-      if (rateLimit.locked) {
+    if (!isValidPinLoginHandle(loginHandle) || !/^\d{4}$/.test(pin)) {
+      return { ok: false, message: "Ungültige PIN oder inaktiver Benutzer." };
+    }
+
+    const candidates = await db
+      .select({
+        id: appUsers.id,
+        active: appUsers.active,
+        fullName: appUsers.fullName,
+        pinHash: appUsers.pinHash,
+        role: appUsers.role,
+        tenantId: appUsers.tenantId,
+      })
+      .from(appUsers)
+      .where(
+        and(
+          eq(appUsers.tenantId, APP_TENANT_ID),
+          eq(appUsers.active, true),
+          ne(appUsers.role, "developer"),
+        ),
+      );
+    const user = resolvePinLoginCandidate(loginHandle, candidates);
+
+    if (!user) {
+      return { ok: false, message: "Ungültige PIN oder inaktiver Benutzer." };
+    }
+
+    const pinAttempt = await runPinAttempt(
+      user.id,
+      () => verifyAndMigratePin(user, pin),
+    );
+    if (pinAttempt.status === "blocked") {
+      if (pinAttempt.locked) {
         return {
           ok: false,
           message: "Konto gesperrt. Bitte Administrator kontaktieren.",
@@ -83,35 +124,17 @@ export async function loginWithPin(
 
       return {
         ok: false,
-        message: `Zu viele Fehlversuche. Bitte in ${rateLimit.retryAfterMinutes} Minute(n) erneut versuchen.`,
+        message: `Zu viele Fehlversuche. Bitte in ${pinAttempt.retryAfterMinutes} Minute(n) erneut versuchen.`,
       };
     }
 
-    const [user] = await db
-      .select()
-      .from(appUsers)
-      .where(
-        and(
-          eq(appUsers.id, userId),
-          eq(appUsers.tenantId, "galvanik-kreile"),
-        ),
-      );
-
-    if (!user || !user.active) {
+    if (pinAttempt.status === "invalid") {
       return { ok: false, message: "Ungültige PIN oder inaktiver Benutzer." };
     }
-
-    const pinValid = await verifyAndMigratePin(user, pin);
-    if (!pinValid) {
-      await recordFailedPinAttempt(user.id);
-      return { ok: false, message: "Ungültige PIN oder inaktiver Benutzer." };
-    }
-
-    await resetPinRateLimit(user.id);
 
     const displayName = user.fullName?.trim();
     if (!displayName) {
-      console.error("loginWithPin: user.fullName is empty for userId:", userId);
+      console.error("loginWithPin: user.fullName is empty for resolved operator.");
       return {
         ok: false,
         message: "Kein Anzeigename für diesen Benutzer konfiguriert. Bitte Administrator kontaktieren.",

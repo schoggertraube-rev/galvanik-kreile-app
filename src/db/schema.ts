@@ -20,7 +20,7 @@ export const appUsers = pgTable("app_users", {
   wochenstunden: numeric("wochenstunden", { precision: 5, scale: 2 }),
   urlaubstageProJahr: integer("urlaubstage_pro_jahr"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
 export const pinRateLimits = pgTable("pin_rate_limits", {

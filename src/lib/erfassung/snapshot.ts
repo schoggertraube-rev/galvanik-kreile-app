@@ -11,6 +11,7 @@ export async function getKostensatz(
     .from('app_users')
     .select('kostensatz_eur_pro_stunde')
     .eq('id', employeeId)
+    .eq('tenant_id', tenantId)
     .single();
 
   if (!userError && userData?.kostensatz_eur_pro_stunde != null) {
@@ -38,12 +39,14 @@ export async function getKostensatz(
 
 export async function getEinkaufspreis(
   supabase: SupabaseClient,
-  inventoryItemId: string
+  inventoryItemId: string,
+  tenantId: string,
 ): Promise<number | null> {
   const { data, error } = await supabase
     .from('inventory_items')
     .select('einkaufspreis_eur')
     .eq('id', inventoryItemId)
+    .eq('tenant_id', tenantId)
     .single();
 
   if (!error && data?.einkaufspreis_eur != null) {

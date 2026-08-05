@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createAuthorizedDataClient, createClient } from '@/lib/supabase/server';
 import type { WorkEntry, MaterialEntry, ExtraCostEntry } from '@/lib/orders/costCalculation';
 import { db } from "@/db";
 import { arbeitszeitBuchung, events } from "@/db/schema";
@@ -185,7 +185,7 @@ export async function getStationCostSummary(orderId: string) {
 // Get benchmark data for a station
 // ─────────────────────────────────────────────
 export async function getBenchmarkData(station: string) {
-  const supabase = await createClient();
+  const supabase = await createAuthorizedDataClient('read');
 
   const { data: zeitVorlagen } = await supabase
     .from('vorlage_zeit')

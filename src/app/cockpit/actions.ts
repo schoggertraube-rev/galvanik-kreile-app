@@ -1,6 +1,10 @@
 "use server";
 
-import { createClient } from '@/lib/supabase/server';
+import {
+  createAuthorizedDataClient,
+  createAuthorizedDataContext,
+  createClient,
+} from '@/lib/supabase/server';
 import type { KontextDaten } from '@/lib/whatif/engine';
 
 export interface EngpassStation {
@@ -282,6 +286,7 @@ export async function getAuftragDbRanking(limit = 10): Promise<AuftragDbRankingR
 
 export async function getWhatIfKontext(): Promise<KontextDaten> {
   const supabase = await createClient();
+  const privileged = await createAuthorizedDataClient('read');
   
   const kontext: KontextDaten = {
     db_marge_je_ks: {},
@@ -294,7 +299,11 @@ export async function getWhatIfKontext(): Promise<KontextDaten> {
     kostenstellen_liste: []
   };
 
-  const { data: kostenstellen } = await supabase.from('kostenstelle').select('kuerzel, name, verfuegbare_stunden_monatlich').eq('typ', 'produktion');
+  const { data: kostenstellen } = await privileged
+    .from('kostenstelle')
+    .select('kuerzel, name, verfuegbare_stunden_monatlich')
+    .eq('tenant_id', 'galvanik-kreile')
+    .eq('typ', 'produktion');
   if (kostenstellen) {
     kontext.kostenstellen_liste = kostenstellen.map(ks => ({ kuerzel: ks.kuerzel, name: ks.name }));
     kostenstellen.forEach(ks => {
@@ -391,6 +400,7 @@ export async function getAuftragDbDetails(orderId: string): Promise<AuftragDbDet
 
 export async function getForecastDaten(): Promise<ForecastDaten> {
   const supabase = await createClient();
+  const privileged = await createAuthorizedDataClient('read');
   const { data: results, error } = await supabase.from('v_monatsergebnis')
     .select('monat, erloes_netto, ergebnis')
     .order('monat', { ascending: true })
@@ -401,7 +411,7 @@ export async function getForecastDaten(): Promise<ForecastDaten> {
     .order('erwarteter_monat', { ascending: true });
 
   const currentYear = new Date().getFullYear();
-  const { data: plan } = await supabase.from('forecast_version')
+  const { data: plan } = await privileged.from('forecast_version')
     .select('werte')
     .eq('tenant_id', 'galvanik-kreile')
     .eq('jahr', currentYear)
@@ -461,7 +471,7 @@ export async function getAgingRechnungen(bucket: string): Promise<AgingInvoiceRo
 }
 
 export async function getAktiveWarnungen(): Promise<ActiveWarning[]> {
-  const supabase = await createClient();
+  const supabase = await createAuthorizedDataClient('read');
   const { data, error } = await supabase
     .from('warning_event')
     .select('*')
@@ -491,9 +501,8 @@ export async function dismissWarnung(id: string, begruendung: string) {
     throw new Error("Begründung muss mindestens 10 Zeichen lang sein.");
   }
   
-  const supabase = await createClient();
-  const { data: userData } = await supabase.auth.getUser();
-  const userId = userData?.user?.id;
+  const { client: supabase, authorization } = await createAuthorizedDataContext('write');
+  const userId = authorization.userId;
   
   // Set suppress_bis to 7 days in future
   const suppressDate = new Date();
@@ -507,7 +516,8 @@ export async function dismissWarnung(id: string, begruendung: string) {
       begruendung: begruendung,
       suppress_bis: suppressDate.toISOString()
     })
-    .eq('id', id);
+    .eq('id', id)
+    .eq('tenant_id', authorization.tenantId);
 
   if (error) {
     console.error("Error dismissWarnung:", error.message, error.details, error.hint);
@@ -517,7 +527,7 @@ export async function dismissWarnung(id: string, begruendung: string) {
 }
 
 export async function refreshWarnungen() {
-  const supabase = await createClient();
+  const supabase = await createAuthorizedDataClient('write');
   const { error } = await supabase.rpc('fn_compute_warnings', { p_tenant: 'galvanik-kreile' });
   if (error) {
     console.error("Error refreshWarnungen:", error.message, error.details, error.hint);
@@ -527,7 +537,7 @@ export async function refreshWarnungen() {
 }
 
 export async function getAktiverJahresplan(jahr: number) {
-  const supabase = await createClient();
+  const supabase = await createAuthorizedDataClient('read');
   const { data, error } = await supabase
     .from('forecast_version')
     .select('*')
@@ -545,23 +555,22 @@ export async function getAktiverJahresplan(jahr: number) {
 }
 
 export async function speichereJahresplan(jahr: number, monate: Record<string, number>) {
-  const supabase = await createClient();
+  const { client: supabase, authorization } = await createAuthorizedDataContext('write');
   
   await supabase
     .from('forecast_version')
     .update({ ist_aktiv: false })
-    .eq('tenant_id', 'galvanik-kreile')
+    .eq('tenant_id', authorization.tenantId)
     .eq('jahr', jahr)
     .eq('version_typ', 'plan')
     .eq('ist_aktiv', true);
     
-  const { data: userData } = await supabase.auth.getUser();
-  const userId = userData?.user?.id;
+  const userId = authorization.userId;
 
   const { error } = await supabase
     .from('forecast_version')
     .insert({
-      tenant_id: 'galvanik-kreile',
+      tenant_id: authorization.tenantId,
       jahr,
       version_typ: 'plan',
       ist_aktiv: true,

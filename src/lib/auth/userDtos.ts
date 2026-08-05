@@ -1,8 +1,7 @@
 export type StartUserDto = {
-  id: string;
+  loginHandle: string;
   initials: string;
-  role: string;
-  fullName: string;
+  tileKind: "office" | "workshop";
 };
 
 export type StartUserSource = {
@@ -21,10 +20,6 @@ export type AdminUserDto = {
   language: string | null;
 };
 
-export type AdminUserSource = AdminUserDto & {
-  pinHash?: string | null;
-};
-
 export function deriveUserInitials(fullName: string): string {
   const normalized = fullName.trim();
   if (!normalized) return "?";
@@ -37,16 +32,18 @@ export function deriveUserInitials(fullName: string): string {
   return normalized.slice(0, 2).toUpperCase();
 }
 
-export function toStartUserDto(user: StartUserSource): StartUserDto {
+export function toStartUserDto(
+  user: StartUserSource,
+  loginHandle: string,
+): StartUserDto {
   return {
-    id: user.id,
-    fullName: user.fullName,
-    role: user.role,
+    loginHandle,
     initials: deriveUserInitials(user.fullName),
+    tileKind: user.role === "buero" ? "office" : "workshop",
   };
 }
 
-export function toAdminUserDto(user: AdminUserSource): AdminUserDto {
+export function toAdminUserDto(user: AdminUserDto): AdminUserDto {
   return {
     id: user.id,
     email: user.email,
