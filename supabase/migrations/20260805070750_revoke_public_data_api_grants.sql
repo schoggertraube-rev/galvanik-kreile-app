@@ -33,6 +33,12 @@ REVOKE ALL PRIVILEGES ON TABLE
   public.warning_event
 FROM anon, authenticated;
 
+-- New tables are created by the migration role. Keep their Data API surface
+-- fail-closed until a future migration explicitly grants a supported client
+-- path. Existing server-only service-role access is intentionally unchanged.
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM anon, authenticated;
+
 DO $$
 DECLARE
   exposed_table text;
@@ -69,10 +75,26 @@ BEGIN
   ) AS protected_tables(table_name)
   WHERE EXISTS (
     SELECT 1
-    FROM information_schema.role_table_grants grants
-    WHERE grants.table_schema = 'public'
-      AND grants.table_name = protected_tables.table_name
-      AND grants.grantee IN ('anon', 'authenticated')
+    FROM (VALUES ('anon'), ('authenticated')) AS roles(role_name)
+    WHERE has_table_privilege(
+      roles.role_name,
+      format('public.%I', protected_tables.table_name),
+      'SELECT'
+    )
+    OR has_table_privilege(
+      roles.role_name,
+      format('public.%I', protected_tables.table_name),
+      'INSERT'
+    )
+    OR has_table_privilege(
+      roles.role_name,
+      format('public.%I', protected_tables.table_name),
+      'UPDATE'
+    )
+    OR has_table_privilege(
+      roles.role_name,
+      format('public.%I', protected_tables.table_name),
+      'DELETE'
   )
   LIMIT 1;
 
@@ -81,3 +103,5 @@ BEGIN
   END IF;
 END
 $$;
+
+NOTIFY pgrst, 'reload schema';
