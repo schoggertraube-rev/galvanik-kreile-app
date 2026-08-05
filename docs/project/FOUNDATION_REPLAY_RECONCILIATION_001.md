@@ -1,6 +1,6 @@
 # FOUNDATION-REPLAY-RECONCILIATION-001
 
-Stand: 2026-08-05  
+Stand: 2026-08-05
 Status: `BASELINE_REQUIRED`; Draft-PR; kein Production-Write
 
 ## Verifizierter Befund
