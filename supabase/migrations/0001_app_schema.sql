@@ -217,3 +217,22 @@ CREATE TABLE price_agreements (
     CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
 );
 ALTER TABLE price_agreements ENABLE ROW LEVEL SECURITY; -- RLS aktivieren
+
+-- Tabelle: inquiries (QuoteRequests)
+CREATE TABLE inquiries (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(), -- Eindeutige Anfrage-ID
+    customer_id uuid, -- Optional, falls es ein bereits bekannter Bestandskunde ist
+    customer_name text NOT NULL, -- Name des Anfragenden (wichtig für Neukunden ohne Konto)
+    subject text NOT NULL, -- Betreff oder Titel der Anfrage
+    description text, -- Freitext der Anfrage vom Kunden
+    rust_level text, -- Bewerteter Zustand (z.B. Rostgrad) des Bauteils für den Aufwand
+    pricing jsonb, -- Kalkulierte Preisstruktur (Grundarbeit, Reinigung, etc.)
+    status text NOT NULL, -- Bearbeitungsstatus (z.B. offen, angeboten, abgelehnt)
+    photo_url text, -- Link zum angehängten Schadens- oder Teilefoto
+    received_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Tatsächlicher Eingang der Anfrage (E-Mail Datum)
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Anlage in der Datenbank
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL, -- Letzte Änderung
+    -- FK: SET NULL, falls ein Bestandskunde gelöscht wird, bleibt die alte Anfrage für die globale Statistik anonymisiert erhalten
+    CONSTRAINT fk_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+);
+ALTER TABLE inquiries ENABLE ROW LEVEL SECURITY; -- RLS aktivieren
