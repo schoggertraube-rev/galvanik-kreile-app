@@ -7,20 +7,24 @@ Status: Draft-PR; kein Production-Write
 
 Die historische Migrationskette war nicht von Null reproduzierbar:
 
-- `0001_app_schema.sql` erzeugte `public.inquiries`.
-- `0005_inquiries.sql` erzeugte dieselbe Relation erneut mit einem anderen Vertrag.
-- Ein Fresh Replay brach deshalb in `0005` mit SQLSTATE `42P07` ab.
-- Der Production-Ledger enthält beide Versionen als angewendet. Er ist damit kein Beweis, dass die eingecheckte Dateikette jemals sequenziell erfolgreich lief.
+- `0001_app_schema.sql` erzeugt den ersten, später abzulösenden Vertrag von `public.inquiries`.
+- `0002_rls_policies.sql` setzt Policies auf diese Legacy-Tabelle und benötigt sie deshalb.
+- `0005_inquiries.sql` versuchte dieselbe Relation erneut unbedingt zu erzeugen.
+- Der Fresh Replay brach deshalb ursprünglich in `0005` mit SQLSTATE `42P07` ab.
+- Der Production-Ledger enthält beide Versionen als angewendet. Er beweist nicht, dass die eingecheckte Dateikette jemals sequenziell erfolgreich lief.
 
-## Kanonischer Vertrag
+## Kanonischer Ablauf
 
-`0005_inquiries.sql` ist die dedizierte Eigentümermigration für die Erzeugung von `public.inquiries`. Der versehentliche `inquiries`-Block wurde aus `0001_app_schema.sql` entfernt.
+`0001` erzeugt die Legacy-Tabelle, damit `0002` ausführbar bleibt. `0005` entfernt diese zu diesem Zeitpunkt noch unbesiedelte Tabelle und erzeugt anschließend den neuen, kanonischen Vertrag.
+
+Die Korrektur liegt damit in der Migration, die den Vertragswechsel ohnehin beansprucht. `0001` bleibt unverändert.
 
 Diese historische Korrektur ist eine eng begrenzte Ausnahme vom Grundsatz, angewendete Migrationen nicht nachträglich zu ändern:
 
 - keine Production-DDL oder -DML;
 - keine Änderung am Production-Ledger;
 - keine Änderung an bestehenden Produktionsdaten;
+- Production führt `0005` nicht erneut aus, weil die Version dort bereits als angewendet registriert ist;
 - die ursprünglichen Production-Statements bleiben im realen Supabase-Ledger und im Ledger-Manifest nachvollziehbar;
 - keine andere historische Migration wird verändert.
 
