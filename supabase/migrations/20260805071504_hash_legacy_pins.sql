@@ -14,10 +14,14 @@ BEGIN
   END IF;
 
   UPDATE public.app_users
-  SET pin_hash = extensions.crypt(
-    pin_hash,
-    extensions.gen_salt('bf', 12)
-  )
+  SET
+    pin_hash = extensions.crypt(
+      pin_hash,
+      extensions.gen_salt('bf', 12)
+    ),
+    -- app_users has no update trigger. Advancing this canonical revocation
+    -- marker invalidates every session issued before the security migration.
+    updated_at = now()
   WHERE pin_hash ~ '^[0-9]{4}$';
 
   IF EXISTS (
