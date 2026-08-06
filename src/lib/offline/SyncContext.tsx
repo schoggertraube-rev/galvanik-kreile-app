@@ -67,21 +67,13 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const syncNow = useCallback(async () => {
+    // CONTAINMENT (OFFLINE-48H-001): No real server sync transport exists yet.
+    // The previous implementation deleted outbox items after a fake 600ms delay
+    // WITHOUT transmitting them to the server, causing silent data loss on
+    // reconnect. Until a real, verified sync transport is implemented, syncNow
+    // must NEVER remove or mutate outbox items. It only refreshes the snapshot
+    // so the UI reflects the pending, still-intact items.
     if (!isOnline) return;
-
-    const items = await offlineOutbox.getAllItems();
-    for (const item of items) {
-      if (item.status === "draft" || item.status === "queued" || item.status === "failed") {
-        try {
-          await new Promise((resolve) => setTimeout(resolve, 600));
-          await offlineOutbox.removeItem(item.id);
-        } catch {
-          item.status = "failed";
-          item.retryCount += 1;
-          await offlineOutbox.saveItem(item);
-        }
-      }
-    }
     await refreshOutboxSnapshot();
   }, [isOnline]);
 
@@ -103,7 +95,8 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     await refreshOutboxSnapshot();
   }, []);
 
-  // Auto sync when coming online
+  // CONTAINMENT (OFFLINE-48H-001): Auto-refresh outbox snapshot when coming
+  // online. This deliberately does NOT trigger any deletion or fake sync.
   useEffect(() => {
     if (isOnline && outboxItems.length > 0) {
       void syncNow();
