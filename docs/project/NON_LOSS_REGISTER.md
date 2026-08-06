@@ -1,6 +1,6 @@
 # Non-Loss Register
 
-Stand: 2026-08-05
+Stand: 2026-08-06
 
 Dieses Register schuetzt bestaetigte Produktziele, verschobene Missionen und verwertbare Alt-Arbeit vor stiller Verwerfung. Ein Eintrag darf nur mit belegter Produktentscheidung entfernt werden.
 
@@ -37,12 +37,45 @@ Dieses Register schuetzt bestaetigte Produktziele, verschobene Missionen und ver
 | `LIVE-AUTH-001` | Abgelaufene Sitzung schliesst Erfassung, loescht App-Session und fuehrt nach `/start`. | `ACTIVE` | Cookie-/Routengrenzen gehaertet; realer Ablauf mit zuvor gueltiger, dann abgelaufener Sitzung noch vollstaendig zu bestaetigen. |
 | `AUTH-IDENTITY-002` | Benutzerwechsel MK -> Admin -> MK ohne alte Rolle, Initialen, Rechte oder Sessionreste. | `DONE_VERIFIED` | PR #33; atomarer Auth-State und keine localStorage-Identitaet. |
 | `SEC-PIN-002` | PIN-Hashing-Grundlage, kein Default und zentrale Rollen-/Rotationsregeln. | `DONE_VERIFIED` | PR #37 als Grundlage; Recovery-Kandidat entfernt zusaetzlich Klartext-Schreibpfade. |
-| `SEC-PIN-002B` | Device-/Challenge-Grenze, serialisierter Fehlversuchsschutz, Session-Widerruf, Bestandsrotation und finaler Plaintext-Ausschluss. | `ACTIVE` | Recovery-Kandidat schliesst Race, Rotation, Bestandsmigration und Session-Widerruf; Device-Challenge bleibt Produktentscheidung. Production weiterhin 0/6 bcrypt. |
-| `RLS-CONTRACT-001` | Rollen-/Tenant-/Grant-/Relationsvertrag und relationenweise Fail-closed-Policies. | `ACTIVE` | Recovery-Kandidat entzieht 26 offenen Tabellen die Data-API-Grants; relationenweise RLS-/Policy-Matrix bleibt danach offen. |
+| `SEC-PIN-002B` | Device-/Challenge-Grenze, serialisierter Fehlversuchsschutz, Session-Widerruf, Bestandsrotation und finaler Plaintext-Ausschluss. | `ACTIVE` | Race, Rotation, Bestandsmigration und Session-Widerruf umgesetzt; Device-Challenge bleibt Produktentscheidung. Production 2026-08-05 auf 6/6 bcrypt migriert und verifiziert. Leaked-Password-Schutz vor Go-live im Dashboard aktivieren. |
+| `RLS-CONTRACT-001` | Rollen-/Tenant-/Grant-/Relationsvertrag und relationenweise Fail-closed-Policies. | `ACTIVE` | 2026-08-05 allen Tabellen/Views die Data-API-Grants entzogen (0 Grants verifiziert). Relationenweise RLS-/Policy-Matrix und tenant_isolation bleiben offen (architektonisch noch nicht sauber). |
 | `OFFLINE-SHELL-001` | Eine Service-Worker-Registrierung; App-Shell offline nutzbar. | `READY_AFTER_DEPENDENCY` | Nach Quality-/Identity-Vertrag. |
 | `OFFLINE-48H-001` | 48 Stunden arbeitsfaehig mit einer Outbox, verlustfreier Altqueue-Drainage, Neustart, Konflikt- und Wiederholschutz. | `READY_AFTER_DEPENDENCY` | Benoetigt stabile Shell, Receipt-Writer/Readback sowie Inventar, idempotenten Import, Quarantaene, Nutzeranzeige und Rollback fuer bestehende Browserqueues. |
 | `SEC-STORAGE-001` | MIME-, Groessen-, Pfad-, Tenant- und Storage-Limits fuer Fotos/Dokumente. | `READY_AFTER_DEPENDENCY` | Mit Capture-/Storage-Vertrag. |
 | `BACKUP-RESTORE-001` | Daten, Dokumente, Fotos, Audit und Wiederherstellung nachweisbar sichern. | `PROTECTED_BACKLOG` | Vor Verkauf/Go-live vollstaendig testen. |
+
+## Angewandte Production-Aenderungen und Fundament-Fixes (2026-08-06)
+
+Additiv ergaenzt. Kein Eintrag oben wurde entfernt.
+
+### Angewandte Production-Aenderungen ausserhalb Ledger (`APPLIED_NOT_IN_LEDGER`)
+
+| Aenderung | Datum | Nachweis | Restarbeit |
+|---|---|---|---|
+| Data-API-Grant-Entzug (alle Tabellen/Views, `anon`/`authenticated`) | 2026-08-05 | 0 Grants per SQL verifiziert | ledgerfaehig nachziehen |
+| Default-Privileges fail-closed (`postgres`) | 2026-08-05 | Migration angewandt | ledgerfaehig nachziehen |
+| PIN-Bestand bcrypt cost 12 | 2026-08-05 | 6/6 verifiziert, 0 Legacy | ledgerfaehig nachziehen |
+| D1 - Bucket `belege` privat | 2026-08-06 | `storage.buckets.public=false` verifiziert | Signed-URL-Umstellung (`SEC-STORAGE-BELEGE-001`) |
+| D2 - EXECUTE-Entzug 9 App-Funktionen von `PUBLIC`/`anon`/`authenticated` | 2026-08-06 | `has_function_privilege` false fuer anon/auth; service_role/postgres behalten | ledgerfaehig nachziehen |
+| Loeschung aller Tenant-Geschaeftsdaten | 2026-08-06 | ausdrueckliche Freigabe; alle Kern-/Abhaengigkeitstabellen = 0; 6 `app_users` erhalten | keine |
+
+### Fundament-Fixes als offene PRs (CI gruen, ungemergt)
+
+| PR | ID | Inhalt | Status |
+|---|---|---|---|
+| `#42` | `OFFLINE-DATALOSS-001` | SyncContext: kein Fake-Sync/Loeschen ohne Serveruebertragung | offen, Review PASS, kein Merge ohne Freigabe |
+| `#43` | `INQUIRIES-SERVER-ACTION-001` | `inquiriesRepository` auf Server Action; kein Fake-Success | offen, Review PASS, kein Merge ohne Freigabe |
+| `#44` | `TODAY-DATA-CONTRACT-001` | `dueValue`/`risk` server-seitig aus echtem `dueDate`; Mock-Typen raus | offen, Review PASS, kein Merge ohne Freigabe |
+| `#41` | Docs/Offline-Containment | kuerzt geschuetzte Anforderungen | **nicht als-is mergen**; durch Doku-Korrektur ersetzt |
+
+### Neue / aktualisierte offene Missionen
+
+| ID | Ziel | Status | Nachweis / Restarbeit |
+|---|---|---|---|
+| `LEDGER-CONSOLIDATION-001` | `execute_sql`-Aenderungen ledgerfaehig nachziehen; Fresh-Replay herstellen | `ACTIVE` | Voraussetzung fuer Migrationswahrheit |
+| `SEC-STORAGE-BELEGE-001` | `belege`-Anzeige/Download auf serverseitige Signed URLs | `READY` | Bucket ist privat; getPublicUrl darf hier nicht verwendet werden |
+| `SUPABASE-ADMIN-DEFAULTPRIV-001` | Default Privileges von `supabase_admin` schliessen | `BLOCKED_EXTERNAL` | nur ueber Dashboard/Owner |
+| `SYSTEMATIC-AUDIT-001` | Alle Client-Supabase-/Upload-/Rechnungs-/Reklamationspfade systematisch pruefen | `OPEN` | bisher nur review-benannte Dateien verifiziert |
 
 ## Offene PRs und Branch-Disposition
 
