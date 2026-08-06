@@ -126,6 +126,56 @@ versionsabhängiger, nicht semantischer Katalogdarstellung außer Betracht:
 
 Jede weitere Abweichung ist unklassifiziert und führt zu `FAIL`.
 
+### Vollständigkeitsinventar
+
+`scripts/schema-parity-inventory.json` bindet den Paritätsprüfer an den am
+2026-08-06 read-only erneut gezählten Production-Scope:
+
+| Kategorie | Einträge |
+|---|---:|
+| column | 1.312 |
+| constraint | 253 |
+| default_privilege | 72 |
+| extension | 5 |
+| function | 21 |
+| function_grant | 50 |
+| index | 178 |
+| policy | 71 |
+| relation | 113 |
+| relation_grant | 1.736 |
+| storage_bucket | 4 |
+| trigger | 7 |
+| view | 17 |
+| **Gesamt** | **3.839** |
+
+Production- und Local-Snapshot müssen jede Kategorie und die Gesamtsumme exakt
+erfüllen. Darüber hinaus enthält das Inventar für jede Kategorie zwei SHA-256-
+Verträge: einen über die sortierten Objekt-Keys und einen über die sortierten
+Paare aus Objekt-Key und normalisierter Payload. Ein globaler Inhalts-Digest
+bindet zusätzlich alle 3.839 Zeilen in ihrer Kategorie-/Key-Reihenfolge. Damit
+führen auch gleich große, symmetrisch manipulierte Snapshots zwingend zu
+`FAIL`; reine Zeilenzahlen sind kein Paritätsnachweis.
+
+Der Capture-Receipt wurde am `2026-08-06T06:54:55Z` mit der unveränderten,
+read-only ausgeführten Datei `scripts/schema-parity-catalog.sql` gegen das
+Supabase-Projekt `syhaigjhsbpjmtnggqka` erzeugt. Dabei wurden nur
+PostgreSQL-Katalogmetadaten und die vier Bucket-Konfigurationszeilen gelesen;
+keine Nutzdaten, Auth-Nutzer oder Storage-Objekte. Der maschinenprüfbare Vertrag
+lautet:
+
+- Katalog-SHA-256:
+  `175b8ca9f8b964532ef8ad6a5cff710fcea833874ceb5f7b1f7cf358f5a1357d`
+- globaler normalisierter Inhalts-SHA-256:
+  `bef3cba9f5025181413c1247159752e867018c7049da0198c86263bd310cfd25`
+- Ergebnis: `3.839` Zeilen und die oben ausgewiesenen 13 Kategorien
+
+Der Prüfer validiert Capture-Methode, Projekt-Referenz, Zeitpunkt, Scope,
+Katalog-Hash, Payload-Form je Kategorie sowie sämtliche Key-/Inhalts-Digests.
+Die vollständigen 13 Kategorieverträge stehen ohne Schema-Inhalte in
+`scripts/schema-parity-inventory.json`. Änderungen an Katalogabfrage,
+Objektinventar oder Payloads verlangen daher einen neuen dokumentierten
+read-only Production-Capture.
+
 ## Ledger-Abgrenzung
 
 - Historisches Production-Ledger: 96 Einträge, unverändert archiviert.
