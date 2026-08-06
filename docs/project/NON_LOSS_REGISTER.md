@@ -1,6 +1,6 @@
 # Non-Loss Register
 
-Stand: 2026-08-05
+Stand: 2026-08-06
 
 Dieses Register schuetzt bestaetigte Produktziele, verschobene Missionen und verwertbare Alt-Arbeit vor stiller Verwerfung. Ein Eintrag darf nur mit belegter Produktentscheidung entfernt werden.
 
@@ -37,85 +37,43 @@ Dieses Register schuetzt bestaetigte Produktziele, verschobene Missionen und ver
 | `LIVE-AUTH-001` | Abgelaufene Sitzung schliesst Erfassung, loescht App-Session und fuehrt nach `/start`. | `ACTIVE` | Cookie-/Routengrenzen gehaertet; realer Ablauf mit zuvor gueltiger, dann abgelaufener Sitzung noch vollstaendig zu bestaetigen. |
 | `AUTH-IDENTITY-002` | Benutzerwechsel MK -> Admin -> MK ohne alte Rolle, Initialen, Rechte oder Sessionreste. | `DONE_VERIFIED` | PR #33; atomarer Auth-State und keine localStorage-Identitaet. |
 | `SEC-PIN-002` | PIN-Hashing-Grundlage, kein Default und zentrale Rollen-/Rotationsregeln. | `DONE_VERIFIED` | PR #37 als Grundlage; Recovery-Kandidat entfernt zusaetzlich Klartext-Schreibpfade. |
-| `SEC-PIN-002B` | Device-/Challenge-Grenze, serialisierter Fehlversuchsschutz, Session-Widerruf, Bestandsrotation und finaler Plaintext-Ausschluss. | `ACTIVE` | Recovery-Kandidat schliesst Race, Rotation, Bestandsmigration und Session-Widerruf; Device-Challenge bleibt Produktentscheidung. Production weiterhin 0/6 bcrypt. |
-| `RLS-CONTRACT-001` | Rollen-/Tenant-/Grant-/Relationsvertrag und relationenweise Fail-closed-Policies. | `ACTIVE` | Recovery-Kandidat entzieht 26 offenen Tabellen die Data-API-Grants; relationenweise RLS-/Policy-Matrix bleibt danach offen. |
+| `SEC-PIN-002B` | Device-/Challenge-Grenze, serialisierter Fehlversuchsschutz, Session-Widerruf, Bestandsrotation und finaler Plaintext-Ausschluss. | `ACTIVE` | Race, Rotation, Bestandsmigration und Session-Widerruf umgesetzt; Device-Challenge bleibt Produktentscheidung. Production 2026-08-05 auf 6/6 bcrypt migriert und verifiziert. Leaked-Password-Schutz vor Go-live im Dashboard aktivieren. |
+| `RLS-CONTRACT-001` | Rollen-/Tenant-/Grant-/Relationsvertrag und relationenweise Fail-closed-Policies. | `ACTIVE` | 2026-08-05 allen Tabellen/Views die Data-API-Grants entzogen (0 Grants verifiziert). Relationenweise RLS-/Policy-Matrix und tenant_isolation bleiben offen (architektonisch noch nicht sauber). |
 | `OFFLINE-SHELL-001` | Eine Service-Worker-Registrierung; App-Shell offline nutzbar. | `READY_AFTER_DEPENDENCY` | Nach Quality-/Identity-Vertrag. |
 | `OFFLINE-48H-001` | 48 Stunden arbeitsfaehig mit einer Outbox, verlustfreier Altqueue-Drainage, Neustart, Konflikt- und Wiederholschutz. | `READY_AFTER_DEPENDENCY` | Benoetigt stabile Shell, Receipt-Writer/Readback sowie Inventar, idempotenten Import, Quarantaene, Nutzeranzeige und Rollback fuer bestehende Browserqueues. |
 | `SEC-STORAGE-001` | MIME-, Groessen-, Pfad-, Tenant- und Storage-Limits fuer Fotos/Dokumente. | `READY_AFTER_DEPENDENCY` | Mit Capture-/Storage-Vertrag. |
 | `BACKUP-RESTORE-001` | Daten, Dokumente, Fotos, Audit und Wiederherstellung nachweisbar sichern. | `PROTECTED_BACKLOG` | Vor Verkauf/Go-live vollstaendig testen. |
 
-## Offene PRs und Branch-Disposition
+## Angewandte Production-Aenderungen und Fundament-Fixes (2026-08-06)
 
-| Quelle | Status | Geschuetzter Wert | Verbot / naechste Aktion |
+Additiv ergaenzt. Kein Eintrag oben wurde entfernt.
+
+### Angewandte Production-Aenderungen ausserhalb Ledger (`APPLIED_NOT_IN_LEDGER`)
+
+| Aenderung | Datum | Nachweis | Restarbeit |
 |---|---|---|---|
-| PR `#8`, `fix/auth-identity-002-root`, Head `007b85bec133ea77675b9eb851d398b707ef905d`, PR-Base/Merge-Base `78c761f66f5bff2279ecc5bcfd1dd0a6462ffbba` | `PROTECTED_SALVAGE` | Identity-Switch-/Permissions-Ideen und Tests | Archiv `archive/pr-8-auth-identity-002-007b85b`, 3 Commits/15 Dateien; nicht mergen, Schliessung erst nach Truth-Kommentar |
-| PR `#15`, `feature/capture-auth-tenant`, Head `f0090ab33fecac024415752366101add6102eb7f`, historischer PR-Base `02906c400516a765d07ac15455cfa6c668bd495a`, aktueller Merge-Base `27c463421af0aed98c85f173609855d41ff894b2` | `PROTECTED_SALVAGE` | Capture/Auth/Tenant-, Test- und CI-Arbeit aus 48 Commits | Archiv `archive/pr-15-capture-auth-tenant-f0090ab`, 48 Commits/149 Dateien; kein Sammelmerge |
-| PR `#19`, `codex/foundation-security-remediation-20260715`, Head `338a13c09228ea1943bd06c40d4abbdea177a1e2`, PR-Base/Merge-Base `6e1d1831be823b7655130f0f46ba964d45c4b8dc` | `PROTECTED_SALVAGE` | Security-, Tenant-, RLS-, Schema- und Testkandidaten | Archiv `archive/pr-19-foundation-security-338a13c`, 11 Commits/692 Dateien; acht `20260713...`-Versionen sind ledger-registriert, Branch-Blobs unverified |
-| PR `#20`, `codex/foundation-consolidation-v3-20260728`, Head `2589fdebb198720b168aab359236673e39c911d5`, PR-Base/Merge-Base `6e1d1831be823b7655130f0f46ba964d45c4b8dc` | `PROTECTED_SALVAGE` | Fail-closed-Adapter, Tests und Dispositionsmaterial | Archiv `archive/pr-20-foundation-consolidation-2589fde`, 12 Commits/430 Dateien; nicht mergen |
-| geschlossener PR `#21` | `PROTECTED_SALVAGE` | Nachweis, dass die lokale Historie keinen Fresh-Replay besteht | nicht wiedereroeffnen/wholesale uebernehmen; Befund in `DB-TRUTH-001` verwenden |
-| uebrige Remote-Branches | `PROTECTED_SALVAGE` | moegliche Einzelideen und historische Nachweise | keine pauschale Loeschung; erst maschinenlesbares Inventar und Einzelentscheidung |
+| Data-API-Grant-Entzug (alle Tabellen/Views, `anon`/`authenticated`) | 2026-08-05 | 0 Grants per SQL verifiziert | ledgerfaehig nachziehen |
+| Default-Privileges fail-closed (`postgres`) | 2026-08-05 | Migration angewandt | ledgerfaehig nachziehen |
+| PIN-Bestand bcrypt cost 12 | 2026-08-05 | 6/6 verifiziert, 0 Legacy | ledgerfaehig nachziehen |
+| D1 вЂ” Bucket `belege` privat | 2026-08-06 | `storage.buckets.public=false` verifiziert | Signed-URL-Umstellung (`SEC-STORAGE-BELEGE-001`) |
+| D2 вЂ” EXECUTE-Entzug 9 App-Funktionen von `PUBLIC`/`anon`/`authenticated` | 2026-08-06 | `has_function_privilege` false fuer anon/auth; service_role/postgres behalten | ledgerfaehig nachziehen |
+| Loeschung aller Tenant-Geschaeftsdaten | 2026-08-06 | ausdrueckliche Freigabe; alle Kern-/Abhaengigkeitstabellen = 0; 6 `app_users` erhalten | keine |
 
-Ein geschlossener PR verliert seinen Branch nicht automatisch. PR-Schliessung beendet nur die falsche Darstellung als aktiver Lieferkandidat.
+### Fundament-Fixes als offene PRs (CI gruen, ungemergt)
 
-## Lokale und externe Arbeitsstaende
-
-| Quelle | Status | Regel |
-|---|---|---|
-| lokaler `main`-Worktree | sauber | exakt `origin/main`; keine Mission direkt darin entwickeln |
-| `codex/foundation-gap-fill-001` | isolierter Recovery-Kandidat | Nur die verifizierten Claude-Luecken; kein Merge, Deploy oder Remote-DB-Write ohne Freigabe. |
-| lokaler Truth-Worktree | isolierter Kandidat | nur kanonische Projekt-Dokumente |
-| PIN-Checkpoint | `CANDIDATE_NO_MERGE` | Tree-identischer Remote-Checkpoint `dad42eb...` zu `d7d2bd3...`; bewusst kein lokaler Worktree und nicht mit Truth-/Lint-Arbeit vermischen |
-| frueher genannter Windows-Dirty-Checkout | `UNKNOWN_EXTERNAL` | bekannte Hinweise: `diagnose/auth-session-permissions-2026-06-17@1621702`, bessere Offline-/Service-Worker-Arbeit sowie nicht versionierte Capture-/Foto-/Testarbeit; read-only inventarisieren, dann gezielt committen; kein Reset/Stash/Delete |
-
-## Operativer Kern und Erfassung
-
-| ID | Ziel | Status | Abhaengigkeit / Nachweis |
+| PR | ID | Inhalt | Status |
 |---|---|---|---|
-| `APP-STRUCTURE-001` | Zielgrenzen und Import-/Ownership-Vertrag fuer den realen Vertikalschnitt festlegen. | `PARTIAL` | PR #36 brachte Ownership-/Importregeln; verbleibender Vertrag folgt nach Foundation-Recovery, ohne Big-Bang-Umsortierung. |
-| `OPERATIVE-SLICE-001` | Kunde -> Auftrag -> Behaelter/QR -> Teil -> Arbeitsaktion -> Today -> Receipt -> Readback. | `BLOCKED` | Strukturvertrag, PIN-/Rollen-/RLS-Grenze und W1-Runtime-Writer fehlen. |
-| `CAPTURE-ORIGINAL-001` | Eine kanonische Originalerfassung vor OCR und Zuordnung. | `READY_AFTER_DEPENDENCY` | Identitaet und Offline-Shell stabil. |
-| `OFFLINE-CAPTURE-001` | Foto/Datei offline sichern, Neustart ueberstehen und genau einmal synchronisieren. | `READY_AFTER_DEPENDENCY` | `CAPTURE-ORIGINAL-001`, `OFFLINE-48H-001`. |
-| `APP-0001D-A` | Echte Kamera und Datei-Upload als getrennte, verstaendliche Wege. | `READY_AFTER_DEPENDENCY` | Salvage aus `feature/capture-auth-tenant`. |
-| `APP-0001D-B` | OCR, privater Storage, `item_photos`, Signed URLs und Orphan-Cleanup. | `BLOCKED` | Remote-Schema, Migrationsquelle, Drizzle und RLS zuerst abgleichen. |
-| `OCR-REVIEW-001` | Konfidenz je Feld; nur unsichere Felder pruefen. | `READY_AFTER_DEPENDENCY` | OCR-Vertrag. |
-| `CAPTURE-ASSIGN-001` | Kunde, Auftrag und Teilgruppe sicher vorschlagen/zuordnen. | `READY_AFTER_DEPENDENCY` | Original- und OCR-Vertrag. |
-| `LABEL-QR-001` | QR-/Etiketterkennung als schneller Zuordnungsweg. | `READY_AFTER_DEPENDENCY` | Teil des operativen Vertikalschnitts fuer Behaelteridentitaet. |
-| `WARENEINGANG-EVENT-001` | Aufnahme erzeugt nachvollziehbares Wareneingangsereignis. | `READY_AFTER_DEPENDENCY` | Zuordnung und Receipt-Vertrag stehen. |
-| `FIRST-PRODUCTION-CARD-001` | Erster vollstaendiger Eingang bis sichtbarer Produktionskarte. | `READY_AFTER_DEPENDENCY` | Wareneingangsereignis, Timeline und Today-Read-Model. |
-| `FIRST-WARENEINGANG-E2E-001` | Original bis Kunde, Auftrag, Teil, Wareneingangsereignis, Timeline, Produktionskarte und Reload belegen. | `READY_AFTER_DEPENDENCY` | Operativer Slice, Capture-/Storage- und Offline-Vertrag muessen bestanden sein. |
-| `AI-PHOTO-001` | Optionale Teile-/Zustandsanalyse mit Quellen, Konfidenz und Review. | `DEFERRED_WITH_REASON` | Erst nach belastbarer Original-, Storage- und Zuordnungsbasis. |
-| `APP-PHOTO-002` | Wiederholungs- und Nacharbeitsfotos ohne Duplikat-/Verlustpfad. | `READY_AFTER_DEPENDENCY` | `APP-0001D-B`. |
+| `#42` | `OFFLINE-DATALOSS-001` | SyncContext: kein Fake-Sync/Loeschen ohne Serveruebertragung | offen, Review PASS, kein Merge ohne Freigabe |
+| `#43` | `INQUIRIES-SERVER-ACTION-001` | `inquiriesRepository` auf Server Action; kein Fake-Success | offen, Review PASS, kein Merge ohne Freigabe |
+| `#44` | `TODAY-DATA-CONTRACT-001` | `dueValue`/`risk` server-seitig aus echtem `dueDate`; Mock-Typen raus | offen, Review PASS, kein Merge ohne Freigabe |
+| `#41` | Docs/Offline-Containment | kuerzt geschuetzte Anforderungen | **nicht als-is mergen**; durch Doku-Korrektur ersetzt |
 
-## Modularitaet und Wiederverwendung
+### Neue / aktualisierte offene Missionen
 
-| ID | Ziel | Status | Abhaengigkeit / Nachweis |
+| ID | Ziel | Status | Nachweis / Restarbeit |
 |---|---|---|---|
-| `MODULAR-CORE-001` | Neue Module ueber Ports/Provider, Typen, Props und Konfiguration entkoppeln. | `ACTIVE` | Gilt fuer jede neue Mission; Ist-Struktur ist noch route-first und stark gekoppelt. |
-| `LEDGER-CORE-PREP-001` | Buchhaltungs-/OCR-Inventar, Schnittkanten, Direktzugriffe und spaetere Paketgrenze dokumentieren. | `READY_AFTER_DEPENDENCY` | Nach operativem Kern und stabiler Buchhaltungswahrheit; keine Extraktion. |
-| `LEDGER-CORE-EXTRACT-001` | Stabilen Buchhaltungskern einmal kontrolliert herausloesen. | `DEFERRED_WITH_REASON` | Erst nach produktiver Buchhaltung und belegter End-to-End-Nutzung. |
-| `SHARED-MODULE-CATALOG-001` | Capture, Suche, Timeline, Offline-Outbox und Analyse anhand realer Vertraege katalogisieren. | `PROTECTED_BACKLOG` | Keine vorschnelle Generalisierung. |
-
-## Geschuetzte Produktroadmap
-
-| Bereich | Geschuetztes Ziel | Status |
-|---|---|---|
-| Kontroll-Cockpit | Cash, offene Auftraege, Engpaesse, Termine, Verspaetungen und erwartete Einnahmen als handlungsorientierte Chefansicht. | `PROTECTED_BACKLOG` |
-| Planbarkeit | Investitions-, Personal-, Fahrzeug- und Liquiditaetsentscheidungen mit Schwellenwerten, Prognosen und Gesamtkosten. | `PROTECTED_BACKLOG` |
-| Auftragstimeline | Vollstaendiger Verlauf von Kontakt und Eingang bis Rechnung, Zahlung, Versand, Reklamation und Folgeauftrag. | `PROTECTED_BACKLOG` |
-| Buchhaltung | Belege, Rechnungen, Zahlungen, DATEV/CSV/ZIP, UStVA, Audit und Senden-Button mit realen Daten. | `PROTECTED_BACKLOG` |
-| Such-Gehirn | Suche ueber Kunden, Auftraege, Teile, Dokumente, Kommunikation und Geld mit Beziehungsart und belegten Quellen. | `PROTECTED_BACKLOG` |
-| KI-Entscheidungen | Antworten mit Quellen, Links, Stichworten, Graphiken, Kostenfreigabe und nachvollziehbarer Unsicherheit. | `PROTECTED_BACKLOG` |
-| Kundenkarte | Kundenwissen, Beziehungen, Freitext, Quellenqualitaet und optionale Deep-Research-Anreicherung. | `PROTECTED_BACKLOG` |
-| Kommunikation | Telefonnotiz, E-Mail, Bilder, Rueckruf, Anfrage und Kundenkontext in einer Arbeitsflaeche. | `PROTECTED_BACKLOG` |
-| Marketing | Aktion -> Reichweite -> Klick -> Anfrage -> Auftrag -> Umsatz/Marge mit Attribution und Lernschleife. | `PROTECTED_BACKLOG` |
-| Lager/Baeder/Energie/QS/KVP | Operative Bestaende, Badwerte, Energie, Qualitaet, Reklamationen und Verbesserungen mit realen Daten. | `PROTECTED_BACKLOG` |
-| Performance | Fluessige Tablet-/Desktop-Nutzung, kein Jank, keine flackernden oder unkontrolliert schliessenden Overlays. | `PROTECTED_BACKLOG` |
-| Modularer Kern | Tenant-Begriffe, Vertraege und Konfiguration zentral; keine Tiefimporte oder zweite Wahrheiten. | `PROTECTED_BACKLOG` |
-
-## Nutzer-Twins als Abnahmeregel
-
-- **Rolf:** Desktop primaer; Kontrolle, Geld, Termine, Freigaben und Planbarkeit ohne KPI-Wand.
-- **Philipp:** Tablet primaer; Produktion und Zahlen ohne zusaetzliche Buerarbeit.
-- **Michael:** stark gefuehrte Aufnahme, Telefon, E-Mail, Eingang und Ausgang; geringe Technikroutine.
-
-Keine Mission gilt als produktreif, wenn der relevante Nutzer-Twin den Kernweg nicht ohne versteckte Entwicklerkenntnisse ausfuehren kann.
+| `LEDGER-CONSOLIDATION-001` | `execute_sql`-Aenderungen ledgerfaehig nachziehen; Fresh-Replay herstellen | `ACTIVE` | Voraussetzung fuer Migrationswahrheit |
+| `SEC-STORAGE-BELEGE-001` | `belegekP[ћ™ZYЩKСЭЫ›ШY]Y€Щ\ќ™\њЩZ]YЩHЪYЫ™YT“И‘PQXќXЪЩ]\Эљ]]ИЩ]X›XХ\›\™€Y\€љXЪ™\ќЩ[™]Щ\™[€џХTPђTСKPQRS‹QQђUS’U‹LXY][љ]љ[YЩ\И›Ы€Э\X\ЩWШYZ[ШЪY\ЬЩ[€“РТСQСVT“ђSќ\€YX™\€\Ъ›Ш\™УЭЫ™\€џЦTХSPUPЛPUQULX[HЫY[ќTЭ\X\ЩKKХ\ШYKФ™XЪќ[™ЬЛKФ™ZЫ[X][ЫњЬYHЮ\Э[X]\ШЪќYY™[€ФSљ\Ъ\€ќ\€™]љY]ЛX™[[›ќH]ZY[€™\љYљ^љY\ќ‚€ИИЩ™™[™HњИ[™њ[ЪQ\ЬЬЪ][Ы‚‚џ]Y[HЭ]\ИЩ\ШЪY]ќ\€Щ\ќ™\›ЭИYXЪЭHZЭ[Ы€џKK_KK_KK_KK_џ€Ољ^Ш]]ZY[ќ]KL‹\›ЫЭXYШЋX™XМLМЩXMННЌНXЋYXЋLYОNЌМЩYЋLY‹P\ЩKУY\™ЩKP\ЩHОННЊYЌЌ™ЌX™™ЊЊЌОYXШНXЩ™YMЌЊ™™X“ХPХQФРSђQСXY[ќ]KTЭЪ]ЪKФ\›Z\ЬЪ[ЫњЛRYY[€[™\ЭИ\Ъ]€\Ъ]™KЬ‹NX]]ZY[ќ]KL‹LШЋXИЫЫ[Z]ЛМMH]ZY[ЋИљXЪY\™Щ[‹ШЪY\ЬЭ[™И\њЭXЪќ]RЫЫ[Y[ќ\€џ€МMX™X]\™KШШ\\™KX]]][[ќXYЊLXЊМЩ™XШXМЌMMНLЊНЌЊLXYЊL™XЌЩ\ЭЬљ\ШЪ\€‹P\ЩHЋLНLMMНЌYШXМMMMXЩMНЌЋ™MXXZЭY[\€Y\™ЩKP\ЩHЌШНЊНЊXYЊYYNОYЊMМНЊNMYY™ЋMЊ“ХPХQФРSђQСXШ\\™KР]]Х[[ќK\ЭH[™ТKP\™Z]]\ИЫЫ[Z]И\Ъ]€\Ъ]™KЬ‹LMKXШ\\™KX]]][[ќYЊLXЫЫ[Z]ЛМMH]ZY[ЋИЩZ[€Ш[[Y[Y\™ЩHџ€МNXЫЩ^Щ›Э[™][Ы‹\ЩXЭ\љ]K\™[YYX][Ы‹LЊЌЊМMXXYМОLLШМLЊЋXLNMШ™НX™XLMНШLYL‹P\ЩKУY\™ЩKP\ЩH™LYNМX™NЊШЌНЌMLLМЊЌNMЌXНЋШ“ХPХQФРSђQСXЩXЭ\љ]KK[[ќK“ЛKШЪ[XKH[™\ЭШ[™Y][€\Ъ]€\Ъ]™KЬ‹LNKY›Э[™][Ы‹\ЩXЭ\љ]KLМОLLШШLHЫЫ[Z]ЛНЋL€]ZY[ЋИXЪЊЌЊМLЛ‹‹U™\њЪ[Ы™[€Ъ[™YЩ\‹\™YЪ\ЭљY\ќњ[ЪP›ШњИ[ќ™\љYљYYџ€МЊЫЩ^Щ›Э[™][Ы‹XЫЫњЫЫY][Ы‹]ЊЛLЊЌЊМЋXYЌNY™XЊNNМЊЊMЋXXЊНNLЊНЌЌМЩLОXОLLYX‹P\ЩKУY\™ЩKP\ЩH™LYNМX™NЊШЌНЌMLLМЊЌNMЌXНЋШ“ХPХQФРSђQСXZ[XЫЬЩYPY\\‹\ЭИ[™\ЬЬЪ][ЫњЫX]\љX[\Ъ]€\Ъ]™KЬ‹LЊY›Э[™][Ы‹XЫЫњЫЫY][Ы‹LЌNY™XL€ЫЫ[Z]ЛНМ]ZY[ЋИљXЪY\™Щ[€џЩ\ШЪЬЬЩ[™\€€МЊX“ХPХQФРSђQСXXЪЩZ\Л\ЬИYHЪШ[H\ЭЬљYHЩZ[™[€њ™\ЪT™\^H™\ЭZљXЪЪYY\™\›ЩY™›™[‹ЭЪЫ\Ш[HYX™\›™ZY[ЋИ™Yќ[™[€‹U•ULX™\ќЩ[™[€џYXњљYЩH™[[ЭKPњ[Ъ\И“ХPХQФРSђQСX[ЩYЫXЪHZ[ћ™[YY[€[™\ЭЬљ\ШЪHXЪЩZ\ЩHЩZ[™H]\ШЪ[HЩ\ШЪ[™ОИ\њЭX\ШЪ[™[›\Ш\™\И[ќ™[ќ\€[™Z[ћ™[[ќШЪZY[™И‚‘Z[€Щ\ШЪЬЬЩ[™\€€™\›Y\ќЩZ[™[€њ[ЪљXЪ]]ЫX]\ШЪ€‹TШЪY\ЬЭ[™И™Y[™]ќ\€YH[ШЪH\њЭ[[™И[ИZЭ]™\€YY™\љШ[™Y]‚‚€ИИЪШ[H[™^\›™H\™Z]ЬЭY[™B‚џ]Y[HЭ]\И™YЩ[џKK_KK_KK_џЪШ[\€XZ[UЫЬљЭ™YHШ]X™\€^ZЭЬљYЪ[‹ЫXZ[ИЩZ[™HZ\ЬЪ[Ы€\™ZЭ\љ[€[ќЪXЪЩ[€џЫЩ^Щ›Э[™][Ы‹YШ\Yљ[LX\ЫЫY\ќ\€™XЫЭ™\ћKRШ[™Y]ќ\€YH™\љYљ^љY\ќ[€Ы]YKSYXЪЩ[ЋИЩZ[€Y\™ЩK\ЮHЩ\€™[[ЭKQ‹UЬљ]HЪ™Hњ™ZYШX™K€џЪШ[\€ќ]UЫЬљЭ™YH\ЫЫY\ќ\€Ш[™Y]ќ\€Ш[›Ыљ\ШЪH›Ъ™ZЭQЪЭ[Y[ќHџS‹PЪXЪЬЪ[ќРS‘QUWУ“ЧУQT‘СX™YKZY[ќ\ШЪ\€™[[ЭKPЪXЪЬЪ[ќY™X‹‹‹ќHЩ™Л‹‹И™]Э\ЬЭЩZ[€ЪШ[\€ЫЬљЭ™YH[™љXЪZ]ќ]KУ[ќP\™Z]™\›Z\ШЪ[€џњќYZ\€Щ[[›ќ\€Ъ[™ЭЬЛQ\ќKPЪXЪЫЭ]S’У“ХУ—СVT“ђS™ZШ[›ќH[ќЩZ\ЩN€XYЫ›ЬЩKШ]]\Щ\ЬЪ[Ы‹\\›Z\ЬЪ[ЫњЛLЊЌ‹L‹LMРMЊЊMМ™\ЬЩ\™HЩ™›[™KKФЩ\ќљXЩKUЫЬљЩ\‹P\™Z]ЫЭЪYHљXЪ™\њЪ[ЫљY\ќHШ\\™KKС›ЭЛKХ\Э\™Z]И™XY[Ы›H[ќ™[ќ\љ\ЪY\™[‹[›€Щ^љY[ЫЫ[Z][ЋИЩZ[€™\Щ]ФЭ\ЪС[]H‚€ИИЬ\]]™\€Щ\›€[™\™\ЬЭ[™В‚џQљY[Э]\ИXљY[™ЪYЪЩZ]ИXЪЩZ\ИџKK_KK_KK_KK_џTTХ•PХT‘KLXљY[Ь™[ћ™[€[™[\ЬќKУЭЫ™\њЪ\U™\ќYИќY\€[€™X[[€™\ќZШ[ШЪљ]™\ЭYЩ[‹€T•PS€МН€њXЪHЭЫ™\њЪ\KТ[\Ьќ™YЩ[ЋИ™\›ZX™[™\€™\ќYИ›ЫЭXЪ›Э[™][Ы‹T™XЫЭ™\ћKЪ™HљYЛP[™ЛU[\ЫЬќY\ќ[™Л€џФTђUU‘KTУPСKLXЭ[™HO€]YќYИO€™ZY[\‹ФT€O€Z[O€\™Z]ШZЭ[Ы€O€Щ^HO€™XЩZ\O€™XYXЪЛ€“РТСQЭќZЭ\ќ™\ќYЛS‹KФ›Ы[‹KФ“ЛQЬ™[ћ™H[™МKTќ[ќ[YKUЬљ]\€™Z[‹€џРTT‘KSФ’QТSђSLXZ[™HШ[›Ыљ\ШЪHЬљYЪ[[\™\ЬЭ[™И›Ь€РФ€[™ќ[Ь™ќ[™Л€‘PQWРQ•T—СTS‘SђЦXY[ќ]Y][™Щ™›[™KTЪ[ЭXљ[€џС‘“S‘KPРTT‘KLX›ЭЛС]ZHЩ™›[™HЪXЪ\›‹™]\Э\ќYX™\њЭZ[€[™Щ[]HZ[›X[Ю[Ъ›Ыљ\ЪY\™[‹€‘PQWРQ•T—СTS‘SђЦXРTT‘KSФ’QТSђSLXС‘“S‘KMLX€џTLQPXXЪHШ[Y\H[™]ZKU\ШY[ИЩ]™[›ќK™\њЭY[™XЪHЩYЩK€‘PQWРQ•T—СTS‘SђЦXШ[YЩH]\И™X]\™KШШ\\™KX]]][[ќ€џTLQPРФ‹љ]]\€ЭЬYЩK][WЬЭЬШЪYЫ™YT“И[™Ьњ[‹PЫX[ќ\€“РТСQ™[[ЭKTШЪ[XKZYЬ][ЫњЬ]Y[Kљ^ћ›H[™“ИќY\њЭX™ЫZXЪ[‹€џРФ‹T‘U’QUЛLXЫЫ™љY[ћ€™H™[Иќ\€[њЪXЪ\™H™[\€ќYY™[‹€‘PQWРQ•T—СTS‘SђЦXРФ‹U™\ќYЛ€џРTT‘KPTФТQУ‹LXЭ[™K]YќYИ[™Z[Ьќ\HЪXЪ\€›ЬњШЪYЩ[‹Юќ[Ь™™[‹€‘PQWРQ•T—СTS‘SђЦXЬљYЪ[[H[™РФ‹U™\ќYЛ€џP‘STT‹LXT‹KС]ZЩ]\љЩ[›ќ[™И[ИШЪ™[\€ќ[Ь™ќ[™ЬЭЩYЛ€‘PQWРQ•T—СTS‘SђЦXZ[\ИЬ\]]™[€™\ќZШ[ШЪљ]ИќY\€™ZY[\љY[ќ]Y]€џРT‘S‘RS‘РS‘ЛQU‘S•LX]Y›ZYH\ћ™]YЭXЪ›ЫљYZ\™\ИШ\™[™Z[™Ш[™ЬЩ\™ZYЫљ\Л€‘PQWРQ•T—СTS‘SђЦXќ[Ь™ќ[™И[™™XЩZ\U™\ќYИЭZ[‹€џ’T”ХT“СPХSУ‹PРT‘LX\њЭ\€›ЫЭY[™YЩ\€Z[™Ш[™Иљ\ИЪXЪ\™\€›ЩZЭ[ЫњЪШ\ќK€‘PQWРQ•T—СTS‘SђЦXШ\™[™Z[™Ш[™ЬЩ\™ZYЫљ\Л[Y[[™H[™Щ^KT™XYS[Щ[€џ’T”ХUРT‘S‘RS‘РS‘ЛQL‘KLXЬљYЪ[[љ\ИЭ[™K]YќYЛZ[Ш\™[™Z[™Ш[™ЬЩ\™ZYЫљ\Л[Y[[™K›ЩZЭ[ЫњЪШ\ќH[™™[ШY™[YЩ[‹€‘PQWРQ•T—СTS‘SђЦXЬ\]]™\€ЫXЩKШ\\™KKФЭЬYЩKH[™Щ™›[™KU™\ќYИ]Y\ЬЩ[€™\Э[™[€ЩZ[‹€џRKTХЛLXЬ[Ы[HZ[KKЦќ\Э[™Ш[[\ЩHZ]]Y[[‹ЫЫ™љY[ћ€[™™]љY]Л€Q‘T”‘QХТUФ‘PTУУ\њЭXЪ™[\Э\™\€ЬљYЪ[[KЭЬYЩKH[™ќ[Ь™ќ[™ЬШ\Ъ\Л€џTTХЛLЪYY\љЫ[™ЬЛH[™XЪ\™Z]Щ›ЭЬИЪ™H\ZШ]KХ™\›\ЭY€‘PQWРQ•T—СTS‘SђЦXTLQP€‚€ИИ[Щ[\љ]Y][™ЪYY\ќ™\ќЩ[™[™В‚џQљY[Э]\ИXљY[™ЪYЪЩZ]ИXЪЩZ\ИџKK_KK_KK_KK_џSСST‹PУФ‘KLX™]YH[Щ[HYX™\€ЬќЛФ›ЭљY\‹\[‹›ЬИ[™ЫЫ™љYЭ\][Ы€[ќЫЬ[‹€PХU‘XЪ[ќY\€™YH™]YHZ\ЬЪ[ЫЋИ\ЭTЭќZЭ\€\Э›ШЪ›Э]KYљ\њЭ[™Э\љИЩZЫЬ[€џQСT‹PУФ‘KT‘TLXќXЪ[[™ЬЛKУРФ‹R[ќ™[ќ\‹ШЪљ]Ш[ќ[‹\™ZЭќYЬљY™™H[™ЬY]\™HZЩ]Ь™[ћ™HЪЭ[Y[ќY\™[‹€‘PQWРQ•T—СTS‘SђЦXXЪЬ\]]™[HЩ\›€[™ЭXљ[\€ќXЪ[[™ЬЭШZљZ]ИЩZ[™H^ZЭ[Ы‹€џQСT‹PУФ‘KQVђPХLXЭXљ[[€ќXЪ[[™ЬЪЩ\›€Z[›X[ЫЫќ›ЫY\ќ\]\ЫЩ\Щ[‹€Q‘T”‘QХТUФ‘PTУУ\њЭXЪ›ЩZЭ]™\€ќXЪ[[™И[™™[YЭ\€[™]ЛQ[™Sќ]ќ[™Л€џТT‘QSSСSKPРUSСЛLXШ\\™KЭXЪK[Y[[™KЩ™›[™KSЭ]›Ю[™[[\ЩH[љ[™™X[\€™\ќYYЩHШ][ЩЪ\ЪY\™[‹€“ХPХQРђPТУСШЩZ[™H›ЬњШЪ™[HЩ[™\[\ЪY\ќ[™Л€‚€ИИЩ\ШЪY]ќH›ЩZЭ›ШYX\‚џ™\™ZXЪЩ\ШЪY]ќ\ИљY[Э]\ИџKK_KK_KK_џЫЫќ›ЫPЫШЪЬ]Ш\ЪЩ™™[™H]YќYYЩK[™ЬY\ЬЩK\›Z[™K™\њЬY][™Щ[€[™\ќШ\ќ]HZ[›ZY[€[И[™[™ЬЫЬљY[ќY\ќHЪY[њЪXЪ€“ХPХQРђPТУСШџ[\љЩZ][ќ™\Э][ЫњЛK\њЫЫ[KZћ™]YЛH[™\]ZY]Y]Щ[ќШЪZY[™Щ[€Z]ШЪЩ[[ќЩ\ќ[‹›ЩЫ›ЬЩ[€[™Щ\Ш[]ЫЬЭ[‹€“ХPХQРђPТУСШџ]YќYЬЭ[Y[[™H›ЫЭY[™YЩ\€™\›]Y€›Ы€ЫЫќZЭ[™Z[™Ш[™Иљ\И™XЪќ[™ЛZ[™Л™\њШ[™™ZЫ[X][Ы€[™›ЫЩX]YќYЛ€“ХPХQРђPТУСШџќXЪ[[™И™[YЩK™XЪќ[™Щ[‹Z[™Щ[‹UU‹РФХ‹Ц’TTЭђK]Y][™Щ[™[‹Pќ]Ы€Z]™X[[€][‹€“ХPХQРђPТУСШџЭXЪQЩZ\›€ЭXЪHYX™\€Э[™[‹]YќYYЩKZ[KЪЭ[Y[ќKЫЫ[][љZШ][Ы€[™Щ[Z]™^љYZ[™ЬШ\ќ[™™[YЭ[€]Y[[‹€“ХPХQРђPТУСШџТKQ[ќШЪZY[™Щ[€[ќЫЬќ[€Z]]Y[[‹[љЬЛЭXЪЫЬќ[‹Ь\ZЩ[‹ЫЬЭ[™њ™ZYШX™H[™XЪ›ЫљYZ\™\€[њЪXЪ\љZ]€“ХPХQРђPТУСШџЭ[™[љШ\ќHЭ[™[ќЪ\ЬЩ[‹™^љYZ[™Щ[‹њ™Z]^]Y[[њ]X[]Y][™Ь[Ы[HY\T™\ЩX\ЪP[њ™ZXЪ\ќ[™Л€“ХPХQРђPТУСШџЫЫ[][љZШ][Ы€[Y›Ы››Э^‹KSXZ[љ[\‹ќYXЪЬќY‹[™њYЩH[™Э[™[љЫЫќ^[€Z[™\€\™Z]Щ›YXЪK€“ХPХQРђPТУСШџX\љЩ][™ИZЭ[Ы€O€™ZXЪЩZ]HO€ЫXЪИO€[™њYЩHO€]YќYИO€[\Ш]‹УX\™ЩHZ]]љXќ][Ы€[™\›њШЪZY™K€“ХPХQРђPТУСШџYЩ\‹РYY\‹С[™\™ЪYKФTЛТХ”Ь\]]™H™\ЭY[™KYЩ\ќK[™\™ЪYK]X[]Y]™ZЫ[X][Ы™[€[™™\™\ЬЩ\ќ[™Щ[€Z]™X[[€][‹€“ХPХQРђPТУСШџ\™›Ь›X[ЩH›Y\ЬЪYЩHX›]KС\ЪЭЬSќ]ќ[™ЛЩZ[€[љЛЩZ[™H›XЪЩ\›™[€Щ\€[љЫЫќ›ЫY\ќШЪY\ЬЩ[™[€Э™\›^\Л€“ХPХQРђPТУСШџ[Щ[\™\€Щ\›€[[ќP™YЬљY™™K™\ќYYЩH[™ЫЫ™љYЭ\][Ы€™[ќ[ИЩZ[™HYYљ[\ЬќHЩ\€ќЩZ]HШZљZ][‹€“ХPХQРђPТУСШ‚€ИИќ]™\‹UЪ[њИ[ИX›ZY\™YЩ[‚‹H
+Љ”›ЫЋЉЉ€\ЪЭЬљ[XY\ЋИЫЫќ›ЫKЩ[\›Z[™Kњ™ZYШX™[€[™[\љЩZ]Ъ™HФKUШ[™‚‹H
+Љ”[\ЉЉ€X›]љ[XY\ЋИ›ЩZЭ[Ы€[™Z[€Ъ™Hќ\ШY]›XЪHќY\\™Z]‚‹H
+Љ“ZXЪY[ЉЉ€Э\љИЩYќYZќH]Y›ZYK[Y›Ы‹KSXZ[Z[™Ш[™И[™]\ЩШ[™ОИЩ\љ[™ЩHXЪљZЬ›Э][™K‚‚’ЩZ[™HZ\ЬЪ[Ы€Ъ[[И›ЩZЭ™ZY‹Щ[›€\€™[][ќHќ]™\‹UЪ[€[€Щ\›ќЩYИљXЪЪ™H™\њЭXЪЭH[ќЪXЪЫ\љЩ[›ќљ\ЬЩH]\ЩќYZ™[€Ш[›‹‚

@@ -1,112 +1,46 @@
 # Current State
 
-Stand: 2026-08-05 â€” verifizierter Recovery-Kandidat, noch nicht gemergt oder deployed
+Stand: 2026-08-06 â€” verifizierter Ist-Stand gegen `origin/main`, Supabase Production und Vercel.
+
+Diese Datei ersetzt den veralteten Stand vom 2026-08-05, der Data-API und PIN faelschlich als offen fuehrte. Ein gruener Build oder ein aktuelles Deployment ist kein Gesamt-PASS.
 
 ## Gesamturteil
 
 | Ebene | Status | Verifizierter Stand |
 |---|---|---|
-| GitHub-Lieferquelle | `PASS` | `main` ist die einzige Lieferwahrheit; aktueller Head `eb5f1c40d582a16eadeda90bec808c6e92aeb5fa`. |
-| Vercel Production | `PASS_CURRENT_MAIN` | Production laeuft auf `eb5f1c40...`; fuer 24 Stunden wurden keine gruppierten Runtime-Fehler gefunden. |
-| Foundation-Bericht | `FAIL_INTERNAL` | Der Abschluss-PASS und â€keine offene Arbeitâ€œ widersprechen Live-Befund und Repository. |
-| Migrationswahrheit auf `main` | `FAIL` | 97 lokale SQL-Dateien, 96 Production-Ledgerzeilen; Versionen drifteten und der vorhandene Check lief nicht in CI. |
-| Data-API-Sicherheit in Production | `NO_GO` | 26 Tabellen ohne RLS erlauben `anon` und `authenticated` jeweils SELECT, INSERT, UPDATE und DELETE. |
-| PIN-Bestand in Production | `NO_GO` | 0 bcrypt-Hashes, 6 Legacy-PINs im vierstelligen Altformat. |
-| Recovery-Kandidat | `PASS_LOCAL_PENDING_REVIEW` | Exakter Ledgervertrag, Grant-Entzug, PIN-Bestandsmigration und Codekorrekturen liegen nur im isolierten Branch. |
-| Produkt-Go-live | `NO_GO` | Recovery-Migrationen, operativer E2E-Kern, Offline-Vertrag und Fresh-Replay sind nicht produktiv abgenommen. |
+| GitHub-Lieferquelle | `PASS` | `main` ist einzige Lieferwahrheit; Head `6e0c74893ed10e5337e03b10457477f4b6d8cbf7`. |
+| Vercel Production | `PASS_CURRENT_MAIN` | Production laeuft auf aktuellem `main`. |
+| Data-API-Sicherheit (Production) | `DONE_VERIFIED` | 2026-08-05 alle Tabellen-Grants fuer `anon`/`authenticated` entzogen; per SQL 0 verbleibende Grants verifiziert. |
+| PIN-Bestand (Production) | `DONE_VERIFIED` | 6/6 App-User bcrypt cost 12; 0 Legacy-Klartext-PINs (per SQL verifiziert). |
+| Storage-Buckets (Production) | `DONE_VERIFIED` | `belege` 2026-08-06 auf privat gesetzt (D1); `buchhaltung-belege`, `item-photos`, `scans` bereits privat. |
+| Public-Funktions-Grants (Production) | `DONE_VERIFIED` | 2026-08-06 EXECUTE fuer 9 App-Funktionen von `PUBLIC`/`anon`/`authenticated` entzogen (D2); `service_role`/`postgres` behalten Zugriff. |
+| Tenant-Datenbestand (Production) | `CLEARED` | 2026-08-06 auf ausdrueckliche Freigabe alle Geschaeftsdaten (orders, customers, items, events, scan_uploads + abhaengige Tabellen) geloescht; 6 `app_users` erhalten. |
+| Migrationswahrheit auf `main` | `FAIL` | Mehrere Production-Aenderungen (Data-API-Revoke, Default-Privileges, PIN-bcrypt, D1, D2) wurden per `execute_sql` angewandt und liegen ausserhalb des Ledgers. Fresh-Replay bleibt unbewiesen. |
+| Operativer E2E-Kern | `NOT_PROVEN` | Kunde -> Auftrag -> Behaelter/QR -> Teil -> Aktion -> Today -> Beleg -> Reload wurde nie durchgaengig ausgefuehrt oder durch einen automatisierten Test abgesichert. |
+| Offline-Vertrag | `CONTAINED_ONLY` | Kein echter, verifizierter Sync-Transport. Datenverlust-Pfad in SyncContext ist stillgelegt (PR #42, offen). 48h-Nachweis fehlt. |
+| Produkt-Go-live | `NO_GO` | E2E-Kern, Offline-Vertrag, RLS-Relationsmatrix, Fresh-Replay und Ledger-Konsolidierung sind nicht abgenommen. |
 
-Ein gruener Build oder ein aktuelles Deployment ist kein Gesamt-PASS.
+## Offene Fundament-Fixes (Branch + PR, CI gruen, ungemergt)
 
-## Unveraenderte Live-Wahrheit
+Auf ausdrueckliche Anweisung noch nicht gemergt. Sammelfreigabe steht aus.
 
-- Es wurde kein zweites Projekt und kein neuer Repository-Clone als neue Wahrheit angelegt.
-- Es gab keinen Merge, kein Production-Deployment und keine Remote-Supabase-Migration.
-- Supabase Production ist Projekt `syhaigjhsbpjmtnggqka`.
-- Production enthaelt 96 Migrationsledgerzeilen; die letzte Version ist
-  `20260804201239_pin_rate_limits`.
-- Die produktive PIN-Tabelle existiert, RLS ist aktiviert und der Tenant-Index ist vorhanden.
-- Geschuetzte Routen und APIs reagieren ohne gueltige App-Sitzung fail-closed.
+| PR | Inhalt | CI | Status |
+|---|---|---|---|
+| `#42` | C1 â€” SyncContext: stiller Datenverlust gestoppt (kein Fake-Sync/Loeschen ohne Serveruebertragung). | gruen (5/5) | offen, Review PASS |
+| `#43` | C2 â€” `inquiriesRepository` auf Server Action umgestellt; kein Fake-Success mehr. | gruen | offen, Review PASS |
+| `#44` | C3+C4 â€” Today-Datenvertrag: `risk`/`dueLabel`/`dueValue` server-seitig aus echtem `dueDate`; Mock-Typen raus; keine Client-Priorisierung. | gruen (quality/Build) | offen, Review PASS |
+| `#41` | Docs + Offline-Containment. | gruen | **nicht als-is mergen** â€” kuerzt geschuetzte Anforderungen; durch diese Doku-Korrektur ersetzt. |
 
-## Recovery-Kandidat: exakt gefuellte Luecken
+## Angewandte Production-Aenderungen ausserhalb des Ledgers (APPLIED_NOT_IN_LEDGER)
 
-### 1. Migrationsvertrag
+Diese Aenderungen sind produktiv wirksam, aber nicht als Migration im Ledger abgebildet. Vor Go-live in eine ledgerfaehige, replaybare Form ueberfuehren.
 
-- `scripts/migration-ledger-manifest.txt` bildet alle 96 angewandten Production-Versionen
-  mit Name und Statement-Hash ab.
-- `scripts/check-migration-ledger.mjs` prueft Version, Name, Hash, Duplikate,
-  Append-only-Vertrag und nur vorwaerts liegende neue Migrationen.
-- `.github/workflows/quality.yml` ruft diesen Vertrag tatsaechlich auf.
-- Die produktive PIN-Migration ist lokal unter ihrer echten Version
-  `20260804201239_pin_rate_limits.sql` und mit dem echten Inhalt abgebildet.
-- Die nicht angewandte, gefaehrliche RLS-Datei liegt ausserhalb des automatischen
-  Migrationspfads unter `supabase/quarantined-migrations/`.
-- Kandidatenstand: 96 angewandte Dateien plus zwei klar ausgewiesene, spaetere
-  Recovery-Migrationen.
-
-### 2. Data-API-Grenze
-
-- Der Browser greift fuer Lager und Preisvereinbarungen nicht mehr direkt auf die
-  offenen Tabellen zu.
-- Lager-Reads sind rollen- und tenantgebundene Server-Actions.
-- Lagerbewegung und Bestandsaenderung laufen in einer Transaktion mit Zeilensperre;
-  die Benutzeridentitaet stammt aus der kanonischen Sitzung.
-- Legitime Serverzugriffe auf die 26 grantlosen Tabellen erzeugen einen
-  privilegierten Client erst nach `checkAppAuthorization("read" | "write")` und
-  binden tenantfaehige Relationen an den kanonischen Mandanten. Bestehende
-  sitzungsgebundene Supabase-Pfade auf anderen Relationen bleiben unveraendert.
-- Die ausstehende Migration `20260805070750_revoke_public_data_api_grants.sql`
-  entzieht `anon` und `authenticated` auf exakt den 26 live verifizierten Tabellen
-  alle Tabellenrechte und setzt fuer kuenftige, von `postgres` angelegte `public`-
-  Tabellen denselben fail-closed-Default. Sie aendert keine RLS-Policy.
-
-### 3. PIN und Sitzungen
-
-- PIN-Versuche werden je Operator durch einen transaktionalen Advisory-Lock
-  serialisiert; parallele Erstversuche koennen die Sperrpruefung nicht mehr
-  gleichzeitig passieren.
-- Vergleich, Fehlversuchserhoehung und Reset liegen in derselben Transaktion.
-- Neue und zurueckgesetzte PINs werden serverseitig mit bcrypt cost 12 gehasht;
-  kein Default-PIN wird mehr gespeichert.
-- PIN-Reset loescht gleichzeitig den Sperrzaehler.
-- Rollen-, Status- und PIN-Aenderungen aktualisieren `app_users.updated_at`;
-  aeltere signierte App-Sitzungen werden dadurch abgewiesen.
-- Die ausstehende Migration `20260805071504_hash_legacy_pins.sql` konvertiert die
-  sechs vierstelligen Legacy-Werte innerhalb von PostgreSQL und setzt dabei
-  `app_users.updated_at`, damit vor der Umstellung ausgestellte Sitzungen
-  widerrufen werden. Kein PIN-Wert wird ausgelesen oder in einen Client
-  uebertragen.
-- Device-Binding bleibt offen und wird nicht als erledigt dargestellt.
-
-### 4. Oeffentliche Startseite
-
-- Der oeffentliche Payload enthaelt keine Namen, Rollen oder internen UUIDs mehr.
-- Der Login verwendet einen HMAC-basierten, opaken Handle; die kanonische Benutzer-ID
-  wird erst serverseitig aufgeloest.
-- Bei Datenbankfehlern wird kein erfundener Fallback-Administrator angezeigt.
-
-## Noch offen / nicht behauptet
-
-| ID | Status | Restarbeit |
-|---|---|---|
-| `FOUNDATION-RECOVERY-001` | `ACTIVE` | Vollstaendige Gates, Review, Draft-PR und Preview; danach separate Freigabe fuer Merge und Production-Migration. |
-| `RLS-CONTRACT-001` | `ACTIVE_AFTER_RECOVERY` | Relationenspezifische Rollen-/Tenant-Matrix und schwache bestehende Policies pruefen. RLS ist nicht â€entfallenâ€œ. |
-| `SEC-PIN-002B` | `PARTIAL` | Device-Binding/Challenge und operativer Production-Postflight bleiben offen. |
-| `APP-STRUCTURE-001` | `PARTIAL` | PR #36 brachte Ownership-/Importregeln; kein Big-Bang-Umbau. |
-| `OPERATIVE-SLICE-001` | `BLOCKED` | Kunde -> Auftrag -> Behaelter/QR -> Teil -> Aktion -> Today -> Receipt -> Reload noch nicht E2E belegt. |
-| `OFFLINE-SHELL-001` | `READY_AFTER_RECOVERY` | Eine sichere Offline-Shell und genau eine Registrierungswahrheit herstellen. |
-| `OFFLINE-48H-001` | `BLOCKED` | Outbox, Idempotenz, Konflikte, Restart und 48-Stunden-Nachweis fehlen. |
-
-## Naechste Reihenfolge
-
-1. Recovery-Kandidat vollstaendig pruefen und als Draft-PR zur unabhaengigen Review stellen.
-2. Nach ausdruecklicher Freigabe: Merge, Preview/Production-Abnahme und die beiden
-   Recovery-Migrationen in kontrollierter Reihenfolge ausfuehren.
-3. Postflight: 0 oeffentliche Tabellenrechte auf den 26 Relationen, 6/6 bcrypt,
-   negativer anonymer CRUD-Test, legitimer Lager-/Cockpit-/Buchhaltungspfad positiv.
-4. Danach den bestehenden Plan fortsetzen: `OFFLINE-SHELL-001`, verbleibender
-   Strukturvertrag, `OPERATIVE-SLICE-001`, Receipt/Readback und `OFFLINE-48H-001`.
-
-## Freigabegrenzen
-
-Ohne ausdrueckliche Freigabe erfolgen weiterhin kein Merge, kein Production-Deploy,
-keine Remote-Migration, keine RLS-/Policy-Aenderung und keine Datenloeschung.
+- 2026-08-05: Data-API-Grant-Entzug auf allen Tabellen/Views fuer `anon`/`authenticated` (0 Grants verifiziert).
+- 2026-08-05: Default-Privileges fail-closed fuer kuenftige `public`-Objekte von `postgres`.
+- 2026-08-05: PIN-Bestandsmigration auf bcrypt cost 12 (6/6).
+- 2026-08-06: D1 â€” Bucket `belege` auf privat.
+- 2026-08-06: D2 â€” EXECUTE-Entzug fuer `fn_compute_warnings`, `fn_is_production_order`, `fn_update_vorlagen`, `fn_verteile_energiekosten`, `search_globalhÙ×Ø™[Y×Ú[œÙ\™]™[Ø™[Y×Ù[]X™]™[Ø™[Y×Û]]][Û˜™]™[Ø]Y]Û]]][Û˜‚‹HŒ‹LLˆÙ\ØÚ[™È[\ˆ[˜[QÙ\ØÚYYÙ][ˆ
+]\ÙYXÚÛXÚHœ™ZYØX™JK‚‚ˆÈÈ›ØÚÙ™™[ˆÈšXÚ™Z]\]‚ŸQİ]\È™\İ\˜™Z]ŸKK_KK_KK_ŸÕTPTÑKPQRS‹QQUS’U‹LX“ĞÒÑQÑVT“SY˜][š]š[YÙ\È›Ûˆİ\X˜\ÙWØYZ[˜Y\ˆ[›Û˜Ø]][XØ]Y™\İZ[ˆÙZ]\È\ˆYX™\ˆ\Ú›Ø\™ÓİÛ™\ˆÙ\Ø˜\‹ˆŸQÑT‹PÓÓ”ÓÓQUSÓ‹LXPÕU‘XYH\ˆ^Xİ]WÜÜ[[™Ù]Ø[™[ˆY[™\[™Ù[ˆYÙ\™˜YZYÈ˜XÚšYZ[Èœ™\ÚT™\^H\œİ[[‹ˆŸ“ËPÓÓ•PÕLXPÕU‘X™[][Û™[œÜ^šYš\ØÚH›Û[‹KÕ[˜[SX]š^È[˜[Ú\ÛÛ][ÛˆÜ™ZY\˜Ú]ZİÛš\ØÚ›ØÚšXÚØ]X™\‹ˆ“È\İšXÚ8 '™[˜[[ˆ‹ˆŸÔTUU‘KTÓPÑKLX“ÕÔ“Õ‘S˜L‘KRÙ\›ÙYÈ\˜ÚØY[™ÚYÈ]\ÙYZ™[ˆ[™]]ÛX]\ÚY\XœÚXÚ\›‹ˆÒKQL‘HYYZİY[\ˆÙZH]]Q˜Y[KˆŸÑ‘“S‘KTÒSLXÈÑ‘“S‘KMLX“ĞÒÑQXÚ\ˆŞ[˜ËU˜[œÜÜİ]›ŞRY[\İ[‹ÛÛ™›ZİK™\İ\[™S˜XÚÙZ\È™Z[‹ˆŸÑPËTÕÔQÑKP‘SQÑKLX‘PQX™[YÙXP[™ZYÙKÑİÛ›ØY]YˆÙ\™\œÙZ]YÙHÚYÛ™YT“È[\İ[[ˆ
+XÚÙ]\İ™]š]˜]
+KˆŸÑPËTS‹L˜T•PS]šXÙKPš[™[™ËĞÚ[[™ÙH›ZX›ÙZİ[ØÚZY[™ÎÈXZÙYT\ÜİÛÜ™TØÚ]ˆ›ÜˆÛË[]™H[H\Ú›Ø\™Zİ]šY\™[‹ˆŸÖTÕSPUPËPUQULXÔS˜\ˆYH›ÛH™]šY]È™[˜[›[ˆ]ZY[ˆİ\™[ˆ™\šYš^šY\ÈÙZ]\™HÛY[Tİ\X˜\ÙKT˜YH[™™XÚ[™ÜËKÔ™ZÛ[X][ÛœËKÕ\ØYT˜YHÚ[™šXÚŞ\İ[X]\ØÚÙ\YYˆ‚ˆÈÈ˜YXÚİH™ZZ[™›ÛÙB‚ŒKˆY\ÙHÚİKRÛÜœ™Zİ\ˆYY™[ˆ\ÜÙ[È™ZH™Y\™ˆÛÜœšYÚY\™[‹‚Œ‹ˆØ[[Y[œ™ZYØX™HY\ˆˆÍ‹ÈÍËÈÍÈÍHØÚY\ÜÙ[ˆÙ\ˆ]YˆÚİKRÛÜœ™Zİ\ˆ™Y^šY\™[‹‚ŒËˆYÙ\‹RÛÛœÛÛYY\[™È
+Èœ™\ÚT™\^K‚ˆ]]ÛX]\ÚY\\ˆL‘KRÙ\›ÙYËU\İÈ[˜XÚÙ™›[™KU™\˜YË‚‚ˆÈÈœ™ZYØX™YÜ™[™[‚‚“Ú™H]\ÙYXÚÛXÚHœ™ZYØX™H\™›ÛÙ[ˆÙZ]\š[ˆÙZ[ˆY\™ÙKÙZ[ˆ›ÙXİ[Û‹Q\ŞKÙZ[™HÙZ]\™H™[[İKSZYÜ˜][Û‹ÙZ[™H“ËKÔÛXŞKPY[™\[™È[™ÙZ[™HÙZ]\™H][›Ù\ØÚ[™Ëˆ\ˆ\KUÛÜšİ™YH™X]\™KØØ\\™KX]]][˜[Ú\™šXÚ[™Ù]\İ]‚
