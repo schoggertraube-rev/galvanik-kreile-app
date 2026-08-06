@@ -85,33 +85,6 @@ export default function TodayDashboard() {
     return getStationConfig(station).fullName || station;
   };
 
-  const handleAction = (orderId: string) => {
-    const updated = orders.map(o => {
-      if (o.id === orderId || o.orderNumber === orderId) {
-        return {
-          ...o,
-          risk: "green",
-          statusText: "IM PLAN (Gegenmaßnahme eingeleitet)",
-          delayReason: undefined,
-          recommendedAction: undefined,
-        };
-      }
-      return o;
-    });
-
-    setOrders(updated);
-    // Fire async update to DB in background
-    try {
-      const orderToUpdate = updated.find(o => o.id === orderId || o.orderNumber === orderId);
-      // Async sync to DB
-      if (orderToUpdate) {
-        ordersRepository.updateOrder(orderId, (orderToUpdate as unknown) as Parameters<typeof ordersRepository.updateOrder>[1]).catch(console.error);
-      }
-    } catch (e) {
-      console.error("Fehler beim Speichern der Gegenmaßnahme", e);
-    }
-  };
-
   const getCustomerPhone = (customerId: string, customerName: string) => {
     const customer = customers.find(
       c => c.id === customerId || String(c?.name ?? "").toLowerCase().includes(String(customerName ?? "").toLowerCase())
@@ -293,23 +266,6 @@ export default function TodayDashboard() {
                         </span>
                       </div>
 
-                      {order.recommendedAction && (
-                        <Button 
-                          size="sm" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAction(order.id);
-                          }}
-                          className={`h-10 font-extrabold text-xs gap-2 px-4 rounded-xl border shadow-sm transition-all cursor-pointer ${
-                            isRed 
-                              ? "bg-danger-red text-white hover:bg-danger-red border-danger-red hover:scale-[1.03]" 
-                              : "bg-navy-900 text-white hover:bg-navy-700 border-navy-900 hover:scale-[1.03]"
-                          }`}
-                        >
-                          <Zap className="h-3.5 w-3.5" /> 
-                          <span>{order.recommendedAction}</span>
-                        </Button>
-                      )}
                     </div>
 
                   </CardContent>
@@ -456,15 +412,6 @@ export default function TodayDashboard() {
                     }
                   })()}
 
-                  {selectedOrder.recommendedAction && (
-                    <Button 
-                      className="w-full bg-navy-900 hover:bg-navy-700 text-white font-extrabold text-xs h-11 rounded-xl flex items-center justify-center gap-2 border border-navy-900 shadow-sm transition-all cursor-pointer"
-                      onClick={() => handleAction(selectedOrder.id)}
-                    >
-                      <Zap className="h-3.5 w-3.5 text-accent-orange" />
-                      <span>Interne Maßnahme einleiten</span>
-                    </Button>
-                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <Link href="/customers" className="block w-full">
                       <Button 
