@@ -20,8 +20,10 @@ const STORE_NAME = "mutations";
 let dbInstance: IDBDatabase | null = null;
 
 function generateUlid(): string {
-  // Simpler ULID-like generator for unique sortable IDs
-  return Date.now().toString(36) + Math.random().toString(36).substring(2);
+  // ULID-like generator for unique sortable IDs (crypto-safe)
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  const rand = Array.from(bytes, (b) => b.toString(36).padStart(2, "0")).join("").slice(0, 12);
+  return Date.now().toString(36) + rand;
 }
 
 async function initDB(): Promise<IDBDatabase> {
