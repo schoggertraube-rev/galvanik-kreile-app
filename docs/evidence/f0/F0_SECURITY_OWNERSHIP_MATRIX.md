@@ -42,6 +42,19 @@ Gut geformt (tenant-/rollengebunden, Referenz): `*.tenant_isolation*`, `orders.a
 - **supabase_admin Default Privileges** (Cluster) — BLOCKED_EXTERNAL (Dashboard/Owner).
 - RLS-CONTRACT-001: breite Policies (Abschnitt 3) tenant-/rollengebunden nachziehen + Pos/Neg-Tests (F0-05 DoD).
 
-## Fazit
-Fail-closed-Grundlage ist **belegt** (SECURITY DEFINER gepinnt; nicht-exponierte Tabellen 0 Grants).
-Für A06/A07 vollständig fehlt noch: relationsweise Pos/Neg-Tests + Härtung der breiten Policies (RLS-CONTRACT-001).
+## 5. Red-Team-Korrektur (verifiziert, ersetzt überzogene Claims oben)
+- **SECDEF-Owner geprüft:** alle 11 SECURITY-DEFINER-Funktionen gehören `postgres`, **kein Superuser**.
+  Sie umgehen RLS (owner-Rechte), sind aber — außer `current_user_can_view_finance` (authenticated) —
+  **nur service_role-EXECUTE**. Die finance-Check-Funktion ist tenant-gescopt (Boolean über auth.uid()),
+  kein Cross-Tenant-Leak. → **kein Escalation-Vektor verifiziert**, aber Posture hängt an korrekten EXECUTE-Grants.
+- **Views (17): NEUER Härtungspunkt.** Alle postgres-owned mit `security_invoker=off` → würden RLS umgehen,
+  falls erreichbar. Aktuell 0 anon/auth-Grants → kein Data-API-Pfad. Defense-in-depth: `security_invoker=on`.
+- **Ehrliche Herabstufung:** A06/A07 sind **NICHT PASS**, sondern **CONDITIONAL/UNTESTED** — die Fail-closed-Lage
+  ruht allein auf Grant-Entzug (ein `GRANT`/`ALTER DEFAULT PRIVILEGES` von Totalexposition entfernt), nicht auf
+  RLS+security_invoker. service_role umgeht RLS vollständig (bekannt, per Design Backend-Rolle).
+
+## Fazit (korrigiert)
+Fail-closed ist **aktuell wahr, aber fragil** (nur Grant-Entzug). Verifiziert: SECDEF-Owner=postgres/non-super,
+RLS-umgehende Writes nur service_role, finance-Check tenant-gescopt, alle no-RLS-Tabellen + Views 0 anon/auth-Grants.
+Für echtes A06/A07-PASS fehlt: RLS+Tenant-Policies auf die 68 Tabellen (RLS-CONTRACT-001), `security_invoker=on`
+auf Views, relationsweise Pos/Neg-Tests, + die service_role-ACL-Entscheidung. **Kein PASS behauptet.**
