@@ -1,6 +1,6 @@
 # Current State
 
-Stand: 2026-08-06 â€” verifizierter Ist-Stand gegen `origin/main`, Supabase Production und Vercel.
+Stand: 2026-08-06 - verifizierter Ist-Stand gegen `origin/main`, Supabase Production und Vercel.
 
 Diese Datei ersetzt den veralteten Stand vom 2026-08-05, der Data-API und PIN faelschlich als offen fuehrte. Ein gruener Build oder ein aktuelles Deployment ist kein Gesamt-PASS.
 
@@ -26,10 +26,10 @@ Auf ausdrueckliche Anweisung noch nicht gemergt. Sammelfreigabe steht aus.
 
 | PR | Inhalt | CI | Status |
 |---|---|---|---|
-| `#42` | C1 â€” SyncContext: stiller Datenverlust gestoppt (kein Fake-Sync/Loeschen ohne Serveruebertragung). | gruen (5/5) | offen, Review PASS |
-| `#43` | C2 â€” `inquiriesRepository` auf Server Action umgestellt; kein Fake-Success mehr. | gruen | offen, Review PASS |
-| `#44` | C3+C4 â€” Today-Datenvertrag: `risk`/`dueLabel`/`dueValue` server-seitig aus echtem `dueDate`; Mock-Typen raus; keine Client-Priorisierung. | gruen (quality/Build) | offen, Review PASS |
-| `#41` | Docs + Offline-Containment. | gruen | **nicht als-is mergen** â€” kuerzt geschuetzte Anforderungen; durch diese Doku-Korrektur ersetzt. |
+| `#42` | C1 - SyncContext: stiller Datenverlust gestoppt (kein Fake-Sync/Loeschen ohne Serveruebertragung). | gruen (5/5) | offen, Review PASS |
+| `#43` | C2 - `inquiriesRepository` auf Server Action umgestellt; kein Fake-Success mehr. | gruen | offen, Review PASS |
+| `#44` | C3+C4 - Today-Datenvertrag: `risk`/`dueLabel`/`dueValue` server-seitig aus echtem `dueDate`; Mock-Typen raus; keine Client-Priorisierung. | gruen (quality/Build) | offen, Review PASS |
+| `#41` | Docs + Offline-Containment. | gruen | **nicht als-is mergen** - kuerzt geschuetzte Anforderungen; durch diese Doku-Korrektur ersetzt. |
 
 ## Angewandte Production-Aenderungen ausserhalb des Ledgers (APPLIED_NOT_IN_LEDGER)
 
@@ -38,9 +38,30 @@ Diese Aenderungen sind produktiv wirksam, aber nicht als Migration im Ledger abg
 - 2026-08-05: Data-API-Grant-Entzug auf allen Tabellen/Views fuer `anon`/`authenticated` (0 Grants verifiziert).
 - 2026-08-05: Default-Privileges fail-closed fuer kuenftige `public`-Objekte von `postgres`.
 - 2026-08-05: PIN-Bestandsmigration auf bcrypt cost 12 (6/6).
-- 2026-08-06: D1 â€” Bucket `belege` auf privat.
-- 2026-08-06: D2 â€” EXECUTE-Entzug fuer `fn_compute_warnings`, `fn_is_production_order`, `fn_update_vorlagen`, `fn_verteile_energiekosten`, `search_globalhÙ×Ø™[Y×Ú[œÙ\™]™[Ø™[Y×Ù[]X™]™[Ø™[Y×Û]]][Û˜™]™[Ø]Y]Û]]][Û˜‚‹HŒ‹LLˆÙ\ØÚ[™È[\ˆ[˜[QÙ\ØÚYYÙ][ˆ
-]\ÙYXÚÛXÚHœ™ZYØX™JK‚‚ˆÈÈ›ØÚÙ™™[ˆÈšXÚ™Z]\]‚ŸQİ]\È™\İ\˜™Z]ŸKK_KK_KK_ŸÕTPTÑKPQRS‹QQUS’U‹LX“ĞÒÑQÑVT“SY˜][š]š[YÙ\È›Ûˆİ\X˜\ÙWØYZ[˜Y\ˆ[›Û˜Ø]][XØ]Y™\İZ[ˆÙZ]\È\ˆYX™\ˆ\Ú›Ø\™ÓİÛ™\ˆÙ\Ø˜\‹ˆŸQÑT‹PÓÓ”ÓÓQUSÓ‹LXPÕU‘XYH\ˆ^Xİ]WÜÜ[[™Ù]Ø[™[ˆY[™\[™Ù[ˆYÙ\™˜YZYÈ˜XÚšYZ[Èœ™\ÚT™\^H\œİ[[‹ˆŸ“ËPÓÓ•PÕLXPÕU‘X™[][Û™[œÜ^šYš\ØÚH›Û[‹KÕ[˜[SX]š^È[˜[Ú\ÛÛ][ÛˆÜ™ZY\˜Ú]ZİÛš\ØÚ›ØÚšXÚØ]X™\‹ˆ“È\İšXÚ8 '™[˜[[ˆ‹ˆŸÔTUU‘KTÓPÑKLX“ÕÔ“Õ‘S˜L‘KRÙ\›ÙYÈ\˜ÚØY[™ÚYÈ]\ÙYZ™[ˆ[™]]ÛX]\ÚY\XœÚXÚ\›‹ˆÒKQL‘HYYZİY[\ˆÙZH]]Q˜Y[KˆŸÑ‘“S‘KTÒSLXÈÑ‘“S‘KMLX“ĞÒÑQXÚ\ˆŞ[˜ËU˜[œÜÜİ]›ŞRY[\İ[‹ÛÛ™›ZİK™\İ\[™S˜XÚÙZ\È™Z[‹ˆŸÑPËTÕÔQÑKP‘SQÑKLX‘PQX™[YÙXP[™ZYÙKÑİÛ›ØY]YˆÙ\™\œÙZ]YÙHÚYÛ™YT“È[\İ[[ˆ
-XÚÙ]\İ™]š]˜]
-KˆŸÑPËTS‹L˜T•PS]šXÙKPš[™[™ËĞÚ[[™ÙH›ZX›ÙZİ[ØÚZY[™ÎÈXZÙYT\ÜİÛÜ™TØÚ]ˆ›ÜˆÛË[]™H[H\Ú›Ø\™Zİ]šY\™[‹ˆŸÖTÕSPUPËPUQULXÔS˜\ˆYH›ÛH™]šY]È™[˜[›[ˆ]ZY[ˆİ\™[ˆ™\šYš^šY\ÈÙZ]\™HÛY[Tİ\X˜\ÙKT˜YH[™™XÚ[™ÜËKÔ™ZÛ[X][ÛœËKÕ\ØYT˜YHÚ[™šXÚŞ\İ[X]\ØÚÙ\YYˆ‚ˆÈÈ˜YXÚİH™ZZ[™›ÛÙB‚ŒKˆY\ÙHÚİKRÛÜœ™Zİ\ˆYY™[ˆ\ÜÙ[È™ZH™Y\™ˆÛÜœšYÚY\™[‹‚Œ‹ˆØ[[Y[œ™ZYØX™HY\ˆˆÍ‹ÈÍËÈÍÈÍHØÚY\ÜÙ[ˆÙ\ˆ]YˆÚİKRÛÜœ™Zİ\ˆ™Y^šY\™[‹‚ŒËˆYÙ\‹RÛÛœÛÛYY\[™È
-Èœ™\ÚT™\^K‚ˆ]]ÛX]\ÚY\\ˆL‘KRÙ\›ÙYËU\İÈ[˜XÚÙ™›[™KU™\˜YË‚‚ˆÈÈœ™ZYØX™YÜ™[™[‚‚“Ú™H]\ÙYXÚÛXÚHœ™ZYØX™H\™›ÛÙ[ˆÙZ]\š[ˆÙZ[ˆY\™ÙKÙZ[ˆ›ÙXİ[Û‹Q\ŞKÙZ[™HÙZ]\™H™[[İKSZYÜ˜][Û‹ÙZ[™H“ËKÔÛXŞKPY[™\[™È[™ÙZ[™HÙZ]\™H][›Ù\ØÚ[™Ëˆ\ˆ\KUÛÜšİ™YH™X]\™KØØ\\™KX]]][˜[Ú\™šXÚ[™Ù]\İ]‚
+- 2026-08-06: D1 - Bucket `belege` auf privat.
+- 2026-08-06: D2 - EXECUTE-Entzug fuer `fn_compute_warnings`, `fn_is_production_order`, `fn_update_vorlagen`, `fn_verteile_energiekosten`, `search_global`, `log_beleg_insert`, `prevent_beleg_delete`, `prevent_beleg_mutation`, `prevent_audit_mutation`.
+- 2026-08-06: Loeschung aller Tenant-Geschaeftsdaten (ausdrueckliche Freigabe).
+
+## Noch offen / nicht behauptet
+
+| ID | Status | Restarbeit |
+|---|---|---|
+| `SUPABASE-ADMIN-DEFAULTPRIV-001` | `BLOCKED_EXTERNAL` | Default Privileges von `supabase_admin` fuer `anon`/`authenticated` bestehen weiter; nur ueber Dashboard/Owner loesbar. |
+| `LEDGER-CONSOLIDATION-001` | `ACTIVE` | Die per `execute_sql` angewandten Aenderungen ledgerfaehig nachziehen; Fresh-Replay herstellen. |
+| `RLS-CONTRACT-001` | `ACTIVE` | Relationenspezifische Rollen-/Tenant-Matrix; tenant_isolation greift architektonisch noch nicht sauber. RLS ist nicht entfallen. |
+| `OPERATIVE-SLICE-001` | `NOT_PROVEN` | E2E-Kernweg durchgaengig ausfuehren und automatisiert absichern. CI-E2E prueft aktuell nur zwei Auth-Faelle. |
+| `OFFLINE-SHELL-001` / `OFFLINE-48H-001` | `BLOCKED` | Echter Sync-Transport, Outbox-Idempotenz, Konflikte, Restart und 48h-Nachweis fehlen. |
+| `SEC-STORAGE-BELEGE-001` | `READY` | `belege`-Anzeige/Download auf serverseitige Signed URLs umstellen (Bucket ist jetzt privat). |
+| `SEC-PIN-002B` | `PARTIAL` | Device-Binding/Challenge bleibt Produktentscheidung; Leaked-Password-Schutz vor Go-live im Dashboard aktivieren. |
+| `SYSTEMATIC-AUDIT-001` | `OPEN` | Nur die vom Review benannten Dateien wurden verifiziert; weitere Client-Supabase-Pfade und Rechnungs-/Reklamations-/Upload-Pfade sind nicht systematisch geprueft. |
+
+## Naechste Reihenfolge
+
+1. Diese Doku-Korrektur pruefen lassen; bei Bedarf korrigieren.
+2. Sammelfreigabe fuer PR #42/#43/#44; #41 schliessen oder auf Doku-Korrektur reduzieren.
+3. Ledger-Konsolidierung + Fresh-Replay.
+4. Automatisierter E2E-Kernweg-Test; danach Offline-Vertrag.
+
+## Freigabegrenzen
+
+Ohne ausdrueckliche Freigabe erfolgen weiterhin kein Merge, kein Production-Deploy, keine weitere Remote-Migration, keine RLS-/Policy-Aenderung und keine weitere Datenloeschung. Der Dirty-Worktree `feature/capture-auth-tenant` wird nicht angetastet.
