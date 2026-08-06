@@ -20,16 +20,20 @@ Diese Datei ersetzt den veralteten Stand vom 2026-08-05, der Data-API und PIN fa
 | Offline-Vertrag | `CONTAINED_ONLY` | Kein echter, verifizierter Sync-Transport. Datenverlust-Pfad in SyncContext ist stillgelegt (PR #42, offen). 48h-Nachweis fehlt. |
 | Produkt-Go-live | `NO_GO` | E2E-Kern, Offline-Vertrag, RLS-Relationsmatrix, Fresh-Replay und Ledger-Konsolidierung sind nicht abgenommen. |
 
-## Offene Fundament-Fixes (Branch + PR, CI gruen, ungemergt)
+## Fundament-Fixes: Stand F0-Konsolidierung
 
-Auf ausdrueckliche Anweisung noch nicht gemergt. Sammelfreigabe steht aus.
+C1 (`#42`) ist nach `main` gemergt (`62af22d7`). Die uebrigen Fixes sind im F0-Konsolidierungskandidaten
+`#48` (Branch `f0/consolidation`) gebuendelt; Merge erfolgt gebuendelt nach Freigabe.
 
-| PR | Inhalt | CI | Status |
-|---|---|---|---|
-| `#42` | C1 - SyncContext: stiller Datenverlust gestoppt (kein Fake-Sync/Loeschen ohne Serveruebertragung). | gruen (5/5) | offen, Review PASS |
-| `#43` | C2 - `inquiriesRepository` auf Server Action umgestellt; kein Fake-Success mehr. | gruen | offen, Review PASS |
-| `#44` | C3+C4 - Today-Datenvertrag: `risk`/`dueLabel`/`dueValue` server-seitig aus echtem `dueDate`; Mock-Typen raus; keine Client-Priorisierung. | gruen (quality/Build) | offen, Review PASS |
-| `#41` | Docs + Offline-Containment. | gruen | **nicht als-is mergen** - kuerzt geschuetzte Anforderungen; durch diese Doku-Korrektur ersetzt. |
+| PR | Inhalt | Status |
+|---|---|---|
+| `#42` | C1 - SyncContext: stiller Datenverlust gestoppt. | **INTEGRATED (main)** |
+| `#43` | C2 - `inquiriesRepository` auf Server Action; kein Fake-Success. Fail-closed Auth + B1-Negativtests. | INTEGRATED in `#48` |
+| `#44` | C3+C4 - Today-Datenvertrag server-seitig; Mock-Typen raus. + B2. | INTEGRATED in `#48` |
+| `#45` | G1 - diese wahrheitsgetreue Doku (additiv). | INTEGRATED in `#48` |
+| `#46` | B4 - Upload-Routen autorisiert + Signed URLs + Negativtests. | INTEGRATED in `#48` |
+| `#41` | Docs + Offline-Containment. | **SUPERSEDED** - kuerzt geschuetzte Anforderungen; Doku-Teil durch `#45` ersetzt. Nicht mergen. |
+| `#40` / `#47` | Baseline-Ersatz (Draft) / D1-D2-Migrationen. | MATERIAL fuer F0-03/04 (Ledger/Replay). |
 
 ## Angewandte Production-Aenderungen ausserhalb des Ledgers (APPLIED_NOT_IN_LEDGER)
 
