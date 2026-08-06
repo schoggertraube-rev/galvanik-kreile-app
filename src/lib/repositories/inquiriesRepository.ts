@@ -1,7 +1,9 @@
-import { createId } from "@paralleldrive/cuid2";
-
-
-import { createClient } from "@/lib/supabase/client";
+import {
+  getInquiries,
+  getOpenInquiriesCount,
+  createInquiry,
+  updateInquiry,
+} from "@/app/actions/inquiries.actions";
 
 export type QuoteRequest = {
   id: string;
@@ -27,130 +29,39 @@ export type QuoteRequest = {
   };
 };
 
-const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
-
+// All data access delegates to the inquiries server action (Drizzle,
+// privileged). The browser Supabase client is intentionally NOT used here:
+// with the Data-API locked down it cannot read or write, and previously
+// masked failures as success, silently losing quote requests.
 export const inquiriesRepository = {
   async getAll(): Promise<QuoteRequest[]> {
-    if (isSupabase) {
-      const supabase = createClient();
-      const { data, error } = await supabase.from('inquiries').select('*').order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error("Supabase inquiriesRepository.getAll error:", error);
-        return [];
-      }
-
-      const mapped = data.map(db => ({
-        id: db.id,
-        customerName: db.customer_name,
-        customerId: db.customer_id || "",
-        subject: db.subject,
-        description: db.description,
-        receivedAt: db.received_at,
-        rustLevel: db.rust_level || "Leicht",
-        dirtLevel: db.dirt_level || "Sauber",
-        partCount: db.part_count || 1,
-        material: db.material || "",
-        status: db.status || "offen",
-        photo: db.photo,
-        pricing: db.pricing || {
-          grundarbeit: 0,
-          reinigung: 0,
-          entmetallisierung: 0,
-          schleifaufwand: 0,
-          badchemie: 0,
-          risikopuffer: 0,
-          marge: 0,
-        }
-      })) as QuoteRequest[];
-
-      return mapped;
-    }
-    
-    return [];
+    return getInquiries();
   },
 
   async getOpenCount(): Promise<number> {
-    if (isSupabase) {
-      const supabase = createClient();
-      const { count, error } = await supabase.from('inquiries').select('*', { count: 'exact', head: true }).eq('status', 'offen');
-      if (!error && count !== null) return count;
-    }
-    const all = await this.getAll();
-    return all.filter(q => q.status === "offen").length;
+    return getOpenInquiriesCount();
   },
 
   async create(data: Omit<QuoteRequest, "id" | "receivedAt" | "status" | "pricing">): Promise<QuoteRequest> {
-    const newId = `inq_${createId()}`;
-    const pricing = {
-      grundarbeit: 0,
-      reinigung: 0,
-      entmetallisierung: 0,
-      schleifaufwand: 0,
-      badchemie: 0,
-      risikopuffer: 0,
-      marge: 0,
-    };
-    
-    if (isSupabase) {
-      const supabase = createClient();
-      const dbRow = {
-        id: newId,
-        tenant_id: 'galvanik-kreile',
-        customer_name: data.customerName,
-        customer_id: data.customerId || null,
-        subject: data.subject,
-        description: data.description,
-        rust_level: data.rustLevel,
-        dirt_level: data.dirtLevel,
-        part_count: data.partCount,
-        material: data.material,
-        status: 'offen',
-        pricing: pricing,
-      };
-      const { error } = await supabase.from('inquiries').insert([dbRow]);
-      if (error) {
-        console.error("Supabase inquiriesRepository.create error:", error.message, error.details, error.hint);
-      }
+    const result = await createInquiry(data as Record<string, unknown>);
+    if (!result.success) {
+      const detail = result.errors
+        ? JSON.stringify(result.errors)
+        : (result.error ?? "Unbekannter Fehler");
+      throw new Error(`Anfrage konnte nicht gespeichert werden: ${detail}`);
     }
-    
-    const newInquiry: QuoteRequest = {
-      ...data,
-      id: newId,
-      receivedAt: new Date().toISOString(),
-      status: "offen",
-      pricing,
-    };
-    return newInquiry;
+    return result.data as QuoteRequest;
   },
 
   async updateStatus(id: string, status: QuoteRequest["status"]): Promise<QuoteRequest | null> {
-    if (isSupabase) {
-      const supabase = createClient();
-      const { error } = await supabase.from('inquiries').update({ status }).eq('id', id);
-      if (error) {
-        console.error("Supabase inquiriesRepository.updateStatus error:", error);
-      }
-    }
-    
+    const updated = await updateInquiry(id, { status });
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event('kreile-inquiries-updated'));
+      window.dispatchEvent(new Event("kreile-inquiries-updated"));
     }
-    
-    const all = await this.getAll();
-    return all.find(q => q.id === id) || null;
+    return updated;
   },
 
   async updatePricing(id: string, pricing: QuoteRequest["pricing"]): Promise<QuoteRequest | null> {
-    if (isSupabase) {
-      const supabase = createClient();
-      const { error } = await supabase.from('inquiries').update({ pricing }).eq('id', id);
-      if (error) {
-        console.error("Supabase inquiriesRepository.updatePricing error:", error);
-      }
-    }
-
-    const all = await this.getAll();
-    return all.find(q => q.id === id) || null;
-  }
+    return updateInquiry(id, { pricing });
+  },
 };
