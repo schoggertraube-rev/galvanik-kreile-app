@@ -4,6 +4,7 @@ import { eq, desc, and, notInArray, notIlike, sql, inArray } from "drizzle-orm";
 import type { OperationalOrder, OperationalOrderItem } from "@/lib/types/operationalOrder";
 
 export type { OperationalOrder, OperationalOrderItem } from "@/lib/types/operationalOrder";
+import { evaluateOrderPriority } from "@/lib/priority";
 
 // Short-lived in-memory cache (5 seconds) — prevents parallel duplicate DB calls
 // during a single page render without blocking real-time updates.
@@ -71,6 +72,12 @@ async function _fetchAndMap(): Promise<OperationalOrder[]> {
     const intakeDate = o.intakeDate ? new Date(o.intakeDate).toISOString() : (o.createdAt ? new Date(o.createdAt).toISOString() : new Date().toISOString());
     const dueDate = o.dueDate ? new Date(o.dueDate).toISOString() : new Date(new Date(intakeDate).getTime() + 10 * 24 * 60 * 60 * 1000).toISOString();
 
+    // Single source of truth: derive risk/urgency from the real dueDate,
+    // server-side. Never hardcode dueValue — that previously made every order
+    // display "10 Tagen" and corrupted downstream priority logic.
+    const isBlocked = o.status === "blocked" || o.risk === "blocked";
+    const priority = evaluateOrderPriority({ dueDate, risk: o.risk ?? undefined, isBlocked });
+
     return {
       id: o.id,
       orderNumber: o.orderNumber,
@@ -82,13 +89,13 @@ async function _fetchAndMap(): Promise<OperationalOrder[]> {
       surfaceRequested: orderParts.length > 0 ? orderParts[0].surfaceRequested || null : null,
       station: o.currentStationId || "wareneingang",
       status: o.status,
-      risk: o.risk || "green",
+      risk: priority.risk,
       currentStationId: o.currentStationId || "wareneingang",
       parts: orderParts,
       intakeDate,
       dueDate,
-      dueLabel: "Fällig in",
-      dueValue: "10 Tagen",
+      dueLabel: priority.dueLabel,
+      dueValue: priority.dueValue,
       createdAt: o.createdAt?.toISOString(),
     };
   });
