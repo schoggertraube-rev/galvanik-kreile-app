@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kreile-pwa-cache-v2';
+const CACHE_NAME = 'kreile-pwa-cache-v3';
 const OFFLINE_URL = '/';
 
 const STATIC_ASSETS = [
@@ -17,80 +17,57 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((name) => {
-          if (name !== CACHE_NAME) return caches.delete(name);
-        })
-      );
-    })
+    Promise.all([
+      // Clean up old caches
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((name) => {
+            if (name !== CACHE_NAME) return caches.delete(name);
+          })
+        );
+      }),
+      // CONTAINMENT: Delete stale API cache IndexedDB from previous SW version
+      new Promise((resolve) => {
+        try {
+          const req = indexedDB.deleteDatabase('kreile-offline-db');
+          req.onsuccess = () => { console.log('[SW] Cleaned up stale kreile-offline-db'); resolve(); };
+          req.onerror = () => resolve();
+          req.onblocked = () => resolve();
+        } catch { resolve(); }
+      })
+    ])
   );
   self.clients.claim();
 });
 
-const DB_NAME = 'kreile-offline-db';
-const STORE_NAME = 'api-cache';
-
-function getDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = (e) => {
-      e.target.result.createObjectStore(STORE_NAME);
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function saveToDB(url, data) {
-  const db = await getDB();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
-  tx.objectStore(STORE_NAME).put({ data, timestamp: Date.now() }, url);
-  return tx.complete;
-}
-
-async function getFromDB(url) {
-  const db = await getDB();
-  return new Promise((resolve) => {
-    const tx = db.transaction(STORE_NAME, 'readonly');
-    const request = tx.objectStore(STORE_NAME).get(url);
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => resolve(null);
-  });
-}
+// CONTAINMENT: API caching disabled until OFFLINE-SHELL-001
+// Previously, API responses were cached in IndexedDB and served as stale
+// fallbacks. This caused users to see outdated data presented as current.
+// Static assets remain cache-first. All other requests are network-only.
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // API requests: network-only, no caching
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/supabase/')) {
     event.respondWith(
-      fetch(event.request)
-        .then((response) => {
-          const cloned = response.clone();
-          cloned.json().then((data) => saveToDB(url.href, data)).catch(() => {});
-          return response;
-        })
-        .catch(async () => {
-          const cached = await getFromDB(url.href);
-          if (cached && Date.now() - cached.timestamp < 48 * 60 * 60 * 1000) {
-            return new Response(JSON.stringify(cached.data), {
-              headers: { 'Content-Type': 'application/json', 'X-Offline-Fallback': 'true' }
-            });
-          }
-          return new Response(JSON.stringify({ error: 'Offline', offline: true }), {
-            status: 503,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        })
+      fetch(event.request).catch(() => {
+        return new Response(JSON.stringify({ error: 'Offline', offline: true }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      })
     );
     return;
   }
 
+  // Navigation: network-first, fallback to cached offline page
   if (event.request.mode === 'navigate') {
     event.respondWith(
       fetch(event.request).catch(() => caches.match(OFFLINE_URL))
     );
   } else {
+    // Static assets: cache-first
     event.respondWith(
       caches.match(event.request).then((cached) => cached || fetch(event.request))
     );

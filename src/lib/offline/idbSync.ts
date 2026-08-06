@@ -125,17 +125,10 @@ export const syncQueue = {
   },
 
   async remove(id: string): Promise<void> {
-    try {
-      const db = await initDB();
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(STORE_NAME, "readwrite");
-        const store = tx.objectStore(STORE_NAME);
-        const req = store.delete(id);
-        req.onsuccess = () => resolve();
-        req.onerror = () => reject(req.error);
-      });
-    } catch {
-      // ignore
-    }
+    // CONTAINMENT: drain/delete disabled until OFFLINE-48H-001.
+    // Queue entries must not be deleted until idempotent sync is implemented.
+    // Previous behavior silently discarded user data on sync errors.
+    console.warn(`[idbSync] remove(${id}) disabled — OFFLINE-48H-001 pending`);
+    return;
   }
 };

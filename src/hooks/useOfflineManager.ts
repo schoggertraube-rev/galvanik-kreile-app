@@ -1,3 +1,7 @@
+/**
+ * @deprecated Mock-only hook that stores actions in React state only (no persistence).
+ * Use SyncContext instead. Will be removed with OFFLINE-SHELL-001.
+ */
 'use client'
 
 import { useState, useCallback } from 'react'
@@ -15,8 +19,9 @@ export function useOfflineManager() {
 
   const enqueueAction = useCallback((action: OfflineAction) => {
     setOutbox(prev => [...prev, action])
-    // In a real implementation this would write to IndexedDB or localStorage
-    console.log('[OfflineManager] Action enqueued:', action)
+    // CONTAINMENT: This hook only stores in React state (lost on unmount).
+    // No persistence, no sync. Use SyncContext for real offline support.
+    console.warn('[useOfflineManager] deprecated — use SyncContext instead')
   }, [])
 
   return {
