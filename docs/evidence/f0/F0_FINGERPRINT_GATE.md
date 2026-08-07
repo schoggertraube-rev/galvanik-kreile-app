@@ -15,7 +15,9 @@
 | cons (Constraints) | `6d01fa1055264eeed86b00940bba8220` | Anzahl exakt (252/FK79); Text-Normalisierung |
 | trig (Trigger) | `fd2dbbf795278d30567641a9dc244488` | Anzahl exakt (7); Text-Normalisierung |
 | pol (Policy-Ausdrücke) | `ba81e93f371031e2952e90befec17545` | 69/71 exakt; 2 kosmetisch (s.u.) |
-| grants (public+private) | `6ca01b506766bfdf5507067b094006c0` | service_role-ACL-Divergenz (s.u.) |
+| grants (public+private Tabellen) | `6ca01b506766bfdf5507067b094006c0` | service_role-ACL-Divergenz (s.u.) |
+| func_grants (Funktions-EXECUTE) | `32b5f7cdd1e3b13e841896b8cf2fb663` | NEU (Red-Team) — schließt #94-Klasse |
+| def_privs (ALTER DEFAULT PRIVILEGES) | `52bcb99349592ff3ca7c25e0039b5720` | NEU (Red-Team) |
 
 Voll-Fingerprint (Namensebene, Struktur inkl. storage-Policies): Prod `7c6bbd55e1e80a4aaee974075f7cec4e`,
 Replay identisch (71 Policies) — belegt strukturelle Parität.
@@ -38,3 +40,15 @@ Replay identisch (71 Policies) — belegt strukturelle Parität.
 ## Einsatz in CI (F0-08 P8)
 Job: fresh `supabase db reset` → `f0_schema_fingerprint.sql` → Vergleich gegen diese Referenz;
 Prod-Referenz read-only re-attestieren (kein Schreibzugriff). FAIL bei harter Abweichung.
+
+## Sicherheitsbefund (func_grants, verifiziert)
+Explizite Prüfung: anon/authenticated/PUBLIC-EXECUTE auf App-Funktionen = **nur**
+`current_user_can_view_finance` (tenant-gescopter RLS-Helper, safe). Alle übrigen anon/auth-Funktions-Grants
+sind reine `pg_trgm`-Extension-Funktionen (Trigramm-Mathematik, kein Datenzugriff) → benigne.
+**Kein gefährlicher Funktions-EXECUTE (#94-Klasse) offen.**
+
+## Noch NICHT im Gate (Red-Team, offen)
+Storage-Bucket-Config (Size/MIME), Extensions+Versionen, Sequenz-Parameter, Kommentare, Materialized Views
+und partitionierte Tabellen sind noch nicht im Fingerprint. Nächste Härtung des Gates.
+Der Client-Boundary-Guard (`check-supabase-client-boundary.mjs`) ist Regex-basiert = **Hinweisscanner**,
+kein harter CI-Gate (mögliche False-Negatives bei aliasierten/dynamischen Imports).
