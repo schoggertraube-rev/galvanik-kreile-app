@@ -1,4 +1,4 @@
-﻿-- FOUNDATION_PRODUCTION_BASELINE_001 (Inhalt gehoben auf bewiesenen Prod-Stand 2026-08-06)
+-- FOUNDATION_PRODUCTION_BASELINE_001 (Inhalt gehoben auf bewiesenen Prod-Stand 2026-08-06)
 -- Zusammensetzung: Schema(public+private) + Grants-Lockdown + Storage-Policies + service_role-ACL.
 -- read-only aus Prod syhaigjhsbpjmtnggqka verifiziert; Replay==Prod via f0_schema_fingerprint.sql.
 
