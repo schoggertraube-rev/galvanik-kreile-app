@@ -136,6 +136,10 @@ jobs:
           echo "replay-fingerprint: $FP"
           node scripts/quality/fingerprint-compare.mjs "$FP" docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt | tee replay-fingerprint.txt
 
+      - name: F0 negative + inventory tests (grant-denial, rls-contract, storage, view)
+        run: |
+          PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f scripts/quality/f0_negative_tests.sql
+
       - name: Upload fingerprint artifact
         if: always()
         continue-on-error: true

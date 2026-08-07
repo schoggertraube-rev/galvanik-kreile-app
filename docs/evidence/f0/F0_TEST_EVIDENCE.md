@@ -1,4 +1,20 @@
-﻿# F0_TEST_EVIDENCE â€” Runtime/Build/Test-Nachweis
+# F0_TEST_EVIDENCE â€” Runtime/Build/Test-Nachweis
+
+## Konsolidierte CI-Gates (Stand 2026-08-07, massgeblich)
+
+| Gate | Mechanik | Ort |
+|---|---|---|
+| Fresh-Replay | leere DB -> Baseline + 7 Forward-Migrationen | CI-Job `Fresh Supabase replay` |
+| Fingerprint | 6/10 Komponenten byte-exakt = Prod, hart (fingerprint-compare.mjs) | im Replay-Job |
+| Negativ-/Inventartests | scripts/quality/f0_negative_tests.sql: (A) anon/authenticated grant-denial auf 5 Tabellen, (B) >=29 Haertungspolicies + keine breiten Policies ausser service_role, (C) Bucket-Limits (skip-if-absent, Daten), (D) v_auftrag_db security_invoker | im Replay-Job, NEU (F0-08) |
+| Ledger-Vertrag | check-migration-ledger.mjs (Archiv 96 + Baseline + Forward) | quality |
+| Forbidden Patterns | Diff-Checker mit exakter Allowlist der 3 prod-treuen Migrationen | quality |
+| Client-Boundary | check-supabase-client-boundary.mjs (nur lib/supabase darf createClient) | quality |
+| ESLint-Ratchet | 0 errors / 0 warnings Regression | ratchet |
+
+Bekannte, bewusste Grenzen: pol/cons/trig known-normalization (Parse-Tree, soft); def_privs known-external;
+Bucket-Zeilen sind Daten (skip-faehig); tenant-Zeilen-Sichtbarkeitstests mit Fixtures = F1-Erweiterung.
+
 
 **Kandidat-Branch:** `f0/consolidation`
 **Head:** `5d4d9367ec23d8d5ffbb82eb3f9cc64e11622843`
