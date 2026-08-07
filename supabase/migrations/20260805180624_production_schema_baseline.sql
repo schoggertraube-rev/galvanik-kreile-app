@@ -1,21 +1,13 @@
+﻿-- FOUNDATION_PRODUCTION_BASELINE_001 (Inhalt gehoben auf bewiesenen Prod-Stand 2026-08-06)
+-- Zusammensetzung: Schema(public+private) + Grants-Lockdown + Storage-Policies + service_role-ACL.
+-- read-only aus Prod syhaigjhsbpjmtnggqka verifiziert; Replay==Prod via f0_schema_fingerprint.sql.
+
+-- ===== PROD_BASELINE_2026-08-06.sql =====
+-- Baseline preamble: non-default prod extension
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 
 
 
--- FOUNDATION_PRODUCTION_BASELINE_001
--- Source project: syhaigjhsbpjmtnggqka (Production, read-only export)
--- Export command contract: Supabase CLI 2.111.0 `db dump --linked`
--- Raw schema dump SHA-256: cd4b69f4102504905dffdf2d013199e04991226dbe1ec97908c57efb4028cd4e
--- Scope: schema only. No COPY records, top-level INSERT/UPDATE/DELETE, auth users,
--- storage objects, customer data, order data, PIN values, financial rows, or secrets.
--- Reproducibility adjustments:
---   * The CLI dump body below is retained verbatim, including Production grants,
---     default privileges, RLS state, policies, owners, extensions, and search_path.
---   * Local Supabase role defaults are neutralized before object creation so the
---     dump's explicit ACLs and final default privileges reproduce Production.
---   * Supabase-managed storage schema DDL is intentionally not duplicated.
---   * Four app-owned storage.objects policies are appended after the dump because
---     the CLI excludes the managed storage schema from its default schema dump.
---   * Bucket configuration is isolated in the post-baseline migration.
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -29,66 +21,19 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 
--- Supabase local images provision broader anon/authenticated defaults than the
--- linked Production catalog. These statements affect only subsequently created
--- objects; the dump's explicit GRANTs and final ALTER DEFAULT PRIVILEGES restore
--- the exact Production contract.
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public"
-    REVOKE ALL ON TABLES FROM "anon", "authenticated", "service_role";
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public"
-    REVOKE ALL ON SEQUENCES FROM "anon", "authenticated", "service_role";
-ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public"
-    REVOKE ALL ON FUNCTIONS FROM "anon", "authenticated", "service_role";
-
-
-CREATE SCHEMA IF NOT EXISTS "drizzle";
-
-
-ALTER SCHEMA "drizzle" OWNER TO "postgres";
-
-
 CREATE SCHEMA IF NOT EXISTS "private";
 
 
 ALTER SCHEMA "private" OWNER TO "postgres";
 
 
+CREATE SCHEMA IF NOT EXISTS "public";
+
+
+ALTER SCHEMA "public" OWNER TO "pg_database_owner";
+
+
 COMMENT ON SCHEMA "public" IS 'standard public schema';
-
-
-
-CREATE EXTENSION IF NOT EXISTS "pg_stat_statements" WITH SCHEMA "extensions";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "pg_trgm" WITH SCHEMA "public";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA "extensions";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "supabase_vault" WITH SCHEMA "vault";
-
-
-
-
-
-
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA "extensions";
-
-
-
 
 
 
@@ -277,19 +222,19 @@ CREATE OR REPLACE FUNCTION "public"."fn_compute_warnings"("p_tenant" "text") RET
     SET "search_path" TO 'public', 'pg_temp'
     AS $$
 BEGIN
-  -- 1. Liquiditätswarnung: Forderungen >30 Tage > 15% Monatsumsatz
+  -- 1. LiquiditÃ¤tswarnung: Forderungen >30 Tage > 15% Monatsumsatz
   INSERT INTO warning_event (tenant_id, typ, titel, beschreibung, schwere, link)
   SELECT p_tenant, 'liquiditaet',
-    'Offene Forderungen über 30 Tage',
-    COUNT(*) || ' Rechnungen über 30 Tage überfällig, Volumen ' ||
-      COALESCE(SUM(netto)::int::text, '0') || ' €',
+    'Offene Forderungen Ã¼ber 30 Tage',
+    COUNT(*) || ' Rechnungen Ã¼ber 30 Tage Ã¼berfÃ¤llig, Volumen ' || 
+      COALESCE(SUM(netto)::int::text, '0') || ' â‚¬',
     CASE WHEN COUNT(*) > 3 THEN 'kritisch' ELSE 'warnung' END,
     '/buchhaltung'
   FROM v_aging
   WHERE aging_bucket IN ('31-60','61-90','>90')
   HAVING COUNT(*) > 0
   AND NOT EXISTS (
-    SELECT 1 FROM warning_event we
+    SELECT 1 FROM warning_event we 
     WHERE we.tenant_id = p_tenant AND we.typ = 'liquiditaet'
       AND (we.dismissed_am IS NULL OR we.suppress_bis > NOW())
   );
@@ -304,7 +249,7 @@ BEGIN
   FROM v_engpass
   WHERE auslastung_quote > 0.85
   AND NOT EXISTS (
-    SELECT 1 FROM warning_event we
+    SELECT 1 FROM warning_event we 
     WHERE we.tenant_id = p_tenant AND we.typ = 'auslastung_' || kuerzel
       AND (we.dismissed_am IS NULL OR we.suppress_bis > NOW())
   );
@@ -313,8 +258,8 @@ BEGIN
   INSERT INTO warning_event (tenant_id, typ, titel, beschreibung, schwere, link, payload)
   SELECT p_tenant, 'abwanderung',
     'Stammkunden-Abwanderung',
-    COUNT(*) || ' Stammkunden seit >9 Monaten inaktiv (Umsatz: ' ||
-      COALESCE(SUM(umsatz_gesamt)::int::text, '0') || ' €)',
+    COUNT(*) || ' Stammkunden seit >9 Monaten inaktiv (Umsatz: ' || 
+      COALESCE(SUM(umsatz_gesamt)::int::text, '0') || ' â‚¬)',
     'warnung',
     '/cockpit',
     jsonb_build_object('kunden', jsonb_agg(jsonb_build_object(
@@ -325,7 +270,7 @@ BEGIN
     AND auftraege_gesamt >= 3
   HAVING COUNT(*) > 0
   AND NOT EXISTS (
-    SELECT 1 FROM warning_event we
+    SELECT 1 FROM warning_event we 
     WHERE we.tenant_id = p_tenant AND we.typ = 'abwanderung'
       AND (we.dismissed_am IS NULL OR we.suppress_bis > NOW())
   );
@@ -334,7 +279,7 @@ BEGIN
   INSERT INTO warning_event (tenant_id, typ, titel, beschreibung, schwere, link, payload)
   SELECT p_tenant, 'db_negativ_' || order_id,
     'Verlustauftrag ' || order_number,
-    'Auftrag ' || order_number || ' hat DB von ' || ROUND(deckungsbeitrag) || ' €',
+    'Auftrag ' || order_number || ' hat DB von ' || ROUND(deckungsbeitrag) || ' â‚¬',
     'kritisch',
     '/orders/' || order_id,
     jsonb_build_object('order_id', order_id, 'db', deckungsbeitrag)
@@ -343,7 +288,7 @@ BEGIN
     AND erloes_netto > 0
     AND status IN ('completed','abgeschlossen')
   AND NOT EXISTS (
-    SELECT 1 FROM warning_event we
+    SELECT 1 FROM warning_event we 
     WHERE we.tenant_id = p_tenant AND we.typ = 'db_negativ_' || order_id
   );
 END;
@@ -390,7 +335,7 @@ BEGIN
 
   v_tenant := COALESCE(NEW.tenant_id, 'galvanik-kreile');
 
-  -- Für jedes Item des Auftrags
+  -- FÃ¼r jedes Item des Auftrags
   FOR v_item IN
     SELECT i.id, i.name, i.surface_requested
     FROM items i WHERE i.order_id = NEW.id
@@ -436,7 +381,7 @@ BEGIN
       WHERE zb.kostenstelle_kuerzel = v_station
         AND zb.tenant_id = v_tenant
         AND o.status IN ('completed', 'abgeschlossen')
-        -- Ähnlichkeits-Match: gleicher Schlüssel
+        -- Ã„hnlichkeits-Match: gleicher SchlÃ¼ssel
         AND EXISTS (
           SELECT 1 FROM teile_klassifikator tk2
           WHERE tk2.tenant_id = v_tenant
@@ -447,14 +392,14 @@ BEGIN
             AND tk2.klasse = v_klasse
         )
         AND COALESCE(lower(trim(it.surface_requested)), 'unbekannt') = v_oberflaeche
-        -- Ausreißer-Schutz: ignoriere Werte > 3x oder < 1/3 des bisherigen Medians
-        AND zb.dauer_minuten BETWEEN
-          COALESCE((SELECT median_minuten / 3 FROM vorlage_zeit
-                    WHERE schluessel = v_schluessel AND station_kuerzel = v_station
+        -- AusreiÃŸer-Schutz: ignoriere Werte > 3x oder < 1/3 des bisherigen Medians
+        AND zb.dauer_minuten BETWEEN 
+          COALESCE((SELECT median_minuten / 3 FROM vorlage_zeit 
+                    WHERE schluessel = v_schluessel AND station_kuerzel = v_station 
                     AND tenant_id = v_tenant), 0)
           AND
-          COALESCE((SELECT median_minuten * 3 FROM vorlage_zeit
-                    WHERE schluessel = v_schluessel AND station_kuerzel = v_station
+          COALESCE((SELECT median_minuten * 3 FROM vorlage_zeit 
+                    WHERE schluessel = v_schluessel AND station_kuerzel = v_station 
                     AND tenant_id = v_tenant), 99999)
       ON CONFLICT (tenant_id, schluessel, station_kuerzel)
       DO UPDATE SET
@@ -482,7 +427,7 @@ BEGIN
       percentile_cont(0.25) WITHIN GROUP (ORDER BY abs(sm.quantity)),
       percentile_cont(0.75) WITHIN GROUP (ORDER BY abs(sm.quantity)),
       COUNT(DISTINCT sm.order_id),
-      -- Häufigkeit: in wieviel % der Aufträge dieser Klasse kommt dieser Artikel vor
+      -- HÃ¤ufigkeit: in wieviel % der AuftrÃ¤ge dieser Klasse kommt dieser Artikel vor
       COUNT(DISTINCT sm.order_id)::numeric / GREATEST(1, (
         SELECT COUNT(DISTINCT o2.id) FROM orders o2
         JOIN items it2 ON it2.order_id = o2.id
@@ -550,12 +495,12 @@ BEGIN
     AND EXTRACT(MONTH FROM b.belegdatum) = p_monat
     AND b.status != 'storniert';
 
-  -- 2. Bestehende Verteilung für diesen Monat löschen (Idempotenz)
+  -- 2. Bestehende Verteilung fÃ¼r diesen Monat lÃ¶schen (Idempotenz)
   DELETE FROM kostenstellen_energie_monat
-  WHERE tenant_id = p_tenant
+  WHERE tenant_id = p_tenant 
     AND monat = make_date(p_jahr, p_monat, 1);
 
-  -- 3. Schleife über alle Produktions-Kostenstellen
+  -- 3. Schleife Ã¼ber alle Produktions-Kostenstellen
   FOR v_rec IN
     SELECT ks.id AS ks_id, ks.kuerzel, ks.verfuegbare_stunden_monatlich
     FROM kostenstelle ks
@@ -581,7 +526,7 @@ BEGIN
       v_eur_pro_stunde := 0;
     END IF;
 
-    -- In kostenstellen_energie_monat einfügen
+    -- In kostenstellen_energie_monat einfÃ¼gen
     IF v_ks_anteil > 0 THEN
       INSERT INTO kostenstellen_energie_monat (tenant_id, kostenstelle_id, monat, energie_eur_pro_stunde)
       VALUES (p_tenant, v_rec.ks_id, make_date(p_jahr, p_monat, 1), v_eur_pro_stunde);
@@ -635,7 +580,7 @@ CREATE OR REPLACE FUNCTION "public"."prevent_audit_mutation"() RETURNS "trigger"
     SET "search_path" TO 'public', 'pg_temp'
     AS $$
 BEGIN
-  RAISE EXCEPTION 'GoBD: Audit-Log ist append-only. Änderungen/Löschungen sind nicht erlaubt.';
+  RAISE EXCEPTION 'GoBD: Audit-Log ist append-only. Ã„nderungen/LÃ¶schungen sind nicht erlaubt.';
 END;
 $$;
 
@@ -648,7 +593,7 @@ CREATE OR REPLACE FUNCTION "public"."prevent_beleg_delete"() RETURNS "trigger"
     SET "search_path" TO 'public', 'pg_temp'
     AS $$
 BEGIN
-  RAISE EXCEPTION 'GoBD: Belege dürfen nicht gelöscht werden. Nur Storno ist erlaubt.';
+  RAISE EXCEPTION 'GoBD: Belege dÃ¼rfen nicht gelÃ¶scht werden. Nur Storno ist erlaubt.';
 END;
 $$;
 
@@ -662,14 +607,14 @@ CREATE OR REPLACE FUNCTION "public"."prevent_beleg_mutation"() RETURNS "trigger"
     AS $$
 BEGIN
   IF OLD.status = 'festgeschrieben' AND NEW.status != 'storniert' THEN
-    RAISE EXCEPTION 'GoBD: Festgeschriebener Beleg darf nicht verändert werden. Nur Storno ist erlaubt.';
+    RAISE EXCEPTION 'GoBD: Festgeschriebener Beleg darf nicht verÃ¤ndert werden. Nur Storno ist erlaubt.';
   END IF;
   IF OLD.status = 'storniert' THEN
-    RAISE EXCEPTION 'GoBD: Stornierter Beleg darf nicht verändert werden.';
+    RAISE EXCEPTION 'GoBD: Stornierter Beleg darf nicht verÃ¤ndert werden.';
   END IF;
-  -- Schutz: original_datei darf nie geändert werden
+  -- Schutz: original_datei darf nie geÃ¤ndert werden
   IF OLD.original_datei IS DISTINCT FROM NEW.original_datei THEN
-    RAISE EXCEPTION 'GoBD: original_datei darf nicht verändert werden.';
+    RAISE EXCEPTION 'GoBD: original_datei darf nicht verÃ¤ndert werden.';
   END IF;
   RETURN NEW;
 END;
@@ -1092,24 +1037,24 @@ CREATE OR REPLACE FUNCTION "public"."search_global"("query" "text") RETURNS TABL
     LANGUAGE "sql" STABLE
     SET "search_path" TO 'public', 'pg_temp'
     AS $$
-  SELECT 'auftrag' AS typ, id, order_number AS label, title AS sublabel
+  SELECT 'auftrag' AS typ, id, order_number AS label, title AS sublabel 
   FROM orders
   WHERE order_number ILIKE '%' || query || '%' OR title ILIKE '%' || query || '%'
-
+  
   UNION ALL
-
-  SELECT 'kunde' AS typ, id, coalesce(company_name, name) AS label, email AS sublabel
+  
+  SELECT 'kunde' AS typ, id, coalesce(company_name, name) AS label, email AS sublabel 
   FROM customers
-  WHERE company_name ILIKE '%' || query || '%'
+  WHERE company_name ILIKE '%' || query || '%' 
      OR name ILIKE '%' || query || '%'
      OR email ILIKE '%' || query || '%'
-
+     
   UNION ALL
-
-  SELECT 'teil' AS typ, id, name AS label, material AS sublabel
+  
+  SELECT 'teil' AS typ, id, name AS label, material AS sublabel 
   FROM items
   WHERE name ILIKE '%' || query || '%' OR material ILIKE '%' || query || '%'
-
+  
   LIMIT 20;
 $$;
 
@@ -1208,32 +1153,6 @@ ALTER FUNCTION "public"."settle_item_photo_analysis"("p_job_id" "uuid", "p_outco
 SET default_tablespace = '';
 
 SET default_table_access_method = "heap";
-
-
-CREATE TABLE IF NOT EXISTS "drizzle"."__drizzle_migrations" (
-    "id" integer NOT NULL,
-    "hash" "text" NOT NULL,
-    "created_at" bigint
-);
-
-
-ALTER TABLE "drizzle"."__drizzle_migrations" OWNER TO "postgres";
-
-
-CREATE SEQUENCE IF NOT EXISTS "drizzle"."__drizzle_migrations_id_seq"
-    AS integer
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
-
-ALTER SEQUENCE "drizzle"."__drizzle_migrations_id_seq" OWNER TO "postgres";
-
-
-ALTER SEQUENCE "drizzle"."__drizzle_migrations_id_seq" OWNED BY "drizzle"."__drizzle_migrations"."id";
-
 
 
 CREATE TABLE IF NOT EXISTS "public"."ai_usage_reservations" (
@@ -3081,7 +3000,7 @@ CREATE OR REPLACE VIEW "public"."v_production_orders" WITH ("security_invoker"='
     "quote_status",
     "quote_converted_order_id"
    FROM "public"."orders"
-  WHERE ((("tenant_id")::"text" = 'galvanik-kreile'::"text") AND (COALESCE("source", ''::"text") <> ALL (ARRAY['seed'::"text", 'test'::"text", 'integration-test'::"text"])) AND ("customer_id" IS NOT NULL) AND (TRIM(BOTH FROM "customer_id") <> ''::"text") AND ("order_number" IS NOT NULL) AND (TRIM(BOTH FROM "order_number") <> ''::"text") AND ("order_number" !~* '^A-SEED-'::"text") AND ("order_number" !~* 'TEST'::"text") AND ((COALESCE(TRIM(BOTH FROM "title"), ''::"text") <> ''::"text") OR (COALESCE(TRIM(BOTH FROM "task"), ''::"text") <> ''::"text")) AND (NOT (((COALESCE("title", ''::"text") <> ''::"text") AND (TRIM(BOTH FROM "title") <> ''::"text") AND (("length"(TRIM(BOTH FROM "title")) < 3) OR (TRIM(BOTH FROM "title") ~* '^[bcdfghjklmnpqrstvwxyz]{5,}'::"text") OR (TRIM(BOTH FROM "title") ~* 'asd|sdf|dfg|fgh|ghj|hjk|jkl|yxc|xcv|cvb|vbn|bnm'::"text") OR (TRIM(BOTH FROM "title") ~* '^([a-z])\1+'::"text") OR ("lower"(TRIM(BOTH FROM "title")) = ANY (ARRAY['gjgvvh'::"text", 'sfdghgjklji'::"text"])) OR ("lower"(TRIM(BOTH FROM "title")) ~~ '%auftrag per scan test e2e%'::"text") OR ("lower"(TRIM(BOTH FROM "title")) ~~ '%test order%'::"text") OR ("lower"(TRIM(BOTH FROM "title")) ~~ '%test stoßstange kundenakte%'::"text"))) OR ((COALESCE("task", ''::"text") <> ''::"text") AND (TRIM(BOTH FROM "task") <> ''::"text") AND (("length"(TRIM(BOTH FROM "task")) < 3) OR (TRIM(BOTH FROM "task") ~* '^[bcdfghjklmnpqrstvwxyz]{5,}'::"text") OR (TRIM(BOTH FROM "task") ~* 'asd|sdf|dfg|fgh|ghj|hjk|jkl|yxc|xcv|cvb|vbn|bnm'::"text") OR (TRIM(BOTH FROM "task") ~* '^([a-z])\1+'::"text") OR ("lower"(TRIM(BOTH FROM "task")) = ANY (ARRAY['gjgvvh'::"text", 'sfdghgjklji'::"text"])) OR ("lower"(TRIM(BOTH FROM "task")) ~~ '%auftrag per scan test e2e%'::"text") OR ("lower"(TRIM(BOTH FROM "task")) ~~ '%test order%'::"text") OR ("lower"(TRIM(BOTH FROM "task")) ~~ '%test stoßstange kundenakte%'::"text"))))) AND (NOT ((COALESCE("order_number", ''::"text") ~* 'test|e2e|demo|seed|mock|fixture|sample|placeholder'::"text") OR (COALESCE("title", ''::"text") ~* 'test|e2e|demo|seed|mock|fixture|sample|placeholder'::"text") OR (COALESCE("task", ''::"text") ~* 'test|e2e|demo|seed|mock|fixture|sample|placeholder'::"text"))));
+  WHERE ((("tenant_id")::"text" = 'galvanik-kreile'::"text") AND (COALESCE("source", ''::"text") <> ALL (ARRAY['seed'::"text", 'test'::"text", 'integration-test'::"text"])) AND ("customer_id" IS NOT NULL) AND (TRIM(BOTH FROM "customer_id") <> ''::"text") AND ("order_number" IS NOT NULL) AND (TRIM(BOTH FROM "order_number") <> ''::"text") AND ("order_number" !~* '^A-SEED-'::"text") AND ("order_number" !~* 'TEST'::"text") AND ((COALESCE(TRIM(BOTH FROM "title"), ''::"text") <> ''::"text") OR (COALESCE(TRIM(BOTH FROM "task"), ''::"text") <> ''::"text")) AND (NOT (((COALESCE("title", ''::"text") <> ''::"text") AND (TRIM(BOTH FROM "title") <> ''::"text") AND (("length"(TRIM(BOTH FROM "title")) < 3) OR (TRIM(BOTH FROM "title") ~* '^[bcdfghjklmnpqrstvwxyz]{5,}'::"text") OR (TRIM(BOTH FROM "title") ~* 'asd|sdf|dfg|fgh|ghj|hjk|jkl|yxc|xcv|cvb|vbn|bnm'::"text") OR (TRIM(BOTH FROM "title") ~* '^([a-z])\1+'::"text") OR ("lower"(TRIM(BOTH FROM "title")) = ANY (ARRAY['gjgvvh'::"text", 'sfdghgjklji'::"text"])) OR ("lower"(TRIM(BOTH FROM "title")) ~~ '%auftrag per scan test e2e%'::"text") OR ("lower"(TRIM(BOTH FROM "title")) ~~ '%test order%'::"text") OR ("lower"(TRIM(BOTH FROM "title")) ~~ '%test stoÃŸstange kundenakte%'::"text"))) OR ((COALESCE("task", ''::"text") <> ''::"text") AND (TRIM(BOTH FROM "task") <> ''::"text") AND (("length"(TRIM(BOTH FROM "task")) < 3) OR (TRIM(BOTH FROM "task") ~* '^[bcdfghjklmnpqrstvwxyz]{5,}'::"text") OR (TRIM(BOTH FROM "task") ~* 'asd|sdf|dfg|fgh|ghj|hjk|jkl|yxc|xcv|cvb|vbn|bnm'::"text") OR (TRIM(BOTH FROM "task") ~* '^([a-z])\1+'::"text") OR ("lower"(TRIM(BOTH FROM "task")) = ANY (ARRAY['gjgvvh'::"text", 'sfdghgjklji'::"text"])) OR ("lower"(TRIM(BOTH FROM "task")) ~~ '%auftrag per scan test e2e%'::"text") OR ("lower"(TRIM(BOTH FROM "task")) ~~ '%test order%'::"text") OR ("lower"(TRIM(BOTH FROM "task")) ~~ '%test stoÃŸstange kundenakte%'::"text"))))) AND (NOT ((COALESCE("order_number", ''::"text") ~* 'test|e2e|demo|seed|mock|fixture|sample|placeholder'::"text") OR (COALESCE("title", ''::"text") ~* 'test|e2e|demo|seed|mock|fixture|sample|placeholder'::"text") OR (COALESCE("task", ''::"text") ~* 'test|e2e|demo|seed|mock|fixture|sample|placeholder'::"text"))));
 
 
 ALTER VIEW "public"."v_production_orders" OWNER TO "postgres";
@@ -3687,15 +3606,6 @@ CREATE TABLE IF NOT EXISTS "public"."zahlung" (
 
 
 ALTER TABLE "public"."zahlung" OWNER TO "postgres";
-
-
-ALTER TABLE ONLY "drizzle"."__drizzle_migrations" ALTER COLUMN "id" SET DEFAULT "nextval"('"drizzle"."__drizzle_migrations_id_seq"'::"regclass");
-
-
-
-ALTER TABLE ONLY "drizzle"."__drizzle_migrations"
-    ADD CONSTRAINT "__drizzle_migrations_pkey" PRIMARY KEY ("id");
-
 
 
 ALTER TABLE ONLY "public"."ai_usage_reservations"
@@ -5416,31 +5326,6 @@ CREATE POLICY "ustva_periode_all" ON "public"."ustva_periode" TO "authenticated"
 ALTER TABLE "public"."zahlung" ENABLE ROW LEVEL SECURITY;
 
 
-
-
-ALTER PUBLICATION "supabase_realtime" OWNER TO "postgres";
-
-
-
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."beleg";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."customers";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."events";
-
-
-
-ALTER PUBLICATION "supabase_realtime" ADD TABLE ONLY "public"."items";
-
-
-
 GRANT USAGE ON SCHEMA "private" TO "authenticated";
 
 
@@ -5449,167 +5334,6 @@ GRANT USAGE ON SCHEMA "public" TO "postgres";
 GRANT USAGE ON SCHEMA "public" TO "anon";
 GRANT USAGE ON SCHEMA "public" TO "authenticated";
 GRANT USAGE ON SCHEMA "public" TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gtrgm_in"("cstring") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gtrgm_in"("cstring") TO "anon";
-GRANT ALL ON FUNCTION "public"."gtrgm_in"("cstring") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gtrgm_in"("cstring") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gtrgm_out"("public"."gtrgm") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gtrgm_out"("public"."gtrgm") TO "anon";
-GRANT ALL ON FUNCTION "public"."gtrgm_out"("public"."gtrgm") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gtrgm_out"("public"."gtrgm") TO "service_role";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -5642,113 +5366,27 @@ REVOKE ALL ON FUNCTION "public"."enforce_operator_control_monotonic_version"() F
 
 
 
+REVOKE ALL ON FUNCTION "public"."fn_compute_warnings"("p_tenant" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."fn_compute_warnings"("p_tenant" "text") TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."fn_is_production_order"("p_order_id" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."fn_is_production_order"("p_order_id" "text") TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."fn_update_vorlagen"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."fn_update_vorlagen"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."fn_verteile_energiekosten"("p_jahr" integer, "p_monat" integer, "p_tenant" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."fn_verteile_energiekosten"("p_jahr" integer, "p_monat" integer, "p_tenant" "text") TO "service_role";
 
 
 
-GRANT ALL ON FUNCTION "public"."gin_extract_query_trgm"("text", "internal", smallint, "internal", "internal", "internal", "internal") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gin_extract_query_trgm"("text", "internal", smallint, "internal", "internal", "internal", "internal") TO "anon";
-GRANT ALL ON FUNCTION "public"."gin_extract_query_trgm"("text", "internal", smallint, "internal", "internal", "internal", "internal") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gin_extract_query_trgm"("text", "internal", smallint, "internal", "internal", "internal", "internal") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gin_extract_value_trgm"("text", "internal") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gin_extract_value_trgm"("text", "internal") TO "anon";
-GRANT ALL ON FUNCTION "public"."gin_extract_value_trgm"("text", "internal") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gin_extract_value_trgm"("text", "internal") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gin_trgm_consistent"("internal", smallint, "text", integer, "internal", "internal", "internal", "internal") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gin_trgm_consistent"("internal", smallint, "text", integer, "internal", "internal", "internal", "internal") TO "anon";
-GRANT ALL ON FUNCTION "public"."gin_trgm_consistent"("internal", smallint, "text", integer, "internal", "internal", "internal", "internal") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gin_trgm_consistent"("internal", smallint, "text", integer, "internal", "internal", "internal", "internal") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gin_trgm_triconsistent"("internal", smallint, "text", integer, "internal", "internal", "internal") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gin_trgm_triconsistent"("internal", smallint, "text", integer, "internal", "internal", "internal") TO "anon";
-GRANT ALL ON FUNCTION "public"."gin_trgm_triconsistent"("internal", smallint, "text", integer, "internal", "internal", "internal") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gin_trgm_triconsistent"("internal", smallint, "text", integer, "internal", "internal", "internal") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gtrgm_compress"("internal") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gtrgm_compress"("internal") TO "anon";
-GRANT ALL ON FUNCTION "public"."gtrgm_compress"("internal") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gtrgm_compress"("internal") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gtrgm_consistent"("internal", "text", smallint, "oid", "internal") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gtrgm_consistent"("internal", "text", smallint, "oid", "internal") TO "anon";
-GRANT ALL ON FUNCTION "public"."gtrgm_consistent"("internal", "text", smallint, "oid", "internal") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gtrgm_consistent"("internal", "text", smallint, "oid", "internal") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gtrgm_decompress"("internal") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gtrgm_decompress"("internal") TO "anon";
-GRANT ALL ON FUNCTION "public"."gtrgm_decompress"("internal") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gtrgm_decompress"("internal") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gtrgm_distance"("internal", "text", smallint, "oid", "internal") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gtrgm_distance"("internal", "text", smallint, "oid", "internal") TO "anon";
-GRANT ALL ON FUNCTION "public"."gtrgm_distance"("internal", "text", smallint, "oid", "internal") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gtrgm_distance"("internal", "text", smallint, "oid", "internal") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gtrgm_options"("internal") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gtrgm_options"("internal") TO "anon";
-GRANT ALL ON FUNCTION "public"."gtrgm_options"("internal") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gtrgm_options"("internal") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gtrgm_penalty"("internal", "internal", "internal") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gtrgm_penalty"("internal", "internal", "internal") TO "anon";
-GRANT ALL ON FUNCTION "public"."gtrgm_penalty"("internal", "internal", "internal") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gtrgm_penalty"("internal", "internal", "internal") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gtrgm_picksplit"("internal", "internal") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gtrgm_picksplit"("internal", "internal") TO "anon";
-GRANT ALL ON FUNCTION "public"."gtrgm_picksplit"("internal", "internal") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gtrgm_picksplit"("internal", "internal") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gtrgm_same"("public"."gtrgm", "public"."gtrgm", "internal") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gtrgm_same"("public"."gtrgm", "public"."gtrgm", "internal") TO "anon";
-GRANT ALL ON FUNCTION "public"."gtrgm_same"("public"."gtrgm", "public"."gtrgm", "internal") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gtrgm_same"("public"."gtrgm", "public"."gtrgm", "internal") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."gtrgm_union"("internal", "internal") TO "postgres";
-GRANT ALL ON FUNCTION "public"."gtrgm_union"("internal", "internal") TO "anon";
-GRANT ALL ON FUNCTION "public"."gtrgm_union"("internal", "internal") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."gtrgm_union"("internal", "internal") TO "service_role";
-
-
-
+REVOKE ALL ON FUNCTION "public"."log_beleg_insert"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."log_beleg_insert"() TO "service_role";
 
 
@@ -5758,14 +5396,17 @@ GRANT ALL ON FUNCTION "public"."mark_item_photo_uncertain"("p_job_id" "uuid", "p
 
 
 
+REVOKE ALL ON FUNCTION "public"."prevent_audit_mutation"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."prevent_audit_mutation"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."prevent_beleg_delete"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."prevent_beleg_delete"() TO "service_role";
 
 
 
+REVOKE ALL ON FUNCTION "public"."prevent_beleg_mutation"() FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."prevent_beleg_mutation"() TO "service_role";
 
 
@@ -5785,14 +5426,8 @@ GRANT ALL ON FUNCTION "public"."reset_security_rate_limit"("p_namespace" "text",
 
 
 
+REVOKE ALL ON FUNCTION "public"."search_global"("query" "text") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."search_global"("query" "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."set_limit"(real) TO "postgres";
-GRANT ALL ON FUNCTION "public"."set_limit"(real) TO "anon";
-GRANT ALL ON FUNCTION "public"."set_limit"(real) TO "authenticated";
-GRANT ALL ON FUNCTION "public"."set_limit"(real) TO "service_role";
 
 
 
@@ -5803,126 +5438,6 @@ GRANT ALL ON FUNCTION "public"."settle_ai_usage_reservation"("p_reservation_id" 
 
 REVOKE ALL ON FUNCTION "public"."settle_item_photo_analysis"("p_job_id" "uuid", "p_outcome" "text", "p_actual_units" integer, "p_provider_status" "text", "p_result" "jsonb") FROM PUBLIC;
 GRANT ALL ON FUNCTION "public"."settle_item_photo_analysis"("p_job_id" "uuid", "p_outcome" "text", "p_actual_units" integer, "p_provider_status" "text", "p_result" "jsonb") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."show_limit"() TO "postgres";
-GRANT ALL ON FUNCTION "public"."show_limit"() TO "anon";
-GRANT ALL ON FUNCTION "public"."show_limit"() TO "authenticated";
-GRANT ALL ON FUNCTION "public"."show_limit"() TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."show_trgm"("text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."show_trgm"("text") TO "anon";
-GRANT ALL ON FUNCTION "public"."show_trgm"("text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."show_trgm"("text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."similarity"("text", "text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."similarity"("text", "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."similarity"("text", "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."similarity"("text", "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."similarity_dist"("text", "text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."similarity_dist"("text", "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."similarity_dist"("text", "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."similarity_dist"("text", "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."similarity_op"("text", "text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."similarity_op"("text", "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."similarity_op"("text", "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."similarity_op"("text", "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."strict_word_similarity"("text", "text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity"("text", "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity"("text", "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity"("text", "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_commutator_op"("text", "text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_commutator_op"("text", "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_commutator_op"("text", "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_commutator_op"("text", "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_dist_commutator_op"("text", "text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_dist_commutator_op"("text", "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_dist_commutator_op"("text", "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_dist_commutator_op"("text", "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_dist_op"("text", "text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_dist_op"("text", "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_dist_op"("text", "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_dist_op"("text", "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_op"("text", "text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_op"("text", "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_op"("text", "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."strict_word_similarity_op"("text", "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."word_similarity"("text", "text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."word_similarity"("text", "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."word_similarity"("text", "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."word_similarity"("text", "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."word_similarity_commutator_op"("text", "text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."word_similarity_commutator_op"("text", "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."word_similarity_commutator_op"("text", "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."word_similarity_commutator_op"("text", "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."word_similarity_dist_commutator_op"("text", "text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."word_similarity_dist_commutator_op"("text", "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."word_similarity_dist_commutator_op"("text", "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."word_similarity_dist_commutator_op"("text", "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."word_similarity_dist_op"("text", "text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."word_similarity_dist_op"("text", "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."word_similarity_dist_op"("text", "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."word_similarity_dist_op"("text", "text") TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "public"."word_similarity_op"("text", "text") TO "postgres";
-GRANT ALL ON FUNCTION "public"."word_similarity_op"("text", "text") TO "anon";
-GRANT ALL ON FUNCTION "public"."word_similarity_op"("text", "text") TO "authenticated";
-GRANT ALL ON FUNCTION "public"."word_similarity_op"("text", "text") TO "service_role";
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -6450,12 +5965,6 @@ GRANT ALL ON TABLE "public"."zahlung" TO "service_role";
 
 
 
-
-
-
-
-
-
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "postgres";
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON SEQUENCES TO "service_role";
 
@@ -6476,20 +5985,68 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TABLES TO "service_role";
 
 
--- App-owned policies on Supabase-managed storage.objects, exported read-only from
--- Production with `supabase db dump --linked --schema storage`.
-CREATE POLICY "scan_objects_insert_authenticated" ON "storage"."objects" FOR INSERT TO "authenticated" WITH CHECK ((("bucket_id" = 'scans'::"text") AND (EXISTS ( SELECT 1
-   FROM "public"."app_users" "au"
-  WHERE (("au"."id" = "auth"."uid"()) AND ("au"."active" IS TRUE) AND ("au"."tenant_id" = ("storage"."foldername"("objects"."name"))[1]) AND (("au"."role")::"text" = ANY ((ARRAY['werkstatt'::character varying, 'meister'::character varying, 'buero'::character varying, 'admin'::character varying])::"text"[])))))));
 
-CREATE POLICY "scan_objects_select_authenticated" ON "storage"."objects" FOR SELECT TO "authenticated" USING ((("bucket_id" = 'scans'::"text") AND (EXISTS ( SELECT 1
-   FROM "public"."app_users" "au"
-  WHERE (("au"."id" = "auth"."uid"()) AND ("au"."active" IS TRUE) AND ("au"."tenant_id" = ("storage"."foldername"("objects"."name"))[1]))))));
 
-CREATE POLICY "scan_objects_service_role_all" ON "storage"."objects" TO "service_role" USING (("bucket_id" = 'scans'::"text")) WITH CHECK (("bucket_id" = 'scans'::"text"));
 
-CREATE POLICY "scan_objects_update_authenticated" ON "storage"."objects" FOR UPDATE TO "authenticated" USING ((("bucket_id" = 'scans'::"text") AND (EXISTS ( SELECT 1
-   FROM "public"."app_users" "au"
-  WHERE (("au"."id" = "auth"."uid"()) AND ("au"."active" IS TRUE) AND ("au"."tenant_id" = ("storage"."foldername"("objects"."name"))[1]) AND (("au"."role")::"text" = ANY ((ARRAY['werkstatt'::character varying, 'meister'::character varying, 'buero'::character varying, 'admin'::character varying])::"text"[]))))))) WITH CHECK ((("bucket_id" = 'scans'::"text") AND (EXISTS ( SELECT 1
-   FROM "public"."app_users" "au"
-  WHERE (("au"."id" = "auth"."uid"()) AND ("au"."active" IS TRUE) AND ("au"."tenant_id" = ("storage"."foldername"("objects"."name"))[1]) AND (("au"."role")::"text" = ANY ((ARRAY['werkstatt'::character varying, 'meister'::character varying, 'buero'::character varying, 'admin'::character varying])::"text"[])))))));
+
+
+
+-- ===== PROD_LOCKDOWN_GRANTS.sql =====
+-- Data-API Grant-Lockdown â€” reproduzierbare Form der Prod-Massnahmen (#86/#87/#88)
+-- ZWINGEND zusammen mit der Schema-Baseline anzuwenden.
+--
+-- Grund (empirisch belegt 2026-08-06): Ein reiner Schema-Dump reproduziert den
+-- Prod-Zustand "0 Grants an anon/authenticated" NICHT. Auf einer frischen Supabase-
+-- Instanz vergeben die plattformseitigen Default Privileges alle public-Objekte
+-- (94 Tabellen + 17 Views = 111) automatisch an anon UND authenticated zurueck
+-- (Fresh-Replay-Messung: 666 Grants). Diese Migration entzieht sie wieder auf 0.
+--
+-- Verifiziert: nach Anwendung im Fresh-Replay -> 0 Grants (= Produktion).
+-- Idempotent / replay-safe.
+
+-- 1) Bestehende Tabellen- und View-Rechte entziehen
+revoke all on all tables in schema public from anon, authenticated;
+
+-- 2) Kuenftige Objekte fail-closed (Default Privileges)
+alter default privileges in schema public revoke all on tables from anon, authenticated;
+
+-- Hinweis (nicht hier loesbar): Die supabase_admin-Default-Privileges auf Cluster-
+-- Ebene (SUPABASE-ADMIN-DEFAULTPRIV-001) sind nur ueber Dashboard/Owner adressierbar
+-- und bleiben ein separater, extern zu klaerender Punkt.
+
+-- ===== PROD_STORAGE_POLICIES.sql =====
+-- Storage-RLS-Policies (storage.objects) â€” Prod-Paritaet fuer F0-03/F0-06.
+-- Exakte Prod-Definitionen (pg_get_expr). Idempotent/replay-safe.
+-- Prod: 67 public/private + 4 storage = 71 Policies gesamt.
+
+drop policy if exists "scan_objects_insert_authenticated" on storage.objects;
+CREATE POLICY scan_objects_insert_authenticated ON storage.objects AS PERMISSIVE FOR INSERT TO authenticated WITH CHECK (((bucket_id = 'scans'::text) AND (EXISTS ( SELECT 1 FROM app_users au WHERE ((au.id = auth.uid()) AND (au.active IS TRUE) AND (au.tenant_id = (storage.foldername(objects.name))[1]) AND ((au.role)::text = ANY ((ARRAY['werkstatt'::character varying, 'meister'::character varying, 'buero'::character varying, 'admin'::character varying])::text[])))))));
+
+drop policy if exists "scan_objects_select_authenticated" on storage.objects;
+CREATE POLICY scan_objects_select_authenticated ON storage.objects AS PERMISSIVE FOR SELECT TO authenticated USING (((bucket_id = 'scans'::text) AND (EXISTS ( SELECT 1 FROM app_users au WHERE ((au.id = auth.uid()) AND (au.active IS TRUE) AND (au.tenant_id = (storage.foldername(objects.name))[1]))))));
+
+drop policy if exists "scan_objects_service_role_all" on storage.objects;
+CREATE POLICY scan_objects_service_role_all ON storage.objects AS PERMISSIVE FOR ALL TO service_role USING ((bucket_id = 'scans'::text)) WITH CHECK ((bucket_id = 'scans'::text));
+
+drop policy if exists "scan_objects_update_authenticated" on storage.objects;
+CREATE POLICY scan_objects_update_authenticated ON storage.objects AS PERMISSIVE FOR UPDATE TO authenticated USING (((bucket_id = 'scans'::text) AND (EXISTS ( SELECT 1 FROM app_users au WHERE ((au.id = auth.uid()) AND (au.active IS TRUE) AND (au.tenant_id = (storage.foldername(objects.name))[1]) AND ((au.role)::text = ANY ((ARRAY['werkstatt'::character varying, 'meister'::character varying, 'buero'::character varying, 'admin'::character varying])::text[]))))))) WITH CHECK (((bucket_id = 'scans'::text) AND (EXISTS ( SELECT 1 FROM app_users au WHERE ((au.id = auth.uid()) AND (au.active IS TRUE) AND (au.tenant_id = (storage.foldername(objects.name))[1]) AND ((au.role)::text = ANY ((ARRAY['werkstatt'::character varying, 'meister'::character varying, 'buero'::character varying, 'admin'::character varying])::text[])))))));
+
+-- ===== PROD_SERVICE_ROLE_ACL.sql =====
+-- F0-03/05 ParitÃ¤t + Least-Privilege: service_role-ACL an Prod angleichen.
+-- Selbst gefundener, entscheidungsfreier Fehler: Supabase-Default-Privileges granten service_role
+-- auf neu erzeugten Tabellen VOLL (7 Rechte). Prod haelt service_role auf 4 Telemetrie-/Control-Tabellen
+-- bewusst knapp. Richtung = restriktiver = sicher, Prod autoritativ -> REVOKE. Idempotent/replay-safe.
+
+-- app_usage_events: Prod = SELECT
+revoke delete, insert, references, trigger, truncate, update on public.app_usage_events from service_role;
+-- developer_feedback: Prod = SELECT
+revoke delete, insert, references, trigger, truncate, update on public.developer_feedback from service_role;
+-- operator_control_events: Prod = INSERT, SELECT
+revoke delete, references, trigger, truncate, update on public.operator_control_events from service_role;
+-- tenant_operator_controls: Prod = INSERT, SELECT, UPDATE
+revoke delete, references, trigger, truncate on public.tenant_operator_controls from service_role;
+
+-- OFFEN (ENTSCHEIDUNG, NICHT hier): ai_usage_reservations, item_photo_jobs, security_rate_limit_counters.
+-- Dort ist die Baseline restriktiver (nur REFERENCES/TRIGGER/TRUNCATE), Prod hat service_role VOLL.
+-- ParitÃ¤t wuerde GRANT bedeuten; Security spricht fuer Least-Privilege (nur die SECURITY-DEFINER-RPC schreibt).
+-- Richtung ist eine Produkt-/Security-Entscheidung -> bewusst ausgelassen.
