@@ -1,0 +1,17 @@
+-- F0 definitorischer Schema-Fingerprint (Replay==Prod-Gate).
+-- Liefert je Komponente ein md5 ueber die ECHTEN Definitionen (nicht nur Namen):
+-- Spalten(Typ/NotNull/Default), Indizes, Constraints, Trigger, Funktions-Bodies,
+-- Policy-Ausdruecke (inkl. storage.objects), RLS-Flags, Grants (public+private).
+-- Gegen dieselbe Query auf Prod vergleichen. Deterministisch (kein pg_dump/\restrict-Token).
+
+select
+ md5((select coalesce(string_agg(x, E'\n' order by x),'') from (select c.relname||'.'||a.attname||':'||format_type(a.atttypid,a.atttypmod)||':'||a.attnotnull::text||':'||coalesce(pg_get_expr(ad.adbin,ad.adrelid),'') as x from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace left join pg_attrdef ad on ad.adrelid=a.attrelid and ad.adnum=a.attnum where n.nspname in ('public','private') and c.relkind in ('r','v') and a.attnum>0 and not a.attisdropped) s)) as cols,
+ md5((select coalesce(string_agg(pg_get_indexdef(i.indexrelid), E'\n' order by pg_get_indexdef(i.indexrelid)),'') from pg_index i join pg_class c on c.oid=i.indrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private'))) as idx,
+ md5((select coalesce(string_agg(con.conrelid::regclass::text||' '||pg_get_constraintdef(con.oid), E'\n' order by con.conrelid::regclass::text||' '||pg_get_constraintdef(con.oid)),'') from pg_constraint con join pg_namespace n on n.oid=con.connamespace where n.nspname in ('public','private'))) as cons,
+ md5((select coalesce(string_agg(pg_get_triggerdef(t.oid), E'\n' order by pg_get_triggerdef(t.oid)),'') from pg_trigger t join pg_class c on c.oid=t.tgrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and not t.tgisinternal)) as trig,
+ md5((select coalesce(string_agg(pg_get_functiondef(p.oid), E'\n' order by p.proname,p.oid),'') from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname in ('public','private'))) as func,
+ md5((select coalesce(string_agg(pol.polrelid::regclass::text||'.'||pol.polname||':'||pol.polcmd::text||':'||coalesce(pg_get_expr(pol.polqual,pol.polrelid),'')||':'||coalesce(pg_get_expr(pol.polwithcheck,pol.polrelid),'')||':'||pol.polpermissive::text||':'||array_to_string(pol.polroles::regrole[]::text[],','), E'\n' order by pol.polrelid::regclass::text||'.'||pol.polname),'') from pg_policy pol join pg_class c on c.oid=pol.polrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private','storage'))) as pol,
+ md5((select coalesce(string_agg(c.relname||':'||c.relrowsecurity::text||':'||c.relforcerowsecurity::text, E'\n' order by c.relname),'') from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private') and c.relkind='r')) as rls,
+ md5((select coalesce(string_agg(table_name||':'||grantee||':'||privilege_type, E'\n' order by table_name,grantee,privilege_type),'') from information_schema.role_table_grants where table_schema in ('public','private'))) as grants,
+ md5((select coalesce(string_agg(routine_name||':'||grantee||':'||privilege_type, E'\n' order by routine_name,grantee,privilege_type),'') from information_schema.role_routine_grants where routine_schema in ('public','private'))) as func_grants,
+ md5((select coalesce(string_agg(coalesce(defaclrole::regrole::text,'')||':'||defaclobjtype::text||':'||coalesce(defaclnamespace::regnamespace::text,'-')||':'||coalesce(array_to_string(defaclacl::text[],','),''), E'\n' order by 1),'') from pg_default_acl)) as def_privs;
