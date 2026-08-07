@@ -47,8 +47,10 @@ Gut geformt (tenant-/rollengebunden, Referenz): `*.tenant_isolation*`, `orders.a
   Sie umgehen RLS (owner-Rechte), sind aber â€” auÃŸer `current_user_can_view_finance` (authenticated) â€”
   **nur service_role-EXECUTE**. Die finance-Check-Funktion ist tenant-gescopt (Boolean Ã¼ber auth.uid()),
   kein Cross-Tenant-Leak. â†’ **kein Escalation-Vektor verifiziert**, aber Posture hÃ¤ngt an korrekten EXECUTE-Grants.
-- **Views (17): NEUER HÃ¤rtungspunkt.** Alle postgres-owned mit `security_invoker=off` â†’ wÃ¼rden RLS umgehen,
-  falls erreichbar. Aktuell 0 anon/auth-Grants â†’ kein Data-API-Pfad. Defense-in-depth: `security_invoker=on`.
+- **Views (17) â€” KORRIGIERT 2026-08-07 (Messfehler behoben):** frÃ¼here Aussage â€žalle 17 `security_invoker=off`"
+  war **falsch** (Query prÃ¼fte `=on`, Postgres speichert `=true`). TatsÃ¤chlich: **16 Views bereits
+  `security_invoker=true`; nur `v_auftrag_db` ist ungesetzt (off).** HÃ¤rtungsbedarf = **genau 1 View**.
+  Alle 17 postgres-owned; aktuell zusÃ¤tzlich durch 0 anon/auth-Grants gedeckt.
 - **Ehrliche Herabstufung:** A06/A07 sind **NICHT PASS**, sondern **CONDITIONAL/UNTESTED** â€” die Fail-closed-Lage
   ruht allein auf Grant-Entzug (ein `GRANT`/`ALTER DEFAULT PRIVILEGES` von Totalexposition entfernt), nicht auf
   RLS+security_invoker. service_role umgeht RLS vollstÃ¤ndig (bekannt, per Design Backend-Rolle).

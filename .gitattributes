@@ -29,3 +29,6 @@
 
 # F0: verbatim Prod-Dumps von Whitespace-Pruefung ausnehmen
 docs/evidence/f0/baseline/*.sql -whitespace
+
+# F0: SQL immer LF (verhindert CRLF-Hash-Drift)
+docs/evidence/f0/**/*.sql text eol=lf

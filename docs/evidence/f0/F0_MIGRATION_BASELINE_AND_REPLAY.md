@@ -44,3 +44,8 @@ Funktionen/**Policies (inkl. Storage)**/Grants â€” deterministisch, reprodu
 ## Sauberkeit
 Alle lokalen Stacks gestoppt, Replay-/Redump-Klone gelÃ¶scht. Prod ausschlieÃŸlich read-only.
 DB-Passwort nach Nutzung weiterhin zur Rotation empfohlen.
+## Hash-Rebind (2026-08-07, Review-Korrektur)
+Fruehere SHA-256-Angabe (030A6893...) bezog sich auf das lokale CRLF-File VOR dem Commit - Fehler.
+Massgeblich ist das LF-Repo-Artefakt `docs/evidence/f0/baseline/PROD_BASELINE_2026-08-06.sql`:
+SHA-256 (Repo-Stand): 29896f7143bd9937994d4bd0f6e9675707694539b9c0039c347dcc6b31c6193d
+.gitattributes erzwingt ab jetzt eol=lf fuer diese SQLs.
