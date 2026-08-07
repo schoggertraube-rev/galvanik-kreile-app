@@ -129,7 +129,7 @@ jobs:
         continue-on-error: true
         run: |
           FP=$(PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres \
-            -A -F'|' -t -f docs/evidence/f0/hardening/f0_schema_fingerprint.sql | tr -d '\r' | tr -d '\n')
+            -A -F'|' -t -f docs/evidence/f0/hardening/f0_schema_fingerprint.sql | grep '|' | tr -d '\r' | tr -d '\n')
           echo "replay-fingerprint: $FP"
           node scripts/quality/fingerprint-compare.mjs "$FP" docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt | tee replay-fingerprint.txt
 
