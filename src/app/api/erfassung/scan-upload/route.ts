@@ -1,16 +1,13 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 import { db } from "@/db";
 import { scanUploads } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { extractDocumentData } from "@/lib/ocr/geminiOcr";
 import { checkAppAuthorization } from "@/lib/server/authHelper";
+import { createAdminClient } from "@/lib/supabase/admin";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+const supabase = createAdminClient();
 
 const ALLOWED_TYPES = [
   "image/jpeg",

@@ -1,0 +1,37 @@
+{
+  "moduleId": "erfassung",
+  "version": "0.1.0",
+  "owner": "galvanik-kreile-app-team",
+  "publicExports": [
+    "@/lib/erfassung/snapshot#getKostensatz",
+    "@/lib/erfassung/klassifikator"
+  ],
+  "capabilities": [
+    "erfassung:read",
+    "erfassung:write"
+  ],
+  "migrations": [],
+  "viewsFunctions": [],
+  "storagePurposes": [
+    {
+      "bucket": "scans",
+      "purpose": "Original document scans uploaded via /api/erfassung/scan-upload, OCR'd server-side into scan_uploads."
+    },
+    {
+      "bucket": "item-photos",
+      "purpose": "Per-item intake photos uploaded via /api/erfassung/item-photo-upload, analyzed via the item-photo-analyze edge function."
+    }
+  ],
+  "events": {
+    "emits": [],
+    "consumes": []
+  },
+  "config": {
+    "NEXT_PUBLIC_SUPABASE_URL": "Supabase project URL, used for storage uploads and edge function calls.",
+    "SUPABASE_SERVICE_ROLE_KEY": "Service-role key for the canonical admin client (src/lib/supabase/admin.ts); never exposed client-side."
+  },
+  "dependencies": [
+    "auth",
+    "supabase-client-boundary"
+  ]
+}

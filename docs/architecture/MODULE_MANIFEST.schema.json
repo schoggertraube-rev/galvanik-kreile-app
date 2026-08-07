@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://kreile.internal/schemas/module-manifest.schema.json",
+  "title": "Module Manifest",
+  "description": "Declares the public boundary of one modular slice of the Kreile app: what it exports for other modules to consume, what database and storage objects it owns, what domain events it emits/consumes, and what it depends on. One manifest file per module lives under docs/architecture/modules/<moduleId>.manifest.json. Documentation-as-data for F0-07 (minimal modular boundary); not (yet) enforced at build time.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["moduleId", "version", "owner"],
+  "properties": {
+    "moduleId": {
+      "type": "string",
+      "description": "Stable, unique identifier for the module, kebab-case.",
+      "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of this manifest's contract (semver). Bump when publicExports, capabilities, or events change in a breaking way.",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "owner": {
+      "type": "string",
+      "description": "Person, role, or team accountable for this module.",
+      "minLength": 1
+    },
+    "publicExports": {
+      "type": "array",
+      "description": "Symbols or module paths (e.g. '@/lib/erfassung/snapshot#getKostensatz') that other modules are permitted to import. Anything not listed here is a module-internal implementation detail and must not be imported cross-module.",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "capabilities": {
+      "type": "array",
+      "description": "Named capabilities/permissions this module provides or requires (e.g. 'erfassung:write').",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "migrations": {
+      "type": "array",
+      "description": "Filenames under supabase/migrations/ that this module owns and is responsible for evolving.",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "viewsFunctions": {
+      "type": "array",
+      "description": "Database views and functions this module owns, schema-qualified (e.g. 'public.fn_erfassung_snapshot').",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "storagePurposes": {
+      "type": "array",
+      "description": "Storage buckets this module owns and what each is used for.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["bucket", "purpose"],
+        "properties": {
+          "bucket": { "type": "string" },
+          "purpose": { "type": "string" }
+        }
+      },
+      "default": []
+    },
+    "events": {
+      "type": "object",
+      "description": "Domain events this module emits and/or consumes, for future cross-module wiring.",
+      "additionalProperties": false,
+      "properties": {
+        "emits": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "consumes": { "type": "array", "items": { "type": "string" }, "default": [] }
+      },
+      "default": {}
+    },
+    "config": {
+      "type": "object",
+      "description": "Module-specific configuration keys (env vars, feature flags) mapped to a short description of each.",
+      "additionalProperties": { "type": "string" },
+      "default": {}
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "moduleId values of other modules this module depends on.",
+      "items": { "type": "string" },
+      "default": []
+    }
+  }
+}
