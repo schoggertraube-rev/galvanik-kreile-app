@@ -26,3 +26,6 @@
 *.eot binary
 *.zip binary
 *.pdf binary
+
+# F0: verbatim Prod-Dumps von Whitespace-Pruefung ausnehmen
+docs/evidence/f0/baseline/*.sql -whitespace
