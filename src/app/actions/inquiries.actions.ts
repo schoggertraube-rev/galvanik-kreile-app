@@ -5,13 +5,18 @@ import { inquiries } from "@/db/schema";
 import { eq, count } from "drizzle-orm";
 import type { InferInsertModel } from "drizzle-orm";
 import { createId } from "@paralleldrive/cuid2";
+import { checkAppAuth } from "@/lib/server/authHelper";
 import type { QuoteRequest } from "@/lib/repositories/inquiriesRepository";
 
 export async function getInquiries(): Promise<QuoteRequest[]> {
+  // Authorize before any privileged DB access. Fail-closed to an empty list
+  // so unauthenticated/forbidden callers never read tenant data.
+  const auth = await checkAppAuth("read");
+  if (!auth.ok) return [];
   if (!db) return [];
   try {
     const dbInquiries = await db.select().from(inquiries).orderBy(inquiries.createdAt);
-    
+
     return dbInquiries.map(inq => ({
       id: inq.id,
       customerName: inq.customerName,
@@ -42,6 +47,8 @@ export async function getInquiries(): Promise<QuoteRequest[]> {
 }
 
 export async function getOpenInquiriesCount(): Promise<number> {
+  const auth = await checkAppAuth("read");
+  if (!auth.ok) return 0;
   if (!db) return 0;
   try {
     const [{ value }] = await db.select({ value: count() }).from(inquiries).where(eq(inquiries.status, 'offen'));
@@ -53,18 +60,21 @@ export async function getOpenInquiriesCount(): Promise<number> {
 }
 
 export async function createInquiry(data: Record<string, unknown>) {
+  // Mutation requires an explicit write role. Fail-closed before any DB write.
+  const auth = await checkAppAuth("write");
+  if (!auth.ok) return { success: false, error: "UNAUTHORIZED" };
   if (!db) return { success: false, error: "Database not available" };
-  
+
   const { inquirySchema } = await import("@/lib/validation/inquirySchema");
   const parsed = inquirySchema.safeParse(data);
-  
+
   if (!parsed.success) {
     const formattedErrors = parsed.error.flatten().fieldErrors;
     return { success: false, errors: formattedErrors };
   }
-  
+
   const validData = parsed.data;
-  
+
   try {
     const newId = createId();
     const pricing = {
@@ -76,9 +86,11 @@ export async function createInquiry(data: Record<string, unknown>) {
       risikopuffer: 0,
       marge: 0,
     };
-    
+
     const dbRow = {
       id: newId,
+      // Tenant is server-canonical for this single-tenant app; never taken
+      // from client input.
       tenantId: "galvanik-kreile",
       customerName: validData.customerName,
       customerId: validData.customerId || null,
@@ -92,9 +104,9 @@ export async function createInquiry(data: Record<string, unknown>) {
       pricing,
       quelleTyp: validData.quelleTyp || "unbekannt",
     };
-    
+
     await db.insert(inquiries).values(dbRow);
-    
+
     return {
       success: true,
       data: {
@@ -112,6 +124,8 @@ export async function createInquiry(data: Record<string, unknown>) {
 }
 
 export async function updateInquiry(id: string, changes: Partial<QuoteRequest>): Promise<QuoteRequest | null> {
+  const auth = await checkAppAuth("write");
+  if (!auth.ok) return null;
   if (!db) return null;
   try {
     const updateData: Partial<InferInsertModel<typeof inquiries>> = {};
@@ -120,13 +134,13 @@ export async function updateInquiry(id: string, changes: Partial<QuoteRequest>):
     if (changes.customerName !== undefined) updateData.customerName = changes.customerName;
     if (changes.subject !== undefined) updateData.subject = changes.subject;
     if (changes.description !== undefined) updateData.description = changes.description;
-    
+
     await db.update(inquiries).set(updateData).where(eq(inquiries.id, id));
-    
+
     // Fetch the updated inquiry to return it
     const updated = await db.select().from(inquiries).where(eq(inquiries.id, id));
     if (!updated.length) return null;
-    
+
     const inq = updated[0];
     return {
       id: inq.id,

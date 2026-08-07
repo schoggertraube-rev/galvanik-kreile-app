@@ -1,0 +1,54 @@
+﻿# F0 Fingerprint-Gate â€” definitorische Replay==Prod-PrÃ¼fung
+
+**Zweck:** Bei jedem Build den Fresh-Replay gegen Prod prÃ¼fen â€” **auf Definitionsebene**
+(Policy-AusdrÃ¼cke, Funktions-Bodies, Constraints, Spalten), nicht nur Namen/Anzahl.
+**Script:** `docs/evidence/f0/hardening/f0_schema_fingerprint.sql` (identisch auf Replay und Prod ausfÃ¼hren).
+
+## Hinterlegte Prod-Referenz (2026-08-06, read-only)
+
+| Komponente | Prod-md5 | Replay-Status |
+|---|---|---|
+| cols (Spalten Typ/NotNull/Default) | `298ae919741dd003962021f8f1d5fa84` | **EXAKT** |
+| idx (Indizes) | `75343db54bb620978e1461bdeeb2e195` | **EXAKT** |
+| func (Funktions-Bodies inkl. SECDEF/search_path) | `57c5dd75d3af96d97423714cd6affb88` | **EXAKT** |
+| rls (RLS-Flags) | `7176c1c699aa26fb0c23276c53341087` | **EXAKT** |
+| cons (Constraints) | `6d01fa1055264eeed86b00940bba8220` | Anzahl exakt (252/FK79); Text-Normalisierung |
+| trig (Trigger) | `fd2dbbf795278d30567641a9dc244488` | Anzahl exakt (7); Text-Normalisierung |
+| pol (Policy-AusdrÃ¼cke) | `ba81e93f371031e2952e90befec17545` | 69/71 exakt; 2 kosmetisch (s.u.) |
+| grants (public+private Tabellen) | `6ca01b506766bfdf5507067b094006c0` | service_role-ACL-Divergenz (s.u.) |
+| func_grants (Funktions-EXECUTE) | `32b5f7cdd1e3b13e841896b8cf2fb663` | NEU (Red-Team) â€” schlieÃŸt #94-Klasse |
+| def_privs (ALTER DEFAULT PRIVILEGES) | `52bcb99349592ff3ca7c25e0039b5720` | NEU (Red-Team) |
+
+Voll-Fingerprint (Namensebene, Struktur inkl. storage-Policies): Prod `7c6bbd55e1e80a4aaee974075f7cec4e`,
+Replay identisch (71 Policies) â€” belegt strukturelle ParitÃ¤t.
+
+## Gate-Regeln
+- **Hart (mÃ¼ssen exakt sein):** cols, idx, func, rls. Abweichung â‡’ FAIL.
+- **cons/trig:** Anzahl muss exakt sein (252/79/7); Text-md5-Abweichung ist als
+  pg_dump/Serialisierungs-Normalisierung dokumentiert (Stichprobe bestÃ¤tigt Semantik) â‡’ WARN, kein FAIL,
+  solange Anzahl + Stichprobe stimmen.
+- **pol:** die 2 Storage-Policies `scan_objects_insert/update_authenticated` weichen nur in der
+  Array-Cast-Serialisierung ab (gleiche 4 Rollen) â‡’ bekannte, bewiesene Ã„quivalenz (WARN).
+  Alle Ã¼brigen 69 mÃ¼ssen exakt sein.
+- **grants:** nach KlÃ¤rung der service_role-ACL (Entscheidung) muss grants exakt matchen.
+
+## Bekannte Rest-Divergenzen (zu schlieÃŸen)
+1. **grants/service_role** â€” 4 Tabellen fixbar (REVOKE, verifiziert), 3 RPC-Tabellen ENTSCHEIDUNG nÃ¶tig.
+2. **2 Storage-Policies** â€” optional serialisierungs-angleichen fÃ¼r md5-Exaktheit.
+3. **cons/trig** â€” Stichprobe zur endgÃ¼ltigen Kosmetik-BestÃ¤tigung (nÃ¤chste Runde).
+
+## Einsatz in CI (F0-08 P8)
+Job: fresh `supabase db reset` â†’ `f0_schema_fingerprint.sql` â†’ Vergleich gegen diese Referenz;
+Prod-Referenz read-only re-attestieren (kein Schreibzugriff). FAIL bei harter Abweichung.
+
+## Sicherheitsbefund (func_grants, verifiziert)
+Explizite PrÃ¼fung: anon/authenticated/PUBLIC-EXECUTE auf App-Funktionen = **nur**
+`current_user_can_view_finance` (tenant-gescopter RLS-Helper, safe). Alle Ã¼brigen anon/auth-Funktions-Grants
+sind reine `pg_trgm`-Extension-Funktionen (Trigramm-Mathematik, kein Datenzugriff) â†’ benigne.
+**Kein gefÃ¤hrlicher Funktions-EXECUTE (#94-Klasse) offen.**
+
+## Noch NICHT im Gate (Red-Team, offen)
+Storage-Bucket-Config (Size/MIME), Extensions+Versionen, Sequenz-Parameter, Kommentare, Materialized Views
+und partitionierte Tabellen sind noch nicht im Fingerprint. NÃ¤chste HÃ¤rtung des Gates.
+Der Client-Boundary-Guard (`check-supabase-client-boundary.mjs`) ist Regex-basiert = **Hinweisscanner**,
+kein harter CI-Gate (mÃ¶gliche False-Negatives bei aliasierten/dynamischen Imports).

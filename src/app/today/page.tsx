@@ -16,20 +16,20 @@ import {
   Phone,
   Calendar
 } from "lucide-react";
-import { MockOrder, MockCustomer } from "@/lib/mockData";
-const INITIAL_ORDERS: MockOrder[] = [];
-const INITIAL_CUSTOMERS: MockCustomer[] = [];
+import type { Order } from "@/lib/repositories/ordersRepository";
+import type { Customer } from "@/lib/types/customer";
+const INITIAL_ORDERS: Order[] = [];
+const INITIAL_CUSTOMERS: Customer[] = [];
 import { getRiskConfig } from "@/constants/status";
 import { getStationConfig } from "@/constants/stations";
-import { evaluateOrderPriority } from "@/lib/priority";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { customersRepository } from "@/lib/repositories/customersRepository";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 export default function TodayDashboard() {
   usePageView();
-  const [orders, setOrders] = useState<MockOrder[]>(INITIAL_ORDERS);
-  const [customers, setCustomers] = useState<MockCustomer[]>(INITIAL_CUSTOMERS);
+  const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS);
+  const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS);
   const [filter, setFilter] = useState<string>("all");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>("o1");
 
@@ -40,12 +40,12 @@ export default function TodayDashboard() {
       try {
         const dbOrders = await ordersRepository.getAll();
         if (isMounted && dbOrders && dbOrders.length > 0) {
-          setOrders(dbOrders as unknown as MockOrder[]);
+          setOrders(dbOrders);
         }
         
         const dbCustomers = await customersRepository.getAll();
         if (isMounted && dbCustomers && dbCustomers.length > 0) {
-          setCustomers(dbCustomers as unknown as MockCustomer[]);
+          setCustomers(dbCustomers);
         }
       } catch (e) {
         console.error("Fehler beim Laden aus Repositories", e);
@@ -71,14 +71,11 @@ export default function TodayDashboard() {
   }, []);
 
   // Filter orders for "today" - overdue (red) or due today (orange)
-  const todayOrders = orders.filter(o => {
-    const evalRes = evaluateOrderPriority({
-      dueDate: o.dueValue,
-      risk: o.risk,
-    });
-    return evalRes.risk === "red" || evalRes.risk === "orange" || evalRes.risk === "yellow"; 
-    // Including yellow (3 days) for a bit more data in demo, but strictly speaking it's red/orange
-  });
+  // Priority is computed server-side (single source of truth). Filter on the
+  // canonical risk instead of recomputing it on the client from a display string.
+  const todayOrders = orders.filter(o =>
+    o.risk === "red" || o.risk === "orange" || o.risk === "yellow"
+  );
 
   // Dynamic status counts based ONLY on today's orders
   const countRed = todayOrders.filter(o => o.risk === "red").length;
@@ -86,35 +83,6 @@ export default function TodayDashboard() {
   // Central workshop station names helper
   const getStationName = (station: string) => {
     return getStationConfig(station).fullName || station;
-  };
-
-  const handleAction = (orderId: string) => {
-    const updated = orders.map(o => {
-      if (o.id === orderId || o.orderNumber === orderId) {
-        return {
-          ...o,
-          risk: "green" as const,
-          statusText: "IM PLAN (Gegenmaßnahme eingeleitet)",
-          delayReason: undefined,
-          recommendedAction: undefined,
-          dueLabel: "Fällig in",
-          dueValue: "10 Tagen"
-        };
-      }
-      return o;
-    });
-
-    setOrders(updated);
-    // Fire async update to DB in background
-    try {
-      const orderToUpdate = updated.find(o => o.id === orderId || o.orderNumber === orderId);
-      // Async sync to DB
-      if (orderToUpdate) {
-        ordersRepository.updateOrder(orderId, (orderToUpdate as unknown) as Parameters<typeof ordersRepository.updateOrder>[1]).catch(console.error);
-      }
-    } catch (e) {
-      console.error("Fehler beim Speichern der Gegenmaßnahme", e);
-    }
   };
 
   const getCustomerPhone = (customerId: string, customerName: string) => {
@@ -209,19 +177,16 @@ export default function TodayDashboard() {
             {filteredOrders.length === 0 ? (
                 <div className="p-8 text-center text-text-muted">Für heute sind keine Aufträge fällig.</div>
             ) : filteredOrders.map((order) => {
-              const evalRes = evaluateOrderPriority({
-                dueDate: order.dueValue,
-                risk: order.risk,
-              });
+              const config = getRiskConfig(order.risk);
               const isSelected = selectedOrderId === order.id;
               const isRed = order.risk === "red";
               const isOrange = order.risk === "orange";
               
-              let cardStyle = evalRes.config.cardClass;
+              let cardStyle = config.cardClass;
               if (isSelected) {
                 cardStyle += " ring-2 ring-navy-900";
               }
-              const leftBorderColor = evalRes.config.leftBorderClass;
+              const leftBorderColor = config.leftBorderClass;
               
               let iconElement = <CheckCircle2 className="h-6 w-6 text-success-green" />;
 
@@ -301,23 +266,6 @@ export default function TodayDashboard() {
                         </span>
                       </div>
 
-                      {order.recommendedAction && (
-                        <Button 
-                          size="sm" 
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAction(order.id);
-                          }}
-                          className={`h-10 font-extrabold text-xs gap-2 px-4 rounded-xl border shadow-sm transition-all cursor-pointer ${
-                            isRed 
-                              ? "bg-danger-red text-white hover:bg-danger-red border-danger-red hover:scale-[1.03]" 
-                              : "bg-navy-900 text-white hover:bg-navy-700 border-navy-900 hover:scale-[1.03]"
-                          }`}
-                        >
-                          <Zap className="h-3.5 w-3.5" /> 
-                          <span>{order.recommendedAction}</span>
-                        </Button>
-                      )}
                     </div>
 
                   </CardContent>
@@ -415,19 +363,24 @@ export default function TodayDashboard() {
                 <div className="space-y-2 border-t pt-4">
                   <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider block">Zugeordnete Werkstücke</span>
                   <div className="space-y-2">
-                    {(selectedOrder.parts || []).map(part => (
-                      <div key={part.id} className="p-2 bg-bg-app-soft border rounded-lg flex items-center justify-between text-xs">
+                    {(selectedOrder.parts || []).map((part, idx) => {
+                      const p = part as { id?: string; name?: string; surfaceRequested?: string; material?: string };
+                      return (
+                      <div key={p.id || idx} className="p-2 bg-bg-app-soft border rounded-lg flex items-center justify-between text-xs">
                         <div>
-                          <p className="font-bold text-navy-900">{part.name}</p>
+                          <p className="font-bold text-navy-900">{p.name}</p>
                           <p className="text-[10px] text-text-muted">
-                            Oberfläche: {part.finish} | Ort: {part.location}
+                            Oberfläche: {p.surfaceRequested || "—"}{p.material ? ` | Material: ${p.material}` : ""}
                           </p>
                         </div>
-                        <Badge variant="outline" className="font-mono text-[9px] bg-white text-text-muted">
-                          {part.id}
-                        </Badge>
+                        {p.id && (
+                          <Badge variant="outline" className="font-mono text-[9px] bg-white text-text-muted">
+                            {p.id}
+                          </Badge>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -435,7 +388,7 @@ export default function TodayDashboard() {
 
                 <div className="space-y-2 pt-1">
                   {(() => {
-                    const phone = getCustomerPhone(selectedOrder.customerId, selectedOrder.customerName);
+                    const phone = getCustomerPhone(selectedOrder.customerId, selectedOrder.customerName ?? "");
                     if (phone) {
                       return (
                         <a 
@@ -459,15 +412,6 @@ export default function TodayDashboard() {
                     }
                   })()}
 
-                  {selectedOrder.recommendedAction && (
-                    <Button 
-                      className="w-full bg-navy-900 hover:bg-navy-700 text-white font-extrabold text-xs h-11 rounded-xl flex items-center justify-center gap-2 border border-navy-900 shadow-sm transition-all cursor-pointer"
-                      onClick={() => handleAction(selectedOrder.id)}
-                    >
-                      <Zap className="h-3.5 w-3.5 text-accent-orange" />
-                      <span>Interne Maßnahme einleiten</span>
-                    </Button>
-                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <Link href="/customers" className="block w-full">
                       <Button 
