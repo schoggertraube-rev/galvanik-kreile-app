@@ -8,10 +8,8 @@ update storage.buckets
        allowed_mime_types = array['image/jpeg','image/png','image/webp']
  where id = 'item-photos';
 
--- buchhaltung-belege: derzeit kein Limit/kein MIME-Allowlist.
--- ENTSCHEIDUNG NOETIG (Werte nicht aus Code ableitbar) -> bewusst NICHT gesetzt.
--- Vorschlag zur Bestaetigung (analog 'belege'): 5 MiB, ['image/png','image/jpeg','application/pdf'].
--- update storage.buckets
---    set file_size_limit = 5242880,
---        allowed_mime_types = array['image/png','image/jpeg','application/pdf']
---  where id = 'buchhaltung-belege';
+-- buchhaltung-belege: Entscheidung 2026-08-07 = 5 MiB, pdf/png/jpeg (analog 'belege').
+update storage.buckets
+   set file_size_limit = 5242880,
+       allowed_mime_types = array['application/pdf','image/png','image/jpeg']
+ where id = 'buchhaltung-belege';
