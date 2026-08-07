@@ -1,0 +1,16 @@
+# Prod-Fingerprint-Referenz - read-only aus Prod gezogen 2026-08-07 (tenant galvanik-kreile).
+# grants/func_grants via aclexplode (rollenunabhaengig). Verglichen wird der CI-Fresh-Replay dagegen.
+# Aktualisierungs-Verfahren: bei jeder genehmigten Prod-Schemaaenderung diese Referenz per
+# f0_schema_fingerprint.sql read-only neu ziehen und im selben PR aktualisieren (sonst wird sie zur Luege).
+cols=298ae919741dd003962021f8f1d5fa84
+idx=75343db54bb620978e1461bdeeb2e195
+cons=6d01fa1055264eeed86b00940bba8220
+trig=fd2dbbf795278d30567641a9dc244488
+func=57c5dd75d3af96d97423714cd6affb88
+pol=ba81e93f371031e2952e90befec17545
+rls=7176c1c699aa26fb0c23276c53341087
+grants=01feb57e0cbb387abb9842f7f07c6413
+func_grants=2d91f6b46df3bcdaa48daea0f5e37388
+def_privs=52bcb99349592ff3ca7c25e0039b5720
+# HINWEIS def_privs: enthaelt supabase_admin Default Privileges (Cluster, extern/Owner) - lokal NICHT
+# reproduzierbar -> DIFF auf def_privs ist ERWARTET und als BLOCKED_EXTERNAL bekannt.

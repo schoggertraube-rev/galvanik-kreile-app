@@ -125,12 +125,13 @@ jobs:
       - name: Replay every migration from zero
         run: npx --yes supabase@2.111.0 db reset --local
 
-      - name: Schema fingerprint report (informational until prod parity)
+      - name: Schema fingerprint vs prod reference (informational until parity)
         continue-on-error: true
         run: |
-          PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres \
-            -A -F'|' -t -f docs/evidence/f0/hardening/f0_schema_fingerprint.sql | tee replay-fingerprint.txt
-          echo "Prod-Referenz siehe docs/evidence/f0/F0_FINGERPRINT_GATE.md (Gate wird nach Baseline-Paritaet scharf geschaltet)"
+          FP=$(PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres \
+            -A -F'|' -t -f docs/evidence/f0/hardening/f0_schema_fingerprint.sql | tr -d '\r' | tr -d '\n')
+          echo "replay-fingerprint: $FP"
+          node scripts/quality/fingerprint-compare.mjs "$FP" docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt | tee replay-fingerprint.txt
 
       - name: Upload fingerprint artifact
         if: always()
