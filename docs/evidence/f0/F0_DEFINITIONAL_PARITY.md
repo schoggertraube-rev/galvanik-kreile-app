@@ -44,8 +44,29 @@ Grant-Divergenzen aufgedeckt, die der Namens-Fingerprint verbarg. „Replay = Pr
 voll — offen: Constraints/Trigger lokalisieren, 2 kosmetische Policies angleichen/normalisieren, und die
 service_role-ACL-Entscheidung. Struktur (Spalten/Indizes/Funktionen/RLS-Flags) ist definitorisch exakt.
 
-## Nächste Runde
-1. Constraints- und Trigger-Diff lokalisieren (vermutlich pg_dump-Normalisierung vs. echt).
-2. service_role-ACL-Entscheidung einholen, dann `PROD_SERVICE_ROLE_ACL.sql` final.
-3. 2 Storage-Policies serialisierungs-angleichen ODER Fingerprint-Normalisierung.
-4. Danach: definitorischer Voll-Fingerprint == Prod als CI-Gate.
+## Update 2026-08-07 — nach service_role-4-Tabellen-Fix (voller 10-Komponenten-Fingerprint)
+Migrations-Set: Baseline + Lockdown + Storage-Policies + **PROD_SERVICE_ROLE_ACL.sql** (neu).
+Replay vs. Prod je Komponente:
+
+| Komponente | Prod | Replay | Match |
+|---|---|---|:--:|
+| cols | 298ae919 | 298ae919 | ✅ |
+| idx | 75343db5 | 75343db5 | ✅ |
+| func (Bodies) | 57c5dd75 | 57c5dd75 | ✅ |
+| rls-Flags | 7176c1c6 | 7176c1c6 | ✅ |
+| **func_grants** | 32b5f7cd | 32b5f7cd | ✅ |
+| cons | 6d01fa10 | 288694a7 | ⚠️ zahlgleich (252/79), Normalisierung |
+| trig | fd2dbbf7 | 02b69c0d | ⚠️ zahlgleich (7), Normalisierung |
+| pol | ba81e93f | 3ddc472e | ⚠️ 69/71 exakt; 2 kosmetische Storage-Policies |
+| grants | 6ca01b50 | e3b86120 | ⚠️ 4-Tab-Fix drin; Rest = 3 RPC-Tab (Entscheidung) |
+| **def_privs** | 52bcb99 | 5b26728e | ❌ → **bekannter Blocker** `supabase_admin` Default Privileges (extern) |
+
+**Selbst gefundener Fehler behoben:** service_role-Über-Grant auf 4 Tabellen (REVOKE, verifiziert = Prod).
+**Rest ist entweder kosmetisch (cons/trig/2 Policies) oder ein bekannter Entscheidungs-/externer Blocker
+(3 RPC-Tabellen; def_privs = supabase_admin).** Kein neuer versteckter Defekt.
+
+## Nächste Runde (nach Entscheidungen)
+1. cons/trig-Stichprobe zur endgültigen Kosmetik-Bestätigung (hohe Sicherheit: PG17-Serialisierung).
+2. service_role-3-RPC-Entscheidung, dann grants == Prod.
+3. supabase_admin Default Privileges (extern) → def_privs == Prod.
+4. Danach: definitorischer Voll-Fingerprint == Prod als CI-Gate scharf.
