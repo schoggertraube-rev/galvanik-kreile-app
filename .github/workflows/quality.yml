@@ -103,3 +103,44 @@ jobs:
 
       - name: Forbidden pattern gate
         run: node scripts/quality/check-forbidden-patterns.mjs --base "${{ steps.diff.outputs.base }}" --head "${{ steps.diff.outputs.head }}"
+
+  fresh-supabase-replay:
+    name: Fresh Supabase replay
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.18.0
+          cache: npm
+
+      - name: Start isolated local Postgres
+        run: npx --yes supabase@2.111.0 db start
+
+      - name: Replay every migration from zero
+        run: npx --yes supabase@2.111.0 db reset --local
+
+      - name: Schema fingerprint vs prod reference (hard gate on exact components)
+        run: |
+          set -o pipefail
+          FP=$(PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres \
+            -A -F'|' -t -f docs/evidence/f0/hardening/f0_schema_fingerprint.sql | grep '|' | tr -d '\r' | tr -d '\n')
+          echo "replay-fingerprint: $FP"
+          node scripts/quality/fingerprint-compare.mjs "$FP" docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt | tee replay-fingerprint.txt
+
+      - name: Upload fingerprint artifact
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: replay-fingerprint
+          path: replay-fingerprint.txt
+
+      - name: Stop isolated local Supabase
+        if: always()
+        run: npx --yes supabase@2.111.0 stop --no-backup

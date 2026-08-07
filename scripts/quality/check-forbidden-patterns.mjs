@@ -90,6 +90,26 @@ for (const filePath of files) {
     continue;
   }
 
+  // Archivierte, eingefrorene Alt-Migrationen (supabase/migrations_legacy/) sind ein
+  // historisches Protokoll dessen, was bereits in Prod lief - kein neu geschriebener Code.
+  // Prototype-RLS-Muster darin sind Prod-Ist und werden separat (RLS-CONTRACT-001) forward gehaertet.
+  // Der Gate bleibt fuer src/, supabase/functions/ und AKTIVE supabase/migrations/ voll scharf.
+  if (normalizedPath.startsWith("supabase/migrations_legacy/")) {
+    continue;
+  }
+
+  // Prod-faithful Baseline-Reproduktions-Migrationen: EXAKTE Allowlist (kein Namensmuster-Bypass).
+  // Diese Dateien reproduzieren dokumentiertes Prod-Ist fuer Replay==Prod-Paritaet;
+  // separat via RLS-CONTRACT-001 forward gehaertet. Neue Dateien muessen hier explizit gelistet werden.
+  const prodFaithfulAllowlist = new Set([
+    "supabase/migrations/20260805180624_production_schema_baseline.sql",
+    "supabase/migrations/20260806120200_prod_faithful_app_functions.sql",
+    "supabase/migrations/20260806120300_prod_faithful_service_role_grants.sql",
+  ]);
+  if (prodFaithfulAllowlist.has(normalizedPath)) {
+    continue;
+  }
+
   const lines = readLines(filePath);
   const content = lines.join("\n");
   const productionPath = isProductionPath(filePath);
