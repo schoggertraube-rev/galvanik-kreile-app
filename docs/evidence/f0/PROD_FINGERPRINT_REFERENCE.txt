@@ -8,10 +8,11 @@ idx=0e3988277b7e1c7ed57847e92c4515b8
 cons=17a7c7942b86f3c0c1394f694c877d3b
 trig=bb8753d29efa811aab211736041c6237
 func=a6d8df6999952e773e32a1bd944f275e
-pol=a6bf6244671d602e27b69379d268f94e
+pol=af7dd29ef35db3ec25297d54b999ba32
 rls=7176c1c699aa26fb0c23276c53341087
 grants=01feb57e0cbb387abb9842f7f07c6413
 func_grants=2d91f6b46df3bcdaa48daea0f5e37388
 def_privs=52bcb99349592ff3ca7c25e0039b5720
 # HINWEIS def_privs: enthaelt supabase_admin Default Privileges (Cluster, extern/Owner) - lokal NICHT
 # reproduzierbar -> DIFF auf def_privs ist ERWARTET und als BLOCKED_EXTERNAL bekannt.
+# pol aktualisiert 2026-08-07 nach RLS-CONTRACT-Haertung auf Prod (verifiziert read-only via f0_schema_fingerprint.sql).
