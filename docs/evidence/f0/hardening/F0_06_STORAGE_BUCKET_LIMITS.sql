@@ -1,5 +1,5 @@
 -- F0-06 Härtung: Size-/MIME-Limits fuer bisher unbeschraenkte private Buckets.
--- Status: buildable Kandidat; Remote-Anwendung braucht Freigabe.
+-- Status: ANGEWENDET auf Prod 2026-08-07 (f0_06_storage_view_hardening, mit Freigabe).
 
 -- item-photos: Werte EVIDENZBASIERT aus RPC reserve_item_photo_job
 --   (file_bytes 1..12582912 = 12 MiB; mime image/jpeg,image/png,image/webp).
