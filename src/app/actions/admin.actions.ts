@@ -3,12 +3,12 @@
 import { db } from '@/db'
 import { appUsers, featureFlags, pinRateLimits } from '@/db/schema'
 import { and, eq } from 'drizzle-orm'
-import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs'
 import { requireAdminOrDeveloper } from '@/lib/auth/permissions'
 import { isAppRole } from '@/lib/auth/authorizationContract'
 import { toAdminUserDto } from '@/lib/auth/userDtos'
 import { APP_TENANT_ID } from '@/lib/server/appSession'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 const PIN_HASH_ROUNDS = 12
 
@@ -21,19 +21,7 @@ function validatePin(pin: unknown): string {
 
 // Admin client using Service Role Key (MUST ONLY BE USED IN SERVER ACTIONS)
 const getAdminSupabase = () => {
-  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    throw new Error('SUPABASE_SERVICE_ROLE_KEY is not defined');
-  }
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    }
-  )
+  return createAdminClient()
 }
 
 // ── Users ──────────────────────────────────────────────────────────────

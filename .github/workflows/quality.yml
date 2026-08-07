@@ -98,6 +98,9 @@ jobs:
       - name: Repository ESLint ratchet
         run: node --import tsx scripts/quality/check-eslint-ratchet.ts --base "${{ steps.diff.outputs.base }}"
 
+      - name: Supabase client boundary
+        run: node scripts/quality/check-supabase-client-boundary.mjs
+
       - name: Whitespace and merge marker check
         run: git diff --check "${{ steps.diff.outputs.base }}" "${{ steps.diff.outputs.head }}"
 
