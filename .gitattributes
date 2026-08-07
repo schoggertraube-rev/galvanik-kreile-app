@@ -32,3 +32,6 @@ docs/evidence/f0/baseline/*.sql -whitespace
 
 # F0: SQL immer LF (verhindert CRLF-Hash-Drift)
 docs/evidence/f0/**/*.sql text eol=lf
+
+# F0: aktive Baseline ist verbatim Prod-Dump -> Whitespace-Pruefung ausnehmen (eol=lf bleibt)
+supabase/migrations/20260805180624_production_schema_baseline.sql -whitespace
