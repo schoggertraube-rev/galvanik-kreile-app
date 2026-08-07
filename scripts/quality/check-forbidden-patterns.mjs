@@ -105,6 +105,8 @@ for (const filePath of files) {
     "supabase/migrations/20260805180624_production_schema_baseline.sql",
     "supabase/migrations/20260806120200_prod_faithful_app_functions.sql",
     "supabase/migrations/20260806120300_prod_faithful_service_role_grants.sql",
+    "supabase/migrations/20260807090000_f0_05_rls_contract_hardening.sql",
+    "supabase/migrations/20260807090100_f0_06_storage_view_hardening.sql",
   ]);
   if (prodFaithfulAllowlist.has(normalizedPath)) {
     continue;
