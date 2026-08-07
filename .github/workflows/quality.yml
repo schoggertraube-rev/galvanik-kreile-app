@@ -125,9 +125,9 @@ jobs:
       - name: Replay every migration from zero
         run: npx --yes supabase@2.111.0 db reset --local
 
-      - name: Schema fingerprint vs prod reference (informational until parity)
-        continue-on-error: true
+      - name: Schema fingerprint vs prod reference (hard gate on exact components)
         run: |
+          set -o pipefail
           FP=$(PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres \
             -A -F'|' -t -f docs/evidence/f0/hardening/f0_schema_fingerprint.sql | grep '|' | tr -d '\r' | tr -d '\n')
           echo "replay-fingerprint: $FP"

@@ -1,4 +1,8 @@
-﻿# F0 Fingerprint-Gate â€” definitorische Replay==Prod-PrÃ¼fung
+# SUPERSEDED (2026-08-07): Hashes veraltet. Kanonische Referenz: PROD_FINGERPRINT_REFERENCE.txt
+# + fingerprint-compare.mjs (Klassen: 6 exact / cons,trig,pol known-normalization / def_privs known-external).
+# Analyse in F0_STATUS_04_05_06.md.
+
+# F0 Fingerprint-Gate â€” definitorische Replay==Prod-PrÃ¼fung
 
 **Zweck:** Bei jedem Build den Fresh-Replay gegen Prod prÃ¼fen â€” **auf Definitionsebene**
 (Policy-AusdrÃ¼cke, Funktions-Bodies, Constraints, Spalten), nicht nur Namen/Anzahl.

@@ -98,10 +98,15 @@ for (const filePath of files) {
     continue;
   }
 
-  // Prod-faithful Baseline-Reproduktions-Migrationen (Parity-Zug) reproduzieren DOKUMENTIERTES
-  // Prod-Ist (inkl. der in Prod bereits vorhandenen breiten Policies) fuer Replay==Prod-Paritaet;
-  // separat via RLS-CONTRACT-001 forward gehaertet. Kein neu erfundenes Prototype-RLS.
-  if (/^supabase\/migrations\/\d+_prod_faithful_[a-z_]+\.sql$/.test(normalizedPath)) {
+  // Prod-faithful Baseline-Reproduktions-Migrationen: EXAKTE Allowlist (kein Namensmuster-Bypass).
+  // Diese Dateien reproduzieren dokumentiertes Prod-Ist fuer Replay==Prod-Paritaet;
+  // separat via RLS-CONTRACT-001 forward gehaertet. Neue Dateien muessen hier explizit gelistet werden.
+  const prodFaithfulAllowlist = new Set([
+    "supabase/migrations/20260805180624_production_schema_baseline.sql",
+    "supabase/migrations/20260806120200_prod_faithful_app_functions.sql",
+    "supabase/migrations/20260806120300_prod_faithful_service_role_grants.sql",
+  ]);
+  if (prodFaithfulAllowlist.has(normalizedPath)) {
     continue;
   }
 
