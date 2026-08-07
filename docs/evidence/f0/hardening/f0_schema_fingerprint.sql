@@ -1,8 +1,10 @@
 -- F0 definitorischer Schema-Fingerprint (Replay==Prod-Gate).
 -- Liefert je Komponente ein md5 ueber die ECHTEN Definitionen (nicht nur Namen).
--- grants/func_grants via aclexplode(relacl)/aclexplode(proacl) = katalog-direkt, ROLLENUNABHAENGIG
--- (information_schema.role_table_grants zeigt je nach Connection-Rolle nur Teilmengen -> untauglich fuer Prod-Vergleich).
+-- grants/func_grants via aclexplode(relacl)/aclexplode(proacl) = katalog-direkt, ROLLENUNABHAENGIG.
+-- SET search_path = pg_catalog erzwingt DETERMINISTISCHES Rendering (regclass/pg_get_* qualifizieren
+--   sonst je nach Session-search_path unterschiedlich -> falsche Scheindiffs bei cons/trig/pol/idx/func).
 -- Gegen dieselbe Query auf Prod vergleichen. Deterministisch (kein pg_dump/\restrict-Token).
+set search_path = pg_catalog;
 select
  md5((select coalesce(string_agg(x, E'\n' order by x),'') from (select c.relname||'.'||a.attname||':'||format_type(a.atttypid,a.atttypmod)||':'||a.attnotnull::text||':'||coalesce(pg_get_expr(ad.adbin,ad.adrelid),'') as x from pg_attribute a join pg_class c on c.oid=a.attrelid join pg_namespace n on n.oid=c.relnamespace left join pg_attrdef ad on ad.adrelid=a.attrelid and ad.adnum=a.attnum where n.nspname in ('public','private') and c.relkind in ('r','v') and a.attnum>0 and not a.attisdropped) s)) as cols,
  md5((select coalesce(string_agg(pg_get_indexdef(i.indexrelid), E'\n' order by pg_get_indexdef(i.indexrelid)),'') from pg_index i join pg_class c on c.oid=i.indrelid join pg_namespace n on n.oid=c.relnamespace where n.nspname in ('public','private'))) as idx,
