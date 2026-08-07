@@ -90,6 +90,14 @@ for (const filePath of files) {
     continue;
   }
 
+  // Archivierte, eingefrorene Alt-Migrationen (supabase/migrations_legacy/) sind ein
+  // historisches Protokoll dessen, was bereits in Prod lief - kein neu geschriebener Code.
+  // Prototype-RLS-Muster darin sind Prod-Ist und werden separat (RLS-CONTRACT-001) forward gehaertet.
+  // Der Gate bleibt fuer src/, supabase/functions/ und AKTIVE supabase/migrations/ voll scharf.
+  if (normalizedPath.startsWith("supabase/migrations_legacy/")) {
+    continue;
+  }
+
   const lines = readLines(filePath);
   const content = lines.join("\n");
   const productionPath = isProductionPath(filePath);
