@@ -1,0 +1,34 @@
+{
+  "contract": "F0_V1.0",
+  "date": "2026-08-08",
+  "tenant": "galvanik-kreile",
+  "repo": "schoggertraube-rev/galvanik-kreile-app",
+  "technical_proof_commit": "b6a4808424304338391abba43d2bd192e227b7ff",
+  "final_commit": "SET_ON_MERGE_OF_DOCS_PR_56",
+  "final_commit_note": "docs-only delta vs technical_proof_commit (F0_FINAL_REPORT.md, F0_HANDOFF.json)",
+  "production": {
+    "supabase_project": "syhaigjhsbpjmtnggqka",
+    "ledger_rows": 8,
+    "ledger_post_digest": "693a36cefda4eeb9a6f4330517403d5c",
+    "ledger_pre_digest_backup": "55d2fb1404d2b9d57e3373aaf0ab9d05",
+    "fingerprint_reference": "docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt",
+    "fingerprint_live_match": "10/10 (ratifier-verified 2026-08-08; pol+grants re-verified post-reconciliation)",
+    "anon_authenticated_table_grants": 0,
+    "views_security_invoker": "17/17",
+    "private_buckets": 4,
+    "pins_bcrypt_cost12": "6/6"
+  },
+  "ci_gates": ["fresh-replay", "fingerprint-hard(6exact)", "negative-inventory-tests(A-F incl tenant-fixture-matrix)", "db-integration(scan_order)", "ledger-contract", "forbidden-patterns", "client-boundary", "eslint-ratchet", "tsc", "lint:full 0/0", "unit 132", "playwright-auth-e2e", "build"],
+  "deps_hardening": { "next": "16.2.6 -> 16.2.12", "advisory_closed": "GHSA-6gpp-xcg3-4w24", "remaining_audit": "13 transitive (2 low/2 moderate/9 high), no direct runtime dep" },
+  "F0_A01_TO_A15": "PASS",
+  "annotations": {
+    "A05": "def_privs supabase_admin BLOCKED_EXTERNAL_PERMISSION, compensations active (F0_PERMISSION_PACKET.md)",
+    "A14": "full backup/restore drill deliberately gated at Go-live gate G"
+  },
+  "FINAL_STATUS": "PASS",
+  "OPEN_BLOCKERS": 0,
+  "UNRESOLVED_PARALLEL_WORK": 0,
+  "ZIP_READINESS_RECOMMENDATION": "GREEN_AFTER_RATIFIER_CONFIRM",
+  "operator_duties_before_golive": ["rotate DB password", "optional: enable leaked-password-protection", "optional: Supabase support ticket def_privs (template in F0_PERMISSION_PACKET.md)"],
+  "evidence_files": ["F0_FINAL_REPORT.md", "F0_POSTFLIGHT.md", "F0_LEDGER_RECONCILIATION_PLAN.md", "F0_PERMISSION_PACKET.md", "F0_PROD_HARDENING_APPLIED.md", "F0_CLOSEOUT.md", "F0_TEST_EVIDENCE.md", "PROD_FINGERPRINT_REFERENCE.txt"]
+}
