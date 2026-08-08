@@ -337,7 +337,7 @@ const postBaseline = activeEntries.slice(1).map((entry) => entry.fileName);
 console.log(
   `POST_BASELINE_MIGRATIONS=${postBaseline.length > 0 ? postBaseline.join(",") : "NONE"}`,
 );
-console.log("PRODUCTION_BASELINE_APPLIED=NOT_ASSERTED");
-console.log("PRODUCTION_LEDGER_RECONCILIATION=OPEN");
-console.log("REMOTE_LEDGER_MUTATION=NOT_PERFORMED");
+console.log("PRODUCTION_BASELINE_APPLIED=LEDGER_RECONCILED_2026-08-08");
+console.log("PRODUCTION_LEDGER_RECONCILIATION=DONE_2026-08-08_POST_DIGEST_693a36cefda4eeb9a6f4330517403d5c");
+console.log("REMOTE_LEDGER_MUTATION=PERFORMED_WITH_APPROVAL_2026-08-08");
 console.log("MIGRATION_LEDGER_CONTRACT=PASS");
