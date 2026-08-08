@@ -106,6 +106,10 @@ do $$
 begin
   execute 'drop role if exists f0_probe';
   execute 'create role f0_probe nologin';
+  -- Nur Rollen-Erzeugung macht den Erzeuger noch nicht zum Mitglied (anders als bei anon/authenticated,
+  -- wo postgres bereits Mitglied ist -> Abschnitt A kann direkt "set local role" nutzen). Ohne diesen
+  -- GRANT scheitert "set local role f0_probe" unten mit "permission denied to set role".
+  execute format('grant f0_probe to %I', current_user);
   execute 'grant usage on schema public to f0_probe';
   execute 'grant select, insert on public.audit_log to f0_probe';
 end $$;
