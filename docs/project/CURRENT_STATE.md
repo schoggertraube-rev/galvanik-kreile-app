@@ -1,11 +1,11 @@
 # Current State
 
-## Stand 2026-08-07 — F0-Fundament auf main (maßgeblich)
+## Stand 2026-08-07/08 — F0-Fundament auf main (maßgeblich)
 
 - F0-03/04 DB-Wahrheit: Prod-Baseline replayt fresh aus Null; definitorischer Fingerprint 6/10 Komponenten byte-exakt = Prod, CI-hart gegated (fingerprint-compare.mjs, quality.yml); cons/trig/pol = known-normalization (PG-Parse-Tree), def_privs = known-external. Ledger-Vertrag: migrations_legacy-Archiv (96) + Baseline + Forward-Migrationen. (PR #49)
 - F0-05/06 Security/Storage: RLS-CONTRACT-Härtung (25 Tabellen, 29 Policies) + Bucket-Limits + v_auftrag_db security_invoker als aktive Migrationen 20260807090000/090100; am 2026-08-07 mit Freigabe auf Prod angewendet und read-only verifiziert. Evidence: docs/evidence/f0/F0_PROD_HARDENING_APPLIED.md (inkl. app_users-RLS-Nuance und Red-Team-Recheck). Fingerprint-Referenz pol nachgezogen. (PRs #50, #52)
 - F0-07 Modulare Grenze: kanonische Admin-Client-Factory src/lib/supabase/admin.ts, CI-Gate check-supabase-client-boundary.mjs, Modulmanifest-Schema + erfassung-Beispiel. (PR #51)
-- Offen Richtung F0-GREEN: F0-08..11 (konsolidierte Test-Evidence, kanonische Doku, permissionierter Abschluss); zurückgestellt: Prod-Ledger-Rekonziliation (96 Legacy-Zeilen, tooling-hygiene), def_privs (extern), DB-Passwort-Rotation nach F0.
+- F0-08..11: ERLEDIGT (PR #54: CI-Negativ-/Inventartests, konsolidierte Evidence, F0_CLOSEOUT; unabhaengige Review als PR-Kommentar). Ratifizierungsauflagen 2026-08-08 umgesetzt: Prod-Ledger RECONCILED (8 aktive Migrationen, POST_DIGEST 693a36ce..., siehe F0_POSTFLIGHT.md), def_privs als BLOCKED_EXTERNAL_PERMISSION dokumentiert (F0_PERMISSION_PACKET.md), Tenant-/Storage-Negativmatrix + DB-Integrationstests in CI, next auf >=16.2.11 gehaertet, PR #41 geschlossen.
 
 Stand: 2026-08-06 - verifizierter Ist-Stand gegen `origin/main`, Supabase Production und Vercel.
 
