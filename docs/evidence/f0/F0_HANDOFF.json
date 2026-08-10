@@ -20,11 +20,14 @@
     { "date": "2026-08-10", "action": "apply of repo migration 20260810100000 incl. ledger entry (closes the governance gap; note: applied pre-merge of PR #57 - exception, not the regular merge-then-apply path)", "authorization": "principal session mandate" }
   ],
   "NEXT_REQUIRED_PERMISSION": "Supabase support or sufficiently privileged operator removes/neutralizes default ACLs FOR ROLE supabase_admin granting anon/authenticated (template: F0_PERMISSION_PACKET.md)",
-  "FINAL_STATUS": "PASS_WITH_DECLARED_EXTERNAL_EXCEPTION",
-  "OPEN_INTERNAL_BLOCKERS": 0,
+  "FINAL_STATUS": "FAIL_INTERNAL",
+  "OPEN_INTERNAL_BLOCKERS": 7,
   "OPEN_EXTERNAL_BLOCKERS": 1,
+  "defect_register": "docs/evidence/f0/F0_DEFECT_REGISTER.md",
+  "f1_handoff": "docs/evidence/f0/KREILE_F0_UEBERGABE_UND_F1_START.md",
   "F0_A_MATRIX": { "A01": "PASS", "A02": "PASS", "A03": "PASS", "A04": "PASS", "A05": "PASS_WITH_EXTERNAL_EXCEPTION", "A06": "PASS", "A07": "PASS", "A08": "PASS", "A09": "PASS", "A10": "PASS", "A11": "PASS", "A12": "PASS", "A13": "SEPARATE_INSTANCE_REVIEW_PASSED_ORG_INDEPENDENCE_PENDING_EXTERNAL", "A14": "PREPARED_NOT_DRILLED", "A15": "PASS" },
-  "ZIP_READINESS": "RECOMMEND_GREEN_AFTER_EXTERNAL_RATIFICATION",
+  "A_MATRIX_NOTE": "A01-A15 DB-Infra-Teil verifiziert; FINAL_STATUS=FAIL_INTERNAL wegen bestätigter interner P0-Anwendungsdefekte (F0_DEFECT_REGISTER.md) + A13 unabhängige Ratifikation ausstehend",
+  "ZIP_READINESS": "RED",
   "operator_duties_before_golive": [ "rotate DB password", "enable leaked-password-protection (duty, not optional)", "restore drill (gate G)", "def_privs support ticket" ],
   "advisor_open": { "extension_in_public": "pg_trgm (WARN)", "leaked_password_protection": "disabled (WARN, operator duty)", "rls_enabled_no_policy": "13 tables (INFO, deny-all; categorized in F0_TENANT_COVERAGE.json)" }
 }
