@@ -1,57 +1,33 @@
 import { createOrderFromErfassung } from "../src/app/actions/erfassung.actions";
-import dotenv from "dotenv";
-dotenv.config({ path: ".env.local" });
 
 async function runTests() {
-  console.log("Starte Validierungstests für source-Feld...");
-  
-  let passed = 0;
-  let failed = 0;
-
   type SourceTestPayload = { source?: string | null };
+  const sourcePayloads: readonly [string, SourceTestPayload][] = [
+    ["Auftrag ohne source", {}],
+    ["Auftrag mit source null", { source: null }],
+    ["Auftrag mit source unbekannt", { source: "unbekannt" }],
+    ["Manuelle Erfassung", { source: "manual" }],
+    ["Kundenakte", { source: "customer" }],
+    ["Capture", { source: "capture" }],
+    ["Integrationstest", { source: "integration-test" }],
+  ];
 
-  const runTest = async (name: string, payload: SourceTestPayload, expectedError: boolean, expectedSourceVal?: string) => {
+  for (const [name, payload] of sourcePayloads) {
     const result = await createOrderFromErfassung({
       customerId: "test-customer",
       title: "Test Auftrag",
-      ...payload
+      ...payload,
     });
 
-    if (expectedError) {
-      if (!result.ok) {
-        console.log(`[PASS] ${name}: Wurde korrekt abgelehnt (${result.error})`);
-        passed++;
-      } else {
-        console.log(`[FAIL] ${name}: Wurde nicht abgelehnt!`);
-        failed++;
-      }
-    } else {
-      if (result.ok && result.order) {
-        const order = result.order;
-        if (order.source === expectedSourceVal) {
-          console.log(`[PASS] ${name}: Erfolgreich erstellt mit source=${order.source}`);
-          passed++;
-        } else {
-          console.log(`[FAIL] ${name}: Erstellt, aber falscher source=${order.source}`);
-          failed++;
-        }
-      } else {
-        console.log(`[FAIL] ${name}: Unerwarteter Fehler: ${result.error}`);
-        failed++;
-      }
+    if (result.ok !== false || result.error !== "CONFLICT" || !result.message.includes("NOT_AVAILABLE")) {
+      throw new Error(`${name}: erwarteter NOT_AVAILABLE-CONFLICT-Denial fehlt`);
     }
-  };
+  }
 
-  await runTest("Auftrag ohne source", {}, true);
-  await runTest("Auftrag mit source null", { source: null }, true);
-  await runTest("Auftrag mit source unbekannt", { source: "unbekannt" }, true);
-  await runTest("Manuelle Erfassung", { source: "manual" }, false, "manual");
-  await runTest("Kundenakte", { source: "customer" }, false, "customer");
-  await runTest("Capture", { source: "capture" }, false, "capture");
-  await runTest("Integrationstest", { source: "integration-test" }, false, "integration-test");
-
-  console.log(`\nTestergebnisse: ${passed} PASS, ${failed} FAIL`);
-  if (failed > 0) process.exit(1);
+  console.log(`PASS: ${sourcePayloads.length} NOT_AVAILABLE-CONFLICT-Denials verifiziert.`);
 }
 
-runTests().then(() => process.exit(0)).catch(console.error);
+runTests().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
+});
