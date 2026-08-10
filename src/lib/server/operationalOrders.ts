@@ -246,28 +246,8 @@ export async function moveOperationalOrderToStationService(orderId: string, stat
 }
 
 export async function startProcessingStationService(orderId: string, stationId: string, actorId?: string) {
-  if (!db) throw new Error("Database not available");
-
-  const targetStation = stationId === "beschichtung" ? "galvanik" : stationId;
-
-  return await db.transaction(async (tx) => {
-    const currentOrder = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-    if (!currentOrder || currentOrder.length === 0) throw new Error("Order not found");
-
-    await tx.update(orders).set({ currentStationId: targetStation, status: "in_progress" }).where(eq(orders.id, orderId));
-    await tx.update(items).set({ currentStationId: targetStation }).where(eq(items.orderId, orderId));
-
-    const eventId = createId();
-    await tx.insert(events).values({
-      id: eventId,
-      tenantId: "galvanik-kreile",
-      orderId,
-      eventType: "PROCESSING_STARTED",
-      description: `Bearbeitung gestartet in ${targetStation}`,
-      station: targetStation,
-      userId: actorId,
-    });
-    
-    return { success: true, eventId, targetStation };
-  });
+  void orderId;
+  void stationId;
+  void actorId;
+  throw new Error("NOT_AVAILABLE: Stationsstart benötigt den W3-Command-Vertrag.");
 }

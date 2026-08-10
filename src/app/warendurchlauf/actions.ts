@@ -1,6 +1,7 @@
 "use server";
 
-import { getOperationalOrders, getOperationalOrdersByStation, getOperationalOrdersReadyForStation, startProcessingStationService } from "@/lib/server/operationalOrders";
+import { getOperationalOrdersByStation, getOperationalOrdersReadyForStation } from "@/lib/server/operationalOrders";
+import type { getOperationalOrders } from "@/lib/server/operationalOrders";
 import { checkAppAuth } from "@/lib/server/authHelper";
 
 export type WarendurchlaufOrder = Awaited<ReturnType<typeof getOperationalOrders>>[number];
@@ -16,7 +17,7 @@ export interface WarendurchlaufKpiData {
 
 export type WarendurchlaufActionResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: "AUTH_ERROR" | "QUERY_ERROR"; message: string };
+  | { ok: false; error: "AUTH_ERROR" | "QUERY_ERROR" | "NOT_AVAILABLE"; message: string };
 
 export async function getStationOrders(stationId: string): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
   const auth = await checkAppAuth();
@@ -41,93 +42,11 @@ export async function getStationReadyOrders(stationId: string): Promise<Warendur
 }
 
 export async function startProcessingStation(orderId: string, stationId: string) {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
-  try {
-    const res = await startProcessingStationService(orderId, stationId);
-    return { ok: true, data: res };
-  } catch (error) {
-    return { ok: false, error: "QUERY_ERROR", message: String(error) };
-  }
+  void orderId;
+  void stationId;
+  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Stationsstart benötigt den W3-Command-Vertrag." };
 }
 
 export async function getWarendurchlaufKPIs(): Promise<WarendurchlaufActionResult<WarendurchlaufKpiData>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
-
-  try {
-    const allOrdersQuery = await getOperationalOrders();
-
-    const totalOrders = allOrdersQuery.length;
-    
-    // Engpass
-    const stations: Record<string, number> = {};
-    allOrdersQuery.forEach(o => {
-      if (o.status !== "completed" && o.status !== "abgeschlossen" && o.status !== "versendet") {
-        const station = o.currentStationId || "wareneingang";
-        stations[station] = (stations[station] || 0) + 1;
-      }
-    });
-    
-    let engpassStation = "Kein Engpass";
-    let maxCount = 0;
-    for (const [station, count] of Object.entries(stations)) {
-      if (count > maxCount) {
-        maxCount = count;
-        engpassStation = station;
-      }
-    }
-
-    // Offene Aufträge
-    const offene = allOrdersQuery.filter(o => o.status !== "completed" && o.status !== "abgeschlossen" && o.status !== "versendet").length;
-
-    let termintreue = 0;
-    let durchlaufzeitTage = 0;
-    
-    if (totalOrders > 0) {
-      let onTime = 0;
-      let totalDays = 0;
-      let countWithDate = 0;
-
-      allOrdersQuery.forEach(o => {
-        // Termintreue: if due date exists, and it's not red risk, or intakeDate + 10 days > now
-        if (o.dueDate && o.intakeDate) {
-          const due = new Date(o.dueDate).getTime();
-          const created = new Date(o.intakeDate).getTime();
-          const now = Date.now();
-          
-          if (o.status === "completed" || o.status === "abgeschlossen") {
-             // For completed, we don't have ist_am, so we just assume on-time if it was completed
-             onTime++;
-          } else {
-             if (now <= due) onTime++;
-          }
-          
-          const diffTime = Math.abs(now - created);
-          totalDays += diffTime / (1000 * 60 * 60 * 24);
-          countWithDate++;
-        } else {
-          // If no dates, we just skip from strict calculation
-        }
-      });
-      
-      termintreue = totalOrders > 0 ? Math.round((onTime / totalOrders) * 100) : 0;
-      durchlaufzeitTage = countWithDate > 0 ? Number((totalDays / countWithDate).toFixed(1)) : 0;
-    }
-
-    return {
-      ok: true,
-      data: {
-        termintreue,
-        durchlaufzeitTage,
-        engpassStation,
-        engpassCount: maxCount,
-        offeneAuftraege: offene,
-        orders: allOrdersQuery
-      }
-    };
-  } catch (error) {
-    console.error("Error in getWarendurchlaufKPIs:", error);
-    return { ok: false, error: "QUERY_ERROR", message: String(error) };
-  }
+  return { ok: false, error: "NOT_AVAILABLE", message: "NOT_AVAILABLE: Warendurchlauf-KPIs benötigen einen kanonischen SQL-Read-Model-Vertrag." };
 }
