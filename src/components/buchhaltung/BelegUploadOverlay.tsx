@@ -48,9 +48,10 @@ export function BelegUploadOverlay({ open, onClose, onSubmit, mode }: BelegUploa
   };
 
   const handleSimulateCapture = () => {
-    const demoFiles = ["shell_tankbeleg.jpg", "gasthaus_adler_beleg.jpg", "riedel_rechnung.pdf", "microsoft_abo.pdf", "aral_tankbeleg.jpg"];
-    const randomFile = demoFiles[Math.floor(Math.random() * demoFiles.length)];
-    handleFileSelect(randomFile);
+    // F0-W2a (STO-04): no randomized fake-dataset selection in a production
+    // path. handleFileSelect no longer picks a mocked result by filename,
+    // so a fixed placeholder name is honest and sufficient here.
+    handleFileSelect("erfasster-beleg.jpg");
   };
 
   const handleClose = () => {
