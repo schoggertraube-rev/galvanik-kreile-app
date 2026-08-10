@@ -3,10 +3,10 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, Layers, PlayCircle, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { OrderCompactCard, UrgencyType } from "@/components/orders/OrderCompactCard";
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
-import { getStationOrders, getStationReadyOrders, startProcessingStation } from "@/app/warendurchlauf/actions";
+import { getStationOrders, getStationReadyOrders } from "@/app/warendurchlauf/actions";
+import { transitionOrderProcess } from "@/app/actions/orders.actions";
 import type { WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
 
 type GalvanikBucket = "ready" | "in_progress" | "finished";
@@ -87,17 +87,16 @@ export default function GalvanikPage() {
       // Move to in progress
       const order = readyOrders.find(o => o.id === orderId);
       if (order) {
+         const result = await transitionOrderProcess({ orderId, action: "start" });
+         if (!result.ok) {
+           window.alert(result.message);
+           return;
+         }
          setReadyOrders(prev => prev.filter(o => o.id !== orderId));
          setInProgressOrders(prev => sortByUrgency([...prev, { ...order, status: "in_progress", statusText: "In Bearbeitung" }]));
-         await startProcessingStation(orderId, "galvanik");
       }
     } else if (currentBucket === "in_progress") {
-      // Move to warenausgang via existing repo locally for demo
-      const order = inProgressOrders.find(o => o.id === orderId);
-      if (order) {
-        setInProgressOrders(prev => prev.filter(o => o.id !== orderId));
-        await ordersRepository.updateOrder(orderId, { station: "warenausgang", status: "ready" });
-      }
+      window.alert("NOT_AVAILABLE: Der Stationsabschluss benötigt einen atomaren Command.");
     }
   };
 

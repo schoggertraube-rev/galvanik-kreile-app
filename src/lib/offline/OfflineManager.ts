@@ -1,6 +1,5 @@
 import { IndexedDBHelper, OfflineAction } from "./IndexedDBHelper";
 import type { Order } from "@/lib/repositories/ordersRepository";
-import type { CreateStockMovementInput } from "@/lib/repositories/inventoryRepository";
 
 export const OfflineManager = {
   isOffline(): boolean {
@@ -97,8 +96,9 @@ export const OfflineManager = {
 
     // Dynamic imports of repositories to prevent circular import loops at bundle time
     const { ordersRepository } = await import("@/lib/repositories/ordersRepository");
-    const { inventoryRepository } = await import("@/lib/repositories/inventoryRepository");
-    const { eventsRepository } = await import("@/lib/repositories/eventsRepository");
+
+    let syncedCount = 0;
+    let blockedCount = 0;
 
     for (const item of queue) {
       try {
@@ -111,9 +111,11 @@ export const OfflineManager = {
           }
           
           case "ORDER_STATUS_UPDATE": {
-            const payload = item.payload as { id?: string; orderNumber?: string; changes?: Partial<Order> };
-            await ordersRepository.updateOrder(payload.id || payload.orderNumber || "", payload.changes || {});
-            break;
+            // F0-W2C-B1: Retain the outbox item for the W3 command contract.
+            // Replaying an ID-only status mutation would silently bypass it.
+            blockedCount++;
+            console.warn(`NOT_AVAILABLE: queued order status update ${item.id} remains pending until the command contract exists.`);
+            continue;
           }
 
           case "CUSTOMER_CREATE": {
@@ -130,13 +132,17 @@ export const OfflineManager = {
           }
           
           case "MATERIAL_BOOKING": {
-            await inventoryRepository.createMovement(item.payload as CreateStockMovementInput);
-            break;
+            // F0-W2C-B1: a material movement needs the W3 atomic command.
+            blockedCount++;
+            console.warn(`NOT_AVAILABLE: queued material booking ${item.id} remains pending until the command contract exists.`);
+            continue;
           }
           
           case "TIME_BOOKING": {
-            await eventsRepository.addEvent(item.payload as import('../repositories/eventsRepository').StatusEvent);
-            break;
+            // F0-W2C-B1: a time event must not be replayed outside that command.
+            blockedCount++;
+            console.warn(`NOT_AVAILABLE: queued time booking ${item.id} remains pending until the command contract exists.`);
+            continue;
           }
           
           case "INQUIRY_CREATE": {
@@ -167,6 +173,7 @@ export const OfflineManager = {
         
         // Remove item from queue on success
         await IndexedDBHelper.removeFromQueue(item.id);
+        syncedCount++;
         console.log(`Action ${item.id} successfully synced and deleted from queue.`);
         
       } catch (err) {
@@ -180,7 +187,7 @@ export const OfflineManager = {
     // Dispatch completion events
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("kreile-sync-queue-updated"));
-      window.dispatchEvent(new CustomEvent("kreile-sync-success", { detail: { count: queue.length } }));
+      window.dispatchEvent(new CustomEvent("kreile-sync-success", { detail: { count: syncedCount, blockedCount } }));
       window.dispatchEvent(new Event("storage")); // force layout state sync
     }
 

@@ -169,55 +169,17 @@ export async function updateOrderDb(id: string, changes: {
   priorityComputed?: string;
   title?: string;
 }): Promise<ActionResult<Record<string, unknown>>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  try {
-    const updateData: Record<string, string> = {};
-    if (changes.status !== undefined) updateData.status = changes.status;
-    if (changes.currentStationId !== undefined) updateData.currentStationId = changes.currentStationId;
-    if (changes.priorityComputed !== undefined) updateData.priorityComputed = changes.priorityComputed;
-    if (changes.title !== undefined) updateData.title = changes.title;
-    
-    await db.update(orders).set(updateData).where(eq(orders.id, id));
-    
-    if (changes.currentStationId !== undefined) {
-      await db.update(items).set({ currentStationId: changes.currentStationId }).where(eq(items.orderId, id));
-    }
-
-    if (changes.status === "abgeschlossen" || changes.status === "completed") {
-      try {
-        const orderRec = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
-        if (orderRec.length > 0) {
-          const o = orderRec[0];
-          if (o.customerId) {
-            const plannedDate = new Date();
-            plannedDate.setDate(plannedDate.getDate() + 7); // Schedule for 7 days later
-            const { feedbackMail } = await import("@/db/schema_marketing");
-            // Check if one already exists
-            const existing = await db.select().from(feedbackMail).where(eq(feedbackMail.auftragId, id)).limit(1);
-            if (existing.length === 0) {
-              await db.insert(feedbackMail).values({
-                auftragId: id,
-                kundeId: o.customerId,
-                geplantFuer: plannedDate,
-                status: "geplant",
-                tokenFeedback: crypto.randomUUID()
-              });
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Failed to schedule feedback mail:", err);
-      }
-    }
-    
-    return { ok: true, data: { id, ...changes } };
-  } catch (error) {
-    console.error("Failed to update order in DB:", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Aktualisieren des Auftrags", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
-  }
+  void id;
+  void changes;
+  // F0-W2C-B1: This legacy ID-only writer has no actor, tenant, ownership, or
+  // version contract. It must not start a partial order/item/feedback workflow.
+  // W3 will replace it with a command contract; retain this ActionResult shape
+  // so existing clients receive an explicit denial instead of a false success.
+  return {
+    ok: false,
+    error: "CONFLICT",
+    message: "NOT_AVAILABLE: Auftragsänderungen sind bis zum serverseitigen Command-Vertrag nicht verfügbar.",
+  };
 }
 
 export async function getRiskOrders(limit = 3) {

@@ -2,9 +2,7 @@ import { useRef } from "react";
 import { Camera, Phone, Printer, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { eventsRepository } from "@/lib/repositories/eventsRepository";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
-import { createStatusEvent } from "@/app/actions/status-events.actions";
 import { StationStatusButton } from "./StationStatusButton";
 
 export function OrderActionGrid({ 
@@ -79,24 +77,6 @@ export function OrderActionGrid({
     reader.readAsDataURL(file);
   };
  
-    const confirmAction = async (action: string, status: "completed" | "cancelled" | "rework") => {
-    if (confirm(`Möchten Sie wirklich die Aktion "${action}" ausführen?`)) {
-      if (status === "rework") {
-        await eventsRepository.addEvent({ orderId, customerId, eventType: "REWORK_STARTED" });
-        createStatusEvent({ orderId, eventType: "REWORK_STARTED" }).catch(e => console.warn(e));
-      } else if (status === "cancelled") {
-        await ordersRepository.updateOrder(orderId, { status: "cancelled" });
-        await eventsRepository.addEvent({ orderId, customerId, eventType: "QUALITY_CHECK_FAILED" });
-        createStatusEvent({ orderId, eventType: "QUALITY_CHECK_FAILED" }).catch(e => console.warn(e));
-      } else {
-        await ordersRepository.updateOrder(orderId, { status: "completed" });
-        await eventsRepository.addEvent({ orderId, customerId, eventType: "STATION_COMPLETED" });
-        createStatusEvent({ orderId, eventType: "STATION_COMPLETED" }).catch(e => console.warn(e));
-      }
-      if (typeof window !== "undefined") window.dispatchEvent(new Event("storage"));
-    }
-  };
- 
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-extrabold text-navy-500 uppercase tracking-widest pl-1">Schnellaktionen</h3>
@@ -145,18 +125,18 @@ export function OrderActionGrid({
         )}
         
         <DropdownMenu>
-          <DropdownMenuTrigger className="flex-1 text-navy-500 hover:bg-neutral-gray-100 hover:text-navy-900 font-bold h-12 rounded-lg flex items-center justify-center border border-transparent transition-colors outline-none cursor-pointer">
+          <DropdownMenuTrigger disabled title="NOT_AVAILABLE: Mehrstufige Auftragsaktionen sind gesperrt" className="flex-1 text-text-muted font-bold h-12 rounded-lg flex items-center justify-center border border-transparent transition-colors outline-none disabled:cursor-not-allowed">
             <MoreHorizontal className="w-5 h-5 mr-2" /> Weitere
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => confirmAction("Nacharbeit starten", "rework")} className="cursor-pointer font-bold">
+            <DropdownMenuItem disabled className="font-bold">
               Nacharbeit starten
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => confirmAction("Auftrag schließen", "completed")} className="cursor-pointer font-bold text-navy-700">
+            <DropdownMenuItem disabled className="font-bold text-navy-700">
               Auftrag schließen
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => confirmAction("Auftrag stornieren", "cancelled")} className="cursor-pointer font-bold text-danger-red">
+            <DropdownMenuItem disabled className="font-bold text-danger-red">
               Auftrag stornieren
             </DropdownMenuItem>
           </DropdownMenuContent>

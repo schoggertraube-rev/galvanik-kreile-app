@@ -9,11 +9,9 @@ import { useState, Suspense, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 import { OrderCompactCard } from "@/components/orders/OrderCompactCard";
-import { OrderEditModal } from "@/components/orders/OrderEditModal";
 import { getUrgency } from "@/lib/orders/getUrgency";
 import { useOverlayStore } from "@/lib/overlayStore";
 import type { WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
-import type { Order } from "@/lib/repositories/ordersRepository";
 
 function getLegacyStatusText(order: WarendurchlaufOrder) {
   if (
@@ -40,7 +38,6 @@ function WarendurchlaufLeitstandContent() {
   const [orders, setOrders] = useState<WarendurchlaufOrder[]>([]);
   const [stationOrders, setStationOrders] = useState<WarendurchlaufOrder[]>([]);
   const [todos, setTodos] = useState<{ id: number; title: string; subtitle: string; tags: string[]; action: string; priority?: string; live?: boolean; targetHref?: string; done: boolean }[]>([]);
-  const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<Order | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -270,6 +267,7 @@ function WarendurchlaufLeitstandContent() {
             <span className="text-xs bg-[#f4f0e8] px-2 py-1 rounded text-[#9e9689]">{stationOrders.length}</span>
           </div>
 
+          <p className="mb-3 text-xs text-[#9e9689]">NOT_AVAILABLE: Auftragsbearbeitung wird erst mit dem atomaren Command aktiviert.</p>
           <div className="flex flex-col gap-2">
             {stationOrders.length > 0 ? (
               stationOrders.map((order) => {
@@ -303,24 +301,6 @@ function WarendurchlaufLeitstandContent() {
           </div>
         </div>
       </div>
-
-      {selectedOrderForEdit && (
-        <OrderEditModal
-          order={selectedOrderForEdit}
-          customers={[]} // Can be extended to load customers if needed
-          onClose={() => setSelectedOrderForEdit(null)}
-          onSave={async (changes) => {
-            // Placeholder: Call server action to update order
-            const { updateOrderDb } = await import("@/app/actions/orders.actions");
-            await updateOrderDb(selectedOrderForEdit.id, changes);
-            setSelectedOrderForEdit(null);
-            // Trigger reload
-            window.dispatchEvent(new CustomEvent("kreile-orders-updated"));
-          }}
-        />
-      )}
-
-
 
       {/* Animation */}
       <style>{`

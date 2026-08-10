@@ -66,22 +66,8 @@ export default function StatusDelayPage() {
     return () => window.removeEventListener("storage", loadData);
   }, []);
 
-  const handleTriggerAction = async (orderNumber: string) => {
-    const changes = {
-      risk: "green" as const,
-      statusText: "Im Plan (Gegenmaßnahme eingeleitet)",
-      delayReason: undefined,
-      recommendedAction: undefined,
-      dueLabel: "Fällig in",
-      dueValue: "10 Tagen"
-    };
-
-    // Update through unified repository supporting offline queuing
-    await ordersRepository.updateOrder(orderNumber, changes);
-
-    // Refresh state
-    const all = await ordersRepository.getAll();
-    setOrders(all as unknown as MockOrder[]);
+  const handleTriggerAction = () => {
+    window.alert("NOT_AVAILABLE: Statusänderungen benötigen den serverseitigen Command-Vertrag.");
   };
 
   // Compute stats dynamically from the loaded state
@@ -325,7 +311,9 @@ export default function StatusDelayPage() {
                           {item.reasonCategory === "Kundenfreigabe" ? (
                             <Button 
                               size="sm" 
-                              onClick={() => handleTriggerAction(item.id)}
+                              onClick={handleTriggerAction}
+                              title="NOT_AVAILABLE: Statusänderung ist gesperrt"
+                              disabled
                               className="bg-navy-900 text-white hover:bg-navy-700 h-12 text-xs font-bold w-full sm:w-auto px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm"
                             >
                               <Phone className="h-4 w-4" /> Kunde anrufen
@@ -333,7 +321,9 @@ export default function StatusDelayPage() {
                           ) : (
                             <Button 
                               size="sm"
-                              onClick={() => handleTriggerAction(item.id)}
+                              onClick={handleTriggerAction}
+                              title="NOT_AVAILABLE: Statusänderung ist gesperrt"
+                              disabled
                               className={`h-12 text-xs font-bold w-full sm:w-auto px-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm ${
                                 isCritical 
                                   ? "bg-danger-red text-white hover:bg-danger-red" 
