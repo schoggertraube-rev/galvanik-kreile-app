@@ -144,8 +144,13 @@ end $$;
 -- Fixtures als postgres (Owner umgeht RLS): je Tabelle 2x Tenant f0-a, 1x Tenant f0-b.
 -- INSERT-Template enthaelt %L-Platzhalter fuer tenant_id. id-Spalten ohne DB-Default nutzen
 -- gen_random_uuid()::text inline (bei jeder Ausfuehrung neu berechnet -> keine PK-Kollision
--- zwischen den 3 Fixture-Zeilen je Tabelle). email_templates.template_key ist UNIQUE -> ebenfalls
--- pro Zeile mit gen_random_uuid() eindeutig gemacht.
+-- zwischen den 3 Fixture-Zeilen je Tabelle). Tabellen mit einer UNIQUE-Constraint UEBER die
+-- id-Spalte hinaus bekommen zusaetzlich einen gen_random_uuid()-Anteil in genau der Spalte, die
+-- den Konflikt verursachen wuerde: email_templates.template_key (UNIQUE) sowie
+-- kpi_snapshots.kpi_key (Teil von UNIQUE(tenant_id, kpi_key, periode, periode_start) - ohne das
+-- waeren die zwei f0-a-Zeilen mit identischem kpi_key/periode/periode_start ein Duplikat, siehe
+-- CI-Fund 2026-08-10-Zyklus-1: "duplicate key value violates unique constraint
+-- kpi_snapshots_tenant_id_kpi_key_periode_periode_start_key").
 do $$
 declare
   tbl text;
@@ -159,7 +164,7 @@ declare
     $t$insert into public.calendar_events (id, tenant_id, title, event_type, starts_at) values (gen_random_uuid()::text, %L, 'f0 probe event', 'f0_probe', now())$t$,
     $t$insert into public.communication_drafts (id, tenant_id, customer_id, subject, body) values (gen_random_uuid()::text, %L, 'f0-e2e-probe-customer', 'f0 probe', 'f0 probe body')$t$,
     $t$insert into public.email_templates (tenant_id, template_key, name, subject_template, body_html_template) values (%L, 'f0-probe-' || gen_random_uuid()::text, 'f0 probe', 'f0 probe subject', 'f0 probe body')$t$,
-    $t$insert into public.kpi_snapshots (tenant_id, kpi_key, periode, periode_start) values (%L, 'f0_probe_kpi', 'f0-probe', current_date)$t$,
+    $t$insert into public.kpi_snapshots (tenant_id, kpi_key, periode, periode_start) values (%L, 'f0_probe_kpi_' || gen_random_uuid()::text, 'f0-probe', current_date)$t$,
     $t$insert into public.kvp_items (id, tenant_id, title, category, benefit) values (gen_random_uuid()::text, %L, 'f0 probe', 'f0_probe', 'f0 probe benefit')$t$,
     $t$insert into public.offline_outbox (id, tenant_id, mutation_type, payload) values (gen_random_uuid()::text, %L, 'f0_probe', '{}'::jsonb)$t$,
     $t$insert into public.order_cost_positions (id, tenant_id, order_id, "type", description, amount_cents) values (gen_random_uuid()::text, %L, 'f0-e2e-probe-order', 'f0_probe', 'f0 probe cost', 0)$t$
