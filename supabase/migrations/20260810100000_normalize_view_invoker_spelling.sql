@@ -1,0 +1,19 @@
+-- BF-002 Folgemigration: vereinheitlicht die reloptions-Schreibweise von
+-- public.v_auftrag_db mit den uebrigen 16 gehaerteten Views.
+--
+-- Hintergrund: 20260807090100_f0_06_storage_view_hardening.sql setzte
+-- "security_invoker = on". Alle 16 anderen Views wurden in der Production-
+-- Schema-Baseline mit "security_invoker" = 'true' erzeugt. Beide Schreibweisen
+-- sind fuer Postgres boolesch identisch (on/true/yes/1 sind aequivalente
+-- boolean-Literale) - es aendert sich keine Sicherheitswirkung. Der neue
+-- Fingerprint-Bestandteil "viewopts" (BF-002) vergleicht jedoch den LITERALEN
+-- Text in pg_class.reloptions byte-exakt, nicht nur die geparste Bedeutung.
+--
+-- Live-Messung 2026-08-10 (read-only, per-View-Abfrage von pg_class.reloptions
+-- gegen Production-Projekt syhaigjhsbpjmtnggqka) bestaetigt: alle 17 Views
+-- tragen dort bereits einheitlich "security_invoker=true" (nicht "on"). Diese
+-- Migration bringt die Replay-Kette auf denselben Wortlaut, damit ein frischer
+-- "supabase db reset" exakt denselben viewopts-Hash erzeugt wie der Live-Stand
+-- (docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt: viewopts=037165d741eb34e0177f0c3cb27fb76a).
+-- Rein additive Schreibweisen-Normalisierung; keine Berechtigungs- oder RLS-Aenderung.
+alter view public.v_auftrag_db set (security_invoker = true);

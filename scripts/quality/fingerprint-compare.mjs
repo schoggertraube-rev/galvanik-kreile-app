@@ -7,11 +7,14 @@
 //    identisch (Objektmengen und Ausdruckssemantik verifiziert); byte-Match prinzipiell unerreichbar
 //    per Replay. Belegt durch No-Op-Experiment (DROP+CREATE aller Trigger+Policies aenderte nichts).
 //  - knownExternal: def_privs - supabase_admin Default Privileges (Cluster/Owner, lokal nicht setzbar).
+// viewopts (BF-002, ergaenzt 2026-08-10): md5 ueber pg_class.reloptions aller public/private-Views
+//   (u.a. security_invoker). expectMatch/hart, da byte-exakt replayfaehig; deckt genau die BF-001-Drift
+//   (v_auftrag_db ohne security_invoker) ab, die die urspruengliche 10-Komponenten-Definition nicht sah.
 // Aufruf: node scripts/quality/fingerprint-compare.mjs "<pipe-delimited-fp>" <referenz-datei>
 import { readFileSync } from "node:fs";
 
-const order = ["cols","idx","cons","trig","func","pol","rls","grants","func_grants","def_privs"];
-const expectMatch = new Set(["cols","idx","func","rls","grants","func_grants"]);
+const order = ["cols","idx","cons","trig","func","pol","rls","grants","func_grants","def_privs","viewopts"];
+const expectMatch = new Set(["cols","idx","func","rls","grants","func_grants","viewopts"]);
 const knownNormalization = new Set(["cons","trig","pol"]);
 const knownExternal = new Set(["def_privs"]);
 
@@ -40,6 +43,6 @@ order.forEach((k, i) => {
 });
 console.log(`FINGERPRINT_HARD_FAILS=${hardFails}`);
 console.log(hardFails === 0
-  ? "FINGERPRINT_PARITY=PASS (6 exakt; cons/trig/pol known-normalization; def_privs known-external)"
+  ? "FINGERPRINT_PARITY=PASS (7 exakt; cons/trig/pol known-normalization; def_privs known-external)"
   : `FINGERPRINT_PARITY=FAIL (${hardFails} Regression(en) in exakt matchbaren Komponenten)`);
 process.exit(hardFails === 0 ? 0 : 1);

@@ -13,6 +13,11 @@ rls=7176c1c699aa26fb0c23276c53341087
 grants=01feb57e0cbb387abb9842f7f07c6413
 func_grants=2d91f6b46df3bcdaa48daea0f5e37388
 def_privs=52bcb99349592ff3ca7c25e0039b5720
+viewopts=037165d741eb34e0177f0c3cb27fb76a
 # HINWEIS def_privs: enthaelt supabase_admin Default Privileges (Cluster, extern/Owner) - lokal NICHT
 # reproduzierbar -> DIFF auf def_privs ist ERWARTET und als BLOCKED_EXTERNAL bekannt.
 # pol aktualisiert 2026-08-07 nach RLS-CONTRACT-Haertung auf Prod (verifiziert read-only via f0_schema_fingerprint.sql).
+# viewopts ergaenzt 2026-08-10 (BF-002), Wert read-only live erhoben. Deckt pg_class.reloptions aller
+# 17 public-Views ab (u.a. security_invoker) - die von BF-001 gefundene Drift bei v_auftrag_db waere
+# mit dieser Komponente als HARD-FAIL im Fingerprint sichtbar geworden. Live-Stand 2026-08-10 verifiziert:
+# alle 17 Views tragen einheitlich reloptions=[security_invoker=true] (per-View-Abfrage, nicht nur Aggregat-Hash).
