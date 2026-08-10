@@ -2,7 +2,6 @@ import { customersRepository } from "../repositories/customersRepository";
 import { ordersRepository } from "../repositories/ordersRepository";
 import { itemsRepository } from "../repositories/itemsRepository";
 import { eventsRepository } from "../repositories/eventsRepository";
-import { photoService } from "./photoService";
 
 export const intakeService = {
   async processIntake(data: {
@@ -12,6 +11,9 @@ export const intakeService = {
     orderTitle: string;
     items: { name: string; quantity: number; surfaceRequested?: string; photo?: string }[];
   }) {
+    if (data.items.some((item) => item.photo)) {
+      throw new Error("Fotoerfassung ist bis zum sicheren Server-Command-Vertrag nicht verfügbar.");
+    }
     await eventsRepository.addEvent({ eventType: "ORDER_CREATED_MANUAL" });
 
     // 1. Kunde zuordnen oder anlegen
@@ -73,13 +75,6 @@ export const intakeService = {
       photoUrl: i.photo || undefined
     }));
     await itemsRepository.createMany(itemsData);
-
-    // Fotos im Hintergrund an Supabase schicken
-    for (const item of data.items) {
-      if (item.photo) {
-        await photoService.savePhotoForOrder(order.id, item.photo);
-      }
-    }
 
     await eventsRepository.addEvent({ eventType: "ITEM_COUNT_CONFIRMED", orderId: order.id });
 

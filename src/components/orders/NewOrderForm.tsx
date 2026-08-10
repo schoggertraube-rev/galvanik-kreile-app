@@ -33,26 +33,12 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
   }, []);
 
   const handleSave = async () => {
+    if (previewUrl && previewUrl.startsWith("data:")) {
+      alert("Auftrag mit Dokumentvorschau kann erst nach dem sicheren Server-Command-Vertrag gespeichert werden.");
+      return;
+    }
     try {
       setLoading(true);
-      let finalAttachmentUrl = "";
-      
-      if (previewUrl && previewUrl.startsWith("data:")) {
-        const { createClient } = await import("@/lib/supabase/client");
-        const supabase = createClient();
-        
-        // Convert base64 to Blob
-        const response = await fetch(previewUrl);
-        const blob = await response.blob();
-        
-        const fileName = `order_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.jpg`;
-        const { data, error } = await supabase.storage.from("attachments").upload(fileName, blob);
-        
-        if (!error && data) {
-          const { data: publicUrlData } = supabase.storage.from("attachments").getPublicUrl(fileName);
-          finalAttachmentUrl = publicUrlData.publicUrl;
-        }
-      }
 
       await ordersRepository.create({
         customerId,
@@ -60,7 +46,6 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
         task,
         station: "wareneingang",
         source: "customer",
-        attachmentUrl: finalAttachmentUrl || undefined,
         parts: [
           {
             name: title,
@@ -184,7 +169,7 @@ export function NewOrderForm({ onClose, customerId, customerName, ocrData, previ
             <Button variant="outline" onClick={onClose} disabled={loading} className="font-bold">
               Abbrechen
             </Button>
-            <Button onClick={handleSave} disabled={loading || !title} className="bg-navy-900 hover:bg-navy-800 text-white font-bold min-w-[140px]">
+            <Button onClick={handleSave} disabled={loading || !title || Boolean(previewUrl?.startsWith("data:"))} className="bg-navy-900 hover:bg-navy-800 text-white font-bold min-w-[140px]">
               {loading ? "Speichert..." : (
                 <>
                   <Save className="w-4 h-4 mr-2" />

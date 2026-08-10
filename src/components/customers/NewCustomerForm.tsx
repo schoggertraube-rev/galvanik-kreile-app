@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { customersRepository } from "@/lib/repositories/customersRepository";
 import { Customer } from "@/lib/types/customer";
-import { createClient } from "@/lib/supabase/client";
 import { createCustomerDb } from "@/app/actions/customers.actions";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { Building2, Save, Upload, FilePlus2, Copy, AlertTriangle, Camera, X, CheckCircle2 } from "lucide-react";
@@ -38,7 +37,6 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
   const [notes, setNotes] = useState("");
   
   // Images
-  const [files, setFiles] = useState<File[]>([]);
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [success, setSuccess] = useState(false);
   
@@ -126,63 +124,19 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
     initAutocomplete();
   }, []);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const selectedFiles = Array.from(e.target.files).filter(
-        file => file.type === "image/jpeg" || file.type === "image/png"
-      );
-      setFiles(prev => [...prev, ...selectedFiles]);
-    }
-  };
-
-  const removeFile = (index: number) => {
-    setFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
   const removeExistingImage = (index: number) => {
     setImageUrls(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSave = async () => {
+    if (previewUrl?.startsWith("data:")) {
+      setErrors({ submit: ["Kunde mit Bildvorschau kann erst nach dem sicheren Server-Command-Vertrag gespeichert werden."] });
+      return;
+    }
     try {
       setLoading(true);
       setErrors({});
-      const supabase = createClient();
-      
-      // 1. Upload new files
-      const uploadedUrls: string[] = [];
-      for (const file of files) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2, 15)}_${Date.now()}.${fileExt}`;
-        const filePath = `${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("customer-images")
-          .upload(filePath, file);
-
-        if (uploadError) {
-          console.error("Error uploading image:", uploadError);
-          // Even if one fails, we continue with others
-          continue;
-        }
-
-        const { data } = supabase.storage.from("customer-images").getPublicUrl(filePath);
-        uploadedUrls.push(data.publicUrl);
-      }
-      
-      // Also upload previewUrl if provided
-      if (previewUrl && previewUrl.startsWith("data:")) {
-        const response = await fetch(previewUrl);
-        const blob = await response.blob();
-        const fileName = `customer_${Date.now()}_${Math.random().toString(36).substring(2, 9)}.jpg`;
-        const { data, error } = await supabase.storage.from("customer-images").upload(fileName, blob);
-        if (!error && data) {
-          const { data: publicUrlData } = supabase.storage.from("customer-images").getPublicUrl(fileName);
-          uploadedUrls.push(publicUrlData.publicUrl);
-        }
-      }
-
-      const allImageUrls = [...imageUrls, ...uploadedUrls];
+      const allImageUrls = imageUrls;
 
       // 2. Save customer
       let savedId = customerId;
@@ -302,6 +256,7 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
                     className="pl-9 font-medium"
                   />
                 </div>
+                {previewUrl?.startsWith("data:") && <p className="text-xs text-danger-red font-medium">Speichern mit Bildvorschau ist derzeit nicht verfügbar.</p>}
               </div>
             </div>
 
@@ -387,29 +342,15 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
             <div className="space-y-2">
               <label className="text-xs font-bold text-navy-900">Bilder & Dokumente (JPG/PNG)</label>
               <div className="flex items-center gap-4 flex-wrap">
-                <label className="cursor-pointer bg-white border-2 border-dashed border-neutral-gray-300 hover:border-navy-900 hover:bg-bg-app-soft transition-all rounded-xl p-4 flex flex-col items-center justify-center min-w-[120px]">
+                <button disabled title="Nicht verfügbar: sicherer Server-Command-Vertrag fehlt." className="bg-white border-2 border-dashed border-neutral-gray-300 rounded-xl p-4 flex flex-col items-center justify-center min-w-[120px] opacity-50 cursor-not-allowed">
                   <Camera className="w-5 h-5 text-navy-900 mb-2" />
                   <span className="text-[10px] font-bold text-navy-900 text-center">Kamera<br/>starten</span>
-                  <input 
-                    type="file" 
-                    accept="image/jpeg, image/png" 
-                    capture="environment"
-                    className="hidden" 
-                    onChange={handleFileChange}
-                  />
-                </label>
+                </button>
 
-                <label className="cursor-pointer bg-white border-2 border-dashed border-neutral-gray-300 hover:border-navy-900 hover:bg-bg-app-soft transition-all rounded-xl p-4 flex flex-col items-center justify-center min-w-[120px]">
+                <button disabled title="Nicht verfügbar: sicherer Server-Command-Vertrag fehlt." className="bg-white border-2 border-dashed border-neutral-gray-300 rounded-xl p-4 flex flex-col items-center justify-center min-w-[120px] opacity-50 cursor-not-allowed">
                   <Upload className="w-5 h-5 text-navy-900 mb-2" />
                   <span className="text-[10px] font-bold text-navy-900 text-center">Datei<br/>hochladen</span>
-                  <input 
-                    type="file" 
-                    multiple 
-                    accept="image/jpeg, image/png" 
-                    className="hidden" 
-                    onChange={handleFileChange}
-                  />
-                </label>
+                </button>
                 
                 <div className="flex gap-3 overflow-x-auto pb-2">
                   {imageUrls.map((url, idx) => (
@@ -429,7 +370,7 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
                       </button>
                     </div>
                   ))}
-                  {previewUrl && !imageUrls.length && !files.length && (
+                  {previewUrl && !imageUrls.length && (
                     <div className="relative shrink-0 group">
                       <Image 
                         src={previewUrl} 
@@ -440,23 +381,6 @@ export function NewCustomerForm({ onClose, customerId, previewUrl, onSave, inlin
                       />
                     </div>
                   )}
-                  {files.map((file, idx) => (
-                    <div key={`new-${idx}`} className="relative shrink-0 group">
-                      <Image 
-                        src={URL.createObjectURL(file)} 
-                        alt="Customer file preview" 
-                        width={64} 
-                        height={64} 
-                        className="w-16 h-16 object-cover rounded-xl border border-neutral-gray-200"
-                      />
-                      <button 
-                        onClick={() => removeFile(idx)}
-                        className="absolute -top-2 -right-2 bg-danger-red text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>

@@ -6,13 +6,11 @@ import { StatusMailDrawer } from "./StatusMailDrawer";
 import { ItemDrawer } from "./ItemDrawer";
 import { 
   X, Check, AlertTriangle, Clock, Droplet, Package, Info, Plus, 
-  Send, Camera, Phone, FileText, Receipt, Truck, ArrowRight, CameraOff, Wrench, Loader2
+  Send, Camera, Phone, FileText, Receipt, Truck, ArrowRight, CameraOff, Wrench
 } from "lucide-react";
 import { StationContextBlock } from "./StationContextBlock";
 import { HeadCostBadge } from "./HeadCostBadge";
 import { AppOverlayPortal } from "@/components/ui/AppOverlayPortal";
-import { uploadOrderPhotoRecord } from "@/features/orders/orderPhoto.actions";
-import { createClient } from "@/lib/supabase/client";
 import type { getOrderWithDetails } from "@/lib/repositories/orderQueries";
 
 type OrderDetails = NonNullable<Awaited<ReturnType<typeof getOrderWithDetails>>>;
@@ -32,8 +30,6 @@ export function OrderOverlay() {
   const [showMail, setShowMail] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | 'new' | null>(null);
   const [activeStationOverride, setActiveStationOverride] = useState<string | null>(null);
-  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const currentOrderId = orderStack.length > 0 ? orderStack[orderStack.length - 1] : null;
 
@@ -428,51 +424,14 @@ export function OrderOverlay() {
                       <Send className="w-[18px] h-[18px]"/><span className="ci-qa-label">Status-Mail</span>
                     </button>
                     
-                    <label className="ci-qa cursor-pointer relative" style={isUploadingPhoto ? { opacity: 0.7, pointerEvents: 'none' } : {}}>
-                      <input 
-                        type="file" 
-                        accept="image/*,capture=camera" 
-                        className="hidden" 
-                        disabled={isUploadingPhoto}
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          
-                          setIsUploadingPhoto(true);
-                          setUploadError(null);
-                          try {
-                            const supabase = createClient();
-                            const fileName = `galvanik-kreile/${currentOrderId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-                            
-                            const { error: uploadError } = await supabase.storage
-                              .from("scans")
-                              .upload(fileName, file);
-
-                            if (uploadError) throw new Error(uploadError.message);
-                            
-                            const { data: publicUrlData } = supabase.storage.from("scans").getPublicUrl(fileName);
-
-                            const dbRes = await uploadOrderPhotoRecord({
-                              orderId: currentOrderId,
-                              fileUrl: publicUrlData.publicUrl,
-                              fileType: file.type
-                            });
-
-                            if (!dbRes.success) throw new Error(dbRes.error);
-                            
-                          } catch (error: unknown) {
-                            console.error("Foto-Upload fehlgeschlagen:", error);
-                            setUploadError("Fehler beim Upload.");
-                          } finally {
-                            setIsUploadingPhoto(false);
-                            if (e.target) e.target.value = '';
-                          }
-                        }}
-                      />
-                      {isUploadingPhoto ? <Loader2 className="w-[18px] h-[18px] animate-spin text-[var(--ci-accent)]" /> : <Camera className="w-[18px] h-[18px]"/>}
+                    <button
+                      disabled
+                      title="Nicht verfügbar: sicherer Server-Command-Vertrag fehlt."
+                      className="ci-qa opacity-50 cursor-not-allowed"
+                    >
+                      <CameraOff className="w-[18px] h-[18px]"/>
                       <span className="ci-qa-label">Foto +</span>
-                      {uploadError && <span className="absolute -bottom-5 text-red-500 text-[10px] whitespace-nowrap">{uploadError}</span>}
-                    </label>
+                    </button>
 
                     <button className="ci-qa"><Phone className="w-[18px] h-[18px]"/><span className="ci-qa-label">Anrufen</span></button>
                     <button className="ci-qa"><FileText className="w-[18px] h-[18px]"/><span className="ci-qa-label">KV</span></button>
