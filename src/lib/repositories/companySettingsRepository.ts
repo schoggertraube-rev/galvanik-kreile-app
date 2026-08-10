@@ -111,52 +111,7 @@ export const companySettingsRepository = {
   },
 
   async updateSettings(settings: Partial<CompanySettings>): Promise<CompanySettings> {
-    if (OfflineManager.isOffline()) {
-      throw new Error("Cannot update company settings while offline.");
-    }
-
-    const current = await this.getSettings();
-    const merged = { ...current, ...settings };
-
-    const dbPayload = {
-      id: "default",
-      tenant_id: "galvanik-kreile",
-      company_name: merged.companyName,
-      tagline: merged.tagline,
-      street: merged.street,
-      zip: merged.zip,
-      city: merged.city,
-      country: merged.country,
-      phone: merged.phone,
-      email: merged.email,
-      website: merged.website,
-      iban: merged.iban,
-      bic: merged.bic,
-      bank_name: merged.bankName,
-      tax_id: merged.taxId,
-      logo_url: merged.logoUrl,
-      email_greeting: merged.emailGreeting,
-      email_pickup_info: merged.emailPickupInfo,
-      email_payment_info: merged.emailPaymentInfo,
-      email_agb_text: merged.emailAgbText,
-      email_footer: merged.emailFooter,
-      email_additional_notes: merged.emailAdditionalNotes,
-      updated_at: new Date().toISOString()
-    };
-
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("company_settings")
-      .upsert(dbPayload, { onConflict: "id" });
-
-    if (error) {
-      console.error("Supabase companySettingsRepository.updateSettings error:", error.message, error.details, error.hint);
-      throw error;
-    }
-
-    if (typeof window !== "undefined") {
-      localStorage.setItem("kreile_company_settings", JSON.stringify(merged));
-    }
-    return merged;
+    void settings;
+    throw new Error("NOT_AVAILABLE: Sichere Firmendatenänderung benötigt den W3-Command-Vertrag.");
   }
 };

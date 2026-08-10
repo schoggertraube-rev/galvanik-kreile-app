@@ -2,13 +2,12 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { getCompanySettings, updateCompanySettings } from "@/app/actions/company.actions";
+import { getCompanySettings } from "@/app/actions/company.actions";
 import { CompanySettings } from "@/lib/repositories/companySettingsRepository";
 import { Loader2, Save, Upload, Building2, Mail } from "lucide-react";
 
 export function CompanySettingsForm() {
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState<CompanySettings | null>(null);
 
   useEffect(() => {
@@ -31,20 +30,8 @@ export function CompanySettingsForm() {
     setFormData(prev => prev ? { ...prev, [name]: value } : null);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData) return;
-    
-    setSaving(true);
-    try {
-      await updateCompanySettings(formData);
-      alert("Firmendaten erfolgreich gespeichert.");
-    } catch (err) {
-      console.error("Failed to save settings", err);
-      alert("Fehler beim Speichern der Firmendaten.");
-    } finally {
-      setSaving(false);
-    }
   };
 
   const handleLogoUpload = () => {
@@ -76,13 +63,17 @@ export function CompanySettingsForm() {
           </div>
           <button 
             type="submit" 
-            disabled={saving}
+            disabled
             className="flex items-center gap-2 bg-navy-900 hover:bg-navy-700 text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md transition-all active:scale-95 disabled:opacity-50"
           >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Speichern
+            <Save className="w-4 h-4" />
+            Speichern (NOT_AVAILABLE)
           </button>
         </div>
+
+        <p className="px-6 pt-6 text-sm text-text-muted" role="status">
+          NOT_AVAILABLE: Sichere Firmendatenänderung benötigt den W3-Command-Vertrag.
+        </p>
 
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
           

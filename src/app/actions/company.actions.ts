@@ -10,5 +10,6 @@ export async function getCompanySettings(): Promise<CompanySettings> {
 
 export async function updateCompanySettings(data: Partial<CompanySettings>): Promise<CompanySettings> {
   await requireAdminOrDeveloper();
-  return companySettingsRepository.updateSettings(data);
+  void data;
+  throw new Error("NOT_AVAILABLE: Sichere Firmendatenänderung benötigt den W3-Command-Vertrag.");
 }
