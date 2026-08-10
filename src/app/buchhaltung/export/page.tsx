@@ -1,14 +1,8 @@
-import { exportBelegeAction } from "@/app/buchhaltung/actions";
-import { ExportClient } from "./ExportClient";
+import { FoundationUnavailable } from '@/components/foundation/FoundationUnavailable';
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-export default async function ExportPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }) {
-  const sp = await searchParams;
-  const initialFormat = (sp.format as string) || "datev";
-
-  // Wir rufen zur Demonstration einfach den "DATEV" Export auf.
-  const previewData = await exportBelegeAction("DATEV");
-
-  return <ExportClient initialFormat={initialFormat} previewData={previewData} />;
+export default function ExportPage() {
+  return <FoundationUnavailable />;
 }
