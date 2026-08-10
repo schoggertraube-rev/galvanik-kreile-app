@@ -5,9 +5,18 @@ import { KlippaProvider } from '@/lib/ocr/KlippaProvider';
 import { GeminiProvider } from '@/lib/ocr/GeminiProvider';
 import { verteilBeleg } from '@/lib/ocr/Verteilung';
 import { ilike } from 'drizzle-orm';
-import { readAppSession } from '@/lib/server/appSession';
+import { checkAppAuthorization } from '@/lib/server/authHelper';
 
 export async function POST(req: Request) {
+  // F0-W2a (STO-02): auth-first. Session + tenant + write-capability MUST
+  // resolve before any provider call, storage access, or DB write below.
+  const auth = await checkAppAuthorization('write');
+  if (!auth.ok) {
+    const status = auth.error === 'FORBIDDEN' ? 403 : 401;
+    return NextResponse.json({ error: 'PERMISSION_DENIED' }, { status });
+  }
+  const erstelltVon = auth.data.userId;
+
   try {
     const { storagePath } = await req.json();
 
@@ -15,8 +24,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'storagePath missing' }, { status: 400 });
     }
 
-    // Determine Provider
+    // Determine Provider — only a really (env-)configured adapter may run.
     const hasKlippa = !!process.env.KLIPPA_API_KEY;
+    const hasGemini = !!process.env.GEMINI_API_KEY;
+    if (!hasKlippa && !hasGemini) {
+      // F0-W2a (STO-02): no real OCR adapter configured — say so honestly
+      // instead of silently inserting a fabricated/empty beleg record.
+      return NextResponse.json({ status: 'NOT_CONFIGURED' }, { status: 503 });
+    }
     const provider = hasKlippa ? new KlippaProvider() : new GeminiProvider();
     
     // Wir können bei Supabase den Public URL abfragen, falls es public ist
@@ -77,23 +92,8 @@ export async function POST(req: Request) {
     // Status bestimmen
     const status = ergebnis.confidence >= 0.85 ? 'erfasst' : 'pruefen';
 
-    let erstelltVon: string;
-    const sessionRes = await readAppSession();
-    if (sessionRes.ok) {
-      erstelltVon = sessionRes.session.userId;
-    } else {
-      if (process.env.NODE_ENV !== "production") {
-        const { appUsers } = await import("@/db/schema");
-        const users = await db.select().from(appUsers).limit(1);
-        if (users.length > 0) {
-          erstelltVon = users[0].id;
-        } else {
-          erstelltVon = "00000000-0000-0000-0000-000000000000";
-        }
-      } else {
-        return NextResponse.json({ error: "Sitzung abgelaufen oder nicht angemeldet" }, { status: 401 });
-      }
-    }
+    // F0-W2a (STO-02): erstelltVon kommt ausschliesslich aus der oben
+    // geprueften Session/Autorisierung — kein Dev-Fallback, keine Null-UUID.
 
     // Datensatz in `beleg` anlegen
     const [newBeleg] = await db.insert(beleg).values({
