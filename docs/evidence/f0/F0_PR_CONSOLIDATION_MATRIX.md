@@ -1,4 +1,7 @@
-﻿# F0_PR_CONSOLIDATION_MATRIX â€” Disposition der Foundation-Parallelarbeit
+# F0_PR_CONSOLIDATION_MATRIX â€” Disposition der Foundation-Parallelarbeit
+
+> **Historisches Arbeitsdokument** (Konsolidierung, Stand 07.08.). Massgeblicher Endzustand:
+> docs/project/CURRENT_STATE.md + docs/evidence/f0/F0_FINAL_REPORT.md (2026-08-10).
 
 **Kandidat:** `f0/consolidation` @ `5d4d936` (Basis `main` `62af22d7`)
 **Datum:** 2026-08-06

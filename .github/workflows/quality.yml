@@ -72,6 +72,9 @@ jobs:
       - name: TypeScript
         run: npx tsc --noEmit --incremental false
 
+      - name: Full ESLint (lint:full, BF-013)
+        run: npm run lint:full
+
       - name: Unit tests
         run: npm run test:unit
 
@@ -98,6 +101,9 @@ jobs:
       - name: Repository ESLint ratchet
         run: node --import tsx scripts/quality/check-eslint-ratchet.ts --base "${{ steps.diff.outputs.base }}"
 
+      - name: F0 doc truth gate
+        run: node scripts/quality/check-f0-doc-truth.mjs
+
       - name: Supabase client boundary
         run: node scripts/quality/check-supabase-client-boundary.mjs
 
@@ -107,10 +113,37 @@ jobs:
       - name: Forbidden pattern gate
         run: node scripts/quality/check-forbidden-patterns.mjs --base "${{ steps.diff.outputs.base }}" --head "${{ steps.diff.outputs.head }}"
 
+      - name: Runtime dependency audit (persisted artifact, BF-013, kein Fail-Gate)
+        if: always()
+        shell: bash
+        run: |
+          npm audit --omit=dev --json > npm-audit-omit-dev.json || true
+          node -e "
+            const fs = require('node:fs');
+            let v = {};
+            try {
+              const data = JSON.parse(fs.readFileSync('npm-audit-omit-dev.json', 'utf8'));
+              v = data.metadata?.vulnerabilities ?? {};
+            } catch (e) {
+              console.error('npm-audit-omit-dev.json nicht parsebar:', e.message);
+            }
+            const sev = ['critical','high','moderate','low','info'];
+            const counts = sev.map((s) => \`\${s}=\${v[s] ?? 0}\`).join(' ');
+            console.log('NPM_AUDIT_OMIT_DEV_SEVERITY_COUNTS ' + counts + ' total=' + (v.total ?? 0));
+          "
+
+      - name: Upload runtime audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-audit
+          path: npm-audit-omit-dev.json
+          if-no-files-found: warn
+
   fresh-supabase-replay:
     name: Fresh Supabase replay
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -125,8 +158,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Start isolated local Postgres
-        run: npx --yes supabase@2.111.0 db start
+      - name: Start isolated local Supabase stack (Postgres + Storage + Auth, BF-007)
+        # War vorher "supabase db start" (nur Postgres-Container). BF-007 braucht die echte
+        # Storage-REST-API (scripts/quality/f0-storage-http-tests.mjs) und liest deren Keys zur
+        # Laufzeit aus "supabase status -o env" - dieser Befehl liefert API_URL/ANON_KEY/
+        # SERVICE_ROLE_KEY nur fuer Dienste, die tatsaechlich laufen. "db start" startet nur
+        # Postgres; erst der volle "start" bringt Storage/Auth/Kong mit hoch (CI-Fund
+        # 2026-08-10-Zyklus-2: "status -o env" lieferte nur DB_URL, storage-http-tests.mjs
+        # brach mit FATAL ab). Alle anderen Schritte in diesem Job sprechen ohnehin nur die
+        # Postgres-DB direkt an und sind von den zusaetzlich laufenden Diensten unberuehrt.
+        run: npx --yes supabase@2.111.0 start
 
       - name: Replay every migration from zero
         run: npx --yes supabase@2.111.0 db reset --local
@@ -137,11 +178,20 @@ jobs:
           FP=$(PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres \
             -A -F'|' -t -f docs/evidence/f0/hardening/f0_schema_fingerprint.sql | grep '|' | tr -d '\r' | tr -d '\n')
           echo "replay-fingerprint: $FP"
+          echo "FP=$FP" >> "$GITHUB_ENV"
           node scripts/quality/fingerprint-compare.mjs "$FP" docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt | tee replay-fingerprint.txt
 
       - name: F0 negative + inventory tests (grant-denial, rls-contract, storage, view)
         run: |
           PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -v ON_ERROR_STOP=1 -f scripts/quality/f0_negative_tests.sql
+
+      - name: BF-008 tenant coverage check (F0_TENANT_COVERAGE.json vs live)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: node scripts/quality/check-tenant-coverage.mjs
+
+      - name: BF-007 storage HTTP negative matrix (S1-S12, real Storage API)
+        run: node scripts/quality/f0-storage-http-tests.mjs
 
       - name: DB integration tests against replay DB
         # NUR scan_order.integration.test.ts: es mockt @/lib/server/authorization vollstaendig.
@@ -158,6 +208,76 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
           SUPABASE_URL: http://127.0.0.1:54321
         run: npx vitest run src/test/scan_order.integration.test.ts
+
+      - name: BF-006 build (gegen lokale Supabase-Replay-DB, echte Session-Kette)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+          SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+          SUPABASE_URL: http://127.0.0.1:54321
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          APP_SESSION_SECRET: f0-verify-http-tests-ci-secret-2026-08-10
+        run: npm run build
+
+      - name: BF-006 start app (next start -p 3100) + readiness loop
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+          SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
+          SUPABASE_URL: http://127.0.0.1:54321
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          APP_SESSION_SECRET: f0-verify-http-tests-ci-secret-2026-08-10
+        run: |
+          npx next start -p 3100 > next-start.log 2>&1 &
+          echo $! > next-start.pid
+          ready=0
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3100/ -o /dev/null; then
+              echo "next start ready after ${i}s"
+              ready=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "next start did not become ready in time"
+            cat next-start.log
+            exit 1
+          fi
+
+      - name: BF-006 verify HTTP tests (real login POST + session cookie + auth boundary)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          BASE_URL: http://127.0.0.1:3100
+          APP_SESSION_SECRET: f0-verify-http-tests-ci-secret-2026-08-10
+        run: node scripts/quality/f0-verify-http-tests.mjs
+
+      - name: BF-006 stop app
+        if: always()
+        run: |
+          if [ -f next-start.pid ]; then
+            kill "$(cat next-start.pid)" 2>/dev/null || true
+          fi
+          if [ -f next-start.log ]; then
+            echo "--- next-start.log (last 100 lines) ---"
+            tail -n 100 next-start.log
+          fi
+
+      - name: BF-013 determinism replay (second db reset, byte-compare fingerprint)
+        run: |
+          set -o pipefail
+          npx --yes supabase@2.111.0 db reset --local
+          FP2=$(PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres \
+            -A -F'|' -t -f docs/evidence/f0/hardening/f0_schema_fingerprint.sql | grep '|' | tr -d '\r' | tr -d '\n')
+          DIGEST1=$(printf '%s' "$FP" | sha256sum | cut -d' ' -f1)
+          DIGEST2=$(printf '%s' "$FP2" | sha256sum | cut -d' ' -f1)
+          echo "REPLAY_DIGEST_1=$DIGEST1"
+          echo "REPLAY_DIGEST_2=$DIGEST2"
+          if [ "$FP" != "$FP2" ]; then
+            echo "REPLAY_DETERMINISM=FAIL (Fingerprint-Zeilen unterscheiden sich zwischen zwei frischen db-reset-Laeufen)"
+            exit 1
+          fi
+          echo "REPLAY_DETERMINISM=PASS"
 
       - name: Upload fingerprint artifact
         if: always()

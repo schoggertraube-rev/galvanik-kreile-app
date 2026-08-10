@@ -22,7 +22,13 @@ Dashboard ebenfalls permission denied). `postgres` ist auf Supabase kein Mitglie
 > FOR ROLE supabase_admin granting to anon/authenticated in schema public (pg_default_acl),
 > or advise how the project owner can do so. We enforce a zero-grant contract for these roles.
 
-## Blocker 2: Leaked-Password-Protection (Advisor WARN, informativ)
+## Praezisierung 2026-08-10 (BF-009/015, live nachgemessen)
+pg_default_acl gesamt: **24** Zeilen, davon **15** FOR ROLE supabase_admin; explodiert **96**
+Privilegien-Zeilen zugunsten anon/authenticated (Tabellen: SELECT/INSERT/UPDATE/DELETE/TRUNCATE/
+REFERENCES/TRIGGER/MAINTAIN; Sequenzen: SELECT/UPDATE/USAGE; Funktionen: EXECUTE). anon und
+authenticated behalten USAGE auf Schema public (Supabase-Standard; kompensiert durch 0 Objekt-
+Grants + RLS). Leaked-Password-Protection: **Betreiberpflicht vor Go-live** (nicht optional).
+
 Auth-Konfiguration, nur im Dashboard durch Betreiber aktivierbar (Auth → Passwords). Empfohlen.
 
 ## Kein Blocker (zur Abgrenzung)

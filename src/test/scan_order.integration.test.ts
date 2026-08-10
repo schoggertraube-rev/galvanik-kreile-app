@@ -3,6 +3,13 @@ dotenv.config({ path: ".env.local" });
 
 import { test, expect, vi } from "vitest";
 
+// BF-006 (2026-08-10): Dieser Test mockt "@/lib/server/authorization" bewusst weiterhin
+// vollstaendig - er prueft die DB-Integration des gescannten Auftragswegs, nicht die reale
+// Session-/Cookie-Autorisierungskette. Diese Beweisgrenze ist jetzt explizit geschlossen durch
+// scripts/quality/f0-verify-http-tests.mjs (Replay-Job, .github/workflows/quality.yml): echter
+// PIN-Login-POST gegen einen echten "next start"-Server, echtes Session-Cookie, echte
+// Rollen-/Deny-Pruefung ohne jeden Mock (F0-Befund BF-006, 2026-08-10-Pruefzyklus).
+//
 // Mock authorization to bypass auth guards during testing
 vi.mock("@/lib/server/authorization", () => ({
   resolveAuthorization: vi.fn().mockResolvedValue({

@@ -1,78 +1,100 @@
-# Current State
+# CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-## Stand 2026-08-07/08 — F0-Fundament auf main (maßgeblich)
+**Massgeblicher Stand: 2026-08-10.** Diese Datei wurde nach dem Befundbericht 2026-08-10 vollstaendig
+neu geschrieben (BF-004). Fruehere Fassungen sind ausschliesslich Git-Historie; kein Absatz dieser
+Datei beschreibt einen ueberholten Zustand als aktuell. Konsistenz wird durch das CI-Gate
+`scripts/quality/check-f0-doc-truth.mjs` erzwungen.
 
-- F0-03/04 DB-Wahrheit: Prod-Baseline replayt fresh aus Null; definitorischer Fingerprint 6/10 Komponenten byte-exakt = Prod, CI-hart gegated (fingerprint-compare.mjs, quality.yml); cons/trig/pol = known-normalization (PG-Parse-Tree), def_privs = known-external. Ledger-Vertrag: migrations_legacy-Archiv (96) + Baseline + Forward-Migrationen. (PR #49)
-- F0-05/06 Security/Storage: RLS-CONTRACT-Härtung (25 Tabellen, 29 Policies) + Bucket-Limits + v_auftrag_db security_invoker als aktive Migrationen 20260807090000/090100; am 2026-08-07 mit Freigabe auf Prod angewendet und read-only verifiziert. Evidence: docs/evidence/f0/F0_PROD_HARDENING_APPLIED.md (inkl. app_users-RLS-Nuance und Red-Team-Recheck). Fingerprint-Referenz pol nachgezogen. (PRs #50, #52)
-- F0-07 Modulare Grenze: kanonische Admin-Client-Factory src/lib/supabase/admin.ts, CI-Gate check-supabase-client-boundary.mjs, Modulmanifest-Schema + erfassung-Beispiel. (PR #51)
-- F0-08..11: ERLEDIGT (PR #54: CI-Negativ-/Inventartests, konsolidierte Evidence, F0_CLOSEOUT; unabhaengige Review als PR-Kommentar). Ratifizierungsauflagen 2026-08-08 umgesetzt: Prod-Ledger RECONCILED (8 aktive Migrationen, POST_DIGEST 693a36ce..., siehe F0_POSTFLIGHT.md), def_privs als BLOCKED_EXTERNAL_PERMISSION dokumentiert (F0_PERMISSION_PACKET.md), Tenant-/Storage-Negativmatrix + DB-Integrationstests in CI, next auf >=16.2.11 gehaertet, PR #41 geschlossen.
+## F0-Fundament (Repo + Production)
 
-Stand: 2026-08-06 - verifizierter Ist-Stand gegen `origin/main`, Supabase Production und Vercel.
+| Wahrheit | Stand |
+|---|---|
+| main | ae47f3ded22e6a29d695b48d3e67ca39c37a8b3f; einziger offener Foundation-PR: #57 (f0/befund-fixes) |
+| Production-Deployment | ae47f3de aktiv (Vercel dpl_7vwbgEJrPJhYHf9RcuLWswBr1EbT, READY, target=production) |
+| Supabase Prod | syhaigjhsbpjmtnggqka; Ledger 9/9 = aktive Repo-Migrationen (Digest 268ce6c1d87a7d020d68369eac20b2b4) |
+| Migrationswahrheit | PASS: Fresh-Replay aus Null, im CI DOPPELT mit identischem Digest (9dc1067b…) |
+| Schema-Paritaet | 7 HARTE Fingerprint-Komponenten = Prod (cols/idx/func/rls/grants/func_grants/viewopts); cons/trig/pol known-normalization, def_privs known-external |
+| Data API | 0 direkte anon/authenticated-Privileges auf allen public-Tabellen/Views (relationsweiter CI-Test); USAGE auf Schema public besteht (Supabase-Standard, kompensiert) |
+| RLS | 29 Haertungspolicies; Tenant-Fixture-Matrix ueber alle 8 tenant_isolation-Tabellen im CI; vollstaendige Kategorisierung aller tenant_id-Tabellen in F0_TENANT_COVERAGE.json mit Live-Abgleich-Gate |
+| Views | 17/17 security_invoker (einheitlich `true`, am 10.08. normalisiert; Aufloesung des Audit-Befunds BF-001 s. F0_FINAL_REPORT) |
+| Storage | 4 private Buckets, Limits/MIME gesetzt; ECHTE HTTP-Negativmatrix S1–S12 im CI (inkl. Signed-URL expired/manipuliert/fremd) |
+| Auth/Session | 6/6 PIN bcrypt; echte Session-Kette V1–V5 im CI (Login-POST, Cookie-Denials, Rollen-Denial); Playwright-Auth-E2E |
+| CI-Gates | tsc · lint:full (eigener Step) · Units · DB-Integration · V1–V5 · S1–S12 · Doppel-Replay · Negativ/Inventar (A–H) · Tenant-Coverage · Fingerprint hart · Ledger-Vertrag · Forbidden-Patterns · Client-Boundary · Ratchet · doc-truth · Build · npm-audit-Rohartefakt · diff-check |
+| Dependencies | next 16.2.12; npm audit --omit=dev als CI-Artefakt persistiert (Stand: 0 critical / 9 high / 2 moderate / 2 low, alle transitiv; transitiv ≠ automatisch irrelevant — Review-Pflicht bleibt) |
+| Externer Blocker | def_privs FOR ROLE supabase_admin (15 von 24 defacl-Eintraegen): BLOCKED_EXTERNAL_PERMISSION, kompensiert + Ticket-Vorlage (F0_PERMISSION_PACKET.md) |
+| Advisor offen | pg_trgm in public (WARN); Leaked-Password-Protection deaktiviert (WARN — Betreiberpflicht vor Go-live); 13 rls_enabled_no_policy (INFO, deny-all, kategorisiert) |
+| Abschlussstatus | FINAL_STATUS=PASS_WITH_DECLARED_EXTERNAL_EXCEPTION · RATIFICATION_STATUS=PENDING_EXTERNAL (F0_FINAL_REPORT.md / F0_HANDOFF.json) |
 
-Diese Datei ersetzt den veralteten Stand vom 2026-08-05, der Data-API und PIN faelschlich als offen fuehrte. Ein gruener Build oder ein aktuelles Deployment ist kein Gesamt-PASS.
+## Ausdruecklich NICHT Teil des F0-Fundaments (Produkt-/Go-live-Gates, offen)
+48h-Offline-Nachweis · Backup-/Restore-DRILL (Rollback ist vorbereitet, nicht getestet) ·
+DB-Passwort-Rotation · UI-Gesamtabnahme Desktop/Tablet/Mobile · operativer E2E-Kernweg ·
+Capture/OCR-Vollnutzung · Brain/Buchkern/Connectoren · Rate-Limit-Wirkungs-Drill.
 
-## Gesamturteil
+## Governance-Vermerk (ehrlich)
+Zwei Prod-Eingriffe dieser F0-Phase liefen mit Session-Freigabe des Auftraggebers VOR dem
+PR-Merge (Haertung 07.08.; Migration 20260810100000 am 10.08., dabei zunaechst ohne
+Ledger-Eintrag — selbst entdeckt und noch am selben Tag regulaer im Ledger nachgefuehrt).
+Regelweg bleibt Merge→Apply; alle Eingriffe sind in F0_HANDOFF.json REMOTE_MUTATIONS protokolliert.
 
-| Ebene | Status | Verifizierter Stand |
-|---|---|---|
-| GitHub-Lieferquelle | `PASS` | `main` ist einzige Lieferwahrheit; Head `6e0c74893ed10e5337e03b10457477f4b6d8cbf7`. |
-| Vercel Production | `PASS_CURRENT_MAIN` | Production laeuft auf aktuellem `main`. |
-| Data-API-Sicherheit (Production) | `DONE_VERIFIED` | 2026-08-05 alle Tabellen-Grants fuer `anon`/`authenticated` entzogen; per SQL 0 verbleibende Grants verifiziert. |
-| PIN-Bestand (Production) | `DONE_VERIFIED` | 6/6 App-User bcrypt cost 12; 0 Legacy-Klartext-PINs (per SQL verifiziert). |
-| Storage-Buckets (Production) | `DONE_VERIFIED` | `belege` 2026-08-06 auf privat gesetzt (D1); `buchhaltung-belege`, `item-photos`, `scans` bereits privat. |
-| Public-Funktions-Grants (Production) | `DONE_VERIFIED` | 2026-08-06 EXECUTE fuer 9 App-Funktionen von `PUBLIC`/`anon`/`authenticated` entzogen (D2); `service_role`/`postgres` behalten Zugriff. |
-| Tenant-Datenbestand (Production) | `CLEARED` | 2026-08-06 auf ausdrueckliche Freigabe alle Geschaeftsdaten (orders, customers, items, events, scan_uploads + abhaengige Tabellen) geloescht; 6 `app_users` erhalten. |
-| Migrationswahrheit auf `main` | `FAIL` | Mehrere Production-Aenderungen (Data-API-Revoke, Default-Privileges, PIN-bcrypt, D1, D2) wurden per `execute_sql` angewandt und liegen ausserhalb des Ledgers. Fresh-Replay bleibt unbewiesen. |
-| Operativer E2E-Kern | `NOT_PROVEN` | Kunde -> Auftrag -> Behaelter/QR -> Teil -> Aktion -> Today -> Beleg -> Reload wurde nie durchgaengig ausgefuehrt oder durch einen automatisierten Test abgesichert. |
-| Offline-Vertrag | `CONTAINED_ONLY` | Kein echter, verifizierter Sync-Transport. Datenverlust-Pfad in SyncContext ist stillgelegt (PR #42, offen). 48h-Nachweis fehlt. |
-| Produkt-Go-live | `NO_GO` | E2E-Kern, Offline-Vertrag, RLS-Relationsmatrix, Fresh-Replay und Ledger-Konsolidierung sind nicht abgenommen. |
-
-## Fundament-Fixes: Stand F0-Konsolidierung
-
-C1 (`#42`) ist nach `main` gemergt (`62af22d7`). Die uebrigen Fixes sind im F0-Konsolidierungskandidaten
-`#48` (Branch `f0/consolidation`) gebuendelt; Merge erfolgt gebuendelt nach Freigabe.
-
-| PR | Inhalt | Status |
-|---|---|---|
-| `#42` | C1 - SyncContext: stiller Datenverlust gestoppt. | **INTEGRATED (main)** |
-| `#43` | C2 - `inquiriesRepository` auf Server Action; kein Fake-Success. Fail-closed Auth + B1-Negativtests. | INTEGRATED in `#48` |
-| `#44` | C3+C4 - Today-Datenvertrag server-seitig; Mock-Typen raus. + B2. | INTEGRATED in `#48` |
-| `#45` | G1 - diese wahrheitsgetreue Doku (additiv). | INTEGRATED in `#48` |
-| `#46` | B4 - Upload-Routen autorisiert + Signed URLs + Negativtests. | INTEGRATED in `#48` |
-| `#41` | Docs + Offline-Containment. | **SUPERSEDED** - kuerzt geschuetzte Anforderungen; Doku-Teil durch `#45` ersetzt. Nicht mergen. |
-| `#40` / `#47` | Baseline-Ersatz (Draft) / D1-D2-Migrationen. | MATERIAL fuer F0-03/04 (Ledger/Replay). |
-
-## Angewandte Production-Aenderungen ausserhalb des Ledgers (APPLIED_NOT_IN_LEDGER)
-
-Diese Aenderungen sind produktiv wirksam, aber nicht als Migration im Ledger abgebildet. Vor Go-live in eine ledgerfaehige, replaybare Form ueberfuehren.
-
-- 2026-08-05: Data-API-Grant-Entzug auf allen Tabellen/Views fuer `anon`/`authenticated` (0 Grants verifiziert).
-- 2026-08-05: Default-Privileges fail-closed fuer kuenftige `public`-Objekte von `postgres`.
-- 2026-08-05: PIN-Bestandsmigration auf bcrypt cost 12 (6/6).
-- 2026-08-06: D1 - Bucket `belege` auf privat.
-- 2026-08-06: D2 - EXECUTE-Entzug fuer `fn_compute_warnings`, `fn_is_production_order`, `fn_update_vorlagen`, `fn_verteile_energiekosten`, `search_global`, `log_beleg_insert`, `prevent_beleg_delete`, `prevent_beleg_mutation`, `prevent_audit_mutation`.
-- 2026-08-06: Loeschung aller Tenant-Geschaeftsdaten (ausdrueckliche Freigabe).
-
-## Noch offen / nicht behauptet
-
-| ID | Status | Restarbeit |
-|---|---|---|
-| `SUPABASE-ADMIN-DEFAULTPRIV-001` | `BLOCKED_EXTERNAL` | Default Privileges von `supabase_admin` fuer `anon`/`authenticated` bestehen weiter; nur ueber Dashboard/Owner loesbar. |
-| `LEDGER-CONSOLIDATION-001` | `ACTIVE` | Die per `execute_sql` angewandten Aenderungen ledgerfaehig nachziehen; Fresh-Replay herstellen. |
-| `RLS-CONTRACT-001` | `ACTIVE` | Relationenspezifische Rollen-/Tenant-Matrix; tenant_isolation greift architektonisch noch nicht sauber. RLS ist nicht entfallen. |
-| `OPERATIVE-SLICE-001` | `NOT_PROVEN` | E2E-Kernweg durchgaengig ausfuehren und automatisiert absichern. CI-E2E prueft aktuell nur zwei Auth-Faelle. |
-| `OFFLINE-SHELL-001` / `OFFLINE-48H-001` | `BLOCKED` | Echter Sync-Transport, Outbox-Idempotenz, Konflikte, Restart und 48h-Nachweis fehlen. |
-| `SEC-STORAGE-BELEGE-001` | `READY` | `belege`-Anzeige/Download auf serverseitige Signed URLs umstellen (Bucket ist jetzt privat). |
-| `SEC-PIN-002B` | `PARTIAL` | Device-Binding/Challenge bleibt Produktentscheidung; Leaked-Password-Schutz vor Go-live im Dashboard aktivieren. |
-| `SYSTEMATIC-AUDIT-001` | `OPEN` | Nur die vom Review benannten Dateien wurden verifiziert; weitere Client-Supabase-Pfade und Rechnungs-/Reklamations-/Upload-Pfade sind nicht systematisch geprueft. |
-
-## Naechste Reihenfolge
-
-1. Diese Doku-Korrektur pruefen lassen; bei Bedarf korrigieren.
-2. Sammelfreigabe fuer PR #42/#43/#44; #41 schliessen oder auf Doku-Korrektur reduzieren.
-3. Ledger-Konsolidierung + Fresh-Replay.
-4. Automatisierter E2E-Kernweg-Test; danach Offline-Vertrag.
-
-## Freigabegrenzen
-
-Ohne ausdrueckliche Freigabe erfolgen weiterhin kein Merge, kein Production-Deploy, keine weitere Remote-Migration, keine RLS-/Policy-Aenderung und keine weitere Datenloeschung. Der Dirty-Worktree `feature/capture-auth-tenant` wird nicht angetastet.
+## Remote-Branch-Inventar (2026-08-10)
+Einziger aktiver Foundation-Branch: `f0/befund-fixes` (PR #57). Nachfolgende Liste aller weiteren
+Remote-Branches (historisch, ohne offenen PR; Disposition: nach F0-Abschluss loeschbar, kein
+F0-Inhalt geht verloren — Salvage bereits erfolgt):
+- agent/docs-rls-architecture
+- agent/docs-update-and-m3
+- agent/m4-sec-pin-002b
+- archive/db-truth-main-source-c3b9f20
+- archive/db-truth-pr30-source-d6bbfc2
+- archive/db-truth-replay-source-5b5aa76
+- archive/pr-15-capture-auth-tenant-f0090ab
+- archive/pr-19-foundation-security-338a13c
+- archive/pr-20-foundation-consolidation-2589fde
+- archive/pr-8-auth-identity-002-007b85b
+- checkpoint/order-flow-source-stable-2026-06-16
+- checkpoint/sec-pin-002-no-merge-20260801
+- chore/company-agent-governance
+- chore/control-plane-min-ci
+- chore/cowork-control-plane
+- chore/ledger-d1-d2-migrations
+- chore/minimal-mission-runtime
+- ci/agentur-gate-to-main
+- codex/foundation-consolidation-v3-20260728
+- codex/foundation-gap-fill-001
+- codex/foundation-migration-reconciliation-20260801
+- codex/foundation-replay-inquiries-001
+- codex/foundation-security-remediation-20260715
+- codex/p0-hotfix-no-pin-payload
+- codex/p0-hotfix-no-pin-payload-clean
+- codex/w0-api-02f-scan-upload-02
+- codex/w1-runtime-receipts-20260801
+- docs/plan-sync-001
+- docs/truthful-current-state-2026-08-06
+- f0/befund-fixes
+- f0/consolidation
+- feature/appvernetzung-a1-data-truth
+- feature/capture-auth-tenant
+- feature/gemini-model-router
+- feature/integration-capture-r15e
+- feature/right-nav-focus
+- feature/rls-core-migrations
+- feature/rls-r1a-items-timeline-server-bridge
+- feature/rls-r2-customers-server-bridge
+- feature/rls-r3-baths-server-bridge
+- feature/ui-cleanup-after-search-live
+- fix/auth-identity-002-root
+- fix/auth-session-permissions-2026-06-17
+- fix/docs-and-offline-containment
+- fix/inquiries-repository-server-action
+- fix/live-auth-relogin
+- fix/offline-synccontext-dataloss-containment
+- fix/operational-orders-real-priority
+- fix/orders-auth-after-a1-a2
+- fix/storage-ocr-signed-urls
+- hotfix/main-build-repair
+- main
+- r14c/s1-production-orders-view
+- r15/scan-upload-security-lazy-init
+- repair/f0-migration-ledger-reviewed
+- repair/m03-auth-foundation
+- review/G-2026-0001-scan-order-persistenz
+- test/r5-negativ-20260713
