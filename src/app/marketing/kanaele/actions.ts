@@ -10,6 +10,8 @@ export async function getKanaele() {
 }
 
 export async function updateKanalConfig(id: string, verbunden: boolean, config: Record<string, unknown>) {
+  throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
+
   await db.update(kanal).set({
     verbunden,
     config,

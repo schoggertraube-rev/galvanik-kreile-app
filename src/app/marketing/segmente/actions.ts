@@ -18,7 +18,9 @@ export async function getSegmentById(id: string) {
 }
 
 export async function createSegment(formData: FormData) {
-  const name = formData.get("name")?.toString();
+  throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
+
+  const name = formData.get("name")?.toString() ?? "";
   const icon = formData.get("icon")?.toString() || "";
   const farbe = formData.get("farbe")?.toString() || "#e91e63";
   const beschreibung = formData.get("beschreibung")?.toString() || "";
@@ -40,7 +42,9 @@ export async function createSegment(formData: FormData) {
 }
 
 export async function updateSegment(id: string, formData: FormData) {
-  const name = formData.get("name")?.toString();
+  throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
+
+  const name = formData.get("name")?.toString() ?? "";
   const icon = formData.get("icon")?.toString() || "";
   const farbe = formData.get("farbe")?.toString() || "#e91e63";
   const beschreibung = formData.get("beschreibung")?.toString() || "";
@@ -62,6 +66,8 @@ export async function updateSegment(id: string, formData: FormData) {
 }
 
 export async function deleteSegment(id: string) {
+  throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
+
   const target = await getSegmentById(id);
   if (target?.isDemo === false) {
     // Only true demo items could be deleted if we want to restrict, 
