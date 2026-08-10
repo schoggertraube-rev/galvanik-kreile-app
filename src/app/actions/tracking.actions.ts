@@ -2,8 +2,6 @@
 
 import { db } from "@/db";
 import { uiEventsTable } from "@/db/schema";
-import { createId } from "@paralleldrive/cuid2";
-import { getCurrentAppUser } from "@/lib/auth/permissions";
 import { requireAdminOrDeveloper } from "@/lib/auth/permissions";
 
 interface UiEventPayload {
@@ -16,41 +14,23 @@ interface UiEventPayload {
   occurred_at?: string;
 }
 
+export type UiTrackingDenial = {
+  ok: false;
+  error: "NOT_AVAILABLE";
+  message: "NOT_AVAILABLE: UI-Tracking benötigt den W3-Command-Vertrag.";
+};
+
 function getPayloadText(value: unknown, fallback: string): string {
   return value ? String(value) : fallback;
 }
 
-export async function logUiEvent(event: UiEventPayload): Promise<void> {
-  try {
-    if (!db) return;
-    
-    // Add user context safely on the server
-    const user = await getCurrentAppUser();
-    
-    const { event_type, route, target, meta, device, session_id } = event;
-    const tenantId = "galvanik-kreile";
-    
-    const enrichedPayload = {
-      route,
-      target,
-      meta,
-      device,
-      actor_user_id: user?.id || null,
-      actor_role: user?.role || "unbekannt",
-      actor_initials: user?.fullName || null
-    };
-
-    await db.insert(uiEventsTable).values({
-      id: createId(),
-      tenantId,
-      eventType: event_type,
-      payload: enrichedPayload,
-      sessionId: session_id,
-    });
-  } catch (error) {
-    const err = error as { message?: string; details?: string; hint?: string };
-    console.error("Failed to log UI event:", err.message, err.details, err.hint);
-  }
+export async function logUiEvent(event: UiEventPayload): Promise<UiTrackingDenial> {
+  void event;
+  return {
+    ok: false,
+    error: "NOT_AVAILABLE",
+    message: "NOT_AVAILABLE: UI-Tracking benötigt den W3-Command-Vertrag.",
+  };
 }
 
 export async function getRecentUiEvents() {
