@@ -100,7 +100,10 @@ describe("F0 W2C active client containment", () => {
     const photo = readFileSync(resolve(process.cwd(), "src/lib/services/photoService.ts"), "utf8");
 
     expect(intake).not.toContain('import { photoService }');
-    expect(intake.indexOf("data.items.some")).toBeLessThan(intake.indexOf("eventsRepository.addEvent"));
+    expect(intake).toMatch(/error:\s*"NOT_AVAILABLE"/);
+    expect(intake).toContain('message: "NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt."');
+    expect(intake).not.toMatch(/\bphotoService\b|\beventsRepository\b|\baddEvent\b/);
+    expect(intake).not.toMatch(/\b(?:customers?|orders?|items?)(?:Repository|Service)\b|\b(?:create|update|insert)(?:Customer|Order|Item)\b/);
     expect(photo).not.toMatch(/createClient|storage|fetch\(|getPublicUrl|addEvent/);
     expect(photo).toMatch(/nicht verfügbar/i);
   });

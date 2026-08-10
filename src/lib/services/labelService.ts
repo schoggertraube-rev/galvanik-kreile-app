@@ -1,10 +1,16 @@
-import { eventsRepository } from "../repositories/eventsRepository";
+export type LabelUnavailable = {
+  ok: false;
+  error: "NOT_AVAILABLE";
+  message: "NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.";
+};
 
 export const labelService = {
-  async generateLabel(orderId: string) {
-    // Fake logic for label printer
-    console.log(`🖨️ Etikett generiert für Order ${orderId}`);
-    await eventsRepository.addEvent({ eventType: "LABEL_PREPARED", orderId });
-    return "label-mock-url";
-  }
+  async generateLabel(_orderId: string): Promise<LabelUnavailable> {
+    void _orderId;
+    return {
+      ok: false,
+      error: "NOT_AVAILABLE",
+      message: "NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.",
+    };
+  },
 };

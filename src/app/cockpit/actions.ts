@@ -585,16 +585,7 @@ export async function speichereJahresplan(jahr: number, monate: Record<string, n
   return true;
 }
 
-export async function savePhoneNote(data: { customer_id?: string, caller_name?: string, raw_text: string, category: string, urgency: string }) {
-  const supabase = await createClient();
-  const { error } = await supabase.from('phone_notes').insert({
-    tenant_id: 'galvanik-kreile',
-    customer_id: data.customer_id || null,
-    caller_name: data.caller_name || '',
-    raw_text: data.raw_text,
-    category: data.category,
-    urgency: data.urgency,
-    status: 'open'
-  });
-  if (error) throw error;
+export async function savePhoneNote(_data: { customer_id?: string, caller_name?: string, raw_text: string, category: string, urgency: string }) {
+  void _data;
+  return { ok: false as const, error: "NOT_AVAILABLE" as const, message: "NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt." };
 }
