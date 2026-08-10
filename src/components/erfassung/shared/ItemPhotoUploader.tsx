@@ -34,8 +34,9 @@ export function ItemPhotoUploader({ itemId, onUploadComplete, onRemove, photos }
 
     // Only handle first file for simplicity in this MVP version
     const file = files[0];
-    if (file.size > 10 * 1024 * 1024) {
-      alert("Datei ist zu groß (max 10MB)");
+    // F0-W2a interim: 4.5MB Vercel Function limit; signierter Direktupload folgt in W4 (STO-06)
+    if (file.size > 4.5 * 1024 * 1024) {
+      alert("Datei ist zu groß (max 4,5 MB)");
       return;
     }
 

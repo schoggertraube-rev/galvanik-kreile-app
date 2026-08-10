@@ -421,16 +421,24 @@ export async function createOrderFromScan(params: {
       } else {
         // Kein Treffer
         if (params.forceCreateCustomer) {
+          // F0-W2a (ORD-13): no fabricated address. A scan never yields a
+          // verified postal address, so we must not invent one (previously
+          // a fixed placeholder street/city/postal-code literal). Address
+          // fields stay empty; customerSchema requires a real address (and phone/
+          // email, which this scan path never supplies either), so an
+          // incomplete auto-create is honestly rejected instead of
+          // persisting fabricated Stammdaten — no order is created with
+          // invented master data.
           const { createCustomerDb } = await import("./customers.actions");
           const createResult = await createCustomerDb({
             company: params.customerName,
             firstName: "",
             lastName: "",
-            street: "Hauptstraße",
-            houseNumber: "1",
-            city: "Frankfurt",
-            postalCode: "60311",
-            country: "Deutschland"
+            street: "",
+            houseNumber: "",
+            city: "",
+            postalCode: "",
+            country: ""
           });
           if (createResult.ok) {
             finalCustomerId = createResult.data.id;
@@ -438,7 +446,7 @@ export async function createOrderFromScan(params: {
             return {
               ok: false,
               error: "CUSTOMER_CREATION_FAILED",
-              message: "Kunde konnte nicht angelegt werden",
+              message: "Kunde konnte nicht automatisch angelegt werden: Adresse und Kontaktdaten fehlen. Bitte Kunden manuell mit vollständigen Angaben anlegen.",
               details: createResult.error
             };
           }

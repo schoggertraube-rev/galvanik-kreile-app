@@ -1,8 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { X, Upload, Camera, CheckCircle2, AlertTriangle, Loader2, FileText } from "lucide-react";
-import { MockOcrProvider } from "@/lib/buchhaltung/ocr/MockOcrProvider";
+import { X, Upload, Camera, AlertTriangle, Loader2, FileText } from "lucide-react";
 import type { OcrResult } from "@/lib/buchhaltung/types";
 
 interface BelegUploadOverlayProps {
@@ -28,25 +27,16 @@ export function BelegUploadOverlay({ open, onClose, onSubmit, mode }: BelegUploa
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
   const [rawFile, setRawFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const ocrProvider = useRef(new MockOcrProvider());
 
   if (!open) return null;
 
-  const handleFileSelect = async (selectedFilename: string) => {
+  const handleFileSelect = (selectedFilename: string) => {
     setFilename(selectedFilename);
-    setPhase("processing");
-
-    try {
-      const result = await ocrProvider.current.extract({
-        data: "mock-data",
-        filename: selectedFilename,
-        mimeType: selectedFilename.endsWith(".pdf") ? "application/pdf" : "image/jpeg",
-      });
-      setOcrResult(result);
-      setPhase("result");
-    } catch {
-      setPhase("idle");
-    }
+    // F0-W2a (STO-04): no production OCR adapter is wired into this upload
+    // flow. Never fabricate recognized fields (previously MockOcrProvider) —
+    // show an honest "not configured" state so the user fills in manually.
+    setOcrResult({ confidence: 0, felder: [] });
+    setPhase("result");
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,19 +150,15 @@ export function BelegUploadOverlay({ open, onClose, onSubmit, mode }: BelegUploa
 
           {phase === "result" && ocrResult && (
             <div className="space-y-6">
-              {/* Status Banner */}
-              <div className={`flex items-center gap-3 p-4 rounded-2xl ${isLowConfidence ? "bg-amber-50 border border-amber-200" : "bg-emerald-50 border border-emerald-200"}`}>
-                {isLowConfidence ? (
-                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-                ) : (
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-                )}
+              {/* Status Banner — F0-W2a (STO-04): honest "not configured" state */}
+              <div className="flex items-center gap-3 p-4 rounded-2xl bg-amber-50 border border-amber-200">
+                <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
                 <div>
-                  <p className={`text-sm font-extrabold ${isLowConfidence ? "text-amber-800" : "text-emerald-800"}`}>
-                    {isLowConfidence ? "Prüfung erforderlich" : "Erfolgreich erkannt"}
+                  <p className="text-sm font-extrabold text-amber-800">
+                    Automatische Beleg-Erkennung ist nicht konfiguriert
                   </p>
-                  <p className={`text-xs ${isLowConfidence ? "text-amber-600" : "text-emerald-600"}`}>
-                    Confidence: {ocrResult.confidence.toFixed(1)} % · {filename}
+                  <p className="text-xs text-amber-600">
+                    Bitte Felder manuell ausfüllen · {filename}
                   </p>
                 </div>
               </div>
