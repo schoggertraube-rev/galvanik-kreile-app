@@ -183,10 +183,16 @@ async function main() {
     body: JSON.stringify({ prefixes: cleanupPaths }),
   });
   const verifyGone = await fetch(`${STORAGE_BASE}/object/${BUCKET}/${ownPath}`, { headers: authHeaders(serviceRoleKey) });
+  const verifyGoneBody = await bodySnippet(verifyGone);
+  // Die lokale Storage-API meldet "nicht gefunden" konsistent als Transport-HTTP-400 mit
+  // {"statusCode":"404",...,"code":"NoSuchKey"} im Body - siehe S3/S5/S6 oben, die exakt dasselbe
+  // Muster fuer denselben Endpunkt zeigen. Ein rohes HTTP-404 tritt hier nie ein (CI-Fund
+  // 2026-08-10-Zyklus-3: verifyGone.status war 400, nicht 404 - urspruengliche Erwartung falsch).
+  const goneConfirmed = verifyGone.status === 400 && verifyGoneBody.includes("NoSuchKey");
   report(
     12,
-    deleteResponse.ok && verifyGone.status === 404,
-    `delete status=${deleteResponse.status}, Verifikations-GET danach status=${verifyGone.status} (erwartet 404)`,
+    deleteResponse.ok && goneConfirmed,
+    `delete status=${deleteResponse.status}, Verifikations-GET danach status=${verifyGone.status} body=${verifyGoneBody} (erwartet 400/NoSuchKey)`,
   );
 
   console.log(`F0_STORAGE_HTTP_FAILURES=${failures}`);
