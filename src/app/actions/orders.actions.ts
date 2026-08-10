@@ -1,11 +1,9 @@
 "use server";
 
 import { db } from "@/db";
-import { orders, items, customers, events } from "@/db/schema";
-import { eq, like, desc, and, sql, notInArray, notIlike, ilike } from "drizzle-orm";
-import { createId } from "@paralleldrive/cuid2";
+import { orders } from "@/db/schema";
+import { eq, and, sql, notInArray, notIlike } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
-import { resolveAuthorization } from "@/lib/server/authorization";
 import { unstable_noStore as noStore } from "next/cache";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
@@ -56,111 +54,8 @@ export async function getOrderCountDb(): Promise<ActionResult<{ count: number }>
 }
 
 export async function createOrderDb(data: Record<string, unknown>): Promise<ActionResult<Record<string, unknown>>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  
-  const { orderSchema } = await import("@/lib/validation/orderSchema");
-  const parsed = orderSchema.safeParse(data);
-  
-  if (!parsed.success) {
-    const formattedErrors = parsed.error.flatten().fieldErrors;
-    return { ok: false, error: "UNKNOWN", message: "Validierungsfehler", details: formattedErrors };
-  }
-  
-  const validData = parsed.data;
-  
-  try {
-    const orderId = (typeof data.id === 'string' ? data.id : undefined) || createId();
-    const year = new Date().getFullYear();
-    const pattern = `A-${year}-%`;
-
-    const newOrder = await db.transaction(async (tx) => {
-      const existingOrders = await tx
-        .select({ orderNumber: orders.orderNumber })
-        .from(orders)
-        .where(like(orders.orderNumber, pattern))
-        .orderBy(desc(orders.orderNumber))
-        .limit(50);
-
-      let maxSequenceNum = 0;
-      for (const o of existingOrders) {
-        if (o.orderNumber) {
-          const parts = o.orderNumber.split("-");
-          if (parts.length === 3) {
-            const num = parseInt(parts[2], 10);
-            if (!isNaN(num) && num > maxSequenceNum) {
-              maxSequenceNum = num;
-            }
-          }
-        }
-      }
-      const sequenceNum = maxSequenceNum > 0 ? maxSequenceNum + 1 : 1;
-      const sequenceString = sequenceNum.toString().padStart(4, "0");
-      const orderNumber = `A-${year}-${sequenceString}`;
-      
-      const newOrderVal = {
-        id: orderId,
-        tenantId: "galvanik-kreile",
-        orderNumber,
-        customerId: validData.customerId || "",
-        title: validData.title || "Unbenannt",
-        currentStationId: validData.currentStationId || "wareneingang",
-        status: "in_progress",
-        priorityComputed: "green",
-        source: validData.source || "manual",
-      };
-      
-      await tx.insert(orders).values(newOrderVal);
-      
-      if (validData.parts && validData.parts.length > 0) {
-        const newItems = validData.parts.map(p => ({
-          id: p.id || createId(),
-          tenantId: "galvanik-kreile",
-          orderId,
-          customerId: validData.customerId || "",
-          name: p.name,
-          quantity: typeof p.quantity === "number" ? p.quantity : parseInt(p.quantity as string) || 1,
-          currentStationId: validData.currentStationId || "wareneingang"
-        }));
-        await tx.insert(items).values(newItems);
-      }
-      
-      await tx.insert(events).values({
-        id: createId(),
-        tenantId: "galvanik-kreile",
-        orderId,
-        eventType: "ORDER_CREATED",
-        description: "Auftrag erstellt",
-        station: "wareneingang",
-      });
-
-      return newOrderVal;
-    });
-
-    try { 
-      const { revalidatePath } = await import("next/cache");
-      revalidatePath("/"); 
-      revalidatePath("/orders");
-      revalidatePath("/customers");
-      revalidatePath("/warendurchlauf");
-      revalidatePath("/warendurchlauf/wareneingang");
-    } catch { /* ignore when not in Next runtime */ }
-    
-    return {
-      ok: true,
-      data: {
-        ...newOrder,
-        station: newOrder.currentStationId,
-        risk: newOrder.priorityComputed,
-        parts: validData.parts
-      }
-    };
-  } catch (error) {
-    console.error("Failed to create order in DB:", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Erstellen des Auftrags", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
-  }
+  void data;
+  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Auftragserstellung benötigt den W3-Command-Vertrag." };
 }
 
 export async function updateOrderDb(id: string, changes: {
@@ -209,124 +104,6 @@ export async function createOrderFromScan(params: {
   | { ok: true; data: { orderId: string; newCustomerId?: string; status: string; customerChoices?: Record<string, unknown>[] } }
   | { ok: false; error: string; message: string; details?: unknown }
 > {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return { ok: false, error: auth.error, message: auth.message };
-
-  const authRes = await resolveAuthorization();
-  if (!authRes.ok) return { ok: false, error: "UNAUTHORIZED", message: authRes.message };
-  const tenantId = authRes.data.tenantId;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-
-  try {
-    let finalCustomerId = params.customerId;
-
-    // 1. Wenn kein customerId übergeben wurde, suchen wir über den Namen
-    if (!finalCustomerId && params.customerName && params.customerName.trim() !== "") {
-      const searchPattern = `%${params.customerName.trim()}%`;
-      const matches = await db.select().from(customers).where(
-        and(
-          eq(customers.tenantId, tenantId),
-          ilike(customers.name, searchPattern),
-          sql`coalesce(${customers.source}, '') not in ('seed', 'test', 'demo', 'integration-test')`
-        )
-      );
-
-      if (matches.length === 1) {
-        // Eindeutiger Treffer
-        finalCustomerId = matches[0].id;
-      } else if (matches.length > 1) {
-        // Mehrdeutige Treffer
-        return {
-          ok: false,
-          error: "CUSTOMER_AMBIGUOUS",
-          message: "Mehrere Kunden mit diesem Namen gefunden",
-          details: matches.map(c => ({ id: c.id, name: c.name, companyName: c.companyName }))
-        };
-      } else {
-        // Kein Treffer
-        if (params.forceCreateCustomer) {
-          // F0-W2a (ORD-13): no fabricated address. A scan never yields a
-          // verified postal address, so we must not invent one (previously
-          // a fixed placeholder street/city/postal-code literal). Address
-          // fields stay empty; customerSchema requires a real address (and phone/
-          // email, which this scan path never supplies either), so an
-          // incomplete auto-create is honestly rejected instead of
-          // persisting fabricated Stammdaten — no order is created with
-          // invented master data.
-          const { createCustomerDb } = await import("./customers.actions");
-          const createResult = await createCustomerDb({
-            company: params.customerName,
-            firstName: "",
-            lastName: "",
-            street: "",
-            houseNumber: "",
-            city: "",
-            postalCode: "",
-            country: ""
-          });
-          if (createResult.ok) {
-            finalCustomerId = createResult.data.id;
-          } else {
-            return {
-              ok: false,
-              error: "CUSTOMER_CREATION_FAILED",
-              message: "Kunde konnte nicht automatisch angelegt werden: Adresse und Kontaktdaten fehlen. Bitte Kunden manuell mit vollständigen Angaben anlegen.",
-              details: createResult.error
-            };
-          }
-        } else {
-          return {
-            ok: false,
-            error: "CUSTOMER_NOT_FOUND",
-            message: "Kunde wurde in der Datenbank nicht gefunden. Möchten Sie diesen neu anlegen?",
-            details: { customerName: params.customerName }
-          };
-        }
-      }
-    }
-
-    if (!finalCustomerId) {
-      return {
-        ok: false,
-        error: "CUSTOMER_REQUIRED",
-        message: "Ein Kunde ist zwingend erforderlich, um einen Auftrag zu erstellen."
-      };
-    }
-
-    // 2. Erstelle den Auftrag mit der Server Action createOrderDb
-    const orderData = {
-      customerId: finalCustomerId,
-      title: params.title || `Auftrag per Scan - ${new Date().toLocaleDateString("de-DE")}`,
-      source: "scan",
-      parts: params.parts
-    };
-
-    const orderResult = await createOrderDb(orderData);
-    if (!orderResult.ok) {
-      return {
-        ok: false,
-        error: orderResult.error,
-        message: orderResult.message,
-        details: orderResult.details
-      };
-    }
-
-    return {
-      ok: true,
-      data: {
-        orderId: String(orderResult.data.id),
-        newCustomerId: params.forceCreateCustomer ? finalCustomerId : undefined,
-        status: "success"
-      }
-    };
-  } catch (error: unknown) {
-    console.error("createOrderFromScan error:", error);
-    return {
-      ok: false,
-      error: "SERVER_ERROR",
-      message: "Interner Serverfehler beim Erstellen des Auftrags",
-      details: error instanceof Error ? error.message : "Unbekannter Fehler"
-    };
-  }
+  void params;
+  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Auftragserstellung benötigt den W3-Command-Vertrag." };
 }

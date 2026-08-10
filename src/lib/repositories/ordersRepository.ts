@@ -1,4 +1,4 @@
-import { getOrdersDb, createOrderDb, updateOrderDb } from "@/app/actions/orders.actions";
+import { getOrdersDb, updateOrderDb } from "@/app/actions/orders.actions";
 
 export type Order = {
   id: string;
@@ -55,17 +55,8 @@ export const ordersRepository = {
   },
 
   async create(data: Omit<Order, "id" | "orderNumber" | "status" | "risk"> & { id?: string }): Promise<Order> {
-    if (isSupabase) {
-      const result = await createOrderDb(data as Record<string, unknown>);
-      if (!result.ok) {
-        if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
-          throw new Error(`AUTH_ERROR: ${result.message}`);
-        }
-        throw new Error("Drizzle Server Action failed: " + result.message);
-      }
-      return result.data as unknown as Order;
-    }
-    throw new Error("Supabase is not enabled.");
+    void data;
+    throw new Error("NOT_AVAILABLE: Auftragserstellung benötigt den W3-Command-Vertrag.");
   },
 
   async updateOrder(idOrNumber: string, changes: Partial<Order>): Promise<Order | null> {
