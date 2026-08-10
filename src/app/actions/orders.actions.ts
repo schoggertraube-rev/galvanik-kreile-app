@@ -187,96 +187,16 @@ export async function getRiskOrders(_limit = 3): Promise<{ ok: false; error: "NO
   return { ok: false, error: "NOT_AVAILABLE", message: "NOT_AVAILABLE: Terminrisiken benötigen eine kanonische, quellgestützte Berechnung." };
 }
 
-// F0-W2b (ORD-01): setOrderStationDb entfernt. War ein zweiter, nicht-transaktionaler
-// Schreibpfad für Stationswechsel neben transitionOrderProcess (führt den Wechsel
-// atomar in einer DB-Transaktion inkl. items/events durch). Grep über src/ auf
-// "setOrderStationDb" fand keine aktiven Call-Sites außer dieser Definition — daher
-// entfernt statt @deprecated, damit kein zweiter divergenter Writer im Repo bestehen
-// bleibt. Für Stationswechsel ausschließlich transitionOrderProcess verwenden.
+// F0-W2C quarantine: transitionOrderProcess is an unsafe transition port without
+// the W3 command contract. It denies every station transition until W3 replaces it.
 
 export async function transitionOrderProcess(params: {
   orderId: string;
   targetStep?: string;
   action?: string;
-}) {
-  const { orderId, targetStep, action } = params;
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  
-  try {
-    const currentOrder = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-    if (currentOrder.length === 0) return { ok: false, error: "NOT_FOUND", message: "Auftrag nicht gefunden" };
-    const o = currentOrder[0];
-    
-    let newStation = o.currentStationId || "wareneingang";
-    let newStatus = o.status;
-    let eventType = "STATION_STARTED";
-    let description = "Prozessschritt gestartet";
-    
-    if (action === "start") {
-      newStatus = "in_progress";
-      description = `Bearbeitung gestartet in ${newStation}`;
-    } else if (action === "complete") {
-      const orderProcessChain = ["wareneingang", "entmetallisierung", "schleiferei", "galvanik", "qualitaetssicherung", "warenausgang"];
-      const currIdx = orderProcessChain.indexOf(newStation);
-      if (currIdx >= 0 && currIdx < orderProcessChain.length - 1) {
-        newStation = orderProcessChain[currIdx + 1];
-        if (newStation === "qualitaetssicherung") {
-          newStatus = "QS/Fertigprüfung";
-        } else if (newStation === "warenausgang") {
-          newStatus = "Bereit für Versand";
-        } else {
-          newStatus = "ready";
-        }
-        eventType = "STATION_COMPLETED";
-        description = `Station abgeschlossen. Weitergeleitet an ${newStation}`;
-      } else if (currIdx === orderProcessChain.length - 1) {
-        newStatus = "abgeschlossen";
-        eventType = "STATION_COMPLETED";
-        description = `Auftrag abgeschlossen und versendet.`;
-      }
-    } else if (targetStep) {
-      newStation = targetStep;
-      if (newStation === "qualitaetssicherung") newStatus = "QS/Fertigprüfung";
-      else if (newStation === "warenausgang") newStatus = "Bereit für Versand";
-      else newStatus = "ready";
-      description = `Manuell zu Station ${newStation} gewechselt`;
-    }
-
-    await db.transaction(async (tx) => {
-      await tx.update(orders).set({
-        currentStationId: newStation,
-        status: newStatus
-      }).where(eq(orders.id, orderId));
-      
-      await tx.update(items).set({
-        currentStationId: newStation
-      }).where(eq(items.orderId, orderId));
-      
-      await tx.insert(events).values({
-        id: crypto.randomUUID(),
-        tenantId: "galvanik-kreile",
-        orderId,
-        eventType,
-        station: newStation,
-        description,
-        createdAt: new Date()
-      });
-    });
-
-    try { 
-      const { revalidatePath } = await import("next/cache");
-      revalidatePath("/"); 
-      revalidatePath("/orders");
-      revalidatePath("/warendurchlauf");
-    } catch { /* ignore */ }
-
-    return { ok: true, data: { success: true, newStation, newStatus } };
-  } catch (error) {
-    console.error("Failed transition:", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Prozesswechsel" };
-  }
+}): Promise<ActionResult<never>> {
+  void params;
+  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Stationswechsel benötigen den W3-Command-Vertrag." };
 }
 
 export async function createOrderFromScan(params: {

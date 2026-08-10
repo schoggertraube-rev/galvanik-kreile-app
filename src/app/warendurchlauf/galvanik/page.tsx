@@ -6,7 +6,6 @@ import { ArrowRight, Layers, PlayCircle, CheckCircle2, AlertTriangle, Loader2 } 
 import { OrderCompactCard, UrgencyType } from "@/components/orders/OrderCompactCard";
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import { getStationOrders, getStationReadyOrders } from "@/app/warendurchlauf/actions";
-import { transitionOrderProcess } from "@/app/actions/orders.actions";
 import type { WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
 
 type GalvanikBucket = "ready" | "in_progress" | "finished";
@@ -80,26 +79,6 @@ export default function GalvanikPage() {
     load();
   }, []);
 
-  const handleAdvance = async (e: React.MouseEvent, orderId: string, currentBucket: GalvanikBucket) => {
-    e.stopPropagation();
-    
-    if (currentBucket === "ready") {
-      // Move to in progress
-      const order = readyOrders.find(o => o.id === orderId);
-      if (order) {
-         const result = await transitionOrderProcess({ orderId, action: "start" });
-         if (!result.ok) {
-           window.alert(result.message);
-           return;
-         }
-         setReadyOrders(prev => prev.filter(o => o.id !== orderId));
-         setInProgressOrders(prev => sortByUrgency([...prev, { ...order, status: "in_progress", statusText: "In Bearbeitung" }]));
-      }
-    } else if (currentBucket === "in_progress") {
-      window.alert("NOT_AVAILABLE: Der Stationsabschluss benötigt einen atomaren Command.");
-    }
-  };
-
   const renderOrderList = (orders: GalvanikOrder[], bucket: GalvanikBucket) => {
     const isActive = activeBucket === bucket;
     return (
@@ -122,7 +101,6 @@ export default function GalvanikPage() {
               dueLabel={o.dueLabel || "Tage"}
               badgeText={o.statusText || o.status}
               onClick={() => isActive ? openOrder(o.id) : setActiveBucket(bucket)}
-              onAdvance={isActive ? (e) => handleAdvance(e, o.id, bucket) : undefined}
             />
           ))
         )}
@@ -139,6 +117,7 @@ export default function GalvanikPage() {
           Galvanik Bearbeitung
           <span className="flex-1 h-px bg-[#d8d0c4]" />
         </div>
+        <p className="mb-4 text-sm text-[#9e9689]">NOT_AVAILABLE: Stationswechsel benötigen den W3-Command-Vertrag.</p>
 
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-20 text-[#9e9689]">

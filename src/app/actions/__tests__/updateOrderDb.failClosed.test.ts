@@ -88,9 +88,10 @@ describe("W2C-B1 caller containment", () => {
     }
   });
 
-  it("leaves non-atomic flows visibly blocked and keeps the sole simple start on the process port", async () => {
+  it("leaves non-atomic flows visibly blocked and removes the simple start from the process port", async () => {
     const stationButton = await readFile(path.join(srcRoot, "components/orders/StationStatusButton.tsx"), "utf8");
     const blockedFiles = await Promise.all([
+      "components/orders/variants/WareneingangActive.tsx",
       "components/orders/StationCompletionModal.tsx",
       "components/orders/OrderActionGrid.tsx",
       "components/orders/OrderMaterialTimeDrawer.tsx",
@@ -100,8 +101,8 @@ describe("W2C-B1 caller containment", () => {
       "lib/offline/OfflineManager.ts",
     ].map((file) => readFile(path.join(srcRoot, file), "utf8")));
 
-    expect(stationButton).toContain("transitionOrderProcess");
-    expect(stationButton).toContain('action: "start"');
+    expect(stationButton).not.toContain("transitionOrderProcess");
+    expect(stationButton).not.toContain('action: "start"');
     for (const source of blockedFiles) {
       expect(source).toMatch(/NOT_AVAILABLE|disabled/);
     }
