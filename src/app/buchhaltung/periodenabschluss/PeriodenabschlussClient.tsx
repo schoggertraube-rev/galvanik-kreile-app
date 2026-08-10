@@ -3,70 +3,15 @@
 import { Breadcrumb } from "@/components/ui/Breadcrumb";
 import { BackButton } from "@/components/ui/BackButton";
 import { FeedbackFooter } from "@/components/feedback/FeedbackFooter";
-import { usePageView } from "@/hooks/usePageView";
-import { useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, AlertTriangle, Lock, ExternalLink, Zap } from "lucide-react";
 import type { PeriodenabschlussStatus } from "./actions";
-import { runEnergieVerteilungAction, schliessePeriodeAction, finalSchliessePeriodeAction } from "./actions";
-
-import { useRouter } from "next/navigation";
 
 export function PeriodenabschlussClient({ initialStatus, userRole }: { initialStatus: PeriodenabschlussStatus | null, userRole?: string }) {
-  usePageView();
-  const router = useRouter();
-  const [status, setStatus] = useState<PeriodenabschlussStatus | null>(initialStatus);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const status = initialStatus;
 
   const monatName = status ? new Date(status.jahr, status.monat - 1).toLocaleString('de-DE', { month: 'long' }) : "";
   const periodTitle = status ? `${monatName} ${status.jahr}` : "Keine offene Periode";
-
-  const handleEnergie = async () => {
-    if (!status) return;
-    setIsProcessing(true);
-    try {
-      await runEnergieVerteilungAction(status.jahr, status.monat);
-      alert("Energie erfolgreich verteilt");
-      // Trigger a refresh of the status if needed, but in this case, energy distribution
-      // doesn't directly change the view status.
-    } catch {
-      alert("Fehler bei der Energieverteilung");
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleAbschluss = async () => {
-    if (!status) return;
-    setIsProcessing(true);
-    try {
-      await schliessePeriodeAction(status.id);
-      alert(`Periode ${periodTitle} vorläufig abgeschlossen!`);
-      router.refresh();
-      setStatus({ ...status, status: 'vorlaeufig_geschlossen' }); 
-    } catch (caught: unknown) {
-      const e = caught && typeof caught === "object" && "message" in caught ? caught : { message: undefined };
-      alert("Fehler beim Schließen: " + (e.message || "Unbekannter Fehler"));
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleFinalAbschluss = async () => {
-    if (!status) return;
-    setIsProcessing(true);
-    try {
-      await finalSchliessePeriodeAction(status.id);
-      alert(`Periode ${periodTitle} endgültig abgeschlossen!`);
-      router.refresh();
-      setStatus(null); // Remove from view
-    } catch (caught: unknown) {
-      const e = caught && typeof caught === "object" && "message" in caught ? caught : { message: undefined };
-      alert("Fehler beim finalen Abschließen: " + (e.message || "Unbekannter Fehler"));
-    } finally {
-      setIsProcessing(false);
-    }
-  };
 
   const blockerCount = status ? 
     (status.belege_ohne_konto + status.belege_ohne_kostenstelle + status.rechnungen_ohne_auftrag + status.auftraege_ohne_db) 
@@ -149,8 +94,7 @@ export function PeriodenabschlussClient({ initialStatus, userRole }: { initialSt
       content: (
         <div className="mt-4">
           <button 
-            onClick={handleEnergie}
-            disabled={isProcessing}
+            disabled
             className="flex items-center gap-2 bg-[#1e1b18] text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-black transition-colors disabled:opacity-50"
           >
             <Zap className="w-4 h-4 text-amber-400" /> Kosten verteilen
@@ -176,8 +120,8 @@ export function PeriodenabschlussClient({ initialStatus, userRole }: { initialSt
       description: "Alle Rechnungen und festgeschriebenen Belege für DATEV oder Lexware exportieren.",
       content: (
         <div className="mt-4 flex gap-3">
-          <button className="px-4 py-2 bg-blue-50 text-blue-700 font-bold text-sm rounded-lg hover:bg-blue-100 transition-colors">DATEV Export</button>
-          <button className="px-4 py-2 bg-emerald-50 text-emerald-700 font-bold text-sm rounded-lg hover:bg-emerald-100 transition-colors">Lexware Export</button>
+          <button disabled className="px-4 py-2 bg-blue-50 text-blue-700 font-bold text-sm rounded-lg hover:bg-blue-100 transition-colors">DATEV Export</button>
+          <button disabled className="px-4 py-2 bg-emerald-50 text-emerald-700 font-bold text-sm rounded-lg hover:bg-emerald-100 transition-colors">Lexware Export</button>
         </div>
       )
     },
@@ -187,7 +131,7 @@ export function PeriodenabschlussClient({ initialStatus, userRole }: { initialSt
       description: "Umsatzsteuer berechnen und XML für ELSTER generieren.",
       content: (
         <div className="mt-4">
-          <button className="px-4 py-2 bg-purple-50 text-purple-700 font-bold text-sm rounded-lg hover:bg-purple-100 transition-colors">UStVA XML generieren</button>
+          <button disabled className="px-4 py-2 bg-purple-50 text-purple-700 font-bold text-sm rounded-lg hover:bg-purple-100 transition-colors">UStVA XML generieren</button>
         </div>
       )
     },
@@ -204,8 +148,7 @@ export function PeriodenabschlussClient({ initialStatus, userRole }: { initialSt
               </span>
               {(userRole === 'inhaber' || userRole === 'admin' || userRole === 'developer') && (
                 <button 
-                  onClick={handleFinalAbschluss}
-                  disabled={isProcessing}
+                  disabled
                   className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm disabled:opacity-50"
                 >
                   <Lock className="w-4 h-4" /> Endgültig schließen (Inhaber)
@@ -220,8 +163,7 @@ export function PeriodenabschlussClient({ initialStatus, userRole }: { initialSt
                 </p>
               )}
               <button 
-                onClick={handleAbschluss}
-                disabled={isProcessing || blockerCount > 0}
+                disabled
                 className="flex items-center w-fit gap-2 bg-blue-600 text-white px-5 py-2.5 rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 disabled:bg-neutral-300"
               >
                 <Lock className="w-4 h-4" /> {periodTitle} vorläufig schließen
@@ -245,6 +187,9 @@ export function PeriodenabschlussClient({ initialStatus, userRole }: { initialSt
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#2a2420] tracking-tight">Periodenabschluss</h1>
           <p className="text-sm text-neutral-500 mt-2 font-medium">
             {status ? `Aktuell offene Periode: ${periodTitle}` : "Alle vergangenen Perioden sind abgeschlossen."}
+          </p>
+          <p className="text-sm text-amber-700 mt-2 font-bold">
+            NOT_AVAILABLE: Periodenabschluss benötigt den W3-Command-Vertrag.
           </p>
         </div>
         {status && (
