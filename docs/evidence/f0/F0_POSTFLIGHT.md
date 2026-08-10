@@ -20,3 +20,13 @@
 ## Konsequenz
 `supabase db push`/`db diff` sieht Repo und Prod jetzt als deckungsgleich (Ledger = aktive Migrationsmenge).
 F0-A04: PASS. Rückfallweg bleibt über Backup + migrations_legacy (SHA-manifestiert) jederzeit möglich.
+
+## Nachtrag 2026-08-10 (BF-Session)
+
+1. Normalisierung: `alter view public.v_auftrag_db set (security_invoker = true)` direkt auf Prod
+   ausgefuehrt (Session-Mandat; zunaechst OHNE Ledger-Eintrag - Governance-Luecke, selbst entdeckt).
+2. Gleiche Aenderung als Repo-Migration 20260810100000_normalize_view_invoker_spelling in PR #57;
+   anschliessend regulaerer Apply-Akt auf Prod (DDL idempotent + Ledger-INSERT atomar).
+   ACHTUNG ehrlich: Apply erfolgte VOR PR-Merge (Ausnahme mit Session-Freigabe, kein Regelweg).
+3. Postflight: Ledger ROWS=9, letzte Version 20260810100000, POST_DIGEST_V2=268ce6c1d87a7d020d68369eac20b2b4.
+   Views live 17/17 security_invoker=true (einheitliche Schreibweise).

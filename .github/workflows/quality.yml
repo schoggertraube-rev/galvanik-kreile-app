@@ -101,6 +101,9 @@ jobs:
       - name: Repository ESLint ratchet
         run: node --import tsx scripts/quality/check-eslint-ratchet.ts --base "${{ steps.diff.outputs.base }}"
 
+      - name: F0 doc truth gate
+        run: node scripts/quality/check-f0-doc-truth.mjs
+
       - name: Supabase client boundary
         run: node scripts/quality/check-supabase-client-boundary.mjs
 

@@ -48,7 +48,7 @@ Dieses Register schuetzt bestaetigte Produktziele, verschobene Missionen und ver
 
 Additiv ergaenzt. Kein Eintrag oben wurde entfernt.
 
-### Angewandte Production-Aenderungen ausserhalb Ledger (`APPLIED_NOT_IN_LEDGER`)
+### Angewandte Production-Aenderungen ausserhalb Ledger (`APPLIED_LEDGER_RECONCILED_2026-08-08`)
 
 | Aenderung | Datum | Nachweis | Restarbeit |
 |---|---|---|---|
