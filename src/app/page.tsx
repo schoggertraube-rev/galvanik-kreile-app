@@ -3,7 +3,6 @@
 import { usePageView } from "@/hooks/usePageView";
 import { useState, useEffect, useRef } from "react";
 import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
-import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository"; // Will keep this if no actions exist
 import { useHydrated } from "@/hooks/useHydrated";
 type Order = OrderResponse;
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
@@ -75,7 +74,6 @@ export default function HomeDashboard() {
   usePageView();
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [openQuotes, setOpenQuotes] = useState(0);
   const mounted = useHydrated();
   
   // Drilldown Overlay State
@@ -122,16 +120,12 @@ export default function HomeDashboard() {
       setTodos(newTodos);
 
       if (dbOrders) setOrders(dbOrders);
-      const qCount = await inquiriesRepository.getOpenCount();
-      setOpenQuotes(qCount);
     };
     load();
     const onUpdate = () => load();
     window.addEventListener("kreile-orders-updated", onUpdate);
-    window.addEventListener("kreile-inquiries-updated", onUpdate);
     return () => {
       window.removeEventListener("kreile-orders-updated", onUpdate);
-      window.removeEventListener("kreile-inquiries-updated", onUpdate);
     };
   }, []);
 
@@ -151,17 +145,12 @@ export default function HomeDashboard() {
           if (t.id === 2 && orders.length > 0 && orders.filter(o => o.station === 'warenausgang').length === 0) {
             return { ...t, done: true, completionHint: "Alle Auslieferungen erledigt" };
           }
-          // ID 3: Offene Anfragen
-          if (t.id === 3 && openQuotes === 0) {
-            return { ...t, done: true, completionHint: "Keine offenen Anfragen" };
-          }
-          
           return t;
         })
       );
     }, 0);
     return () => clearTimeout(timer);
-  }, [orders, openQuotes]);
+  }, [orders]);
 
   const toggleTodo = (id: number) => {
     setTodos(prev =>
@@ -183,7 +172,6 @@ export default function HomeDashboard() {
 
   const focusMessage = (() => {
     if (orders.filter(o => o.risk === "red").length > 0) return "Kritische Aufträge zuerst entschärfen";
-    if (openQuotes > 0) return "Kundenrückfragen bündeln";
     return "Warendurchlauf kurz prüfen und Engpässe vermeiden";
   })();
 
@@ -388,6 +376,7 @@ export default function HomeDashboard() {
                 <span className="text-accent-orange font-bold">{focusMessage}</span>
               </div>
             </div>
+            <p className="mb-4 text-sm text-text-muted">Anfragen derzeit nicht verfügbar</p>
 
             {/* Tasks */}
             <div className="space-y-0">
