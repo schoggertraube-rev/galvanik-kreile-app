@@ -1,11 +1,9 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { db } from "@/db";
 import {
   appUsers,
   inventoryItems,
-  orders,
   stockMovements,
 } from "@/db/schema";
 import {
@@ -20,7 +18,6 @@ import type {
   StockMovementType,
 } from "@/lib/types/inventory";
 import { and, desc, eq, type InferSelectModel } from "drizzle-orm";
-import { revalidatePath } from "next/cache";
 
 type InventoryRow = InferSelectModel<typeof inventoryItems>;
 
@@ -321,118 +318,10 @@ export async function getInventoryMovementsByItemAction(
 export async function createInventoryMovementAction(
   rawInput: CreateStockMovementInput,
 ): Promise<ActionResult<StockMovement>> {
-  const auth = await checkAppAuthorization("write");
-  if (!auth.ok) return auth;
-
-  let input: CreateStockMovementInput;
-  try {
-    input = validateMovementInput(rawInput);
-  } catch (error) {
-    if (error instanceof InventoryDomainError) {
-      return { ok: false, error: error.code, message: error.message };
-    }
-    throw error;
-  }
-
-  try {
-    const movement = await db.transaction(async (tx) => {
-      const [item] = await tx
-        .select()
-        .from(inventoryItems)
-        .where(
-          and(
-            eq(inventoryItems.id, input.inventoryItemId),
-            eq(inventoryItems.tenantId, auth.data.tenantId),
-          ),
-        )
-        .limit(1)
-        .for("update");
-
-      if (!item) {
-        throw new InventoryDomainError("NOT_FOUND", "Lagerartikel nicht gefunden.");
-      }
-
-      if (input.orderId) {
-        const [order] = await tx
-          .select({ id: orders.id })
-          .from(orders)
-          .where(
-            and(
-              eq(orders.id, input.orderId),
-              eq(orders.tenantId, auth.data.tenantId),
-            ),
-          )
-          .limit(1);
-
-        if (!order) {
-          throw new InventoryDomainError("NOT_FOUND", "Auftrag nicht gefunden.");
-        }
-      }
-
-      const absoluteQuantity = Math.abs(input.quantity);
-      const signedQuantity =
-        input.movementType === "stock_out" ||
-        input.movementType === "consumption" ||
-        input.movementType === "waste"
-          ? -absoluteQuantity
-          : input.movementType === "correction"
-            ? input.quantity
-            : absoluteQuantity;
-      const currentStock = item.currentStock ?? 0;
-      const nextStock = currentStock + signedQuantity;
-
-      if (nextStock < 0) {
-        throw new InventoryDomainError(
-          "CONFLICT",
-          "Buchung würde einen negativen Lagerbestand erzeugen.",
-        );
-      }
-
-      const movementId = randomUUID();
-      const createdAt = new Date();
-
-      await tx.insert(stockMovements).values({
-        id: movementId,
-        tenantId: auth.data.tenantId,
-        inventoryItemId: item.id,
-        movementType: input.movementType,
-        quantity: String(signedQuantity),
-        orderId: input.orderId,
-        reason: input.reason,
-        erfasstVon: auth.data.userId,
-        createdAt,
-      });
-
-      await tx
-        .update(inventoryItems)
-        .set({ currentStock: nextStock })
-        .where(
-          and(
-            eq(inventoryItems.id, item.id),
-            eq(inventoryItems.tenantId, auth.data.tenantId),
-          ),
-        );
-
-      return {
-        id: movementId,
-        inventoryItemId: item.id,
-        movementType: input.movementType,
-        quantity: signedQuantity,
-        unit: item.unit ?? item.einheitNormiert ?? "Stk.",
-        orderId: input.orderId,
-        reason: input.reason,
-        createdBy: auth.data.displayName,
-        createdAt: createdAt.toISOString(),
-      } satisfies StockMovement;
-    });
-
-    revalidatePath("/items");
-    return { ok: true, data: movement };
-  } catch (error) {
-    if (error instanceof InventoryDomainError) {
-      return { ok: false, error: error.code, message: error.message };
-    }
-
-    return databaseFailure("createInventoryMovementAction failed:", error);
-  }
+  void rawInput;
+  return {
+    ok: false,
+    error: "CONFLICT",
+    message: "NOT_AVAILABLE: Sicherer W3-Lagerbewegungs-Command-Vertrag fehlt.",
+  };
 }
