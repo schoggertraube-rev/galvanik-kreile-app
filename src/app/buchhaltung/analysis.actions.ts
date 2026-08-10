@@ -45,11 +45,11 @@ export async function getUstvaAnalysisAction(von: string, bis: string) {
   const vmVorsteuer = vmBelege.reduce((sum, b) => sum + (Number(b.ustBetrag) || 0), 0);
   const vmZahllast = vmUst - vmVorsteuer;
 
-  // 12 Months Chart Data (Mock trend shape based on current zahllast)
+  // F0-W2b (ANA-01): keine Monatshistorie für Zahllast vorhanden — keine erfundenen Werte.
   const chartData = Array.from({length: 12}).map(() => ({
     name: `Monat \${i+1}`,
-    ist: 0,
-    vorjahr: 0
+    ist: null,
+    vorjahr: null
   }));
 
   const trendProzent = vmZahllast === 0 ? 0 : ((zahllast - vmZahllast) / Math.abs(vmZahllast)) * 100;
@@ -113,8 +113,8 @@ export async function getKraftstoffAnalysisAction(von: string, bis: string) {
   // Chart
   const chartData = Array.from({length: 12}).map(() => ({
     name: `Monat \${i+1}`,
-    ist: 0,
-    vorjahr: 0
+    ist: null,
+    vorjahr: null
   }));
 
   const umsatzRaw = await db.select({ netto: ausgangsrechnung.netto }).from(ausgangsrechnung)
@@ -160,11 +160,11 @@ export async function getOffenePostenAnalysisAction(von: string, bis: string) {
   const offeneSumme = offene.reduce((s, r) => s + (Number(r.brutto) || 0), 0);
   const ueberfaelligSumme = ueberfaellig.reduce((s, r) => s + (Number(r.brutto) || 0), 0);
   
-  // Trend: Dummy chart since we don't have historical snapshot data for OPOS
+  // F0-W2b (ANA-01): keine Historiendaten für OPOS vorhanden — keine erfundenen Werte.
   const chartData = Array.from({length: 6}).map(() => ({
     name: `Monat \${i+1}`,
-    ist: 0,
-    vorjahr: 0
+    ist: null,
+    vorjahr: null
   }));
 
   const umsatzRaw = await db.select({ netto: ausgangsrechnung.netto }).from(ausgangsrechnung)
@@ -213,8 +213,8 @@ export async function getBwaAnalysisAction(von: string, bis: string) {
 
   const chartData = Array.from({length: 12}).map(() => ({
     name: `Monat \${i+1}`,
-    ist: 0,
-    vorjahr: 0
+    ist: null,
+    vorjahr: null
   }));
 
   const materialQuote = einnahmen > 0 ? (material / einnahmen) * 100 : 0;
@@ -270,13 +270,13 @@ export async function getAusgabenAnalysisAction(von: string, bis: string) {
 
   const gesamt = variabel + fix;
 
-  // Mock Trend for Chart
+  // F0-W2b (ANA-01): keine erfundene Monatshistorie ohne echte Quelle.
   const chartData = Array.from({length: 12}).map(() => ({
     name: `Monat \${i+1}`,
-    variabel: 0,
-    fix: 0,
-    gesamt: 0 // calculated below
-  })).map(d => ({ ...d, gesamt: d.variabel + d.fix }));
+    variabel: null,
+    fix: null,
+    gesamt: null
+  }));
 
   // Kategorien 
   const kats: Record<string, number> = {};
@@ -342,7 +342,8 @@ export async function getSparzaehlerAnalysisAction(von: string, bis: string) {
     return {
       name: `Monat \${i+1}`,
       ist: Math.round(autoInMonth * 4 * (stundensatz / 60)),
-      vorjahr: Math.round(autoInMonth * 4 * (stundensatz / 60) * 0.8) // Mock Vorjahr
+      // F0-W2b (ANA-01): keine Vorjahresquelle vorhanden — kein erfundener Faktor.
+      vorjahr: null
     };
   });
 
@@ -396,13 +397,14 @@ export async function getAusgabenKategorien() {
   const kra = getSum('kraftstoff');
   const bew = getSum('bewirtung');
 
+  // F0-W2b (ANA-01): keine erfundenen Trend-Prozente ohne echte Vorjahres-/Vormonatsquelle.
   return [
-    { id: "material", label: "Material & Chemie", color: "bg-rose-500", iconBg: "bg-rose-50", iconColor: "text-rose-500", sum: mat.sum, budget: 20000, trend: "+2.4%", count: mat.count },
-    { id: "energie", label: "Energie", color: "bg-teal-500", iconBg: "bg-teal-50", iconColor: "text-teal-500", sum: ene.sum, budget: 10000, trend: "-1.2%", count: ene.count },
-    { id: "kfz", label: "Kfz & Wartung", color: "bg-purple-500", iconBg: "bg-purple-50", iconColor: "text-purple-500", sum: kfz.sum, budget: 1500, trend: "+12.5%", count: kfz.count, warning: true },
-    { id: "buero", label: "Büro & Software", color: "bg-emerald-500", iconBg: "bg-emerald-50", iconColor: "text-emerald-500", sum: bue.sum, budget: 1500, trend: "-0.5%", count: bue.count },
-    { id: "kraftstoff", label: "Kraftstoff", color: "bg-blue-500", iconBg: "bg-blue-50", iconColor: "text-blue-500", sum: kra.sum, budget: 1500, trend: "+5.0%", count: kra.count },
-    { id: "bewirtung", label: "Bewirtung", color: "bg-amber-500", iconBg: "bg-amber-50", iconColor: "text-amber-500", sum: bew.sum, budget: 500, trend: "-10.0%", count: bew.count },
-    { id: "sonstiges", label: "Sonstiges", color: "bg-neutral-500", iconBg: "bg-neutral-100", iconColor: "text-neutral-500", sum: 0, budget: 15000, trend: "+4.1%", count: 0 },
+    { id: "material", label: "Material & Chemie", color: "bg-rose-500", iconBg: "bg-rose-50", iconColor: "text-rose-500", sum: mat.sum, budget: 20000, trend: null, count: mat.count },
+    { id: "energie", label: "Energie", color: "bg-teal-500", iconBg: "bg-teal-50", iconColor: "text-teal-500", sum: ene.sum, budget: 10000, trend: null, count: ene.count },
+    { id: "kfz", label: "Kfz & Wartung", color: "bg-purple-500", iconBg: "bg-purple-50", iconColor: "text-purple-500", sum: kfz.sum, budget: 1500, trend: null, count: kfz.count },
+    { id: "buero", label: "Büro & Software", color: "bg-emerald-500", iconBg: "bg-emerald-50", iconColor: "text-emerald-500", sum: bue.sum, budget: 1500, trend: null, count: bue.count },
+    { id: "kraftstoff", label: "Kraftstoff", color: "bg-blue-500", iconBg: "bg-blue-50", iconColor: "text-blue-500", sum: kra.sum, budget: 1500, trend: null, count: kra.count },
+    { id: "bewirtung", label: "Bewirtung", color: "bg-amber-500", iconBg: "bg-amber-50", iconColor: "text-amber-500", sum: bew.sum, budget: 500, trend: null, count: bew.count },
+    { id: "sonstiges", label: "Sonstiges", color: "bg-neutral-500", iconBg: "bg-neutral-100", iconColor: "text-neutral-500", sum: 0, budget: 15000, trend: null, count: 0 },
   ];
 }

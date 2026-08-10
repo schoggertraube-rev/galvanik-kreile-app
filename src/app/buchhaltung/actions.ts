@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
+import { checkAppAuth } from '@/lib/server/authHelper'
 import type { Beleg, BelegDetail, BelegFilter, Ausgangsrechnung, RechnungFilter, AusgangsrechnungPosition , Kostenposten, KostenpostenFilter } from '@/lib/buchhaltung/types'
 
 type BelegUpdatePayload = {
@@ -154,8 +155,14 @@ export async function getBelegAction(id: string): Promise<BelegDetail> {
  * Erstellt einen Beleg inkl. Upload in den Storage Bucket.
  */
 export async function createBelegAction(formData: FormData): Promise<Beleg> {
+  // F0-W2b (SEC-02-Sperre): kanonische Autorisierung vor jeder Mutation.
+  const auth = await checkAppAuth("write")
+  if (!auth.ok) {
+    throw new Error(`PERMISSION_DENIED: ${auth.message}`)
+  }
+
   const supabase = await createClient()
-  
+
   const { data: authData } = await supabase.auth.getUser()
   if (!authData.user) {
     throw new Error('Nicht authentifiziert.')
@@ -192,6 +199,12 @@ export async function createBelegAction(formData: FormData): Promise<Beleg> {
   }
   
   // 2. Beleg-Datensatz anlegen
+  // F0-W2b (BUC-01): keine erfundenen Beträge/Steuerwerte beim Anlegen. brutto/netto/
+  // vorsteuer_abzug/absetzbar_prozent sind in der DB nullable bzw. haben einen neutralen
+  // Schema-Default (supabase/migrations/20260805180624_production_schema_baseline.sql,
+  // Tabelle "beleg" — keiner dieser vier Spalten ist NOT NULL). Bis eine echte OCR-
+  // Erkennung oder die manuelle Freigabe (freigebenBelegAction) reale Werte liefert,
+  // behauptet die Anlage hier keine Zahl.
   const belegData = {
     id: belegId,
     status: 'pruefen',
@@ -199,12 +212,6 @@ export async function createBelegAction(formData: FormData): Promise<Beleg> {
     original_format: mimeType,
     erfasst_am: new Date().toISOString(),
     erstellt_von: userId,
-    // Mock-Daten für OCR: Da MockOcrProvider genutzt wird, erwarten wir im Frontend
-    // ein Fallback oder füllen das hier minimal aus.
-    brutto: 0,
-    netto: 0,
-    vorsteuer_abzug: true,
-    absetzbar_prozent: 100
   }
   
   const { data: dbData, error: insertError } = await supabase
@@ -225,8 +232,14 @@ export async function createBelegAction(formData: FormData): Promise<Beleg> {
  * Gibt einen Beleg frei.
  */
 export async function freigebenBelegAction(id: string, korrektur?: Partial<Beleg>): Promise<Beleg> {
+  // F0-W2b (SEC-02-Sperre): kanonische Autorisierung vor jeder Mutation.
+  const auth = await checkAppAuth("write")
+  if (!auth.ok) {
+    throw new Error(`PERMISSION_DENIED: ${auth.message}`)
+  }
+
   const supabase = await createClient()
-  
+
   // Nur 'pruefen' oder 'erfasst' dürfen bearbeitet/freigegeben werden
   const { data: current, error: fetchError } = await supabase.from('beleg').select('status').eq('id', id).single()
   if (fetchError || !current) throw new Error('Beleg nicht gefunden.')
@@ -262,11 +275,21 @@ export async function freigebenBelegAction(id: string, korrektur?: Partial<Beleg
  */
 export async function stornoBelegAction(id: string, grund: string): Promise<Beleg> {
   void grund;
+  // F0-W2b (SEC-02-Sperre): kanonische Autorisierung vor jeder Mutation.
+  const auth = await checkAppAuth("write")
+  if (!auth.ok) {
+    throw new Error(`PERMISSION_DENIED: ${auth.message}`)
+  }
+
   const supabase = await createClient()
-  
+
   const { data: authData } = await supabase.auth.getUser()
   const userId = authData.user?.id
-  
+  // F0-W2b: bisheriger "kein Abbruch bei fehlendem User"-Pfad entfernt — bricht jetzt ab.
+  if (!userId) {
+    throw new Error('Nicht authentifiziert.')
+  }
+
   const { data, error } = await supabase.from('beleg').update({
     status: 'storniert',
     storniert_von: userId
@@ -317,8 +340,14 @@ export async function getKraftstoffTankungenAction() {
 
 export async function exportBelegeAction(format: "DATEV" | "Lexware" | "CSV") {
   void format;
+  // F0-W2b (SEC-02-Sperre): kanonische Autorisierung vor jeder Mutation.
+  const auth = await checkAppAuth("write")
+  if (!auth.ok) {
+    throw new Error(`PERMISSION_DENIED: ${auth.message}`)
+  }
+
   const supabase = await createClient()
-  
+
   const { data, error } = await supabase.from('beleg')
     .select('*')
     .eq('status', 'festgeschrieben')
@@ -331,14 +360,21 @@ export async function exportBelegeAction(format: "DATEV" | "Lexware" | "CSV") {
 
   const belege = data.map(mapToClientBeleg);
 
-  const rows = belege.map(b => {
-    return `${b.belegdatum || b.erfasstAm};${b.lieferantText || "Unbekannt"};${b.skrKonto || ""};${b.kategorieId};${b.brutto};${b.ustSatz || "19%"};${b.ustBetrag || "0,00"};${b.id};${b.status}`;
+  // F0-W2b (BUC-02): kein Steuer-Default; unvollständige Steuerwahrheit wird verweigert (DEC-01 offen).
+  // Belege ohne echten USt-Satz/USt-Betrag werden nicht exportiert statt einen Satz zu erfinden.
+  const belegeMitVollstaendigerSteuerwahrheit = belege.filter(
+    b => b.ustSatz !== undefined && b.ustSatz !== null && b.ustBetrag !== undefined && b.ustBetrag !== null
+  );
+
+  const rows = belegeMitVollstaendigerSteuerwahrheit.map(b => {
+    return `${b.belegdatum || b.erfasstAm};${b.lieferantText || "Unbekannt"};${b.skrKonto || ""};${b.kategorieId};${b.brutto};${b.ustSatz};${b.ustBetrag};${b.id};${b.status}`;
   });
 
   return {
     header: "Datum;Lieferant/Kunde;Konto;Kategorie;Betrag;USt-Satz;USt-Betrag;Belegnummer;Status",
     rows,
-    csv: "Datum;Lieferant/Kunde;Konto;Kategorie;Betrag;USt-Satz;USt-Betrag;Belegnummer;Status\n" + rows.join('\n')
+    csv: "Datum;Lieferant/Kunde;Konto;Kategorie;Betrag;USt-Satz;USt-Betrag;Belegnummer;Status\n" + rows.join('\n'),
+    skippedIncompleteTaxCount: belege.length - belegeMitVollstaendigerSteuerwahrheit.length
   };
 }
 
@@ -450,6 +486,12 @@ function mapToClientBeleg(dbData: BelegRow): Beleg {
 }
 
 export async function createRechnungAction(formData: FormData, positionen: AusgangsrechnungPosition[]): Promise<Ausgangsrechnung> {
+  // F0-W2b (SEC-02-Sperre): kanonische Autorisierung vor jeder Mutation.
+  const auth = await checkAppAuth("write")
+  if (!auth.ok) {
+    throw new Error(`PERMISSION_DENIED: ${auth.message}`)
+  }
+
   const supabase = await createClient();
 
   // Validate basic fields
@@ -457,7 +499,15 @@ export async function createRechnungAction(formData: FormData, positionen: Ausga
   const kundeId = formData.get('kundeId') as string;
   const datum = formData.get('datum') as string;
   const faelligAm = formData.get('faelligAm') as string;
-  const ustSatz = parseFloat(formData.get('ustSatz') as string || "19");
+  // F0-W2b (BUC-02): kein Steuer-Default; unvollständige Steuerwahrheit wird verweigert (DEC-01 offen).
+  const ustSatzRaw = formData.get('ustSatz') as string | null;
+  if (!ustSatzRaw || ustSatzRaw.trim() === '') {
+    throw new Error('VALIDATION_FAILED: USt-Satz ist ein Pflichtfeld und darf nicht angenommen werden.');
+  }
+  const ustSatz = parseFloat(ustSatzRaw);
+  if (isNaN(ustSatz)) {
+    throw new Error('VALIDATION_FAILED: USt-Satz ist ungültig.');
+  }
   const bemerkung = formData.get('bemerkung') as string || null;
   const leadId = formData.get('leadId') as string || null;
   const isDemo = formData.get('isDemo') === "true";
@@ -811,11 +861,13 @@ export async function generateDatevExportAction(von: string, bis: string): Promi
   
   const csvRows = [];
   if (belege) {
+    // F0-W2b (BUC-02): kein Steuer-Default im DATEV-Export; unvollständige Steuerwahrheit
+    // wird verweigert (DEC-01 offen). Belege ohne echten USt-Satz werden nicht exportiert.
     for (const b of belege) {
+      if (b.ust_satz === null || b.ust_satz === undefined) continue;
       const datum = new Date(b.belegdatum || b.erfasst_am);
       const ttmm = String(datum.getDate()).padStart(2, '0') + String(datum.getMonth() + 1).padStart(2, '0');
-      const ustSatz = b.ust_satz || '19';
-      csvRows.push(`"${b.brutto || ''}";"S";"${b.skr_konto || ''}";"1200";"";"${ttmm}";"${b.id.substring(0,8)}";"${b.lieferant_text || ''}";"${ustSatz}";"1"`);
+      csvRows.push(`"${b.brutto || ''}";"S";"${b.skr_konto || ''}";"1200";"";"${ttmm}";"${b.id.substring(0,8)}";"${b.lieferant_text || ''}";"${b.ust_satz}";"1"`);
     }
   }
 
@@ -830,10 +882,12 @@ export async function generateLexwareExportAction(von: string, bis: string): Pro
   const columnHeaders = `Datum;Belegnummer;Buchungstext;Betrag;USt-Satz;USt-Betrag;Konto;Gegenkonto;S/H`;
   const csvRows = [];
   if (belege) {
+    // F0-W2b (BUC-02): kein Steuer-Default im Lexware-Export; unvollständige Steuerwahrheit
+    // wird verweigert (DEC-01 offen). Belege ohne echten USt-Satz werden nicht exportiert.
     for (const b of belege) {
+      if (b.ust_satz === null || b.ust_satz === undefined) continue;
       const datum = new Date(b.belegdatum || b.erfasst_am).toLocaleDateString('de-DE');
-      const ustSatz = b.ust_satz || '19';
-      csvRows.push(`${datum};${b.id.substring(0,8)};${b.lieferant_text || ''};${b.brutto || ''};${ustSatz};${b.ust_betrag || ''};${b.skr_konto || ''};1200;S`);
+      csvRows.push(`${datum};${b.id.substring(0,8)};${b.lieferant_text || ''};${b.brutto || ''};${b.ust_satz};${b.ust_betrag || ''};${b.skr_konto || ''};1200;S`);
     }
   }
 

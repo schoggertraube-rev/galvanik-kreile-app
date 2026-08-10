@@ -427,13 +427,24 @@ export async function getAnalyseTileDetail(
         { label: "Verlauf", sourceName: "kpi_snapshots", recordCount: null, status: "missing" }
       ];
 
+      // F0-W2b (ANA-03): isLive wird aus der tatsächlichen Quellenabdeckung abgeleitet
+      // (nicht mehr unbedingt true). "Verlauf"/kpi_snapshots ist strukturell noch keine
+      // echte Quelle (keine Abfrage dahinter) und wird bereits separat ehrlich über
+      // trend.comparison.available=false ausgewiesen; für die Kern-Kachel (hero/stations/
+      // economics) zählen die fünf tatsächlich abgefragten Quellen als "nötig".
+      const requiredDataSources = ds.filter(source => source.sourceName !== "kpi_snapshots");
+      const isLive = requiredDataSources.every(source => source.status === "live");
+      const missingSourceWarnings = requiredDataSources
+        .filter(source => source.status !== "live")
+        .map(source => `DATA_THIN: Quelle fehlt — ${source.label}`);
+
       detail.werkstattPulsData = {
         period: toWerkstattPulsPeriod(period),
         dataStatus: {
-          isLive: true,
+          isLive,
           lastUpdatedAt: new Date().toISOString(),
           maturity: "S2",
-          warnings: []
+          warnings: missingSourceWarnings
         },
         hero: {
           termintreuePct, termintreueMessbarN, ohneZusageterminN,
