@@ -33,7 +33,6 @@ Dieses Register schuetzt bestaetigte Produktziele, verschobene Missionen und ver
 | `TRUTH-CLEANUP-001` | Eine kanonische Sicht auf `main`, Vercel, Supabase, PRs und Worktrees. | `DONE_VERIFIED` | PR 25; `main`, Vercel und Archive-Receipts gegengeprueft. |
 | `QUALITY-RATCHET-001` | Globalen Lintbestand maschinenlesbar festhalten und jede Erhoehung blockieren. | `DONE_VERIFIED` | PR 26; Inline-Disable wirkungslos; geschuetzter Base-Judge besteht und `main-protection` verlangt jetzt `quality` und `ratchet`. |
 | `LINT-DEBT-001` | 484 Fehler und 459 Warnungen in kleinen nichtfachlichen Wellen bis null abbauen. | `DONE_VERIFIED` | PR #31; ESLint 0/0 und Ratchet aktiv. |
-| `DB-TRUTH-001` | Production-Ledger und lokale Migrationsquelle versions- und hashgenau versoehnen. | `ACTIVE` | Recovery-Kandidat: Manifest fuer 96 angewandte Versionen, echter CI-Aufruf und zwei klar ausgewiesene neue Migrationen; Fresh-Replay bleibt offen. |
 | `BRANCH-DISPOSITION-001` | Alte PRs unveraenderlich archivieren, inventarisieren und erst danach schliessen. | `DONE_VERIFIED` | PR 8/15/19/20 einzeln kommentiert und ungemergt geschlossen; Archivrefs, Receipts und Quellbranches erhalten. |
 | `WINDOWS-WORKTREE-AUDIT-001` | Externen Windows-Checkout samt bekannter Diagnose- und nicht versionierter Arbeit inventarisieren und verlustfrei sauberstellen. | `UNKNOWN_EXTERNAL` | Nur im betroffenen Checkout ausfuehrbar; kein Reset/Stash/Delete. Erwartete Quelle: `diagnose/auth-session-permissions-2026-06-17@1621702` sowie Capture-/Foto-/Testarbeit. |
 
@@ -48,7 +47,6 @@ Dieses Register schuetzt bestaetigte Produktziele, verschobene Missionen und ver
 | `AUTH-IDENTITY-002` | Benutzerwechsel MK -> Admin -> MK ohne alte Rolle, Initialen, Rechte oder Sessionreste. | `DONE_VERIFIED` | PR #33; atomarer Auth-State und keine localStorage-Identitaet. |
 | `SEC-PIN-002` | PIN-Hashing-Grundlage, kein Default und zentrale Rollen-/Rotationsregeln. | `DONE_VERIFIED` | PR #37 als Grundlage; Recovery-Kandidat entfernt zusaetzlich Klartext-Schreibpfade. |
 | `SEC-PIN-002B` | Device-/Challenge-Grenze, serialisierter Fehlversuchsschutz, Session-Widerruf, Bestandsrotation und finaler Plaintext-Ausschluss. | `ACTIVE` | Race, Rotation, Bestandsmigration und Session-Widerruf umgesetzt; Device-Challenge bleibt Produktentscheidung. Production 2026-08-05 auf 6/6 bcrypt migriert und verifiziert. Leaked-Password-Schutz vor Go-live im Dashboard aktivieren. |
-| `RLS-CONTRACT-001` | Rollen-/Tenant-/Grant-/Relationsvertrag und relationenweise Fail-closed-Policies. | `ACTIVE` | 2026-08-05 allen Tabellen/Views die Data-API-Grants entzogen (0 Grants verifiziert). Relationenweise RLS-/Policy-Matrix und tenant_isolation bleiben offen (architektonisch noch nicht sauber). |
 | `OFFLINE-SHELL-001` | Eine Service-Worker-Registrierung; App-Shell offline nutzbar. | `READY_AFTER_DEPENDENCY` | Nach Quality-/Identity-Vertrag. |
 | `OFFLINE-48H-001` | 48 Stunden arbeitsfaehig mit einer Outbox, verlustfreier Altqueue-Drainage, Neustart, Konflikt- und Wiederholschutz. | `READY_AFTER_DEPENDENCY` | Benoetigt stabile Shell, Receipt-Writer/Readback sowie Inventar, idempotenten Import, Quarantaene, Nutzeranzeige und Rollback fuer bestehende Browserqueues. |
 | `SEC-STORAGE-001` | MIME-, Groessen-, Pfad-, Tenant- und Storage-Limits fuer Fotos/Dokumente. | `READY_AFTER_DEPENDENCY` | Mit Capture-/Storage-Vertrag. |
@@ -82,7 +80,6 @@ Additiv ergaenzt. Kein Eintrag oben wurde entfernt.
 
 | ID | Ziel | Status | Nachweis / Restarbeit |
 |---|---|---|---|
-| `LEDGER-CONSOLIDATION-001` | `execute_sql`-Aenderungen ledgerfaehig nachziehen; Fresh-Replay herstellen | `ACTIVE` | Voraussetzung fuer Migrationswahrheit |
 | `SEC-STORAGE-BELEGE-001` | `belege`-Anzeige/Download auf serverseitige Signed URLs | `READY` | Bucket ist privat; getPublicUrl darf hier nicht verwendet werden |
 | `SUPABASE-ADMIN-DEFAULTPRIV-001` | Default Privileges von `supabase_admin` schliessen | `BLOCKED_EXTERNAL` | nur ueber Dashboard/Owner |
 | `SYSTEMATIC-AUDIT-001` | Alle Client-Supabase-/Upload-/Rechnungs-/Reklamationspfade systematisch pruefen | `OPEN` | bisher nur review-benannte Dateien verifiziert |
@@ -162,3 +159,17 @@ Ein geschlossener PR verliert seinen Branch nicht automatisch. PR-Schliessung be
 - **Michael:** stark gefuehrte Aufnahme, Telefon, E-Mail, Eingang und Ausgang; geringe Technikroutine.
 
 Keine Mission gilt als produktreif, wenn der relevante Nutzer-Twin den Kernweg nicht ohne versteckte Entwicklerkenntnisse ausfuehren kann.
+
+## Historie (nicht kanonisch, Stand vor 2026-08-10)
+
+Die folgenden Zeilen standen bis 2026-08-10 mit Status `ACTIVE` in den kanonischen Tabellen oben und
+wurden an diesem Datum hierher verschoben, weil sie laut Nachtrag-Header (Dokumentanfang) durch F0
+abgeschlossen bzw. ueberholt sind. Wortlaut unveraendert uebernommen (keine Loeschung gemaess
+Registerregel); Status hier gilt NICHT als aktuell. Massgeblich fuer den heutigen Stand sind
+ausschliesslich `docs/project/CURRENT_STATE.md` und `docs/evidence/f0/F0_FINAL_REPORT.md`.
+
+| ID | Ziel | Status (Stand vor 2026-08-10) | Abhaengigkeit / Nachweis (Stand vor 2026-08-10) |
+|---|---|---|---|
+| `DB-TRUTH-001` | Production-Ledger und lokale Migrationsquelle versions- und hashgenau versoehnen. | `ACTIVE` | Recovery-Kandidat: Manifest fuer 96 angewandte Versionen, echter CI-Aufruf und zwei klar ausgewiesene neue Migrationen; Fresh-Replay bleibt offen. |
+| `RLS-CONTRACT-001` | Rollen-/Tenant-/Grant-/Relationsvertrag und relationenweise Fail-closed-Policies. | `ACTIVE` | 2026-08-05 allen Tabellen/Views die Data-API-Grants entzogen (0 Grants verifiziert). Relationenweise RLS-/Policy-Matrix und tenant_isolation bleiben offen (architektonisch noch nicht sauber). |
+| `LEDGER-CONSOLIDATION-001` | `execute_sql`-Aenderungen ledgerfaehig nachziehen; Fresh-Replay herstellen | `ACTIVE` | Voraussetzung fuer Migrationswahrheit |

@@ -3,9 +3,22 @@
 **Stand:** 2026-08-10 · **Norm:** F0_CONTRACT_V1.md (extern bereitgestellt, s. Herkunftskopf dort)
 **TECHNICAL_PROOF_COMMIT:** b6a4808424304338391abba43d2bd192e227b7ff · **Evidence-Payload:** PR #57 (Aufloesung: dessen Merge-Commit)
 **Prod:** syhaigjhsbpjmtnggqka · Ledger 9/9, Digest 268ce6c1d87a7d020d68369eac20b2b4 · PRODUCTION_DEPLOYMENT_HEAD ae47f3de (dpl_7vwbgEJrPJhYHf9RcuLWswBr1EbT, READY)
+**FINAL_STATUS: FAIL_INTERNAL · ZIP_READINESS: RED** (Statuskorrektur 2026-08-10, s. Abschnitt unten)
 
 Diese Neufassung ersetzt den Report vom 08.08. vollstaendig. Jeder Status nennt seinen Beweis; kein
 Status stuetzt sich auf einen frueheren Selbst-PASS.
+
+## Statuskorrektur 2026-08-10
+Der zuvor hier verwendete Status `PASS_WITH_DECLARED_EXTERNAL_EXCEPTION` ist **kein zulaessiger
+Vertrags-Enum** (erlaubt sind ausschliesslich `PASS`, `FAIL_INTERNAL`, `BLOCKED_EXTERNAL_PERMISSION`,
+`BLOCKED_PRODUCT_DECISION`, `BLOCKED_CAPABILITY_ADAPTER_MISSING`) und wird hiermit entfernt. Ein
+externer Befundbericht hat 7 interne P0-Anwendungsdefekte durch read-only-Verifikation gegen den
+echten Code auf main bestaetigt (siehe `F0_DEFECT_REGISTER.md`); der wahre aggregierte Status ist
+daher **`FINAL_STATUS=FAIL_INTERNAL`**, **`ZIP_READINESS=RED`**. A13 (unabhaengige Ratifikation der
+organisatorischen Unabhaengigkeit) ist weiterhin offen. Die Austrittsmatrix A01–A15 unten bleibt
+bestehen, weil sie den engeren, weiterhin gueltigen DB-/Infrastruktur-Vertrag beschreibt (s.
+F0_DEFECT_REGISTER.md, Abschnitt „Grund-Ehrlichkeit") — sie ist NICHT der aggregierte Gesamtstatus
+von F0 und bedeutet nicht „alle PASS".
 
 ## Befund BF-001 — transparente Aufloesung (kein absolutes Urteil)
 Audit 10.08. mass v_auftrag_db als "ohne Invoker-Option/false" (16/17). Direktmessung derselben View
@@ -39,9 +52,11 @@ Fingerprint-Komponente `viewopts` (PR #57) — jede kuenftige View-Options-Drift
 | A15 | PASS | Produkt-/Go-live-Themen strikt getrennt (CURRENT_STATE); kein F0-PASS stuetzt sich auf spaetere Gates |
 
 ## Schlussstatus
-`FINAL_STATUS=PASS_WITH_DECLARED_EXTERNAL_EXCEPTION` · `OPEN_INTERNAL_BLOCKERS=0` ·
+`FINAL_STATUS=FAIL_INTERNAL` · `OPEN_INTERNAL_BLOCKERS=7 (siehe F0_DEFECT_REGISTER.md)` ·
 `OPEN_EXTERNAL_BLOCKERS=1 (def_privs supabase_admin)` · `RATIFICATION_STATUS=PENDING_EXTERNAL` ·
-`ZIP_READINESS=RECOMMEND_GREEN_AFTER_EXTERNAL_RATIFICATION`
+`ZIP_READINESS=RED`
 
-Betreiberpflichten vor Go-live (nicht F0): DB-Passwort-Rotation; Leaked-Password-Protection
-AKTIVIEREN (Pflicht, nicht optional); Restore-Drill (Gate G); def_privs-Ticket (Vorlage im Packet).
+F0 ist damit NICHT abgeschlossen. Naechster Schritt: Paket F0-W2 (Quarantaene der betroffenen Pfade),
+siehe `KREILE_F0_UEBERGABE_UND_F1_START.md`. Betreiberpflichten vor Go-live (nicht F0, weiterhin
+gueltig): DB-Passwort-Rotation; Leaked-Password-Protection AKTIVIEREN (Pflicht, nicht optional);
+Restore-Drill (Gate G); def_privs-Ticket (Vorlage im Packet).

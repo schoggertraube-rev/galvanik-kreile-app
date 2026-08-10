@@ -1,8 +1,12 @@
 # F0 CLOSEOUT — Fundament-Abschlusserklaerung (Neufassung 2026-08-10)
 
-**Status: PASS_WITH_DECLARED_EXTERNAL_EXCEPTION** (Details/Norm: F0_FINAL_REPORT.md, F0_HANDOFF.json,
-F0_CONTRACT_V1.md). Externe Ratifikation: PENDING_EXTERNAL. Diese Fassung ersetzt die vom 07.08.
-vollstaendig (BF-005: dort stand die Ledger-Reconciliation noch als spaetere Aufgabe).
+**Status: FAIL_INTERNAL** (Statuskorrektur 2026-08-10; Details/Norm: F0_FINAL_REPORT.md,
+F0_HANDOFF.json, F0_CONTRACT_V1.md, F0_DEFECT_REGISTER.md). ZIP_READINESS: RED. Externe Ratifikation:
+PENDING_EXTERNAL. Diese Fassung ersetzt die vom 07.08. vollstaendig (BF-005: dort stand die
+Ledger-Reconciliation noch als spaetere Aufgabe).
+
+F0 ist NICHT abgeschlossen; naechstes Paket F0-W2 Quarantaene (siehe Uebergabe,
+KREILE_F0_UEBERGABE_UND_F1_START.md).
 
 ## Erfuellt (Belege = aktive CI-Gates + Live-Zustand, s. F0_TEST_EVIDENCE.md)
 - DB-Wahrheit: Baseline-Replay x2 deterministisch; 7 harte Fingerprint-Komponenten = Prod;

@@ -104,6 +104,9 @@ jobs:
       - name: F0 doc truth gate
         run: node scripts/quality/check-f0-doc-truth.mjs
 
+      - name: F0 doc truth gate selftest (proves the gate rules themselves fire, GOV-06d)
+        run: node scripts/quality/check-f0-doc-truth.mjs --selftest
+
       - name: Supabase client boundary
         run: node scripts/quality/check-supabase-client-boundary.mjs
 

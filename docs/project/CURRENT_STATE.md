@@ -9,7 +9,7 @@ Datei beschreibt einen ueberholten Zustand als aktuell. Konsistenz wird durch da
 
 | Wahrheit | Stand |
 |---|---|
-| main | ae47f3ded22e6a29d695b48d3e67ca39c37a8b3f; einziger offener Foundation-PR: #57 (f0/befund-fixes) |
+| main | a3d7db762ea4d95867a9edc2ade2850333f75f34 (Basis dieses Pakets); einziger offener Foundation-PR: dieser W1-PR (f0/w1-governance-truth) |
 | Production-Deployment | ae47f3de aktiv (Vercel dpl_7vwbgEJrPJhYHf9RcuLWswBr1EbT, READY, target=production) |
 | Supabase Prod | syhaigjhsbpjmtnggqka; Ledger 9/9 = aktive Repo-Migrationen (Digest 268ce6c1d87a7d020d68369eac20b2b4) |
 | Migrationswahrheit | PASS: Fresh-Replay aus Null, im CI DOPPELT mit identischem Digest (9dc1067b…) |
@@ -23,7 +23,7 @@ Datei beschreibt einen ueberholten Zustand als aktuell. Konsistenz wird durch da
 | Dependencies | next 16.2.12; npm audit --omit=dev als CI-Artefakt persistiert (Stand: 0 critical / 9 high / 2 moderate / 2 low, alle transitiv; transitiv ≠ automatisch irrelevant — Review-Pflicht bleibt) |
 | Externer Blocker | def_privs FOR ROLE supabase_admin (15 von 24 defacl-Eintraegen): BLOCKED_EXTERNAL_PERMISSION, kompensiert + Ticket-Vorlage (F0_PERMISSION_PACKET.md) |
 | Advisor offen | pg_trgm in public (WARN); Leaked-Password-Protection deaktiviert (WARN — Betreiberpflicht vor Go-live); 13 rls_enabled_no_policy (INFO, deny-all, kategorisiert) |
-| Abschlussstatus | FINAL_STATUS=PASS_WITH_DECLARED_EXTERNAL_EXCEPTION · RATIFICATION_STATUS=PENDING_EXTERNAL (F0_FINAL_REPORT.md / F0_HANDOFF.json) |
+| Abschlussstatus | FINAL_STATUS=FAIL_INTERNAL · ZIP_READINESS=RED · RATIFICATION_STATUS=PENDING_EXTERNAL (siehe F0_DEFECT_REGISTER.md, KREILE_F0_UEBERGABE_UND_F1_START.md, F0_FINAL_REPORT.md, F0_HANDOFF.json) |
 
 ## Ausdruecklich NICHT Teil des F0-Fundaments (Produkt-/Go-live-Gates, offen)
 48h-Offline-Nachweis · Backup-/Restore-DRILL (Rollback ist vorbereitet, nicht getestet) ·
@@ -37,9 +37,12 @@ Ledger-Eintrag — selbst entdeckt und noch am selben Tag regulaer im Ledger nac
 Regelweg bleibt Merge→Apply; alle Eingriffe sind in F0_HANDOFF.json REMOTE_MUTATIONS protokolliert.
 
 ## Remote-Branch-Inventar (2026-08-10)
-Einziger aktiver Foundation-Branch: `f0/befund-fixes` (PR #57). Nachfolgende Liste aller weiteren
-Remote-Branches (historisch, ohne offenen PR; Disposition: nach F0-Abschluss loeschbar, kein
-F0-Inhalt geht verloren — Salvage bereits erfolgt):
+Einziger aktiver Foundation-Branch: `f0/w1-governance-truth` (dieser PR, F0-W1 Governance-Wahrheit-
+Korrektur, KEIN Selbstmerge). `f0/befund-fixes` (PR #57) ist gemergt und bereits geloescht — main
+enthaelt dessen Inhalt (a3d7db76). Das vollstaendige Inventar aller Remote-Branches mit SHA und
+Disposition steht in `F0_BRANCH_INVENTORY.md` (Disposition dort endgueltig erst nach DEC-04 durch
+den Repo-Owner). Nachfolgende Liste (historisch, unveraendert aus der Vorfassung stehen gelassen,
+Stand vor 2026-08-10; fuer die aktuelle Disposition gilt ausschliesslich F0_BRANCH_INVENTORY.md):
 - agent/docs-rls-architecture
 - agent/docs-update-and-m3
 - agent/m4-sec-pin-002b
