@@ -9,7 +9,6 @@ import { SEARCH_ACTIONS } from '@/lib/search/actionRegistry'
 import { addRecentSearch } from '@/lib/search/recent'
 import type { SearchSuggestion } from '@/types/search'
 import { globalSearch, type SearchResult } from '@/app/actions/search.actions'
-import { GlobalSearchAIResult } from './GlobalSearchAIResult'
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import { useCustomerOverlay } from "@/components/customers/useCustomerOverlay";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
@@ -228,7 +227,9 @@ function GlobalSearchDialog({ onOpenChange }: { onOpenChange: (v: boolean) => vo
         <div className="overflow-y-auto flex-1 p-3 space-y-4">
           
           {isAiMode && searchTerm.length > 2 ? (
-            <GlobalSearchAIResult query={searchTerm} onClose={handleClose} />
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900">
+              NOT_AVAILABLE – KI-Suche bis zum sicheren W3-KI-/Provider-Vertrag nicht verfügbar.
+            </div>
           ) : (
             <>
               {!searchTerm && (

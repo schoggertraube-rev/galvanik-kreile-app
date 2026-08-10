@@ -1,20 +1,16 @@
 "use server";
 
-import { extractDocumentData, OcrResult } from "@/lib/ocr/geminiOcr";
-import { ocrService, OCRScan } from "@/lib/services/ocrService";
+import type { OcrResult } from "@/lib/ocr/geminiOcr";
+import type { OCRScan } from "@/lib/services/ocrService";
+
+const denial = "NOT_AVAILABLE: Sicherer W3-KI-/Provider-Vertrag fehlt.";
 
 export async function processImage(base64Image: string): Promise<OcrResult> {
-  try {
-    return await extractDocumentData(base64Image);
-  } catch (error) {
-    console.error("❌ processImage Error:", error);
-    return { rawText: "OCR fehlgeschlagen" };
-  }
+  void base64Image;
+  throw new Error(denial);
 }
 
-// DEPRECATED: ersetzt durch processImage
 export async function processImageWithAI(base64Image: string): Promise<OCRScan> {
   void base64Image;
-  console.warn("⚠️ processImageWithAI is deprecated, use processImage instead");
-  return await ocrService.simulateScan("document");
+  throw new Error(denial);
 }

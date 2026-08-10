@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useErfassung } from "../ErfassungProvider";
-import { Sparkles, Check, Loader2, MapPin, Search } from "lucide-react";
+import { Check, Loader2, MapPin } from "lucide-react";
 import { createCustomerDb } from "@/app/actions/customers.actions";
-import { extractCustomerDataFromFreetext, enrichCustomerData } from "@/app/actions/ai-enrichment.actions";
 
 export function CustomerWizard() {
   const { options, closeErfassung, openErfassung, setIsDirty } = useErfassung();
@@ -30,12 +29,9 @@ export function CustomerWizard() {
   
   const [freetext, setFreetext] = useState((options?.prefill?.rawText as string) || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isExtracting, setIsExtracting] = useState(false);
-  const [isEnriching, setIsEnriching] = useState(false);
   const [successResult, setSuccessResult] = useState<{ id: string; customerNumber: string | null; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [autofilledFields, setAutofilledFields] = useState<string[]>([]);
-  const [inlineMessage, setInlineMessage] = useState<{ type: 'success'|'error', text: string } | null>(null);
+  const [autofilledFields] = useState<string[]>([]);
 
   const getHighlight = (field: string) => autofilledFields.includes(field) ? ' ring-2 ring-green-400 !bg-green-50 transition-all duration-300' : '';
 
@@ -111,95 +107,6 @@ export function CustomerWizard() {
     }
   };
 
-  const handleExtractFreetext = async () => {
-    if (!freetext) return;
-    setIsExtracting(true);
-    setInlineMessage(null);
-    try {
-      const res = await extractCustomerDataFromFreetext(freetext);
-      if (res.ok && res.data) {
-        const d = res.data;
-        const filled: string[] = [];
-        if (d.type) { setCustomerType(d.type); filled.push("customerType"); }
-        if (d.company) { setCompany(d.company); filled.push("company"); }
-        if (d.contactName) { setContactName(d.contactName); filled.push("contactName"); }
-        if (d.email) { setEmail(d.email); filled.push("email"); }
-        if (d.phone) { setPhone(d.phone); filled.push("phone"); }
-        if (d.street) { 
-          // Attempt to split street and house number
-          const match = d.street.match(/(.*)\s+(\d+[a-zA-Z]*)/);
-          if (match) {
-            setStreet(match[1]);
-            setHouseNumber(match[2]);
-            filled.push("street", "houseNumber");
-          } else {
-            setStreet(d.street); filled.push("street");
-          }
-        }
-        if (d.zipCode) { setZipCode(d.zipCode); filled.push("zipCode"); }
-        if (d.city) { setCity(d.city); filled.push("city"); }
-        if (d.notes) { setNotes(d.notes); filled.push("notes"); }
-        
-        // Build address line
-        setAddress([d.street, d.zipCode, d.city].filter(Boolean).join(", "));
-        
-        setAutofilledFields(filled);
-        setInlineMessage({ type: 'success', text: "Daten aus Freitext erkannt und ausgefüllt!" });
-        setTimeout(() => {
-          setAutofilledFields([]);
-          setInlineMessage(null);
-        }, 2000);
-      } else {
-        setInlineMessage({ type: 'error', text: res.error || "Fehler beim Extrahieren" });
-      }
-    } finally {
-      setIsExtracting(false);
-    }
-  };
-
-  const handleEnrichWeb = async () => {
-    if (!company && !city) {
-      setInlineMessage({ type: 'error', text: "Mindestens Firma oder Stadt muss angegeben werden." });
-      return;
-    }
-    setIsEnriching(true);
-    setInlineMessage(null);
-    try {
-      const res = await enrichCustomerData(company, city);
-      if (res.ok && res.data) {
-        const d = res.data;
-        const filled: string[] = [];
-        if (d.website && !notes.includes(d.website)) { setNotes(prev => prev ? prev + "\nWeb: " + d.website : "Web: " + d.website); filled.push("notes"); }
-        if (d.phone && !phone) { setPhone(d.phone); filled.push("phone"); }
-        if (d.email && !email) { setEmail(d.email); filled.push("email"); }
-        if (d.street && !street) { 
-          const match = d.street.match(/(.*)\s+(\d+[a-zA-Z]*)/);
-          if (match) {
-            setStreet(match[1]);
-            setHouseNumber(match[2]);
-            filled.push("street", "houseNumber");
-          } else {
-            setStreet(d.street); filled.push("street");
-          }
-        }
-        if (d.zipCode && !zipCode) { setZipCode(d.zipCode); filled.push("zipCode"); }
-        if (d.city && !city) { setCity(d.city); filled.push("city"); }
-        if (d.country) { setCountry(d.country); filled.push("country"); }
-        
-        setAutofilledFields(filled);
-        setInlineMessage({ type: 'success', text: "Daten per Web/Gemini ergänzt! (Confidence: " + d.confidence + ")" });
-        setTimeout(() => {
-          setAutofilledFields([]);
-          setInlineMessage(null);
-        }, 2000);
-      } else {
-        setInlineMessage({ type: 'error', text: res.error || "Fehler beim Recherchieren" });
-      }
-    } finally {
-      setIsEnriching(false);
-    }
-  };
-
   const handleNextToOrder = () => {
     openErfassung({
       mode: "order",
@@ -252,17 +159,16 @@ export function CustomerWizard() {
           Kunde erfassen (V2)
         </h2>
         <p className="text-sm text-gray-500">
-          KI-Assistent für die strukturierte Erfassung von Neukunden.
+          Manuelle, strukturierte Erfassung von Neukunden.
         </p>
       </div>
 
       {/* Main Form */}
       <div className="px-8 pb-8 space-y-6 overflow-y-auto flex-1">
         
-        {/* KI Assistenz */}
+        {/* Provider-Assistenzen bleiben bis zum W3-Vertrag deaktiviert. */}
         <section className="bg-linear-to-br from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 shadow-sm p-5">
           <div className="flex items-center gap-2 mb-3 text-indigo-900">
-            <Sparkles className="w-5 h-5 text-indigo-600" />
             <h3 className="font-serif text-lg">Assistenz & Autofill</h3>
           </div>
           <textarea 
@@ -274,27 +180,21 @@ export function CustomerWizard() {
           />
           <div className="flex gap-3">
             <button 
-              onClick={handleExtractFreetext}
-              disabled={isExtracting || !freetext}
+              disabled
               className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg text-sm font-semibold transition-colors"
             >
-              {isExtracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               Aus Freitext erkennen
             </button>
             <button 
-              onClick={handleEnrichWeb}
-              disabled={isEnriching || (!company && !city)}
+              disabled
               className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-gray-50 disabled:opacity-50 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-semibold transition-colors"
             >
-              {isEnriching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
               Per Web/Gemini ergänzen
             </button>
           </div>
-          {inlineMessage && (
-            <div className={`mt-3 p-3 rounded-md text-sm ${inlineMessage.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-              {inlineMessage.text}
-            </div>
-          )}
+          <p className="mt-3 text-sm font-semibold text-indigo-900">
+            NOT_AVAILABLE: KI-/Provider-Assistenzen sind bis zum sicheren W3-KI-/Provider-Vertrag nicht verfügbar.
+          </p>
         </section>
 
         {/* 1. Kundentyp */}
@@ -404,7 +304,7 @@ export function CustomerWizard() {
               </div>
             </div>
             {(!street || !city) && (
-               <p className="text-xs text-gray-400 italic flex items-center gap-1">Nutze &quot;Per Web ergänzen&quot; oder &quot;Freitext erkennen&quot; zum Auffüllen.</p>
+               <p className="text-xs text-gray-400 italic flex items-center gap-1">Bitte die Adresse manuell vervollständigen.</p>
             )}
           </div>
         </section>

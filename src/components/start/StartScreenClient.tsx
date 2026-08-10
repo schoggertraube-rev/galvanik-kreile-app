@@ -7,82 +7,12 @@ import { Delete, Clock, Wrench, Calculator, Sun } from "lucide-react";
 import { getGreeting } from "@/lib/greeting";
 import { EmailLoginDialog } from "@/components/start/EmailLoginDialog";
 import { useSearchParams } from "next/navigation";
-import { getFeierabendEvents, notifyAdminPinReset } from "@/app/actions/start.actions";
+import { notifyAdminPinReset } from "@/app/actions/start.actions";
 import { loginWithPin } from "@/app/actions/auth.actions";
 import type { StartUserDto } from "@/lib/auth/userDtos";
 
-// Asynchronous weather card fetching directly from Open-Meteo
+// Provider-dependent weather and event hints remain unavailable until contracted safely.
 function WeatherCard() {
-  const [weatherText, setWeatherText] = useState("");
-  const [temperature, setTemperature] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [eventText, setEventText] = useState<string | null>(null);
-  const timeStr = new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
-
-  useEffect(() => {
-    const fetchWeather = async () => {
-      try {
-        // Fetch Frankfurt am Main weather
-        const res = await fetch(
-          "https://api.open-meteo.com/v1/forecast?latitude=50.1109&longitude=8.6821&current_weather=true"
-        );
-        const data = await res.json();
-        const temp = data?.current_weather?.temperature;
-        const code = data?.current_weather?.weathercode;
-        setTemperature(Math.round(temp));
-
-        // Formulate a beautiful greeting string based on weather codes
-        let condition = "perfekte Bedingungen, um nach Feierabend noch kurz an den Main zu gehen. 🍺";
-        if (code >= 51 && code <= 67) {
-          condition = "Draußen Schmuddel – guter Tag, drinnen ein paar liegengebliebene Aufträge abzuhaken. ☕";
-        } else if (code >= 71 && code <= 86) {
-          condition = "Es schneit über Mainhattan! Perfekt eingepackt geht es ans Werk. ❄️";
-        } else if (temp < 12) {
-          condition = "Etwas frisch heute – die Galvanikbäder wärmen uns auf! ☕";
-        }
-
-        // Fetch event if after 15:00
-        const hour = new Date().getHours();
-        if (hour >= 15) {
-          try {
-            const evRes = await getFeierabendEvents();
-            if (evRes?.success && evRes.event) {
-              setEventText(`Event-Tipp: ${evRes.event} 🎉`);
-            }
-          } catch (e) {
-            console.error(e);
-          }
-        }
-
-        // Simulating the 600ms skeleton requirement
-        setTimeout(() => {
-          setWeatherText(condition);
-          setLoading(false);
-        }, 600);
-      } catch {
-        setTimeout(() => {
-          setWeatherText("Heute mal kein Wetter — aber bestimmt was zu tun. 💪");
-          setLoading(false);
-        }, 600);
-      }
-    };
-    fetchWeather();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="absolute top-6 right-6 w-[320px] bg-white rounded-2xl border border-neutral-gray-100 p-5 shadow-card animate-pulse">
-        <div className="flex gap-4">
-          <div className="w-8 h-8 bg-neutral-gray-100 rounded-full shrink-0" />
-          <div className="flex-1 space-y-2">
-            <div className="h-4 bg-neutral-gray-100 rounded w-3/4" />
-            <div className="h-4 bg-neutral-gray-100 rounded" />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="absolute top-6 right-6 w-[320px] bg-white rounded-2xl border border-neutral-gray-100 p-5 shadow-card animate-in fade-in duration-300">
       <div className="flex gap-3.5 items-start">
@@ -90,16 +20,10 @@ function WeatherCard() {
           <Sun className="w-7 h-7 text-accent-orange" strokeWidth={1.5} />
         </div>
         <div className="text-sm leading-relaxed text-navy-900 font-medium">
-          Heute: <strong>{temperature !== null ? `${temperature}°C` : "20°C"}</strong> und noch {weatherText}
-          {eventText && (
-            <div className="mt-2 text-xs text-accent-orange font-bold flex items-center gap-1">
-              {eventText}
-            </div>
-          )}
+          NOT_AVAILABLE: Wetter- und Eventhinweise sind bis zu einem sicheren Provider-Vertrag nicht verfügbar.
         </div>
       </div>
       <div className="flex justify-end items-center gap-1.5 mt-3">
-        <span className="text-[11px] text-text-muted font-mono">{timeStr}</span>
         <svg viewBox="0 0 16 10" fill="none" className="w-4 h-3">
           <path d="M1 5l3 4L13 1" stroke="#B8923F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
           <path d="M4 5l3 4L16 1" stroke="#B8923F" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
@@ -108,8 +32,6 @@ function WeatherCard() {
     </div>
   );
 }
-
-import { initializeDemoIfNeeded } from "@/app/actions/demoSetup";
 
 // PIN Dialog Component
 function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void }) {
@@ -130,18 +52,6 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
         const res = await loginWithPin(user.loginHandle, newPin);
 
         if (res.ok) {
-          // Setup / Initialisierung nur im echten Demo-Modus
-          if (process.env.NEXT_PUBLIC_DEMO_MODE === "true" && !localStorage.getItem("setup_done")) {
-            try {
-              const initRes = await initializeDemoIfNeeded();
-              if (initRes?.initialized || initRes?.reason === "data_exists" || initRes?.reason === "not_supabase") {
-                localStorage.setItem("setup_done", "true");
-              }
-            } catch (e) {
-              console.warn("Demo setup failed", e);
-            }
-          }
-
           // Redirect to home — PermissionsContext picks up identity atomically via server action
           window.location.href = "/";
         } else {
@@ -192,13 +102,6 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
           <button onClick={onClose} className="text-text-muted hover:text-navy-900 text-2xl leading-none cursor-pointer" disabled={isInitializing}>×</button>
         </div>
 
-        {isInitializing && process.env.NEXT_PUBLIC_DEMO_MODE === "true" && !localStorage.getItem("setup_done") && (
-          <div className="bg-accent-orange/10 px-6 py-3 border-b border-accent-orange/20 flex flex-col items-center justify-center">
-             <span className="text-sm font-semibold text-accent-orange animate-pulse">Beispieldaten werden vorbereitet...</span>
-             <span className="text-xs text-text-muted text-center mt-1">Dieser Vorgang dauert einen Moment.</span>
-          </div>
-        )}
-
         {/* PIN Dots */}
         <div className="flex justify-center gap-4 py-7">
           {[0, 1, 2, 3].map((i) => (
@@ -215,7 +118,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
             Falscher PIN. <button onClick={async () => {
               const res = await notifyAdminPinReset(user.loginHandle);
               if (res.success) {
-                alert("Der Administrator wurde benachrichtigt und wird sich bei Ihnen melden.");
+                alert("Anfrage wurde verarbeitet. Falls das Konto vorhanden ist, wird sie intern weitergeleitet.");
               } else {
                 alert("Fehler beim Benachrichtigen des Administrators. Bitte sprechen Sie ihn direkt an.");
               }
