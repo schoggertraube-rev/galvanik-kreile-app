@@ -1,5 +1,5 @@
 import { Customer } from "@/lib/types/customer";
-import { getCustomersDb, getCustomerByIdDb, createCustomerDb, updateCustomerDb, searchCustomersDb } from "@/app/actions/customers.actions";
+import { getCustomersDb, getCustomerByIdDb, searchCustomersDb } from "@/app/actions/customers.actions";
 
 export type { Customer };
 
@@ -27,11 +27,8 @@ export const customersRepository = {
   },
 
   async create(data: Omit<Customer, "id" | "customerNumber">): Promise<Customer> {
-    const res = await createCustomerDb(data);
-    if (!res.ok) {
-      throw new Error(res.message);
-    }
-    return res.data;
+    void data;
+    throw new Error("NOT_AVAILABLE: Kundenerstellung benötigt den W3-Command-Vertrag.");
   },
 
   async findSimilar(nameOrPhone: string): Promise<Customer[]> {
@@ -46,12 +43,8 @@ export const customersRepository = {
   },
 
   async updateCustomer(id: string, changes: Partial<Customer>): Promise<Customer | null> {
-
-
-    const res = await updateCustomerDb(id, changes);
-    if (!res.ok) {
-      throw new Error(res.message);
-    }
-    return res.data;
+    void id;
+    void changes;
+    throw new Error("NOT_AVAILABLE: Kundenänderungen benötigen den W3-Command-Vertrag.");
   }
 };

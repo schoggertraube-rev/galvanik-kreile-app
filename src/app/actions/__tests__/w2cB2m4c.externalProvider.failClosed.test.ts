@@ -70,7 +70,7 @@ describe("W2C-B2M4C external provider fail-closed", () => {
     expect(customerWizard).not.toContain("Daten per Web/Gemini ergänzt");
     expect(customerWizard).toContain("disabled");
     expect(customerWizard).toContain("NOT_AVAILABLE");
-    expect(customerWizard).toContain("createCustomerDb");
+    expect(customerWizard).not.toContain("createCustomerDb");
     expect(startScreen).not.toContain("getFeierabendEvents");
     expect(startScreen).not.toContain("fetch(");
     expect(startScreen).not.toContain("Open-Meteo");

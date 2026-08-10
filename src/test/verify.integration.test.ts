@@ -1,8 +1,7 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is required for integration tests");
-}
+vi.mock('@/db', () => ({ db: {} }));
+
 import { transitionOrderProcess } from '@/app/actions/orders.actions';
 import { createCustomerDb } from '@/app/actions/customers.actions';
 
@@ -22,8 +21,7 @@ test('transitionOrderProcess denies start, complete, and targetStep without a da
   }
 });
 
-test('Customer creation works with full payload', async () => {
-  console.log("TEST: ausgefüllter Kunde wird validiert und gespeichert");
+test('Customer creation denies without a W3 command contract', async () => {
 
   const payload = {
     firstName: "Max",
@@ -38,10 +36,9 @@ test('Customer creation works with full payload', async () => {
     type: "privat"
   };
 
-  const result = await createCustomerDb(payload);
-  if (!result.ok) {
-    throw new Error("Validation failed: " + JSON.stringify(result));
-  }
-  
-  console.log("PASS: Customer creation verified");
+  await expect(createCustomerDb(payload)).resolves.toEqual({
+    ok: false,
+    error: "CONFLICT",
+    message: "NOT_AVAILABLE: Kundenerstellung benötigt den W3-Command-Vertrag.",
+  });
 });
