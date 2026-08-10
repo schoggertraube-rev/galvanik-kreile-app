@@ -1,6 +1,6 @@
 # F0_SECURITY_OWNERSHIP_MATRIX (F0-05) â€” read-only aus Prod
 
-> **Nachtrag 2026-08-10 (SUPERSEDED-Aufloesung):** Der unten dokumentierte 16/17-Stand und 
+> **Nachtrag 2026-08-10 (SUPERSEDED-Aufloesung):** Der unten dokumentierte 16/17-Stand und
 > 'A06/A07 NICHT PASS' beschreiben den Prueftag 07.08. Live-Stand seit 10.08.: 17/17 Views
 > security_invoker (einheitlich true, Schreibweise normalisiert; Aufloesung des on-vs-true-
 > Messartefakts in F0_FINAL_REPORT.md). A06/A07-Neubewertung: F0_FINAL_REPORT.md (PASS mit
