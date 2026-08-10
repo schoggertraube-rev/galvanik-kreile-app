@@ -162,7 +162,10 @@ export const OfflineManager = {
             await inquiriesRepository.updatePricing(payload.id, payload.pricing);
             break;
           }
-          case "APP_KVP_CREATE":
+          case "APP_KVP_CREATE": {
+            blockedCount++;
+            continue;
+          }
           case "BUSINESS_KVP_CREATE": {
             // Mock backend sync for now
             console.log("Mocking backend sync for KVP:", item.payload);

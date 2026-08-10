@@ -21,54 +21,15 @@ export function BetriebKvpClient() {
   const isChef = role === "admin" || role === "developer" || role === "chef";
 
   // Form State
-  const [newTitle, setNewTitle] = useState("");
-  const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
-  const [newBenefit, setNewBenefit] = useState(BENEFITS[0]);
-  const [newProblem, setNewProblem] = useState("");
-  const [hasPhotoMock, setHasPhotoMock] = useState(false);
+  const [newTitle] = useState("");
+  const [newCategory] = useState(CATEGORIES[0]);
+  const [newBenefit] = useState(BENEFITS[0]);
+  const [newProblem] = useState("");
+  const [hasPhotoMock] = useState(false);
 
   useEffect(() => {
     kvpRepository.getAll().then(data => setItems(data)).catch(console.error);
   }, []);
-
-  const handleSave = async () => {
-    if (!newTitle.trim()) return;
-
-    try {
-      const newItem = await kvpRepository.addItem({
-        title: newTitle,
-        category: newCategory,
-        benefit: newBenefit,
-        status: "neu",
-        problemDesc: newProblem,
-        hasPhoto: hasPhotoMock,
-        date: "Gerade eben",
-        isDemo: false
-      });
-
-      setItems([newItem, ...items]);
-      setNewTitle("");
-      setNewProblem("");
-      setHasPhotoMock(false);
-    } catch (e) {
-      console.error("Failed to add KVP item", e);
-      alert("Fehler beim Speichern der Idee.");
-    }
-  };
-
-  const handleUpdateStatus = async (status: KvpItem["status"]) => {
-    if (!activeItem) return;
-    try {
-      const updated = await kvpRepository.updateItemStatus(activeItem.id, status);
-      if (updated) {
-        setItems(items.map(i => i.id === updated.id ? updated : i));
-        setActiveItem(updated);
-      }
-    } catch (e) {
-      console.error("Failed to update status", e);
-      alert("Fehler beim Aktualisieren des Status.");
-    }
-  };
 
   const getStatusBadge = (status: string) => {
     switch(status) {
@@ -133,7 +94,7 @@ export function BetriebKvpClient() {
                 <input 
                   type="text" 
                   value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
+                  disabled
                   placeholder="Z.B. Besen kaputt..."
                   className="w-full rounded-xl border border-neutral-gray-300 px-3 py-2 text-sm focus:border-navy-900 focus:ring-1 focus:ring-navy-900 outline-none"
                 />
@@ -143,7 +104,7 @@ export function BetriebKvpClient() {
                 <label className="block text-xs font-bold text-text-muted uppercase mb-1">Kategorie</label>
                 <select 
                   value={newCategory}
-                  onChange={e => setNewCategory(e.target.value)}
+                  disabled
                   className="w-full rounded-lg border border-neutral-gray-300 px-2 py-1.5 text-sm focus:border-navy-900 outline-none bg-white"
                 >
                   {CATEGORIES.map((c: string) => <option key={c} value={c}>{c}</option>)}
@@ -154,7 +115,7 @@ export function BetriebKvpClient() {
                 <label className="block text-xs font-bold text-text-muted uppercase mb-1">Kurznotiz / Details</label>
                 <textarea 
                   value={newProblem}
-                  onChange={e => setNewProblem(e.target.value)}
+                  disabled
                   placeholder="Was genau ist das Problem oder die Idee?"
                   className="w-full rounded-xl border border-neutral-gray-300 px-3 py-2 text-sm h-20 resize-none focus:border-navy-900 focus:ring-1 focus:ring-navy-900 outline-none"
                 />
@@ -165,14 +126,14 @@ export function BetriebKvpClient() {
                   <label className="block text-xs font-bold text-text-muted uppercase mb-1">Nutzen</label>
                   <select 
                     value={newBenefit}
-                    onChange={e => setNewBenefit(e.target.value)}
+                    disabled
                     className="w-full rounded-lg border border-neutral-gray-300 px-2 py-1.5 text-xs focus:border-navy-900 outline-none bg-white"
                   >
                     {BENEFITS.map(b => <option key={b} value={b}>{b}</option>)}
                   </select>
                 </div>
                 <button 
-                  onClick={() => setHasPhotoMock(!hasPhotoMock)}
+                  disabled
                   className={`shrink-0 h-[34px] px-3 rounded-lg flex items-center justify-center gap-2 border transition-colors ${hasPhotoMock ? 'bg-accent-orange/10 border-accent-orange text-accent-orange' : 'bg-gray-100 border-neutral-gray-200 text-text-muted hover:bg-gray-200'}`}
                   title="Foto anhängen (Mock)"
                 >
@@ -182,12 +143,12 @@ export function BetriebKvpClient() {
               </div>
 
               <button 
-                onClick={handleSave}
-                disabled={!newTitle.trim()}
+                disabled
                 className="w-full mt-2 bg-navy-900 text-white font-bold py-3 rounded-xl hover:bg-navy-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Einreichen
+                Einreichen (NOT_AVAILABLE)
               </button>
+              <p className="text-xs text-danger-red">NOT_AVAILABLE: Sicherer Server-Command-Vertrag fehlt.</p>
             </div>
           </section>
 
@@ -332,10 +293,11 @@ export function BetriebKvpClient() {
               <div className="pt-4 border-t border-neutral-gray-200">
                 <h3 className="font-bold text-sm uppercase text-text-muted mb-2">Aktion (Chef / Meister)</h3>
                 <div className="flex gap-2">
-                  <button onClick={() => handleUpdateStatus("umgesetzt")} className="flex-1 bg-success-green/10 text-success-green font-bold py-2 rounded-lg text-sm border border-success-green/20 hover:bg-success-green/20 transition">Umgesetzt</button>
-                  <button onClick={() => handleUpdateStatus("prüfen")} className="flex-1 bg-warning-yellow/10 text-warning-yellow font-bold py-2 rounded-lg text-sm border border-warning-yellow/20 hover:bg-warning-yellow/20 transition">Prüfen</button>
-                  <button onClick={() => handleUpdateStatus("abgelehnt")} className="flex-1 bg-neutral-gray-100 text-text-muted font-bold py-2 rounded-lg text-sm border border-neutral-gray-200 hover:bg-neutral-gray-200 transition">Ablehnen</button>
+                  <button disabled className="flex-1 bg-success-green/10 text-success-green font-bold py-2 rounded-lg text-sm border border-success-green/20 opacity-50">Umgesetzt</button>
+                  <button disabled className="flex-1 bg-warning-yellow/10 text-warning-yellow font-bold py-2 rounded-lg text-sm border border-warning-yellow/20 opacity-50">Prüfen</button>
+                  <button disabled className="flex-1 bg-neutral-gray-100 text-text-muted font-bold py-2 rounded-lg text-sm border border-neutral-gray-200 opacity-50">Ablehnen</button>
                 </div>
+                <p className="mt-2 text-xs text-danger-red">NOT_AVAILABLE: Statusänderungen benötigen einen sicheren Server-Command-Vertrag.</p>
               </div>
             )}
           </div>

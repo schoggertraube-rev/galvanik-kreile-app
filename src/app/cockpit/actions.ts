@@ -497,43 +497,13 @@ export async function getAktiveWarnungen(): Promise<ActiveWarning[]> {
 }
 
 export async function dismissWarnung(id: string, begruendung: string) {
-  if (!begruendung || begruendung.length < 10) {
-    throw new Error("Begründung muss mindestens 10 Zeichen lang sein.");
-  }
-  
-  const { client: supabase, authorization } = await createAuthorizedDataContext('write');
-  const userId = authorization.userId;
-  
-  // Set suppress_bis to 7 days in future
-  const suppressDate = new Date();
-  suppressDate.setDate(suppressDate.getDate() + 7);
-
-  const { error } = await supabase
-    .from('warning_event')
-    .update({
-      dismissed_am: new Date().toISOString(),
-      dismissed_von: userId,
-      begruendung: begruendung,
-      suppress_bis: suppressDate.toISOString()
-    })
-    .eq('id', id)
-    .eq('tenant_id', authorization.tenantId);
-
-  if (error) {
-    console.error("Error dismissWarnung:", error.message, error.details, error.hint);
-    throw new Error(error.message);
-  }
-  return true;
+  void id;
+  void begruendung;
+  return { ok: false as const, error: "NOT_AVAILABLE" as const, message: "NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt." };
 }
 
 export async function refreshWarnungen() {
-  const supabase = await createAuthorizedDataClient('write');
-  const { error } = await supabase.rpc('fn_compute_warnings', { p_tenant: 'galvanik-kreile' });
-  if (error) {
-    console.error("Error refreshWarnungen:", error.message, error.details, error.hint);
-    return false;
-  }
-  return true;
+  return { ok: false as const, error: "NOT_AVAILABLE" as const, message: "NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt." };
 }
 
 export async function getAktiverJahresplan(jahr: number) {

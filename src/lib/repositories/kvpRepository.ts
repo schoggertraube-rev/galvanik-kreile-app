@@ -1,4 +1,3 @@
-import { createId } from "@paralleldrive/cuid2";
 import { createClient } from "@/lib/supabase/client";
 
 export type KvpItem = {
@@ -42,46 +41,13 @@ export const kvpRepository = {
   },
 
   async addItem(item: Omit<KvpItem, "id">): Promise<KvpItem> {
-    const id = "b-" + createId();
-    const newItem: KvpItem = { ...item, id };
-    
-
-
-    if (isSupabase) {
-      const supabase = createClient();
-      const { error } = await supabase.from('kvp_items').insert({
-        id,
-        tenant_id: "galvanik-kreile",
-        title: item.title,
-        category: item.category,
-        benefit: item.benefit,
-        status: item.status,
-        problem_desc: item.problemDesc,
-        has_photo: item.hasPhoto,
-        date: item.date,
-        is_demo: item.isDemo || false
-      });
-
-      if (error) {
-        console.error("Supabase kvpRepository.addItem error:", error.message, error.details, error.hint);
-        throw error;
-      }
-    }
-    
-    return newItem;
+    void item;
+    throw new Error("NOT_AVAILABLE: Sicherer Server-Command-Vertrag fehlt.");
   },
 
   async updateItemStatus(id: string, status: KvpItem["status"]): Promise<KvpItem | null> {
-    if (isSupabase) {
-      const supabase = createClient();
-      const { error } = await supabase.from('kvp_items').update({ status }).eq('id', id);
-      if (error) {
-        console.error("Supabase kvpRepository.updateItemStatus error:", error.message, error.details, error.hint);
-        throw error;
-      }
-      return { id, status } as unknown as KvpItem;
-    }
-
-    return null;
+    void id;
+    void status;
+    throw new Error("NOT_AVAILABLE: Sicherer Server-Command-Vertrag fehlt.");
   }
 };

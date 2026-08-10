@@ -5,7 +5,6 @@ import { Lightbulb, PlusCircle, Target, Activity, AlertOctagon, CheckCircle2, Li
 import { usePageView } from "@/hooks/usePageView";
 import { DetailOverlay } from "@/components/ui/DetailOverlay";
 import Link from "next/link";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
 import { OfflineSyncBadge } from "@/components/offline/OfflineSyncBadge";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 
@@ -98,16 +97,6 @@ function subscribeToKvpItems(onStoreChange: () => void): () => void {
   };
 }
 
-function saveKvpItems(items: KvpItem[]): void {
-  if (typeof window === "undefined") return;
-
-  const raw = JSON.stringify(items);
-  cachedKvpItemsRaw = raw;
-  cachedKvpItems = items;
-  localStorage.setItem(KVP_STORAGE_KEY, raw);
-  window.dispatchEvent(new Event(KVP_STORAGE_EVENT));
-}
-
 const CATEGORIES = ["Bedienung", "Kommunikation", "Warendurchlauf", "Performance", "Kundenservice", "Bäder/Chemie", "Finanzen", "Sonstiges"];
 const BENEFITS = ["Zeit sparen", "Fehler vermeiden", "Kunde zufriedener", "Kosten senken", "Übersicht verbessern"];
 
@@ -173,37 +162,10 @@ export function KvpClient() {
   const [activeItem, setActiveItem] = useState<KvpItem | null>(null);
 
   // Form State
-  const [newTitle, setNewTitle] = useState("");
-  const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
-  const [newBenefit, setNewBenefit] = useState(BENEFITS[0]);
-  const [newProblem, setNewProblem] = useState("");
-
-  const handleSave = () => {
-    if (!newTitle.trim()) return;
-
-    const newItem: KvpItem = {
-      id: "local-" + Date.now(),
-      title: newTitle,
-      category: newCategory,
-      benefit: newBenefit,
-      effort: "mittel",
-      priority: "mittel",
-      status: "neu",
-      problemDesc: newProblem,
-      observedSignal: "Manuell gemeldet",
-      expectedBenefit: newBenefit,
-      affectedPage: "Allgemein",
-      nextAction: "Muss noch analysiert werden",
-      isDemo: false
-    };
-
-    saveKvpItems([newItem, ...getKvpItemsSnapshot()]);
-
-    OfflineManager.enqueueAction("APP_KVP_CREATE", newItem).catch(console.error);
-
-    setNewTitle("");
-    setNewProblem("");
-  };
+  const [newTitle] = useState("");
+  const [newCategory] = useState(CATEGORIES[0]);
+  const [newBenefit] = useState(BENEFITS[0]);
+  const [newProblem] = useState("");
 
   const getStatusBadge = (status: string) => {
     switch(status) {
@@ -250,7 +212,7 @@ export function KvpClient() {
                 <input 
                   type="text" 
                   value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
+                  disabled
                   placeholder="Kurzer Titel..."
                   className="w-full rounded-xl border border-neutral-gray-300 px-3 py-2 text-sm focus:border-navy-900 focus:ring-1 focus:ring-navy-900 outline-none"
                 />
@@ -260,7 +222,7 @@ export function KvpClient() {
                 <label className="block text-xs font-bold text-text-muted uppercase mb-1">Details (Optional)</label>
                 <textarea 
                   value={newProblem}
-                  onChange={e => setNewProblem(e.target.value)}
+                  disabled
                   placeholder="Beschreibe das Problem genauer..."
                   className="w-full rounded-xl border border-neutral-gray-300 px-3 py-2 text-sm h-20 resize-none focus:border-navy-900 focus:ring-1 focus:ring-navy-900 outline-none"
                 />
@@ -271,7 +233,7 @@ export function KvpClient() {
                   <label className="block text-xs font-bold text-text-muted uppercase mb-1">Kategorie</label>
                   <select 
                     value={newCategory}
-                    onChange={e => setNewCategory(e.target.value)}
+                    disabled
                     className="w-full rounded-lg border border-neutral-gray-300 px-2 py-1.5 text-xs focus:border-navy-900 outline-none bg-white"
                   >
                     {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
@@ -281,7 +243,7 @@ export function KvpClient() {
                   <label className="block text-xs font-bold text-text-muted uppercase mb-1">Wirkung</label>
                   <select 
                     value={newBenefit}
-                    onChange={e => setNewBenefit(e.target.value)}
+                    disabled
                     className="w-full rounded-lg border border-neutral-gray-300 px-2 py-1.5 text-xs focus:border-navy-900 outline-none bg-white"
                   >
                     {BENEFITS.map(b => <option key={b} value={b}>{b}</option>)}
@@ -290,12 +252,12 @@ export function KvpClient() {
               </div>
 
               <button 
-                onClick={handleSave}
-                disabled={!newTitle.trim()}
+                disabled
                 className="w-full mt-2 bg-navy-900 text-white font-bold py-3 rounded-xl hover:bg-navy-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Lokal vormerken
+                Lokal vormerken (NOT_AVAILABLE)
               </button>
+              <p className="text-xs text-danger-red">NOT_AVAILABLE: Sicherer Server-Command-Vertrag fehlt.</p>
             </div>
           </section>
 

@@ -1,85 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { AlertCircle, CheckCircle2, ArrowRight, Loader2, X } from "lucide-react";
+import { AlertCircle, CheckCircle2, ArrowRight, Loader2 } from "lucide-react";
 import {
   getAktiveWarnungen,
-  refreshWarnungen,
-  dismissWarnung,
   type ActiveWarning,
 } from "../actions";
 import Link from "next/link";
 import { KachelInfo } from "@/components/ui/KachelInfo";
 
-function getErrorWithMessage(error: unknown): { message?: string } {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return { message: error.message };
-  }
-
-  return {};
-}
-
 export function FruehwarnungenKachel() {
   const [warnungen, setWarnungen] = useState<ActiveWarning[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dismissModalOpen, setDismissModalOpen] = useState(false);
-  const [selectedWarnungId, setSelectedWarnungId] = useState<string | null>(null);
-  const [begruendung, setBegruendung] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
-  
-
-  const loadData = async () => {
-    setLoading(true);
-    await refreshWarnungen();
-    const data = await getAktiveWarnungen();
-    setWarnungen(data);
-    setLoading(false);
-  };
-
   useEffect(() => {
-    void refreshWarnungen()
-      .then(getAktiveWarnungen)
+    void getAktiveWarnungen()
       .then(data => {
         setWarnungen(data);
         setLoading(false);
       });
   }, []);
-
-  const handleDismissClick = (id: string) => {
-    setSelectedWarnungId(id);
-    setBegruendung("");
-    setError("");
-    setDismissModalOpen(true);
-  };
-
-  const handleConfirmDismiss = async () => {
-    if (begruendung.trim().length < 10) {
-      setError("Die Begründung muss mindestens 10 Zeichen lang sein.");
-      return;
-    }
-    
-    if (!selectedWarnungId) return;
-
-    setSubmitting(true);
-    setError("");
-    
-    try {
-      await dismissWarnung(selectedWarnungId, begruendung);
-      setDismissModalOpen(false);
-      await loadData();
-    } catch (caught: unknown) {
-      const err = getErrorWithMessage(caught);
-      setError(err.message || "Fehler beim Bestätigen.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   if (loading && warnungen.length === 0) {
     return (
@@ -106,10 +45,11 @@ export function FruehwarnungenKachel() {
             <h3 className="font-bold text-navy-900 text-lg">Frühwarnungen (KI)</h3>
           </div>
           <button 
-            onClick={loadData}
-            className="text-xs font-semibold text-navy-500 hover:text-navy-700 transition-colors"
+            disabled
+            title="NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt."
+            className="text-xs font-semibold text-navy-500 opacity-50"
           >
-            Aktualisieren
+            Aktualisieren (NOT_AVAILABLE)
           </button>
         </div>
 
@@ -124,66 +64,17 @@ export function FruehwarnungenKachel() {
               <WarnungCard 
                 key={w.id} 
                 warnung={w} 
-                onDismiss={() => handleDismissClick(w.id)} 
               />
             ))
           )}
         </div>
       </div>
 
-      {dismissModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="p-4 border-b border-neutral-gray-100 flex items-center justify-between">
-              <h3 className="font-bold text-navy-900">Warnung bestätigen</h3>
-              <button onClick={() => setDismissModalOpen(false)} className="text-neutral-gray-400 hover:text-navy-900">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6">
-              <p className="text-sm text-text-muted mb-4">
-                Bitte begründen Sie, warum diese Warnung ignoriert werden kann. 
-                Die Warnung wird für 7 Tage unterdrückt.
-              </p>
-              
-              <label className="block text-sm font-semibold text-navy-900 mb-2">
-                Begründung (min. 10 Zeichen)
-              </label>
-              <textarea
-                value={begruendung}
-                onChange={e => setBegruendung(e.target.value)}
-                className="w-full border border-neutral-gray-300 rounded-lg p-3 text-sm focus:ring-2 focus:ring-navy-500 outline-none h-24 resize-none"
-                placeholder="z.B. Maßnahme bereits ergriffen, Zahlungseingang am 15. erwartet..."
-              />
-              
-              {error && (
-                <div className="text-danger-red text-sm mt-2">{error}</div>
-              )}
-              
-              <div className="mt-6 flex gap-3">
-                <button 
-                  onClick={() => setDismissModalOpen(false)}
-                  className="flex-1 py-2 font-semibold text-navy-600 bg-neutral-gray-50 hover:bg-neutral-gray-100 rounded-lg transition-colors"
-                >
-                  Abbrechen
-                </button>
-                <button 
-                  onClick={handleConfirmDismiss}
-                  disabled={submitting || begruendung.trim().length < 10}
-                  className="flex-1 py-2 font-bold text-white bg-navy-600 hover:bg-navy-700 rounded-lg transition-colors disabled:opacity-50 flex justify-center items-center"
-                >
-                  {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : "Verstanden"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }
 
-function WarnungCard({ warnung, onDismiss }: { warnung: ActiveWarning; onDismiss: () => void }) {
+function WarnungCard({ warnung }: { warnung: ActiveWarning }) {
   let bgColor = 'bg-blue-50 border-blue-200';
   let dotColor = 'bg-blue-500';
   
@@ -250,10 +141,11 @@ function WarnungCard({ warnung, onDismiss }: { warnung: ActiveWarning; onDismiss
         )}
         
         <button 
-          onClick={onDismiss}
-          className="text-xs font-semibold text-neutral-gray-600 hover:text-navy-900 transition-colors px-3 py-1.5 ml-auto"
+          disabled
+          title="NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt."
+          className="text-xs font-semibold text-neutral-gray-600 opacity-50 px-3 py-1.5 ml-auto"
         >
-          Verstanden
+          Verstanden (NOT_AVAILABLE)
         </button>
       </div>
     </div>
