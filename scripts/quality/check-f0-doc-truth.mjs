@@ -78,6 +78,14 @@ try {
     fail.push(`FINAL_STATUS mismatch: report=${m[1]} handoff=${handoff.FINAL_STATUS}`);
 } catch { fail.push("F0_FINAL_REPORT.md: unreadable"); }
 
+// NON_LOSS guard: register must carry the 2026-08-10 supersession header that marks
+// foundation rows as history (BF-005 recheck finding).
+try {
+  const nl = read("docs/project/NON_LOSS_REGISTER.md");
+  if (!/Nachtrag 2026-08-10 \(massgeblich fuer Fundament-Stati\)/.test(nl))
+    fail.push("NON_LOSS_REGISTER.md: missing supersession header for foundation states");
+} catch { fail.push("NON_LOSS_REGISTER.md unreadable"); }
+
 if (fail.length) {
   console.error("F0_DOC_TRUTH=FAIL");
   for (const f of fail) console.error(" - " + f);

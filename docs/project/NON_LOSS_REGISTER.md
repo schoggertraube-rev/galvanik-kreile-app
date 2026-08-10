@@ -1,4 +1,14 @@
-# Non-Loss Register
+# NON_LOSS_REGISTER
+
+> **Nachtrag 2026-08-10 (massgeblich fuer Fundament-Stati):** Alle FUNDAMENT-Eintraege dieses
+> Registers (u.a. DB-TRUTH-001, LEDGER-CONSOLIDATION-001, RLS-CONTRACT-001, die Fundament-PR-Listen
+> #42/#43/#44 sowie die Branch-Disposition) sind durch F0 abgeschlossen bzw. ueberholt:
+> Ledger RECONCILED 9/9 (Digest 268ce6c1), Fresh-Replay x2 deterministisch im CI, RLS-CONTRACT
+> angewendet und CI-getestet, PRs #42/#43/#44 seit 06.-08.08.2026 geschlossen; einziger offener
+> Foundation-PR ist #57. Massgeblich sind docs/project/CURRENT_STATE.md und
+> docs/evidence/f0/F0_FINAL_REPORT.md. Die untenstehenden Fundament-Zeilen sind HISTORIE
+> (Original-Wortlaut bewusst erhalten, damit die Salvage-Herkunft prueffbar bleibt).
+> PRODUKTSCOPE-Eintraege (Ideen, Module, geschuetzte Produktziele) bleiben unveraendert gueltig.
 
 Stand: 2026-08-06
 
