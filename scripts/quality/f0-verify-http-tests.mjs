@@ -19,6 +19,9 @@ import bcrypt from "bcryptjs";
 //  - Login: src/app/actions/auth.actions.ts::loginWithPin(loginHandle, pin) - Server Action
 //    ("use server"), aufgerufen aus src/components/start/StartScreenClient.tsx per onClick (kein
 //    <form action>, also der fetch/Next-Action-Pfad, nicht der No-JS-Formular-Fallback).
+//    StartScreenClient wird von src/app/start/page.tsx gerendert -> die reale Seiten-URL ist
+//    "/start", NICHT "/" (CI-Fund 2026-08-10-Zyklus-3: mit POST-Ziel "/" kam nie ein
+//    Set-Cookie zustande - unten korrigiert auf "/start" fuer Discovery-GET UND Action-POST).
 //  - loginHandle ist KEIN DB-Feld, sondern HMAC-SHA256(APP_SESSION_SECRET,
 //    "pin-login:<tenant>:<userId>") als base64url (src/lib/server/pinLoginHandle.ts) - hier
 //    identisch nachgebaut, da dasselbe APP_SESSION_SECRET dem Testserver mitgegeben wird.
@@ -107,11 +110,11 @@ async function discoverCandidateActionIds() {
   }
 
   try {
-    const html = await fetch(`${BASE_URL}/`, { headers: { Accept: "text/html" } }).then((r) => r.text());
+    const html = await fetch(`${BASE_URL}/start`, { headers: { Accept: "text/html" } }).then((r) => r.text());
     const found = html.match(/[a-f0-9]{16,64}/gi) ?? [];
     for (const id of found) candidates.add(id.toLowerCase());
   } catch (error) {
-    console.log(`F0-VERIFY-HTTP NOTICE: GET ${BASE_URL}/ fuer Kandidatensuche fehlgeschlagen (${error.message}).`);
+    console.log(`F0-VERIFY-HTTP NOTICE: GET ${BASE_URL}/start fuer Kandidatensuche fehlgeschlagen (${error.message}).`);
   }
 
   return [...candidates];
@@ -130,7 +133,7 @@ function extractSessionCookie(response) {
 }
 
 async function tryServerAction(actionId, args) {
-  const response = await fetch(`${BASE_URL}/`, {
+  const response = await fetch(`${BASE_URL}/start`, {
     method: "POST",
     redirect: "manual",
     headers: {

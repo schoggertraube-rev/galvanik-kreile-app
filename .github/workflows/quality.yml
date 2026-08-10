@@ -140,7 +140,7 @@ jobs:
   fresh-supabase-replay:
     name: Fresh Supabase replay
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -155,8 +155,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Start isolated local Postgres
-        run: npx --yes supabase@2.111.0 db start
+      - name: Start isolated local Supabase stack (Postgres + Storage + Auth, BF-007)
+        # War vorher "supabase db start" (nur Postgres-Container). BF-007 braucht die echte
+        # Storage-REST-API (scripts/quality/f0-storage-http-tests.mjs) und liest deren Keys zur
+        # Laufzeit aus "supabase status -o env" - dieser Befehl liefert API_URL/ANON_KEY/
+        # SERVICE_ROLE_KEY nur fuer Dienste, die tatsaechlich laufen. "db start" startet nur
+        # Postgres; erst der volle "start" bringt Storage/Auth/Kong mit hoch (CI-Fund
+        # 2026-08-10-Zyklus-2: "status -o env" lieferte nur DB_URL, storage-http-tests.mjs
+        # brach mit FATAL ab). Alle anderen Schritte in diesem Job sprechen ohnehin nur die
+        # Postgres-DB direkt an und sind von den zusaetzlich laufenden Diensten unberuehrt.
+        run: npx --yes supabase@2.111.0 start
 
       - name: Replay every migration from zero
         run: npx --yes supabase@2.111.0 db reset --local
