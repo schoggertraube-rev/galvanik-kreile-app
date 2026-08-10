@@ -245,49 +245,12 @@ export async function getRiskOrders(limit = 3) {
   }
 }
 
-export async function setOrderStationDb(orderId: string, newStation: string): Promise<ActionResult<{ success: boolean }>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  try {
-    // removed unused createId import
-    
-    // fetch current order to get current station
-    const currentOrder = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-    const aktuelleStation = currentOrder[0]?.currentStationId || currentOrder[0]?.station || "wareneingang";
-    // update order to new station
-    await db.update(orders).set({ currentStationId: newStation }).where(eq(orders.id, orderId));
-    
-    // Insert exit event
-    // events are imported statically
-    await db.insert(events).values({
-      id: crypto.randomUUID(),
-      tenantId: "galvanik-kreile",
-      orderId,
-      eventType: "STATION_AUSGANG",
-      station: aktuelleStation,
-      description: `Station verlassen: ${aktuelleStation}`,
-      createdAt: new Date()
-    });
-    
-    // Insert entry event
-    await db.insert(events).values({
-      id: crypto.randomUUID(),
-      tenantId: "galvanik-kreile",
-      orderId,
-      eventType: "STATION_EINGANG",
-      station: newStation,
-      description: `Station betreten: ${newStation}`,
-      createdAt: new Date()
-    });
-
-    return { ok: true, data: { success: true } };
-  } catch (error) {
-    console.error("Failed to update station:", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Setzen der Station", details: String(error) };
-  }
-}
+// F0-W2b (ORD-01): setOrderStationDb entfernt. War ein zweiter, nicht-transaktionaler
+// Schreibpfad für Stationswechsel neben transitionOrderProcess (führt den Wechsel
+// atomar in einer DB-Transaktion inkl. items/events durch). Grep über src/ auf
+// "setOrderStationDb" fand keine aktiven Call-Sites außer dieser Definition — daher
+// entfernt statt @deprecated, damit kein zweiter divergenter Writer im Repo bestehen
+// bleibt. Für Stationswechsel ausschließlich transitionOrderProcess verwenden.
 
 export async function transitionOrderProcess(params: {
   orderId: string;
