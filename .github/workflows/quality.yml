@@ -172,8 +172,46 @@ jobs:
         # Postgres-DB direkt an und sind von den zusaetzlich laufenden Diensten unberuehrt.
         run: npx --yes supabase@2.111.0 start
 
-      - name: Replay every migration from zero
+      - name: Capture isolated local Supabase runtime credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_env="$(mktemp)"
+          npx --yes supabase@2.111.0 status -o env > "$runtime_env"
+          set -a
+          source "$runtime_env"
+          set +a
+          test -n "${API_URL:-}"
+          test -n "${ANON_KEY:-}"
+          test -n "${SERVICE_ROLE_KEY:-}"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Replay W3/W4-01 ledger cutoff from zero
+        # The predecessor test deliberately proves the exact 11-row ledger through
+        # 20260811154732. Run it before W4-03 instead of weakening its assertion.
+        run: npx --yes supabase@2.111.0 db reset --local --version 20260811154732
+
+      - name: W3/W4-01 order-station command, receipt, and private read-model integration
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          W3_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          W4_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/w3_order_station.integration.test.ts
+
+      - name: Replay every migration including W4-03 from zero
         run: npx --yes supabase@2.111.0 db reset --local
+
+      - name: W4-03 Galvanik handoff attachment real DB, View, Actions, Panel, and Storage HTTP
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          W4_ATTACHMENT_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: npx vitest run src/test/w4_order_station_attachment.integration.test.ts
 
       - name: Schema fingerprint vs prod reference (hard gate on exact components)
         run: |
@@ -211,14 +249,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU
           SUPABASE_URL: http://127.0.0.1:54321
         run: npx vitest run src/test/scan_order.integration.test.ts
-
-      - name: W3/W4 order-station command, receipt, and private read-model integration
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-          W3_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-          W4_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
-          SUPABASE_SERVICE_ROLE_KEY: ""
-        run: npx vitest run src/test/w3_order_station.integration.test.ts
 
       - name: BF-006 build (gegen lokale Supabase-Replay-DB, echte Session-Kette)
         env:

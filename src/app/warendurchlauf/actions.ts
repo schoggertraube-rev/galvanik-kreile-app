@@ -1,13 +1,20 @@
 "use server";
 
 import { unstable_noStore as noStore } from "next/cache";
-import { resolveAuthorization } from "@/lib/server/authorization";
+import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
   readTenantOrderStationReceipt,
   readTenantStationOrders,
   type OrderStationReceiptReadInput,
 } from "@/lib/server/orderStationRead";
 import type { OrderStationTransitionReceipt } from "@/lib/server/commands/orderStationCommand";
+import type {
+  FinalizeOrderStationAttachmentInput,
+  GetOrderStationAttachmentOriginalInput,
+  GetOrderStationAttachmentsInput,
+  OrderStationAttachmentResult,
+  ReserveOrderStationAttachmentInput,
+} from "@/lib/server/orderStationAttachment";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
 export type WarendurchlaufOrder = OperationalOrder;
@@ -100,6 +107,87 @@ export async function getOrderStationReceiptAction(
   } catch {
     return { ok: false, error: "QUERY_ERROR", message: "Stationsbeleg konnte nicht sicher geladen werden." };
   }
+}
+
+async function authorizeOrderStationAttachment(
+  permission: "perm_view_leitstand" | "perm_op_photos",
+): Promise<
+  | { ok: true; data: AuthorizationSnapshot }
+  | { ok: false; result: OrderStationAttachmentResult<never> }
+> {
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return {
+      ok: false,
+      result: { code: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." },
+    };
+  }
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      result: authorization.reason === "AUTHORIZATION_UNAVAILABLE"
+        ? { code: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." }
+        : { code: "UNAUTHENTICATED", message: "Sitzung ist nicht verfügbar." },
+    };
+  }
+  if (!authorization.data.permissions.includes(permission)) {
+    return {
+      ok: false,
+      result: { code: "FORBIDDEN", message: "Übergabeoriginale sind nicht erlaubt." },
+    };
+  }
+  return { ok: true, data: authorization.data };
+}
+
+export async function getGalvanikHandoffAttachmentsAction(
+  input: GetOrderStationAttachmentsInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_view_leitstand");
+  if (!authorization.ok) return authorization.result;
+  const domain = await import("@/lib/server/orderStationAttachment");
+  const result = await domain.readOrderStationAttachments(authorization.data, input);
+  if (result.code !== "OK") return result;
+  return {
+    code: "OK" as const,
+    data: {
+      receipts: result.data,
+      canOperate: authorization.data.permissions.includes("perm_op_photos"),
+      currentActorId: authorization.data.userId,
+    },
+  };
+}
+
+export async function reserveGalvanikHandoffAttachmentAction(
+  input: ReserveOrderStationAttachmentInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_op_photos");
+  if (!authorization.ok) return authorization.result;
+  const domain = await import("@/lib/server/orderStationAttachment");
+  return domain.reserveOrderStationAttachment(authorization.data, input);
+}
+
+export async function finalizeGalvanikHandoffAttachmentAction(
+  input: FinalizeOrderStationAttachmentInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_op_photos");
+  if (!authorization.ok) return authorization.result;
+  const domain = await import("@/lib/server/orderStationAttachment");
+  return domain.finalizeOrderStationAttachment(authorization.data, input);
+}
+
+export async function getGalvanikHandoffAttachmentOriginalAction(
+  input: GetOrderStationAttachmentOriginalInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_op_photos");
+  if (!authorization.ok) return authorization.result;
+  const domain = await import("@/lib/server/orderStationAttachment");
+  return domain.getOrderStationAttachmentOriginal(authorization.data, input);
 }
 
 export async function startProcessingStation(orderId: string, stationId: string) {

@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, Layers, PlayCircle, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import { OrderCompactCard, UrgencyType } from "@/components/orders/OrderCompactCard";
+import { GalvanikHandoffAttachmentPanel } from "@/components/orders/GalvanikHandoffAttachmentPanel";
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import { getGalvanikOrdersAction, type WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
 
@@ -96,8 +97,8 @@ export default function GalvanikPage() {
           </div>
         ) : (
           orders.map((o) => (
+            <div key={o.id}>
             <OrderCompactCard
-              key={o.id}
               id={o.id}
               orderNumber={o.orderNumber}
               customerName={o.customerName || "Kunde nicht hinterlegt"}
@@ -109,6 +110,14 @@ export default function GalvanikPage() {
               badgeText={o.statusText || o.status}
               onClick={() => isActive ? openOrder(o.id) : setActiveBucket(bucket)}
             />
+            {isActive && bucket === "ready" && o.status === "ready" && (
+              <GalvanikHandoffAttachmentPanel
+                orderId={o.id}
+                expectedVersion={o.version}
+                items={o.parts.map((item) => ({ id: item.id, name: item.name }))}
+              />
+            )}
+            </div>
           ))
         )}
       </div>

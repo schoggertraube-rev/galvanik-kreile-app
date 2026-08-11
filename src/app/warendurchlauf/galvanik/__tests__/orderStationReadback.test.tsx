@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const getGalvanikOrdersAction = vi.hoisted(() => vi.fn());
 
 vi.mock("@/app/warendurchlauf/actions", () => ({ getGalvanikOrdersAction }));
+vi.mock("@/components/orders/GalvanikHandoffAttachmentPanel", () => ({
+  GalvanikHandoffAttachmentPanel: () => null,
+}));
 vi.mock("@/components/orders/OrderModalProvider", () => ({ useOrderModal: () => ({ openOrder: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a> }));
 vi.mock("lucide-react", () => ({ ArrowRight: () => null, Layers: () => null, PlayCircle: () => null, CheckCircle2: () => null, AlertTriangle: () => null, Loader2: () => null, ChevronRight: () => null }));
