@@ -13,6 +13,7 @@ const unavailablePages = [
   "src/app/performance/baeder-material/page.tsx",
   "src/app/today/page.tsx",
   "src/app/status/page.tsx",
+  "src/app/baeder/page.tsx",
 ];
 
 describe("F0 W2C-B2S page truth containment", () => {
