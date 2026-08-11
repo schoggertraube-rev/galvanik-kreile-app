@@ -212,6 +212,13 @@ jobs:
           SUPABASE_URL: http://127.0.0.1:54321
         run: npx vitest run src/test/scan_order.integration.test.ts
 
+      - name: W3 order-station command and tenant-read integration
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          W3_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/w3_order_station.integration.test.ts
+
       - name: BF-006 build (gegen lokale Supabase-Replay-DB, echte Session-Kette)
         env:
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321

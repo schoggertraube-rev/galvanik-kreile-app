@@ -87,17 +87,21 @@ describe("transitionWareneingangToGalvanik", () => {
     await expect(transitionWareneingangToGalvanik({ orderId: "order-1", expectedVersion: 1 })).resolves.toMatchObject({ code: "CONFLICT" });
   });
 
-  it("returns VALIDATION_ERROR before writes for invalid station, status, or tenant-owned item state", async () => {
+  it("returns VALIDATION_ERROR before writes for invalid station, status, or any linked item state", async () => {
     executeSpy
       .mockResolvedValueOnce([{ ...validOrder, station: null, current_station: null, current_station_id: null }])
       .mockResolvedValueOnce([{ ...validOrder, status: "fertig" }])
       .mockResolvedValueOnce([validOrder])
-      .mockResolvedValueOnce([{ id: "item-1", tenant_id: "tenant-a", current_station_id: null }]);
+      .mockResolvedValueOnce([{ id: "item-1", tenant_id: "tenant-a", current_station_id: null }])
+      .mockResolvedValueOnce([validOrder])
+      .mockResolvedValueOnce([{ id: "item-foreign", tenant_id: "tenant-b", current_station_id: "wareneingang" }])
+      .mockResolvedValueOnce([validOrder])
+      .mockResolvedValueOnce([{ id: "item-null", tenant_id: null, current_station_id: "wareneingang" }]);
     const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
-    for (const orderId of ["station", "status", "item"]) {
+    for (const orderId of ["station", "status", "item", "foreign-item", "null-item"]) {
       await expect(transitionWareneingangToGalvanik({ orderId, expectedVersion: 1 })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     }
-    expect(executeSpy).toHaveBeenCalledTimes(4);
+    expect(executeSpy).toHaveBeenCalledTimes(8);
   });
 
   it("updates the triple station fields, version, and items atomically after locks", async () => {
@@ -109,7 +113,8 @@ describe("transitionWareneingangToGalvanik", () => {
     const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
     await expect(transitionWareneingangToGalvanik({ orderId: "order-1", expectedVersion: 1 })).resolves.toEqual({ code: "OK", orderId: "order-1", version: 2 });
     expect(executeSpy.mock.calls[0][0].text).toContain("FOR UPDATE");
-    expect(executeSpy.mock.calls[1][0].text).toContain("AND tenant_id = ?");
+    expect(executeSpy.mock.calls[1][0].text).toContain("WHERE order_id = ?");
+    expect(executeSpy.mock.calls[1][0].text).not.toContain("AND tenant_id");
     for (const predicate of [
       "station = ?",
       "current_station = ?",
@@ -142,6 +147,9 @@ describe("transitionWareneingangToGalvanik", () => {
     expect(source).toContain('import "server-only";');
     expect(source).not.toMatch(/\bevents\b|\.insert\(|rpc\(|createClient|supabase/i);
     expect(source).toContain("perm_op_status");
-    expect(source).toMatch(/FROM public\.items[\s\S]+WHERE order_id = \$\{order\.id\}[\s\S]+AND tenant_id = \$\{authorization\.data\.tenantId\}[\s\S]+FOR UPDATE/);
+    const itemLock = source.match(/SELECT id, tenant_id, current_station_id[\s\S]+?FOR UPDATE/)?.[0] ?? "";
+    expect(itemLock).toContain("WHERE order_id = ${order.id}");
+    expect(itemLock).not.toContain("AND tenant_id");
+    expect(source).toContain("item.tenant_id !== authorization.data.tenantId");
   });
 });

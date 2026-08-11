@@ -114,7 +114,14 @@ describe("W3 tenant station reads", () => {
     expect(reader).toContain("Pick<AuthorizationSnapshot, \"tenantId\">");
     expect(reader).toContain("eq(orders.tenantId, tenantId)");
     expect(reader).toContain("eq(customers.tenantId, tenantId)");
-    expect(reader).toContain("eq(items.tenantId, tenantId)");
+    expect(reader).toContain("customerOwnerId: customers.id");
+    expect(reader).toContain("row.customerOwnerId !== row.customerId");
+    expect(reader).toContain(".where(inArray(items.orderId, orderIds))");
+    expect(reader).not.toContain("and(eq(items.tenantId, tenantId), inArray(items.orderId, orderIds))");
+    expect(reader).toContain("item.tenantId !== tenantId");
+    expect(reader).toContain("customerIdByOrderId.get(item.orderId) !== item.customerId");
+    expect(reader).toContain("ORDER_ITEM_OWNERSHIP_INVALID");
+    expect(reader).not.toContain(".select()\n          .from(items)");
     expect(reader).not.toContain('"galvanik-kreile"');
     expect(reader).not.toMatch(/cache|unstable_cache|_ordersCache/i);
   });

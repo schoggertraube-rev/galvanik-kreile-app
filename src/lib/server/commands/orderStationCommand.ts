@@ -137,7 +137,6 @@ export async function transitionWareneingangToGalvanik(
         SELECT id, tenant_id, current_station_id
         FROM public.items
         WHERE order_id = ${order.id}
-          AND tenant_id = ${authorization.data.tenantId}
         FOR UPDATE
       `);
 

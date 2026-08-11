@@ -51,6 +51,7 @@ export async function readTenantStationOrders(
         version: orders.version,
         orderNumber: orders.orderNumber,
         customerId: orders.customerId,
+        customerOwnerId: customers.id,
         customerName: customers.name,
         title: orders.title,
         task: orders.task,
@@ -83,17 +84,52 @@ export async function readTenantStationOrders(
       )
       .orderBy(desc(orders.createdAt));
 
-    if (rows.some((row) => !isPositiveVersion(row.version))) {
-      throw new Error("ORDER_VERSION_INVALID");
+    if (
+      rows.some(
+        (row) =>
+          !isPositiveVersion(row.version) ||
+          row.customerOwnerId === null ||
+          row.customerOwnerId !== row.customerId,
+      )
+    ) {
+      throw new Error("ORDER_OWNERSHIP_INVALID");
     }
 
     const orderIds = rows.map((row) => row.id);
     const tenantItems: OperationalOrderItem[] = orderIds.length === 0
       ? []
       : await tx
-          .select()
+          .select({
+            id: items.id,
+            tenantId: items.tenantId,
+            orderId: items.orderId,
+            customerId: items.customerId,
+            name: items.name,
+            quantity: items.quantity,
+            currentStationId: items.currentStationId,
+            material: items.material,
+            surfaceRequested: items.surfaceRequested,
+            photoIds: items.photoIds,
+            photo: items.photo,
+            repairTypes: items.repairTypes,
+            stationSequence: items.stationSequence,
+            currentStep: items.currentStep,
+            internalNotes: items.internalNotes,
+            createdAt: items.createdAt,
+          })
           .from(items)
-          .where(and(eq(items.tenantId, tenantId), inArray(items.orderId, orderIds)));
+          .where(inArray(items.orderId, orderIds));
+
+    const customerIdByOrderId = new Map(rows.map((row) => [row.id, row.customerId]));
+    if (
+      tenantItems.some(
+        (item) =>
+          item.tenantId !== tenantId ||
+          customerIdByOrderId.get(item.orderId) !== item.customerId,
+      )
+    ) {
+      throw new Error("ORDER_ITEM_OWNERSHIP_INVALID");
+    }
 
     return rows.map((row) => {
       const dueDate = toSafeIsoDate(row.dueDate);

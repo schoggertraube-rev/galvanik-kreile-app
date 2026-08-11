@@ -7,7 +7,16 @@ COMMAND_RESULT: OK | UNAUTHENTICATED | FORBIDDEN | NOT_FOUND | CONFLICT | VALIDA
 READBACK: fresh tenant-bound Wareneingang and Galvanik reads; source absence plus target presence and version increment
 READ_CAPABILITY: perm_view_leitstand
 COMMAND_CAPABILITY: perm_op_status
-LOCAL_DB_REPLAY: PENDING
+LOCAL_DB_REPLAY: PASS_LOCAL
+LOCAL_REPLAY_AT_UTC: 2026-08-11T14:49:17.3055828Z
+SUPABASE_CLI: 2.111.0
+POSTGRESQL: 17.6
+LOCAL_LEDGER: 10 migrations; 20260805180624..20260811150000
+LOCAL_DB_ROLE: postgres; rolsuper=false; rolbypassrls=true; row_security=on
+LOCAL_INTEGRATION: 1 file; 7 tests PASS
+UNIT_SUITE: 79 files; 407 tests PASS
+TYPECHECK: PASS
+EXACT_ESLINT: PASS
 W4_PENDING: Events, Evidence, Attachments, versionierte SQL-Read-Models
 REMOTE_PRODUCTION: BLOCKED_EXTERNAL_PERMISSION
 ```
@@ -32,9 +41,39 @@ REMOTE_PRODUCTION: BLOCKED_EXTERNAL_PERMISSION
 - Stations-Start und -Abschluss sowie alle übrigen Legacy-Writer bleiben bewusst
   nicht verfügbar.
 
+## Lokaler Replay- und Integrationsnachweis
+
+- Der isolierte Supabase-Stack wurde mit der gepinnten CLI `2.111.0` und nur
+  PostgreSQL, GoTrue, Storage, Kong und PostgREST gestartet. Der anschließende
+  `db reset --local --no-seed` spielte alle zehn getrackten Migrationen von Null
+  bis `20260811150000_w3_order_station_version.sql` fehlerfrei ein.
+- Der Live-Katalog belegt `orders.version integer NOT NULL DEFAULT 1` und den
+  validierten Check `orders_version_positive`.
+- Der echte Test `src/test/w3_order_station.integration.test.ts` nutzt weder
+  einen DB-, Command-, Reader- noch Resolver-Mock. Nur die requestgebundene
+  Cookie-Lesefunktion wird am Rand ersetzt; Rollen, Berechtigungen,
+  Tenantauflösung, Queries und Transaktionen laufen über die Produktionsmodule.
+- `readonly` und `buero` lesen mit `perm_view_leitstand` ausschließlich den
+  Session-Tenant und erhalten für den Command `FORBIDDEN` ohne Mutation.
+- Fremde Aufträge bleiben `NOT_FOUND`. Fremd- oder NULL-tenantgebundene Items an
+  einem eigenen Auftrag liefern `VALIDATION_ERROR`; Auftrag und alle Items
+  bleiben unverändert. Der Reader bricht bei beschädigter Customer-/Item-
+  Ownership ab, statt fremde IDs oder ein Teilaggregat zurückzugeben.
+- Der Happy Path aktualisiert Auftragstriple, Status, Version und sämtliche
+  eigenen Items atomar. Frische Reads belegen Quellabwesenheit und
+  Zielanwesenheit. Ein stale Retry liefert `CONFLICT`; zwei parallele Version-1-
+  Commands ergeben genau einmal `OK` und einmal `CONFLICT` bei Endversion 2.
+- Eine echte absichtlich geworfene Transaktion belegt den vollständigen Rollback
+  nach Order- und Item-Update. Die Eventmenge bleibt unverändert; Event- und
+  Receipt-Wahrheit werden erst in W4 ergänzt.
+- Finale lokale Gates: fokussierte Units `16/16`, Integration `7/7`, TypeScript,
+  exaktes ESLint sowie die gesamte Unit-Suite `407/407` sind grün.
+
 ## Nachweisgrenze
 
-Die Migration ist nur ein lokaler Kandidat. Ein lokaler Datenbank-Replay steht bis
-zum separaten Docker-Gate auf `PENDING`. Dieser Nachweis behauptet weder eine
-Remote-Migration noch eine Production-Prüfung oder einen F0-PASS. W4 schließt
+Die Migration bleibt ein lokaler Kandidat. Die lokale Verbindung lief als
+`postgres` mit `rolbypassrls=true`; sie belegt daher Anwendungspredikate,
+Ownership und Transaktionsatomarität, aber ausdrücklich weder RLS noch einen
+Least-Privilege-Runtime-DB-Rollenvertrag. Dieser Nachweis behauptet keine
+Remote-Migration, keine Production-Prüfung und keinen F0-PASS. W4 schließt
 Events, Evidence, Attachments und versionierte SQL-Read-Models Ende-zu-Ende.
