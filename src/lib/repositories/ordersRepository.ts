@@ -31,27 +31,11 @@ const isSupabase = process.env.NEXT_PUBLIC_DATA_PROVIDER === 'supabase';
 
 export const ordersRepository = {
   async getAll(): Promise<Order[]> {
-    if (isSupabase) {
-      try {
-        const result = await getOrdersDb();
-        if (!result.ok) {
-          if (result.error === "UNAUTHORIZED" || result.error === "FORBIDDEN") {
-            throw new Error(`AUTH_ERROR: ${result.message}`);
-          }
-          console.warn("Drizzle ordersRepository fallback:", result.message, result.error);
-          return [];
-        } else {
-          return result.data as unknown as Order[];
-        }
-      } catch (error) {
-        if (error instanceof Error && error.message.startsWith("AUTH_ERROR")) {
-          throw error; // hard crash for auth errors
-        }
-        console.warn("Drizzle ordersRepository.getAll error. Message:", error instanceof Error ? error.message : "Unknown", "Details:", error);
-        return [];
-      }
+    const result = await getOrdersDb();
+    if (!result.ok) {
+      throw new Error(`${result.error}: ${result.message}`);
     }
-    return [];
+    return result.data as unknown as Order[];
   },
 
   async create(data: Omit<Order, "id" | "orderNumber" | "status" | "risk"> & { id?: string }): Promise<Order> {

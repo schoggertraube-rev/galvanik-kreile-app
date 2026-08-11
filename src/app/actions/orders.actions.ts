@@ -1,10 +1,11 @@
 "use server";
 
-import { db } from "@/db";
-import { orders } from "@/db/schema";
-import { eq, and, sql, notInArray, notIlike } from "drizzle-orm";
-import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { unstable_noStore as noStore } from "next/cache";
+import type { ActionResult } from "@/lib/server/authHelper";
+import {
+  resolveAuthorization,
+  type AuthorizationSnapshot,
+} from "@/lib/server/authorization";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import {
   transitionWareneingangToGalvanik,
@@ -21,46 +22,80 @@ export async function transitionWareneingangToGalvanikAction(
   return transitionWareneingangToGalvanik(input);
 }
 
+async function resolveOperationalReadAuthorization(): Promise<ActionResult<AuthorizationSnapshot>> {
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return {
+      ok: false,
+      error: "DB_ERROR",
+      message: "Auftragsdaten sind derzeit nicht verfügbar.",
+    };
+  }
+
+  if (!authorization.ok) {
+    if (authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
+      return {
+        ok: false,
+        error: "DB_ERROR",
+        message: "Auftragsdaten sind derzeit nicht verfügbar.",
+      };
+    }
+    return {
+      ok: false,
+      error: "UNAUTHORIZED",
+      message: "Sitzung oder Berechtigung ist nicht verfügbar.",
+    };
+  }
+
+  if (!authorization.data.permissions.includes("perm_view_leitstand")) {
+    return {
+      ok: false,
+      error: "FORBIDDEN",
+      message: "Auftragsansicht ist nicht erlaubt.",
+    };
+  }
+
+  return { ok: true, data: authorization.data };
+}
+
 export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const authorization = await resolveOperationalReadAuthorization();
+  if (!authorization.ok) return authorization;
 
   try {
     const { getOperationalOrders } = await import("@/lib/server/operationalOrders");
-    const data = await getOperationalOrders();
+    const data = await getOperationalOrders(authorization.data);
     return { ok: true, data };
   } catch (error: unknown) {
-    console.error("[DB_ERROR_DETAIL]", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Laden der Aufträge", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
+    console.error("[ORDER_READ_ERROR]", error);
+    return {
+      ok: false,
+      error: "DB_ERROR",
+      message: "Auftragsdaten konnten nicht sicher geladen werden.",
+    };
   }
 }
 
-/** Leichtgewichtige Variante nur für Header-Badge — führt nur COUNT(*) aus. */
+/** Tenant-bound count from the same versioned operational read port. */
 export async function getOrderCountDb(): Promise<ActionResult<{ count: number }>> {
   noStore();
-  const auth = await checkAppAuth();
-  if (!auth.ok) return auth;
+  const authorization = await resolveOperationalReadAuthorization();
+  if (!authorization.ok) return authorization;
 
   try {
-    const result = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(orders)
-      .where(
-        and(
-          eq(orders.tenantId, "galvanik-kreile"),
-          notInArray(
-            sql`coalesce(${orders.source}, 'manual')`,
-            ["seed", "test", "demo", "integration-test"]
-          ),
-          notIlike(sql`coalesce(${orders.orderNumber}, '')`, "A-SEED-%"),
-          notIlike(sql`coalesce(${orders.orderNumber}, '')`, "%TEST%")
-        )
-      );
-    return { ok: true, data: { count: result[0]?.count ?? 0 } };
+    const { getOperationalOrderCount } = await import("@/lib/server/operationalOrders");
+    const count = await getOperationalOrderCount(authorization.data);
+    return { ok: true, data: { count } };
   } catch (error: unknown) {
-    console.error("[ORDER_COUNT_ERROR]", error instanceof Error ? error.message : String(error));
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Zählen der Aufträge", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
+    console.error("[ORDER_COUNT_ERROR]", error);
+    return {
+      ok: false,
+      error: "DB_ERROR",
+      message: "Auftragsanzahl konnte nicht sicher geladen werden.",
+    };
   }
 }
 

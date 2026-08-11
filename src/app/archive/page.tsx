@@ -10,30 +10,55 @@ import { getOrdersDb, type OrderResponse } from "@/app/actions/orders.actions";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { AppBackButton } from "@/components/ui/AppBackButton";
 
-type Order = OrderResponse & { statusText?: unknown };
+type OrdersReadState = "loading" | "unavailable" | "loaded";
+
+const ARCHIVED_ORDER_STATUSES = new Set([
+  "done",
+  "completed",
+  "shipped",
+  "abgeschlossen",
+  "fertig",
+]);
 
 export default function ArchivePage() {
   usePageView();
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<OrderResponse[]>([]);
+  const [loadedOrderCount, setLoadedOrderCount] = useState(0);
+  const [ordersReadState, setOrdersReadState] = useState<OrdersReadState>("loading");
 
   useEffect(() => {
+    let active = true;
     const loadData = async () => {
+      setOrders([]);
+      setLoadedOrderCount(0);
+      setOrdersReadState("loading");
       try {
         const dbOrdersRes = await getOrdersDb();
-        if (dbOrdersRes.ok && dbOrdersRes.data && dbOrdersRes.data.length > 0) {
-          setOrders(dbOrdersRes.data.filter((order) => {
-            const legacyOrder = order as Order;
-            const statusText = typeof legacyOrder.statusText === "string" ? legacyOrder.statusText : undefined;
-            return order.status === "done" || statusText === "closed" || statusText === "completed" || statusText === "shipped";
-          }));
-        } else {
-           setOrders([]);
+        if (!active) return;
+        if (!dbOrdersRes.ok) {
+          setOrdersReadState("unavailable");
+          return;
         }
+        setLoadedOrderCount(dbOrdersRes.data.length);
+        setOrders(
+          dbOrdersRes.data.filter((order) =>
+            ARCHIVED_ORDER_STATUSES.has(order.status.trim().toLowerCase()),
+          ),
+        );
+        setOrdersReadState("loaded");
       } catch (e) {
         console.error("Fehler beim Laden aus dem Repository", e);
+        if (active) {
+          setOrders([]);
+          setLoadedOrderCount(0);
+          setOrdersReadState("unavailable");
+        }
       }
     };
-    loadData();
+    void loadData();
+    return () => {
+      active = false;
+    };
   }, []);
 
   const getStationName = (station: string) => {
@@ -50,14 +75,32 @@ export default function ArchivePage() {
         subtitle="Abgeschlossene und versendete Aufträge (Nur-Lese-Ansicht)."
       />
 
-      {orders.length === 0 ? (
+      {ordersReadState === "loading" ? (
+        <Card role="status" className="border-dashed border-2 border-neutral-gray-300 bg-bg-app-soft/50 p-12 text-center rounded-2xl space-y-4">
+          <ArchiveIcon className="h-8 w-8 mx-auto text-text-muted animate-pulse" />
+          <h4 className="font-extrabold text-lg text-navy-900">Archiv wird geladen</h4>
+          <p className="text-sm text-text-muted">Die tenantgebundenen Aufträge werden sicher gelesen.</p>
+        </Card>
+      ) : ordersReadState === "unavailable" ? (
+        <Card role="alert" className="border-2 border-neutral-gray-300 bg-bg-app-soft/50 p-12 text-center rounded-2xl space-y-4">
+          <ArchiveIcon className="h-8 w-8 mx-auto text-text-muted" />
+          <h4 className="font-extrabold text-lg text-navy-900">Archiv derzeit nicht verfügbar</h4>
+          <p className="text-sm text-text-muted">Es werden keine veralteten oder unvollständigen Auftragsdaten angezeigt.</p>
+        </Card>
+      ) : orders.length === 0 ? (
         <Card className="border-dashed border-2 border-neutral-gray-300 bg-bg-app-soft/50 p-12 text-center rounded-2xl space-y-4">
           <div className="h-16 w-16 rounded-full bg-bg-app-soft flex items-center justify-center mx-auto text-text-muted">
             <ArchiveIcon className="h-8 w-8" />
           </div>
-          <h4 className="font-extrabold text-lg text-navy-900">Noch keine Aufträge erfasst</h4>
+          <h4 className="font-extrabold text-lg text-navy-900">
+            {loadedOrderCount === 0
+              ? "Noch keine Aufträge erfasst"
+              : "Noch keine archivierten Aufträge"}
+          </h4>
           <p className="text-sm text-text-muted max-w-sm mx-auto leading-relaxed">
-            Aktuell befinden sich keine Aufträge im Archiv. Sobald ein Auftrag den Warenausgang verlässt, taucht er hier auf.
+            {loadedOrderCount === 0
+              ? "Sobald ein Auftrag erfasst wurde, kann er später im Archiv erscheinen."
+              : "Die geladenen Aufträge sind noch nicht abgeschlossen oder versendet."}
           </p>
         </Card>
       ) : (

@@ -12,8 +12,6 @@ import {
 // Mock data removed
 import { getStationConfig } from "@/constants/stations";
 import { getOrdersDb } from "@/app/actions/orders.actions";
-import { getCustomersDb } from "@/app/actions/customers.actions";
-import type { Customer } from "@/lib/types/customer";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
 import { usePageView } from "@/hooks/usePageView";
@@ -23,6 +21,7 @@ import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import { getUrgency } from "@/lib/orders/getUrgency";
 
 const safe = (value: unknown) => String(value ?? "").toLowerCase();
+type OrdersReadState = "loading" | "unavailable" | "loaded";
 
 
 function OrdersPageInner() {
@@ -46,39 +45,43 @@ function OrdersPageInner() {
   }
 
   const [orders, setOrders] = useState<OperationalOrder[]>([]);
-
-  const [, setCustomersList] = useState<Customer[]>([]);
+  const [ordersReadState, setOrdersReadState] = useState<OrdersReadState>("loading");
   
   const { openOrder } = useOrderModal();
 
   // Load from Repositories on mount
   useEffect(() => {
     let isMounted = true;
+    let loadVersion = 0;
     const loadData = async () => {
+      const currentLoad = ++loadVersion;
+      if (isMounted) {
+        setOrders([]);
+        setOrdersReadState("loading");
+      }
       try {
         const dbOrdersResult = await getOrdersDb();
+        if (!isMounted || currentLoad !== loadVersion) return;
         if (dbOrdersResult && !dbOrdersResult.ok && dbOrdersResult.error === "UNAUTHORIZED") {
+          setOrdersReadState("unavailable");
           router.push("/start?reason=session_expired");
           return;
         }
-        if (isMounted && dbOrdersResult.ok) {
-          setOrders(dbOrdersResult.data);
-          console.log("[ORDERS_CLIENT]", dbOrdersResult.data.map(o => ({ id: o.id, number: o.orderNumber, source: undefined })));
-        }
-        
-        const dbCustomersResult = await getCustomersDb();
-        if (dbCustomersResult && !dbCustomersResult.ok && dbCustomersResult.error === "UNAUTHORIZED") {
-          router.push("/start?reason=session_expired");
+        if (!dbOrdersResult.ok) {
+          setOrdersReadState("unavailable");
           return;
         }
-        if (isMounted && dbCustomersResult.ok) {
-          setCustomersList(dbCustomersResult.data);
-        }
+        setOrders(dbOrdersResult.data);
+        setOrdersReadState("loaded");
       } catch (e) {
         console.error("Fehler beim Laden aus Repositories", e);
+        if (isMounted && currentLoad === loadVersion) {
+          setOrders([]);
+          setOrdersReadState("unavailable");
+        }
       }
     };
-    loadData();
+    void loadData();
 
     const handleSync = () => {
       console.log("[OrdersPage] Sync event received, reloading orders...");
@@ -90,6 +93,7 @@ function OrdersPageInner() {
 
     return () => {
       isMounted = false;
+      loadVersion += 1;
       window.removeEventListener('kreile-sync-orders', handleSync);
       window.removeEventListener('kreile-sync-focus', handleSync);
     };
@@ -236,6 +240,20 @@ function OrdersPageInner() {
         <button className="btn-new py-1.5 px-3 text-xs" onClick={() => openShortcut("new_order")}>+ Neu</button>
       </div>
 
+      {ordersReadState === "loading" ? (
+        <div role="status" className="p-12 text-center text-text-muted bg-[#faf8f4] border border-[#d8d0c4] rounded-xl space-y-3 mt-4">
+          <RefreshCw className="h-8 w-8 mx-auto text-[#9e9689] animate-spin" />
+          <p className="font-bold text-[#5e5850]">Auftragsbuch wird geladen</p>
+          <p className="text-xs">Die tenantgebundenen Aufträge werden sicher gelesen.</p>
+        </div>
+      ) : ordersReadState === "unavailable" ? (
+        <div role="alert" className="p-12 text-center text-text-muted bg-[#faf8f4] border border-[#d8d0c4] rounded-xl space-y-3 mt-4">
+          <Package className="h-8 w-8 mx-auto text-[#9e9689]" />
+          <p className="font-bold text-[#5e5850]">Auftragsbuch derzeit nicht verfügbar</p>
+          <p className="text-xs">Es werden keine veralteten oder unvollständigen Auftragsdaten angezeigt.</p>
+        </div>
+      ) : (
+        <>
       <div className="status-strip">
         <div className="sr" style={{ flex: counts.red || 0.1 }}></div>
         <div className="sa" style={{ flex: counts.orange || 0.1 }}></div>
@@ -326,9 +344,17 @@ function OrdersPageInner() {
       ) : (
         <div className="p-12 text-center text-text-muted bg-[#faf8f4] border border-[#d8d0c4] rounded-xl space-y-2 mt-4">
           <Package className="h-8 w-8 mx-auto text-[#9e9689] animate-pulse" />
-          <p className="font-bold text-[#5e5850]">Noch keine Aufträge erfasst</p>
-          <p className="text-xs">Passe den Filter oder den Suchbegriff an.</p>
+          <p className="font-bold text-[#5e5850]">
+            {orders.length === 0 ? "Noch keine Aufträge erfasst" : "Keine passenden Aufträge"}
+          </p>
+          <p className="text-xs">
+            {orders.length === 0
+              ? "Sobald ein Auftrag erfasst wurde, erscheint er hier."
+              : "Passe den Filter oder den Suchbegriff an."}
+          </p>
         </div>
+      )}
+        </>
       )}
 
       {/* Detail Overlay removed and centralized */}

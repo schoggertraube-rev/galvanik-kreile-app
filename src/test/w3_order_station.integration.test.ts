@@ -77,8 +77,12 @@ const pool = {
 let transitionWareneingangToGalvanik: typeof import("@/lib/server/commands/orderStationCommand").transitionWareneingangToGalvanik;
 let readTenantStationOrders: typeof import("@/lib/server/orderStationRead").readTenantStationOrders;
 let readTenantOrderStationReceipt: typeof import("@/lib/server/orderStationRead").readTenantOrderStationReceipt;
+let readTenantOperationalOrders: typeof import("@/lib/server/orderStationRead").readTenantOperationalOrders;
+let readTenantOperationalOrderCount: typeof import("@/lib/server/orderStationRead").readTenantOperationalOrderCount;
 let withPrivilegedTenantTransaction: typeof import("@/lib/server/privilegedDb").withPrivilegedTenantTransaction;
 let getWareneingangOrdersAction: typeof import("@/app/warendurchlauf/actions").getWareneingangOrdersAction;
+let getOrdersDb: typeof import("@/app/actions/orders.actions").getOrdersDb;
+let getOrderCountDb: typeof import("@/app/actions/orders.actions").getOrderCountDb;
 
 function setSession(userId: string, role: string, tenantId = TENANT_A) {
   readAppSessionSpy.mockResolvedValue({
@@ -200,9 +204,15 @@ beforeAll(async () => {
   }
 
   ({ transitionWareneingangToGalvanik } = await import("@/lib/server/commands/orderStationCommand"));
-  ({ readTenantStationOrders, readTenantOrderStationReceipt } = await import("@/lib/server/orderStationRead"));
+  ({
+    readTenantStationOrders,
+    readTenantOrderStationReceipt,
+    readTenantOperationalOrders,
+    readTenantOperationalOrderCount,
+  } = await import("@/lib/server/orderStationRead"));
   ({ withPrivilegedTenantTransaction } = await import("@/lib/server/privilegedDb"));
   ({ getWareneingangOrdersAction } = await import("@/app/warendurchlauf/actions"));
+  ({ getOrdersDb, getOrderCountDb } = await import("@/app/actions/orders.actions"));
   await seedFixtures();
 });
 
@@ -591,10 +601,62 @@ describe.sequential("W3 order station local replay integration", () => {
         expect(ids).toContain(ORDERS.visible);
         expect(ids).not.toContain(ORDERS.foreign);
       }
+      const fullRead = await getOrdersDb();
+      expect(fullRead.ok).toBe(true);
+      if (fullRead.ok) {
+        expect(new Set(fullRead.data.map((order) => order.id))).toEqual(
+          new Set([ORDERS.visible, ORDERS.happy, ORDERS.concurrent, ORDERS.race, ORDERS.rollback]),
+        );
+      }
+      await expect(getOrderCountDb()).resolves.toEqual({ ok: true, data: { count: 5 } });
       await expect(
         transitionWareneingangToGalvanik({ orderId: ORDERS.visible, expectedVersion: 1, clientEventId: CLIENT_EVENTS.visible }),
       ).resolves.toMatchObject({ code: "FORBIDDEN" });
       expect(await aggregateSnapshot(ORDERS.visible)).toEqual(before);
+    }
+  });
+
+  it("alternates exact tenant sets and counts without cache bleed through the real v1 read port", async () => {
+    const expectedA = new Set([
+      ORDERS.visible,
+      ORDERS.happy,
+      ORDERS.concurrent,
+      ORDERS.race,
+      ORDERS.rollback,
+    ]);
+    const expectedB = new Set([ORDERS.foreign]);
+
+    const tenantAFirst = await readTenantOperationalOrders({ tenantId: TENANT_A });
+    const tenantB = await readTenantOperationalOrders({ tenantId: TENANT_B });
+    const tenantASecond = await readTenantOperationalOrders({ tenantId: TENANT_A });
+
+    expect(new Set(tenantAFirst.map((order) => order.id))).toEqual(expectedA);
+    expect(new Set(tenantB.map((order) => order.id))).toEqual(expectedB);
+    expect(new Set(tenantASecond.map((order) => order.id))).toEqual(expectedA);
+    expect(tenantAFirst.flatMap((order) => order.parts.map((item) => item.id))).not.toContain(
+      "w3-local-item-6",
+    );
+    expect(tenantB.flatMap((order) => order.parts.map((item) => item.id))).toEqual([
+      "w3-local-item-6",
+    ]);
+    await expect(readTenantOperationalOrderCount({ tenantId: TENANT_A })).resolves.toBe(5);
+    await expect(readTenantOperationalOrderCount({ tenantId: TENANT_B })).resolves.toBe(1);
+  });
+
+  it("rejects a persisted blank station alias in both the full read and same-port count", async () => {
+    await pool.query("UPDATE public.orders SET current_station_id='' WHERE id=$1", [ORDERS.visible]);
+    try {
+      await expect(
+        readTenantOperationalOrders({ tenantId: TENANT_A }),
+      ).rejects.toThrow("ORDER_READMODEL_INVALID");
+      await expect(
+        readTenantOperationalOrderCount({ tenantId: TENANT_A }),
+      ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
+    } finally {
+      await pool.query(
+        "UPDATE public.orders SET current_station_id='wareneingang' WHERE id=$1",
+        [ORDERS.visible],
+      );
     }
   });
 
@@ -643,6 +705,12 @@ describe.sequential("W3 order station local replay integration", () => {
       await expect(
         readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang"),
       ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
+      await expect(
+        readTenantOperationalOrders({ tenantId: TENANT_A }),
+      ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
+      await expect(
+        readTenantOperationalOrderCount({ tenantId: TENANT_A }),
+      ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
       await pool.query("DELETE FROM public.items WHERE id=$1", [itemId]);
     }
   });
@@ -672,6 +740,12 @@ describe.sequential("W3 order station local replay integration", () => {
     await expect(
       readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang"),
     ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
+    await expect(
+      readTenantOperationalOrders({ tenantId: TENANT_A }),
+    ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
+    await expect(
+      readTenantOperationalOrderCount({ tenantId: TENANT_A }),
+    ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
     await pool.query("UPDATE public.orders SET customer_id=$1 WHERE id=$2", [
       CUSTOMERS.a,
       ORDERS.visible,
@@ -693,6 +767,12 @@ describe.sequential("W3 order station local replay integration", () => {
       expect(await aggregateSnapshot(ORDERS.visible)).toEqual(before);
       await expect(
         readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang"),
+      ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
+      await expect(
+        readTenantOperationalOrders({ tenantId: TENANT_A }),
+      ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
+      await expect(
+        readTenantOperationalOrderCount({ tenantId: TENANT_A }),
       ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
       await pool.query("UPDATE public.items SET customer_id=$1 WHERE id=$2", [
         CUSTOMERS.a,
