@@ -9,14 +9,15 @@ const denial = "NOT_AVAILABLE: Warendurchlauf-KPIs benötigen einen kanonischen 
 const stationDenial = "NOT_AVAILABLE: Stationsliste ist nicht verfügbar.";
 const stationThrowDenial = "NOT_AVAILABLE: Stationsliste konnte nicht sicher geladen werden.";
 const getWarendurchlaufKPIs = vi.fn(async () => ({ ok: false as const, error: "NOT_AVAILABLE" as const, message: denial }));
-const getStationOrders = vi.fn(async () => ({ ok: true as const, data: [] }));
+const getWareneingangOrdersAction = vi.fn(async () => ({ ok: true as const, data: [] }));
 
-vi.mock("@/app/warendurchlauf/actions", () => ({ getWarendurchlaufKPIs, getStationOrders }));
+vi.mock("@/app/warendurchlauf/actions", () => ({ getWarendurchlaufKPIs, getWareneingangOrdersAction }));
 vi.mock("../WarendurchlaufCockpitClient", () => ({ WarendurchlaufCockpitClient: () => <div>Termintreue Durchlaufzeit Engpass Offene Aufträge</div> }));
 vi.mock("next/link", () => ({ default: ({ children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => <a {...props}>{children}</a> }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/components/erfassung/ErfassungProvider", () => ({ useErfassung: () => ({ openErfassung: vi.fn() }) }));
 vi.mock("@/components/orders/OrderCompactCard", () => ({ OrderCompactCard: () => <div /> }));
+vi.mock("@/components/orders/WareneingangHandoffButton", () => ({ WareneingangHandoffButton: () => <div /> }));
 vi.mock("@/lib/orders/getUrgency", () => ({ getUrgency: () => "ok" }));
 vi.mock("@/lib/overlayStore", () => ({ useOverlayStore: () => ({ openOrder: vi.fn() }) }));
 vi.mock("lucide-react", () => ({
@@ -41,14 +42,14 @@ describe("W2C-B2M5J unavailable UI", () => {
     const deferredStationOrders = new Promise<{ ok: true; data: [] }>((resolve) => {
       resolveStationOrders = resolve;
     });
-    getStationOrders.mockReturnValueOnce(deferredStationOrders);
+    getWareneingangOrdersAction.mockReturnValueOnce(deferredStationOrders);
     const { default: WareneingangPage } = await import("../wareneingang/page");
     const view = render(<WareneingangPage />);
 
     await waitFor(() => expect(screen.getByText("Stationsliste wird geladen.", { exact: true })).toBeInTheDocument());
     expect(screen.getByText("Stationsliste wird geladen.", { exact: true }).closest('[role="status"]')).not.toBeNull();
     expect(screen.queryByText("0", { exact: true })).not.toBeInTheDocument();
-    expect(screen.queryByText("Aktuell keine Aufträge in dieser Station.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Noch keine Daten erfasst.")).not.toBeInTheDocument();
 
     view.unmount();
     resolveStationOrders({ ok: true, data: [] });
@@ -63,35 +64,35 @@ describe("W2C-B2M5J unavailable UI", () => {
   });
 
   it("renders station denial without confirmed empty-station success while KPI tiles remain unavailable", async () => {
-    getStationOrders.mockResolvedValueOnce({ ok: false, error: "NOT_AVAILABLE", message: stationDenial } as never);
+    getWareneingangOrdersAction.mockResolvedValueOnce({ ok: false, error: "NOT_AVAILABLE", message: stationDenial } as never);
     const { default: WareneingangPage } = await import("../wareneingang/page");
     render(<WareneingangPage />);
 
     await waitFor(() => expect(screen.getByText(stationDenial)).toBeInTheDocument());
     expect(screen.getByText(stationDenial).closest('[role="status"]')).not.toBeNull();
     expect(screen.queryByText("0")).not.toBeInTheDocument();
-    expect(screen.queryByText("Aktuell keine Aufträge in dieser Station.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Noch keine Daten erfasst.")).not.toBeInTheDocument();
     expect(screen.queryByText("Termintreue Durchlaufzeit Engpass Offene Aufträge")).not.toBeInTheDocument();
-    expect(getStationOrders).toHaveBeenCalledWith("wareneingang");
+    expect(getWareneingangOrdersAction).toHaveBeenCalledWith();
   });
 
   it("renders the stable station denial when the station read throws", async () => {
-    getStationOrders.mockRejectedValueOnce(new Error("network failure"));
+    getWareneingangOrdersAction.mockRejectedValueOnce(new Error("network failure"));
     const { default: WareneingangPage } = await import("../wareneingang/page");
     render(<WareneingangPage />);
 
     await waitFor(() => expect(screen.getByText(stationThrowDenial)).toBeInTheDocument());
     expect(screen.getByText(stationThrowDenial).closest('[role="status"]')).not.toBeNull();
     expect(screen.queryByText("0")).not.toBeInTheDocument();
-    expect(screen.queryByText("Aktuell keine Aufträge in dieser Station.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Noch keine Daten erfasst.")).not.toBeInTheDocument();
   });
 
   it("keeps a successful empty station list distinct from KPI denial", async () => {
-    getStationOrders.mockResolvedValueOnce({ ok: true, data: [] });
+    getWareneingangOrdersAction.mockResolvedValueOnce({ ok: true, data: [] });
     const { default: WareneingangPage } = await import("../wareneingang/page");
     render(<WareneingangPage />);
 
-    await waitFor(() => expect(screen.getByText("Aktuell keine Aufträge in dieser Station.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Noch keine Daten erfasst.")).toBeInTheDocument());
     expect(screen.getByText("0")).toBeInTheDocument();
     expect(screen.getByText(denial).closest('[role="status"]')).not.toBeNull();
     expect(screen.queryByText("Termintreue Durchlaufzeit Engpass Offene Aufträge")).not.toBeInTheDocument();
@@ -110,6 +111,8 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(source).toContain("Stationsliste wird geladen.");
     expect(source).toContain("setStationUnavailableMessage(resList.message)");
     expect(source).toContain("NOT_AVAILABLE: Stationsliste konnte nicht sicher geladen werden.");
+    expect(source).toContain("getWareneingangOrdersAction()");
+    expect(source).not.toContain("getStationOrders(\"wareneingang\")");
     expect(source).not.toContain("} catch {} ");
   });
 });

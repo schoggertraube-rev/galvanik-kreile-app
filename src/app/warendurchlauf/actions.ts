@@ -1,10 +1,11 @@
 "use server";
 
-import { getOperationalOrdersByStation, getOperationalOrdersReadyForStation } from "@/lib/server/operationalOrders";
-import type { getOperationalOrders } from "@/lib/server/operationalOrders";
-import { checkAppAuth } from "@/lib/server/authHelper";
+import { unstable_noStore as noStore } from "next/cache";
+import { resolveAuthorization } from "@/lib/server/authorization";
+import { readTenantStationOrders } from "@/lib/server/orderStationRead";
+import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
-export type WarendurchlaufOrder = Awaited<ReturnType<typeof getOperationalOrders>>[number];
+export type WarendurchlaufOrder = OperationalOrder;
 
 export interface WarendurchlaufKpiData {
   termintreue: number;
@@ -17,28 +18,51 @@ export interface WarendurchlaufKpiData {
 
 export type WarendurchlaufActionResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: "AUTH_ERROR" | "QUERY_ERROR" | "NOT_AVAILABLE"; message: string };
+  | { ok: false; error: "AUTH_ERROR" | "FORBIDDEN" | "QUERY_ERROR" | "UNAVAILABLE" | "NOT_AVAILABLE"; message: string };
 
 export async function getStationOrders(stationId: string): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
-  try {
-    const orders = await getOperationalOrdersByStation(stationId);
-    return { ok: true, data: orders };
-  } catch (error) {
-    return { ok: false, error: "QUERY_ERROR", message: String(error) };
-  }
+  void stationId;
+  return { ok: false, error: "NOT_AVAILABLE", message: "NOT_AVAILABLE: Generische Stationslisten sind nicht verfügbar." };
 }
 
 export async function getStationReadyOrders(stationId: string): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
+  void stationId;
+  return { ok: false, error: "NOT_AVAILABLE", message: "NOT_AVAILABLE: Generische Stationslisten sind nicht verfügbar." };
+}
+
+async function getFixedStationOrders(station: "wareneingang" | "galvanik"): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
+  noStore();
+  let authorization;
   try {
-    const orders = await getOperationalOrdersReadyForStation(stationId);
-    return { ok: true, data: orders };
-  } catch (error) {
-    return { ok: false, error: "QUERY_ERROR", message: String(error) };
+    authorization = await resolveAuthorization();
+  } catch {
+    return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
   }
+
+  if (!authorization.ok) {
+    if (authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
+      return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+    }
+    return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  }
+
+  if (!authorization.data.permissions.includes("perm_view_leitstand")) {
+    return { ok: false, error: "FORBIDDEN", message: "Stationsliste ist nicht erlaubt." };
+  }
+
+  try {
+    return { ok: true, data: await readTenantStationOrders(authorization.data, station) };
+  } catch {
+    return { ok: false, error: "QUERY_ERROR", message: "Stationsliste konnte nicht sicher geladen werden." };
+  }
+}
+
+export async function getWareneingangOrdersAction(): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
+  return getFixedStationOrders("wareneingang");
+}
+
+export async function getGalvanikOrdersAction(): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
+  return getFixedStationOrders("galvanik");
 }
 
 export async function startProcessingStation(orderId: string, stationId: string) {

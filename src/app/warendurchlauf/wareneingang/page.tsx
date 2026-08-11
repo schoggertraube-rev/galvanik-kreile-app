@@ -11,7 +11,12 @@ import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 import { OrderCompactCard } from "@/components/orders/OrderCompactCard";
 import { getUrgency } from "@/lib/orders/getUrgency";
 import { useOverlayStore } from "@/lib/overlayStore";
-import type { WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
+import {
+  getWareneingangOrdersAction,
+  getWarendurchlaufKPIs,
+  type WarendurchlaufOrder,
+} from "@/app/warendurchlauf/actions";
+import { WareneingangHandoffButton } from "@/components/orders/WareneingangHandoffButton";
 
 function getLegacyStatusText(order: WarendurchlaufOrder) {
   if (
@@ -41,10 +46,10 @@ function WarendurchlaufLeitstandContent() {
   const [kpiUnavailableMessage, setKpiUnavailableMessage] = useState<string | null>(null);
   const [stationUnavailableMessage, setStationUnavailableMessage] = useState<string | null>(null);
   const [stationListPending, setStationListPending] = useState(true);
+  const [handoffSuccessMessage, setHandoffSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
-      const { getWarendurchlaufKPIs, getStationOrders } = await import("@/app/warendurchlauf/actions");
       try {
         const resKPI = await getWarendurchlaufKPIs();
         if (!resKPI.ok) {
@@ -84,7 +89,7 @@ function WarendurchlaufLeitstandContent() {
 
       setStationListPending(true);
       try {
-        const resList = await getStationOrders("wareneingang");
+        const resList = await getWareneingangOrdersAction();
         if (!resList.ok) {
           setStationUnavailableMessage(resList.message);
         } else {
@@ -99,9 +104,6 @@ function WarendurchlaufLeitstandContent() {
     };
     load();
 
-    const handleUpdate = () => load();
-    window.addEventListener("kreile-orders-updated", handleUpdate);
-    return () => window.removeEventListener("kreile-orders-updated", handleUpdate);
   }, []);
 
   const countUeberfaellig = orders.filter(o => o.risk === 'red').length;
@@ -301,7 +303,8 @@ function WarendurchlaufLeitstandContent() {
               {stationUnavailableMessage}
             </div>
           ) : <>
-            <p className="mb-3 text-xs text-[#9e9689]">NOT_AVAILABLE: Auftragsbearbeitung wird erst mit dem atomaren Command aktiviert.</p>
+            <p className="mb-3 text-xs text-[#9e9689]">Die Übergabe an Galvanik wird erst nach einem bestätigten Reload als erfolgreich angezeigt. Weitere Auftragsbearbeitung bleibt nicht verfügbar.</p>
+            {handoffSuccessMessage ? <p className="mb-3 text-xs text-[#1a6b38]" role="status">{handoffSuccessMessage}</p> : null}
             <div className="flex flex-col gap-2">
               {stationOrders.length > 0 ? (
                 stationOrders.map((order) => {
@@ -313,8 +316,8 @@ function WarendurchlaufLeitstandContent() {
                   else if (order.risk === "unknown" || u === "unknown") urgencyType = "unknown";
 
                   return (
+                    <div key={order.id}>
                     <OrderCompactCard
-                      key={order.id}
                       id={order.id}
                       orderNumber={order.orderNumber}
                       customerName={order.customerName || "Kunde nicht hinterlegt"}
@@ -326,11 +329,26 @@ function WarendurchlaufLeitstandContent() {
                       badgeText={getLegacyStatusText(order) || "Wartend"}
                       onClick={() => openOrder(order.id)}
                     />
+                    {Number.isSafeInteger(order.version) && order.version > 0 ? (
+                      <WareneingangHandoffButton
+                        orderId={order.id}
+                        expectedVersion={order.version}
+                        onConfirmedReadback={(nextWeOrders) => {
+                          setStationOrders(nextWeOrders);
+                          setHandoffSuccessMessage("Übergabe an Galvanik bestätigt.");
+                        }}
+                        onConflictReadback={(nextWeOrders) => {
+                          setStationOrders(nextWeOrders);
+                          setHandoffSuccessMessage(null);
+                        }}
+                      />
+                    ) : null}
+                    </div>
                   );
                 })
               ) : (
                 <div className="p-8 text-center border-2 border-dashed border-[#d8d0c4] rounded-[14px] text-[#9e9689]">
-                  Aktuell keine Aufträge in dieser Station.
+                  Noch keine Daten erfasst. <Link href="/orders">Aufträge anzeigen</Link>
                 </div>
               )}
             </div>

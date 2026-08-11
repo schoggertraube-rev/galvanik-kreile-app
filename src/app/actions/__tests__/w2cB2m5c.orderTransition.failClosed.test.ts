@@ -77,18 +77,20 @@ describe("W2C-B2M5C transitionOrderProcess quarantine", () => {
     expect(dbSpies.insert).not.toHaveBeenCalled();
   });
 
-  it("keeps all three direct UI callers visibly disabled without transition calls", async () => {
+  it("keeps legacy writers denied while the named W3 handoff remains the sole reactivated entry", async () => {
     const srcRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
-    const [wareneingang, stationStatus, galvanik] = await Promise.all([
+    const [wareneingang, stationStatus, galvanik, wareneingangPage] = await Promise.all([
       readFile(path.join(srcRoot, "components/orders/variants/WareneingangActive.tsx"), "utf8"),
       readFile(path.join(srcRoot, "components/orders/StationStatusButton.tsx"), "utf8"),
       readFile(path.join(srcRoot, "app/warendurchlauf/galvanik/page.tsx"), "utf8"),
+      readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8"),
     ]);
 
-    for (const source of [wareneingang, stationStatus, galvanik]) {
+    for (const source of [stationStatus, galvanik]) {
       expect(source).not.toContain("transitionOrderProcess");
-      expect(source).toContain("NOT_AVAILABLE: Stationswechsel benötigen den W3-Command-Vertrag.");
     }
+    expect(wareneingang).not.toContain("transitionOrderProcess");
+    expect(wareneingangPage).toContain("WareneingangHandoffButton");
 
     const wareneingangStart = wareneingang.indexOf("<button");
     const wareneingangEnd = wareneingang.indexOf(">", wareneingangStart);
@@ -114,8 +116,9 @@ describe("W2C-B2M5C transitionOrderProcess quarantine", () => {
     expect(galvanik).not.toContain("onAdvance");
     expect(galvanik).not.toContain("setReadyOrders(prev");
     expect(galvanik).not.toContain("setInProgressOrders(prev");
-    expect(galvanik).toContain("getStationReadyOrders(\"galvanik\")");
-    expect(galvanik).toContain("getStationOrders(\"galvanik\")");
+    expect(galvanik).not.toContain("getStationReadyOrders");
+    expect(galvanik).not.toContain("getStationOrders");
+    expect(galvanik).toContain("getGalvanikOrdersAction()");
     expect(galvanik).toContain("const renderOrderList");
     expect(galvanik).toContain("orders.map((o) => (");
   });

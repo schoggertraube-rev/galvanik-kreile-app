@@ -5,8 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Layers, PlayCircle, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import { OrderCompactCard, UrgencyType } from "@/components/orders/OrderCompactCard";
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
-import { getStationOrders, getStationReadyOrders } from "@/app/warendurchlauf/actions";
-import type { WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
+import { getGalvanikOrdersAction, type WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
 
 type GalvanikBucket = "ready" | "in_progress" | "finished";
 type GalvanikOrder = WarendurchlaufOrder & { statusText?: string };
@@ -42,6 +41,7 @@ export default function GalvanikPage() {
   const [finishedOrders, setFinishedOrders] = useState<GalvanikOrder[]>([]);
   const [topUrgent, setTopUrgent] = useState<GalvanikOrder[]>([]);
   const [dataState, setDataState] = useState<"loading" | "loaded" | "unavailable">("loading");
+  const [unavailableMessage, setUnavailableMessage] = useState("NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.");
   const { openOrder } = useOrderModal();
 
   useEffect(() => {
@@ -51,22 +51,20 @@ export default function GalvanikPage() {
       setInProgressOrders([]);
       setFinishedOrders([]);
       setTopUrgent([]);
+      setUnavailableMessage("NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.");
       try {
-        const [resReady, resActive] = await Promise.all([
-          getStationReadyOrders("galvanik"),
-          getStationOrders("galvanik")
-        ]);
-        
-        if (!resReady.ok || !resActive.ok) {
+        const result = await getGalvanikOrdersAction();
+
+        if (!result.ok) {
+          setUnavailableMessage(result.message);
           setDataState("unavailable");
           return;
         }
 
-        const ready = sortByUrgency(resReady.data ?? []);
-        
-        const allActive = resActive.data ?? [];
-        const active = sortByUrgency(allActive.filter(o => o.status === "in_progress"));
-        const done = sortByUrgency(allActive.filter(o => o.status === "done" || o.status === "quality_check"));
+        const allGalvanik = result.data;
+        const ready = sortByUrgency(allGalvanik.filter((order) => order.status === "ready"));
+        const active = sortByUrgency(allGalvanik.filter((order) => order.status === "in_progress"));
+        const done = sortByUrgency(allGalvanik.filter((order) => order.status === "done" || order.status === "quality_check"));
         
         setReadyOrders(ready);
         setInProgressOrders(active);
@@ -81,6 +79,7 @@ export default function GalvanikPage() {
         setInProgressOrders([]);
         setFinishedOrders([]);
         setTopUrgent([]);
+        setUnavailableMessage("NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.");
         setDataState("unavailable");
       }
     }
@@ -93,7 +92,7 @@ export default function GalvanikPage() {
       <div className={`flex flex-col gap-3 transition-all duration-500 ${isActive ? 'opacity-100' : ''}`}>
         {orders.length === 0 ? (
           <div className="text-xs text-[#9e9689] italic p-4 border border-dashed border-[#d8d0c4] rounded-[14px] text-center">
-            {isActive ? "Keine Aufträge in dieser Kategorie" : "-"}
+            {isActive ? <>Noch keine Daten erfasst. <Link href="/orders">Aufträge anzeigen</Link></> : "-"}
           </div>
         ) : (
           orders.map((o) => (
@@ -125,7 +124,7 @@ export default function GalvanikPage() {
           Galvanik Bearbeitung
           <span className="flex-1 h-px bg-[#d8d0c4]" />
         </div>
-        <p className="mb-4 text-sm text-[#9e9689]">NOT_AVAILABLE: Stationswechsel benötigen den W3-Command-Vertrag.</p>
+        <p className="mb-4 text-sm text-[#9e9689]">Die Übergabe aus dem Wareneingang ist aktiv. Start und Abschluss bleiben NOT_AVAILABLE.</p>
 
         {dataState === "loading" ? (
           <div className="flex flex-col items-center justify-center py-20 text-[#9e9689]">
@@ -133,7 +132,7 @@ export default function GalvanikPage() {
             <p>Lade Galvanik Aufträge...</p>
           </div>
         ) : dataState === "unavailable" ? (
-          <div className="py-20 text-center text-[#9e9689]">NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.</div>
+          <div className="py-20 text-center text-[#9e9689]" role="status">{unavailableMessage}</div>
         ) : (
           <>
 

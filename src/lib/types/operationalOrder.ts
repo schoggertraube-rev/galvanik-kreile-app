@@ -19,6 +19,7 @@ export type OperationalOrderItem = {
 
 export type OperationalOrder = {
   id: string;
+  version: number;
   orderNumber: string;
   customerId: string;
   customerName: string | null;

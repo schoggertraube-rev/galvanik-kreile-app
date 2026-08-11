@@ -58,10 +58,15 @@ describe("transitionWareneingangToGalvanik", () => {
     expect(withTransactionSpy).not.toHaveBeenCalled();
   });
 
-  it("returns FORBIDDEN without a database port when perm_op_status is absent", async () => {
-    resolveAuthorizationSpy.mockResolvedValue({ ...authorization, data: { ...authorization.data, permissions: [] } });
+  it("keeps readonly and buero snapshots with only perm_view_leitstand out of the command transaction", async () => {
     const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
-    await expect(transitionWareneingangToGalvanik({ orderId: "order-1", expectedVersion: 1 })).resolves.toMatchObject({ code: "FORBIDDEN" });
+    for (const role of ["readonly", "buero"] as const) {
+      resolveAuthorizationSpy.mockResolvedValueOnce({
+        ...authorization,
+        data: { ...authorization.data, role, permissions: ["perm_view_leitstand"] },
+      });
+      await expect(transitionWareneingangToGalvanik({ orderId: "order-1", expectedVersion: 1 })).resolves.toMatchObject({ code: "FORBIDDEN" });
+    }
     expect(withTransactionSpy).not.toHaveBeenCalled();
   });
 
@@ -104,6 +109,7 @@ describe("transitionWareneingangToGalvanik", () => {
     const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
     await expect(transitionWareneingangToGalvanik({ orderId: "order-1", expectedVersion: 1 })).resolves.toEqual({ code: "OK", orderId: "order-1", version: 2 });
     expect(executeSpy.mock.calls[0][0].text).toContain("FOR UPDATE");
+    expect(executeSpy.mock.calls[1][0].text).toContain("AND tenant_id = ?");
     for (const predicate of [
       "station = ?",
       "current_station = ?",
@@ -136,5 +142,6 @@ describe("transitionWareneingangToGalvanik", () => {
     expect(source).toContain('import "server-only";');
     expect(source).not.toMatch(/\bevents\b|\.insert\(|rpc\(|createClient|supabase/i);
     expect(source).toContain("perm_op_status");
+    expect(source).toMatch(/FROM public\.items[\s\S]+WHERE order_id = \$\{order\.id\}[\s\S]+AND tenant_id = \$\{authorization\.data\.tenantId\}[\s\S]+FOR UPDATE/);
   });
 });

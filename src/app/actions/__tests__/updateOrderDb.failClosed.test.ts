@@ -95,9 +95,7 @@ describe("W2C-B1 caller containment", () => {
       "components/orders/StationCompletionModal.tsx",
       "components/orders/OrderActionGrid.tsx",
       "components/orders/OrderMaterialTimeDrawer.tsx",
-      "app/warendurchlauf/galvanik/page.tsx",
       "app/status/page.tsx",
-      "app/warendurchlauf/wareneingang/page.tsx",
       "lib/offline/OfflineManager.ts",
     ].map((file) => readFile(path.join(srcRoot, file), "utf8")));
 
@@ -118,9 +116,20 @@ describe("W2C-B1 caller containment", () => {
   it("keeps the Wareneingang edit flow unavailable before an interactive modal can open", async () => {
     const wareneingang = await readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8");
 
-    expect(wareneingang).toContain("NOT_AVAILABLE: Auftragsbearbeitung");
+    expect(wareneingang).toContain("Weitere Auftragsbearbeitung bleibt nicht verfügbar.");
     expect(wareneingang).not.toContain("OrderEditModal");
     expect(wareneingang).not.toContain("selectedOrderForEdit");
+  });
+
+  it("keeps the W3 handoff independent from legacy update and process writers", async () => {
+    const [handoff, wareneingang] = await Promise.all([
+      readFile(path.join(srcRoot, "components/orders/WareneingangHandoffButton.tsx"), "utf8"),
+      readFile(path.join(srcRoot, "app/warendurchlauf/wareneingang/page.tsx"), "utf8"),
+    ]);
+    expect(handoff).toContain("transitionWareneingangToGalvanikAction");
+    expect(handoff).not.toContain("updateOrderDb");
+    expect(handoff).not.toContain("transitionOrderProcess");
+    expect(wareneingang).not.toContain("updateOrderDb");
   });
 });
 

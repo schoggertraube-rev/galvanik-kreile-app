@@ -31,6 +31,7 @@ async function _fetchAndMap(): Promise<OperationalOrder[]> {
   const results = await db
     .select({
       id: orders.id,
+      version: orders.version,
       orderNumber: orders.orderNumber,
       customerId: orders.customerId,
       customerName: customers.name,
@@ -85,6 +86,7 @@ async function _fetchAndMap(): Promise<OperationalOrder[]> {
 
     return {
       id: o.id,
+      version: o.version,
       orderNumber: o.orderNumber,
       customerId: o.customerId,
       customerName: o.customerName || null,

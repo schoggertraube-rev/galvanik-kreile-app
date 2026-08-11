@@ -1,8 +1,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-const getStationReadyOrders = vi.hoisted(() => vi.fn());
-const getStationOrders = vi.hoisted(() => vi.fn());
-vi.mock("@/app/warendurchlauf/actions", () => ({ getStationReadyOrders, getStationOrders }));
+const getGalvanikOrdersAction = vi.hoisted(() => vi.fn());
+vi.mock("@/app/warendurchlauf/actions", () => ({ getGalvanikOrdersAction }));
 vi.mock("@/components/orders/OrderModalProvider", () => ({ useOrderModal: () => ({ openOrder: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }));
 vi.mock("lucide-react", () => ({ ArrowRight: () => null, Layers: () => null, PlayCircle: () => null, CheckCircle2: () => null, AlertTriangle: () => null, Loader2: () => null, ChevronRight: () => null }));
@@ -26,32 +25,29 @@ describe("W2C-B2M5U unknown order cards", () => {
   });
 
   it.each([
-    ["ready non-ok", () => { getStationReadyOrders.mockResolvedValueOnce({ ok: false }); getStationOrders.mockResolvedValueOnce({ ok: true, data: [] }); }],
-    ["active non-ok", () => { getStationReadyOrders.mockResolvedValueOnce({ ok: true, data: [] }); getStationOrders.mockResolvedValueOnce({ ok: false }); }],
-    ["rejection", () => { getStationReadyOrders.mockRejectedValueOnce(new Error("offline")); getStationOrders.mockResolvedValueOnce({ ok: true, data: [] }); }],
+    ["non-ok", () => { getGalvanikOrdersAction.mockResolvedValueOnce({ ok: false, message: unavailable }); }],
+    ["rejection", () => { getGalvanikOrdersAction.mockRejectedValueOnce(new Error("offline")); }],
   ])("renders fail-closed for %s", async (_caseName, arrange) => {
     arrange();
     render(<GalvanikPage />);
     await waitFor(() => expect(screen.getByText(unavailable)).toBeInTheDocument());
-    expect(screen.queryByText("Keine Aufträge in dieser Kategorie")).not.toBeInTheDocument();
+    expect(screen.queryByText("Noch keine Daten erfasst.")).not.toBeInTheDocument();
     expect(screen.queryByText("0 Aufträge")).not.toBeInTheDocument();
     expect(screen.queryByText("Dringlich in Galvanik")).not.toBeInTheDocument();
   });
 
   it("keeps the initial deferred state free of empty success claims", () => {
-    getStationReadyOrders.mockReturnValueOnce(new Promise(() => {}));
-    getStationOrders.mockReturnValueOnce(new Promise(() => {}));
+    getGalvanikOrdersAction.mockReturnValueOnce(new Promise(() => {}));
     render(<GalvanikPage />);
     expect(screen.getByText("Lade Galvanik Aufträge...")).toBeInTheDocument();
-    expect(screen.queryByText("Keine Aufträge in dieser Kategorie")).not.toBeInTheDocument();
+    expect(screen.queryByText("Noch keine Daten erfasst.")).not.toBeInTheDocument();
     expect(screen.queryByText("0 Aufträge")).not.toBeInTheDocument();
   });
 
-  it("renders the real empty state only after both successful empty responses", async () => {
-    getStationReadyOrders.mockResolvedValueOnce({ ok: true, data: [] });
-    getStationOrders.mockResolvedValueOnce({ ok: true, data: [] });
+  it("renders the real empty state only after the fixed action succeeds", async () => {
+    getGalvanikOrdersAction.mockResolvedValueOnce({ ok: true, data: [] });
     render(<GalvanikPage />);
-    expect(await screen.findByText("Keine Aufträge in dieser Kategorie")).toBeInTheDocument();
+    expect(await screen.findByText("Noch keine Daten erfasst.")).toBeInTheDocument();
     expect(screen.getAllByText("0 Aufträge").length).toBe(3);
   });
 });
