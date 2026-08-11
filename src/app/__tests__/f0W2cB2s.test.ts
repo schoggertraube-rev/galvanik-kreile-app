@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -80,27 +79,54 @@ describe("F0 W2C-B2S local provider denials", () => {
   });
 });
 
-const quarantined = ["customer-enrich", "email-send", "freetext-extract", "inquiry-extract", "item-photo-analyze", "kpi-insight", "mollie-create-payment", "notes-extract", "payments-intent", "scan-analyze"];
-const webhookCandidates = ["email-webhook", "mollie-webhook", "payments-webhook-mollie"];
+const quarantined = ["customer-enrich", "email-send", "email-webhook", "freetext-extract", "inquiry-extract", "item-photo-analyze", "kpi-insight", "mollie-create-payment", "mollie-webhook", "notes-extract", "payments-intent", "payments-webhook-mollie", "scan-analyze"];
+const exactQuarantinedSource = 'import { serve } from "https://deno.land/std@0.224.0/http/server.ts";\nimport { notAvailableResponse } from "../_shared/notAvailable.ts";\n\nserve(() => notAvailableResponse());\n';
+const sideEffectTokens = [
+  "request",
+  "req",
+  "body",
+  "secret",
+  "key-secret",
+  "key_secret",
+  "deno.env",
+  "client",
+  "createclient",
+  "provider",
+  "supabase",
+  ".from(",
+  "db.",
+  "drizzle",
+  "fetch(",
+  "invoke(",
+  ".json(",
+  ".text(",
+  ".formdata(",
+  ".insert(",
+  ".update(",
+  ".upsert(",
+  ".delete(",
+  ".rpc(",
+  ".mutate(",
+  "access-control-allow-origin",
+  "cors",
+];
 
 describe("F0 W2C-B2S Edge source containment", () => {
-  it("keeps the exact local inventory and quarantines only the ten named entrypoints", () => {
-    expect(readdirSync(resolve(root, "supabase/functions"), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()).toEqual(["_shared", ...quarantined, ...webhookCandidates].sort());
+  it("keeps the exact local inventory and quarantines all thirteen named entrypoints", () => {
+    expect(readdirSync(resolve(root, "supabase/functions"), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()).toEqual(["_shared", ...quarantined].sort());
     for (const name of quarantined) {
-      const entry = source(`supabase/functions/${name}/index.ts`);
-      expect(entry).toBe('import { serve } from "https://deno.land/std@0.224.0/http/server.ts";\nimport { notAvailableResponse } from "../_shared/notAvailable.ts";\n\nserve(() => notAvailableResponse());\n');
-      expect(entry).not.toMatch(/req\.|\.json\(|\.text\(|Deno\.env|createClient|fetch\(|Access-Control-Allow-Origin|\*/);
+      const entry = source(`supabase/functions/${name}/index.ts`).replace(/\r\n/g, "\n");
+      expect(entry).toBe(exactQuarantinedSource);
+      const normalizedEntry = entry.toLowerCase();
+      for (const token of sideEffectTokens) expect(normalizedEntry).not.toContain(token);
     }
   });
 
-  it("defines the exact non-cacheable 503 JSON helper and leaves webhook candidates byte-unchanged", () => {
+  it("defines the exact non-cacheable 503 JSON helper", () => {
     const helper = source("supabase/functions/_shared/notAvailable.ts");
     expect(helper).toContain('JSON.stringify({ error: "NOT_AVAILABLE" })');
     expect(helper).toContain("status: 503");
     expect(helper).toContain('"Content-Type": "application/json"');
     expect(helper).toContain('"Cache-Control": "no-store"');
-    for (const name of webhookCandidates) {
-      expect(() => execFileSync("git", ["diff", "--quiet", "HEAD", "--", `supabase/functions/${name}/index.ts`], { cwd: root, stdio: "ignore" })).not.toThrow();
-    }
   });
 });

@@ -21,6 +21,8 @@ Live project `syhaigjhsbpjmtnggqka` lists 11 `ACTIVE` Edge Functions. Every list
 
 `mollie-create-payment` and `mollie-webhook` are local-only and are not live-listed. The Edge logs query for the last 24 hours returned no entries; this is not a claim about lifetime use.
 
-## Reconciliation boundary
+## Local source containment and reconciliation boundary
 
-The deployed webhook candidates `email-webhook` and `payments-webhook-mollie`, plus local `mollie-webhook`, remain `BLOCKED_EXTERNAL_PERMISSION` for reconciliation because an Edge mutation or deploy requires explicit permission. They are intentionally outside the local quarantine scope. No deploy or configuration change was performed.
+All 13 local Edge entrypoint sources are now fail-closed through the shared non-available response. This local source change does not establish that any remote or Production function is active with that source.
+
+The deployed live-listed functions `email-webhook` and `payments-webhook-mollie`, plus local-only/not-live-listed `mollie-webhook`, remain `BLOCKED_EXTERNAL_PERMISSION` for deploy and live reconciliation because an Edge mutation or deploy requires explicit permission. Remote and Production were neither checked nor changed. No deploy or configuration change was performed.
