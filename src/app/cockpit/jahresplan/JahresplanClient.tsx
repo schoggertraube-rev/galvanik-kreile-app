@@ -1,26 +1,24 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { getAktiverJahresplan, speichereJahresplan } from "../actions";
-import { Lock, Save, ArrowLeft, CheckCircle } from "lucide-react";
+import { ArrowLeft, Lock, Save } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { getAktiverJahresplan } from "../actions";
 
 const monateList = [
   "Januar", "Februar", "März", "April", "Mai", "Juni",
-  "Juli", "August", "September", "Oktober", "November", "Dezember"
+  "Juli", "August", "September", "Oktober", "November", "Dezember",
 ];
 
+const denial = "NOT_AVAILABLE: Jahresplan-Speichern benötigt den W3-Command-Vertrag.";
+
 export function JahresplanClient({ isDevOrAdmin }: { isDevOrAdmin: boolean }) {
-  const router = useRouter();
-  const [jahr, setJahr] = useState<number>(new Date().getFullYear());
+  const [jahr] = useState<number>(new Date().getFullYear());
   const [monate, setMonate] = useState<Record<string, number>>(
-    Object.fromEntries(monateList.map((_, i) => [String(i + 1), 0]))
+    Object.fromEntries(monateList.map((_, i) => [String(i + 1), 0])),
   );
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     async function loadPlan() {
@@ -54,26 +52,6 @@ export function JahresplanClient({ isDevOrAdmin }: { isDevOrAdmin: boolean }) {
     );
   }
 
-  const handleSave = async () => {
-    setSaving(true);
-    setSuccess(false);
-    try {
-      await speichereJahresplan(jahr, monate);
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
-      router.refresh();
-    } catch {
-      alert("Fehler beim Speichern");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleValueChange = (m: string, val: string) => {
-    const num = parseInt(val, 10);
-    setMonate(prev => ({ ...prev, [m]: isNaN(num) ? 0 : num }));
-  };
-
   const gesamt = Object.values(monate).reduce((acc, curr) => acc + (curr || 0), 0);
 
   return (
@@ -84,48 +62,42 @@ export function JahresplanClient({ isDevOrAdmin }: { isDevOrAdmin: boolean }) {
         </Link>
       </div>
 
-      <PageHeader 
-        title="Jahresplan-Eingabe" 
-        subtitle="Umsatzziele in Euro pro Monat festlegen"
-      />
+      <PageHeader title="Jahresplan-Eingabe" subtitle="Umsatzziele in Euro pro Monat festlegen" />
 
       <div className="flex-1 p-6 max-w-4xl w-full mx-auto">
         <div className="bg-white rounded-2xl border border-neutral-gray-200 shadow-sm p-6 md:p-8">
-          
           <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
               <h2 className="text-xl font-bold text-navy-900">Umsatzziele planen</h2>
               <p className="text-sm text-text-muted">Geben Sie die erwarteten Werte für jeden Monat ein.</p>
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm font-bold text-navy-900">Jahr:</label>
-              <select 
-                value={jahr} 
-                onChange={(e) => setJahr(Number(e.target.value))}
+              <label htmlFor="jahresplan-jahr" className="text-sm font-bold text-navy-900">Jahr:</label>
+              <select
+                id="jahresplan-jahr"
+                value={jahr}
+                disabled
                 className="border border-neutral-gray-300 rounded-lg px-4 py-2 font-bold focus:ring-1 focus:ring-navy-900 outline-none"
               >
-                {[jahr - 1, jahr, jahr + 1, jahr + 2].map(y => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
+                {[jahr - 1, jahr, jahr + 1, jahr + 2].map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
             </div>
           </div>
 
-          {loading ? (
-            <div className="py-12 text-center text-text-muted font-bold">Lade Plan...</div>
-          ) : (
+          {loading ? <div className="py-12 text-center text-text-muted font-bold">Lade Plan...</div> : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-8">
                 {monateList.map((mName, i) => {
                   const mKey = String(i + 1);
                   return (
                     <div key={mKey} className="flex flex-col">
-                      <label className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1">{mName}</label>
+                      <label htmlFor={`jahresplan-monat-${mKey}`} className="text-xs font-bold text-text-muted uppercase tracking-wider mb-1">{mName}</label>
                       <div className="relative">
                         <input
+                          id={`jahresplan-monat-${mKey}`}
                           type="number"
-                          value={monate[mKey] || ""}
-                          onChange={(e) => handleValueChange(mKey, e.target.value)}
+                          value={monate[mKey] ?? 0}
+                          disabled
                           className="w-full border border-neutral-gray-300 rounded-xl pl-4 pr-10 py-3 font-bold text-navy-900 focus:border-navy-900 focus:ring-1 focus:ring-navy-900 outline-none transition-all"
                           placeholder="0"
                         />
@@ -139,27 +111,15 @@ export function JahresplanClient({ isDevOrAdmin }: { isDevOrAdmin: boolean }) {
               <div className="border-t border-neutral-gray-200 pt-6 flex flex-col md:flex-row items-center justify-between gap-4">
                 <div className="text-lg">
                   <span className="text-text-muted">Jahresgesamt: </span>
-                  <span className="font-bold text-navy-900 text-2xl">{gesamt.toLocaleString('de-DE')} €</span>
+                  <span className="font-bold text-navy-900 text-2xl">{gesamt.toLocaleString("de-DE")} €</span>
                 </div>
-                
-                <div className="flex items-center gap-4">
-                  {success && (
-                    <span className="flex items-center gap-2 text-success-green font-bold text-sm">
-                      <CheckCircle className="w-4 h-4" /> Jahresplan für {jahr} gespeichert
-                    </span>
-                  )}
-                  <button 
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="flex items-center gap-2 bg-navy-900 hover:bg-navy-800 text-white font-bold px-6 py-3 rounded-xl transition-colors disabled:opacity-50"
-                  >
-                    <Save className="w-4 h-4" /> {saving ? "Speichert..." : "Speichern"}
-                  </button>
-                </div>
+                <button disabled className="flex items-center gap-2 bg-navy-900 hover:bg-navy-800 text-white font-bold px-6 py-3 rounded-xl transition-colors disabled:opacity-50">
+                  <Save className="w-4 h-4" /> Speichern
+                </button>
               </div>
+              <p role="status" className="mt-4 text-sm font-bold text-error-red">{denial}</p>
             </>
           )}
-
         </div>
       </div>
     </div>

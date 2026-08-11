@@ -2,7 +2,6 @@
 
 import {
   createAuthorizedDataClient,
-  createAuthorizedDataContext,
   createClient,
 } from '@/lib/supabase/server';
 import type { KontextDaten } from '@/lib/whatif/engine';
@@ -525,34 +524,9 @@ export async function getAktiverJahresplan(jahr: number) {
 }
 
 export async function speichereJahresplan(jahr: number, monate: Record<string, number>) {
-  const { client: supabase, authorization } = await createAuthorizedDataContext('write');
-  
-  await supabase
-    .from('forecast_version')
-    .update({ ist_aktiv: false })
-    .eq('tenant_id', authorization.tenantId)
-    .eq('jahr', jahr)
-    .eq('version_typ', 'plan')
-    .eq('ist_aktiv', true);
-    
-  const userId = authorization.userId;
-
-  const { error } = await supabase
-    .from('forecast_version')
-    .insert({
-      tenant_id: authorization.tenantId,
-      jahr,
-      version_typ: 'plan',
-      ist_aktiv: true,
-      erstellt_von: userId,
-      werte: { monate }
-    });
-
-  if (error) {
-    console.error("Error speichereJahresplan:", error);
-    throw new Error(error.message);
-  }
-  return true;
+  void jahr;
+  void monate;
+  return { ok: false as const, error: "NOT_AVAILABLE" as const, message: "NOT_AVAILABLE: Jahresplan-Speichern benötigt den W3-Command-Vertrag." };
 }
 
 export async function savePhoneNote(_data: { customer_id?: string, caller_name?: string, raw_text: string, category: string, urgency: string }) {
