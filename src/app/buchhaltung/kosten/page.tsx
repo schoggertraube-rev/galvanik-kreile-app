@@ -1,12 +1,8 @@
-import { listKostenpostenAction } from "@/app/buchhaltung/actions";
-import { KostenClient } from "./KostenClient";
+import { FoundationUnavailable } from '@/components/foundation/FoundationUnavailable';
 
-export default async function KostenPage({ searchParams }: { searchParams: Promise<{ [key: string]: string | undefined }> }) {
-  const sp = await searchParams;
-  const art = sp.art as "fix" | "variabel" | undefined;
-  const kategorie = sp.kategorie;
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 
-  const kosten = await listKostenpostenAction({ art, kategorie });
-
-  return <KostenClient initialKosten={kosten} initialArt={art || "alle"} initialKategorie={kategorie || "alle"} />;
+export default function AccountingUnavailablePage() {
+  return <FoundationUnavailable />;
 }
