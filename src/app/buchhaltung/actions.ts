@@ -95,45 +95,8 @@ export async function listBelegeAction(filter?: BelegFilter): Promise<Beleg[]> {
  * Lädt einen einzelnen Beleg anhand der ID.
  */
 export async function getBelegAction(id: string): Promise<BelegDetail> {
-  const supabase = await createClient()
-  
-  const { data, error } = await supabase.from('beleg').select(`
-    *,
-    beleg_position (*),
-    kraftstoff_detail (*),
-    kategorie (*),
-    lieferant (*)
-  `).eq('id', id).single()
-  
-  if (error || !data) {
-    console.error('Fehler beim Laden des Belegs:', error)
-    throw new Error('Beleg nicht gefunden.')
-  }
-  
-  // Wenn der Beleg eine Datei hat, erzeugen wir eine Signed URL für die Vorschau
-  let originalDatei = data.original_datei;
-  if (originalDatei && !originalDatei.startsWith('http')) {
-    const { data: urlData } = await supabase
-      .storage
-      .from('buchhaltung-belege')
-      .createSignedUrl(originalDatei, 3600); // 1h gültig
-      
-    if (urlData) {
-      originalDatei = urlData.signedUrl;
-    }
-  }
-
-  const detail: BelegDetail = {
-    ...mapToClientBeleg(data),
-    originalDatei,
-    positionen: data.beleg_position || [],
-    kraftstoffDetail: data.kraftstoff_detail?.[0], // Assuming 1:1 or 1:M where first is picked
-    kategorie: data.kategorie,
-    lieferant: data.lieferant,
-    kiHinweise: [] // TODO: KI-Logik ggf. serverseitig integrieren
-  }
-  
-  return detail
+  void id
+  throw new Error('NOT_AVAILABLE: Sicherer W3-Read-Vertrag fehlt.')
 }
 
 /**
@@ -305,31 +268,8 @@ export async function createRechnungAction(formData: FormData, positionen: Ausga
 }
 
 export async function getRechnungAction(id: string): Promise<Ausgangsrechnung> {
-  const supabase = await createClient();
-  const { data: arData, error: arError } = await supabase
-    .from('ausgangsrechnung')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (arError) {
-    throw new Error('Rechnung nicht gefunden.');
-  }
-
-  const { data: posData } = await supabase
-    .from('ausgangsrechnung_position')
-    .select('*')
-    .eq('ausgangsrechnung_id', id);
-
-  const rechnung = mapToClientRechnung(arData);
-  rechnung.positionen = posData?.map(p => ({
-    id: p.id,
-    beschreibung: p.beschreibung,
-    menge: Number(p.menge),
-    einzelpreisNetto: Number(p.einzelpreis_netto)
-  })) || [];
-
-  return rechnung;
+  void id
+  throw new Error('NOT_AVAILABLE: Sicherer W3-Read-Vertrag fehlt.')
 }
 
 // === KOSTENPOSTEN ===
@@ -372,24 +312,8 @@ export async function createKostenpostenAction(formData: FormData): Promise<Kost
 }
 
 export async function getKostenpostenAction(id: string): Promise<Kostenposten> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.from('kostenposten').select('*').eq('id', id).single();
-  if (error) {
-    throw new Error('Kostenposten nicht gefunden.');
-  }
-  return {
-    id: data.id,
-    bezeichnung: data.bezeichnung,
-    art: data.art as "fix" | "variabel",
-    kategorie: data.kategorie || undefined,
-    betrag: Number(data.betrag),
-    intervall: data.intervall as "einmalig" | "monatlich" | "jaehrlich",
-    belegId: data.beleg_id || undefined,
-    kampagneId: data.kampagne_id || undefined,
-    giltAb: data.gilt_ab || undefined,
-    giltBis: data.gilt_bis || undefined,
-    isDemo: data.is_demo || false
-  };
+  void id
+  throw new Error('NOT_AVAILABLE: Sicherer W3-Read-Vertrag fehlt.')
 }
 
 

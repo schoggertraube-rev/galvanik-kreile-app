@@ -22,6 +22,73 @@ function expectNoPortCalls() {
   expect(ports.checkAppAuth).not.toHaveBeenCalled();
 }
 
+function extractExportedFunctionBody(source: string, name: string) {
+  const signatureStart = source.indexOf(`export async function ${name}`);
+  expect(signatureStart, name).toBeGreaterThanOrEqual(0);
+
+  const bodyStart = source.indexOf('{', signatureStart);
+  expect(bodyStart, name).toBeGreaterThanOrEqual(0);
+
+  let depth = 0;
+  let quote: 'single' | 'double' | 'template' | null = null;
+  let lineComment = false;
+  let blockComment = false;
+
+  for (let index = bodyStart; index < source.length; index += 1) {
+    const character = source[index];
+    const next = source[index + 1];
+
+    if (lineComment) {
+      if (character === '\n') lineComment = false;
+      continue;
+    }
+    if (blockComment) {
+      if (character === '*' && next === '/') {
+        blockComment = false;
+        index += 1;
+      }
+      continue;
+    }
+    if (quote) {
+      if (character === '\\') {
+        index += 1;
+      } else if ((quote === 'single' && character === "'") || (quote === 'double' && character === '"') || (quote === 'template' && character === '`')) {
+        quote = null;
+      }
+      continue;
+    }
+    if (character === '/' && next === '/') {
+      lineComment = true;
+      index += 1;
+      continue;
+    }
+    if (character === '/' && next === '*') {
+      blockComment = true;
+      index += 1;
+      continue;
+    }
+    if (character === "'") {
+      quote = 'single';
+      continue;
+    }
+    if (character === '"') {
+      quote = 'double';
+      continue;
+    }
+    if (character === '`') {
+      quote = 'template';
+      continue;
+    }
+    if (character === '{') depth += 1;
+    if (character === '}') {
+      depth -= 1;
+      if (depth === 0) return source.slice(bodyStart + 1, index).trim();
+    }
+  }
+
+  throw new Error(`Unterminated function body: ${name}`);
+}
+
 describe('Commerce, accounting, shipment, and dunning containment (F0-W2C-B2M2)', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -132,5 +199,59 @@ describe('Commerce and accounting structural containment (F0-W2C-B2M2)', () => {
   it('removes every fabricated shipment literal', async () => {
     const source = await readFile(path.join(srcRoot, 'components/orders/variants/VersandVariant.tsx'), 'utf8');
     expect(source).not.toMatch(/Anschrift 1|12345 Stadt|2 Kolli|12,4 kg|14,90|Versicherung/);
+  });
+});
+
+describe('Accounting detail-read containment (F0-W2C-B2M5P)', () => {
+  const detailActions = ['getBelegAction', 'getRechnungAction', 'getKostenpostenAction'] as const;
+  const hostileIds = [
+    '00000000-0000-4000-8000-000000000001',
+    "' OR 1=1; SELECT * FROM beleg; --",
+    '',
+  ];
+
+  beforeEach(() => vi.clearAllMocks());
+
+  it('rejects every hostile detail id before any port access', async () => {
+    const accounting = await import('@/app/buchhaltung/actions');
+
+    for (const name of detailActions) {
+      for (const id of hostileIds) {
+        await expect(accounting[name](id)).rejects.toThrow('NOT_AVAILABLE: Sicherer W3-Read-Vertrag fehlt.');
+      }
+    }
+
+    expectNoPortCalls();
+  });
+
+  it('keeps every detail read body as exactly void plus the W3 denial', async () => {
+    const source = await readFile(path.join(srcRoot, 'app/buchhaltung/actions.ts'), 'utf8');
+    const expected = "void id\n  throw new Error('NOT_AVAILABLE: Sicherer W3-Read-Vertrag fehlt.')";
+
+    for (const name of detailActions) {
+      const body = extractExportedFunctionBody(source, name);
+      expect(body, name).toBe(expected);
+      expect(body).not.toMatch(/createClient|checkAppAuth|\.from\(|\.storage|createSignedUrl|revalidate|console/);
+    }
+  });
+
+  it('keeps both detail pages as exact prop-free FoundationUnavailable compositions', async () => {
+    const pages = [
+      'app/buchhaltung/rechnungen/[id]/page.tsx',
+      'app/buchhaltung/kosten/[id]/page.tsx',
+    ] as const;
+
+    for (const file of pages) {
+      const source = await readFile(path.join(srcRoot, file), 'utf8');
+      expect(source).toBe(
+        "import { FoundationUnavailable } from '@/components/foundation/FoundationUnavailable';\n\n" +
+          "export const dynamic = 'force-dynamic';\n" +
+          'export const revalidate = 0;\n\n' +
+          'export default function Page() {\n' +
+          '  return <FoundationUnavailable />;\n' +
+          '}\n',
+      );
+      expect(source).not.toMatch(/params|actions|Detail|Link|Feedback|Erfolg/);
+    }
   });
 });
