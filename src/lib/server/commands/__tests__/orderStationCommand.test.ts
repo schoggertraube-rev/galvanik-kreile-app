@@ -26,9 +26,14 @@ const authorization = {
   },
 };
 const validOrder = {
-  id: "order-1", tenant_id: "tenant-a", station: "wareneingang",
+  id: "order-1", tenant_id: "tenant-a", customer_id: "customer-a", station: "wareneingang",
   current_station: "wareneingang", current_station_id: "wareneingang",
   status: "in_progress", version: 1,
+};
+const validCustomer = { id: "customer-a", tenant_id: "tenant-a" };
+const validItem = {
+  id: "item-1", tenant_id: "tenant-a", customer_id: "customer-a",
+  current_station_id: "wareneingang",
 };
 
 describe("transitionWareneingangToGalvanik", () => {
@@ -83,7 +88,11 @@ describe("transitionWareneingangToGalvanik", () => {
     executeSpy.mockResolvedValueOnce([{ ...validOrder, version: 2 }]);
     const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
     await expect(transitionWareneingangToGalvanik({ orderId: "order-1", expectedVersion: 1 })).resolves.toMatchObject({ code: "CONFLICT" });
-    executeSpy.mockResolvedValueOnce([validOrder]).mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    executeSpy
+      .mockResolvedValueOnce([validOrder])
+      .mockResolvedValueOnce([validCustomer])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
     await expect(transitionWareneingangToGalvanik({ orderId: "order-1", expectedVersion: 1 })).resolves.toMatchObject({ code: "CONFLICT" });
   });
 
@@ -92,29 +101,72 @@ describe("transitionWareneingangToGalvanik", () => {
       .mockResolvedValueOnce([{ ...validOrder, station: null, current_station: null, current_station_id: null }])
       .mockResolvedValueOnce([{ ...validOrder, status: "fertig" }])
       .mockResolvedValueOnce([validOrder])
-      .mockResolvedValueOnce([{ id: "item-1", tenant_id: "tenant-a", current_station_id: null }])
+      .mockResolvedValueOnce([validCustomer])
+      .mockResolvedValueOnce([{ ...validItem, current_station_id: null }])
       .mockResolvedValueOnce([validOrder])
-      .mockResolvedValueOnce([{ id: "item-foreign", tenant_id: "tenant-b", current_station_id: "wareneingang" }])
+      .mockResolvedValueOnce([validCustomer])
+      .mockResolvedValueOnce([{ ...validItem, id: "item-foreign", tenant_id: "tenant-b" }])
       .mockResolvedValueOnce([validOrder])
-      .mockResolvedValueOnce([{ id: "item-null", tenant_id: null, current_station_id: "wareneingang" }]);
+      .mockResolvedValueOnce([validCustomer])
+      .mockResolvedValueOnce([{ ...validItem, id: "item-null", tenant_id: null }]);
     const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
     for (const orderId of ["station", "status", "item", "foreign-item", "null-item"]) {
       await expect(transitionWareneingangToGalvanik({ orderId, expectedVersion: 1 })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     }
-    expect(executeSpy).toHaveBeenCalledTimes(8);
+    expect(executeSpy).toHaveBeenCalledTimes(11);
+  });
+
+  it("rejects null and foreign order customers before the item lock or any update", async () => {
+    executeSpy
+      .mockResolvedValueOnce([{ ...validOrder, customer_id: null }])
+      .mockResolvedValueOnce([{ ...validOrder, customer_id: "customer-b" }])
+      .mockResolvedValueOnce([]);
+    const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
+
+    for (const orderId of ["null-customer", "foreign-customer"]) {
+      await expect(
+        transitionWareneingangToGalvanik({ orderId, expectedVersion: 1 }),
+      ).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    }
+
+    expect(executeSpy).toHaveBeenCalledTimes(3);
+    expect(executeSpy.mock.calls.map(([query]) => query.text).join("\n")).not.toContain("UPDATE public");
+  });
+
+  it("rejects null, foreign, and same-tenant mismatched item customers before any update", async () => {
+    for (const customerId of [null, "customer-b", "customer-a-other"]) {
+      executeSpy
+        .mockResolvedValueOnce([validOrder])
+        .mockResolvedValueOnce([validCustomer])
+        .mockResolvedValueOnce([{ ...validItem, customer_id: customerId }]);
+    }
+    const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
+
+    for (const orderId of ["null-item-customer", "foreign-item-customer", "mismatched-item-customer"]) {
+      await expect(
+        transitionWareneingangToGalvanik({ orderId, expectedVersion: 1 }),
+      ).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    }
+
+    expect(executeSpy).toHaveBeenCalledTimes(9);
+    expect(executeSpy.mock.calls.map(([query]) => query.text).join("\n")).not.toContain("UPDATE public");
   });
 
   it("updates the triple station fields, version, and items atomically after locks", async () => {
     executeSpy
       .mockResolvedValueOnce([validOrder])
-      .mockResolvedValueOnce([{ id: "item-1", tenant_id: "tenant-a", current_station_id: "wareneingang" }])
+      .mockResolvedValueOnce([validCustomer])
+      .mockResolvedValueOnce([validItem])
       .mockResolvedValueOnce([{ id: "order-1", version: 2 }])
       .mockResolvedValueOnce([{ id: "item-1" }]);
     const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
     await expect(transitionWareneingangToGalvanik({ orderId: "order-1", expectedVersion: 1 })).resolves.toEqual({ code: "OK", orderId: "order-1", version: 2 });
     expect(executeSpy.mock.calls[0][0].text).toContain("FOR UPDATE");
-    expect(executeSpy.mock.calls[1][0].text).toContain("WHERE order_id = ?");
-    expect(executeSpy.mock.calls[1][0].text).not.toContain("AND tenant_id");
+    expect(executeSpy.mock.calls[1][0].text).toContain("FROM public.customers");
+    expect(executeSpy.mock.calls[1][0].text).toContain("FOR SHARE");
+    expect(executeSpy.mock.calls[2][0].text).toContain("WHERE order_id = ?");
+    expect(executeSpy.mock.calls[2][0].text).toContain("FOR UPDATE");
+    expect(executeSpy.mock.calls[2][0].text).not.toContain("AND tenant_id");
     for (const predicate of [
       "station = ?",
       "current_station = ?",
@@ -122,15 +174,16 @@ describe("transitionWareneingangToGalvanik", () => {
       "tenant_id = ?",
       "version = ?",
     ]) {
-      expect(executeSpy.mock.calls[2][0].text).toContain(predicate);
+      expect(executeSpy.mock.calls[3][0].text).toContain(predicate);
     }
-    expect(executeSpy.mock.calls[3][0].text).toContain("UPDATE public.items");
+    expect(executeSpy.mock.calls[4][0].text).toContain("UPDATE public.items");
   });
 
   it("maps a post-order-update item write failure to UNAVAILABLE without returning OK", async () => {
     executeSpy
       .mockResolvedValueOnce([validOrder])
-      .mockResolvedValueOnce([{ id: "item-1", tenant_id: "tenant-a", current_station_id: "wareneingang" }])
+      .mockResolvedValueOnce([validCustomer])
+      .mockResolvedValueOnce([validItem])
       .mockResolvedValueOnce([{ id: "order-1", version: 2 }])
       .mockRejectedValueOnce(new Error("item write failed"));
     const { transitionWareneingangToGalvanik } = await import("../orderStationCommand");
@@ -138,7 +191,7 @@ describe("transitionWareneingangToGalvanik", () => {
       code: "UNAVAILABLE",
       message: "Stationswechsel ist derzeit nicht verfügbar.",
     });
-    expect(executeSpy).toHaveBeenCalledTimes(4);
+    expect(executeSpy).toHaveBeenCalledTimes(5);
   });
 
   it("contains no event, RPC, or Supabase Data API path", async () => {
@@ -147,9 +200,13 @@ describe("transitionWareneingangToGalvanik", () => {
     expect(source).toContain('import "server-only";');
     expect(source).not.toMatch(/\bevents\b|\.insert\(|rpc\(|createClient|supabase/i);
     expect(source).toContain("perm_op_status");
-    const itemLock = source.match(/SELECT id, tenant_id, current_station_id[\s\S]+?FOR UPDATE/)?.[0] ?? "";
+    const customerLock = source.match(/SELECT id, tenant_id\s+FROM public\.customers[\s\S]+?FOR SHARE/)?.[0] ?? "";
+    expect(customerLock).toContain("WHERE id = ${order.customer_id}");
+    expect(customerLock).toContain("AND tenant_id = ${authorization.data.tenantId}");
+    const itemLock = source.match(/SELECT id, tenant_id, customer_id, current_station_id[\s\S]+?FOR UPDATE/)?.[0] ?? "";
     expect(itemLock).toContain("WHERE order_id = ${order.id}");
     expect(itemLock).not.toContain("AND tenant_id");
     expect(source).toContain("item.tenant_id !== authorization.data.tenantId");
+    expect(source).toContain("item.customer_id !== order.customer_id");
   });
 });

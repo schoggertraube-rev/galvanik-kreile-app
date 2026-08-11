@@ -40,6 +40,7 @@ export type OrderStationCommandResult =
 type LockedOrder = {
   id: string;
   tenant_id: string | null;
+  customer_id: string | null;
   station: string | null;
   current_station: string | null;
   current_station_id: string | null;
@@ -47,9 +48,15 @@ type LockedOrder = {
   version: number;
 };
 
+type LockedCustomer = {
+  id: string;
+  tenant_id: string | null;
+};
+
 type LockedItem = {
   id: string;
   tenant_id: string | null;
+  customer_id: string | null;
   current_station_id: string | null;
 };
 
@@ -113,7 +120,7 @@ export async function transitionWareneingangToGalvanik(
   try {
     return await withPrivilegedTenantTransaction(authorization.data, async (tx) => {
       const lockedOrders = await tx.execute<LockedOrder>(sql`
-        SELECT id, tenant_id, station, current_station, current_station_id, status, version
+        SELECT id, tenant_id, customer_id, station, current_station, current_station_id, status, version
         FROM public.orders
         WHERE id = ${input.orderId} AND tenant_id = ${authorization.data.tenantId}
         FOR UPDATE
@@ -133,8 +140,30 @@ export async function transitionWareneingangToGalvanik(
         return { code: "VALIDATION_ERROR", message: "Auftrag kann nicht aus dem Wareneingang übergeben werden." };
       }
 
+      if (!order.customer_id) {
+        return { code: "VALIDATION_ERROR", message: "Auftragszuordnung ist ungültig." };
+      }
+
+      const lockedCustomers = await tx.execute<LockedCustomer>(sql`
+        SELECT id, tenant_id
+        FROM public.customers
+        WHERE id = ${order.customer_id}
+          AND tenant_id = ${authorization.data.tenantId}
+        FOR SHARE
+      `);
+      const customer = lockedCustomers[0];
+
+      if (
+        lockedCustomers.length !== 1 ||
+        !customer ||
+        customer.id !== order.customer_id ||
+        customer.tenant_id !== authorization.data.tenantId
+      ) {
+        return { code: "VALIDATION_ERROR", message: "Auftragszuordnung ist ungültig." };
+      }
+
       const lockedItems = await tx.execute<LockedItem>(sql`
-        SELECT id, tenant_id, current_station_id
+        SELECT id, tenant_id, customer_id, current_station_id
         FROM public.items
         WHERE order_id = ${order.id}
         FOR UPDATE
@@ -144,6 +173,7 @@ export async function transitionWareneingangToGalvanik(
         lockedItems.some(
           (item) =>
             item.tenant_id !== authorization.data.tenantId ||
+            item.customer_id !== order.customer_id ||
             item.current_station_id !== SOURCE_STATION,
         )
       ) {

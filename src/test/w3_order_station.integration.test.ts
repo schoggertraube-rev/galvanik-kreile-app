@@ -32,6 +32,7 @@ const USERS = {
 
 const CUSTOMERS = {
   a: "w3-local-customer-a",
+  aOther: "w3-local-customer-a-other",
   b: "w3-local-customer-b",
 } as const;
 
@@ -103,9 +104,10 @@ async function seedFixtures() {
   await pool.query(
     `INSERT INTO public.customers (id, tenant_id, customer_number, name, type, source)
      VALUES
-       ($1, $3, 'W3-A', 'W3 Kunde A', 'business', 'manual'),
-       ($2, $4, 'W3-B', 'W3 Kunde B', 'business', 'manual')`,
-    [CUSTOMERS.a, CUSTOMERS.b, TENANT_A, TENANT_B],
+       ($1, $4, 'W3-A', 'W3 Kunde A', 'business', 'manual'),
+       ($2, $4, 'W3-A-OTHER', 'W3 Kunde A Other', 'business', 'manual'),
+       ($3, $5, 'W3-B', 'W3 Kunde B', 'business', 'manual')`,
+    [CUSTOMERS.a, CUSTOMERS.aOther, CUSTOMERS.b, TENANT_A, TENANT_B],
   );
 
   const orderRows = [
@@ -155,7 +157,7 @@ async function seedFixtures() {
 async function aggregateSnapshot(orderId: string) {
   const [order, items, events] = await Promise.all([
     pool.query(
-      `SELECT id, tenant_id, station, current_station, current_station_id, status, version
+      `SELECT id, tenant_id, customer_id, station, current_station, current_station_id, status, version
        FROM public.orders WHERE id = $1`,
       [orderId],
     ),
@@ -307,7 +309,7 @@ describe.sequential("W3 order station local replay integration", () => {
     expect(await aggregateSnapshot(ORDERS.foreign)).toEqual(foreignBefore);
   });
 
-  it("rejects foreign and null tenant children and corrupt customer ownership without partial reads or writes", async () => {
+  it("rejects foreign and null tenant children without partial reads or writes", async () => {
     setSession(USERS.werkstatt, "werkstatt");
 
     for (const [itemId, tenantId] of [
@@ -330,14 +332,56 @@ describe.sequential("W3 order station local replay integration", () => {
       ).rejects.toThrow("ORDER_ITEM_OWNERSHIP_INVALID");
       await pool.query("DELETE FROM public.items WHERE id=$1", [itemId]);
     }
+  });
+
+  it("rejects a tenant-A order assigned to a tenant-B customer without changing its snapshot", async () => {
+    setSession(USERS.werkstatt, "werkstatt");
+
+    await expect(
+      pool.query("UPDATE public.orders SET customer_id=NULL WHERE id=$1", [ORDERS.visible]),
+    ).rejects.toMatchObject({ code: "23502" });
+    await expect(
+      pool.query("UPDATE public.orders SET customer_id=$1 WHERE id=$2", [
+        "w3-local-customer-missing",
+        ORDERS.visible,
+      ]),
+    ).rejects.toMatchObject({ code: "23503" });
 
     await pool.query("UPDATE public.orders SET customer_id=$1 WHERE id=$2", [
       CUSTOMERS.b,
       ORDERS.visible,
     ]);
+    const before = await aggregateSnapshot(ORDERS.visible);
+    await expect(
+      transitionWareneingangToGalvanik({ orderId: ORDERS.visible, expectedVersion: 1 }),
+    ).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    expect(await aggregateSnapshot(ORDERS.visible)).toEqual(before);
     await expect(
       readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang"),
     ).rejects.toThrow("ORDER_OWNERSHIP_INVALID");
+  });
+
+  it("rejects tenant-A items assigned to another tenant-A or tenant-B customer without changing the snapshot", async () => {
+    setSession(USERS.werkstatt, "werkstatt");
+
+    for (const customerId of [CUSTOMERS.aOther, CUSTOMERS.b]) {
+      await pool.query("UPDATE public.items SET customer_id=$1 WHERE id=$2", [
+        customerId,
+        "w3-local-item-1",
+      ]);
+      const before = await aggregateSnapshot(ORDERS.visible);
+      await expect(
+        transitionWareneingangToGalvanik({ orderId: ORDERS.visible, expectedVersion: 1 }),
+      ).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+      expect(await aggregateSnapshot(ORDERS.visible)).toEqual(before);
+      await expect(
+        readTenantStationOrders({ tenantId: TENANT_A }, "wareneingang"),
+      ).rejects.toThrow("ORDER_ITEM_OWNERSHIP_INVALID");
+      await pool.query("UPDATE public.items SET customer_id=$1 WHERE id=$2", [
+        CUSTOMERS.a,
+        "w3-local-item-1",
+      ]);
+    }
   });
 
   it("commits the complete aggregate once, reads it back fresh, and rejects a stale retry", async () => {

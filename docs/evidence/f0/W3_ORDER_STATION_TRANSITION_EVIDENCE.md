@@ -2,6 +2,7 @@
 
 ```yaml
 BASE: 465f8967a0bd55baf3cbd2d496cbb6dc7bcbefe6
+W3_03B_BASE: 2b8073612930329f1d3ccb5a8d28165eda6dfe66
 SCOPE: wareneingang-to-galvanik-only
 COMMAND_RESULT: OK | UNAUTHENTICATED | FORBIDDEN | NOT_FOUND | CONFLICT | VALIDATION_ERROR | UNAVAILABLE
 READBACK: fresh tenant-bound Wareneingang and Galvanik reads; source absence plus target presence and version increment
@@ -13,10 +14,15 @@ SUPABASE_CLI: 2.111.0
 POSTGRESQL: 17.6
 LOCAL_LEDGER: 10 migrations; 20260805180624..20260811150000
 LOCAL_DB_ROLE: postgres; rolsuper=false; rolbypassrls=true; row_security=on
-LOCAL_INTEGRATION: 1 file; 7 tests PASS
-UNIT_SUITE: 79 files; 407 tests PASS
-TYPECHECK: PASS
-EXACT_ESLINT: PASS
+LOCAL_INTEGRATION_BASE: 1 file; 7 tests PASS at W3_03B_BASE
+W3_03B_FOCUSED_TESTS: 2 files; 20 tests PASS after final Customer tenant predicate
+UNIT_SUITE_BASE: 79 files; 407 tests PASS at W3_03B_BASE
+TYPECHECK_BASE: PASS at W3_03B_BASE
+EXACT_ESLINT_BASE: PASS at W3_03B_BASE
+W3_03B_TYPECHECK: PASS after final Customer tenant predicate; tsc --noEmit --incremental false
+W3_03B_EXACT_ESLINT: PASS after final Customer tenant predicate; 3 TS/test paths
+W3_03B_DIFF_CHECK: PASS after final Customer tenant predicate
+W3_03B_SECURITY_REVIEW_BASE: PASS before final Customer tenant predicate
 W4_PENDING: Events, Evidence, Attachments, versionierte SQL-Read-Models
 REMOTE_PRODUCTION: BLOCKED_EXTERNAL_PERMISSION
 ```
@@ -25,8 +31,11 @@ REMOTE_PRODUCTION: BLOCKED_EXTERNAL_PERMISSION
 
 - Einziger aktivierter Command: `wareneingang -> galvanik` mit Session, Tenant,
   Capability, Ownership, Item-Lock und `expectedVersion`.
-- Der Item-Lock enthält den Tenant-Prädikat; der Legacy-Stationswriter bleibt
-  unmittelbar `NOT_AVAILABLE`.
+- Der Command sperrt den referenzierten Customer tenantgebunden `FOR SHARE` und
+  verwirft fehlende oder fremdmandantige Customer-Zuordnungen vor jedem Write.
+  Danach sperrt der Item-Lock alle verknüpften Items ohne Tenant-/Customer-Vorfilter
+  und validiert Tenant, exakte Order-Customer-Zuordnung und Quellstation. Der
+  Legacy-Stationswriter bleibt unmittelbar `NOT_AVAILABLE`.
 - Die UI meldet Erfolg erst nach zwei frischen autorisierten Reads: Auftrag nicht
   mehr im Wareneingang und als `ready` mit inkrementierter Version in Galvanik.
 - Nicht bestätigte oder fehlgeschlagene Readbacks melden keinen Erfolg und sperren
@@ -59,6 +68,12 @@ REMOTE_PRODUCTION: BLOCKED_EXTERNAL_PERMISSION
   einem eigenen Auftrag liefern `VALIDATION_ERROR`; Auftrag und alle Items
   bleiben unverändert. Der Reader bricht bei beschädigter Customer-/Item-
   Ownership ab, statt fremde IDs oder ein Teilaggregat zurückzugeben.
+- W3-03B belegt zusätzlich reale Negativfälle für einen Tenant-A-Auftrag mit
+  Tenant-B-Customer sowie Tenant-A-Items mit einem anderen Tenant-A- oder einem
+  Tenant-B-Customer. Der Command muss jeweils `VALIDATION_ERROR` liefern, der
+  Reader fail-closed abbrechen und der vollständige Aggregate-Snapshot unverändert
+  bleiben. `23502` und `23503` grenzen NULL- und nicht existente Customer-IDs von
+  den durch einfache FKs weiterhin möglichen falschen Zuordnungen ab.
 - Der Happy Path aktualisiert Auftragstriple, Status, Version und sämtliche
   eigenen Items atomar. Frische Reads belegen Quellabwesenheit und
   Zielanwesenheit. Ein stale Retry liefert `CONFLICT`; zwei parallele Version-1-
@@ -66,8 +81,16 @@ REMOTE_PRODUCTION: BLOCKED_EXTERNAL_PERMISSION
 - Eine echte absichtlich geworfene Transaktion belegt den vollständigen Rollback
   nach Order- und Item-Update. Die Eventmenge bleibt unverändert; Event- und
   Receipt-Wahrheit werden erst in W4 ergänzt.
-- Finale lokale Gates: fokussierte Units `16/16`, Integration `7/7`, TypeScript,
-  exaktes ESLint sowie die gesamte Unit-Suite `407/407` sind grün.
+- Am W3-03B-Baseline-HEAD waren fokussierte Units `16/16`, Integration `7/7`,
+  TypeScript, exaktes ESLint sowie die gesamte Unit-Suite `407/407` grün. Die
+  aktualisierten W3-03B-Units und Integrationstests liefen nach dem finalen
+  Customer-Tenant-Prädikat gemeinsam mit `20/20` grün. Auch
+  `tsc --noEmit --incremental false`, exaktes ESLint der drei betroffenen
+  TS-/Testpfade und `git diff --check` sind für diesen finalen Tenant-Lock `PASS`.
+  Der unabhängige Security Review bleibt getrennt als PASS des vorherigen
+  Vorzustands ausgewiesen.
+  Die Unit-Gesamtsuite `407/407` bleibt ausschließlich separat ausgewiesene
+  Baseline-Evidenz und wurde für W3-03B nicht erneut ausgeführt.
 
 ## Nachweisgrenze
 
