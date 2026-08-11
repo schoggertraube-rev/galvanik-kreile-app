@@ -12,6 +12,10 @@ const ports = vi.hoisted(() => {
   const select = vi.fn(() => query);
   const from = vi.fn(() => ({ select }));
   return {
+    resolveAuthorization: vi.fn(async () => ({
+      ok: true as const,
+      data: { tenantId: "galvanik-kreile", role: "admin" as const },
+    })),
     createAuthorizedDataClient: vi.fn(async () => ({ from })),
     createAuthorizedDataContext: vi.fn(),
     createClient: vi.fn(),
@@ -22,6 +26,8 @@ const ports = vi.hoisted(() => {
   };
 });
 
+vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: ports.resolveAuthorization }));
+vi.mock("@/lib/server/appSession", () => ({ APP_TENANT_ID: "galvanik-kreile" }));
 vi.mock("@/lib/supabase/server", () => ({
   createAuthorizedDataClient: ports.createAuthorizedDataClient,
   createAuthorizedDataContext: ports.createAuthorizedDataContext,
@@ -95,7 +101,11 @@ describe("W2C-B2M5N Jahresplan fail-closed", () => {
     expect(screen.getByRole("status")).toHaveTextContent(denial);
     expect(screen.queryByText(/gespeichert/i)).not.toBeInTheDocument();
     expect(ports.createAuthorizedDataContext).not.toHaveBeenCalled();
+    expect(ports.resolveAuthorization).toHaveBeenCalledOnce();
     expect(ports.createAuthorizedDataClient).toHaveBeenCalledWith("read");
+    expect(ports.resolveAuthorization.mock.invocationCallOrder[0]).toBeLessThan(
+      ports.createAuthorizedDataClient.mock.invocationCallOrder[0],
+    );
     expect(ports.from).toHaveBeenCalledWith("forecast_version");
     expect(ports.query.eq).toHaveBeenCalledTimes(4);
     expect(ports.query.eq).toHaveBeenNthCalledWith(1, "tenant_id", "galvanik-kreile");

@@ -4,7 +4,20 @@ import {
   createAuthorizedDataClient,
   createClient,
 } from '@/lib/supabase/server';
+import { resolveAuthorization } from '@/lib/server/authorization';
+import { APP_TENANT_ID } from '@/lib/server/appSession';
 import type { KontextDaten } from '@/lib/whatif/engine';
+
+async function requireCockpitRead(): Promise<void> {
+  const result = await resolveAuthorization();
+  if (
+    !result.ok ||
+    result.data.tenantId !== APP_TENANT_ID ||
+    (result.data.role !== 'admin' && result.data.role !== 'developer')
+  ) {
+    throw new Error('NOT_AVAILABLE: Cockpit-Datenzugriff erfordert kanonische Admin- oder Entwickler-Autorisierung.');
+  }
+}
 
 export interface EngpassStation {
   kostenstelle_id: string;
@@ -117,6 +130,7 @@ export interface KundenDetailAuftrag {
 }
 
 export async function getCockpitKpis() {
+  await requireCockpitRead();
   const supabase = await createClient();
   
   // v_monatsergebnis for current month
@@ -182,6 +196,7 @@ export async function getCockpitKpis() {
 }
 
 export async function getTopKunden(limit = 10): Promise<KundeClvKachelRow[]> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_kunde_clv')
@@ -197,6 +212,7 @@ export async function getTopKunden(limit = 10): Promise<KundeClvKachelRow[]> {
 }
 
 export async function getInaktiveKunden(): Promise<KundeClvKachelRow[]> {
+  await requireCockpitRead();
   const supabase = await createClient();
   
   const nineMonthsAgo = new Date();
@@ -216,6 +232,7 @@ export async function getInaktiveKunden(): Promise<KundeClvKachelRow[]> {
 }
 
 export async function getEngpassDaten(): Promise<EngpassStation[]> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_engpass')
@@ -230,6 +247,7 @@ export async function getEngpassDaten(): Promise<EngpassStation[]> {
 }
 
 export async function getAgingDaten(): Promise<AgingData[]> {
+  await requireCockpitRead();
   const supabase = await createClient();
   
   const { data, error } = await supabase
@@ -268,6 +286,7 @@ export async function getAgingDaten(): Promise<AgingData[]> {
 }
 
 export async function getAuftragDbRanking(limit = 10): Promise<AuftragDbRankingRow[]> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_auftrag_db')
@@ -284,6 +303,7 @@ export async function getAuftragDbRanking(limit = 10): Promise<AuftragDbRankingR
 }
 
 export async function getWhatIfKontext(): Promise<KontextDaten> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const privileged = await createAuthorizedDataClient('read');
   
@@ -377,6 +397,7 @@ export async function getWhatIfKontext(): Promise<KontextDaten> {
 }
 
 export async function getEngpassDetails(station: string): Promise<EngpassDetails> {
+  await requireCockpitRead();
   const supabase = await createClient();
   
   const { data: waitingOrders } = await supabase.from('orders')
@@ -392,12 +413,14 @@ export async function getEngpassDetails(station: string): Promise<EngpassDetails
 }
 
 export async function getAuftragDbDetails(orderId: string): Promise<AuftragDbDetails | null> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const { data } = await supabase.from('v_auftrag_db').select('*').eq('order_id', orderId).single();
   return data;
 }
 
 export async function getForecastDaten(): Promise<ForecastDaten> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const privileged = await createAuthorizedDataClient('read');
   const { data: results, error } = await supabase.from('v_monatsergebnis')
@@ -426,6 +449,7 @@ export async function getForecastDaten(): Promise<ForecastDaten> {
 }
 
 export async function getKundenDetails(customerId: string): Promise<{ clv: KundeClvDetail | null; letzeAuftraege: KundenDetailAuftrag[] }> {
+  await requireCockpitRead();
   const supabase = await createClient();
   
   const { data: clv } = await supabase.from('v_kunde_clv').select('*').eq('customer_id', customerId).single();
@@ -455,6 +479,7 @@ export async function getKundenDetails(customerId: string): Promise<{ clv: Kunde
 
 
 export async function getAgingRechnungen(bucket: string): Promise<AgingInvoiceRow[]> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_aging')
@@ -470,6 +495,7 @@ export async function getAgingRechnungen(bucket: string): Promise<AgingInvoiceRo
 }
 
 export async function getAktiveWarnungen(): Promise<ActiveWarning[]> {
+  await requireCockpitRead();
   const supabase = await createAuthorizedDataClient('read');
   const { data, error } = await supabase
     .from('warning_event')
@@ -506,6 +532,7 @@ export async function refreshWarnungen() {
 }
 
 export async function getAktiverJahresplan(jahr: number) {
+  await requireCockpitRead();
   const supabase = await createAuthorizedDataClient('read');
   const { data, error } = await supabase
     .from('forecast_version')
