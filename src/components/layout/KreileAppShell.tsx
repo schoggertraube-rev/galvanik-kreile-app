@@ -5,7 +5,6 @@ import { KreileHeader } from "./KreileHeader";
 import { RightNav } from "./RightNav";
 import { MobileNav } from "./MobileNav";
 import { MobileBottomNav } from "./MobileBottomNav";
-import { PwaRegister } from "./PwaRegister";
 import { useEffect, useState } from "react";
 import { getSystemStats } from "@/app/actions/systemStats";
 import { AlertTriangle } from "lucide-react";
@@ -54,7 +53,6 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
       <ParkedCallProvider>
         <RealtimeSyncProvider>
           <div className="min-h-screen bg-bg-app text-kreile-text antialiased">
-            <PwaRegister />
             {children}
             <FloatingParkedCall />
             <OrderOverlay />
@@ -72,8 +70,6 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
           className="flex flex-col bg-bg-app text-navy-900 antialiased"
           style={{ height: "100dvh" }}          // dvh für korrekte mobile Viewport-Höhe
         >
-          <PwaRegister />
-
           <SessionWarningBanner show={isSessionExpired} />
 
           {/* Demo/Offline Banner */}
