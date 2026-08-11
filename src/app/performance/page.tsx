@@ -1,12 +1,6 @@
-import React from 'react';
-import { PerformanceCockpitClient } from './PerformanceCockpitClient';
-import { getAnalyseOverview } from '@/features/analyse/analyse.actions';
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
-export default async function PerformanceCockpitPage() {
-  const result = await getAnalyseOverview("Monat");
-  const perfData = result.data || [];
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-  return (
-    <PerformanceCockpitClient overviews={perfData} />
-  );
-}
+export default function PerformancePage() { return <FoundationUnavailable />; }

@@ -15,6 +15,9 @@ const unavailablePages = [
   "src/app/status/page.tsx",
   "src/app/baeder/page.tsx",
   "src/app/kontrolle/page.tsx",
+  "src/app/analyse/page.tsx",
+  "src/app/performance/page.tsx",
+  "src/app/performance/ki-empfehlungen/page.tsx",
 ];
 
 describe("F0 W2C-B2S page truth containment", () => {
@@ -24,33 +27,9 @@ describe("F0 W2C-B2S page truth containment", () => {
     expect(page).toContain('export const dynamic = "force-dynamic";');
     expect(page).toContain("export const revalidate = 0;");
     expect(page).toMatch(/return <FoundationUnavailable \/>;/);
-    expect(page).not.toMatch(/fetch\(|useEffect|Repository|actions|supabase|auftrag|termin|\d{4}/i);
+    expect(page).not.toMatch(/fetch\(|useEffect|Repository|actions|supabase|auftrag|termin|\d{4}|use client|features\/analyse|PerformanceCockpitClient|PerformanceDetailLayout|getAnalyseOverview|next\/link|useState/i);
   });
 
-  it("keeps the root on its view-backed overview path without fabricated decorations", () => {
-    expect(source("src/app/performance/page.tsx")).toContain("getAnalyseOverview");
-    expect(source("src/features/analyse/analyse.actions.ts")).toContain("v_analyse");
-    const rootClient = source("src/app/performance/PerformanceCockpitClient.tsx");
-    expect(rootClient).toContain("NOT_AVAILABLE");
-    expect(rootClient).toContain("DEMO");
-    expect(rootClient).not.toMatch(/Mai 2026|09:14|22 Werktage|5 MA|6 TIPPS/);
-    expect(source("src/app/performance/components/UmsatzMargeKachel.tsx")).not.toContain("M0,22 L16,19");
-    expect(source("src/app/performance/components/KundenMarktKachel.tsx")).not.toMatch(/82% Abholung|18% Versand|3 Länder/);
-  });
-
-  it("keeps the drill period equal to the root overview period without period or comparison controls", () => {
-    const rootPage = source("src/app/performance/page.tsx");
-    const rootClient = source("src/app/performance/PerformanceCockpitClient.tsx");
-    const rootPeriod = rootPage.match(/getAnalyseOverview\("([^"]+)"\)/)?.[1];
-    const drillPeriod = rootClient.match(/<AnalyseDrillOverlay[\s\S]*?period="([^"]+)"/)?.[1];
-
-    expect(rootPeriod).toBe("Monat");
-    expect(drillPeriod).toBe(rootPeriod);
-    expect(drillPeriod).not.toBe("NOT_AVAILABLE");
-    expect(rootClient).not.toContain('period="NOT_AVAILABLE"');
-    expect(rootClient).not.toMatch(/\b(?:tab|cmpOn|cmpPer|setTab|setCmpOn|setCmpPer)\b/);
-    expect(rootClient).not.toMatch(/(?:className=\{`(?:tabb|cmp-btn|cmp-opt)|Woche|Quartal|Jahr|vorwoche|vormonat|vorquartal|vorjahr|Vergleich:|Zeig mir die Veränderungen zu)/i);
-  });
 });
 
 describe("F0 W2C-B2S local provider denials", () => {
