@@ -2,7 +2,12 @@
 
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization } from "@/lib/server/authorization";
-import { readTenantStationOrders } from "@/lib/server/orderStationRead";
+import {
+  readTenantOrderStationReceipt,
+  readTenantStationOrders,
+  type OrderStationReceiptReadInput,
+} from "@/lib/server/orderStationRead";
+import type { OrderStationTransitionReceipt } from "@/lib/server/commands/orderStationCommand";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
 export type WarendurchlaufOrder = OperationalOrder;
@@ -63,6 +68,38 @@ export async function getWareneingangOrdersAction(): Promise<WarendurchlaufActio
 
 export async function getGalvanikOrdersAction(): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
   return getFixedStationOrders("galvanik");
+}
+
+export async function getOrderStationReceiptAction(
+  input: OrderStationReceiptReadInput,
+): Promise<WarendurchlaufActionResult<OrderStationTransitionReceipt | null>> {
+  noStore();
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+  }
+
+  if (!authorization.ok) {
+    if (authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
+      return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+    }
+    return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  }
+
+  if (!authorization.data.permissions.includes("perm_view_leitstand")) {
+    return { ok: false, error: "FORBIDDEN", message: "Stationsbeleg ist nicht erlaubt." };
+  }
+
+  try {
+    return {
+      ok: true,
+      data: await readTenantOrderStationReceipt(authorization.data, input),
+    };
+  } catch {
+    return { ok: false, error: "QUERY_ERROR", message: "Stationsbeleg konnte nicht sicher geladen werden." };
+  }
 }
 
 export async function startProcessingStation(orderId: string, stationId: string) {

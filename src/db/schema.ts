@@ -179,6 +179,11 @@ export const events = pgTable("events", {
   userId: uuid("user_id").references(() => appUsers.id),
   workerId: varchar("worker_id", { length: 100 }),
   station: text("station"),
+  clientEventId: uuid("client_event_id"),
+  eventSchemaVersion: integer("event_schema_version"),
+  correlationId: uuid("correlation_id"),
+  aggregateVersion: integer("aggregate_version"),
+  fromStation: text("from_station"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

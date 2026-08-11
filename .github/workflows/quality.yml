@@ -212,10 +212,11 @@ jobs:
           SUPABASE_URL: http://127.0.0.1:54321
         run: npx vitest run src/test/scan_order.integration.test.ts
 
-      - name: W3 order-station command and tenant-read integration
+      - name: W3/W4 order-station command, receipt, and private read-model integration
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           W3_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          W4_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/w3_order_station.integration.test.ts
 

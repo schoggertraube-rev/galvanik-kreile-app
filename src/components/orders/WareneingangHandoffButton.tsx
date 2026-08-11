@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   getGalvanikOrdersAction,
+  getOrderStationReceiptAction,
   getWareneingangOrdersAction,
   type WarendurchlaufOrder,
 } from "@/app/warendurchlauf/actions";
@@ -15,7 +16,7 @@ type Props = {
   onConflictReadback?: (nextWeOrders: WarendurchlaufOrder[]) => void;
 };
 
-const UNCONFIRMED_MESSAGE = "Übergabe wurde nicht bestätigt; bitte Liste neu laden.";
+const UNCONFIRMED_MESSAGE = "Übergabe wurde nicht bestätigt; erneut prüfen.";
 
 export function WareneingangHandoffButton({
   orderId,
@@ -24,16 +25,32 @@ export function WareneingangHandoffButton({
   onConflictReadback,
 }: Props) {
   const [pending, setPending] = useState(false);
-  const [retryBlocked, setRetryBlocked] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const clientEventRef = useRef<{ orderId: string; expectedVersion: number; id: string } | null>(null);
+
+  function stableClientEventId(): string {
+    if (
+      !clientEventRef.current
+      || clientEventRef.current.orderId !== orderId
+      || clientEventRef.current.expectedVersion !== expectedVersion
+    ) {
+      clientEventRef.current = { orderId, expectedVersion, id: globalThis.crypto.randomUUID() };
+    }
+    return clientEventRef.current.id;
+  }
 
   async function handleHandoff() {
-    if (pending || retryBlocked) return;
+    if (pending) return;
 
     setPending(true);
     setMessage(null);
     try {
-      const command = await transitionWareneingangToGalvanikAction({ orderId, expectedVersion });
+      const clientEventId = stableClientEventId();
+      const command = await transitionWareneingangToGalvanikAction({
+        orderId,
+        expectedVersion,
+        clientEventId,
+      });
 
       if (command.code === "CONFLICT") {
         try {
@@ -53,34 +70,45 @@ export function WareneingangHandoffButton({
 
       let sourceRead;
       let targetRead;
+      let receiptRead;
       try {
-        [sourceRead, targetRead] = await Promise.all([
-          getWareneingangOrdersAction(),
-          getGalvanikOrdersAction(),
-        ]);
+        sourceRead = await getWareneingangOrdersAction();
+        targetRead = await getGalvanikOrdersAction();
+        receiptRead = await getOrderStationReceiptAction({ orderId, clientEventId });
       } catch {
-        setRetryBlocked(true);
         setMessage(UNCONFIRMED_MESSAGE);
         return;
       }
 
-      if (!sourceRead.ok || !targetRead.ok) {
-        setRetryBlocked(true);
+      if (!sourceRead.ok || !targetRead.ok || !receiptRead.ok || !receiptRead.data) {
         setMessage(UNCONFIRMED_MESSAGE);
         return;
       }
 
       const targetOrder = targetRead.data.find((order) => order.id === orderId);
+      const persistedReceipt = receiptRead.data;
+      const receiptConfirmed =
+        persistedReceipt.eventId === command.receipt.eventId &&
+        persistedReceipt.clientEventId === command.receipt.clientEventId &&
+        persistedReceipt.correlationId === command.receipt.correlationId &&
+        persistedReceipt.eventSchemaVersion === command.receipt.eventSchemaVersion &&
+        persistedReceipt.orderId === command.receipt.orderId &&
+        persistedReceipt.aggregateVersion === command.receipt.aggregateVersion &&
+        persistedReceipt.fromStation === command.receipt.fromStation &&
+        persistedReceipt.toStation === command.receipt.toStation &&
+        persistedReceipt.actorId === command.receipt.actorId &&
+        persistedReceipt.occurredAt === command.receipt.occurredAt;
       const confirmed =
         !sourceRead.data.some((order) => order.id === orderId) &&
         targetOrder?.station === "galvanik" &&
         targetOrder.currentStationId === "galvanik" &&
         targetOrder.status === "ready" &&
-        command.version === expectedVersion + 1 &&
-        targetOrder.version === command.version;
+        command.receipt.clientEventId === clientEventId &&
+        command.receipt.aggregateVersion === expectedVersion + 1 &&
+        targetOrder.version === command.receipt.aggregateVersion &&
+        receiptConfirmed;
 
       if (!confirmed) {
-        setRetryBlocked(true);
         setMessage(UNCONFIRMED_MESSAGE);
         return;
       }
@@ -99,7 +127,7 @@ export function WareneingangHandoffButton({
       <button
         type="button"
         onClick={handleHandoff}
-        disabled={pending || retryBlocked}
+        disabled={pending}
         className="rounded-md bg-success-green px-3 py-1.5 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
       >
         {pending ? "Übergabe wird geprüft..." : "An Galvanik übergeben"}

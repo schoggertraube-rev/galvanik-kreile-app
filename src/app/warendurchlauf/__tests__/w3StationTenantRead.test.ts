@@ -5,10 +5,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const resolveAuthorizationSpy = vi.hoisted(() => vi.fn());
 const readTenantStationOrdersSpy = vi.hoisted(() => vi.fn());
+const readTenantOrderStationReceiptSpy = vi.hoisted(() => vi.fn());
 
 vi.mock("next/cache", () => ({ unstable_noStore: vi.fn() }));
 vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: resolveAuthorizationSpy }));
-vi.mock("@/lib/server/orderStationRead", () => ({ readTenantStationOrders: readTenantStationOrdersSpy }));
+vi.mock("@/lib/server/orderStationRead", () => ({
+  readTenantStationOrders: readTenantStationOrdersSpy,
+  readTenantOrderStationReceipt: readTenantOrderStationReceiptSpy,
+}));
 
 const authorization = {
   ok: true as const,
@@ -27,6 +31,7 @@ describe("W3 tenant station reads", () => {
     vi.clearAllMocks();
     resolveAuthorizationSpy.mockResolvedValue(authorization);
     readTenantStationOrdersSpy.mockResolvedValue([]);
+    readTenantOrderStationReceiptSpy.mockResolvedValue(null);
   });
 
   it("reads the two fixed stations only after session authorization and capability", async () => {
@@ -98,6 +103,37 @@ describe("W3 tenant station reads", () => {
     );
   });
 
+  it("reads a persisted receipt with the same read capability and resolved tenant only", async () => {
+    const input = {
+      orderId: "order-1",
+      clientEventId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    };
+    const receipt = {
+      eventId: "event-1",
+      clientEventId: input.clientEventId,
+      correlationId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      eventSchemaVersion: 1,
+      orderId: input.orderId,
+      aggregateVersion: 2,
+      fromStation: "wareneingang",
+      toStation: "galvanik",
+      actorId: "11111111-1111-4111-8111-111111111111",
+      occurredAt: "2026-08-11T15:47:32.000Z",
+    };
+    readTenantOrderStationReceiptSpy.mockResolvedValueOnce(receipt);
+    const { getOrderStationReceiptAction } = await import("../actions");
+
+    await expect(getOrderStationReceiptAction(input)).resolves.toEqual({ ok: true, data: receipt });
+    expect(readTenantOrderStationReceiptSpy).toHaveBeenCalledWith(authorization.data, input);
+
+    resolveAuthorizationSpy.mockResolvedValueOnce({
+      ...authorization,
+      data: { ...authorization.data, permissions: [] },
+    });
+    await expect(getOrderStationReceiptAction(input)).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
+    expect(readTenantOrderStationReceiptSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("source-locks authorization before read, all tenant predicates, no literal tenant, cache, or legacy reader", async () => {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
     const [actions, reader] = await Promise.all([
@@ -111,17 +147,15 @@ describe("W3 tenant station reads", () => {
     expect(actions).not.toContain("getOperationalOrdersByStation");
     expect(actions).not.toContain("getOperationalOrdersReadyForStation");
     expect(reader).toContain('import "server-only";');
-    expect(reader).toContain("Pick<AuthorizationSnapshot, \"tenantId\">");
-    expect(reader).toContain("eq(orders.tenantId, tenantId)");
-    expect(reader).toContain("eq(customers.tenantId, tenantId)");
-    expect(reader).toContain("customerOwnerId: customers.id");
-    expect(reader).toContain("row.customerOwnerId !== row.customerId");
-    expect(reader).toContain(".where(inArray(items.orderId, orderIds))");
-    expect(reader).not.toContain("and(eq(items.tenantId, tenantId), inArray(items.orderId, orderIds))");
-    expect(reader).toContain("item.tenantId !== tenantId");
-    expect(reader).toContain("customerIdByOrderId.get(item.orderId) !== item.customerId");
-    expect(reader).toContain("ORDER_ITEM_OWNERSHIP_INVALID");
-    expect(reader).not.toContain(".select()\n          .from(items)");
+    expect(reader).toContain("private.v_operational_station_queue_v1");
+    expect(reader).toContain("private.v_order_station_receipts_v1");
+    expect(reader).toContain("row.tenant_id !== tenantId");
+    expect(reader).toContain("row.tenant_integrity_ok !== true");
+    expect(reader).toContain("item.tenantId !== row.tenant_id");
+    expect(reader).toContain("item.orderId !== row.id");
+    expect(reader).toContain("item.customerId !== row.customer_id");
+    expect(reader).not.toContain("FROM public.orders");
+    expect(reader).not.toContain("FROM public.items");
     expect(reader).not.toContain('"galvanik-kreile"');
     expect(reader).not.toMatch(/cache|unstable_cache|_ordersCache/i);
   });
