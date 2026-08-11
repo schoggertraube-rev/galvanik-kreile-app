@@ -95,24 +95,20 @@ describe("W2C B2M3B caller quarantine", () => {
       "components/orders/ItemDrawer.tsx",
       "components/orders/PriceLinesEditor.tsx",
       "components/admin/AdminDashboard.tsx",
-      "app/betrieb-kvp/BetriebKvpClient.tsx",
       "app/kvp/KvpClient.tsx",
       "app/cockpit/components/FruehwarnungenKachel.tsx",
     ].map((file) => readFile(path.join(root, file), "utf8")));
-    const [itemDrawer, priceEditor, admin, betriebKvp, kvp, warnings] = files;
+    const [itemDrawer, priceEditor, admin, kvp, warnings] = files;
 
     expect(itemDrawer).toContain("PriceLinesEditor");
     expect(priceEditor).toContain("getPriceLinesDb");
-    expect(betriebKvp).toContain("kvpRepository.getAll");
     expect(warnings).toContain("getAktiveWarnungen");
     expect(warnings).toMatch(/<button\s+disabled[\s\S]*?>\s*Aktualisieren \(NOT_AVAILABLE\)\s*<\/button>/);
     expect(itemDrawer).toMatch(/<button\s+disabled[\s\S]*?>[\s\S]*?<span className="text-xs">Löschen \(NOT_AVAILABLE\)<\/span>[\s\S]*?<\/button>/);
     expect(priceEditor).toMatch(/<button disabled[^>]*><Edit2[\s\S]*?<\/button>\s*<button disabled[^>]*><Trash2[\s\S]*?<\/button>\s*<span className="text-\[10px\] -\(\)">NOT_AVAILABLE<\/span>/);
-    expect(betriebKvp).toMatch(/<button disabled[^>]*>Umgesetzt<\/button>\s*<button disabled[^>]*>Prüfen<\/button>\s*<button disabled[^>]*>Ablehnen<\/button>[\s\S]*?NOT_AVAILABLE: Statusänderungen benötigen einen sicheren Server-Command-Vertrag\./);
     expect(itemDrawer).not.toMatch(/createItemDb|updateItemDb|deleteItemDb|onSaved\(\)/);
     expect(priceEditor).not.toMatch(/createPriceLineDb|updatePriceLineDb|deletePriceLineDb/);
     expect(admin).not.toContain("runSupabaseWriteTest");
-    expect(betriebKvp).not.toMatch(/kvpRepository\.(addItem|updateItemStatus)/);
     expect(kvp).not.toMatch(/localStorage\.setItem|enqueueAction|Date\.now|OfflineManager/);
     expect(warnings).not.toMatch(/refreshWarnungen|dismissWarnung/);
   });

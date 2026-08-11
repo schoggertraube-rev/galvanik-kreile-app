@@ -1,6 +1,9 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import BetriebKvpPage from "@/app/betrieb-kvp/page";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 const root = process.cwd();
 const source = (file: string) => readFileSync(resolve(root, file), "utf8");
@@ -18,6 +21,7 @@ const unavailablePages = [
   "src/app/analyse/page.tsx",
   "src/app/performance/page.tsx",
   "src/app/performance/ki-empfehlungen/page.tsx",
+  "src/app/betrieb-kvp/page.tsx",
 ];
 
 describe("F0 W2C-B2S page truth containment", () => {
@@ -27,9 +31,28 @@ describe("F0 W2C-B2S page truth containment", () => {
     expect(page).toContain('export const dynamic = "force-dynamic";');
     expect(page).toContain("export const revalidate = 0;");
     expect(page).toMatch(/return <FoundationUnavailable \/>;/);
-    expect(page).not.toMatch(/fetch\(|useEffect|Repository|actions|supabase|auftrag|termin|\d{4}|use client|features\/analyse|PerformanceCockpitClient|PerformanceDetailLayout|getAnalyseOverview|next\/link|useState/i);
+    expect(page).not.toMatch(/fetch\(|useEffect|Repository|actions|supabase|auftrag|termin|\d{4}|use client|features\/analyse|PerformanceCockpitClient|PerformanceDetailLayout|getAnalyseOverview|next\/link|useState|BetriebKvpClient|OfflineSyncBadge|FeedbackFooter|usePermissions|localStorage|IndexedDB/i);
   });
 
+  it("renders Betrieb-KVP as the canonical shared denial without former claims", () => {
+    const markup = renderToStaticMarkup(BetriebKvpPage());
+
+    expect(markup).toBe(renderToStaticMarkup(FoundationUnavailable()));
+    expect(markup).toContain("NOT_AVAILABLE");
+    expect(markup).toContain("Operative Daten sind noch nicht verfügbar");
+    expect(markup).toContain("Für diesen Bereich ist noch keine kanonische, quellgestützte operative Datenbasis verfügbar.");
+    for (const formerClaim of [
+      "Häufigste Kategorie",
+      "Ordnung/Sauberkeit",
+      "2 an Station",
+      "Einträge",
+      "Einreichen",
+      "Detail-Report öffnen",
+      "Gemerkt!",
+      "Wieder Online",
+      "Offline – Eingaben werden lokal gesichert",
+    ]) expect(markup).not.toContain(formerClaim);
+  });
 });
 
 describe("F0 W2C-B2S local provider denials", () => {
