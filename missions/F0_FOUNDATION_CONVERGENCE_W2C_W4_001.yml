@@ -4,6 +4,7 @@ product_goal: "Ein fail-closed, evidenzgestützter Foundation-Vertrag für das W
 user_value: "Kontrolle und Planbarkeit beruhen auf tenant-gebundener, nachvollziehbarer Fachwahrheit."
 risk_class: "critical-foundation-security-data-integrity"
 allowed_paths:
+  - "public/sw.js"
   - "src/**"
   - "supabase/migrations/**"
   - "supabase/functions/**"
@@ -68,6 +69,8 @@ acceptance_criteria:
     criterion: "Jeder Denial erzeugt keinen fachlichen Schreib-, Upload-, Event- oder externen Side-Effect."
   - id: "W2C-08"
     criterion: "Negative Tests belegen für jeden geschlossenen aktiven Pfad den Null-Side-Effect-Denial."
+  - id: "W2C-09"
+    criterion: "Der aktive Service Worker wird genau einmal registriert und liest, schreibt oder replayt weder /api/** noch /supabase/** noch Nicht-GET-, HTML-, auth- oder tenantgebundene Antworten; jeder Offline-Denial bleibt ohne Cachezugriff und ohne synthetischen 200-Erfolg."
   - id: "W3-01"
     criterion: "Es gibt genau einen serverseitigen Command-Vertrag für die betroffenen Mutationen."
   - id: "W3-02"
