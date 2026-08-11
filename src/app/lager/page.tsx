@@ -1,9 +1,8 @@
-import { LagerCockpitClient } from "./LagerCockpitClient";
-import { getLagerbestandAction } from "./actions";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
-export default async function LagerPage() {
-  const result = await getLagerbestandAction();
-  const lagerData = result.ok ? result.data : [];
-  
-  return <LagerCockpitClient lagerData={lagerData} />;
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+export default function LagerPage() {
+  return <FoundationUnavailable />;
 }

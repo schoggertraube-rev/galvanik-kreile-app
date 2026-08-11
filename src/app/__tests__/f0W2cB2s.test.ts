@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import BetriebKvpPage from "@/app/betrieb-kvp/page";
+import LagerPage from "@/app/lager/page";
 import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 const root = process.cwd();
@@ -22,6 +23,7 @@ const unavailablePages = [
   "src/app/performance/page.tsx",
   "src/app/performance/ki-empfehlungen/page.tsx",
   "src/app/betrieb-kvp/page.tsx",
+  "src/app/lager/page.tsx",
 ];
 
 describe("F0 W2C-B2S page truth containment", () => {
@@ -51,6 +53,19 @@ describe("F0 W2C-B2S page truth containment", () => {
       "Gemerkt!",
       "Wieder Online",
       "Offline – Eingaben werden lokal gesichert",
+    ]) expect(markup).not.toContain(formerClaim);
+  });
+
+  it("renders Lager as the canonical shared denial without former claims", () => {
+    const markup = renderToStaticMarkup(LagerPage());
+
+    expect(markup).toBe(renderToStaticMarkup(FoundationUnavailable()));
+    expect(markup).toContain("NOT_AVAILABLE");
+    for (const formerClaim of [
+      "Alle BestÃ¤nde sind ausreichend",
+      "Keine Chemie-Artikel in der Datenbank",
+      "Kritischer Bestand",
+      "Letzte 5 Tage",
     ]) expect(markup).not.toContain(formerClaim);
   });
 });
