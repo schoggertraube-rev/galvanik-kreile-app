@@ -10,7 +10,6 @@ import { getOrderCountDb } from "@/app/actions/orders.actions";
 import { logout } from "@/app/actions/auth";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { getCompanySettings } from "@/app/actions/company.actions";
 import { useTestpilot } from "@/components/testpilot/TestpilotProvider";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
@@ -26,7 +25,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [, setIsOffline] = useState(false);
   const [, setOrderCount] = useState(0);
-  const [logoUrl, setLogoUrl] = useState("/assets/logo/kreile-wordmark-skyline.svg");
+  const logoUrl = "/assets/logo/kreile-wordmark-skyline.svg";
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
 
@@ -81,12 +80,6 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
       setIsOffline(OfflineManager.isOffline());
       const countResult = await getOrderCountDb();
       setOrderCount(countResult.ok ? countResult.data.count : 0);
-      try {
-        const settings = await getCompanySettings();
-        if (settings.logoUrl) setLogoUrl(settings.logoUrl);
-      } catch (e) {
-        console.error("Failed to load settings in header", e);
-      }
     };
     updateState();
 

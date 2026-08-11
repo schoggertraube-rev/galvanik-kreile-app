@@ -1,11 +1,10 @@
 "use server";
 
-import { companySettingsRepository, CompanySettings } from "@/lib/repositories/companySettingsRepository";
-
+import type { CompanySettings } from "@/lib/repositories/companySettingsRepository";
 import { requireAdminOrDeveloper } from "@/lib/auth/permissions";
 
 export async function getCompanySettings(): Promise<CompanySettings> {
-  return companySettingsRepository.getSettings();
+  throw new Error("NOT_AVAILABLE: Firmendaten-Anzeige benötigt einen tenant- und capability-geprüften W3-Read-Vertrag.");
 }
 
 export async function updateCompanySettings(data: Partial<CompanySettings>): Promise<CompanySettings> {
