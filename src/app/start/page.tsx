@@ -1,8 +1,9 @@
 import { StartScreenClient } from "@/components/start/StartScreenClient";
 import { db } from "@/db";
 import { appUsers } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import { toStartUserDto, type StartUserDto } from "@/lib/auth/userDtos";
+import { APP_TENANT_ID } from "@/lib/server/appSession";
 import { createPinLoginHandle } from "@/lib/server/pinLoginHandle";
 
 export const dynamic = "force-dynamic";
@@ -16,13 +17,24 @@ export default async function StartPage() {
       id: appUsers.id,
       fullName: appUsers.fullName,
       role: appUsers.role,
+      tenantId: appUsers.tenantId,
+      active: appUsers.active,
     })
       .from(appUsers)
-      .where(eq(appUsers.active, true));
+      .where(
+        and(
+          eq(appUsers.tenantId, APP_TENANT_ID),
+          eq(appUsers.active, true),
+          ne(appUsers.role, "developer"),
+        ),
+      );
 
-    // Filter out developers so they don't appear as PIN logins
-    // We only want normal roles like admin, werkstatt, buero, etc.
-    const eligibleUsers = dbUsers.filter(u => u.role !== "developer");
+    const eligibleUsers = dbUsers.filter(
+      (user) =>
+        user.tenantId === APP_TENANT_ID &&
+        user.active === true &&
+        user.role !== "developer",
+    );
 
     users = eligibleUsers.map((user) =>
       toStartUserDto(user, createPinLoginHandle(user.id)),
