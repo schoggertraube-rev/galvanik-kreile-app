@@ -14,6 +14,7 @@ const unavailablePages = [
   "src/app/today/page.tsx",
   "src/app/status/page.tsx",
   "src/app/baeder/page.tsx",
+  "src/app/kontrolle/page.tsx",
 ];
 
 describe("F0 W2C-B2S page truth containment", () => {
