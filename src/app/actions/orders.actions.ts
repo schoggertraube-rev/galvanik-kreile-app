@@ -6,9 +6,20 @@ import { eq, and, sql, notInArray, notIlike } from "drizzle-orm";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { unstable_noStore as noStore } from "next/cache";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
+import {
+  transitionWareneingangToGalvanik,
+  type OrderStationCommandInput,
+  type OrderStationCommandResult,
+} from "@/lib/server/commands/orderStationCommand";
 
 // DTO Typen (zur Vereinfachung)
 export type OrderResponse = OperationalOrder;
+
+export async function transitionWareneingangToGalvanikAction(
+  input: OrderStationCommandInput,
+): Promise<OrderStationCommandResult> {
+  return transitionWareneingangToGalvanik(input);
+}
 
 export async function getOrdersDb(): Promise<ActionResult<OrderResponse[]>> {
   noStore();

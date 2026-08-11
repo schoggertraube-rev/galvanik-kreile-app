@@ -222,33 +222,15 @@ export async function createOperationalOrderService(data: Record<string, unknown
   });
 }
 
-export async function moveOperationalOrderToStationService(orderId: string, stationId: string, actorId?: string) {
-  if (!db) throw new Error("Database not available");
-
-  // Canonical station fix
-  const targetStation = stationId === "beschichtung" ? "galvanik" : stationId;
-
-  return await db.transaction(async (tx) => {
-    const currentOrder = await tx.select().from(orders).where(eq(orders.id, orderId)).limit(1);
-    if (!currentOrder || currentOrder.length === 0) throw new Error("Order not found");
-    const prevStation = currentOrder[0].currentStationId;
-
-    await tx.update(orders).set({ currentStationId: targetStation, status: "ready" }).where(eq(orders.id, orderId));
-    await tx.update(items).set({ currentStationId: targetStation }).where(eq(items.orderId, orderId));
-
-    const eventId = createId();
-    await tx.insert(events).values({
-      id: eventId,
-      tenantId: "galvanik-kreile",
-      orderId,
-      eventType: "STATION_CHANGED",
-      description: `Verschoben von ${prevStation} nach ${targetStation}`,
-      station: targetStation,
-      userId: actorId,
-    });
-    
-    return { success: true, eventId, prevStation, targetStation };
-  });
+export async function moveOperationalOrderToStationService(
+  orderId: string,
+  stationId: string,
+  actorId?: string,
+) {
+  void orderId;
+  void stationId;
+  void actorId;
+  throw new Error("NOT_AVAILABLE: Stationswechsel benötigt den W3-Command-Vertrag.");
 }
 
 export async function startProcessingStationService(orderId: string, stationId: string, actorId?: string) {

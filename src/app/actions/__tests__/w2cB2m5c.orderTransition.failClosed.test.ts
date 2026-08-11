@@ -16,6 +16,7 @@ const dbSpies = {
 };
 const revalidatePathSpy = vi.fn();
 
+vi.mock("server-only", () => ({}));
 vi.mock("@/db", () => ({ db: dbSpies }));
 vi.mock("@/db/schema", () => ({ orders: {}, items: {}, customers: {}, events: {} }));
 vi.mock("@/lib/server/authHelper", () => ({ checkAppAuth: checkAppAuthSpy }));
@@ -61,6 +62,19 @@ describe("W2C-B2M5C transitionOrderProcess quarantine", () => {
     const body = source.slice(start, end);
     expect(body).toBe(`export async function transitionOrderProcess(params: {\n  orderId: string;\n  targetStep?: string;\n  action?: string;\n}): Promise<ActionResult<never>> {\n  void params;\n  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Stationswechsel benötigen den W3-Command-Vertrag." };\n}`);
     expect(body).not.toMatch(/checkAppAuth|resolveAuthorization|db\.|transaction|update|insert|events|crypto|randomUUID|Date|revalidatePath|import/);
+  });
+
+  it("keeps the dormant legacy station writer immediate and database-free", async () => {
+    const { moveOperationalOrderToStationService } = await import("@/lib/server/operationalOrders");
+
+    await expect(
+      moveOperationalOrderToStationService("order-1", "galvanik", "user-1"),
+    ).rejects.toThrow("NOT_AVAILABLE: Stationswechsel benötigt den W3-Command-Vertrag.");
+
+    expect(dbSpies.select).not.toHaveBeenCalled();
+    expect(dbSpies.transaction).not.toHaveBeenCalled();
+    expect(dbSpies.update).not.toHaveBeenCalled();
+    expect(dbSpies.insert).not.toHaveBeenCalled();
   });
 
   it("keeps all three direct UI callers visibly disabled without transition calls", async () => {
