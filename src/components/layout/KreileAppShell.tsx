@@ -8,9 +8,6 @@ import { MobileBottomNav } from "./MobileBottomNav";
 import { useEffect, useState } from "react";
 import { getSystemStats } from "@/app/actions/systemStats";
 import { AlertTriangle } from "lucide-react";
-import { RealtimeSyncProvider } from "./RealtimeSyncManager";
-import { ParkedCallProvider } from "@/contexts/ParkedCallContext";
-import { FloatingParkedCall } from "@/components/telefonnotiz/FloatingParkedCall";
 import { OrderOverlay } from "@/components/orders/OrderOverlay";
 import { CustomerOverlay } from "@/components/customers/CustomerOverlay";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
@@ -50,22 +47,15 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
 
   if (isStartScreen) {
     return (
-      <ParkedCallProvider>
-        <RealtimeSyncProvider>
           <div className="min-h-screen bg-bg-app text-kreile-text antialiased">
             {children}
-            <FloatingParkedCall />
             <OrderOverlay />
             <CustomerOverlay />
           </div>
-        </RealtimeSyncProvider>
-      </ParkedCallProvider>
     );
   }
 
   return (
-    <ParkedCallProvider>
-      <RealtimeSyncProvider>
         <div
           className="flex flex-col bg-bg-app text-navy-900 antialiased"
           style={{ height: "100dvh" }}          // dvh für korrekte mobile Viewport-Höhe
@@ -115,16 +105,11 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
           {/* Mobile Bottom Nav (nur auf Handys sichtbar) */}
           <MobileBottomNav className="flex md:hidden z-40" />
 
-          {/* Global Floating Parked Call Button & Prompt */}
-          <FloatingParkedCall />
-          
           {/* Global Order Overlay Drawer */}
           <OrderOverlay />
           
           {/* Global Customer Overlay */}
           <CustomerOverlay />
         </div>
-      </RealtimeSyncProvider>
-    </ParkedCallProvider>
   );
 }
