@@ -8,6 +8,7 @@ import AusgabenPage from '../ausgaben/page';
 import BwaPage from '../bwa/page';
 import KostenPage from '../kosten/page';
 import KraftstoffPage from '../kraftstoff/page';
+import PeriodenabschlussPage from '../periodenabschluss/page';
 import RechnungenPage from '../rechnungen/page';
 import SteuerprofilPage from '../steuerprofil/page';
 
@@ -44,6 +45,7 @@ const activeRoutes = [
   ['buchhaltung/ausgaben/page.tsx', AusgabenPage],
   ['buchhaltung/bwa/page.tsx', BwaPage],
   ['buchhaltung/steuerprofil/page.tsx', SteuerprofilPage],
+  ['buchhaltung/periodenabschluss/page.tsx', PeriodenabschlussPage],
 ] as const;
 
 function canonicalExistingPath(path: string): string {
@@ -60,12 +62,13 @@ const forbiddenTargets = [
   'src/app/buchhaltung/analysis.actions.ts',
   'src/app/buchhaltung/search-actions.ts',
   'src/app/buchhaltung/BuchhaltungCockpitClient.tsx',
+  'src/app/buchhaltung/periodenabschluss/actions.ts',
+  'src/app/buchhaltung/periodenabschluss/PeriodenabschlussClient.tsx',
   'src/lib/buchhaltung/index.ts',
   'src/lib/buchhaltung/providers/SupabaseBuchhaltungProvider.ts',
   'src/components/analytics/AnalyticsDrillDrawer.tsx',
 ].map((path) => comparisonKey(canonicalExistingPath(resolve(repoRoot, path))));
 const forbiddenBindings = new Set(['getBuchhaltungProvider']);
-const periodenabschlussActions = comparisonKey(canonicalExistingPath(resolve(appRoot, 'buchhaltung/periodenabschluss/actions.ts')));
 const srcRootKey = comparisonKey(canonicalExistingPath(srcRoot));
 
 type RuntimeEdge = { specifier: string; target?: string; unresolved?: boolean };
@@ -214,6 +217,8 @@ describe('W2C accounting active-route containment', () => {
       import Actions = require('../actions');
       void import('../../buchhaltung/search-actions');
       require('@/components/analytics/AnalyticsDrillDrawer');
+      import { getPeriodenabschlussStatusAction } from '../periodenabschluss/actions';
+      import { PeriodenabschlussClient } from '../periodenabschluss/PeriodenabschlussClient';
       import type { Metadata } from 'next';
       import { type ActionResult } from '../analysis.actions';
       // import('../analysis.actions)
@@ -223,6 +228,7 @@ describe('W2C accounting active-route containment', () => {
     expect([...analysis.moduleSpecifiers]).toEqual(expect.arrayContaining([
       '../BuchhaltungCockpitClient', '@/lib/buchhaltung/providers/SupabaseBuchhaltungProvider', '@/lib/buchhaltung',
       '../analysis.actions', '../actions', '../../buchhaltung/search-actions', '@/components/analytics/AnalyticsDrillDrawer',
+      '../periodenabschluss/actions', '../periodenabschluss/PeriodenabschlussClient',
     ]));
     expect(analysis.resolvedTargets).toEqual(new Set(forbiddenTargets));
     expect([...analysis.bindings]).toEqual(expect.arrayContaining(['DefaultClient', 'provider', 'getBuchhaltungProvider', 'Actions']));
@@ -250,8 +256,10 @@ describe('W2C accounting active-route containment', () => {
     expect(comparisonKey(explicit!)).toBe(forbiddenTargets[1]);
     expect(comparisonKey(resolveModuleTarget(entryPath, '../../buchhaltung/analysis.actions.ts')!)).toBe(forbiddenTargets[1]);
     expect(comparisonKey(resolveModuleTarget(entryPath, '@/app/buchhaltung/actions')!)).toBe(forbiddenTargets[0]);
-    expect(comparisonKey(resolveModuleTarget(entryPath, '@/lib/buchhaltung')!)).toBe(forbiddenTargets[4]);
-    expect(comparisonKey(resolveModuleTarget(entryPath, '@/lib/buchhaltung/providers/SupabaseBuchhaltungProvider.ts')!)).toBe(forbiddenTargets[5]);
+    expect(comparisonKey(resolveModuleTarget(entryPath, '../periodenabschluss/actions')!)).toBe(forbiddenTargets[4]);
+    expect(comparisonKey(resolveModuleTarget(entryPath, '../periodenabschluss/PeriodenabschlussClient')!)).toBe(forbiddenTargets[5]);
+    expect(comparisonKey(resolveModuleTarget(entryPath, '@/lib/buchhaltung')!)).toBe(forbiddenTargets[6]);
+    expect(comparisonKey(resolveModuleTarget(entryPath, '@/lib/buchhaltung/providers/SupabaseBuchhaltungProvider.ts')!)).toBe(forbiddenTargets[7]);
 
     const javascript = resolveModuleTarget(entryPath, '../analysis.actions.js');
     if (javascript) expect(comparisonKey(javascript)).toBe(forbiddenTargets[1]);
@@ -269,19 +277,25 @@ describe('W2C accounting active-route containment', () => {
     const control = 'mem://control.ts';
     const graph: Record<string, string> = {
       [`${route}|../BuchhaltungCockpitClient`]: forbiddenTargets[3],
-      [`${route}|@/lib/buchhaltung`]: forbiddenTargets[4],
-      [`${route}|@/lib/buchhaltung/providers/SupabaseBuchhaltungProvider`]: forbiddenTargets[5],
+      [`${route}|@/lib/buchhaltung`]: forbiddenTargets[6],
+      [`${route}|@/lib/buchhaltung/providers/SupabaseBuchhaltungProvider`]: forbiddenTargets[7],
       [`${route}|../actions`]: forbiddenTargets[0],
       [`${route}|../analysis.actions`]: forbiddenTargets[1],
       [`${route}|../analysis.actions.ts`]: forbiddenTargets[1],
       [`${route}|../../buchhaltung/search-actions`]: forbiddenTargets[2],
-      [`${route}|@/components/analytics/AnalyticsDrillDrawer`]: forbiddenTargets[6],
+      [`${route}|@/components/analytics/AnalyticsDrillDrawer`]: forbiddenTargets[8],
+      [`${route}|../periodenabschluss/actions`]: forbiddenTargets[4],
+      [`${route}|../periodenabschluss/PeriodenabschlussClient`]: forbiddenTargets[5],
       [`${route}|@/test-fixtures/wrapper`]: wrapper,
       [`${wrapper}|../app/buchhaltung/actions`]: forbiddenTargets[0],
+      [`${route}|@/test-fixtures/periodenabschluss-actions-wrapper`]: 'mem://periodenabschluss-actions-wrapper.ts',
+      ['mem://periodenabschluss-actions-wrapper.ts|../app/buchhaltung/periodenabschluss/actions']: forbiddenTargets[4],
+      [`${route}|@/test-fixtures/periodenabschluss-client-wrapper`]: 'mem://periodenabschluss-client-wrapper.ts',
+      ['mem://periodenabschluss-client-wrapper.ts|../app/buchhaltung/periodenabschluss/PeriodenabschlussClient']: forbiddenTargets[5],
       [`${route}|@/test-fixtures/control`]: control,
     };
     const sources: Record<string, string> = {
-      [route]: '', [wrapper]: '', [control]: '',
+      [route]: '', [wrapper]: '', ['mem://periodenabschluss-actions-wrapper.ts']: '', ['mem://periodenabschluss-client-wrapper.ts']: '', [control]: '',
     };
     const readSource: SourceReader = (path) => sources[path];
     const resolver: ModuleResolver = (entryPath, specifier) => memoryResolver(graph, entryPath, specifier);
@@ -294,13 +308,19 @@ describe('W2C accounting active-route containment', () => {
       { name: 'explicit forbidden target', source: "void import('../analysis.actions.ts');", violation: true },
       { name: 'deep relative dynamic import', source: "void import('../../buchhaltung/search-actions');", violation: true },
       { name: 'literal require', source: "require('@/components/analytics/AnalyticsDrillDrawer');", violation: true },
+      { name: 'periodenabschluss action direct target', source: "import '../periodenabschluss/actions';", violation: true },
+      { name: 'periodenabschluss client direct target', source: "import '../periodenabschluss/PeriodenabschlussClient';", violation: true },
       { name: 'transitive forbidden target', source: "import '@/test-fixtures/wrapper';", violation: true },
+      { name: 'periodenabschluss action transitive target', source: "import '@/test-fixtures/periodenabschluss-actions-wrapper';", violation: true },
+      { name: 'periodenabschluss client transitive target', source: "import '@/test-fixtures/periodenabschluss-client-wrapper';", violation: true },
       { name: 'safe control', source: "import '@/test-fixtures/control';", violation: false },
     ];
 
     for (const testCase of cases) {
       sources[route] = testCase.source;
       sources[wrapper] = "require('../app/buchhaltung/actions');";
+      sources['mem://periodenabschluss-actions-wrapper.ts'] = "require('../app/buchhaltung/periodenabschluss/actions');";
+      sources['mem://periodenabschluss-client-wrapper.ts'] = "require('../app/buchhaltung/periodenabschluss/PeriodenabschlussClient');";
       sources[control] = 'export const control = true;';
       const result = inspectContainment([route], readSource, resolver);
       expect(result.unresolved, testCase.name).toEqual([]);
@@ -343,11 +363,7 @@ describe('W2C accounting active-route containment', () => {
     expect(result.unresolved, result.unresolved.join('\n')).toEqual([]);
     expect(result.violations, result.violations.join('\n')).toEqual([]);
 
-    const periodenabschlussPage = canonicalExistingPath(resolve(appRoot, 'buchhaltung/periodenabschluss/page.tsx'));
-    const direct = analyzeImports(periodenabschlussPage, readFileSync(periodenabschlussPage, 'utf8'));
-    const actionTargets = [...direct.resolvedTargets].filter((target) => [...forbiddenTargets.slice(0, 3), periodenabschlussActions].includes(target));
-    expect(actionTargets).toEqual([periodenabschlussActions]);
-  });
+  }, 15_000);
 
   it('keeps the existing export route foundation-unavailable', () => {
     const exportSource = readFileSync(join(appRoot, 'buchhaltung/export/page.tsx'), 'utf8').replace(/\r\n/g, '\n');
