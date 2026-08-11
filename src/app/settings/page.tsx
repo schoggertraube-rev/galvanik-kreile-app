@@ -1,5 +1,8 @@
-import { SettingsClient } from "./SettingsClient";
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
-export default async function SettingsPage() {
-  return <SettingsClient />;
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+export default function SettingsPage() {
+  return <FoundationUnavailable />;
 }

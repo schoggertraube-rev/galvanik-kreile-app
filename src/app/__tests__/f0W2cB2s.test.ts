@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import BetriebKvpPage from "@/app/betrieb-kvp/page";
 import LagerPage from "@/app/lager/page";
+import SettingsPage from "@/app/settings/page";
 import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
 const root = process.cwd();
@@ -24,6 +25,7 @@ const unavailablePages = [
   "src/app/performance/ki-empfehlungen/page.tsx",
   "src/app/betrieb-kvp/page.tsx",
   "src/app/lager/page.tsx",
+  "src/app/settings/page.tsx",
 ];
 
 describe("F0 W2C-B2S page truth containment", () => {
@@ -66,6 +68,21 @@ describe("F0 W2C-B2S page truth containment", () => {
       "Keine Chemie-Artikel in der Datenbank",
       "Kritischer Bestand",
       "Letzte 5 Tage",
+    ]) expect(markup).not.toContain(formerClaim);
+  });
+
+  it("renders Settings as the canonical shared denial without former management-stat claims", () => {
+    const markup = renderToStaticMarkup(SettingsPage());
+
+    expect(markup).toBe(renderToStaticMarkup(FoundationUnavailable()));
+    expect(markup).toContain("NOT_AVAILABLE");
+    for (const formerClaim of [
+      "Systemstatus",
+      "Supabase verbunden",
+      "Demo-/Offline-Modus",
+      "Datenbank",
+      "Benutzerverwaltung",
+      "Einstellungen gespeichert",
     ]) expect(markup).not.toContain(formerClaim);
   });
 });

@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const boundary = vi.hoisted(() => ({
   floatingParkedCall: vi.fn(),
   getAuthorizationSnapshotAction: vi.fn(),
-  getSystemStats: vi.fn(),
   parkedCallProvider: vi.fn(),
   pathname: { value: "/start" },
   realtimeSyncProvider: vi.fn(),
@@ -14,9 +13,6 @@ const boundary = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({
   usePathname: () => boundary.pathname.value,
-}));
-vi.mock("@/app/actions/systemStats", () => ({
-  getSystemStats: boundary.getSystemStats,
 }));
 vi.mock("@/app/actions/auth.actions", () => ({
   getAuthorizationSnapshotAction: boundary.getAuthorizationSnapshotAction,
@@ -85,14 +81,11 @@ function expectRemovedBrowserProvidersAbsent() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubEnv("NEXT_PUBLIC_DEMO_MODE", "false");
-  boundary.getSystemStats.mockResolvedValue({ provider: "supabase", reachable: true });
   boundary.getAuthorizationSnapshotAction.mockResolvedValue({ ok: true });
 });
 
 afterEach(() => {
   cleanup();
-  vi.unstubAllEnvs();
   vi.restoreAllMocks();
   vi.clearAllMocks();
 });
@@ -129,7 +122,7 @@ describe("W2C-B2M5V global browser provider containment", () => {
     expectRemovedBrowserProvidersAbsent();
   });
 
-  it("removes every global browser-provider identifier while preserving both overlays in both branches", () => {
+  it("removes unsafe global provider and system-status identifiers while preserving both overlays in both branches", () => {
     const source = readFileSync(
       resolve(process.cwd(), "src/components/layout/KreileAppShell.tsx"),
       "utf8",
@@ -142,6 +135,10 @@ describe("W2C-B2M5V global browser provider containment", () => {
       "./RealtimeSyncManager",
       "@/contexts/ParkedCallContext",
       "@/components/telefonnotiz/FloatingParkedCall",
+      "getSystemStats",
+      "isDemoMode",
+      "Demo-/Offline Banner",
+      "Supabase nicht erreichbar oder deaktiviert",
     ]) expect(source).not.toContain(removed);
 
     expect(source.match(/<OrderOverlay\s*\/>/g)).toHaveLength(2);
