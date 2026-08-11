@@ -148,8 +148,13 @@ export const OrderLabelDocument = ({ data, settings }: OrderLabelProps) => {
         const urgency = getUrgency(order.dueDate);
         const urgencyStyle = urgency === "kritisch" ? styles.urgencyCritical : urgency === "gefaehrdet" ? styles.urgencyWarning : styles.value;
         
-        const createdDate = order.intakeDate ? format(new Date(order.intakeDate), "dd.MM.yyyy") : format(new Date(), "dd.MM.yyyy");
-        const dueDate = order.dueDate ? format(new Date(order.dueDate), "dd.MM.yyyy") : "Kein Datum";
+        const formatStoredDate = (value: Date | string | null | undefined) => {
+          if (!value || (typeof value === "string" && !value.trim())) return "Nicht erfasst";
+          const date = new Date(value);
+          return Number.isNaN(date.getTime()) ? "Nicht erfasst" : format(date, "dd.MM.yyyy");
+        };
+        const createdDate = formatStoredDate(order.intakeDate);
+        const dueDate = formatStoredDate(order.dueDate);
 
         return (
           <Page key={order.id || index} size="A6" style={styles.page}>

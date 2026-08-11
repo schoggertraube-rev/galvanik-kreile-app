@@ -69,8 +69,13 @@ async function _fetchAndMap(): Promise<OperationalOrder[]> {
 
   return results.map((o) => {
     const orderParts: OperationalOrderItem[] = allParts.filter((p) => p.orderId === o.id);
-    const intakeDate = o.intakeDate ? new Date(o.intakeDate).toISOString() : (o.createdAt ? new Date(o.createdAt).toISOString() : new Date().toISOString());
-    const dueDate = o.dueDate ? new Date(o.dueDate).toISOString() : new Date(new Date(intakeDate).getTime() + 10 * 24 * 60 * 60 * 1000).toISOString();
+    const toValidIso = (value: unknown) => {
+      if (value === null || value === undefined || (typeof value === "string" && !value.trim())) return "";
+      const date = new Date(value as string | number | Date);
+      return Number.isNaN(date.getTime()) ? "" : date.toISOString();
+    };
+    const intakeDate = toValidIso(o.intakeDate);
+    const dueDate = toValidIso(o.dueDate);
 
     // Single source of truth: derive risk/urgency from the real dueDate,
     // server-side. Never hardcode dueValue — that previously made every order
@@ -90,6 +95,7 @@ async function _fetchAndMap(): Promise<OperationalOrder[]> {
       station: o.currentStationId || "wareneingang",
       status: o.status,
       risk: priority.risk,
+      statusText: priority.statusText,
       currentStationId: o.currentStationId || "wareneingang",
       parts: orderParts,
       intakeDate,

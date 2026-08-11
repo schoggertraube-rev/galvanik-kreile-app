@@ -28,6 +28,7 @@ export type OperationalOrder = {
   surfaceRequested: string | null;
   station: string;
   status: string;
+  statusText: string;
   risk: string;
   currentStationId: string;
   parts: OperationalOrderItem[];

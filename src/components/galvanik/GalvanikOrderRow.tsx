@@ -19,12 +19,13 @@ export function GalvanikOrderRow({ order }: GalvanikOrderRowProps) {
 
   // Dringlichkeitslogik
   const urgencyLevel = getUrgency(order.dueDate);
-  const due = order.dueDate ? new Date(order.dueDate) : null;
+  const due = order.dueDate && !Number.isNaN(new Date(order.dueDate).getTime()) ? new Date(order.dueDate) : null;
 
   const urgencyColors = {
     kritisch: "bg-danger-red",
     gefaehrdet: "bg-accent-orange",
-    im_plan: "bg-success-green"
+    im_plan: "bg-success-green",
+    unknown: "bg-slate-500"
   };
 
   return (
@@ -46,7 +47,7 @@ export function GalvanikOrderRow({ order }: GalvanikOrderRowProps) {
           </div>
           
           <div className="text-xs font-bold text-navy-500 whitespace-nowrap shrink-0 ml-4">
-            {due ? format(due, "dd.MM.yy") : "Kein Datum"}
+            {due ? format(due, "dd.MM.yy") : "Nicht erfasst"}
           </div>
         </div>
       </div>

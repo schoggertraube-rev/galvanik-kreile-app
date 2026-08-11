@@ -1,7 +1,7 @@
 import React from "react";
 import { ChevronRight } from "lucide-react";
 
-export type UrgencyType = "ok" | "soon" | "wait" | "crit";
+export type UrgencyType = "ok" | "soon" | "wait" | "crit" | "unknown";
 
 interface OrderCompactCardProps {
   id: string;
@@ -33,6 +33,7 @@ export function OrderCompactCard({
   void id;
   const isCrit = urgency === "crit";
   const isWait = urgency === "wait";
+  const isUnknown = urgency === "unknown";
 
   return (
     <div
@@ -41,7 +42,7 @@ export function OrderCompactCard({
         w-full group cursor-pointer border rounded-xl bg-white
         transition-all duration-200 hover:shadow-md hover:border-gold-400
         flex items-center px-4 py-2.5 gap-4 min-w-0
-        ${isCrit ? 'border-danger-red-soft bg-danger-red-soft/10' : 'border-neutral-gray-200'}
+        ${isCrit ? 'border-danger-red-soft bg-danger-red-soft/10' : isUnknown ? 'border-slate-300 bg-slate-50' : 'border-neutral-gray-200'}
         ${isWait ? 'opacity-70' : ''}
       `}
       style={{ minWidth: 0, wordBreak: "break-word", overflowWrap: "break-word", whiteSpace: "normal" }}
@@ -73,6 +74,8 @@ export function OrderCompactCard({
             <span className="text-danger-red">{badgeText || "KRITISCH"}</span>
           ) : isWait ? (
             <span className="text-gold-800">{badgeText || "WARTEND"}</span>
+          ) : isUnknown ? (
+            <span className="text-slate-600">{badgeText || "TERMIN NICHT ERFASST"}</span>
           ) : (
             <span className="text-success-green">{badgeText || "IM PLAN"}</span>
           )}

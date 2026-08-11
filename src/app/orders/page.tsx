@@ -149,7 +149,7 @@ function OrdersPageInner() {
   filteredOrders.sort((a, b) => {
     const ua = getUrgency(a.dueDate);
     const ub = getUrgency(b.dueDate);
-    const score = { "kritisch": 0, "gefaehrdet": 1, "im_plan": 2 };
+    const score = { "kritisch": 0, "gefaehrdet": 1, "im_plan": 2, "unknown": 3 };
     if (score[ua] !== score[ub]) return score[ua] - score[ub];
     
     const da = new Date(a.dueDate || "9999-12-31").getTime();
@@ -288,6 +288,7 @@ function OrdersPageInner() {
             if (order.risk === "red") urgencyType = "crit";
             else if (order.risk === "orange" || u === "gefaehrdet") urgencyType = "soon";
             else if (order.risk === "blocked") urgencyType = "wait";
+            else if (order.risk === "unknown" || u === "unknown") urgencyType = "unknown";
 
             const textForSurface = (String(order.task) + " " + order.parts.map(p => p.surfaceRequested || "").join(" ")).toLowerCase();
             let surfaceKey: "chrom" | "nickel" | "gold" | "kupfer" | "zink" | "offen" = "offen";
@@ -312,8 +313,8 @@ function OrdersPageInner() {
                 surfaceKey={surfaceKey}
                 badgeText={undefined}
                 urgency={urgencyType}
-                dueValue={order.dueValue || "14 T"}
-                dueLabel={order.dueLabel || "Fällig in"}
+                dueValue={order.dueValue || (urgencyType === "unknown" ? "Nicht erfasst" : "--")}
+                dueLabel={order.dueLabel || (urgencyType === "unknown" ? "Termin" : "Fällig")}
                 onClick={() => {
                   trackUiEvent("detail_open", { target: "order", id: order.id, orderNumber: order.orderNumber });
                   openOrder(order.id);

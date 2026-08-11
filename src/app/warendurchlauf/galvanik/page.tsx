@@ -18,6 +18,7 @@ function sortByUrgency(orders: GalvanikOrder[]) {
     yellow: 2,
     green: 3,
     blocked: 4,
+    unknown: 5,
   };
   return [...orders].sort((a, b) => {
     const aRank = priorityRank[a.risk] ?? 5;
@@ -30,6 +31,7 @@ function mapRiskToUrgency(risk: string): UrgencyType {
   if (risk === "red") return "crit";
   if (risk === "orange" || risk === "yellow") return "soon";
   if (risk === "blocked") return "wait";
+  if (risk === "unknown") return "unknown";
   return "ok";
 }
 
@@ -39,29 +41,32 @@ export default function GalvanikPage() {
   const [inProgressOrders, setInProgressOrders] = useState<GalvanikOrder[]>([]);
   const [finishedOrders, setFinishedOrders] = useState<GalvanikOrder[]>([]);
   const [topUrgent, setTopUrgent] = useState<GalvanikOrder[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [dataState, setDataState] = useState<"loading" | "loaded" | "unavailable">("loading");
   const { openOrder } = useOrderModal();
 
   useEffect(() => {
     async function load() {
+      setDataState("loading");
+      setReadyOrders([]);
+      setInProgressOrders([]);
+      setFinishedOrders([]);
+      setTopUrgent([]);
       try {
         const [resReady, resActive] = await Promise.all([
           getStationReadyOrders("galvanik"),
           getStationOrders("galvanik")
         ]);
         
-        let ready: GalvanikOrder[] = [];
-        if (resReady.ok && resReady.data) {
-          ready = sortByUrgency(resReady.data);
+        if (!resReady.ok || !resActive.ok) {
+          setDataState("unavailable");
+          return;
         }
+
+        const ready = sortByUrgency(resReady.data ?? []);
         
-        let active: GalvanikOrder[] = [];
-        let done: GalvanikOrder[] = [];
-        if (resActive.ok && resActive.data) {
-          const allActive = resActive.data;
-          active = sortByUrgency(allActive.filter(o => o.status === "in_progress"));
-          done = sortByUrgency(allActive.filter(o => o.status === "done" || o.status === "quality_check"));
-        }
+        const allActive = resActive.data ?? [];
+        const active = sortByUrgency(allActive.filter(o => o.status === "in_progress"));
+        const done = sortByUrgency(allActive.filter(o => o.status === "done" || o.status === "quality_check"));
         
         setReadyOrders(ready);
         setInProgressOrders(active);
@@ -69,11 +74,14 @@ export default function GalvanikPage() {
         
         const combined = [...ready, ...active, ...done];
         setTopUrgent(sortByUrgency(combined).filter(o => o.risk === "red" || o.risk === "orange").slice(0, 3));
+        setDataState("loaded");
 
-      } catch (err) {
-        console.error("Failed to load orders in Galvanik", err);
-      } finally {
-        setIsLoading(false);
+      } catch {
+        setReadyOrders([]);
+        setInProgressOrders([]);
+        setFinishedOrders([]);
+        setTopUrgent([]);
+        setDataState("unavailable");
       }
     }
     load();
@@ -97,8 +105,8 @@ export default function GalvanikPage() {
               article={o.itemDescription || "Artikel nicht hinterlegt"}
               surface={o.surfaceRequested || "Oberfläche nicht hinterlegt"}
               urgency={mapRiskToUrgency(o.risk)}
-              dueValue={o.dueValue || "--"}
-              dueLabel={o.dueLabel || "Tage"}
+              dueValue={o.dueValue || (o.risk === "unknown" ? "Nicht erfasst" : "--")}
+              dueLabel={o.dueLabel || (o.risk === "unknown" ? "Termin" : "Fällig")}
               badgeText={o.statusText || o.status}
               onClick={() => isActive ? openOrder(o.id) : setActiveBucket(bucket)}
             />
@@ -119,11 +127,13 @@ export default function GalvanikPage() {
         </div>
         <p className="mb-4 text-sm text-[#9e9689]">NOT_AVAILABLE: Stationswechsel benötigen den W3-Command-Vertrag.</p>
 
-        {isLoading ? (
+        {dataState === "loading" ? (
           <div className="flex flex-col items-center justify-center py-20 text-[#9e9689]">
             <Loader2 className="w-8 h-8 animate-spin mb-4" />
             <p>Lade Galvanik Aufträge...</p>
           </div>
+        ) : dataState === "unavailable" ? (
+          <div className="py-20 text-center text-[#9e9689]">NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.</div>
         ) : (
           <>
 
@@ -143,8 +153,8 @@ export default function GalvanikPage() {
                       article={o.itemDescription || "Artikel nicht hinterlegt"}
                       surface={o.surfaceRequested || "Oberfläche nicht hinterlegt"}
                       urgency={mapRiskToUrgency(o.risk)}
-                      dueValue={o.dueValue || "--"}
-                      dueLabel={o.dueLabel || "Tage"}
+                      dueValue={o.dueValue || (o.risk === "unknown" ? "Nicht erfasst" : "--")}
+                      dueLabel={o.dueLabel || (o.risk === "unknown" ? "Termin" : "Fällig")}
                       badgeText={o.statusText || o.status}
                       onClick={() => openOrder(o.id)}
                     />

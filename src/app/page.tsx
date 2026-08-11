@@ -74,6 +74,7 @@ export default function HomeDashboard() {
   usePageView();
   const router = useRouter();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [orderDataState, setOrderDataState] = useState<"loading" | "loaded" | "unavailable">("loading");
   const mounted = useHydrated();
   
   // Drilldown Overlay State
@@ -90,23 +91,35 @@ export default function HomeDashboard() {
   // Todo List State (Enriched Task Model)
   const [todos, setTodos] = useState<ChecklistTask[]>([]);
 
-  const [feedback, setFeedback] = useState("");
-  const [feedbackSent, setFeedbackSent] = useState(false);
-
   useEffect(() => {
     const load = async () => {
-      
+      setOrderDataState("loading");
+      setOrders([]);
+      setTodos([]);
+      setShowCriticalOrders(false);
+      try {
       const dbOrdersRes = await getOrdersDb();
-      const dbOrders = dbOrdersRes.ok ? dbOrdersRes.data : [];
+      if (!dbOrdersRes.ok) {
+        setOrderDataState("unavailable");
+        setOrders([]);
+        setTodos([]);
+        return;
+      }
+      const dbOrders = dbOrdersRes.data;
+      setOrderDataState("loaded");
       
       const newTodos: ChecklistTask[] = [];
-      const kritisch = dbOrders.filter(o => o.risk === 'red' || o.risk === 'orange');
+      const kritisch = dbOrders.filter(o => (o.risk === 'red' || o.risk === 'orange') && o.dueDate && !Number.isNaN(new Date(o.dueDate).getTime()));
       if (kritisch.length > 0) {
          newTodos.push({
             id: 1, title: `Kritische Aufträge prüfen (${kritisch.length})`, reason: "Aufträge mit hohem Risiko entdeckt",
             area: "Warendurchlauf", urgency: "Hoch", action: "Aufträge ansehen", targetHref: "/kontrolle",
             completionType: "live", source: "live", done: false
          });
+      }
+      const unknownDue = dbOrders.filter(o => !o.dueDate || !String(o.dueDate).trim() || Number.isNaN(new Date(o.dueDate).getTime()));
+      if (unknownDue.length > 0) {
+        newTodos.push({ id: 3, title: "Fälligkeit nicht verfügbar", reason: `${unknownDue.length} Auftrag/Aufträge ohne erfassten Termin`, area: "Warendurchlauf", urgency: "Normal", action: "Termin erfassen", targetHref: "/orders", completionType: "demo", source: "demo", done: false });
       }
       const auslieferungen = dbOrders.filter(o => o.station === 'warenausgang');
       if (auslieferungen.length > 0) {
@@ -119,7 +132,12 @@ export default function HomeDashboard() {
       
       setTodos(newTodos);
 
-      if (dbOrders) setOrders(dbOrders);
+      setOrders(dbOrders);
+      } catch {
+        setOrderDataState("unavailable");
+        setOrders([]);
+        setTodos([]);
+      }
     };
     load();
     const onUpdate = () => load();
@@ -175,19 +193,12 @@ export default function HomeDashboard() {
     return "Warendurchlauf kurz prüfen und Engpässe vermeiden";
   })();
 
-  const handleFeedback = () => {
-    if (!feedback.trim()) return;
-    setFeedbackSent(true);
-    setFeedback("");
-    setTimeout(() => setFeedbackSent(false), 3000);
-  };
-
   const activeTodos = todos.filter(t => !t.done);
   const doneTodos = todos.filter(t => t.done);
 
   // Animated counts
-  const totalCount = useAnimatedCount(orders.length, mounted);
-  const critCount = useAnimatedCount(orders.filter(o => o.risk === 'red').length, mounted);
+  const totalCount = useAnimatedCount(orders.length, mounted && orderDataState === "loaded");
+  const critCount = useAnimatedCount(orders.filter(o => o.risk === 'red').length, mounted && orderDataState === "loaded");
 
   // Get day info
   const now = new Date();
@@ -195,7 +206,7 @@ export default function HomeDashboard() {
 
   const handleQuickClick = (card: Record<string, unknown>) => {
     if (card.id === 'kritisch') {
-      setShowCriticalOrders(true);
+      if (orderDataState === "loaded") setShowCriticalOrders(true);
       return;
     }
     if (card.id === 'auftrag') {
@@ -276,12 +287,12 @@ export default function HomeDashboard() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             
             {(() => {
-              const kritisch = orders.filter(o => o.risk === 'red' || o.risk === 'orange').length;
+              const kritisch = orderDataState === "loaded" ? orders.filter(o => o.risk === 'red' || o.risk === 'orange').length : 0;
               const QUICK_CARDS = [
                 { id: 'telefon', label: 'Telefonnotiz', sub: 'schnell festhalten', grad: 'linear-gradient(135deg,#0E8C8C,#13B0A6)', shadow: 'rgba(14,140,140,.35)', icon: 'phone', href: '/telefonnotiz?source=home', shortcut: undefined as string | undefined },
                 { id: 'kunde', label: 'Neuer Kunde', sub: 'in 30 Sekunden', grad: 'linear-gradient(135deg,#2E9E6B,#46C285)', shadow: 'rgba(46,158,107,.35)', icon: 'userplus', href: undefined as string | undefined, shortcut: 'new_customer' },
                 { id: 'auftrag', label: 'Neuer Auftrag', sub: 'Teil annehmen', grad: 'linear-gradient(135deg,#3A6EA5,#4F8BC9)', shadow: 'rgba(58,110,165,.35)', icon: 'fileplus', href: undefined as string | undefined, shortcut: 'new_order' },
-                { id: 'kritisch', label: 'Kritische Aufträge', sub: kritisch > 0 ? `${kritisch} brauchen dich` : 'Alles im Lot', grad: 'linear-gradient(135deg,#D8453C,#EE6A5A)', shadow: 'rgba(216,69,60,.35)', icon: 'alert', href: undefined as string | undefined, badge: kritisch > 0 ? kritisch.toString() : undefined },
+                { id: 'kritisch', label: 'Kritische Aufträge', sub: orderDataState === 'loading' ? 'Auftragsdaten werden geladen...' : orderDataState === 'unavailable' ? 'NOT_AVAILABLE: Auftragsdaten konnten nicht geladen werden.' : kritisch > 0 ? `${kritisch} brauchen dich` : 'Keine kritischen Aufträge', grad: 'linear-gradient(135deg,#D8453C,#EE6A5A)', shadow: 'rgba(216,69,60,.35)', icon: 'alert', href: undefined as string | undefined, badge: orderDataState === 'loaded' && kritisch > 0 ? kritisch.toString() : undefined },
                 { id: 'marketing', label: 'Marketing', sub: 'Keine Aktion', grad: 'linear-gradient(115deg,#7A3FB0,#C2185B 55%,#F2643C)', shadow: 'rgba(194,24,91,.4)', icon: 'sparkles', href: '/marketing', badge: undefined },
               ];
               return QUICK_CARDS;
@@ -363,7 +374,7 @@ export default function HomeDashboard() {
             </div>
 
             {/* Hebel-Hinweis */}
-            <div
+            {orderDataState === "loaded" && <div
               className="flex items-center gap-3 rounded-2xl p-3 mb-4 border"
               style={{
                 background: 'linear-gradient(120deg, var(--accent-orange-soft, #FBF1DC), var(--surface-card, #fff))',
@@ -375,12 +386,16 @@ export default function HomeDashboard() {
                 <b>Heute wichtigster Hebel:</b>{' '}
                 <span className="text-accent-orange font-bold">{focusMessage}</span>
               </div>
-            </div>
+            </div>}
             <p className="mb-4 text-sm text-text-muted">Anfragen derzeit nicht verfügbar</p>
 
             {/* Tasks */}
             <div className="space-y-0">
-              {activeTodos.length === 0 && doneTodos.length === 0 ? (
+              {orderDataState === "loading" ? (
+                <div className="p-12 text-center text-text-muted"><p className="font-bold text-navy-900">Auftragsdaten werden geladen...</p></div>
+              ) : orderDataState === "unavailable" ? (
+                <div className="p-12 text-center text-text-muted"><p className="font-bold text-navy-900">NOT_AVAILABLE: Auftragsdaten konnten nicht geladen werden.</p></div>
+              ) : activeTodos.length === 0 && doneTodos.length === 0 ? (
                 <div className="p-12 text-center text-text-muted space-y-2">
                   <p className="font-bold text-navy-900">Noch keine Aufträge erfasst</p>
                 </div>
@@ -459,6 +474,11 @@ export default function HomeDashboard() {
                 <h3 className="font-serif text-[17px] font-bold">Im Umlauf</h3>
                 <span className="text-[9.5px] font-bold uppercase tracking-wider text-text-muted bg-bg-app-soft px-2 py-1 rounded-full">Live &amp; Demo</span>
               </div>
+              {orderDataState === "loading" ? (
+                <p className="text-sm text-text-muted">Auftragsdaten werden geladen...</p>
+              ) : orderDataState === "unavailable" ? (
+                <p className="text-sm font-bold text-navy-900">NOT_AVAILABLE: Auftragsdaten konnten nicht geladen werden.</p>
+              ) : <>
               <div className="flex justify-between items-end mb-3">
                 <div>
                   <div className="text-[10.5px] text-text-muted font-semibold uppercase tracking-wider">Gesamt</div>
@@ -483,14 +503,8 @@ export default function HomeDashboard() {
                   <b>{orders.filter(o => o.risk === 'blocked').length}</b>
                 </div>
               </div>
-              <div className="mt-3">
-                <div className="text-[9.5px] text-text-muted font-bold uppercase tracking-wider mb-1.5">Volumen-Trend</div>
-                <div className="h-[9px] w-full rounded-md bg-bg-app-soft overflow-hidden flex">
-                  <div className="h-full" style={{ width: '62%', background: 'var(--navy-900)' }} />
-                  <div className="h-full" style={{ width: '24%', background: 'var(--accent-orange)' }} />
-                  <div className="h-full" style={{ width: '14%', background: 'var(--neutral-gray-300)' }} />
-                </div>
-              </div>
+              <div className="mt-3 text-[9.5px] text-text-muted font-bold uppercase tracking-wider">NOT_AVAILABLE: Volumen-Trend nicht erfasst.</div>
+              </>}
             </div>
 
           </aside>
@@ -501,24 +515,8 @@ export default function HomeDashboard() {
           className="bg-bg-app-soft border border-neutral-gray-200 rounded-[22px] p-6 text-center max-w-2xl mx-auto mt-8"
           style={{ animation: 'hm-floatIn .5s ease .18s both' }}
         >
-          <h3 className="text-lg font-bold font-serif mb-2">Was fehlt auf dieser Seite?</h3>
-          <p className="text-xs text-text-muted mb-4">Feedback-Speicherung wird später angebunden (Demo-Modus).</p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={feedback}
-              onChange={e => setFeedback(e.target.value)}
-              placeholder="Z.B. Ich brauche einen Knopf für..."
-              className="flex-1 rounded-xl border border-neutral-gray-300 px-4 py-3 text-sm focus:outline-none focus:border-navy-900 focus:ring-1 focus:ring-navy-900"
-              onKeyDown={e => e.key === 'Enter' && handleFeedback()}
-            />
-            <button
-              onClick={handleFeedback}
-              className="bg-navy-900 text-white px-6 py-3 rounded-xl font-bold hover:bg-navy-800 transition-colors shrink-0 cursor-pointer"
-            >
-              {feedbackSent ? "Gemerkt!" : "Merken"}
-            </button>
-          </div>
+          <h3 className="text-lg font-bold font-serif mb-2">Feedback</h3>
+          <p className="text-xs text-text-muted mb-4">NOT_AVAILABLE: Feedback-Speicherung ist nicht verfügbar.</p>
           <div className="mt-4 pt-4 border-t border-neutral-gray-200 flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link href="/kvp" className="text-sm font-bold text-text-muted hover:text-navy-900 hover:underline">App verbessern (Developer KVP)</Link>
             <span className="hidden sm:inline text-neutral-gray-300">•</span>
@@ -547,7 +545,7 @@ export default function HomeDashboard() {
         </DetailOverlay>
 
         {/* ── CRITICAL ORDERS MODAL ───────────────────── */}
-        <DetailOverlay open={showCriticalOrders} onClose={() => setShowCriticalOrders(false)} title="Kritische Aufträge">
+        <DetailOverlay open={orderDataState === "loaded" && showCriticalOrders} onClose={() => setShowCriticalOrders(false)} title="Kritische Aufträge">
           <div className="space-y-4 text-navy-900 max-h-[60vh] overflow-y-auto pr-2">
             {orders.filter(o => o.risk === 'red' || o.risk === 'orange' || o.risk === 'yellow').length === 0 ? (
               <div className="p-4 rounded-xl border bg-success-green-soft border-success-green flex gap-3 text-success-green">

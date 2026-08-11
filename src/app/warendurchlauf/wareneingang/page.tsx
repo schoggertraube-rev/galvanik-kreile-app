@@ -306,10 +306,11 @@ function WarendurchlaufLeitstandContent() {
               {stationOrders.length > 0 ? (
                 stationOrders.map((order) => {
                   const u = getUrgency(order.dueDate);
-                  let urgencyType: "ok" | "soon" | "crit" | "wait" = "ok";
+                  let urgencyType: "ok" | "soon" | "crit" | "wait" | "unknown" = "ok";
                   if (order.risk === "red") urgencyType = "crit";
                   else if (order.risk === "orange" || u === "gefaehrdet") urgencyType = "soon";
                   else if (order.risk === "blocked") urgencyType = "wait";
+                  else if (order.risk === "unknown" || u === "unknown") urgencyType = "unknown";
 
                   return (
                     <OrderCompactCard
@@ -320,8 +321,8 @@ function WarendurchlaufLeitstandContent() {
                       article={order.itemDescription || "Artikel nicht hinterlegt"}
                       surface={order.surfaceRequested || "Oberfläche nicht hinterlegt"}
                       urgency={urgencyType}
-                      dueValue={order.dueValue || "14 T"}
-                      dueLabel={order.dueLabel || "Fällig in"}
+                      dueValue={order.dueValue || (urgencyType === "unknown" ? "Nicht erfasst" : "--")}
+                      dueLabel={order.dueLabel || (urgencyType === "unknown" ? "Termin" : "Fällig")}
                       badgeText={getLegacyStatusText(order) || "Wartend"}
                       onClick={() => openOrder(order.id)}
                     />
