@@ -2,11 +2,9 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Search, Camera, Bell, Calendar, Menu, Plus } from "lucide-react";
+import { Search, Camera, Calendar, Menu, Plus } from "lucide-react";
 import { GlobalSearch } from "./GlobalSearch";
 import { useState, useEffect, useRef } from "react";
-import { OfflineManager } from "@/lib/offline/OfflineManager";
-import { getOrderCountDb } from "@/app/actions/orders.actions";
 import { logout } from "@/app/actions/auth";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
@@ -23,17 +21,14 @@ interface KreileHeaderProps {
 export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [, setIsOffline] = useState(false);
-  const [, setOrderCount] = useState(0);
   const logoUrl = "/assets/logo/kreile-wordmark-skyline.svg";
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const notificationsRef = useRef<HTMLDivElement>(null);
 
   const { initials, status, name } = usePermissions();
   const { status: realtimeStatus } = useRealtimeStatus();
   const { isRecording } = useTestpilot();
-  const { isOnline, outboxItems, syncNow } = useSync();
+  const { isOnline, outboxItems } = useSync();
   const { openErfassung } = useErfassung();
+  const pendingOutboxCount = outboxItems.filter((item) => item.status !== "synced").length;
 
   // User Dropdown State
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
@@ -43,18 +38,15 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
   // Click outside to close user dropdown
   useEffect(() => {
-    if (!userDropdownOpen && !notificationsOpen) return;
+    if (!userDropdownOpen) return;
     const handleOutsideClick = (e: MouseEvent) => {
       if (userDropdownOpen && userDropdownRef.current && !userDropdownRef.current.contains(e.target as Node)) {
         setUserDropdownOpen(false);
       }
-      if (notificationsOpen && notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) {
-        setNotificationsOpen(false);
-      }
     };
     document.addEventListener("mousedown", handleOutsideClick);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, [userDropdownOpen, notificationsOpen]);
+  }, [userDropdownOpen]);
 
   const handleLogout = async () => {
     if (isLoggingOut) return; // Doppel-Aufruf verhindern
@@ -75,20 +67,7 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
     month: "2-digit",
   });
 
-  useEffect(() => {
-    const updateState = async () => {
-      setIsOffline(OfflineManager.isOffline());
-      const countResult = await getOrderCountDb();
-      setOrderCount(countResult.ok ? countResult.data.count : 0);
-    };
-    updateState();
-
-    const events = ["kreile-network-change", "kreile-sync-queue-updated", "online", "offline"];
-    events.forEach(e => window.addEventListener(e, updateState));
-    return () => events.forEach(e => window.removeEventListener(e, updateState));
-  }, []);
-
-  const isAnyDropdownOpen = userDropdownOpen || notificationsOpen;
+  const isAnyDropdownOpen = userDropdownOpen;
 
   return (
     <header className={`h-[72px] shrink-0 bg-transparent flex items-center px-4 md:px-6 gap-4 relative transition-all duration-300 ${isAnyDropdownOpen ? "z-[200]" : "z-[100]"}`}>
@@ -183,30 +162,21 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           <span className="w-2 h-2 rounded-full bg-accent-orange animate-pulse" />
         </Link>
 
-        {/* Online/Offline Pill mit Zähler */}
-        <button
-          onClick={() => {
-            if (isOnline) {
-              syncNow();
-            } else {
-              OfflineManager.toggleSimulatedOffline();
-            }
-          }}
+        {/* Lokales Gerätesignal; kein Nachweis einer Server-Synchronisierung */}
+        <div
+          aria-label="Netzwerkstatus"
+          aria-live="polite"
+          role="status"
           className={`hidden sm:flex items-center gap-2 rounded-full px-3 h-9 text-sm font-bold border transition-all duration-300 shadow-sm hover:bg-white hover:border-neutral-gray-200 ${
-            !isOnline || outboxItems.length > 0
+            !isOnline || pendingOutboxCount > 0
               ? "bg-bg-app-soft/50 backdrop-blur-sm border-white/60 text-text-muted"
               : "bg-white/50 backdrop-blur-sm border-white/60 text-navy-900"
           }`}
-          title={!isOnline ? "Offline Modus aktiv" : (outboxItems.length > 0 ? "Klicken zum Synchronisieren" : "Online und synchron")}
+          title="Gerätesignal: zeigt Netzwerkverfügbarkeit und lokal ausstehende Einträge; kein Server- oder Synchronisierungsnachweis."
         >
-          <span className={`w-2 h-2 rounded-full ${!isOnline ? "bg-accent-orange" : (outboxItems.length > 0 ? "bg-gold-500 animate-pulse" : "bg-success-green")}`} />
-          <span>{!isOnline ? "Offline" : (outboxItems.length > 0 ? "Syncing..." : "Online")}</span>
-          {outboxItems.length > 0 && (
-            <span className="bg-accent-orange text-white text-[10px] font-black rounded-full px-1.5 py-px min-w-[20px] text-center">
-              {outboxItems.length > 99 ? "99+" : outboxItems.length}
-            </span>
-          )}
-        </button>
+          <span className={`w-2 h-2 rounded-full ${!isOnline ? "bg-accent-orange" : (pendingOutboxCount > 0 ? "bg-gold-500 animate-pulse" : "bg-success-green")}`} />
+          <span>{!isOnline ? "Offline" : (pendingOutboxCount > 0 ? `${pendingOutboxCount} lokal ausstehend` : "Netzwerk verfügbar")}</span>
+        </div>
 
         {/* Testpilot Recording Indicator */}
         {isRecording && (
@@ -220,53 +190,15 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
         {realtimeStatus !== "disabled" && (
           <div className="hidden lg:flex items-center gap-1.5 px-3 h-9 rounded-full bg-white/50 backdrop-blur-sm border border-white/60 shadow-sm text-xs font-bold text-navy-700 transition-all duration-300 hover:bg-white">
             {realtimeStatus === "active" ? (
-              <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live</>
+              <><span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /><span>Echtzeit aktiv</span></>
             ) : realtimeStatus === "connecting" ? (
-              <><span className="w-1.5 h-1.5 rounded-full bg-accent-orange animate-pulse" /> Sync...</>
+              <><span className="w-1.5 h-1.5 rounded-full bg-accent-orange animate-pulse" /><span>Echtzeit verbindet…</span></>
             ) : (
-              <><span className="w-1.5 h-1.5 rounded-full bg-danger-red" /> Getrennt</>
+              <><span className="w-1.5 h-1.5 rounded-full bg-danger-red" /><span>Echtzeit getrennt</span></>
             )}
           </div>
         )}
 
-        {/* Glocke mit rotem Badge */}
-        <div className="relative hidden md:block" ref={notificationsRef}>
-          <button
-            onClick={() => setNotificationsOpen(!notificationsOpen)}
-            className="w-9 h-9 rounded-full bg-white/50 backdrop-blur-sm border border-white/60 flex items-center justify-center text-navy-900 hover:bg-white hover:border-neutral-gray-200 transition-all duration-300 shadow-sm"
-          >
-            <Bell className="w-4 h-4" />
-          </button>
-          <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-danger-red rounded-full text-[9px] text-white font-black flex items-center justify-center">
-            3
-          </span>
-
-          {notificationsOpen && (
-            <div className="absolute right-0 top-12 mt-2 w-72 bg-white border-2 border-neutral-gray-100 rounded-2xl shadow-xl z-50 p-2 animate-in slide-in-from-top-2 fade-in duration-200">
-              <div className="px-3 py-2 border-b border-neutral-gray-100 mb-1 flex justify-between items-center">
-                <p className="text-xs font-bold text-navy-900">Benachrichtigungen</p>
-                <span className="text-[10px] bg-bg-app px-2 py-0.5 rounded-full text-text-muted">3 Neu</span>
-              </div>
-              <div className="max-h-64 overflow-y-auto">
-                <div className="px-3 py-2 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer mb-1 border-l-2 border-accent-orange">
-                  <p className="text-[11px] font-bold text-navy-900">Materialengpass Galvanik</p>
-                  <p className="text-[10px] text-text-muted mt-0.5">Nickel-Bad 3 benötigt zeitnah neues Material für anstehende Großaufträge.</p>
-                  <p className="text-[9px] text-text-muted mt-1 opacity-60">Vor 12 Min</p>
-                </div>
-                <div className="px-3 py-2 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer mb-1 border-l-2 border-success-green">
-                  <p className="text-[11px] font-bold text-navy-900">5 Aufträge fertiggestellt</p>
-                  <p className="text-[10px] text-text-muted mt-0.5">Die QS hat 5 Werkstücke freigegeben. Bereit für den Warenausgang.</p>
-                  <p className="text-[9px] text-text-muted mt-1 opacity-60">Vor 45 Min</p>
-                </div>
-                <div className="px-3 py-2 hover:bg-neutral-gray-100 rounded-xl transition-colors cursor-pointer border-l-2 border-danger-red">
-                  <p className="text-[11px] font-bold text-navy-900">Kundenanfrage verzögert</p>
-                  <p className="text-[10px] text-text-muted mt-0.5">Auftrag A-202611 nähert sich dem Abgabetermin (morgen).</p>
-                  <p className="text-[9px] text-text-muted mt-1 opacity-60">Vor 2 Std</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
         {/* Theme Switcher (Desktop & Mobile) */}
         <div className="ml-2">
           <ThemeToggle />
