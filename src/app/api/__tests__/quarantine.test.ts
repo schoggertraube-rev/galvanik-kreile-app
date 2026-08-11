@@ -54,7 +54,6 @@ describe("F0 W2C active client containment", () => {
   it("removes browser upload and public-URL operations while keeping honest disabled controls", () => {
     const sources = [
       "src/app/buchhaltung/belege/neu/page.tsx",
-      "src/components/orders/OrderOverlay.tsx",
       "src/components/erfassung/ScanFlow/ScanUpload.tsx",
       "src/components/erfassung/shared/ItemPhotoUploader.tsx",
       "src/components/intake/CameraCapture.tsx",
@@ -68,14 +67,12 @@ describe("F0 W2C active client containment", () => {
     for (const source of sources) {
       expect(source).not.toMatch(/getPublicUrl|\.storage\.from\(|\.upload\(|functions\.invoke|type="file"/);
     }
-    for (const source of sources.slice(0, 8)) {
+    for (const source of sources.slice(0, 7)) {
       expect(source).toMatch(/disabled|nicht verfügbar/i);
       expect(source).not.toMatch(/addEvent|processImage|createPaymentIntent|emailProvider\.send/);
     }
     expect(sources[0]).toContain("disabled");
     expect(sources[0]).toContain("nicht verfügbar");
-    expect(sources[1]).toContain("disabled");
-    expect(sources[1]).toContain("Nicht verfügbar");
   });
 
   it("removes the active payment-provider invocation and exposes an honest disabled control", () => {

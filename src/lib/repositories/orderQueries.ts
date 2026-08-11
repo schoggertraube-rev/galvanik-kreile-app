@@ -1,75 +1,20 @@
-"use server";
+import type { communications, customers, events, items, orderCostPositions, orders, payments, priceLines } from "@/db/schema";
 
-import { db } from "@/db";
-import { orders, items, events, customers, priceLines, payments, communications, orderCostPositions } from "@/db/schema";
-import { eq, desc, asc } from "drizzle-orm";
+export const ORDER_DETAIL_READ_NOT_AVAILABLE_MESSAGE =
+  "NOT_AVAILABLE: Auftragsdetailansicht benötigt einen tenant- und ownership-geprüften W3-Read-Vertrag.";
 
-export async function getOrderWithDetails(orderId: string) {
-  try {
-    const orderResults = await db.select()
-      .from(orders)
-      .leftJoin(customers, eq(orders.customerId, customers.id))
-      .where(eq(orders.id, orderId));
+export type OrderDetails = typeof orders.$inferSelect & {
+  customer: typeof customers.$inferSelect | null;
+  items: Array<typeof items.$inferSelect>;
+  events: Array<typeof events.$inferSelect>;
+  priceLines: Array<typeof priceLines.$inferSelect>;
+  payments: Array<typeof payments.$inferSelect>;
+  communications: Array<typeof communications.$inferSelect>;
+  costPositions: Array<typeof orderCostPositions.$inferSelect>;
+  customerKpis: { ltv: number; activeOrdersCount: number };
+};
 
-    if (orderResults.length === 0) return null;
-
-    const orderRecord = orderResults[0].orders;
-    const customerRecord = orderResults[0].customers;
-
-    const itemsData = await db.select().from(items).where(eq(items.orderId, orderId)).orderBy(asc(items.createdAt));
-    const eventsData = await db.select().from(events).where(eq(events.orderId, orderId)).orderBy(desc(events.createdAt));
-
-    // Phase 2 additions: Parallel queries
-    const [priceLinesData, paymentsData, communicationsData, costPositionsData] = await Promise.all([
-      db.select().from(priceLines).where(eq(priceLines.orderId, orderId)).orderBy(asc(priceLines.sortOrder)),
-      db.select().from(payments).where(eq(payments.orderId, orderId)).orderBy(desc(payments.createdAt)),
-      db.select().from(communications).where(eq(communications.orderId, orderId)).orderBy(desc(communications.createdAt)),
-      db.select().from(orderCostPositions).where(eq(orderCostPositions.orderId, orderId)).orderBy(asc(orderCostPositions.createdAt)),
-    ]);
-
-    let ltv = 0;
-    let activeOrdersCount = 0;
-    
-    if (orderRecord.customerId) {
-      const { sql, and, notInArray } = await import("drizzle-orm");
-      const { ausgangsrechnung } = await import("@/db/schema_buchhaltung");
-      
-      try {
-        const [ltvResult, activeOrdersResult] = await Promise.all([
-          db.select({ value: sql<number>`SUM(${ausgangsrechnung.brutto})` })
-            .from(ausgangsrechnung)
-            .where(sql`${ausgangsrechnung.orderId} IN (SELECT id FROM orders WHERE customer_id = ${orderRecord.customerId})`),
-          db.select({ count: sql<number>`COUNT(*)` })
-            .from(orders)
-            .where(and(
-              eq(orders.customerId, orderRecord.customerId),
-              notInArray(orders.status, ['abgeschlossen', 'storniert', 'completed', 'cancelled'])
-            ))
-        ]);
-        
-        ltv = ltvResult[0]?.value || 0;
-        activeOrdersCount = activeOrdersResult[0]?.count || 0;
-      } catch (e) {
-        console.error("Failed to load customer KPIs", e);
-      }
-    }
-
-    return {
-      ...orderRecord,
-      customer: customerRecord,
-      items: itemsData,
-      events: eventsData,
-      priceLines: priceLinesData,
-      payments: paymentsData,
-      communications: communicationsData,
-      costPositions: costPositionsData,
-      customerKpis: {
-        ltv,
-        activeOrdersCount
-      }
-    };
-  } catch (error) {
-    console.error("Fehler beim Laden des Auftrags:", error);
-    return null;
-  }
+export async function getOrderWithDetails(orderId: string): Promise<OrderDetails | null> {
+  void orderId;
+  return null;
 }
