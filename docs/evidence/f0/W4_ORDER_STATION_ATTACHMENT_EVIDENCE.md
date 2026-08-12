@@ -2,30 +2,32 @@
 
 ```yaml
 BASE: bdba090ecac3b0f1e15f1146c6aeeaac5388bc26
-SCOPE: W4-03; private Galvanik-handoff original attachment only
+SCOPE: W4-01,W4-05,W4-06,W4-07,W4-10; private Galvanik-handoff original attachment core
 SOURCE_STATUS: PASS_LOCAL
 RUNTIME_STATUS: PASS_LOCAL
-MIGRATION: 20260811184850_w4_order_station_attachment.sql
+MIGRATIONS: 20260811184850_w4_order_station_attachment.sql,20260812103446_w4_evidence_read_contract.sql
 MIGRATION_CREATED_WITH: Supabase CLI 2.111.0
 MIGRATION_EXECUTED: LOCAL_REPLAY_ONLY
-LOCAL_DB_RESET: PASS; Supabase CLI 2.111.0; exactly 12 migrations through 20260811184850
+LOCAL_DB_RESET: PASS; Supabase CLI 2.111.0; exactly 13 migrations through 20260812103446
 LOCAL_INTEGRATION_AT: 2026-08-12 00:01:15 Europe/Berlin
-LOCAL_STORAGE_HTTP_INTEGRATION: PASS; 1 file; 12 tests; duration 26.02 s
-FOCUSED_UNIT_UI: PASS; 5 files; 99 tests
+LOCAL_STORAGE_HTTP_INTEGRATION: PASS; 1 file; 14 tests; duration 25.82 s
+FOCUSED_UNIT_UI: PASS; 4 files; 103 tests
 TYPECHECK: PASS; tsc --noEmit --incremental false
 EXACT_ESLINT: PASS; 11 exact TS/TSX paths; zero warnings
 SUPABASE_CLIENT_BOUNDARY: PASS; 699 src files scanned
 DIFF_CHECK: PASS
 INDEPENDENT_REVIEW: REVIEW_PASS; F0 and Redteam freeze a55e8d63 before evidence-only update
-SCHEMA_SEMANTIC_MANIFEST: PENDING_NEXT_ATOM
-CI_SCHEMA_GATE: PENDING_NEXT_ATOM
-BUILD: NOT_RUN
-FULL_UNIT_SUITE: NOT_RUN
+SCHEMA_SEMANTIC_MANIFEST: PASS_LOCAL; 312 exact ADD objects
+CI_SCHEMA_GATE: WIRED_NOT_RUN
+BUILD: PASS_LOCAL
+FULL_UNIT_SUITE: PASS; 87 files; 551 tests
 REMOTE_PRODUCTION: NOT_RUN
 RLS_POLICY_DEFAULT_ACL: NOT_CHANGED
 GRANT_REVOKE: NOT_CHANGED
 BUCKET_CONFIGURATION: NOT_CHANGED
-OVERALL_W4: OPEN
+W4_LOCAL: PASS_LOCAL
+REVIEW_HANDOFF: F0_W4_REVIEW_READY
+OVERALL_F0: BLOCKED_EXTERNAL_PERMISSION
 ```
 
 ## Liefervertrag
@@ -36,7 +38,8 @@ Galvanik-Übergabe bereit. Die Ende-zu-Ende-Kette lautet:
 `ORDER_STATION_MOVED_V1`-Receipt → unveränderliche Reservation → einmaliger
 serverseitiger Signed-Upload-Grant → privates Storage-Objekt → zweiphasige
 Verifikation → unveränderliche Evidence →
-`private.v_order_station_evidence_receipts_v1` → Action →
+`private.v_order_station_evidence_receipts_v2` und
+`private.v_evidence_records_v1` → Action →
 `GalvanikHandoffAttachmentPanel` → Loading/Empty/Error/Pending/Upload/
 Finalize/frischer Readback/Original-Link.
 
@@ -55,6 +58,10 @@ frischer Metadata-Read in allen client-sicheren Bindungsfeldern exakt
 - `private.order_station_evidence` finalisiert jede Reservation höchstens
   einmal und bindet dieselben Owner-/Intent-Felder an eine stabile
   Storage-Objekt-ID, Version, Erstellungszeit und Verifikationszeit.
+- `private.evidence_extraction_metadata` hält den ehrlichen Extraktionszustand;
+  der Stationspfad schreibt `NOT_REQUESTED`. `private.evidence_domain_links`
+  bindet dieselbe Evidence in der Finalize-Transaktion an `ORDER` und
+  `ORDER_ITEM`. Beide Tabellen sind append-only.
 - Globale Eindeutigkeit gilt für Bucket/Pfad und Storage-Objekt-ID. Alle
   Owner-FKs verwenden `ON DELETE RESTRICT`; UPDATE, DELETE und TRUNCATE beider
   Tabellen werden durch sechs Trigger blockiert.
@@ -103,15 +110,14 @@ frischer Metadata-Read in allen client-sicheren Bindungsfeldern exakt
 
 ## Ausgeführte lokale Abnahme
 
-Die folgende Abnahme lief lokal mit der gepinnten Supabase CLI `2.111.0` nach
-einem frischen Reset über exakt zwölf Migrationen. Der Hybridlauf startete am
-12. August 2026 um 00:01:15 Uhr Europe/Berlin und bestand 12/12 Tests in
-26,02 Sekunden.
+Die abschließende Abnahme lief lokal mit der gepinnten Supabase CLI `2.111.0`
+nach einem frischen Reset über exakt dreizehn Migrationen. Der erweiterte
+Hybridlauf bestand 14/14 Tests in rund 26 Sekunden.
 
 | Gate | Erwarteter realer Nachweis | Status |
 |---|---|---|
-| Migration/Ledger | frischer lokaler Reset, exakt 12 geordnete Migrationen bis `20260811184850` | PASS |
-| Katalog | 18/11 geordnete Spaltennamen, 16/10 benannte Constraints, 7 PK-/Unique-Indizes, 6 Immutabilitätstrigger, private `security_invoker`-View | PASS innerhalb W4-03; vollständiges Semantikmanifest bleibt Folgeatom |
+| Migration/Ledger | frischer lokaler Reset, exakt 13 geordnete Migrationen bis `20260812103446` | PASS |
+| Katalog | baseline9→candidate13 exakt 312 ADD, 0 CHANGE/REMOVE; vollständige Spalten-/Constraint-/Index-/Trigger-/View-/Owner-Grant-Payloads | PASS |
 | DB vor Storage | PENDING-Reservation ist beim echten Grant-HTTP-Aufruf bereits committed; Grantfehler lässt genau diese PENDING-Zeile und keine Evidence zurück | PASS |
 | Signed Upload P0 | zwei Replays: gleiche Reservation/Pfad, verschiedene Tokens, eine DB-Zeile; derselbe echte Token kann auch mit Client-`upsert:true` das erste Objekt nicht überschreiben | PASS |
 | Pfadbindung | frischer Token auf substituiertem Pfad liefert 4xx und erzeugt kein Objekt | PASS |
@@ -124,8 +130,9 @@ einem frischen Reset über exakt zwölf Migrationen. Der Hybridlauf startete am
 | Storage HTTP/private Bucket | unsigned Upload und Download liefern 4xx; anon List zeigt kein Objekt; keine direkte Client-Policy wurde hinzugefügt | PASS |
 | Private Relation ACL/default ACL | keine wirksamen oder Default-ACL-Grants für PUBLIC/anon/authenticated/service_role auf den neuen privaten Relationen | PASS |
 | Immutabilität | UPDATE/DELETE/TRUNCATE auf beiden Tabellen: sechs `P0001`, Vor-/Nachsnapshot bytegleich | PASS |
-| E2E | echte DB → private View → echte Actions → echtes Panel → lokales Storage; PNG-Upload, FINALIZED-Readback, Remount allein aus Action/View, Originalbytes/hash | PASS |
-| Quellqualität | fokussierte Unit-/RTL-Suite: 5 Dateien/99 Tests; TypeScript; 11 Exact-Path-ESLint-Pfade; Client-Boundary-Checker mit 699 gescannten `src`-Dateien; Diff-Check | PASS |
+| Evidence-Metadaten/Links/Legacy | `NOT_REQUESTED`-Metadaten, zwei polymorphe Links und realer Legacy-Scan mit Confidence/Originaldaten; Legacy-Snapshot unverändert | PASS |
+| E2E | echte DB → private Views → echte Actions → echtes Panel → lokales Storage; PNG-Upload, FINALIZED-Readback, Remount allein aus Action/View, Originalbytes/hash | PASS |
+| Quellqualität | fokussierte Unit-/RTL-Suite: 4 Dateien/103 Tests; vollständige Units 87/551; TypeScript; vollständiges ESLint; Read-Port-Checker 613 Dateien/3 Ports; Produktionsbuild | PASS |
 
 Der Hybridtest mockt ausschließlich `readAppSession`. Actions, Domain,
 PostgreSQL, private View, Storage-Adapter, Supabase-Clients und HTTP bleiben echt.
@@ -134,16 +141,11 @@ Admin-Upload im Happy Path und keine erfolgreiche Cleanup-/Delete-Aktion im
 Test. Absichtlich abgewiesene DELETE-/TRUNCATE-Versuche sind Teil des
 Immutabilitätsnachweises.
 
-Der Workflow führt zuerst den bestehenden W3-Test am belegten
-`20260811154732`-Cutoff aus, danach einen vollständigen 12er-Reset und diesen
-W4-Hybridtest. Erst anschließend läuft der unveränderte harte
-Production-Fingerprint-Gate. Der vollständige PG17-Semantikmanifest-Nachweis
-für Spaltentypen, Nullability, Defaults sowie normalisierte Constraint-, Index-
-und Viewdefinitionen über `pg_get_viewdef` ist bewusst der separate, unmittelbar folgende
-Kandidaten-Fingerprint-Atom: `SCHEMA_SEMANTIC_MANIFEST=PENDING_NEXT_ATOM`.
-Weil die Production-Referenz das neue private Schema noch nicht enthält, gilt
-zusätzlich `CI_SCHEMA_GATE=PENDING_NEXT_ATOM`. Beide Gates werden in W4-03
-weder als PASS behauptet noch abgeschwächt oder umgangen.
+Der Workflow bindet den Production-Cutoff separat an den unveränderten harten
+Fingerprint, prüft danach den vollständigen 13er-Kandidaten gegen den
+committeten 312-Objekt-Vertrag, führt den exakten 11er-W3-Test und den echten
+13er-W4-Hybrid aus und verlangt anschließend einen zweiten byteidentischen
+13er-Replay. GitHub CI selbst wurde noch nicht ausgeführt.
 
 ## Reparaturschleifen
 
@@ -184,11 +186,12 @@ weder als PASS behauptet noch abgeschwächt oder umgangen.
 
 | Status | Kernpfad | Grenze |
 |---|---|---|
-| wieder aktiv / W4-03 lokal belegt | kanonische aktive Galvanik-Ready-Karte: tenantgebundene Metadaten, Original reservieren/hochladen/finalisieren/frisch bestätigen und teamweit sicher lesen | frischer 12er-Replay, Hybrid 12/12, Source-Gates und zwei unabhängige Freeze-Reviews PASS |
-| weiterhin bewusst quarantänisiert | sämtliche Legacy-Foto-/OCR-Pfade, andere Stationen/Einstiege, direkte Client-Storage-Policies, automatische Adoption, Überschreiben und Löschen | Legacy bleibt bytegleich; Wiederfreigabe benötigt einen eigenen sicheren W3-/W4-Vertrag |
+| wieder aktiv / W4 lokal belegt | kanonische aktive Galvanik-Ready-Karte: tenantgebundene Metadaten, Original reservieren/hochladen/finalisieren/frisch bestätigen, Extraction/Links lesen und teamweit sicher lesen | frischer 13er-Replay, Hybrid 14/14, 312-Objekt-Vertrag, Read-Port- und Source-Gates PASS |
+| kontrolliert read-only reaktiviert | vorhandene gesicherte Legacy-Evidence mit Original-/Extraktions-/Confidence-Metadaten | ausschließlich versionierte private View; Vor-/Nachsnapshot bytegleich; kein Legacy-Upload/Provider |
+| weiterhin bewusst quarantänisiert | Legacy-Foto-/OCR-Schreibpfade, andere Stationen/Einstiege, direkte Client-Storage-Policies, automatische Adoption, Überschreiben und Löschen | Wiederfreigabe benötigt jeweils einen eigenen sicheren W3-/W4-Vertrag |
 | externer Blocker | Production-Fingerprint-Referenz, Remote-/Production-Migration, Production-ACL/RLS-Parität, Draft-PR und Vercel Preview | separater freigegebener Fingerprint-/Delivery-Atom nach lokalem PASS |
 
-## Exakter Scope
+## Exakter Scope des ursprünglichen Attachment-Atoms
 
 1. `supabase/migrations/20260811184850_w4_order_station_attachment.sql`
 2. `src/lib/server/orderStationAttachment.ts`
@@ -209,3 +212,6 @@ Die zwei bestehenden Testpfade 13 und 14 ändern ausschließlich den Leaf-Mock
 für `GalvanikHandoffAttachmentPanel`, damit ältere W3/W2C-Seitentests ihren
 eigenen Vertrag isoliert prüfen. Es gab keine Remote-, Production-, RLS-,
 Policy-, Grant-, Default-ACL-, Bucket-, Deployment-, Merge- oder erfolgreiche Löschaktion.
+
+Der additive Abschluss für W4-02/03/04/08/09 ist mit vollständigem Dateiscope
+und Receipts separat in `W4_EVIDENCE_READ_CONTRACT_EVIDENCE.md` dokumentiert.

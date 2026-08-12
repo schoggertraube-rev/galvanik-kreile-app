@@ -123,6 +123,28 @@ type EvidenceRow = {
   verified_at: Date | string;
 };
 
+type EvidenceExtractionRow = {
+  id: string;
+  evidence_id: string;
+  tenant_id: string;
+  extraction_state: string;
+  provider: string | null;
+  detected_type: string | null;
+  detection_confidence: number | string | null;
+  extracted_data: unknown;
+  field_confidence: unknown;
+  created_at: Date | string;
+};
+
+type EvidenceDomainLinkRow = {
+  id: string;
+  evidence_id: string;
+  tenant_id: string;
+  target_type: string;
+  target_id: string;
+  created_at: Date | string;
+};
+
 type ReceiptViewRow = {
   reservation_id: string;
   receipt_id: string | null;
@@ -523,7 +545,7 @@ async function readReceiptByReservation(
   reservation: InternalReservation,
 ): Promise<OrderStationAttachmentReceipt> {
   const rows = await tx.execute<ReceiptViewRow>(sql`
-    SELECT * FROM private.v_order_station_evidence_receipts_v1
+    SELECT * FROM private.v_order_station_evidence_receipts_v2
     WHERE reservation_id = ${reservation.id}
     LIMIT 2
   `);
@@ -685,7 +707,7 @@ export async function readOrderStationAttachments(
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<ReceiptViewRow>(sql`
-        SELECT * FROM private.v_order_station_evidence_receipts_v1
+        SELECT * FROM private.v_order_station_evidence_receipts_v2
         WHERE order_id = ${input.orderId} AND item_id = ${input.itemId}
         ORDER BY reserved_at DESC, reservation_id
       `);
@@ -1010,6 +1032,58 @@ export async function finalizeOrderStationAttachment(
         || !evidenceMatchesStableObject(inserted[0], reservation, before)) {
         throw new Error("ORDER_STATION_ATTACHMENT_EVIDENCE_INSERT_FAILED");
       }
+
+      const extractionId = randomUUID();
+      const extractionRows = await tx.execute<EvidenceExtractionRow>(sql`
+        INSERT INTO private.evidence_extraction_metadata (
+          id, evidence_id, tenant_id, extraction_state
+        ) VALUES (
+          ${extractionId}, ${evidenceId}, ${authorization.tenantId}, 'NOT_REQUESTED'
+        ) RETURNING *
+      `);
+      const extraction = extractionRows[0];
+      if (
+        extractionRows.length !== 1
+        || !extraction
+        || extraction.id !== extractionId
+        || extraction.evidence_id !== evidenceId
+        || extraction.tenant_id !== authorization.tenantId
+        || extraction.extraction_state !== "NOT_REQUESTED"
+        || extraction.provider !== null
+        || extraction.detected_type !== null
+        || extraction.detection_confidence !== null
+        || extraction.extracted_data !== null
+        || !extraction.field_confidence
+        || typeof extraction.field_confidence !== "object"
+        || Array.isArray(extraction.field_confidence)
+        || Object.keys(extraction.field_confidence).length !== 0
+        || new Date(toIso(extraction.created_at)).getTime() < new Date(toIso(inserted[0].verified_at)).getTime()
+      ) throw new Error("ORDER_STATION_ATTACHMENT_EXTRACTION_INSERT_FAILED");
+
+      const orderLinkId = randomUUID();
+      const itemLinkId = randomUUID();
+      const linkRows = await tx.execute<EvidenceDomainLinkRow>(sql`
+        INSERT INTO private.evidence_domain_links (
+          id, evidence_id, tenant_id, target_type, target_id
+        ) VALUES
+          (${orderLinkId}, ${evidenceId}, ${authorization.tenantId}, 'ORDER', ${reservation.order_id}),
+          (${itemLinkId}, ${evidenceId}, ${authorization.tenantId}, 'ORDER_ITEM', ${reservation.item_id})
+        RETURNING *
+      `);
+      const expectedLinks = new Map([
+        [`ORDER\u0000${reservation.order_id}`, orderLinkId],
+        [`ORDER_ITEM\u0000${reservation.item_id}`, itemLinkId],
+      ]);
+      if (
+        linkRows.length !== 2
+        || linkRows.some((link) =>
+          !validUuid(link.id)
+          || expectedLinks.get(`${link.target_type}\u0000${link.target_id}`) !== link.id
+          || link.evidence_id !== evidenceId
+          || link.tenant_id !== authorization.tenantId
+          || new Date(toIso(link.created_at)).getTime() < new Date(toIso(inserted[0].verified_at)).getTime())
+      ) throw new Error("ORDER_STATION_ATTACHMENT_LINKS_INSERT_FAILED");
+
       const receipt = await readReceiptByReservation(tx, authorization, reservation);
       if (
         receipt.state !== "FINALIZED"
@@ -1036,7 +1110,7 @@ export async function getOrderStationAttachmentOriginal(
   try {
     const owned = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const viewRows = await tx.execute<ReceiptViewRow>(sql`
-        SELECT * FROM private.v_order_station_evidence_receipts_v1
+        SELECT * FROM private.v_order_station_evidence_receipts_v2
         WHERE receipt_id = ${input.receiptId}
         LIMIT 2
       `);

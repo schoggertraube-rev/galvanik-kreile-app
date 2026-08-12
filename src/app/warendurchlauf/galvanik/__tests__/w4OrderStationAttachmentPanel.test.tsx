@@ -57,6 +57,7 @@ vi.mock("lucide-react", () => {
 
 import { GalvanikHandoffAttachmentPanel } from "@/components/orders/GalvanikHandoffAttachmentPanel";
 import GalvanikPage from "@/app/warendurchlauf/galvanik/page";
+import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 
 const ACTOR = "11111111-1111-4111-8111-111111111111";
 const OTHER_ACTOR = "22222222-2222-4222-8222-222222222222";
@@ -103,8 +104,73 @@ function finalized(overrides: Record<string, unknown> = {}) {
   });
 }
 
-function envelope(receipts: ReturnType<typeof receipt>[], canOperate = true, currentActorId = ACTOR) {
-  return { code: "OK" as const, data: { receipts, canOperate, currentActorId } };
+function evidenceRecord(overrides: Record<string, unknown> = {}): EvidenceReadRecord {
+  return {
+    evidenceKey: `order-station-attachment:${RECEIPT}`,
+    source: "ORDER_STATION_ATTACHMENT" as const,
+    sourceId: RECEIPT,
+    original: {
+      state: "VERIFIED" as const,
+      hash: ZERO_SHA,
+      hashAlgorithm: "SHA256" as const,
+      sizeBytes: FILE_BYTES.byteLength,
+      securedAt: "2026-08-11T10:04:00.000Z",
+      mimeType: "image/png",
+    },
+    extraction: {
+      state: "NOT_REQUESTED" as const,
+      provider: null,
+      detectedType: null,
+      detectionConfidence: null,
+      extractedData: null,
+      fieldConfidence: {},
+    },
+    targets: [
+      { targetType: "ORDER" as const, targetId: ORDER_ID },
+      { targetType: "ORDER_ITEM" as const, targetId: ITEM_ID },
+    ],
+    recordedAt: "2026-08-11T10:05:00.000Z",
+    ...overrides,
+  };
+}
+
+function legacyEvidenceRecord(): EvidenceReadRecord {
+  return {
+    ...evidenceRecord(),
+    evidenceKey: "legacy-scan-upload:legacy-scan-1",
+    source: "LEGACY_SCAN_UPLOAD" as const,
+    sourceId: "legacy-scan-1",
+    original: {
+      state: "LEGACY_RECORDED" as const,
+      hash: "b".repeat(64),
+      hashAlgorithm: "SHA256" as const,
+      sizeBytes: 321,
+      securedAt: "2026-08-11T09:01:00.000Z",
+      mimeType: "application/pdf",
+    },
+    extraction: {
+      state: "LEGACY_RECORDED" as const,
+      provider: "legacy-ocr",
+      detectedType: "Lieferschein",
+      detectionConfidence: 0.91,
+      extractedData: { documentNumber: "LS-1" },
+      fieldConfidence: { documentNumber: 0.89 },
+    },
+    targets: [
+      { targetType: "CUSTOMER" as const, targetId: "customer-a" },
+      { targetType: "ORDER" as const, targetId: ORDER_ID },
+    ],
+    recordedAt: "2026-08-11T09:02:00.000Z",
+  };
+}
+
+function envelope(
+  receipts: ReturnType<typeof receipt>[],
+  canOperate = true,
+  currentActorId = ACTOR,
+  evidenceRecords: EvidenceReadRecord[] = [],
+) {
+  return { code: "OK" as const, data: { receipts, evidenceRecords, canOperate, currentActorId } };
 }
 
 function file(): File {
@@ -211,6 +277,30 @@ describe("W4 Galvanik handoff attachment panel", () => {
     expect(screen.queryByRole("button", { name: "Original freigeben" })).not.toBeInTheDocument();
     expect(ports.original).not.toHaveBeenCalled();
     expect(readonly.container.querySelector("input[type=file]")).not.toBeInTheDocument();
+  });
+
+  it("renders verified no-extraction truth and read-only legacy confidence with polymorphic targets", async () => {
+    ports.getAttachments.mockResolvedValueOnce(envelope(
+      [finalized()],
+      true,
+      ACTOR,
+      [evidenceRecord(), legacyEvidenceRecord()],
+    ));
+    render(<GalvanikHandoffAttachmentPanel
+      orderId={ORDER_ID}
+      expectedVersion={2}
+      items={[{ id: ITEM_ID, name: "Teil A" }]}
+    />);
+
+    expect(await screen.findByText("Nachweis-Metadaten")).toBeInTheDocument();
+    expect(screen.getByText("Keine Extraktion angefordert.")).toBeInTheDocument();
+    expect(screen.getByText(/Extraktion übernommen: Lieferschein · Konfidenz 91 %/)).toBeInTheDocument();
+    expect(screen.getByText(/ORDER_ITEM item-a/)).toBeInTheDocument();
+    expect(screen.getByText(/CUSTOMER customer-a/)).toBeInTheDocument();
+    expect(screen.getByText("Bestehender Legacy-Nachweis (nur lesen)")).toBeInTheDocument();
+    expect(ports.reserve).not.toHaveBeenCalled();
+    expect(ports.finalize).not.toHaveBeenCalled();
+    expect(ports.original).not.toHaveBeenCalled();
   });
 
   it("offers a scoped, single-flight metadata retry after rejection", async () => {

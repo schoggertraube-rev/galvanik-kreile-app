@@ -59,7 +59,10 @@ jobs:
           echo "060de7673beef3d9eaa73289dc04159e262137e23bb437354dccffd363696d4b  scripts/schema-parity-inventory.json" | sha256sum --check --strict
 
       - name: W4 candidate checker mutation-free selftest
-        run: node scripts/quality/check-w4-candidate-schema.mjs --selftest
+        run: |
+          node scripts/quality/check-w4-candidate-schema.mjs --selftest
+          node scripts/quality/check-w4-cross-module-read-ports.mjs --selftest
+          node scripts/quality/check-w4-cross-module-read-ports.mjs --check
 
       - name: Resolve diff range
         id: diff
@@ -184,6 +187,8 @@ jobs:
           echo "814c888d0d9b25fdc7fdd066eddc9c34887e07fe839bc2702e6250e3a004f315  docs/evidence/f0/hardening/f0_schema_fingerprint.sql" | sha256sum --check --strict
           echo "060de7673beef3d9eaa73289dc04159e262137e23bb437354dccffd363696d4b  scripts/schema-parity-inventory.json" | sha256sum --check --strict
           node scripts/quality/check-w4-candidate-schema.mjs --selftest
+          node scripts/quality/check-w4-cross-module-read-ports.mjs --selftest
+          node scripts/quality/check-w4-cross-module-read-ports.mjs --check
 
       - name: Start isolated local Supabase stack (Postgres + Storage + Auth, BF-007)
         # War vorher "supabase db start" (nur Postgres-Container). BF-007 braucht die echte
@@ -231,7 +236,7 @@ jobs:
           FP_BASELINE="$(node -e "const f=require('./w4-baseline-fingerprint.json'); process.stdout.write(['cols','idx','cons','trig','func','pol','rls','grants','func_grants','def_privs','viewopts'].map(k=>f[k]).join('|'))")"
           node scripts/quality/fingerprint-compare.mjs "$FP_BASELINE" docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt | tee replay-baseline-fingerprint.txt
 
-      - name: Replay exact 12-migration W4 candidate from zero without seed
+      - name: Replay exact 13-migration W4 candidate from zero without seed
         run: npx --yes supabase@2.111.0 db reset --local --no-seed
 
       - name: Capture and check exact W4 candidate catalog, ledger, and fingerprint
@@ -252,7 +257,7 @@ jobs:
 
       - name: Replay W3/W4-01 predecessor cutoff without seed
         # The predecessor test deliberately proves the exact 11-row ledger through
-        # 20260811154732; do not weaken that assertion for the 12-row candidate.
+        # 20260811154732; do not weaken that assertion for the 13-row candidate.
         run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260811154732
 
       - name: W3/W4-01 order-station command, receipt, and private read-model integration
@@ -263,7 +268,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/w3_order_station.integration.test.ts
 
-      - name: Restore exact 12-migration W4 candidate without seed
+      - name: Restore exact 13-migration W4 candidate without seed
         run: npx --yes supabase@2.111.0 db reset --local --no-seed
 
       - name: W4-03 Galvanik handoff attachment real DB, View, Actions, Panel, and Storage HTTP
@@ -358,7 +363,7 @@ jobs:
             tail -n 100 next-start.log
           fi
 
-      - name: Second exact 12-migration replay and byte-identical W4 captures
+      - name: Second exact 13-migration replay and byte-identical W4 captures
         run: |
           set -euo pipefail
           npx --yes supabase@2.111.0 db reset --local --no-seed

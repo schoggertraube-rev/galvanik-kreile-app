@@ -15,6 +15,7 @@ import type {
   OrderStationAttachmentResult,
   ReserveOrderStationAttachmentInput,
 } from "@/lib/server/orderStationAttachment";
+import type { EvidenceReadRecord, ReadEvidenceTargetInput } from "@/lib/server/evidenceRead";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
 export type WarendurchlaufOrder = OperationalOrder;
@@ -150,14 +151,28 @@ export async function getGalvanikHandoffAttachmentsAction(
   const domain = await import("@/lib/server/orderStationAttachment");
   const result = await domain.readOrderStationAttachments(authorization.data, input);
   if (result.code !== "OK") return result;
+  const evidenceDomain = await import("@/lib/server/evidenceRead");
+  const evidence = await evidenceDomain.readOrderEvidenceRecords(authorization.data, input);
+  if (evidence.code !== "OK") return evidence;
   return {
     code: "OK" as const,
     data: {
       receipts: result.data,
+      evidenceRecords: evidence.data satisfies EvidenceReadRecord[],
       canOperate: authorization.data.permissions.includes("perm_op_photos"),
       currentActorId: authorization.data.userId,
     },
   };
+}
+
+export async function getGalvanikEvidenceByTargetAction(
+  input: ReadEvidenceTargetInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_view_leitstand");
+  if (!authorization.ok) return authorization.result;
+  const evidenceDomain = await import("@/lib/server/evidenceRead");
+  return evidenceDomain.readEvidenceRecordsByTarget(authorization.data, input);
 }
 
 export async function reserveGalvanikHandoffAttachmentAction(

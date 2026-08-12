@@ -6,27 +6,28 @@ Stand: 2026-08-12
 
 | Gate | Status |
 |---|---|
-| `OVERALL_W4` | `OPEN` |
+| `W4_LOCAL` | `PASS_LOCAL`; `F0_W4_REVIEW_READY` |
+| `OVERALL_F0` | `BLOCKED_EXTERNAL_PERMISSION` |
 | Static contract and checker | `PASS` |
 | Local PostgreSQL 17 DB/Storage/runtime execution | `PASS_LOCAL` |
 | Committed local capture hashes | `CAPTURED_LOCAL` |
 | Frozen nine-migration cutoff vs committed Production hard fingerprint | `PASS_LOCAL`; `FINGERPRINT_HARD_FAILS=0`, 7 exact components |
-| Exact 9-to-12 full-catalog delta | `PASS_LOCAL`; exactly 182 ADD, no CHANGE/REMOVE |
+| Exact 9-to-13 full-catalog delta | `PASS_LOCAL`; exactly 312 ADD, no CHANGE/REMOVE |
 | Exact-11 W3 integration | `PASS_LOCAL`; 19/19 tests |
-| Full-12 W4-03 hybrid integration | `PASS_LOCAL`; 12/12 tests |
-| Second full-12 replay determinism and strict check | `PASS_LOCAL` |
+| Full-13 W4 evidence hybrid integration | `PASS_LOCAL`; 14/14 tests |
+| Second full-13 replay determinism and strict check | `PASS_LOCAL` |
 | Independent Step-5 receipt review | `PASS` |
 | GitHub CI workflow | `NOT_RUN` |
-| Full build and full repository test suite | `NOT_RUN` |
+| Full build and full repository unit suite | `PASS_LOCAL`; build PASS, 87/87 files and 551/551 tests |
 | Live-current Production parity | `BLOCKED_EXTERNAL_PERMISSION` |
 | Current full-catalog Production parity | `BLOCKED_EXTERNAL_PERMISSION/BOOTSTRAP_DECISION` |
 | Remote migration | `NOT_RUN` |
 | Production, RLS, policy, grant, default-ACL or bucket mutation | `NOT_RUN` |
 
 The local candidate contract is captured and reproducible. `PASS_LOCAL` is
-limited to the named local gates and does not close `OVERALL_W4`, current
-full-catalog Production parity, Remote/Production, CI, RLS, build, or the full
-repository suite. The local `postgres` role has `rolbypassrls`; this replay is
+limited to the named local gates and does not close current full-catalog
+Production parity, Remote/Production, CI or Production-RLS. The local
+`postgres` role has `rolbypassrls`; this replay is
 catalog, migration, integration, and local Storage-runtime evidence, never
 Production-RLS proof.
 
@@ -92,30 +93,31 @@ four separate fail-fast operations and completed successfully.
 
 The exact ordered ledger is pinned in the JSON contract: nine migrations
 through `20260810100000`, then W3 `20260811150000`, W4-01
-`20260811154732`, and W4-03 `20260811184850`. Every migration file is hashed
-from raw bytes. There are no duplicate, missing, reordered, or extra versions.
+`20260811154732`, W4-03 `20260811184850`, and the Evidence-Read-Vertrag
+`20260812103446`. Every migration file is hashed from raw bytes. There are no
+duplicate, missing, reordered, or extra versions.
 
 ## Exact candidate delta
 
 | Kind | ADD |
 |---|---:|
-| relation | 5 |
-| column | 87 |
-| constraint | 29 |
-| index | 9 |
-| view | 3 |
-| trigger | 9 |
-| relation grant | 40 |
-| **Total** | **182** |
+| relation | 9 |
+| column | 156 |
+| constraint | 40 |
+| index | 15 |
+| view | 5 |
+| trigger | 15 |
+| relation grant | 72 |
+| **Total** | **312** |
 
-Migration attribution is `2 / 60 / 120` for W3 / W4-01 / W4-03. This
-provenance is derived from the exact 12 source-file hashes plus the frozen
-182-key manifest; it is not claimed as a measured intermediate-catalog
+Migration attribution is `2 / 60 / 120 / 130` for W3 / W4-01 / W4-03 /
+Evidence-Read-Vertrag. This provenance is derived from the exact 13
+source-file hashes plus the frozen 312-key manifest; it is not claimed as a measured intermediate-catalog
 capture. The strict local check proved every key ADD-only: absent at the
 nine-migration baseline and present exactly once with its committed candidate
 payload SHA-256.
 
-The captured contract contains 40 relation-grant records: exactly five new relations times the eight
+The captured contract contains 72 relation-grant records: exactly nine new relations times the eight
 effective PostgreSQL 17 owner privileges `DELETE`, `INSERT`, `MAINTAIN`,
 `REFERENCES`, `SELECT`, `TRIGGER`, `TRUNCATE`, and `UPDATE`. Grantee and grantor
 are `postgres`; `grantable` is false. The capture also proved that these
@@ -145,19 +147,20 @@ The single DB worker executed:
    ledger/catalog/fingerprint, and run the existing hard Production fingerprint
    comparator; the historical 3,839-object inventory is not used as a current
    replay/parity gate;
-4. reset without seed to all 12 migrations, capture, deterministically
+4. reset without seed to all 13 migrations, capture, deterministically
    materialize the committed contract, and run the strict checker plus its
    mutation-free selftest;
 5. run the unchanged exact-11-ledger W3 predecessor test at its cutoff, restore
-   all 12 migrations, and run the W4-03 hybrid integration against the real
+   all 13 migrations, and run the W4 evidence hybrid integration against the real
    loopback Storage/API runtime;
-6. reset all 12 migrations a second time and require byte-identical catalog,
+6. reset all 13 migrations a second time and require byte-identical catalog,
    fingerprint and ledger captures, then run the strict checker against the
    unchanged committed contract.
 
-The W3 integration passed 19/19 tests and W4-03 passed 12/12 tests. No full
-build, full unit suite, existing negative/coverage suite, HTTP suite, or GitHub
-CI workflow was run in this evidence-only sequence.
+The W3 integration passed 19/19 tests and the extended W4 integration passed
+14/14 tests. The complete unit suite passed 87/87 files and 551/551 tests; the
+production build passed with local redacted runtime variables. GitHub CI and
+Remote/Production gates were not run.
 
 The selftest rejects missing, unexpected, duplicate, reordered, removed and
 changed objects; same-name view drift; payload mismatch; non-owner/grantable
@@ -180,13 +183,13 @@ local database and local test fixtures. Live-current Production parity remains
 |---|---|
 | Supabase CLI | pinned installed binary, `2.111.0` |
 | baseline catalog SHA-256 | `a928c98f1e4470f734ae1e9686c6c98bcf03fc5876ba44e038a20ab14095f84b` |
-| candidate catalog SHA-256 | `cd1c432c9d56874e60298cfcbf87deba3829e15ac8f8885d77a85426bd6cb7fa` |
-| candidate catalog replay 2 | byte-identical; 1,044,578 bytes; SHA-256 `cd1c432c9d56874e60298cfcbf87deba3829e15ac8f8885d77a85426bd6cb7fa` |
-| candidate fingerprint replay 2 | byte-identical; 479 bytes; file SHA-256 `b000f8fcbe7d584a616eb6f4c90370a8024c8b11828aa1e48815804d1f20d392` |
-| candidate ledger replay 2 | byte-identical; 1,733 bytes; file SHA-256 `f2db2df9f3cd2882e611c505f5ada4af88a3d608c61a864f9589320b54dc93f0` |
-| strict candidate check, replay 1 | `PASS`; exactly 182 ADD |
-| strict candidate check, replay 2 | `PASS`; exactly 182 ADD |
-| contract SHA-256 after Step 5 | `5d0643ce0b7e77efa733302f22f69fcfd59f10cf368e2bba4f5cdcd14433dbee` |
+| candidate catalog SHA-256 | `25b91a7408d022ccbe92b7b26f9f50954dd56f5a935a08f1f9ca6eb6dd756908` |
+| candidate catalog replay 2 | byte-identical; 1,093,433 bytes; SHA-256 `25b91a7408d022ccbe92b7b26f9f50954dd56f5a935a08f1f9ca6eb6dd756908` |
+| candidate fingerprint replay 2 | byte-identical; 479 bytes; file SHA-256 `5795e078dae63b17ae616a01aaa4835aca3b3430a777fa9ad80c0131197d1eb1` |
+| candidate ledger replay 2 | byte-identical; 1,873 bytes; file SHA-256 `c3bbe08a8b6c631d26704b1f1a2ef347f2dbb9dc98f4fe0df69e71a4d0952c8f` |
+| strict candidate check, replay 1 | `PASS`; exactly 312 ADD |
+| strict candidate check, replay 2 | `PASS`; exactly 312 ADD |
+| contract SHA-256 | `f17e2abbb78144ef87bdc11a0cfdd520b40123c295665e13c7ebf0061597cb53` |
 
 ### Baseline fingerprint
 
@@ -208,17 +211,17 @@ local database and local test fixtures. Live-current Production parity remains
 
 | Component | MD5 |
 |---|---|
-| `cols` | `a1b79c2f90d150c8fd4426aebd1b1e82` |
-| `idx` | `40fdca08569552142b2b093d6f7fbf0e` |
-| `cons` | `2fa0a95d803fc445434d377607262427` |
-| `trig` | `f3d550ae1b73dd0a3c7a5b0792083be2` |
+| `cols` | `a573359ddf20c0b99868b6daed7dcc91` |
+| `idx` | `bb2d8ae4c2a264a05cdcadf1ff5c9a2f` |
+| `cons` | `91b6b6af234eb057a1ccb0b5bbb3b550` |
+| `trig` | `585fecf6f0604b6ab85f59aea3d8ee4a` |
 | `func` | `a6d8df6999952e773e32a1bd944f275e` |
 | `pol` | `0ad24fe9d82a4a0671ccb3502b5c322b` |
-| `rls` | `6d60cbd5e41c6d40178ff96df0d3e069` |
+| `rls` | `264e3d4285532a7503c8c98bab4828c1` |
 | `grants` | `01feb57e0cbb387abb9842f7f07c6413` |
 | `func_grants` | `2d91f6b46df3bcdaa48daea0f5e37388` |
 | `def_privs` | `5b26728e4bd65edd20d38a4afb4997e5` |
-| `viewopts` | `0e4790b108717608acfad8cbdba4649c` |
+| `viewopts` | `2079cebbcdbe9b6d8fcf3b2630e7805e` |
 
 Canonical checker entry after capture:
 
@@ -228,7 +231,7 @@ node scripts/quality/check-w4-candidate-schema.mjs --check --baseline-catalog w4
 ```
 
 The materialization command validated the pending manifest and captured inputs,
-computed all 182 payload hashes, both catalog hashes and all 22 component
+computed all 312 payload hashes, both catalog hashes and all 22 component
 hashes, and changed the status to `CAPTURED_LOCAL`. No pending value was
 manually invented. The checker and selftest passed immediately afterward; the
 second replay then passed against the unchanged committed contract.

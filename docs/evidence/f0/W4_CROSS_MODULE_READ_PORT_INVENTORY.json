@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "contract": "W4-08",
+  "productionSourceRoot": "src",
+  "excludedPathSegments": [
+    "/__tests__/",
+    "/test/"
+  ],
+  "baseRelations": [
+    "private.evidence_domain_links",
+    "private.evidence_extraction_metadata",
+    "private.order_station_evidence",
+    "private.order_station_evidence_reservations",
+    "public.scan_uploads"
+  ],
+  "readPorts": {
+    "src/lib/server/evidenceRead.ts": [
+      "private.v_evidence_records_v1"
+    ],
+    "src/lib/server/orderStationAttachment.ts": [
+      "private.v_order_station_evidence_receipts_v2"
+    ],
+    "src/lib/server/orderStationRead.ts": [
+      "private.v_operational_station_queue_v1",
+      "private.v_order_station_receipts_v1"
+    ]
+  },
+  "commandOwners": {
+    "src/lib/server/orderStationAttachment.ts": [
+      "private.evidence_domain_links",
+      "private.evidence_extraction_metadata",
+      "private.order_station_evidence",
+      "private.order_station_evidence_reservations"
+    ]
+  },
+  "declarations": {},
+  "forbiddenProductionViewReferences": [
+    "private.v_order_station_evidence_receipts_v1"
+  ],
+  "migrationContract": {
+    "path": "supabase/migrations/20260812103446_w4_evidence_read_contract.sql",
+    "requiredSecurityInvokerViews": [
+      "private.v_evidence_records_v1",
+      "private.v_order_station_evidence_receipts_v2"
+    ],
+    "requiredLegacySource": "public.scan_uploads"
+  }
+}

@@ -2,11 +2,11 @@
 
 Status: PASS_LOCAL
 
-Gesamtstatus W4: OPEN
+Gesamtstatus W4: PASS_LOCAL; F0-Delivery bleibt BLOCKED_EXTERNAL_PERMISSION
 
 ## Gegenstand
 
-W4-02 ersetzt die aktiven globalen beziehungsweise hardcodierten Auftragsleser durch genau einen vollständigen, frischen und tenantgebundenen Read-Port. Das Paket ändert keine Migration, keine Policy, keine Grants, keine Remote-Datenbank und keinen Writer.
+Der operative W4-08-Read-Anteil ersetzt die aktiven globalen beziehungsweise hardcodierten Auftragsleser durch genau einen vollständigen, frischen und tenantgebundenen Read-Port. Das Paket ändert keine Migration, keine Policy, keine Grants, keine Remote-Datenbank und keinen Writer.
 
 ## Datenkette
 
@@ -81,4 +81,4 @@ Evidence: docs/evidence/f0/W4_OPERATIONAL_ORDER_READ_EVIDENCE.md.
 
 Der lokale Replay- und Integrationstest lief gegen PostgreSQL 17. Der lokale Postgres-Rollenvertrag verwendet `rolbypassrls`; damit belegt dieser Lauf den App-Prädikat- und Transaktionsvertrag, nicht Production-RLS oder Least-Privilege.
 
-Dieses Paket führt keine Production-/Remote-DB-Aktion aus. Build, Remote-/Production-Aktivierung sowie Production-RLS und Least-Privilege sind nicht belegt und bleiben bis zur gesonderten Freigabe außerhalb dieses Nachweises. Gesamt-W4 bleibt deshalb OPEN.
+Dieses Paket führt keine Production-/Remote-DB-Aktion aus. Remote-/Production-Aktivierung sowie Production-RLS und Least-Privilege sind nicht belegt und bleiben bis zur gesonderten Freigabe außerhalb dieses Nachweises. Der vollständige lokale W4-Abschluss und der globale Read-Port-Checker sind in `W4_EVIDENCE_READ_CONTRACT_EVIDENCE.md` belegt; F0-Delivery bleibt extern blockiert.

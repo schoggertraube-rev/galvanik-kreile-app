@@ -32,16 +32,22 @@ const EXPECTED_LEDGER = [
   ["20260811150000", "w3_order_station_version", "034cc8d6509aabe093948ff84c2e092289ddc211123d087a87e5bdfe7cbb45d7"],
   ["20260811154732", "w4_order_station_event_readmodels", "44ecf82b34023c763c1f0773266483cfe6a0a87809fc5970d0406370aea00595"],
   ["20260811184850", "w4_order_station_attachment", "70aaead2150d95069829997bfdb128c2496b292d59cb6b69c8440dd1dfd2b6cb"],
+  ["20260812103446", "w4_evidence_read_contract", "dfd01b52b146ecbea34499b535ff4833cf18e7fa1dcecc1182ff6f8bb93cfd3f"],
 ].map(([version, name, sha256]) => ({ version, name, sha256 }));
 const OWNER_RELATIONS = [
+  "private.evidence_domain_links",
+  "private.evidence_extraction_metadata",
   "private.order_station_evidence",
   "private.order_station_evidence_reservations",
+  "private.v_evidence_records_v1",
   "private.v_operational_station_queue_v1",
   "private.v_order_station_evidence_receipts_v1",
+  "private.v_order_station_evidence_receipts_v2",
   "private.v_order_station_receipts_v1",
 ];
 const OWNER_PRIVILEGES = ["DELETE", "INSERT", "MAINTAIN", "REFERENCES", "SELECT", "TRIGGER", "TRUNCATE", "UPDATE"];
-const EXPECTED_OBJECT_MANIFEST_SHA256 = "fe5f4513ec094c434236682faaa2b00318a0199055ea9c6b02b368d239b2a7a2";
+const EXPECTED_OBJECT_COUNT = 312;
+const EXPECTED_OBJECT_MANIFEST_SHA256 = "1368a35044e1eba1d73f00a5b1e5e13b67f1d0da8012bc4b74e9bf2c0baf254c";
 const EXPECTED_CANONICALIZATION = {
   transport: "ascii-decimal-byte-length:base64(canonical-json)",
   json_keys: "UTF-8 bytewise ascending",
@@ -134,7 +140,7 @@ function validateContract(contract) {
   exactKeys(contract.reference_files, Object.keys(EXPECTED_REFERENCES), "REFERENCE_SET_INVALID");
   if (canonical(contract.reference_files) !== canonical(EXPECTED_REFERENCES)) fail("REFERENCE_CONTRACT_INVALID");
   if (contract.baseline.migration_cutoff !== "20260810100000" || contract.baseline.migration_count !== 9) fail("BASELINE_LEDGER_CONTRACT_INVALID");
-  if (contract.candidate.migration_cutoff !== "20260811184850" || contract.candidate.migration_count !== 12) fail("CANDIDATE_LEDGER_CONTRACT_INVALID");
+  if (contract.candidate.migration_cutoff !== "20260812103446" || contract.candidate.migration_count !== 13) fail("CANDIDATE_LEDGER_CONTRACT_INVALID");
   exactKeys(contract.baseline, ["migration_cutoff", "migration_count", "migrations", "component_hashes", "catalog_payload_sha256"], "BASELINE_FIELDS_INVALID");
   exactKeys(contract.candidate, ["migration_cutoff", "migration_count", "migrations", "component_hashes", "catalog_payload_sha256"], "CANDIDATE_FIELDS_INVALID");
   if (canonical(contract.baseline.migrations) !== canonical(EXPECTED_LEDGER.slice(0, 9))) fail("BASELINE_LEDGER_CONTRACT_INVALID");
@@ -149,9 +155,9 @@ function validateContract(contract) {
     }
     if (snapshot.catalog_payload_sha256 !== PENDING && !/^[0-9a-f]{64}$/.test(snapshot.catalog_payload_sha256)) fail("CATALOG_SHA_INVALID");
   }
-  if (!Array.isArray(contract.objects) || contract.objects.length !== 182) fail("OBJECT_COUNT_INVALID", String(contract.objects?.length));
+  if (!Array.isArray(contract.objects) || contract.objects.length !== EXPECTED_OBJECT_COUNT) fail("OBJECT_COUNT_INVALID", String(contract.objects?.length));
   exactKeys(contract.expected_delta, ["operation", "total", "by_migration", "by_kind"], "DELTA_FIELDS_INVALID");
-  exactKeys(contract.expected_delta.by_migration, ["20260811150000", "20260811154732", "20260811184850"], "DELTA_MIGRATION_SET_INVALID");
+  exactKeys(contract.expected_delta.by_migration, ["20260811150000", "20260811154732", "20260811184850", "20260812103446"], "DELTA_MIGRATION_SET_INVALID");
   exactKeys(contract.expected_delta.by_kind, ["relation", "column", "constraint", "index", "view", "trigger", "relation_grant"], "DELTA_KIND_SET_INVALID");
   const keys = new Set();
   const kindCounts = {};
@@ -172,7 +178,7 @@ function validateContract(contract) {
   }
   if (canonical(kindCounts) !== canonical(contract.expected_delta.by_kind)) fail("OBJECT_KIND_COUNTS_INVALID");
   if (canonical(migrationCounts) !== canonical(contract.expected_delta.by_migration)) fail("OBJECT_MIGRATION_COUNTS_INVALID");
-  if (contract.expected_delta.operation !== "ADD" || contract.expected_delta.total !== 182) fail("DELTA_CONTRACT_INVALID");
+  if (contract.expected_delta.operation !== "ADD" || contract.expected_delta.total !== EXPECTED_OBJECT_COUNT) fail("DELTA_CONTRACT_INVALID");
   const expectedGrantKeys = OWNER_RELATIONS.flatMap((relation) => OWNER_PRIVILEGES.map((privilege) => `relation_grant:${relation}|postgres|${privilege}`)).sort(compareText);
   const actualGrantKeys = contract.objects.filter((object) => object.kind === "relation_grant").map((object) => object.key).sort(compareText);
   if (canonical(actualGrantKeys) !== canonical(expectedGrantKeys)) fail("OWNER_GRANT_CONTRACT_INVALID");
@@ -322,7 +328,7 @@ async function captureLedger(databaseUrl, outputPath) {
 from supabase_migrations.schema_migrations order by version;`;
   const rows = runPsql(databaseUrl, sql).split("\n").filter(Boolean).map((line) => JSON.parse(Buffer.from(line, "base64").toString("utf8")));
   const expected = EXPECTED_LEDGER.slice(0, rows.length);
-  if (rows.length !== 9 && rows.length !== 12) fail("LEDGER_CAPTURE_COUNT_INVALID", String(rows.length));
+  if (rows.length !== 9 && rows.length !== 13) fail("LEDGER_CAPTURE_COUNT_INVALID", String(rows.length));
   if (canonical(rows) !== canonical(expected.map(({ version, name }) => ({ version, name })))) fail("LEDGER_CAPTURE_SEQUENCE_INVALID");
   await writeFile(outputPath, `${canonical(expected)}\n`, "utf8");
 }
@@ -389,7 +395,7 @@ async function runCheck(args) {
   const baselineSha = sha256(baselineCatalogRaw); const candidateSha = sha256(candidateCatalogRaw);
   if (contract.baseline.catalog_payload_sha256 !== PENDING && baselineSha !== contract.baseline.catalog_payload_sha256) fail("BASELINE_CATALOG_SHA_MISMATCH");
   if (contract.candidate.catalog_payload_sha256 !== PENDING && candidateSha !== contract.candidate.catalog_payload_sha256) fail("CANDIDATE_CATALOG_SHA_MISMATCH");
-  console.log(JSON.stringify({ gate: "W4_CANDIDATE_SCHEMA", status: "PASS", additions: 182, baseline_catalog_sha256: baselineSha, candidate_catalog_sha256: candidateSha }));
+  console.log(JSON.stringify({ gate: "W4_CANDIDATE_SCHEMA", status: "PASS", additions: EXPECTED_OBJECT_COUNT, baseline_catalog_sha256: baselineSha, candidate_catalog_sha256: candidateSha }));
 }
 
 async function materializeContract(args) {
@@ -421,7 +427,7 @@ async function materializeContract(args) {
   for (const object of contract.objects) object.payload_sha256 = sha256(canonical(candidateByKey.get(object.key).payload));
   validateContract(contract);
   await writeFile(takeArg(args, "--output"), `${JSON.stringify(contract, null, 2)}\n`, "utf8");
-  console.log(JSON.stringify({ gate: "W4_CANDIDATE_CONTRACT_MATERIALIZATION", status: "PASS", objects: 182 }));
+  console.log(JSON.stringify({ gate: "W4_CANDIDATE_CONTRACT_MATERIALIZATION", status: "PASS", objects: EXPECTED_OBJECT_COUNT }));
 }
 
 function validateCheckReadiness(contract, args, required = ["--baseline-catalog", "--candidate-catalog", "--baseline-fingerprint", "--candidate-fingerprint", "--ledger"]) {
@@ -519,7 +525,7 @@ async function runSelftest() {
 
   const prodRefDrift = clone(contract); prodRefDrift.reference_files["docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt"] = "0".repeat(64);
   expectReject("REFERENCE_CONTRACT_INVALID", () => validateContract(prodRefDrift));
-  const migrationDrift = clone(contract); migrationDrift.candidate.migrations[11].sha256 = "0".repeat(64);
+  const migrationDrift = clone(contract); migrationDrift.candidate.migrations.at(-1).sha256 = "0".repeat(64);
   expectReject("CANDIDATE_LEDGER_CONTRACT_INVALID", () => validateContract(migrationDrift));
   const migrationMissing = clone(contract); migrationMissing.candidate.migrations.pop();
   expectReject("CANDIDATE_LEDGER_CONTRACT_INVALID", () => validateContract(migrationMissing));

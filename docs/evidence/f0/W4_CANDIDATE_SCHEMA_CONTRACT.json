@@ -75,8 +75,8 @@
     "catalog_payload_sha256": "a928c98f1e4470f734ae1e9686c6c98bcf03fc5876ba44e038a20ab14095f84b"
   },
   "candidate": {
-    "migration_cutoff": "20260811184850",
-    "migration_count": 12,
+    "migration_cutoff": "20260812103446",
+    "migration_count": 13,
     "migrations": [
       {
         "version": "20260805180624",
@@ -137,22 +137,27 @@
         "version": "20260811184850",
         "name": "w4_order_station_attachment",
         "sha256": "70aaead2150d95069829997bfdb128c2496b292d59cb6b69c8440dd1dfd2b6cb"
+      },
+      {
+        "version": "20260812103446",
+        "name": "w4_evidence_read_contract",
+        "sha256": "dfd01b52b146ecbea34499b535ff4833cf18e7fa1dcecc1182ff6f8bb93cfd3f"
       }
     ],
     "component_hashes": {
-      "cols": "a1b79c2f90d150c8fd4426aebd1b1e82",
-      "cons": "2fa0a95d803fc445434d377607262427",
+      "cols": "a573359ddf20c0b99868b6daed7dcc91",
+      "cons": "91b6b6af234eb057a1ccb0b5bbb3b550",
       "def_privs": "5b26728e4bd65edd20d38a4afb4997e5",
       "func": "a6d8df6999952e773e32a1bd944f275e",
       "func_grants": "2d91f6b46df3bcdaa48daea0f5e37388",
       "grants": "01feb57e0cbb387abb9842f7f07c6413",
-      "idx": "40fdca08569552142b2b093d6f7fbf0e",
+      "idx": "bb2d8ae4c2a264a05cdcadf1ff5c9a2f",
       "pol": "0ad24fe9d82a4a0671ccb3502b5c322b",
-      "rls": "6d60cbd5e41c6d40178ff96df0d3e069",
-      "trig": "f3d550ae1b73dd0a3c7a5b0792083be2",
-      "viewopts": "0e4790b108717608acfad8cbdba4649c"
+      "rls": "264e3d4285532a7503c8c98bab4828c1",
+      "trig": "585fecf6f0604b6ab85f59aea3d8ee4a",
+      "viewopts": "2079cebbcdbe9b6d8fcf3b2630e7805e"
     },
-    "catalog_payload_sha256": "cd1c432c9d56874e60298cfcbf87deba3829e15ac8f8885d77a85426bd6cb7fa"
+    "catalog_payload_sha256": "25b91a7408d022ccbe92b7b26f9f50954dd56f5a935a08f1f9ca6eb6dd756908"
   },
   "reference_files": {
     "docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt": "7d3a6d679e8e32e064297901d43fe2eacfe2a7681e408a76206a85ef6c2e4fcb",
@@ -175,24 +180,30 @@
       "version": "20260811184850",
       "name": "w4_order_station_attachment",
       "sha256": "70aaead2150d95069829997bfdb128c2496b292d59cb6b69c8440dd1dfd2b6cb"
+    },
+    {
+      "version": "20260812103446",
+      "name": "w4_evidence_read_contract",
+      "sha256": "dfd01b52b146ecbea34499b535ff4833cf18e7fa1dcecc1182ff6f8bb93cfd3f"
     }
   ],
   "expected_delta": {
     "operation": "ADD",
-    "total": 182,
+    "total": 312,
     "by_migration": {
       "20260811150000": 2,
       "20260811154732": 60,
-      "20260811184850": 120
+      "20260811184850": 120,
+      "20260812103446": 130
     },
     "by_kind": {
-      "relation": 5,
-      "column": 87,
-      "constraint": 29,
-      "index": 9,
-      "view": 3,
-      "trigger": 9,
-      "relation_grant": 40
+      "relation": 9,
+      "column": 156,
+      "constraint": 40,
+      "index": 15,
+      "view": 5,
+      "trigger": 15,
+      "relation_grant": 72
     }
   },
   "changed_components": [
@@ -220,6 +231,118 @@
     "non_owner_grant"
   ],
   "objects": [
+    {
+      "key": "column:private.evidence_domain_links.created_at",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "d1582b24939cf98be60baaada3a9e3566772902cea6cf8eb28b7699681aaf18a"
+    },
+    {
+      "key": "column:private.evidence_domain_links.evidence_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "edd812d45f5919458976c71690d34d25df87d6b100a3d63c71677d4903db4bdf"
+    },
+    {
+      "key": "column:private.evidence_domain_links.id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "6acbcac2652344e14be611fc356eab967d6a5ccb26c6342ec16bcb7b16db876c"
+    },
+    {
+      "key": "column:private.evidence_domain_links.target_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe3d45d046d466cea20fb3135fc86ea644d6a44aa452b4f9f91d61439d42b1e5"
+    },
+    {
+      "key": "column:private.evidence_domain_links.target_type",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe3d45d046d466cea20fb3135fc86ea644d6a44aa452b4f9f91d61439d42b1e5"
+    },
+    {
+      "key": "column:private.evidence_domain_links.tenant_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe3d45d046d466cea20fb3135fc86ea644d6a44aa452b4f9f91d61439d42b1e5"
+    },
+    {
+      "key": "column:private.evidence_extraction_metadata.created_at",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "d1582b24939cf98be60baaada3a9e3566772902cea6cf8eb28b7699681aaf18a"
+    },
+    {
+      "key": "column:private.evidence_extraction_metadata.detected_type",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.evidence_extraction_metadata.detection_confidence",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7e451de0ac85bd7579b8801531068e232411be601062092dc5e54ce96e89a726"
+    },
+    {
+      "key": "column:private.evidence_extraction_metadata.evidence_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "edd812d45f5919458976c71690d34d25df87d6b100a3d63c71677d4903db4bdf"
+    },
+    {
+      "key": "column:private.evidence_extraction_metadata.extracted_data",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "29ca0049a1d41e390b32730f026a6768138373d79b28e11ab0452a999dfccabd"
+    },
+    {
+      "key": "column:private.evidence_extraction_metadata.extraction_state",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe3d45d046d466cea20fb3135fc86ea644d6a44aa452b4f9f91d61439d42b1e5"
+    },
+    {
+      "key": "column:private.evidence_extraction_metadata.field_confidence",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "114923190ea64f63519e8034faa20dc2a9245c1b3cfd97b2da823af096cc8bfb"
+    },
+    {
+      "key": "column:private.evidence_extraction_metadata.id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "6acbcac2652344e14be611fc356eab967d6a5ccb26c6342ec16bcb7b16db876c"
+    },
+    {
+      "key": "column:private.evidence_extraction_metadata.provider",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.evidence_extraction_metadata.tenant_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe3d45d046d466cea20fb3135fc86ea644d6a44aa452b4f9f91d61439d42b1e5"
+    },
     {
       "key": "column:private.order_station_evidence.actor_id",
       "kind": "column",
@@ -422,6 +545,153 @@
       "migration": "20260811184850",
       "operation": "ADD",
       "payload_sha256": "1e3f60df329c740a3003768c08a64c9ca42022663619ee1627207e2487de78cf"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.detected_type",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.detection_confidence",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "2a5d120bda92875037d67c97d1c511d4ac0ec7f5b7db82bb82b59a4df4a520d7"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.evidence_key",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.extracted_data",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "29ca0049a1d41e390b32730f026a6768138373d79b28e11ab0452a999dfccabd"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.extraction_provider",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.extraction_state",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.field_confidence",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "29ca0049a1d41e390b32730f026a6768138373d79b28e11ab0452a999dfccabd"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.integrity_ok",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "af7e6ab940582672c86897fdc9b5ff2165a476557938cf4557943be704eec250"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.original_bucket_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.original_hash",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.original_hash_algorithm",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.original_mime_type",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.original_secured_at",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "01e3ebbbd9a9da77a690e2953bcb4cbec2e1ee95f4b8c836b465713c730a3795"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.original_size_bytes",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "232e6e5aadd392dd7e510da531a0cde5c6489722e441801e4ce4b991f4bb8ec0"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.original_state",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.original_storage_path",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.recorded_at",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "01e3ebbbd9a9da77a690e2953bcb4cbec2e1ee95f4b8c836b465713c730a3795"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.source_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.source_kind",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.target_links",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "29ca0049a1d41e390b32730f026a6768138373d79b28e11ab0452a999dfccabd"
+    },
+    {
+      "key": "column:private.v_evidence_records_v1.tenant_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
     },
     {
       "key": "column:private.v_operational_station_queue_v1.created_at",
@@ -718,6 +988,230 @@
       "payload_sha256": "01e3ebbbd9a9da77a690e2953bcb4cbec2e1ee95f4b8c836b465713c730a3795"
     },
     {
+      "key": "column:private.v_order_station_evidence_receipts_v2.actor_display_name",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.actor_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "c4f1490fc6d384dab674435fc78c16215a2a60f21cf6351cca866cb3792a0f56"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.client_request_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "c4f1490fc6d384dab674435fc78c16215a2a60f21cf6351cca866cb3792a0f56"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.content_sha256",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.customer_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.detected_type",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.detection_confidence",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7e451de0ac85bd7579b8801531068e232411be601062092dc5e54ce96e89a726"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.extracted_data",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "29ca0049a1d41e390b32730f026a6768138373d79b28e11ab0452a999dfccabd"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.extraction_created_at",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "01e3ebbbd9a9da77a690e2953bcb4cbec2e1ee95f4b8c836b465713c730a3795"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.extraction_provider",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.extraction_state",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.field_confidence",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "29ca0049a1d41e390b32730f026a6768138373d79b28e11ab0452a999dfccabd"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.file_bytes",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "232e6e5aadd392dd7e510da531a0cde5c6489722e441801e4ce4b991f4bb8ec0"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.integrity_ok",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "af7e6ab940582672c86897fdc9b5ff2165a476557938cf4557943be704eec250"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.item_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.mime_type",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.order_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.order_version",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "c3f0e9d8e463a43bd238b89c7fa9994cae0721112771d3a6ebe6f4455c9bc63e"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.purpose",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.receipt_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "c4f1490fc6d384dab674435fc78c16215a2a60f21cf6351cca866cb3792a0f56"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.receipt_state",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.reservation_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "c4f1490fc6d384dab674435fc78c16215a2a60f21cf6351cca866cb3792a0f56"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.reserved_at",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "01e3ebbbd9a9da77a690e2953bcb4cbec2e1ee95f4b8c836b465713c730a3795"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.station",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.storage_created_at",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "01e3ebbbd9a9da77a690e2953bcb4cbec2e1ee95f4b8c836b465713c730a3795"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.storage_object_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "c4f1490fc6d384dab674435fc78c16215a2a60f21cf6351cca866cb3792a0f56"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.storage_object_version",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.target_links",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "29ca0049a1d41e390b32730f026a6768138373d79b28e11ab0452a999dfccabd"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.tenant_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.transition_event_id",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "7b9a2a748a75f569297d07e63a22555e9cfa0ffe9b2a40f44f19ad6e0abb10d4"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.upload_expires_at",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "01e3ebbbd9a9da77a690e2953bcb4cbec2e1ee95f4b8c836b465713c730a3795"
+    },
+    {
+      "key": "column:private.v_order_station_evidence_receipts_v2.verified_at",
+      "kind": "column",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "01e3ebbbd9a9da77a690e2953bcb4cbec2e1ee95f4b8c836b465713c730a3795"
+    },
+    {
       "key": "column:private.v_order_station_receipts_v1.actor_id",
       "kind": "column",
       "migration": "20260811154732",
@@ -828,6 +1322,76 @@
       "migration": "20260811150000",
       "operation": "ADD",
       "payload_sha256": "8d338ed7ae4b4a74b8ce0e6542c42cba8558335135dd5d6ee468d1da0c5a7771"
+    },
+    {
+      "key": "constraint:private.evidence_domain_links|evidence_domain_links_evidence_fkey",
+      "kind": "constraint",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "6bdb2918395364a63f7e36e3892af0cd3574e92c650b5d403dada8c1f654559f"
+    },
+    {
+      "key": "constraint:private.evidence_domain_links|evidence_domain_links_pkey",
+      "kind": "constraint",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "edbdfbb8fee9409cdabb1723a8541377746ac3dc5dd49c09d963e5a033b1d018"
+    },
+    {
+      "key": "constraint:private.evidence_domain_links|evidence_domain_links_target_id_chk",
+      "kind": "constraint",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "22bb6ee5659616687dcbffebff8124f310bd23f4c929e2ebdee4b82260a2012e"
+    },
+    {
+      "key": "constraint:private.evidence_domain_links|evidence_domain_links_target_key",
+      "kind": "constraint",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "d07ae3794db7b0520bec0d3086c2417b1b882e1ee9b70f4803662791b27a23f9"
+    },
+    {
+      "key": "constraint:private.evidence_domain_links|evidence_domain_links_type_chk",
+      "kind": "constraint",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "0ff43bef5bb6b09c5e5864c19e607f52caf98030cd249e7e83ebc2e883c7f316"
+    },
+    {
+      "key": "constraint:private.evidence_extraction_metadata|evidence_extraction_metadata_evidence_fkey",
+      "kind": "constraint",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "6bdb2918395364a63f7e36e3892af0cd3574e92c650b5d403dada8c1f654559f"
+    },
+    {
+      "key": "constraint:private.evidence_extraction_metadata|evidence_extraction_metadata_evidence_key",
+      "kind": "constraint",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "d5e31e35c4f167040f8cdcdc974d12b613077ae5e853691c3a8ac44da313ed9a"
+    },
+    {
+      "key": "constraint:private.evidence_extraction_metadata|evidence_extraction_metadata_payload_chk",
+      "kind": "constraint",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "a47feae26e8174a1535046f335654c5d6e81007fefd198d8a374a8c993c07020"
+    },
+    {
+      "key": "constraint:private.evidence_extraction_metadata|evidence_extraction_metadata_pkey",
+      "kind": "constraint",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "edbdfbb8fee9409cdabb1723a8541377746ac3dc5dd49c09d963e5a033b1d018"
+    },
+    {
+      "key": "constraint:private.evidence_extraction_metadata|evidence_extraction_metadata_state_chk",
+      "kind": "constraint",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "f0d10e72930dff53b862d5409d08bfed522f3b60fe3573f974765b4a1625aa48"
     },
     {
       "key": "constraint:private.order_station_evidence_reservations|order_station_evidence_reservations_actor_fkey",
@@ -956,6 +1520,13 @@
       "payload_sha256": "f911a061948ca92c50b82363152a822e9036b7e00359ffe8aff7c939bb8bfc32"
     },
     {
+      "key": "constraint:private.order_station_evidence|order_station_evidence_id_tenant_key",
+      "kind": "constraint",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "10b5eba8147696f7f27cc7f8f9d6a30630c167565e61bbba996de3ead1de351a"
+    },
+    {
       "key": "constraint:private.order_station_evidence|order_station_evidence_mime_chk",
       "kind": "constraint",
       "migration": "20260811184850",
@@ -1033,6 +1604,41 @@
       "payload_sha256": "214d453ab4e21f622f2dc832bc4bdf950f43bff1e93c0065b6ed39093b51a157"
     },
     {
+      "key": "index:private.evidence_domain_links|evidence_domain_links_pkey",
+      "kind": "index",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "359a7e794adb2cae7a25a797e039b660e581b0873392d30b52baf5300bde936c"
+    },
+    {
+      "key": "index:private.evidence_domain_links|evidence_domain_links_target_key",
+      "kind": "index",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "f0dcee53a6678494fa1c9c1cb10262e500f8c8598b26fa080e25f7b57f0d60ba"
+    },
+    {
+      "key": "index:private.evidence_domain_links|evidence_domain_links_tenant_target_idx",
+      "kind": "index",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "3e6d78617f46e0b0124e2d2970b8b857f1c19cc63b33037de1105997bfe05ef5"
+    },
+    {
+      "key": "index:private.evidence_extraction_metadata|evidence_extraction_metadata_evidence_key",
+      "kind": "index",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "c298ba4d2b50979d8919631151ba69914a0971953be29e1672c5a5855e53aee9"
+    },
+    {
+      "key": "index:private.evidence_extraction_metadata|evidence_extraction_metadata_pkey",
+      "kind": "index",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "9b845ce2a246ac294ea866866e9320dac82c4c9de3cb66a5002f88db29ab6e8f"
+    },
+    {
       "key": "index:private.order_station_evidence_reservations|order_station_evidence_reservations_actor_request_key",
       "kind": "index",
       "migration": "20260811184850",
@@ -1059,6 +1665,13 @@
       "migration": "20260811184850",
       "operation": "ADD",
       "payload_sha256": "e8761559d4393be6004f1476ed9e37bb31ca70bd7152d7d218a7df17dadeee99"
+    },
+    {
+      "key": "index:private.order_station_evidence|order_station_evidence_id_tenant_key",
+      "kind": "index",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "5f70a302823cda720388a79d9bd4888dbe0e84c0862d80ce160956e349a2148b"
     },
     {
       "key": "index:private.order_station_evidence|order_station_evidence_pkey",
@@ -1096,6 +1709,20 @@
       "payload_sha256": "2676636480b018ebf30594af803284118f1f51ee6b0bcf1ebc12bd563fac239b"
     },
     {
+      "key": "relation:private.evidence_domain_links",
+      "kind": "relation",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "00bb624252410025c4f67112cfed03851b9add5c0e23a63c0b90027a6e678281"
+    },
+    {
+      "key": "relation:private.evidence_extraction_metadata",
+      "kind": "relation",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "00bb624252410025c4f67112cfed03851b9add5c0e23a63c0b90027a6e678281"
+    },
+    {
       "key": "relation:private.order_station_evidence",
       "kind": "relation",
       "migration": "20260811184850",
@@ -1108,6 +1735,13 @@
       "migration": "20260811184850",
       "operation": "ADD",
       "payload_sha256": "00bb624252410025c4f67112cfed03851b9add5c0e23a63c0b90027a6e678281"
+    },
+    {
+      "key": "relation:private.v_evidence_records_v1",
+      "kind": "relation",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "efc6e2e68aa7951967e563fd5ed5b2536a4947f837c3899f7bbd6db9ca715300"
     },
     {
       "key": "relation:private.v_operational_station_queue_v1",
@@ -1124,11 +1758,130 @@
       "payload_sha256": "efc6e2e68aa7951967e563fd5ed5b2536a4947f837c3899f7bbd6db9ca715300"
     },
     {
+      "key": "relation:private.v_order_station_evidence_receipts_v2",
+      "kind": "relation",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "efc6e2e68aa7951967e563fd5ed5b2536a4947f837c3899f7bbd6db9ca715300"
+    },
+    {
       "key": "relation:private.v_order_station_receipts_v1",
       "kind": "relation",
       "migration": "20260811154732",
       "operation": "ADD",
       "payload_sha256": "efc6e2e68aa7951967e563fd5ed5b2536a4947f837c3899f7bbd6db9ca715300"
+    },
+    {
+      "key": "relation_grant:private.evidence_domain_links|postgres|DELETE",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_domain_links|postgres|INSERT",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_domain_links|postgres|MAINTAIN",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_domain_links|postgres|REFERENCES",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_domain_links|postgres|SELECT",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_domain_links|postgres|TRIGGER",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_domain_links|postgres|TRUNCATE",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_domain_links|postgres|UPDATE",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_extraction_metadata|postgres|DELETE",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_extraction_metadata|postgres|INSERT",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_extraction_metadata|postgres|MAINTAIN",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_extraction_metadata|postgres|REFERENCES",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_extraction_metadata|postgres|SELECT",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_extraction_metadata|postgres|TRIGGER",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_extraction_metadata|postgres|TRUNCATE",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.evidence_extraction_metadata|postgres|UPDATE",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
     },
     {
       "key": "relation_grant:private.order_station_evidence_reservations|postgres|DELETE",
@@ -1239,6 +1992,62 @@
       "key": "relation_grant:private.order_station_evidence|postgres|UPDATE",
       "kind": "relation_grant",
       "migration": "20260811184850",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_evidence_records_v1|postgres|DELETE",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_evidence_records_v1|postgres|INSERT",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_evidence_records_v1|postgres|MAINTAIN",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_evidence_records_v1|postgres|REFERENCES",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_evidence_records_v1|postgres|SELECT",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_evidence_records_v1|postgres|TRIGGER",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_evidence_records_v1|postgres|TRUNCATE",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_evidence_records_v1|postgres|UPDATE",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
       "operation": "ADD",
       "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
     },
@@ -1355,6 +2164,62 @@
       "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
     },
     {
+      "key": "relation_grant:private.v_order_station_evidence_receipts_v2|postgres|DELETE",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_order_station_evidence_receipts_v2|postgres|INSERT",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_order_station_evidence_receipts_v2|postgres|MAINTAIN",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_order_station_evidence_receipts_v2|postgres|REFERENCES",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_order_station_evidence_receipts_v2|postgres|SELECT",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_order_station_evidence_receipts_v2|postgres|TRIGGER",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_order_station_evidence_receipts_v2|postgres|TRUNCATE",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "relation_grant:private.v_order_station_evidence_receipts_v2|postgres|UPDATE",
+      "kind": "relation_grant",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
       "key": "relation_grant:private.v_order_station_receipts_v1|postgres|DELETE",
       "kind": "relation_grant",
       "migration": "20260811154732",
@@ -1409,6 +2274,48 @@
       "migration": "20260811154732",
       "operation": "ADD",
       "payload_sha256": "fe81aaff32403265242c8610d7281b00a7111b94c78a0de92c6f312b90d90c58"
+    },
+    {
+      "key": "trigger:private.evidence_domain_links|evidence_domain_links_delete_immutable",
+      "kind": "trigger",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "afb8e03868bb321785de2b064649a36050f253474aaeebad30604c146b2e78c2"
+    },
+    {
+      "key": "trigger:private.evidence_domain_links|evidence_domain_links_truncate_immutable",
+      "kind": "trigger",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "e7b9532ac2234db316ce5270cca9abd8e9fdd5ea30742dac6c85626f23e63745"
+    },
+    {
+      "key": "trigger:private.evidence_domain_links|evidence_domain_links_update_immutable",
+      "kind": "trigger",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "d6cde2647e835622f947c3ca69d5bbea22d56d555d8865ce39c7b6bccab2a6b3"
+    },
+    {
+      "key": "trigger:private.evidence_extraction_metadata|evidence_extraction_metadata_delete_immutable",
+      "kind": "trigger",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "d8ae98e7e5d494d0c0a2b62eb38a25e9928aee6506333508db4e450b19a06c90"
+    },
+    {
+      "key": "trigger:private.evidence_extraction_metadata|evidence_extraction_metadata_truncate_immutable",
+      "kind": "trigger",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "6e9768b15057083954756c6b93fa2113dfb1d4fa786c23017d7fee507ea63f40"
+    },
+    {
+      "key": "trigger:private.evidence_extraction_metadata|evidence_extraction_metadata_update_immutable",
+      "kind": "trigger",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "b3191492093956ac630b3fe9f29236521ac7f3d9bd4c1ae08bcfab1d543c074f"
     },
     {
       "key": "trigger:private.order_station_evidence_reservations|order_station_evidence_reservations_delete_immutable",
@@ -1474,6 +2381,13 @@
       "payload_sha256": "84838e424ef80488757fd31570b5b201ce40a7b9e464a4baee779ab25df7a655"
     },
     {
+      "key": "view:private.v_evidence_records_v1",
+      "kind": "view",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "4b30f4400f1a9e93e6d05d8ee8a6e587dda850b10161961fe1612e8e4659ae37"
+    },
+    {
       "key": "view:private.v_operational_station_queue_v1",
       "kind": "view",
       "migration": "20260811154732",
@@ -1486,6 +2400,13 @@
       "migration": "20260811184850",
       "operation": "ADD",
       "payload_sha256": "bc80f0df83770524bc14e6c316702d3a5bac1333a3a41ef4921e279f70040070"
+    },
+    {
+      "key": "view:private.v_order_station_evidence_receipts_v2",
+      "kind": "view",
+      "migration": "20260812103446",
+      "operation": "ADD",
+      "payload_sha256": "eaa288c8a6282f95bce863e97ecf150267e79604e461eedee1243fb686b36fc1"
     },
     {
       "key": "view:private.v_order_station_receipts_v1",

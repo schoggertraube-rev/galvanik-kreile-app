@@ -19,6 +19,10 @@ const PNG_BYTES = new Uint8Array([
 ]);
 const CHANGED_PNG_BYTES = new Uint8Array([...PNG_BYTES.slice(0, -1), 0x02]);
 const PNG_SHA256 = createHash("sha256").update(PNG_BYTES).digest("hex");
+const LEGACY_SCAN_ID = `w4-legacy-scan-${RUN_SUFFIX}`;
+const LEGACY_CUSTOMER_SCAN_ID = `w4-legacy-customer-${RUN_SUFFIX}`;
+const LEGACY_INVOICE_SCAN_ID = `w4-legacy-invoice-${RUN_SUFFIX}`;
+const INVOICE_ID = randomUUID();
 
 if (
   process.env.DATABASE_URL !== LOCAL_DATABASE_URL
@@ -66,6 +70,7 @@ const ORDERS = {
   corrupt: `w4-attachment-order-corrupt-${RUN_SUFFIX}`,
   ownership: `w4-attachment-order-ownership-${RUN_SUFFIX}`,
   grantFailure: `w4-attachment-order-grant-failure-${RUN_SUFFIX}`,
+  legacyInvalid: `w4-attachment-order-legacy-invalid-${RUN_SUFFIX}`,
   lock: `w4-attachment-order-lock-${RUN_SUFFIX}`,
 } as const;
 const ITEMS = {
@@ -78,6 +83,7 @@ const ITEMS = {
   corrupt: `w4-attachment-item-corrupt-${RUN_SUFFIX}`,
   ownership: `w4-attachment-item-ownership-${RUN_SUFFIX}`,
   grantFailure: `w4-attachment-item-grant-failure-${RUN_SUFFIX}`,
+  legacyInvalid: `w4-attachment-item-legacy-invalid-${RUN_SUFFIX}`,
   lock: `w4-attachment-item-lock-${RUN_SUFFIX}`,
 } as const;
 const EVENTS = {
@@ -90,6 +96,7 @@ const EVENTS = {
   corrupt: randomUUID(),
   ownership: randomUUID(),
   grantFailure: randomUUID(),
+  legacyInvalid: randomUUID(),
   lock: randomUUID(),
 } as const;
 const CLIENT_REQUESTS = {
@@ -182,9 +189,23 @@ async function readPrivateReceipts(orderId: string, itemId: string) {
   return fixtureSql.begin(async (tx) => {
     await tx.unsafe("SELECT set_config('app.tenant_id', $1, true)", [TENANT_A]);
     return tx.unsafe<Record<string, unknown>[]>(
-      `SELECT * FROM private.v_order_station_evidence_receipts_v1
+      `SELECT * FROM private.v_order_station_evidence_receipts_v2
        WHERE order_id=$1 AND item_id=$2 ORDER BY reserved_at, reservation_id`,
       [orderId, itemId],
+    );
+  });
+}
+
+async function readPrivateEvidenceRecords(orderId: string) {
+  return fixtureSql.begin(async (tx) => {
+    await tx.unsafe("SELECT set_config('app.tenant_id', $1, true)", [TENANT_A]);
+    return tx.unsafe<Record<string, unknown>[]>(
+      `SELECT * FROM private.v_evidence_records_v1
+       WHERE target_links @> jsonb_build_array(
+         jsonb_build_object('targetType', 'ORDER', 'targetId', $1::text)
+       )
+       ORDER BY evidence_key`,
+      [orderId],
     );
   });
 }
@@ -232,6 +253,13 @@ async function seedFixtures() {
     );
   }
 
+  await pool.query(
+    `INSERT INTO public.invoices
+       (id, tenant_id, customer_id, order_id, invoice_number, amount_total, status)
+     VALUES ($1, $2, $3, $4, $5, 12.34, 'draft')`,
+    [INVOICE_ID, TENANT_A, CUSTOMER, ORDERS.ui, `W4-INVOICE-${RUN_SUFFIX}`],
+  );
+
   const itemIds = Object.values(ITEMS);
   const orderIds = Object.values(ORDERS);
   for (const [index, itemId] of itemIds.entries()) {
@@ -261,6 +289,56 @@ async function seedFixtures() {
       ],
     );
   }
+
+  await pool.query(
+    `INSERT INTO public.scan_uploads (
+       id, tenant_id, file_url, file_type, uploaded_by, uploaded_at,
+       detected_type, detection_confidence, extracted_data, status,
+       linked_order_id, linked_customer_id, ocr_provider, original_hash,
+       original_storage_path, original_size_bytes, original_secured_at,
+       client_idempotency_key, field_confidence
+     ) VALUES (
+       $1, $2, $3, 'application/pdf', $4, '2026-08-11T07:00:00Z',
+       'Lieferschein', 0.91, '{"documentNumber":"LS-W4"}'::jsonb, 'processed',
+       $5, $6, 'legacy-ocr', $7, $8, 321, '2026-08-11T07:01:00Z',
+       $9, '{"documentNumber":0.89}'::jsonb
+     )`,
+    [
+      LEGACY_SCAN_ID,
+      TENANT_A,
+      `legacy://w4/${RUN_SUFFIX}/scan.pdf`,
+      USERS.werkstatt,
+      ORDERS.ui,
+      CUSTOMER,
+      "b".repeat(64),
+      `legacy/private/${RUN_SUFFIX}/scan.pdf`,
+      `w4-legacy-${RUN_SUFFIX}`,
+    ],
+  );
+
+  await pool.query(
+    `INSERT INTO public.scan_uploads (
+       id, tenant_id, file_url, file_type, uploaded_by, uploaded_at,
+       detected_type, detection_confidence, status, linked_customer_id, linked_invoice_id,
+       client_idempotency_key, field_confidence
+     ) VALUES
+       ($1, $4, $5, 'application/pdf', $6, '2026-08-11T07:02:00Z',
+        'Kundenakte', 0.88, 'processed', $7, NULL, $8, '{}'::jsonb),
+       ($2, $4, $9, 'application/pdf', $6, '2026-08-11T07:03:00Z',
+        'Rechnung', 0.93, 'processed', NULL, $3, $10, '{}'::jsonb)`,
+    [
+      LEGACY_CUSTOMER_SCAN_ID,
+      LEGACY_INVOICE_SCAN_ID,
+      INVOICE_ID,
+      TENANT_A,
+      `legacy://w4/${RUN_SUFFIX}/customer.pdf`,
+      USERS.werkstatt,
+      CUSTOMER,
+      `w4-legacy-customer-${RUN_SUFFIX}`,
+      `legacy://w4/${RUN_SUFFIX}/invoice.pdf`,
+      `w4-legacy-invoice-${RUN_SUFFIX}`,
+    ],
+  );
 }
 
 async function insertReservation(input: {
@@ -361,6 +439,7 @@ describe("W4 order-station attachment local acceptance", () => {
       "20260811150000",
       "20260811154732",
       "20260811184850",
+      "20260812103446",
     ]);
 
     const columns = await pool.query<{ table_name: string; count: number; names: string[] }>(
@@ -425,7 +504,7 @@ describe("W4 order-station attachment local acceptance", () => {
        GROUP BY c.relname ORDER BY c.relname`,
     );
     expect(constraints.rows).toEqual([
-      { relname: "order_station_evidence", count: 10 },
+      { relname: "order_station_evidence", count: 11 },
       { relname: "order_station_evidence_reservations", count: 16 },
     ]);
     const constraintManifest = await pool.query<{ relname: string; names: string[] }>(
@@ -443,6 +522,7 @@ describe("W4 order-station attachment local acceptance", () => {
         names: [
           "order_station_evidence_actor_fkey",
           "order_station_evidence_bytes_chk",
+          "order_station_evidence_id_tenant_key",
           "order_station_evidence_mime_chk",
           "order_station_evidence_pkey",
           "order_station_evidence_reservation_fkey",
@@ -485,7 +565,7 @@ describe("W4 order-station attachment local acceptance", () => {
          AND c.relname IN ('order_station_evidence_reservations', 'order_station_evidence')
          AND (i.indisprimary OR i.indisunique)`,
     );
-    expect(indexCount.rows[0]?.count).toBe(7);
+    expect(indexCount.rows[0]?.count).toBe(8);
     const indexManifest = await pool.query<{ names: string[] }>(
       `SELECT array_agg(index_class.relname ORDER BY index_class.relname) AS names
        FROM pg_index i
@@ -497,6 +577,7 @@ describe("W4 order-station attachment local acceptance", () => {
          AND (i.indisprimary OR i.indisunique)`,
     );
     expect(indexManifest.rows[0]?.names).toEqual([
+      "order_station_evidence_id_tenant_key",
       "order_station_evidence_pkey",
       "order_station_evidence_reservation_key",
       "order_station_evidence_reservations_actor_request_key",
@@ -534,6 +615,86 @@ describe("W4 order-station attachment local acceptance", () => {
       "order_station_evidence_update_immutable",
     ]);
 
+    const evidenceContractColumns = await pool.query<{
+      table_name: string;
+      names: string[];
+    }>(
+      `SELECT table_name, array_agg(column_name ORDER BY ordinal_position) AS names
+       FROM information_schema.columns
+       WHERE table_schema='private'
+         AND table_name IN ('evidence_domain_links', 'evidence_extraction_metadata')
+       GROUP BY table_name ORDER BY table_name`,
+    );
+    expect(evidenceContractColumns.rows).toEqual([
+      {
+        table_name: "evidence_domain_links",
+        names: ["id", "evidence_id", "tenant_id", "target_type", "target_id", "created_at"],
+      },
+      {
+        table_name: "evidence_extraction_metadata",
+        names: [
+          "id",
+          "evidence_id",
+          "tenant_id",
+          "extraction_state",
+          "provider",
+          "detected_type",
+          "detection_confidence",
+          "extracted_data",
+          "field_confidence",
+          "created_at",
+        ],
+      },
+    ]);
+    const evidenceContractConstraints = await pool.query<{ relname: string; names: string[] }>(
+      `SELECT c.relname, array_agg(constraint_row.conname ORDER BY constraint_row.conname) AS names
+       FROM pg_constraint constraint_row
+       JOIN pg_class c ON c.oid=constraint_row.conrelid
+       JOIN pg_namespace n ON n.oid=c.relnamespace
+       WHERE n.nspname='private'
+         AND c.relname IN ('evidence_domain_links', 'evidence_extraction_metadata')
+       GROUP BY c.relname ORDER BY c.relname`,
+    );
+    expect(evidenceContractConstraints.rows).toEqual([
+      {
+        relname: "evidence_domain_links",
+        names: [
+          "evidence_domain_links_evidence_fkey",
+          "evidence_domain_links_pkey",
+          "evidence_domain_links_target_id_chk",
+          "evidence_domain_links_target_key",
+          "evidence_domain_links_type_chk",
+        ],
+      },
+      {
+        relname: "evidence_extraction_metadata",
+        names: [
+          "evidence_extraction_metadata_evidence_fkey",
+          "evidence_extraction_metadata_evidence_key",
+          "evidence_extraction_metadata_payload_chk",
+          "evidence_extraction_metadata_pkey",
+          "evidence_extraction_metadata_state_chk",
+        ],
+      },
+    ]);
+    const evidenceContractTriggers = await pool.query<{ names: string[] }>(
+      `SELECT array_agg(trigger_row.tgname ORDER BY trigger_row.tgname) AS names
+       FROM pg_trigger trigger_row
+       JOIN pg_class c ON c.oid=trigger_row.tgrelid
+       JOIN pg_namespace n ON n.oid=c.relnamespace
+       WHERE n.nspname='private'
+         AND c.relname IN ('evidence_domain_links', 'evidence_extraction_metadata')
+         AND NOT trigger_row.tgisinternal`,
+    );
+    expect(evidenceContractTriggers.rows[0]?.names).toEqual([
+      "evidence_domain_links_delete_immutable",
+      "evidence_domain_links_truncate_immutable",
+      "evidence_domain_links_update_immutable",
+      "evidence_extraction_metadata_delete_immutable",
+      "evidence_extraction_metadata_truncate_immutable",
+      "evidence_extraction_metadata_update_immutable",
+    ]);
+
     const catalog = await pool.query<{
       relname: string;
       relrowsecurity: boolean;
@@ -545,20 +706,33 @@ describe("W4 order-station attachment local acceptance", () => {
        FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
        WHERE n.nspname='private'
          AND relname IN (
+           'evidence_domain_links',
+           'evidence_extraction_metadata',
            'order_station_evidence_reservations',
            'order_station_evidence',
-           'v_order_station_evidence_receipts_v1'
+           'v_order_station_evidence_receipts_v1',
+           'v_order_station_evidence_receipts_v2',
+           'v_evidence_records_v1'
          ) ORDER BY relname`,
     );
-    expect(catalog.rows).toHaveLength(3);
+    expect(catalog.rows).toHaveLength(7);
     expect(catalog.rows.every((row) => !row.relrowsecurity && !row.relforcerowsecurity && row.relacl === null)).toBe(true);
     expect(catalog.rows.find((row) => row.relname === "v_order_station_evidence_receipts_v1")?.reloptions)
+      .toContain("security_invoker=true");
+    expect(catalog.rows.find((row) => row.relname === "v_order_station_evidence_receipts_v2")?.reloptions)
+      .toContain("security_invoker=true");
+    expect(catalog.rows.find((row) => row.relname === "v_evidence_records_v1")?.reloptions)
       .toContain("security_invoker=true");
 
     const policyCount = await pool.query<{ count: number }>(
       `SELECT count(*)::int AS count FROM pg_policies
        WHERE schemaname='private'
-         AND tablename IN ('order_station_evidence_reservations', 'order_station_evidence')`,
+         AND tablename IN (
+           'order_station_evidence_reservations',
+           'order_station_evidence',
+           'evidence_extraction_metadata',
+           'evidence_domain_links'
+         )`,
     );
     expect(policyCount.rows[0]?.count).toBe(0);
     const privileges = await pool.query<{
@@ -576,13 +750,17 @@ describe("W4 order-station attachment local acceptance", () => {
               has_table_privilege(role_name, 'private.' || quote_ident(relname), 'DELETE') AS can_delete
        FROM unnest(ARRAY['anon','authenticated','service_role']) role_name
        CROSS JOIN unnest(ARRAY[
+         'evidence_domain_links',
+         'evidence_extraction_metadata',
          'order_station_evidence_reservations',
          'order_station_evidence',
-         'v_order_station_evidence_receipts_v1'
+         'v_order_station_evidence_receipts_v1',
+         'v_order_station_evidence_receipts_v2',
+         'v_evidence_records_v1'
        ]) relname
        ORDER BY role_name, relname`,
     );
-    expect(privileges.rows).toHaveLength(9);
+    expect(privileges.rows).toHaveLength(21);
     expect(privileges.rows.every((row) =>
       !row.can_select && !row.can_insert && !row.can_update && !row.can_delete)).toBe(true);
     const defaultAcl = await pool.query<{ count: number }>(
@@ -889,10 +1067,23 @@ describe("W4 order-station attachment local acceptance", () => {
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({ receipt_state: "FINALIZED", integrity_ok: true });
 
-    const immutableBefore = await pool.query<{ reservation: unknown; evidence: unknown }>(
+    const immutableBefore = await pool.query<{
+      reservation: unknown;
+      evidence: unknown;
+      extraction: unknown;
+      links: unknown;
+    }>(
       `SELECT
          (SELECT row_to_json(reservation) FROM private.order_station_evidence_reservations reservation WHERE id=$1) AS reservation,
-         (SELECT row_to_json(evidence) FROM private.order_station_evidence evidence WHERE reservation_id=$1) AS evidence`,
+         (SELECT row_to_json(evidence) FROM private.order_station_evidence evidence WHERE reservation_id=$1) AS evidence,
+         (SELECT jsonb_agg(to_jsonb(extraction) ORDER BY extraction.id)
+          FROM private.evidence_extraction_metadata extraction
+          JOIN private.order_station_evidence evidence ON evidence.id=extraction.evidence_id
+          WHERE evidence.reservation_id=$1) AS extraction,
+         (SELECT jsonb_agg(to_jsonb(link) ORDER BY link.target_type, link.target_id)
+          FROM private.evidence_domain_links link
+          JOIN private.order_station_evidence evidence ON evidence.id=link.evidence_id
+          WHERE evidence.reservation_id=$1) AS links`,
       [replay.data.receipt.reservationId],
     );
     for (const mutation of [
@@ -904,15 +1095,38 @@ describe("W4 order-station attachment local acceptance", () => {
       `UPDATE private.order_station_evidence SET verified_at=verified_at
        WHERE reservation_id='${replay.data.receipt.reservationId}'`,
       `DELETE FROM private.order_station_evidence WHERE reservation_id='${replay.data.receipt.reservationId}'`,
-      "TRUNCATE private.order_station_evidence",
+      "TRUNCATE private.order_station_evidence CASCADE",
+      `UPDATE private.evidence_extraction_metadata SET extraction_state=extraction_state
+       WHERE evidence_id='${finalized.data.receipt.receiptId}'`,
+      `DELETE FROM private.evidence_extraction_metadata
+       WHERE evidence_id='${finalized.data.receipt.receiptId}'`,
+      "TRUNCATE private.evidence_extraction_metadata",
+      `UPDATE private.evidence_domain_links SET target_id=target_id
+       WHERE evidence_id='${finalized.data.receipt.receiptId}'`,
+      `DELETE FROM private.evidence_domain_links
+       WHERE evidence_id='${finalized.data.receipt.receiptId}'`,
+      "TRUNCATE private.evidence_domain_links",
     ]) {
       await expect(fixtureSql.begin(async (tx) => tx.unsafe(mutation)))
         .rejects.toMatchObject({ code: "P0001" });
     }
-    const immutableAfter = await pool.query<{ reservation: unknown; evidence: unknown }>(
+    const immutableAfter = await pool.query<{
+      reservation: unknown;
+      evidence: unknown;
+      extraction: unknown;
+      links: unknown;
+    }>(
       `SELECT
          (SELECT row_to_json(reservation) FROM private.order_station_evidence_reservations reservation WHERE id=$1) AS reservation,
-         (SELECT row_to_json(evidence) FROM private.order_station_evidence evidence WHERE reservation_id=$1) AS evidence`,
+         (SELECT row_to_json(evidence) FROM private.order_station_evidence evidence WHERE reservation_id=$1) AS evidence,
+         (SELECT jsonb_agg(to_jsonb(extraction) ORDER BY extraction.id)
+          FROM private.evidence_extraction_metadata extraction
+          JOIN private.order_station_evidence evidence ON evidence.id=extraction.evidence_id
+          WHERE evidence.reservation_id=$1) AS extraction,
+         (SELECT jsonb_agg(to_jsonb(link) ORDER BY link.target_type, link.target_id)
+          FROM private.evidence_domain_links link
+          JOIN private.order_station_evidence evidence ON evidence.id=link.evidence_id
+          WHERE evidence.reservation_id=$1) AS links`,
       [replay.data.receipt.reservationId],
     );
     expect(immutableAfter.rows).toEqual(immutableBefore.rows);
@@ -1316,6 +1530,105 @@ describe("W4 order-station attachment local acceptance", () => {
     expect(evidence.rows[0]?.count).toBe(0);
   });
 
+  it("retains malformed legacy extraction truth but the read-only adapter fails closed without mutation", async () => {
+    const malformedId = `w4-legacy-invalid-${RUN_SUFFIX}`;
+    await pool.query(
+      `INSERT INTO public.scan_uploads (
+         id, tenant_id, file_url, file_type, uploaded_by, uploaded_at,
+         detected_type, detection_confidence, status, linked_order_id,
+         client_idempotency_key, field_confidence
+       ) VALUES (
+         $1, $2, $3, 'application/pdf', $4, '2026-08-11T07:00:00Z',
+          'Rechnung', 1.50, 'processed', $5, $6, '{}'::jsonb
+       )`,
+      [
+        malformedId,
+        TENANT_A,
+        `legacy://w4/${RUN_SUFFIX}/invalid.pdf`,
+        USERS.werkstatt,
+        ORDERS.legacyInvalid,
+        `w4-legacy-invalid-${RUN_SUFFIX}`,
+      ],
+    );
+    const before = await pool.query<{ snapshot: Record<string, unknown> }>(
+      "SELECT row_to_json(scan)::jsonb AS snapshot FROM public.scan_uploads scan WHERE id=$1",
+      [malformedId],
+    );
+    const viewRows = await readPrivateEvidenceRecords(ORDERS.legacyInvalid);
+    expect(viewRows).toHaveLength(1);
+    expect(viewRows[0]).toMatchObject({
+      source_kind: "LEGACY_SCAN_UPLOAD",
+      source_id: malformedId,
+      integrity_ok: false,
+    });
+    const action = await actions.getGalvanikHandoffAttachmentsAction({
+      orderId: ORDERS.legacyInvalid,
+      itemId: ITEMS.legacyInvalid,
+    });
+    expect(action).toEqual({
+      code: "UNAVAILABLE",
+      message: "Nachweise konnten nicht sicher geladen werden.",
+    });
+    const after = await pool.query<{ snapshot: Record<string, unknown> }>(
+      "SELECT row_to_json(scan)::jsonb AS snapshot FROM public.scan_uploads scan WHERE id=$1",
+      [malformedId],
+    );
+    expect(after.rows).toEqual(before.rows);
+  });
+
+  it("reads customer-only and invoice-only legacy Evidence through the polymorphic target action without mutation", async () => {
+    const ids = [LEGACY_CUSTOMER_SCAN_ID, LEGACY_INVOICE_SCAN_ID];
+    const before = await pool.query<{ id: string; snapshot: Record<string, unknown> }>(
+      `SELECT id, row_to_json(scan)::jsonb AS snapshot
+       FROM public.scan_uploads scan WHERE id = ANY($1::text[]) ORDER BY id`,
+      [ids],
+    );
+
+    const customer = await actions.getGalvanikEvidenceByTargetAction({
+      targetType: "CUSTOMER",
+      targetId: CUSTOMER,
+    });
+    expect(customer.code).toBe("OK");
+    if (customer.code !== "OK") throw new Error("W4_CUSTOMER_EVIDENCE_NOT_OK");
+    expect(customer.data).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        source: "LEGACY_SCAN_UPLOAD",
+        sourceId: LEGACY_CUSTOMER_SCAN_ID,
+        targets: [{ targetType: "CUSTOMER", targetId: CUSTOMER }],
+      }),
+    ]));
+
+    const invoice = await actions.getGalvanikEvidenceByTargetAction({
+      targetType: "INVOICE",
+      targetId: INVOICE_ID,
+    });
+    expect(invoice).toEqual({
+      code: "OK",
+      data: [expect.objectContaining({
+        source: "LEGACY_SCAN_UPLOAD",
+        sourceId: LEGACY_INVOICE_SCAN_ID,
+        targets: [{ targetType: "INVOICE", targetId: INVOICE_ID }],
+      })],
+    });
+
+    await expect(actions.getGalvanikEvidenceByTargetAction({
+      targetType: "INVOICE",
+      targetId: ` ${INVOICE_ID}`,
+    })).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
+    setSession(USERS.foreign, "werkstatt", TENANT_B);
+    await expect(actions.getGalvanikEvidenceByTargetAction({
+      targetType: "INVOICE",
+      targetId: INVOICE_ID,
+    })).resolves.toMatchObject({ code: "UNAUTHENTICATED" });
+
+    const after = await pool.query<{ id: string; snapshot: Record<string, unknown> }>(
+      `SELECT id, row_to_json(scan)::jsonb AS snapshot
+       FROM public.scan_uploads scan WHERE id = ANY($1::text[]) ORDER BY id`,
+      [ids],
+    );
+    expect(after.rows).toEqual(before.rows);
+  });
+
   it("proves the order FOR UPDATE lock serializes a concurrent child-item phantom", async () => {
     const locker = postgres(LOCAL_DATABASE_URL, { max: 1, prepare: false });
     const contender = postgres(LOCAL_DATABASE_URL, { max: 1, prepare: false });
@@ -1352,6 +1665,10 @@ describe("W4 order-station attachment local acceptance", () => {
 
   it("closes DB to private view to real actions to real Panel to local Storage HTTP and remount readback", async () => {
     setSession(USERS.werkstatt, "werkstatt");
+    const legacyBefore = await pool.query<{ snapshot: Record<string, unknown> }>(
+      "SELECT row_to_json(scan)::jsonb AS snapshot FROM public.scan_uploads scan WHERE id=$1",
+      [LEGACY_SCAN_ID],
+    );
     const props = {
       orderId: ORDERS.ui,
       expectedVersion: 2,
@@ -1360,6 +1677,8 @@ describe("W4 order-station attachment local acceptance", () => {
     const view = render(createElement(Panel, props));
     expect(await screen.findByText("Noch kein Übergabeoriginal erfasst.", {}, { timeout: 15_000 }))
       .toBeInTheDocument();
+    expect(screen.getByText("Bestehender Legacy-Nachweis (nur lesen)")).toBeInTheDocument();
+    expect(screen.getByText(/Konfidenz 91 %/)).toBeInTheDocument();
     const realPng = new NodeFile([PNG_BYTES], "galvanik-handoff.png", {
       type: "image/png",
     }) as unknown as File;
@@ -1377,13 +1696,23 @@ describe("W4 order-station attachment local acceptance", () => {
       content_sha256: string;
       reservations: number;
       evidence: number;
+      extraction_rows: number;
+      target_links: number;
     }>(
       `SELECT reservation.id AS reservation_id, reservation.object_path,
               reservation.content_sha256,
               (SELECT count(*)::int FROM private.order_station_evidence_reservations r WHERE r.order_id=$1) AS reservations,
               (SELECT count(*)::int FROM private.order_station_evidence e
                JOIN private.order_station_evidence_reservations r ON r.id=e.reservation_id
-               WHERE r.order_id=$1) AS evidence
+               WHERE r.order_id=$1) AS evidence,
+              (SELECT count(*)::int FROM private.evidence_extraction_metadata extraction
+               JOIN private.order_station_evidence e ON e.id=extraction.evidence_id
+               JOIN private.order_station_evidence_reservations r ON r.id=e.reservation_id
+               WHERE r.order_id=$1) AS extraction_rows,
+              (SELECT count(*)::int FROM private.evidence_domain_links link
+               JOIN private.order_station_evidence e ON e.id=link.evidence_id
+               JOIN private.order_station_evidence_reservations r ON r.id=e.reservation_id
+               WHERE r.order_id=$1) AS target_links
        FROM private.order_station_evidence_reservations reservation
        WHERE reservation.order_id=$1`,
       [ORDERS.ui],
@@ -1393,6 +1722,8 @@ describe("W4 order-station attachment local acceptance", () => {
       content_sha256: PNG_SHA256,
       reservations: 1,
       evidence: 1,
+      extraction_rows: 1,
+      target_links: 2,
     });
     const objectPath = persisted.rows[0]!.object_path;
     const info = await serviceClient.storage.from(BUCKET_ID).info(objectPath);
@@ -1410,10 +1741,33 @@ describe("W4 order-station attachment local acceptance", () => {
     const receipts = await readPrivateReceipts(ORDERS.ui, ITEMS.ui);
     expect(receipts).toHaveLength(1);
     expect(receipts[0]).toMatchObject({ receipt_state: "FINALIZED", integrity_ok: true });
+    const evidenceRecords = await readPrivateEvidenceRecords(ORDERS.ui);
+    expect(evidenceRecords).toHaveLength(2);
+    expect(evidenceRecords).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        source_kind: "ORDER_STATION_ATTACHMENT",
+        extraction_state: "NOT_REQUESTED",
+        original_state: "VERIFIED",
+        integrity_ok: true,
+      }),
+      expect.objectContaining({
+        source_kind: "LEGACY_SCAN_UPLOAD",
+        extraction_state: "LEGACY_RECORDED",
+        detection_confidence: "0.91",
+        integrity_ok: true,
+      }),
+    ]));
+    const legacyAfter = await pool.query<{ snapshot: Record<string, unknown> }>(
+      "SELECT row_to_json(scan)::jsonb AS snapshot FROM public.scan_uploads scan WHERE id=$1",
+      [LEGACY_SCAN_ID],
+    );
+    expect(legacyAfter.rows).toEqual(legacyBefore.rows);
 
     view.unmount();
     render(createElement(Panel, props));
     expect(await screen.findByText("Bestätigt", {}, { timeout: 15_000 })).toBeInTheDocument();
+    expect(screen.getByText("Keine Extraktion angefordert.")).toBeInTheDocument();
+    expect(screen.getByText("Bestehender Legacy-Nachweis (nur lesen)")).toBeInTheDocument();
     expect(screen.queryByText("Noch kein Übergabeoriginal erfasst.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Original freigeben" }));
     await waitFor(() => {

@@ -162,6 +162,44 @@ const event = {
 
 type FakeQuery = { text: string; values: unknown[] };
 
+function evidenceContractInsertRows(query: FakeQuery): Record<string, unknown>[] | null {
+  if (query.text.includes("INSERT INTO private.evidence_extraction_metadata")) {
+    return [{
+      id: query.values[0],
+      evidence_id: query.values[1],
+      tenant_id: query.values[2],
+      extraction_state: "NOT_REQUESTED",
+      provider: null,
+      detected_type: null,
+      detection_confidence: null,
+      extracted_data: null,
+      field_confidence: {},
+      created_at: evidence.verified_at,
+    }];
+  }
+  if (query.text.includes("INSERT INTO private.evidence_domain_links")) {
+    return [
+      {
+        id: query.values[0],
+        evidence_id: query.values[1],
+        tenant_id: query.values[2],
+        target_type: "ORDER",
+        target_id: query.values[3],
+        created_at: evidence.verified_at,
+      },
+      {
+        id: query.values[4],
+        evidence_id: query.values[5],
+        tenant_id: query.values[6],
+        target_type: "ORDER_ITEM",
+        target_id: query.values[7],
+        created_at: evidence.verified_at,
+      },
+    ];
+  }
+  return null;
+}
+
 function adminInfo(overrides: Record<string, unknown> = {}) {
   return {
     id: STORAGE_ID,
@@ -335,7 +373,7 @@ describe("W4 order-station attachment domain", () => {
         };
         return [createdReservation];
       }
-      if (query.text.includes("v_order_station_evidence_receipts_v1")) {
+      if (query.text.includes("v_order_station_evidence_receipts_v2")) {
         return [{
           ...pendingReceipt,
           reservation_id: createdReservation.id,
@@ -442,7 +480,7 @@ describe("W4 order-station attachment domain", () => {
       }
       if (query.text.includes("FROM private.order_station_evidence")) return finalized ? [evidence] : [];
       if (query.text.includes("SELECT (")) return [{ integrity_ok: true }];
-      if (query.text.includes("v_order_station_evidence_receipts_v1")) {
+      if (query.text.includes("v_order_station_evidence_receipts_v2")) {
         return [finalized ? finalizedReceipt : pendingReceipt];
       }
       throw new Error(`unexpected query: ${query.text}`);
@@ -496,7 +534,7 @@ describe("W4 order-station attachment domain", () => {
       if (query.text.includes("pg_advisory_xact_lock")) return [];
       if (query.text.includes("FROM private.order_station_evidence_reservations")) return [reservation];
       if (query.text.includes("FROM private.order_station_evidence")) return [evidence];
-      if (query.text.includes("v_order_station_evidence_receipts_v1")) return [finalizedReceipt];
+      if (query.text.includes("v_order_station_evidence_receipts_v2")) return [finalizedReceipt];
       throw new Error(`unexpected query: ${query.text}`);
     });
     await expect(finalizeOrderStationAttachment(authorization, {
@@ -514,7 +552,7 @@ describe("W4 order-station attachment domain", () => {
       if (query.text.includes("pg_advisory_xact_lock")) return [];
       if (query.text.includes("statement_timestamp()")) return [{ ...reservation, upload_grantable: true }];
       if (query.text.includes("FROM private.order_station_evidence")) return [evidence];
-      if (query.text.includes("v_order_station_evidence_receipts_v1")) {
+      if (query.text.includes("v_order_station_evidence_receipts_v2")) {
         return [{ ...finalizedReceipt, verified_at: "2026-08-11T01:01:01.000Z" }];
       }
       return [];
@@ -555,7 +593,7 @@ describe("W4 order-station attachment domain", () => {
         return evidenceReads === 1 ? [] : [evidence];
       }
       if (query.text.includes("SELECT (")) return [{ integrity_ok: true }];
-      if (query.text.includes("v_order_station_evidence_receipts_v1")) {
+      if (query.text.includes("v_order_station_evidence_receipts_v2")) {
         return [{ ...finalizedReceipt, verified_at: "2026-08-11T01:01:01.000Z" }];
       }
       throw new Error(`unexpected query: ${query.text}`);
@@ -589,7 +627,9 @@ describe("W4 order-station attachment domain", () => {
         };
         return [storedEvidence];
       }
-      if (query.text.includes("v_order_station_evidence_receipts_v1")) {
+      const contractRows = evidenceContractInsertRows(query);
+      if (contractRows) return contractRows;
+      if (query.text.includes("v_order_station_evidence_receipts_v2")) {
         return [{
           ...finalizedReceipt,
           receipt_id: storedEvidence?.id,
@@ -678,7 +718,9 @@ describe("W4 order-station attachment domain", () => {
           };
           return [storedEvidence];
         }
-        if (query.text.includes("v_order_station_evidence_receipts_v1")) {
+        const contractRows = evidenceContractInsertRows(query);
+        if (contractRows) return contractRows;
+        if (query.text.includes("v_order_station_evidence_receipts_v2")) {
           return [{ ...finalizedReceipt, receipt_id: storedEvidence?.id }];
         }
         return [];
@@ -690,7 +732,7 @@ describe("W4 order-station attachment domain", () => {
       reservationId: RESERVATION_ID,
     })).resolves.toMatchObject({ code: "UNAVAILABLE" });
     expect(ports.execute.mock.calls.map(([query]) => (query as FakeQuery).text).join("\n")).not.toContain(
-      "v_order_station_evidence_receipts_v1",
+      "v_order_station_evidence_receipts_v2",
     );
 
     for (const statusCode of ["429", "500"]) {
@@ -790,11 +832,12 @@ describe("W4 order-station attachment domain", () => {
 
   it("source-locks private-only schema, immutable tables, and guard ordering", async () => {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
-    const [domain, storage, actions, migration] = await Promise.all([
+    const [domain, storage, actions, migration, evidenceMigration] = await Promise.all([
       readFile(path.join(root, "src/lib/server/orderStationAttachment.ts"), "utf8"),
       readFile(path.join(root, "src/lib/server/orderStationAttachmentStorage.ts"), "utf8"),
       readFile(path.join(root, "src/app/warendurchlauf/actions.ts"), "utf8"),
       readFile(path.join(root, "supabase/migrations/20260811184850_w4_order_station_attachment.sql"), "utf8"),
+      readFile(path.join(root, "supabase/migrations/20260812103446_w4_evidence_read_contract.sql"), "utf8"),
     ]);
     expect(domain).toContain("statement_timestamp() < reservation.upload_expires_at");
     expect(domain).toContain("sameReservation(reservation, first.reservation)");
@@ -819,5 +862,11 @@ describe("W4 order-station attachment domain", () => {
     expect(migration).toContain("LEFT JOIN");
     expect(migration).toContain("'INVALID'");
     expect(migration).not.toMatch(/\b(?:GRANT|REVOKE|CREATE POLICY|ALTER POLICY|ENABLE ROW LEVEL SECURITY)\b/i);
+    expect(evidenceMigration).toContain("CREATE TABLE private.evidence_extraction_metadata");
+    expect(evidenceMigration).toContain("CREATE TABLE private.evidence_domain_links");
+    expect(evidenceMigration).toContain("CREATE VIEW private.v_order_station_evidence_receipts_v2");
+    expect(evidenceMigration).toContain("CREATE VIEW private.v_evidence_records_v1");
+    expect(evidenceMigration).toContain("FROM public.scan_uploads scan");
+    expect(evidenceMigration).not.toMatch(/\b(?:GRANT|CREATE POLICY|ALTER POLICY|ENABLE ROW LEVEL SECURITY)\b/i);
   });
 });

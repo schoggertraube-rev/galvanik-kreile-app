@@ -14,6 +14,7 @@ import type {
   OrderStationAttachmentMime,
   OrderStationAttachmentReceipt,
 } from "@/lib/server/orderStationAttachment";
+import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 
 const BUCKET_ID = "item-photos";
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
@@ -183,6 +184,19 @@ function newestPending(receipts: OrderStationAttachmentReceipt[]): OrderStationA
   })[0] ?? null;
 }
 
+function evidenceRecordsMatchScope(
+  records: EvidenceReadRecord[],
+  orderId: string,
+  itemId: string,
+): boolean {
+  return records.every((record) =>
+    record.targets.some((target) => target.targetType === "ORDER" && target.targetId === orderId)
+    && (
+      record.source !== "ORDER_STATION_ATTACHMENT"
+      || record.targets.some((target) => target.targetType === "ORDER_ITEM" && target.targetId === itemId)
+    ));
+}
+
 function operationLabel(operation: Operation): string {
   const labels: Record<Exclude<Operation, "idle">, string> = {
     hashing: "Datei wird lokal geprüft…",
@@ -228,6 +242,7 @@ function GalvanikHandoffAttachmentPanelInner({
   const initialItemId = items.length === 1 ? items[0].id : "";
   const [selectedItemId, setSelectedItemId] = useState(initialItemId);
   const [receipts, setReceipts] = useState<OrderStationAttachmentReceipt[]>([]);
+  const [evidenceRecords, setEvidenceRecords] = useState<EvidenceReadRecord[]>([]);
   const [panelState, setPanelState] = useState<PanelState>("loading");
   const [serverCanOperate, setServerCanOperate] = useState(false);
   const [currentActorId, setCurrentActorId] = useState<string | null>(null);
@@ -272,6 +287,7 @@ function GalvanikHandoffAttachmentPanelInner({
     activeOperationId.current = null;
     scopeKeyRef.current = makeScopeKey(orderId, expectedVersion, nextItemId, itemIdentity);
     setReceipts([]);
+    setEvidenceRecords([]);
     setServerCanOperate(false);
     setCurrentActorId(null);
     setPanelState(nextItemId ? "loading" : "ready");
@@ -334,6 +350,7 @@ function GalvanikHandoffAttachmentPanelInner({
       ) return null;
       if (result.code !== "OK") {
         setReceipts([]);
+        setEvidenceRecords([]);
         setDownload(null);
         setCurrentActorId(null);
         setMessage(preserveMessage ?? result.message);
@@ -342,8 +359,10 @@ function GalvanikHandoffAttachmentPanelInner({
         return null;
       }
       if (result.data.receipts.some((receipt) =>
-        receipt.orderId !== orderId || receipt.itemId !== selectedItemId)) {
+        receipt.orderId !== orderId || receipt.itemId !== selectedItemId)
+        || !evidenceRecordsMatchScope(result.data.evidenceRecords, orderId, selectedItemId)) {
         setReceipts([]);
+        setEvidenceRecords([]);
         setServerCanOperate(false);
         setDownload(null);
         setCurrentActorId(null);
@@ -353,6 +372,7 @@ function GalvanikHandoffAttachmentPanelInner({
         return null;
       }
       setReceipts(result.data.receipts);
+      setEvidenceRecords(result.data.evidenceRecords);
       setServerCanOperate(result.data.canOperate);
       if (!result.data.canOperate) setDownload(null);
       setCurrentActorId(result.data.currentActorId);
@@ -367,6 +387,7 @@ function GalvanikHandoffAttachmentPanelInner({
         || (workflow && !workflowIsCurrent(workflow))
       ) return null;
       setReceipts([]);
+      setEvidenceRecords([]);
       setServerCanOperate(false);
       setDownload(null);
       setCurrentActorId(null);
@@ -383,6 +404,7 @@ function GalvanikHandoffAttachmentPanelInner({
     selectedItemId,
     setCurrentActorId,
     setDownload,
+    setEvidenceRecords,
     setLoadedScopeKey,
     setMessage,
     setPanelState,
@@ -434,6 +456,7 @@ function GalvanikHandoffAttachmentPanelInner({
       || result.data.currentActorId !== expected.actorId
       || result.data.receipts.some((receipt) =>
         receipt.orderId !== orderId || receipt.itemId !== selectedItemId)
+      || !evidenceRecordsMatchScope(result.data.evidenceRecords, orderId, selectedItemId)
     ) return false;
     const fresh = result.data.receipts.find((receipt) => receipt.reservationId === expected.reservationId);
     if (
@@ -444,6 +467,7 @@ function GalvanikHandoffAttachmentPanelInner({
       || !sameReceipt(fresh, expected)
     ) return false;
     setReceipts(result.data.receipts);
+    setEvidenceRecords(result.data.evidenceRecords);
     setServerCanOperate(result.data.canOperate);
     if (!result.data.canOperate) setDownload(null);
     setCurrentActorId(result.data.currentActorId);
@@ -907,6 +931,33 @@ function GalvanikHandoffAttachmentPanelInner({
             );
           })}
         </ul>
+      )}
+
+      {scopeReady && panelState === "ready" && evidenceRecords.length > 0 && (
+        <div className="mt-3 rounded-lg border border-border p-2 text-xs">
+          <p className="font-medium">Nachweis-Metadaten</p>
+          <ul className="mt-2 space-y-2">
+            {evidenceRecords.map((record) => (
+              <li key={record.evidenceKey} className="rounded-md bg-muted/40 p-2">
+                <p>
+                  {record.source === "ORDER_STATION_ATTACHMENT"
+                    ? "Verifiziertes Übergabeoriginal"
+                    : "Bestehender Legacy-Nachweis (nur lesen)"}
+                </p>
+                <p className="text-muted-foreground">
+                  {record.extraction.state === "NOT_REQUESTED"
+                    ? "Keine Extraktion angefordert."
+                    : record.extraction.state === "NOT_RECORDED"
+                      ? "Keine Extraktionsdaten aufgezeichnet."
+                      : `Extraktion übernommen${record.extraction.detectedType ? `: ${record.extraction.detectedType}` : ""}${record.extraction.detectionConfidence === null ? "" : ` · Konfidenz ${Math.round(record.extraction.detectionConfidence * 100)} %`}.`}
+                </p>
+                <p className="text-muted-foreground">
+                  Verknüpft: {record.targets.map((target) => `${target.targetType} ${target.targetId}`).join(" · ")}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {selectedItem && scopeReady && panelState === "ready" && serverCanOperate && (
