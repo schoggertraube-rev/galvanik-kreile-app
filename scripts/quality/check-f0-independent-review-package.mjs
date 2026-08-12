@@ -12,7 +12,7 @@ const MANIFEST_PATH = path.join(
   "docs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_MANIFEST.json",
 );
 const BASE = "c294c0564dc8a5e137eaa00de1276677cb1a1c53";
-const CANDIDATE = "c02f6ee95645e57d02be2e268e51feeadf2f390c";
+const CANDIDATE = "e3138f9286775bf6e79c0b5b1845ff72a0230b62";
 const NAME_STATUS_SHA256 =
   "075c21a5b733fb45843e814917b4f744b28849b5312e75d3fea8361e0b673a6f";
 const PACKAGE_PATHS = [
@@ -90,7 +90,7 @@ const SOURCE_FILES = [
   ["docs/evidence/f0/W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md", "47bbc1e52c3da1d463f2e39f0cd345e6486051211418db33ee2af51379d5de9a", 14603],
   ["docs/evidence/f0/W4_EVIDENCE_READ_CONTRACT_EVIDENCE.md", "83680067b7d614b9877b4c5fa324aa536765f01ca53d97f131c408c6c3aad911", 7212],
   ["docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json", "81b59e510927c6b9caab38b633e0e1ca5f0c25bcc567e4ff19cd0bc3ae669582", 1402],
-  ["docs/evidence/f0/F0_CLAUDE_REPAIR_LEDGER.md", "40c0b8fa0dae574beb7d69e0b7b88900aa6c178075c7302e18b2a35090e4d7c6", 7519],
+  ["docs/evidence/f0/F0_CLAUDE_REPAIR_LEDGER.md", "62a81b4e7ffe76cde2b2bc3e35fcec35b7f5ca2fd7fbd9265776bdf23ef91493", 7649],
   ["docs/evidence/f0/W4_CANDIDATE_FINGERPRINT_EVIDENCE.md", "15fb812f42180daabcf63933ae16fb6e0b9f3782f7d8522f17034db88b119235", 12206],
   ["docs/evidence/f0/W4_CANDIDATE_SCHEMA_CONTRACT.json", "f17e2abbb78144ef87bdc11a0cfdd520b40123c295665e13c7ebf0061597cb53", 94379],
   [".github/workflows/quality.yml", "b587dc7502b9335f4e1180da6d498a67bd3772211941cc8ed93fb22e56c2504d", 19743],
@@ -372,7 +372,7 @@ function validateManifest(manifest) {
   if (
     manifest.candidate.base !== BASE ||
     manifest.candidate.head !== CANDIDATE ||
-    manifest.candidate.commits !== 62
+    manifest.candidate.commits !== 64
   ) {
     fail("CANDIDATE_ANCHOR_INVALID");
   }
@@ -486,7 +486,7 @@ function validateCandidateGit(manifest) {
   );
   if (ancestry.status !== 0) fail("BASE_NOT_ANCESTOR");
   const commits = Number(git(["rev-list", "--count", BASE + ".." + CANDIDATE]).trim());
-  if (commits !== 62) fail("CANDIDATE_COMMIT_COUNT_INVALID", String(commits));
+  if (commits !== 64) fail("CANDIDATE_COMMIT_COUNT_INVALID", String(commits));
   const entries = parseNameStatus(
     git(
       ["diff", "--name-status", "--no-renames", "-z", BASE + ".." + CANDIDATE],
@@ -558,7 +558,7 @@ async function runCheckWorkingTree() {
   console.log(JSON.stringify({
     gate: "F0_INDEPENDENT_REVIEW_CANDIDATE_INVENTORY",
     status: "PASS",
-    commits: 62,
+    commits: 64,
     files: 314,
     added: 98,
     modified: 216,
@@ -608,7 +608,7 @@ async function runCheckCommitted() {
   console.log(JSON.stringify({
     gate: "F0_INDEPENDENT_REVIEW_CANDIDATE_INVENTORY",
     status: "PASS",
-    commits: 62,
+    commits: 64,
     files: 314,
     added: 98,
     modified: 216,

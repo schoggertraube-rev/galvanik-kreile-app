@@ -3,7 +3,7 @@
 Stand: 2026-08-12
 Paketart: organisatorisch unabhängige, read-only Abnahme
 Kandidatenbasis: `c294c0564dc8a5e137eaa00de1276677cb1a1c53`
-W4-Kandidaten-HEAD: `c02f6ee95645e57d02be2e268e51feeadf2f390c`
+W4-Kandidaten-HEAD: `e3138f9286775bf6e79c0b5b1845ff72a0230b62`
 Paketcommit: aktueller `HEAD`; muss genau einen Parent haben, den W4-Kandidaten
 Lokaler W4-Status des Autors: `F0_W4_REVIEW_READY / PASS_LOCAL`
 Gesamtstatus vor unabhängiger Abnahme: `OPEN`
@@ -36,8 +36,8 @@ Production-Katalogparität bleibt
 | Anker | Erwartung |
 |---|---|
 | Basis | `c294c0564dc8a5e137eaa00de1276677cb1a1c53` |
-| W4-Kandidat | `c02f6ee95645e57d02be2e268e51feeadf2f390c` |
-| Commits Basis→Kandidat | 62 |
+| W4-Kandidat | `e3138f9286775bf6e79c0b5b1845ff72a0230b62` |
+| Commits Basis→Kandidat | 64 |
 | Pfade | 314 |
 | Added / Modified / Deleted | 98 / 216 / 0 |
 | Name-Status-SHA-256 | `075c21a5b733fb45843e814917b4f744b28849b5312e75d3fea8361e0b673a6f` |
@@ -137,6 +137,27 @@ Mock-Erfolgssystem. Belegt sind insbesondere:
 - Scope-Wechsel, Unmount, Single-Flight und Capability-Entzug;
 - signierte Original-URL, TTL, Pfad, Query, Filename und Linkablauf;
 - Read-Port-Exklusivität und negative Checkerfälle.
+
+### 3.6 Zuordnung der neun Claude-Befunde
+
+Die vollständige Ursache-/Datei-/Nachweismatrix steht gepinnt in
+`docs/evidence/f0/F0_CLAUDE_REPAIR_LEDGER.md`. Für die Abnahme gilt:
+
+| Claude-ID | Reparatur bzw. Grenze | Primärnachweis | Autorenstatus |
+|---|---|---|---|
+| `CLAUDE-F0-001` | keine lokale Ersatzhandlung; PR/CI/Preview bleiben genehmigungspflichtig | §8 und Delivery-Gates im Manifest | `BLOCKED_EXTERNAL_PERMISSION` |
+| `CLAUDE-F0-002` | Extraktions-/Confidence-Vertrag im kanonischen Evidence-Read | Migration, `evidenceRead.ts`, reale Integration | `CLOSED_PASS_LOCAL` |
+| `CLAUDE-F0-003` | polymorphe Links und Target-Read für ORDER/ITEM/CUSTOMER/INVOICE | Migration, Target-Action, reale Integration | `CLOSED_PASS_LOCAL` |
+| `CLAUDE-F0-004` | strikt lesender Legacy-Adapter mit unverändertem Vor-/Nach-Snapshot | versionierte View, Port, reale Integration | `CLOSED_PASS_LOCAL` |
+| `CLAUDE-F0-005` | vollständiges Cross-Modul-Read-Port-Inventar | Inventar plus Checker und Selftests | `CLOSED_PASS_LOCAL` |
+| `CLAUDE-F0-006` | positive und negative W4-Vertragsmatrix | fokussierte Tests und reale lokale Integration | `CLOSED_PASS_LOCAL` |
+| `CLAUDE-F0-007` | kanonische lokale Node-/Docker-/CLI-/PG17-Umgebung belegt | P1–P9-Autorenreceipts | `PASS_LOCAL` |
+| `CLAUDE-F0-008` | exakt drei notwendige Pfade wörtlich allowlisted | Mission und Paket-Scopechecker | `CLOSED_PASS_LOCAL` |
+| `CLAUDE-F0-009` | nativer Paketchecker nach Commit ausgeführt | `--selftest` und committed `--check` | `CLOSED_PASS_LOCAL` |
+
+Damit sind acht Befunde lokal geschlossen bzw. lokal belegt; der neunte ist
+die bewusst nicht umgangene externe Liefergrenze. Claude muss alle neun neu
+prüfen und darf den erwarteten externen Blocker nicht als internen PASS zählen.
 
 ## 4. Kriterienmatrix
 
@@ -337,7 +358,7 @@ Jede andere Host-/Port-/DB-/Query-/Service-URL muss der Checker ablehnen.
 ### P8 – Ledger, Schema und Determinismus
 
 ```powershell
-node scripts/check-migration-ledger.mjs --base c02f6ee95645e57d02be2e268e51feeadf2f390c
+node scripts/check-migration-ledger.mjs --base e3138f9286775bf6e79c0b5b1845ff72a0230b62
 node scripts/quality/check-w4-candidate-schema.mjs --selftest
 node scripts/quality/check-w4-cross-module-read-ports.mjs --selftest
 node scripts/quality/check-w4-cross-module-read-ports.mjs --check
@@ -382,11 +403,11 @@ git grep -n -E '^(<<<<<<<|=======|>>>>>>>)'
 
 ```powershell
 git diff --stat c294c0564dc8a5e137eaa00de1276677cb1a1c53..HEAD
-git diff --name-status --no-renames c294c0564dc8a5e137eaa00de1276677cb1a1c53..c02f6ee95645e57d02be2e268e51feeadf2f390c
+git diff --name-status --no-renames c294c0564dc8a5e137eaa00de1276677cb1a1c53..e3138f9286775bf6e79c0b5b1845ff72a0230b62
 git status --short
 ```
 
-Bestätige 62 Commits, 314 Pfade, 98 Added, 216 Modified, 0 Deleted und den
+Bestätige 64 Commits, 314 Pfade, 98 Added, 216 Modified, 0 Deleted und den
 Name-Status-Hash aus §2. Bestätige außerdem, dass der Paketcommit genau die drei
 Modified-Paketpfade enthält.
 
@@ -425,12 +446,12 @@ Prüfe das Galvanik-Kreile-F0-W2C-W4-Paket strikt unabhängig und read-only.
    - docs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_MANIFEST.json
    - scripts/quality/check-f0-independent-review-package.mjs
 2. Verifiziere zuerst, dass HEAD genau einen Parent hat:
-   c02f6ee95645e57d02be2e268e51feeadf2f390c.
+   e3138f9286775bf6e79c0b5b1845ff72a0230b62.
 3. Führe den Paketchecker --selftest und --check aus.
 4. Verifiziere alle 32 Quellhashes und das vollständige Kandidateninventar:
    Basis c294c0564dc8a5e137eaa00de1276677cb1a1c53,
-   Kandidat c02f6ee95645e57d02be2e268e51feeadf2f390c,
-   62 Commits, 314 Pfade, 98A/216M/0D,
+   Kandidat e3138f9286775bf6e79c0b5b1845ff72a0230b62,
+   64 Commits, 314 Pfade, 98A/216M/0D,
    Name-Status-SHA-256
    075c21a5b733fb45843e814917b4f744b28849b5312e75d3fea8361e0b673a6f.
 5. Behandle PASS_LOCAL nur als Autorenbehauptung. Prüfe insbesondere

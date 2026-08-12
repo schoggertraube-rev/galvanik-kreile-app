@@ -5,8 +5,8 @@
   "expected_maximum_current_verdict": "BLOCKED_EXTERNAL_PERMISSION",
   "candidate": {
     "base": "c294c0564dc8a5e137eaa00de1276677cb1a1c53",
-    "head": "c02f6ee95645e57d02be2e268e51feeadf2f390c",
-    "commits": 62
+    "head": "e3138f9286775bf6e79c0b5b1845ff72a0230b62",
+    "commits": 64
   },
   "diff": {
     "files": 314,
@@ -460,8 +460,8 @@
     },
     {
       "path": "docs/evidence/f0/F0_CLAUDE_REPAIR_LEDGER.md",
-      "sha256": "40c0b8fa0dae574beb7d69e0b7b88900aa6c178075c7302e18b2a35090e4d7c6",
-      "bytes": 7519
+      "sha256": "62a81b4e7ffe76cde2b2bc3e35fcec35b7f5ca2fd7fbd9265776bdf23ef91493",
+      "bytes": 7649
     },
     {
       "path": "docs/evidence/f0/W4_CANDIDATE_FINGERPRINT_EVIDENCE.md",
