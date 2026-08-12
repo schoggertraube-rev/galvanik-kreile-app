@@ -1,508 +1,510 @@
-# F0 W2C–W4 Independent Review Packet
+# F0 W2C–W4: unabhängiges Abnahmepaket
 
-## 1. Zweck, Status und harte Grenze
+Stand: 2026-08-12
+Paketart: organisatorisch unabhängige, read-only Abnahme
+Kandidatenbasis: `c294c0564dc8a5e137eaa00de1276677cb1a1c53`
+W4-Kandidaten-HEAD: `c02f6ee95645e57d02be2e268e51feeadf2f390c`
+Paketcommit: aktueller `HEAD`; muss genau einen Parent haben, den W4-Kandidaten
+Lokaler W4-Status des Autors: `F0_W4_REVIEW_READY / PASS_LOCAL`
+Gesamtstatus vor unabhängiger Abnahme: `OPEN`
+Bestmögliches aktuelles Gesamturteil: `BLOCKED_EXTERNAL_PERMISSION`
 
-Dieses Dokument ist das README und der ausführbare Review-Vertrag für eine
-organisatorisch unabhängige, **read-only** Abnahme des F0-Kandidaten. Es ist
-weder ein F0-Abschlussbericht noch das nachgelagerte Claude-Baupaket.
+## 1. Zweck und Stoppgrenze
 
-| Feld | Wert |
+Dieses Paket ist der vollständige Prüfauftrag für Claude. Es enthält die
+Kandidatenanker, das komplette Diff-Inventar, Quellbelege, Kriterien,
+Autoren-Receipts, offene externe Grenzen, den Prüfablauf P1–P12 und das
+verbindliche Ausgabeformat.
+
+Claude prüft unabhängig und read-only. Claude:
+
+- ändert keine Datei und materialisiert keinen Vertrag;
+- führt keine Remote- oder Production-Datenbankaktion aus;
+- erstellt keinen PR, keine Preview und kein Deployment;
+- merged nicht;
+- repariert keinen Befund;
+- stoppt unmittelbar nach dem Urteil.
+
+Ein lokales `PASS_LOCAL` darf nicht als CI-, Preview-, Production- oder
+Gesamt-F0-PASS umgedeutet werden. Ohne bereits vorhandenen Draft-PR und bereits
+vorhandene Preview bleiben diese Gates `NOT_RUN`. Die aktuelle vollständige
+Production-Katalogparität bleibt
+`BLOCKED_EXTERNAL_PERMISSION/BOOTSTRAP_DECISION`.
+
+## 2. Unveränderliche Kandidatenanker
+
+| Anker | Erwartung |
 |---|---|
-| Status des Review-Pakets | `OPEN` |
-| Erwartetes maximal wahrheitsgemäßes Urteil im aktuellen Zustand | `FAIL_INTERNAL` |
-| Kandidatenbasis | `c294c0564dc8a5e137eaa00de1276677cb1a1c53` |
-| W4-Kandidaten-HEAD | `6f802eea10d5abed776dfbf206da5601e5ecce71` |
-| Kandidatendifferenz | 60 Commits; 304 Pfade; 88 Added; 216 Modified; 0 Deleted |
-| Kanonischer Name-Status-SHA-256 | `d4738ce4e46688dd646504df7bcd40011c530a8086589f79ec39f80c35e505c5` |
-| F0-PASS-Claim | verboten |
-| Mergeempfehlung | verboten |
-| `ZIP_READINESS=GREEN` | verboten |
+| Basis | `c294c0564dc8a5e137eaa00de1276677cb1a1c53` |
+| W4-Kandidat | `c02f6ee95645e57d02be2e268e51feeadf2f390c` |
+| Commits Basis→Kandidat | 62 |
+| Pfade | 314 |
+| Added / Modified / Deleted | 98 / 216 / 0 |
+| Name-Status-SHA-256 | `075c21a5b733fb45843e814917b4f744b28849b5312e75d3fea8361e0b673a6f` |
+| Paketpfade | exakt die drei in §2.1 |
+| Paketcommit | genau ein Commit auf dem Kandidaten; genau drei Modified-Pfade |
+| Geschützter Checkout | `feature/capture-auth-tenant@8cf9e6ce2f8640dadd1386d9a149137d783aa1a0`, tracked clean und unangetastet |
 
-`F0_CONTRACT_V1` §10 bindet die Reihenfolge: Erst wird F0 gegen den dann
-aktuellen Stand unabhängig read-only geprüft. Nur nach unabhängig bestätigtem
-F0-GREEN darf der Nutzer separat und wörtlich `Claude-ZIP erstellen`
-autorisieren. Dieses Paket ist ausdrücklich **nicht** dieses ZIP und darf es
-nicht erzeugen.
+Das vollständige geordnete 314-Zeilen-Inventar steht in
+`F0_W2C_W4_INDEPENDENT_REVIEW_MANIFEST.json`. Seine Kodierung ist UTF-8,
+pro Zeile `STATUS<TAB>PATH<LF>`, einschließlich finalem LF, mit
+`--no-renames`.
 
-Die aktuelle Obergrenze `FAIL_INTERNAL` folgt bereits aus fünf ungeklärten
-W4-Vertragsanteilen sowie drei Kandidatenpfaden außerhalb der Missions-Allowlist.
-Fehlende CI-, Build-, Draft-PR-, Preview- und organisatorische Review-Nachweise
-dürfen ebenfalls nicht aus Subwave-Namen, alten Läufen oder Dateiexistenz
-abgeleitet werden.
+### 2.1 Exakte Paketpfade
 
-## 2. Kanonische Paketwahrheit
+1. `docs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_PACKET.md`
+2. `docs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_MANIFEST.json`
+3. `scripts/quality/check-f0-independent-review-package.mjs`
 
-Die maschinenlesbare Wahrheit liegt in
-`docs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_MANIFEST.json`. Sie enthält:
+Alle drei sind im Paketcommit geändert. Keine vierte Datei darf Bestandteil
+dieses Commits sein.
 
-- das vollständige, geordnete 304-Zeilen-Name-Status-Inventar;
-- den Kanon `STATUS<TAB>PATH`, UTF-8, LF nach jeder Zeile einschließlich der
-  letzten Zeile, erzeugt mit `--no-renames`;
-- 22 SHA-256-gepinnte Quellen einschließlich AGENTS, Mission, fünf
-  Projektwahrheiten, F0-Vertrag/Precheck, W2C/W3/W4-Evidenz, W4-Kandidatenvertrag,
-  Workflow, Checker und drei neuen Migrationen;
-- jeden Missionskriteriums-Identifier genau einmal und in Missionsreihenfolge;
-- alle offenen Grenzen, P1–P12-Zustände und Delivery-Gates.
+### 2.2 Missionsscope
 
-Der Paketchecker hat keine externen Abhängigkeiten und keinen Netzwerkpfad:
+Der Kandidat hat keine Löschung, keinen verbotenen Pfad und keine Ausnahme mehr
+außerhalb der Missions-Allowlist. Die zuvor strittigen Pfade sind jetzt eng und
+wörtlich allowlisted:
+
+- `scripts/fetch_and_classify_orders.ts`
+- `scripts/test_order_source.ts`
+- `vitest.config.ts`
+
+Die Mission erlaubt weiterhin keine Production-, Remote-DB-, RLS-, Policy-,
+Grant-, Default-ACL-, Merge-, Deploy- oder Löschaktion.
+
+## 3. Ergebnis des Reparaturatoms
+
+Die fünf durch die erste unabhängige Prüfung belegten W4-Vertragslücken sind
+nicht durch Dokumentation überdeckt, sondern additiv im echten Pfad geschlossen.
+
+### 3.1 W4-02 – Extraktion und Konfidenz
+
+- Neue append-only Metadatenwahrheit
+  `private.evidence_extraction_metadata`.
+- Ehrlicher Zustand `NOT_REQUESTED` für neue Stationsoriginale.
+- Normalisierte bestehende Legacy-Felder aus `public.scan_uploads`.
+- Original-ID, Pfad, MIME, Größe und Hash bleiben unverändert.
+- Ungültige Confidence-, Provider-, Hash-, MIME-, Größen- oder Linkdaten führen
+  fail-closed zu keinem fachlichen Read-Erfolg.
+
+### 3.2 W4-03 – polymorphe Evidence-Links
+
+- Neue append-only Linkwahrheit `private.evidence_domain_links`.
+- Zulässige Zieltypen: `ORDER`, `ORDER_ITEM`, `CUSTOMER`, `INVOICE`.
+- Stationsfinalisierung erzeugt ORDER- und ORDER_ITEM-Links atomar.
+- Der versionierte Server-Port
+  `readEvidenceRecordsByTarget({targetType,targetId})` liest reine
+  CUSTOMER- und reine INVOICE-Evidence ohne künstlichen Order-Link.
+- Unbekannter Typ, ungültige ID, falscher Tenant oder struktureller Linkdrift
+  werden vor einem Erfolg verworfen.
+- Die echte Integration belegt CUSTOMER und INVOICE jeweils positiv sowie
+  falschen Tenant und ungültigen Input negativ.
+
+### 3.3 W4-04 – Legacy Evidence read-only
+
+- `private.v_evidence_records_v1` projiziert verifizierte aktuelle Evidence
+  und vorhandene `public.scan_uploads` in ein kanonisches DTO.
+- Legacy-Pfad ist ausschließlich lesend.
+- Kein Legacy-Status, kein Legacy-Objekt, kein Pfad und keine Metadatenzeile wird
+  adoptiert, überschrieben oder gelöscht.
+- Vor-/Nach-Snapshots bleiben identisch.
+
+### 3.4 W4-08 – versionierte Read-Ports
+
+- Maschinenlesbares Inventar:
+  `docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json`.
+- Dependency-freier Checker:
+  `scripts/quality/check-w4-cross-module-read-ports.mjs`.
+- Drei deklarierte, versionierte W4-Read-Ports.
+- 613 geprüfte Quelldateien.
+- Adversariale Selbsttests blockieren unbekannte Leser, direkte
+  Basistabellen-Bypässe, unversionierte Views, fehlende Konsumenten und
+  Vertragsdrift.
+
+### 3.5 W4-09 – Positiv-/Negativmatrix
+
+Die bestehende reale W4-Integration wurde erweitert; es gibt kein paralleles
+Mock-Erfolgssystem. Belegt sind insbesondere:
+
+- Tenant, Rolle, Capability und Actor;
+- private ACL und null anonyme Schreib-/Listrechte;
+- MIME, Magic Bytes, Größe, SHA-256 und Object-Zeitfenster;
+- append-only Update/Delete/Truncate-Denials;
+- Korrelation, Idempotenz, Lost Response und paralleles Finalize;
+- Grant-Ablauf, Outside-Window, Mismatch und Providerfehler;
+- polymorphe Ziele einschließlich reiner Customer-/Invoice-Reads;
+- Legacy-Read-only und unveränderte Snapshots;
+- Scope-Wechsel, Unmount, Single-Flight und Capability-Entzug;
+- signierte Original-URL, TTL, Pfad, Query, Filename und Linkablauf;
+- Read-Port-Exklusivität und negative Checkerfälle.
+
+## 4. Kriterienmatrix
+
+Die Kandidatenstatus sind Autorenbelege, nicht Claudes Urteil. Claude verifiziert
+sie am Paketcommit.
+
+| Gruppe | IDs | Kandidatenstatus | Primärbeleg |
+|---|---|---|---|
+| T0 | T0-01…T0-04 | PASS_STATIC | Mission, F0 Contract, Precheck |
+| W2C | W2C-01…W2C-09 | PASS_LOCAL | Reenablement Matrix, Edge Reconciliation |
+| W3 | W3-01…W3-08 | PASS_LOCAL | W3 Transition Evidence |
+| W4 Kern | W4-01, W4-05…W4-07, W4-10 | PASS_LOCAL | Event-/Attachment-Evidence |
+| W4 repariert | W4-02, W4-03, W4-04, W4-08, W4-09 | PASS_LOCAL | Evidence-Read-Vertrag, Read-Port-Inventar |
+| G-01 | unabhängige P1–P12-Receipts | NOT_PROVEN | wird erst durch Claude erzeugt |
+| G-02 | lokale/Remote-Grenze | PASS_STATIC | Mission und lokale Receipts |
+| G-03 | Draft-PR | NOT_RUN | keine Freigabe, kein PR |
+| G-04 | Vercel Preview | NOT_RUN | keine Freigabe, keine Preview |
+| G-05 | unabhängiges Urteil | NOT_RUN | Zweck dieses Pakets |
+
+Es gibt im Manifest keine bekannte interne W4-Lücke mehr. Ein während der
+Abnahme gefundener P0/P1 ergibt dennoch `FAIL_INTERNAL`; er darf nicht durch
+den erwarteten Maximalstatus maskiert werden.
+
+## 5. Gepinnte Quellen und maschinenlesbarer Vertrag
+
+Das Manifest pinnt 32 Primärquellen jeweils mit Pfad, Bytezahl und SHA-256,
+darunter:
+
+- Mission und Projektwahrheiten;
+- W2C-, W3- und W4-Evidenz;
+- Reparaturledger;
+- 13er Schema-Vertrag und Checker;
+- W4 Read-Port-Inventar und Checker;
+- vier W3/W4-Migrationen;
+- Evidence-Read-Port, Attachment-Domain, Action, Panel und reale Integration.
+
+Claude muss vor inhaltlichem Vertrauen jeden Source-Hash prüfen. Der
+Paketchecker verwirft fehlende, zusätzliche, umsortierte oder driftende
+Kriterien, Quellen, Diffzeilen, Scopepfade und Paketpfade.
+
+## 6. Autoren-Receipts am finalen W4-Quellstand
+
+| Gate | Ergebnis |
+|---|---|
+| Fokussierte Unit/Action/RTL | 4 Dateien, 103 Tests PASS |
+| Reale lokale W4-Integration | 1 Datei, 14 Tests PASS, 25,82 s |
+| Vollständige Units | 87 Dateien, 551 Tests PASS, 107,32 s |
+| TypeScript | `tsc --noEmit --incremental false` PASS |
+| Vollständiges ESLint | Exit 0; zwei dokumentierte vorbestehende Warnungen |
+| Production Build | PASS; 58 Seiten; ausschließlich lokale redigierte Env |
+| Read-Port-Checker | 613 Dateien, 3 Ports PASS |
+| Read-Port-Selftest | 6 adversariale Fälle PASS |
+| Schema-Checker-Selftest | PASS |
+| Migration Ledger | 13 aktive Migrationen PASS |
+| Baseline9→Candidate13 | exakt 312 ADD; 0 CHANGE; 0 REMOVE |
+| W3 real | 19/19 PASS |
+| W4 real | 14/14 PASS |
+| zweiter Candidate13-Replay | Catalog/Fingerprint/Ledger byteidentisch |
+| geschützter Checkout | unverändert und tracked clean |
+| Remote/Production/Push/PR/Preview | nicht ausgeführt |
+
+### 6.1 Reproduzierbare Datenbank-Receipts
+
+| Artefakt | SHA-256 | Bytes |
+|---|---:|---:|
+| Baseline9-Katalog | `a928c98f1e4470f734ae1e9686c6c98bcf03fc5876ba44e038a20ab14095f84b` | laut Capture |
+| Candidate13-Katalog | `25b91a7408d022ccbe92b7b26f9f50954dd56f5a935a08f1f9ca6eb6dd756908` | 1.093.433 |
+| Candidate13-Fingerprint | `5795e078dae63b17ae616a01aaa4835aca3b3430a777fa9ad80c0131197d1eb1` | 479 |
+| Candidate13-Ledger | `c3bbe08a8b6c631d26704b1f1a2ef347f2dbb9dc98f4fe0df69e71a4d0952c8f` | 1.873 |
+
+Der zweite frische Candidate13-Lauf ist zu diesen drei Candidate-Artefakten
+sowohl SHA-identisch als auch byteidentisch. Der committed Schema-Vertrag ist
+`CAPTURED_LOCAL` und enthält 312/312 Payload-Hashes, beide Kataloghashes und
+22 Komponentenhashes.
+
+### 6.2 Ehrliche Fehlerhistorie
+
+Folgende Stops wurden nicht als Produkt-PASS umgedeutet:
+
+1. Docker-Linux-Pipe fehlte zunächst; nach lokalem Start erreichbar.
+2. Ein psql-Argument-/Footer-Fehler verfälschte die PG17-Ausgabe; der Checker
+   wurde eng korrigiert und danach neu selbstgetestet.
+3. 3.812 versus historisch 3.839 zeigte eine unzulässige Epochenkopplung. Die
+   3.839 bleiben nur historische Hash-Evidence; aktuelle Full-Catalog-Parität
+   bleibt extern/Bootstrap-blockiert.
+4. Ein PowerShell-Parserfehler verhinderte Step 5 vor jeder Mutation. Der
+   vierteilige lokale Fortsetzungslauf bestand später vollständig.
+5. Der erste Build-Aufruf ohne notwendige lokale Env stoppte korrekt. Der
+   finale Build mit lokalen, nicht offengelegten Supabase-/DB-Werten bestand.
+6. Der normale Hook des Implementierungscommits bestand TypeScript und
+   Staged-Lint, traf jedoch bei 550/551 einen 5-s-Timeout in einem unveränderten
+   Render-Test. Derselbe Test bestand unmittelbar danach isoliert 5/5; eine
+   vollständige 551/551-Suite war am finalen Quellstand bereits frisch grün.
+   Der Implementierungscommit wurde danach bewusst ohne erneute Hook-Doppelung
+   erstellt. Claude muss P4 am Paketcommit unabhängig neu ausführen.
+7. Der erste Paketcommit-Hook bestand ebenfalls TypeScript und Staged-Lint,
+   traf bei 550/551 einen 5-s-Timeout in einem anderen unveränderten Render-Test.
+   Auch diese Datei bestand unmittelbar danach isoliert 5/5. Das Paket wird
+   deshalb ohne eine dritte vollständige Hook-Doppelung committed; P4 bleibt
+   ausdrücklich Claudes unabhängiges Pflichtgate.
+
+## 7. Verbindlicher unabhängiger Ablauf P1–P12
+
+Für jedes Gate protokolliert Claude:
 
 ```text
+P<n>_STATUS=PASS|FAIL|NOT_RUN|BLOCKED
+P<n>_COMMAND=<wortwörtlicher Befehl>
+P<n>_EXIT=<Exitcode oder NOT_RUN>
+P<n>_ENV=<OS, Node, npm, Docker, Supabase CLI, PostgreSQL soweit relevant>
+P<n>_COMMIT=<Paketcommit>
+P<n>_RECEIPT=<knapper objektiver Beleg>
+```
+
+Ein fehlendes Werkzeug ist `NOT_RUN/BLOCKED`, niemals ein erfundener PASS.
+
+### P1 – Umgebung und Abhängigkeiten
+
+```powershell
+git status --short
+git rev-parse HEAD
+git rev-list --parents -n 1 HEAD
+node --version
+npm --version
+npm ci
+```
+
+Prüfe zuerst den Paketchecker:
+
+```powershell
 node scripts/quality/check-f0-independent-review-package.mjs --selftest
 node scripts/quality/check-f0-independent-review-package.mjs --check
 ```
 
-`--check` ist erst auf dem sauberen Paketcommit gültig. Es fordert genau einen
-Commit mit erstem und einzigem Parent
-`6f802eea10d5abed776dfbf206da5601e5ecce71`, genau drei hinzugefügte
-Paketpfade und keine weitere Arbeitsbaumänderung. Vor dem Commit prüft der
-Autor ausschließlich:
-
-```text
-node scripts/quality/check-f0-independent-review-package.mjs --check-working-tree
-```
-
-Die strukturellen `PASS`-Zeilen des Checkers sind nur Paket-, Quellen- und
-Inventarprüfungen. Sie sind niemals ein F0-PASS.
-
-### 2.1 Sichtbare Scope-Abweichungen
-
-Das exakte Kandidateninventar enthält keine Löschung und keinen Pfad, der auf
-Secretmaterial, `node_modules`, ein fremdes Repository oder einen absoluten
-Pfad trifft. Drei geänderte Pfade liegen dennoch außerhalb der wörtlichen
-`allowed_paths` der Mission:
-
-1. `scripts/fetch_and_classify_orders.ts`
-2. `scripts/test_order_source.ts`
-3. `vitest.config.ts`
-
-Der Checker verlangt exakt diese Offenlegung. Sie bleibt ein interner
-Review-Gegenstand und darf nicht stillschweigend als erlaubt umgedeutet werden.
-
-## 3. Bekannte, nicht bewiesene Vertragsanteile
-
-Die folgenden Kriterien bleiben unabhängig von den Bezeichnungen W4-01,
-W4-02 oder W4-03 `NOT_PROVEN`:
-
-| Kriterium | Nicht bewiesen | Erforderliche unabhängige Prüfung |
-|---|---|---|
-| `W4-02` | Extraktion und Konfidenz als nachvollziehbare Metadaten | Existenz, Originalerhalt, Provenienz und negative Fälle Ende-zu-Ende belegen |
-| `W4-03` | wirklich polymorpher Evidence-Link | Mehr als den stationsspezifischen Order-/Item-Graphen nachweisen |
-| `W4-04` | Legacy-Evidence-Read-Adapter | Lesende Kompatibilität ohne Legacy-/Objektmutation belegen |
-| `W4-08` | globale Exklusivität versionierter `v_*` Cross-Modul-Read-Ports | alle Cross-Modul-Leser inventarisieren, nicht nur den belegten Kern |
-| `W4-09` | vollständige Negativmatrix zu den offenen Anteilen | private Evidence, Legacy-Adapter, Append-only, Korrelation, Idempotenz und alle Ports abdecken |
-
-`W4-10` ist nur für den realen, lokal belegten
-Galvanik-Handoff-Kernweg als `PASS_LOCAL` vorgemerkt. Das beweist weder die
-offenen W4-Anteile noch Production-RLS oder den vollständigen F0-Vertrag.
-
-## 4. Kriterienmatrix für die unabhängige Abnahme
-
-Jeder Status ist ein Kandidatenstatus, kein übernommenes Reviewerurteil.
-Der Reviewer muss zu jeder Zeile einen eigenen Befund abgeben.
-
-| ID | Kandidatenstatus | Gepinnte Primärevidenz | Explizite Revieweraufgabe |
-|---|---|---|---|
-| T0-01 | `PASS_STATIC` | `F0_PRECHECK.md` | Genau eine aktuelle T0-Wahrheit mit Ankern, Risiken, Gates und Schluss prüfen. |
-| T0-02 | `PASS_STATIC` | `F0_PRECHECK.md` | Tenant-, Ledger-, RLS/Default-ACL-, Evidence-, Event- und aktive Pfadrisiken neu bewerten. |
-| T0-03 | `PASS_STATIC` | `F0_PRECHECK.md` | Null-Side-Effect-Denials für alle benannten externen Grenzen verifizieren. |
-| T0-04 | `PASS_STATIC` | `F0_PRECHECK.md` | Lokale W2C–W4-Belege strikt von F0-/Remote-/Legacy-Gates trennen. |
-| W2C-01 | `PASS_LOCAL` | `W2C_REENABLEMENT_MATRIX.md` | Browser-Upload/Public-URL-Denials positiv und negativ reproduzieren. |
-| W2C-02 | `PASS_LOCAL` | `W2C_REENABLEMENT_MATRIX.md` | ID-only-Operationen ohne Serverautorisierung side-effect-frei ablehnen. |
-| W2C-03 | `PASS_LOCAL` | `W2C_REENABLEMENT_MATRIX.md` | Keinen zweiten aktiven Stationswriter außerhalb des Commands zulassen. |
-| W2C-04 | `PASS_LOCAL` | `W2C_EDGE_LIVE_RECONCILIATION.md` | Unsichere Extraction-/Provider-Pfade ohne Provideraufruf ablehnen. |
-| W2C-05 | `PASS_LOCAL` | `W2C_REENABLEMENT_MATRIX.md` | Today/Cron ohne kanonische Quelle als unverfügbar statt synthetisch prüfen. |
-| W2C-06 | `PASS_LOCAL` | `W2C_REENABLEMENT_MATRIX.md` | Nichtatomare, nicht wiederholbare Side-Effects fail-closed halten. |
-| W2C-07 | `PASS_LOCAL` | `W2C_REENABLEMENT_MATRIX.md` | Für jeden Denial null Write, Upload, Event und externen Effekt belegen. |
-| W2C-08 | `PASS_LOCAL` | `W2C_REENABLEMENT_MATRIX.md` | Vollständige current-head Negativmatrix aller geschlossenen aktiven Pfade ausführen. |
-| W2C-09 | `PASS_LOCAL` | `W2C_REENABLEMENT_MATRIX.md` | Einzelregistrierung und sämtliche Service-Worker-Cache-/Netzdenials prüfen. |
-| W3-01 | `PASS_LOCAL` | `W3_ORDER_STATION_TRANSITION_EVIDENCE.md` | Am exakten 11er-Cutoff genau einen Server-Command nachweisen. |
-| W3-02 | `PASS_LOCAL` | `W3_ORDER_STATION_TRANSITION_EVIDENCE.md` | Actor/Tenant ausschließlich aus Serversession ableiten. |
-| W3-03 | `PASS_LOCAL` | `W3_ORDER_STATION_TRANSITION_EVIDENCE.md` | Capability-Denial vor jeder Mutation reproduzieren. |
-| W3-04 | `PASS_LOCAL` | `W3_ORDER_STATION_TRANSITION_EVIDENCE.md` | Ownership-Denial ohne Side-Effect reproduzieren. |
-| W3-05 | `PASS_LOCAL` | `W3_ORDER_STATION_TRANSITION_EVIDENCE.md` | Versionskonflikt und explizites Konfliktergebnis prüfen. |
-| W3-06 | `PASS_LOCAL` | `W3_ORDER_STATION_TRANSITION_EVIDENCE.md` | Diskriminierte Result-Union ausüben und typseitig prüfen. |
-| W3-07 | `PASS_LOCAL` | `W3_ORDER_STATION_TRANSITION_EVIDENCE.md` | Server-only Provider und secretfreien Clientpayload belegen. |
-| W3-08 | `PASS_LOCAL` | `W3_ORDER_STATION_TRANSITION_EVIDENCE.md` | Tenant/Capability/Ownership/Version negativ und side-effect-frei prüfen. |
-| W4-01 | `PASS_LOCAL` | `W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md` | Stabile private Identität plus Pfad/MIME/Größe/Hash/Provenienz reproduzieren. |
-| W4-02 | `NOT_PROVEN` | Mission | Extraktion/Konfidenz samt Originalerhalt und Negativfällen belegen oder nicht bestanden melden. |
-| W4-03 | `NOT_PROVEN` | Mission | Wirklich polymorphen Evidence-Link belegen oder nicht bestanden melden. |
-| W4-04 | `NOT_PROVEN` | Mission | Legacy-Evidence-Read-Adapter ohne Mutation belegen oder nicht bestanden melden. |
-| W4-05 | `PASS_LOCAL` | `W4_ORDER_STATION_EVENT_READMODEL_EVIDENCE.md` | Append-only UPDATE/DELETE/TRUNCATE-Denials mit Snapshots reproduzieren. |
-| W4-06 | `PASS_LOCAL` | `W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md` | Korrelation und idempotenten Replay für den belegten Kern reproduzieren. |
-| W4-07 | `PASS_LOCAL` | `W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md` | Server-Tenant über Evidence/Fakten/Ereignisse konsistent prüfen. |
-| W4-08 | `NOT_PROVEN` | `W4_OPERATIONAL_ORDER_READ_EVIDENCE.md` | Globales Cross-Modul-Read-Inventar und exklusive versionierte Views beweisen. |
-| W4-09 | `NOT_PROVEN` | Mission | Vollständige Negativmatrix einschließlich aller offenen W4-Anteile ausführen. |
-| W4-10 | `PASS_LOCAL` | `W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md` | Kernweg mit Reload-Readback ohne Entwicklerzustand reproduzieren und danach stoppen. |
-| G-01 | `NOT_PROVEN` | `quality.yml` | P1–P12 je mit exaktem Befehl, Exitcode, Umgebung und Paketcommit ausführen. |
-| G-02 | `PASS_STATIC` | Mission | Nur lokale DB-Arbeit und null Remote/RLS/ACL-Mutation bestätigen. |
-| G-03 | `NOT_RUN` | Mission | Bestehenden Draft-PR des Paketcommits prüfen; während des Reviews keinen erstellen oder mergen. |
-| G-04 | `NOT_RUN` | Mission | Bestehende Vercel Preview des exakten PR-Heads prüfen; Production nicht promoten. |
-| G-05 | `NOT_RUN` | Mission | Eigenes organisatorisch unabhängiges Urteil vor jeder Mergeempfehlung liefern. |
-
-Die vollständigen Evidence-Pfade und ungekürzten Revieweraufgaben stehen im
-Manifest. Kein `PASS_LOCAL` darf ohne frischen Lauf auf dem Paketcommit zum
-Abschluss-PASS werden.
-
-## 5. Review-Preconditions
-
-Vor P1 ist fail-closed zu prüfen:
-
-1. Repository und Produkt sind Galvanik-Kreile WerkstattCockpit; keine fremden
-   Mandanten oder Worktrees werden einbezogen.
-2. Arbeitsbaum ist sauber und `HEAD` ist genau der noch zu benennende
-   Paketcommit.
-3. `HEAD` hat genau einen Parent, den W4-Kandidaten
-   `6f802eea10d5abed776dfbf206da5601e5ecce71`.
-4. Der Paketcommit fügt genau die drei Manifestpfade hinzu.
-5. Paketchecker `--selftest` und `--check` enden mit Exitcode 0.
-6. Ein bereits installiertes Supabase-CLI-Binary meldet exakt `2.111.0`.
-   Während der Abnahme wird kein CLI-Paket nachgeladen.
-7. Docker/Linux-Engine und genau ein lokaler Supabase-Stack sind verfügbar.
-8. Jede DB-Verbindung ist exakt
-   `postgresql://postgres:postgres@127.0.0.1:54322/postgres`; der Checker
-   verweigert Remotehost, URI-Override, andere Credentials, Port oder DB.
-9. PostgreSQL meldet Major 17. Die lokale `postgres`-Rolle hat
-   `rolbypassrls`; lokale Katalog-/Prädikatbelege sind keine Production-RLS-
-   oder Least-Privilege-Beweise.
-10. Captures liegen in einem neu erstellten Tempordner außerhalb des Repos.
-    Ihr Inhalt, Runtime-Keys und Tokens erscheinen nicht im Bericht.
-11. Es gibt keine Freigabe für Remote-/Production-Abfragen oder -Mutationen,
-    Migrationen, RLS/Policy/Grant/Default-ACL-/Bucket-Änderungen, Merge,
-    Deployment oder Promotion.
-
-Scheitert eine Precondition, lautet das Urteil entsprechend
-`FAIL_INTERNAL`, `BLOCKED_EXTERNAL_PERMISSION` oder
-`BLOCKED_PRODUCT_DECISION`. Es werden keine Reparaturen vorgenommen.
-
-## 6. P1–P12: kanonischer Prüfablauf
-
-Für jedes P-Gate muss der Reviewer exakt festhalten:
-
-```text
-P<n>_STATUS=PASS|FAIL|NOT_RUN|BLOCKED
-P<n>_COMMAND=<literal ausgeführter Befehl oder NOT_RUN>
-P<n>_EXIT_CODE=<integer oder NOT_RUN>
-P<n>_ENVIRONMENT=<OS; Node; lokale Dienste; redigierte Variablennamen, keine Werte>
-P<n>_COMMIT=<40-char Paketcommit>
-P<n>_RECEIPT=<kurzer echter Output oder Artefakt-SHA; keine Behauptung>
-```
-
-### P1 – Abhängigkeiten
-
-```text
-npm ci
-```
-
 ### P2 – TypeScript
 
-```text
+```powershell
 npx tsc --noEmit --incremental false
 ```
 
-### P3 – vollständiges ESLint
+### P3 – vollständiges Lint
 
-```text
+```powershell
 npm run lint:full
 ```
 
-### P4 – kanonische Units
+Warnungen getrennt von Fehlern berichten; keine Warnung als Fehler erfinden.
 
-```text
+### P4 – vollständige Unit-Suite
+
+```powershell
 npm run test:unit
 ```
 
-### P5 – relevante echte Integrationen
+Erwartung des Autorenlaufs: 87 Dateien, 551 Tests. Claude übernimmt diese Zahl
+nicht, sondern protokolliert die eigene.
 
-P5 ist erst PASS, wenn der unter §7 beschriebene lokale Ablauf am exakten
-11er-W3- und 12er-W4-Cutoff erfolgreich ist. Erwartete frühere Receipts sind
-W3 `19/19` und W4-03 `12/12`; der Reviewer muss sie frisch reproduzieren.
+### P5 – fokussierter W4-Pfad und reale Integration
 
-### P6 – Build
-
-```text
-npm run build
+```powershell
+npx vitest run src/lib/server/__tests__/orderStationAttachment.test.ts src/lib/server/__tests__/evidenceRead.test.ts src/app/warendurchlauf/__tests__/w4OrderStationAttachmentActions.test.ts src/app/warendurchlauf/galvanik/__tests__/w4OrderStationAttachmentPanel.test.tsx
 ```
 
-Der Build läuft mit der lokalen, redigierten Supabase-/DB-Umgebung wie im
-`fresh-supabase-replay`-Job von `.github/workflows/quality.yml`. Ein alter
-Build oder ein Build auf einem anderen Commit ist `NOT_RUN`.
+Danach ausschließlich gegen den lokalen Loopback-Stack den Integrationstest
+ausführen:
 
-### P7 – frischer Replay
-
-P7 führt die frischen lokalen Reset-/Capture-Sequenzen aus §7 seriell aus:
-9er-Production-Cutoff, 12er-Kandidat, 11er-W3-Cutoff, 12er-W4 und zweiter
-frischer 12er-Kandidat. Seed wird nie verwendet.
-
-### P8 – Ledger, Schema, Grants, RLS und Storage
-
-P8 übernimmt unverändert die Gates des Workflows:
-
-```text
-node scripts/check-migration-ledger.mjs --base <review-diff-base>
-node scripts/quality/check-w4-candidate-schema.mjs --selftest
-node scripts/quality/fingerprint-compare.mjs <baseline-fingerprint-pipe> docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt
-node scripts/quality/check-w4-candidate-schema.mjs --check <capture-arguments>
-psql <loopback-only-options> -v ON_ERROR_STOP=1 -f scripts/quality/f0_negative_tests.sql
-node scripts/quality/check-tenant-coverage.mjs
-node scripts/quality/f0-storage-http-tests.mjs
-```
-
-`<baseline-fingerprint-pipe>` und `<capture-arguments>` werden ausschließlich
-aus den lokalen Temp-Captures gebildet. Es erfolgt **kein**
-`--materialize-contract`, kein `--contract`-Override und keine Änderung des
-committeten W4-Vertrags.
-
-### P9 – positive und negative Evidenz
-
-P9 verlangt positive und negative Fälle zu Auth, Rolle, Capability, Tenant,
-Ownership, Version, Storage, append-only, Korrelation, Idempotenz und
-Read-Ports. Dazu gehören die unveränderten W3-/W4-Integrationen,
-`f0_negative_tests.sql`, Tenant-Coverage, echte lokale Storage-HTTP-Matrix,
-`src/test/scan_order.integration.test.ts` sowie die Kriterien-spezifischen
-Negativfälle. Die offenen `W4-02/03/04/08/09` dürfen nicht durch bestehende
-Kernwegtests ersetzt werden.
-
-### P10 – Preview und Browser-Smokes
-
-P10 prüft read-only einen **bereits vorhandenen** Draft-PR und eine bereits
-vorhandene Vercel Preview:
-
-1. PR-Head ist bytegenau der Paketcommit.
-2. Preview-Deployment ist bytegenau diesem PR-Head zugeordnet.
-3. Production wurde nicht deployt oder promotet.
-4. Relevante Browser-Smokes laufen gegen die Preview; der lokale
-   Workflow-Basissmoke `npm run test:e2e` wird separat protokolliert.
-
-Fehlen PR oder Preview, bleibt P10 `NOT_RUN`. Der unabhängige Reviewer erstellt
-oder mutiert sie nicht.
-
-### P11 – Whitespace/Merge-Marker
-
-```text
-git diff --check c294c0564dc8a5e137eaa00de1276677cb1a1c53..<package-commit>
-```
-
-### P12 – Diff und sauberer Status
-
-```text
-git diff --stat c294c0564dc8a5e137eaa00de1276677cb1a1c53..<package-commit>
-git status --short
-```
-
-## 7. Serielle lokale Supabase-Abnahme
-
-Alle Schritte laufen gegen genau einen lokalen Stack und einen DB-Worker.
-Supabase CLI muss als bereits installiertes Binary exakt `2.111.0` melden.
-Runtime-Credentials werden lokal mit `supabase status -o env` in eine
-temporäre Datei außerhalb des Repos geschrieben, ohne Ausgabe der Werte, und
-nur für echte lokale Storage/API-Aufrufe in den Prozess geladen.
-
-### 7.1 Production-Cutoff 9
-
-1. `db reset --local --no-seed --version 20260810100000`.
-2. Checker `--capture` für Baseline-Katalog, Baseline-Fingerprint und
-   Baseline-Ledger in den Tempordner.
-3. PostgreSQL-17-Guard, exakt neun geordnete Migrationen und
-   unveränderter harter Production-Fingerprint-Comparator.
-
-Erwartete Receipts:
-
-| Receipt | Erwartet |
-|---|---|
-| Baseline-Katalog SHA-256 | `a928c98f1e4470f734ae1e9686c6c98bcf03fc5876ba44e038a20ab14095f84b` |
-| Hard-Fingerprint | `FINGERPRINT_HARD_FAILS=0`; 7 exakte harte Komponenten |
-
-Die historische 3.839-Objekt-Inventur ist nur hashgepinnte Evidenz vom
-2026-08-06. Sie ist kein aktuelles Replay- oder Production-Paritätsgate.
-Current Full Catalog bleibt
-`BLOCKED_EXTERNAL_PERMISSION/BOOTSTRAP_DECISION`.
-
-### 7.2 Erster vollständiger Kandidat 12
-
-1. `db reset --local --no-seed`.
-2. Checker `--capture` für Kandidatkatalog, Fingerprint und Ledger.
-3. Striktes `--check` gegen Baseline und den unveränderten committeten Vertrag.
-4. Checker-`--selftest`.
-
-Erwartete Receipts:
-
-| Receipt | Erwartet |
-|---|---|
-| Kandidatkatalog | SHA-256 `cd1c432c9d56874e60298cfcbf87deba3829e15ac8f8885d77a85426bd6cb7fa`; 1.044.578 Bytes |
-| Kandidat-Fingerprint-Datei | SHA-256 `b000f8fcbe7d584a616eb6f4c90370a8024c8b11828aa1e48815804d1f20d392`; 479 Bytes |
-| Kandidat-Ledger-Datei | SHA-256 `f2db2df9f3cd2882e611c505f5ada4af88a3d608c61a864f9589320b54dc93f0`; 1.733 Bytes |
-| W4-Vertrag | SHA-256 `5d0643ce0b7e77efa733302f22f69fcfd59f10cf368e2bba4f5cdcd14433dbee`, vor und nach Review identisch |
-| Strikter Delta-Check | exakt 182 ADD; 0 CHANGE; 0 REMOVE |
-
-Die 182 ADD sind exakt 5 Relationen, 87 Spalten, 29 Constraints, 9 Indizes,
-3 Views, 9 Trigger und 40 effektive PostgreSQL-17-Owner-Grants. Jede
-Abweichung ist FAIL; die Captures dürfen den Vertrag nicht neu materialisieren.
-
-### 7.3 W3-Cutoff 11
-
-1. `db reset --local --no-seed --version 20260811154732`.
-2. Mit ausschließlich der Loopback-DB-URL und leerem
-   `SUPABASE_SERVICE_ROLE_KEY`:
-
-```text
-npx vitest run src/test/w3_order_station.integration.test.ts
-```
-
-Erwartet: `19/19`.
-
-### 7.4 W4-Cutoff 12 mit echter lokaler Storage/API
-
-1. `db reset --local --no-seed`.
-2. Lokal geladene, nicht ausgegebene Runtime-Credentials verwenden.
-3. Mit der exakten Loopback-DB-URL:
-
-```text
+```powershell
 npx vitest run src/test/w4_order_station_attachment.integration.test.ts
 ```
 
-Erwartet: `12/12`. Der Lauf muss echte lokale DB, View, Actions, Panel und
-Storage HTTP benutzen; nur `readAppSession` ist gemäß gepinnter Evidence
-gemockt.
+Die benötigten lokalen URL-/Key-/DB-Werte sind aus der gepinnten lokalen CLI zu
+beziehen, nie aus Production und nie im Bericht offenzulegen.
 
-### 7.5 Zweiter frischer Kandidat 12
+### P6 – Production Build
 
-1. Nochmals `db reset --local --no-seed`.
-2. Zweite Kandidat-Captures in neue Tempdateien.
-3. Für Katalog, Fingerprint und Ledger jeweils SHA-256 **und** echte
-   Bytegleichheit zum ersten Lauf prüfen.
-4. Striktes `--check` gegen Baseline, Capture 2 und den unveränderten
-   committeten Vertrag.
-
-Erwartet: dieselben drei Hashes und Größen wie §7.2, byteidentisch, erneut
-182 ADD. Jede Nichtdeterministik ist FAIL und darf nicht repariert werden.
-
-## 8. Positive/negative Evidenz und externe Grenzen
-
-Der Reviewer protokolliert für jeden Test:
-
-- exakten Befehl, Start/Ende, Exitcode, Paketcommit und relevante Versionen;
-- positive Erfolgsevidenz und getrennte negative Null-Side-Effect-Evidenz;
-- vor/nach-Snapshots oder Zählwerte, wo Mutation ausgeschlossen werden muss;
-- Artefakt-SHA statt Capture-Inhalt;
-- redigierte Namen vorhandener Umgebungsvariablen, niemals Werte.
-
-Verboten sind:
-
-- Remote-/Production-Supabase-Aufrufe oder -Abfragen;
-- Remote-Migration, RLS-, Policy-, Grant-, Default-ACL- oder Bucketmutation;
-- Legacy-Daten-/Objektmutation;
-- Contract-Materialisierung, Referenzumschreibung oder Bootstrap;
-- Datei-/Datenlöschung außerhalb der ausdrücklich disponiblen lokalen
-  Reset-Datenbank;
-- Commit, Push, PR-Mutation, Merge, Deployment oder Promotion;
-- Fixes nach einem Fehler.
-
-Der Review endet unmittelbar nach dem Urteil. Ein Fehler wird mit Ursache und
-Beleg gemeldet, nicht behoben.
-
-## 9. Exakter Claude-Prompt
-
-Der folgende Prompt wird unverändert zusammen mit dem sauberen Paketcommit
-übergeben:
-
-```text
-Du bist die organisatorisch unabhängige read-only F0-Endprüferin für das
-Galvanik-Kreile WerkstattCockpit. Prüfe ausschließlich den sauberen
-Paketcommit, dessen einziger Parent
-6f802eea10d5abed776dfbf206da5601e5ecce71 ist.
-
-1. Lies AGENTS.md, die Mission F0_FOUNDATION_CONVERGENCE_W2C_W4_001.yml,
-   F0_CONTRACT_V1.md vollständig und danach dieses Review-Paket samt JSON.
-2. Führe zuerst
-   node scripts/quality/check-f0-independent-review-package.mjs --selftest
-   und
-   node scripts/quality/check-f0-independent-review-package.mjs --check
-   aus. Stoppe bei Nonzero ohne Fix.
-3. Verifiziere jeden gepinnten Quellhash, Basis/Ancestry, 60 Commits,
-   304=88A/216M/0D, den SHA d4738ce4e46688dd646504df7bcd40011c530a8086589f79ec39f80c35e505c5
-   und die drei offengelegten Pfade außerhalb der Missions-Allowlist.
-4. Prüfe jeden Missionskriteriums-Identifier genau einmal. Übernimm keinen
-   PASS aus den Namen W4-01/W4-02/W4-03 oder aus alten Berichten.
-5. Behandle W4-02, W4-03, W4-04, W4-08 und W4-09 als NOT_PROVEN, solange du
-   die im Paket genannten vollständigen Beweise nicht frisch reproduziert
-   hast. Keine Reparaturen und keine Produktänderungen.
-6. Führe P1-P12 in der festgelegten Reihenfolge aus und protokolliere je Gate
-   exakten Befehl, Exitcode, Umgebung und Paketcommit. Nutze genau einen
-   lokalen Supabase-Stack, CLI 2.111.0, Loopback-DB und PostgreSQL 17.
-7. Führe die 9/12/11/12/12-Resetfolge, W3 19/19, W4 12/12, beide
-   Kandidatencaptures und den strikten Check aus. Materialisiere oder ändere
-   den committeten Contract niemals. Gib keine Runtime-Secrets oder
-   Capture-Inhalte aus.
-8. Führe keinerlei Remote-/Production-Aktion, RLS/ACL-Mutation, Legacy-
-   Mutation, Commit, Push, PR-Mutation, Merge, Deployment oder Promotion aus.
-9. Prüfe bestehende PR-/Preview-/CI-Belege nur read-only. Fehlen sie, bleiben
-   G-03, G-04 beziehungsweise das betreffende Gate NOT_RUN.
-10. Liefere das Rückgabeformat aus F0_CONTRACT_V1 §9, danach die vollständige
-    Kriterienmatrix, P1-P12-Receipts und REVIEW_HANDOFF aus diesem Paket.
-    ZIP_READINESS bleibt RED, solange nicht jede Vertragsbedingung erfüllt
-    ist. Behaupte kein F0-PASS und keine Mergeempfehlung bei irgendeinem
-    offenen, fehlgeschlagenen, blockierten oder nicht ausgeführten Gate.
-11. Stoppe nach dem Urteil. Keine Fixes. Dies ist nicht das Claude-ZIP.
-    Ein solches ZIP darf erst nach unabhängig bestätigtem F0-GREEN und einer
-    separaten wörtlichen Nutzerfreigabe "Claude-ZIP erstellen" entstehen.
+```powershell
+npm run build
 ```
 
-## 10. Verbindlicher Reviewer-Output
+Nur lokale, redigierte Env verwenden. Fehlende Env ergibt keinen Code-Fail,
+sondern einen ehrlichen Umgebungsstop; ein PASS erfordert jedoch einen
+erfolgreichen finalen Build.
 
-Zuerst ist der Block aus `F0_CONTRACT_V1` §9 vollständig auszugeben:
+### P7 – frische lokale Replay-Kette
 
-```text
-MISSION=KREILE_F0_FOUNDATION_TRUTH_AND_ZIP_READINESS
-FINAL_STATUS=PASS|FAIL_INTERNAL|BLOCKED_EXTERNAL_PERMISSION|BLOCKED_PRODUCT_DECISION
-START_MAIN_HEAD=<40-char-sha>
-FINAL_MAIN_HEAD=<40-char-sha-or-NOT_MERGED>
-CANDIDATE_HEAD=<40-char-package-commit>
-DRAFT_PR=<url-or-NONE>
-PRODUCTION_DEPLOYMENT_HEAD=<40-char-sha-or-NOT_PROVEN>
-PRODUCTION_LEDGER_COUNT=<integer>
-PRODUCTION_LEDGER_DIGEST=<digest-or-NOT_PROVEN>
-FRESH_REPLAY_RUNS=<integer>
-FRESH_REPLAY_DIGEST=<digest-or-NOT_PROVEN>
-SCHEMA_SECURITY_DIGEST=<digest-or-NOT_PROVEN>
-OPEN_FOUNDATION_PRS=<integer>
-UNRESOLVED_PARALLEL_WORK=<integer>
-F0_A01_TO_A15=<PASS-or-list-of-nonpass-ids>
-REMOTE_MUTATIONS=<exact-list-or-NONE>
-OPEN_BLOCKERS=<integer>
-NEXT_REQUIRED_PERMISSION=<exact-action-or-NONE>
-ZIP_READINESS=RED
+Seriell und ohne Seed:
+
+1. Reset bis `20260810100000`; Production-Hard-Fingerprint prüfen.
+2. Voller Reset bis alle 13 Migrationen; Candidate-Capture.
+3. Reset bis `20260811154732`; W3 19/19.
+4. Voller 13er-Reset; W4 14/14.
+5. Noch ein voller 13er-Reset; zweiter Capture.
+
+Erlaubt ist ausschließlich
+`postgresql://postgres:postgres@127.0.0.1:54322/postgres` unter PG17.
+Jede andere Host-/Port-/DB-/Query-/Service-URL muss der Checker ablehnen.
+
+### P8 – Ledger, Schema und Determinismus
+
+```powershell
+node scripts/check-migration-ledger.mjs --base c02f6ee95645e57d02be2e268e51feeadf2f390c
+node scripts/quality/check-w4-candidate-schema.mjs --selftest
+node scripts/quality/check-w4-cross-module-read-ports.mjs --selftest
+node scripts/quality/check-w4-cross-module-read-ports.mjs --check
 ```
 
-Danach folgen:
+Den strikten Schema-`--check` mit Baseline-Capture, zweitem Candidate-Capture
+und dem committed Vertrag ausführen, ohne `--contract`-Override und ohne
+Materialisierung. Erwartung: exakt 312 ADD und null CHANGE/REMOVE. Die beiden
+Candidate-Capture-Sätze müssen zusätzlich für Catalog, Fingerprint und Ledger
+SHA- und byteidentisch sein.
 
-1. `CRITERION_MATRIX`: alle 36 IDs in Manifestreihenfolge mit
-   `PASS|FAIL|NOT_PROVEN|NOT_RUN|BLOCKED`, kurzem Beleg und Reviewerbegründung.
-2. `P1_P12_RECEIPTS`: alle zwölf Gates mit dem in §6 definierten
-   Befehl-/Exit-/Umgebung-/Commit-/Receipt-Schema.
-3. Liste jeder übersprungenen oder fehlgeschlagenen Prüfung.
-4. Liste aller Remote-Mutationen ohne Secrets; im freigegebenen Ablauf
-   zwingend `NONE`.
-5. Bestehender Draft-PR-Link und exakter Preview-Link oder jeweils `NONE`.
-6. Unabhängiges Urteil mit offenen internen und externen Blockern.
-7. Abschließend exakt:
+### P9 – Sicherheits- und Wahrheitsmatrix
 
-```text
-REVIEW_HANDOFF
-PACKAGE_COMMIT=<40-char-sha>
-PACKAGE_CHECK=PASS|FAIL
-CANDIDATE_NAME_STATUS_SHA256=d4738ce4e46688dd646504df7bcd40011c530a8086589f79ec39f80c35e505c5
-CRITERIA_PASS=<comma-list-or-NONE>
-CRITERIA_NONPASS=<comma-list-or-NONE>
-P_GATES_PASS=<comma-list-or-NONE>
-P_GATES_NONPASS=<comma-list-or-NONE>
-SCOPE_EXCEPTIONS=scripts/fetch_and_classify_orders.ts,scripts/test_order_source.ts,vitest.config.ts
-REMOTE_MUTATIONS=NONE
-MERGE_RECOMMENDATION=NO
-ZIP_READINESS=RED
-STOP_NO_FIXES=YES
+Prüfe mindestens:
+
+- Auth/Capability/Tenant/Actor;
+- Owner- versus Team-Originalvertrag;
+- private ACL, unsigned write/list deny;
+- immutable Rows und unveränderte Snapshots;
+- Extraction/Confidence-Grenzen;
+- ORDER/ORDER_ITEM/CUSTOMER/INVOICE-Ziele;
+- reine Customer-/Invoice-Legacy-Reads;
+- Legacy null write/delete/adopt;
+- Storage Token/Path/Overwrite/TTL;
+- paralleles Finalize und Idempotenz;
+- alle Read-Port-Selftests.
+
+### P10 – PR, Preview und Browser
+
+Nur einen bereits vorhandenen Draft-PR und eine bereits vorhandene Vercel
+Preview des exakten Paketcommits lesen. Falls sie fehlen: `NOT_RUN`. Nichts
+erstellen, pushen, deployen oder promoten.
+
+### P11 – Whitespace und Merge-Marker
+
+```powershell
+git diff --check c294c0564dc8a5e137eaa00de1276677cb1a1c53..HEAD
+git grep -n -E '^(<<<<<<<|=======|>>>>>>>)'
 ```
 
-Im aktuellen Paketstand ist `FINAL_STATUS=PASS`,
-`MERGE_RECOMMENDATION=YES` oder `ZIP_READINESS=GREEN` kein zulässiger
-vorweggenommener Ausgang. Die unabhängige Prüfung meldet die echte
-`FAIL_INTERNAL`-/Blocker-Wahrheit und stoppt.
+### P12 – Diff, Scope und sauberer Zustand
+
+```powershell
+git diff --stat c294c0564dc8a5e137eaa00de1276677cb1a1c53..HEAD
+git diff --name-status --no-renames c294c0564dc8a5e137eaa00de1276677cb1a1c53..c02f6ee95645e57d02be2e268e51feeadf2f390c
+git status --short
+```
+
+Bestätige 62 Commits, 314 Pfade, 98 Added, 216 Modified, 0 Deleted und den
+Name-Status-Hash aus §2. Bestätige außerdem, dass der Paketcommit genau die drei
+Modified-Paketpfade enthält.
+
+## 8. Externe Grenzen und Urteilskorridor
+
+Selbst wenn P1–P12 lokal bestehen, bleibt das beste aktuelle Gesamturteil
+`BLOCKED_EXTERNAL_PERMISSION`, weil folgende autorisierungspflichtige
+Lieferbelege fehlen:
+
+- GitHub CI am exakten Paketcommit;
+- Draft-PR am exakten Paketcommit;
+- Vercel Preview am exakten PR-Head;
+- aktuelle Live-Production-Gegenprüfung;
+- aktuelle vollständige Production-Katalogparität.
+
+Der historische 3.839-Objekt-Katalog ist ausdrücklich keine aktuelle
+Production-Parität. Es ist verboten, die fehlenden 27 Objekte zu erfinden oder
+einen neuen Bootstrapvertrag abzuleiten.
+
+Urteile:
+
+- `FAIL_INTERNAL`: reproduzierbarer interner P0/P1, Scopebruch,
+  Vertragsbruch, Quellhash-/Inventardrift oder lokales Pflichtgate fehlgeschlagen.
+- `BLOCKED_EXTERNAL_PERMISSION`: intern unabhängig grün, aber PR/CI/Preview/
+  Live-Production fehlen.
+- `BLOCKED_PRODUCT_DECISION`: echte fachliche Entscheidung fehlt.
+- `PASS`: im aktuellen Paket nicht erreichbar, solange externe Gates fehlen.
+
+## 9. Exakter Claude-Auftrag
+
+```text
+Prüfe das Galvanik-Kreile-F0-W2C-W4-Paket strikt unabhängig und read-only.
+
+1. Lies vollständig:
+   - docs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_PACKET.md
+   - docs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_MANIFEST.json
+   - scripts/quality/check-f0-independent-review-package.mjs
+2. Verifiziere zuerst, dass HEAD genau einen Parent hat:
+   c02f6ee95645e57d02be2e268e51feeadf2f390c.
+3. Führe den Paketchecker --selftest und --check aus.
+4. Verifiziere alle 32 Quellhashes und das vollständige Kandidateninventar:
+   Basis c294c0564dc8a5e137eaa00de1276677cb1a1c53,
+   Kandidat c02f6ee95645e57d02be2e268e51feeadf2f390c,
+   62 Commits, 314 Pfade, 98A/216M/0D,
+   Name-Status-SHA-256
+   075c21a5b733fb45843e814917b4f744b28849b5312e75d3fea8361e0b673a6f.
+5. Behandle PASS_LOCAL nur als Autorenbehauptung. Prüfe insbesondere
+   W4-02, W4-03, W4-04, W4-08 und W4-09 gegen Migration, Ports,
+   Konsumenten, reale Integration und Negativmatrix.
+6. Führe P1–P12 in der Reihenfolge des Pakets aus. Pro Gate protokolliere
+   Status, wortwörtlichen Befehl, Exitcode, Umgebung, Paketcommit und Beleg.
+7. Nutze für Datenbanktests ausschließlich den lokalen PG17-Loopback-Stack
+   mit Supabase CLI 2.111.0. Keine Remote- oder Production-Aktion.
+8. Erstelle keinen Fix, Commit, Push, PR, Preview oder Deploy.
+9. Fehlende Tools oder externe Berechtigungen sind NOT_RUN/BLOCKED, nie PASS.
+10. Gib exakt die in §10 geforderten fünf Abschnitte aus und stoppe danach.
+```
+
+## 10. Verbindliches Claude-Ausgabeformat
+
+Claude liefert genau:
+
+### 10.1 FINAL_STATUS
+
+```text
+FINAL_STATUS=FAIL_INTERNAL|BLOCKED_EXTERNAL_PERMISSION|BLOCKED_PRODUCT_DECISION|PASS
+REVIEWED_PACKAGE_COMMIT=<sha>
+REVIEWED_CANDIDATE=<sha>
+```
+
+### 10.2 CRITERIA_MATRIX
+
+Alle 36 IDs, je eine Zeile:
+
+```text
+<ID>=PASS|FAIL|NOT_RUN|BLOCKED — <knapper Beleg>
+```
+
+### 10.3 P1_P12_RECEIPTS
+
+Alle zwölf Gates im Schema aus §7. Kein Gate auslassen.
+
+### 10.4 FINDINGS
+
+Nur P0/P1, Planabweichungen und Akzeptanzblocker:
+
+```text
+<FINDING_ID> | P0/P1/ACCEPTANCE | betroffenes Kriterium | exakte Datei/Zeile |
+Ursache | Auswirkung | kleinste in-scope Korrektur
+```
+
+Wenn keine vorliegen: `NO_OPEN_P0_P1_OR_ACCEPTANCE_FINDINGS`.
+
+### 10.5 REVIEW_HANDOFF
+
+```text
+INTERNAL_W4_VERDICT=<PASS|FAIL>
+EXTERNAL_GATES=<Liste>
+REMOTE_OR_PRODUCTION_ACTIONS=NONE
+RECOMMENDED_NEXT_STEP=<genau ein Schritt>
+STOPPED_AFTER_VERDICT=YES
+```
+
+## 11. Abschlusswahrheit bei Paketerstellung
+
+Der W4-Kernablauf ist lokal Ende-zu-Ende belegt:
+
+```text
+echte lokale DB
+→ private versionierte Views
+→ tenant-/capability-gebundene Server-Ports
+→ Actions
+→ Panel/UI-Zustände
+→ private Storage-Originale und Legacy-Read-only
+→ frischer Reload/Target-Read
+→ positive und negative Belege
+```
+
+Das Paket behauptet kein Gesamt-F0-PASS. Es übergibt einen lokal
+`F0_W4_REVIEW_READY`-Kandidaten an Claude und stoppt vor F1, Push, PR,
+Preview, Deployment und Production.

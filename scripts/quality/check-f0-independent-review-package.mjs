@@ -12,9 +12,9 @@ const MANIFEST_PATH = path.join(
   "docs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_MANIFEST.json",
 );
 const BASE = "c294c0564dc8a5e137eaa00de1276677cb1a1c53";
-const CANDIDATE = "6f802eea10d5abed776dfbf206da5601e5ecce71";
+const CANDIDATE = "c02f6ee95645e57d02be2e268e51feeadf2f390c";
 const NAME_STATUS_SHA256 =
-  "d4738ce4e46688dd646504df7bcd40011c530a8086589f79ec39f80c35e505c5";
+  "075c21a5b733fb45843e814917b4f744b28849b5312e75d3fea8361e0b673a6f";
 const PACKAGE_PATHS = [
   "docs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_PACKET.md",
   "docs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_MANIFEST.json",
@@ -30,7 +30,8 @@ const CRITERION_IDS = [
   "W4-08", "W4-09", "W4-10",
   "G-01", "G-02", "G-03", "G-04", "G-05",
 ];
-const KNOWN_GAP_IDS = ["W4-02", "W4-03", "W4-04", "W4-08", "W4-09"];
+const KNOWN_GAP_IDS = [];
+const CLOSED_W4_IDS = ["W4-02", "W4-03", "W4-04", "W4-08", "W4-09"];
 const STATUS_ALLOWLIST = new Set([
   "PASS_STATIC",
   "PASS_LOCAL",
@@ -47,6 +48,9 @@ const ALLOWED_PATTERNS = [
   "supabase/functions/**",
   "supabase/config.toml",
   "scripts/quality/**",
+  "scripts/fetch_and_classify_orders.ts",
+  "scripts/test_order_source.ts",
+  "vitest.config.ts",
   ".github/workflows/quality.yml",
   ".github/workflows/agentur-gate.yml",
   "tests/**",
@@ -67,14 +71,10 @@ const FORBIDDEN_PATTERNS = [
   "outside this repository",
   "old worktrees or clones",
 ];
-const OUTSIDE_ALLOWED = [
-  "scripts/fetch_and_classify_orders.ts",
-  "scripts/test_order_source.ts",
-  "vitest.config.ts",
-];
+const OUTSIDE_ALLOWED = [];
 const SOURCE_FILES = [
   ["AGENTS.md", "e83a80bf8632783a0d2364e6f9246a4cdd8510b33c355e28ac4aa96906caa25f", 4440],
-  ["missions/F0_FOUNDATION_CONVERGENCE_W2C_W4_001.yml", "52e99ab8348330448ac5b94d02a61496edbac47c2e7f8f20bfbf0d9ed4eb0c5f", 8143],
+  ["missions/F0_FOUNDATION_CONVERGENCE_W2C_W4_001.yml", "e01c32902ae5c6ede263d26cce800dd2d700372c57afcb132706dc1ead41fd7d", 8244],
   ["docs/project/MASTERPLAN.md", "3506038938e265b9e268d3c478a0f708dbb37e078af6cac985cdc00aa395c85a", 8495],
   ["docs/project/CURRENT_STATE.md", "d253d8d422f206f2db82f037cf154e15ee048190a33767a4517928c14b050e67", 6405],
   ["docs/project/NON_LOSS_REGISTER.md", "1d09574389a2289984fe355c9b14833b24be3afe15ed4e2c1f4d1e602c6e15da", 18158],
@@ -86,15 +86,25 @@ const SOURCE_FILES = [
   ["docs/evidence/f0/W2C_REENABLEMENT_MATRIX.md", "570cb3d236d5534fe45c3bb7aa3c1ed168f3583b21061526b284185462887ab1", 23511],
   ["docs/evidence/f0/W3_ORDER_STATION_TRANSITION_EVIDENCE.md", "de2333700a8444ee284f0e4443ed549b4a954aa3095a9ae49a64f17f79b2f4a4", 6302],
   ["docs/evidence/f0/W4_ORDER_STATION_EVENT_READMODEL_EVIDENCE.md", "c60898493f8f360c6588c4519e54e8e792d7cb1521f672146fe2a6c54bade193", 6698],
-  ["docs/evidence/f0/W4_OPERATIONAL_ORDER_READ_EVIDENCE.md", "fc76f4de6ebca8562f643458f257be08c631f93835fb55fb42677567e92b4375", 6601],
-  ["docs/evidence/f0/W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md", "8704bdefb802a17fa4f98d3a8bcaec0fa585fee8e9707bb2ad8801b71fbdf52e", 13987],
-  ["docs/evidence/f0/W4_CANDIDATE_FINGERPRINT_EVIDENCE.md", "f62c9fd481d49d91d737cad432b12ba53d8b5e446dd570d6c8b5632c3aba5e13", 11984],
-  ["docs/evidence/f0/W4_CANDIDATE_SCHEMA_CONTRACT.json", "5d0643ce0b7e77efa733302f22f69fcfd59f10cf368e2bba4f5cdcd14433dbee", 58415],
-  [".github/workflows/quality.yml", "af8ca01eff6a504b00c34b1570fb58da62bb723de4fd54aafbc75d7d8fcf2e98", 19421],
-  ["scripts/quality/check-w4-candidate-schema.mjs", "006a9b3c26bdbee7cb07edda6d06f8cd58957914a79944b942f45069327c4dd8", 38541],
+  ["docs/evidence/f0/W4_OPERATIONAL_ORDER_READ_EVIDENCE.md", "2ac7567324078d59d1df4d29cf7028ce5b4d27635f7efcb90e81fc3a6780958b", 6808],
+  ["docs/evidence/f0/W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md", "47bbc1e52c3da1d463f2e39f0cd345e6486051211418db33ee2af51379d5de9a", 14603],
+  ["docs/evidence/f0/W4_EVIDENCE_READ_CONTRACT_EVIDENCE.md", "83680067b7d614b9877b4c5fa324aa536765f01ca53d97f131c408c6c3aad911", 7212],
+  ["docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json", "81b59e510927c6b9caab38b633e0e1ca5f0c25bcc567e4ff19cd0bc3ae669582", 1402],
+  ["docs/evidence/f0/F0_CLAUDE_REPAIR_LEDGER.md", "40c0b8fa0dae574beb7d69e0b7b88900aa6c178075c7302e18b2a35090e4d7c6", 7519],
+  ["docs/evidence/f0/W4_CANDIDATE_FINGERPRINT_EVIDENCE.md", "15fb812f42180daabcf63933ae16fb6e0b9f3782f7d8522f17034db88b119235", 12206],
+  ["docs/evidence/f0/W4_CANDIDATE_SCHEMA_CONTRACT.json", "f17e2abbb78144ef87bdc11a0cfdd520b40123c295665e13c7ebf0061597cb53", 94379],
+  [".github/workflows/quality.yml", "b587dc7502b9335f4e1180da6d498a67bd3772211941cc8ed93fb22e56c2504d", 19743],
+  ["scripts/quality/check-w4-candidate-schema.mjs", "6e39de0341fbae85bb736934da838415eb6a32012a1d21ec3b7e28547c167806", 38950],
+  ["scripts/quality/check-w4-cross-module-read-ports.mjs", "210d535882f3fc50057734c3df521d97e33b726020d4790389825747e6447f8c", 9703],
   ["supabase/migrations/20260811150000_w3_order_station_version.sql", "034cc8d6509aabe093948ff84c2e092289ddc211123d087a87e5bdfe7cbb45d7", 269],
   ["supabase/migrations/20260811154732_w4_order_station_event_readmodels.sql", "44ecf82b34023c763c1f0773266483cfe6a0a87809fc5970d0406370aea00595", 5958],
   ["supabase/migrations/20260811184850_w4_order_station_attachment.sql", "70aaead2150d95069829997bfdb128c2496b292d59cb6b69c8440dd1dfd2b6cb", 9943],
+  ["supabase/migrations/20260812103446_w4_evidence_read_contract.sql", "dfd01b52b146ecbea34499b535ff4833cf18e7fa1dcecc1182ff6f8bb93cfd3f", 14447],
+  ["src/lib/server/evidenceRead.ts", "add2ebdd3b64c12094f452ecdcf48cd9080f3d44f13a11e4282199fea641670d", 12639],
+  ["src/lib/server/orderStationAttachment.ts", "47c496a4356fc455440a8a107aa35d6963133148849966fb51b17d610427247f", 52036],
+  ["src/app/warendurchlauf/actions.ts", "e379cf05f8c6ee8b7d6a9a3f6ace1d101db6576507512eae9161f06339d65623", 8404],
+  ["src/components/orders/GalvanikHandoffAttachmentPanel.tsx", "410772109a51627285012642a92bd57b0b966750a0b37848583576734b9641b8", 39519],
+  ["src/test/w4_order_station_attachment.integration.test.ts", "293d77790e02f509487f0650f536465c557e01512f02453795d16bbf8b42bf76", 76361],
 ];
 
 function fail(code, detail = "") {
@@ -183,6 +193,9 @@ function isAllowed(candidatePath) {
   if (candidatePath.startsWith("supabase/functions/")) return true;
   if (candidatePath === "supabase/config.toml") return true;
   if (candidatePath.startsWith("scripts/quality/")) return true;
+  if (candidatePath === "scripts/fetch_and_classify_orders.ts") return true;
+  if (candidatePath === "scripts/test_order_source.ts") return true;
+  if (candidatePath === "vitest.config.ts") return true;
   if (candidatePath === ".github/workflows/quality.yml") return true;
   if (candidatePath === ".github/workflows/agentur-gate.yml") return true;
   if (candidatePath.startsWith("tests/")) return true;
@@ -293,8 +306,8 @@ function validateCriteria(manifest) {
     assertString(item.reviewer_task, "CRITERION_REVIEW_TASK_INVALID");
   }
   const byId = new Map(manifest.criteria.map(function (item) { return [item.id, item]; }));
-  for (const id of KNOWN_GAP_IDS) {
-    if (byId.get(id).status !== "NOT_PROVEN") fail("KNOWN_GAP_STATUS_INVALID", id);
+  for (const id of CLOSED_W4_IDS) {
+    if (byId.get(id).status !== "PASS_LOCAL") fail("CLOSED_W4_STATUS_INVALID", id);
   }
   if (byId.get("G-01").status !== "NOT_PROVEN") fail("G01_OVERCLAIM");
   for (const id of ["G-03", "G-04", "G-05"]) {
@@ -352,14 +365,14 @@ function validateManifest(manifest) {
     fail("PACKAGE_KIND_INVALID");
   }
   if (manifest.overall_status !== "OPEN") fail("OVERALL_STATUS_OVERCLAIM");
-  if (manifest.expected_maximum_current_verdict !== "FAIL_INTERNAL") {
+  if (manifest.expected_maximum_current_verdict !== "BLOCKED_EXTERNAL_PERMISSION") {
     fail("EXPECTED_VERDICT_INVALID");
   }
   exactKeys(manifest.candidate, ["base", "head", "commits"], "CANDIDATE_FIELDS_INVALID");
   if (
     manifest.candidate.base !== BASE ||
     manifest.candidate.head !== CANDIDATE ||
-    manifest.candidate.commits !== 60
+    manifest.candidate.commits !== 62
   ) {
     fail("CANDIDATE_ANCHOR_INVALID");
   }
@@ -377,8 +390,8 @@ function validateManifest(manifest) {
     "DIFF_FIELDS_INVALID",
   );
   if (
-    manifest.diff.files !== 304 ||
-    manifest.diff.added !== 88 ||
+    manifest.diff.files !== 314 ||
+    manifest.diff.added !== 98 ||
     manifest.diff.modified !== 216 ||
     manifest.diff.deleted !== 0 ||
     manifest.diff.canonical_name_status_sha256 !== NAME_STATUS_SHA256 ||
@@ -389,7 +402,7 @@ function validateManifest(manifest) {
   }
   if (
     !Array.isArray(manifest.diff.canonical_name_status) ||
-    manifest.diff.canonical_name_status.length !== 304 ||
+    manifest.diff.canonical_name_status.length !== 314 ||
     sha256(encodeNameStatus(manifest.diff.canonical_name_status)) !== NAME_STATUS_SHA256
   ) {
     fail("DIFF_NAME_STATUS_LIST_INVALID");
@@ -413,12 +426,12 @@ function validateManifest(manifest) {
   );
   if (
     manifest.delivery_gates.current_ci !== "NOT_RUN" ||
-    manifest.delivery_gates.full_build !== "NOT_RUN" ||
     manifest.delivery_gates.draft_pr !== "NOT_RUN" ||
     manifest.delivery_gates.vercel_preview !== "NOT_RUN" ||
     manifest.delivery_gates.organizational_independent_review !== "NOT_RUN" ||
     manifest.delivery_gates.current_production_full_catalog !==
-      "BLOCKED_EXTERNAL_PERMISSION/BOOTSTRAP_DECISION"
+      "BLOCKED_EXTERNAL_PERMISSION/BOOTSTRAP_DECISION" ||
+    manifest.delivery_gates.full_build !== "PASS_LOCAL"
   ) {
     fail("DELIVERY_GATE_STATE_INVALID");
   }
@@ -473,7 +486,7 @@ function validateCandidateGit(manifest) {
   );
   if (ancestry.status !== 0) fail("BASE_NOT_ANCESTOR");
   const commits = Number(git(["rev-list", "--count", BASE + ".." + CANDIDATE]).trim());
-  if (commits !== 60) fail("CANDIDATE_COMMIT_COUNT_INVALID", String(commits));
+  if (commits !== 62) fail("CANDIDATE_COMMIT_COUNT_INVALID", String(commits));
   const entries = parseNameStatus(
     git(
       ["diff", "--name-status", "--no-renames", "-z", BASE + ".." + CANDIDATE],
@@ -483,7 +496,7 @@ function validateCandidateGit(manifest) {
   const added = entries.filter(function (entry) { return entry.startsWith("A\t"); }).length;
   const modified = entries.filter(function (entry) { return entry.startsWith("M\t"); }).length;
   const deleted = entries.filter(function (entry) { return entry.startsWith("D\t"); }).length;
-  if (entries.length !== 304 || added !== 88 || modified !== 216 || deleted !== 0) {
+  if (entries.length !== 314 || added !== 98 || modified !== 216 || deleted !== 0) {
     fail("CANDIDATE_DIFF_COUNTS_INVALID");
   }
   if (sha256(encodeNameStatus(entries)) !== NAME_STATUS_SHA256) {
@@ -507,8 +520,8 @@ function parseWorkingTreeStatus(raw) {
 
 function validateWorkingTreePackage(head, records) {
   if (head !== CANDIDATE) fail("WORKTREE_HEAD_INVALID", head);
-  if (records.some(function (record) { return record.status !== "??"; })) {
-    fail("WORKTREE_TRACKED_CHANGE_PRESENT");
+  if (records.some(function (record) { return record.status !== " M"; })) {
+    fail("WORKTREE_PACKAGE_STATE_INVALID");
   }
   const paths = records.map(function (record) { return record.path; }).sort();
   if (!same(paths, PACKAGE_PATHS.slice().sort())) fail("WORKTREE_PACKAGE_SET_INVALID");
@@ -519,7 +532,7 @@ function validateCommittedPackage(head, parents, entries, worktreeClean) {
   if (head === CANDIDATE) fail("PACKAGE_COMMIT_MISSING");
   if (!same(parents, [CANDIDATE])) fail("PACKAGE_PARENT_INVALID");
   if (
-    entries.some(function (entry) { return !entry.startsWith("A\t"); }) ||
+    entries.some(function (entry) { return !entry.startsWith("M\t"); }) ||
     !same(entries.map(nameStatusPath).sort(), PACKAGE_PATHS.slice().sort())
   ) {
     fail("COMMITTED_PACKAGE_SET_INVALID");
@@ -540,14 +553,14 @@ async function runCheckWorkingTree() {
     status: "PASS",
     criteria: 36,
     known_not_proven: KNOWN_GAP_IDS.length,
-    candidate_verdict_ceiling: "FAIL_INTERNAL",
+    candidate_verdict_ceiling: "BLOCKED_EXTERNAL_PERMISSION",
   }));
   console.log(JSON.stringify({
     gate: "F0_INDEPENDENT_REVIEW_CANDIDATE_INVENTORY",
     status: "PASS",
-    commits: 60,
-    files: 304,
-    added: 88,
+    commits: 62,
+    files: 314,
+    added: 98,
     modified: 216,
     deleted: 0,
     name_status_sha256: NAME_STATUS_SHA256,
@@ -590,14 +603,14 @@ async function runCheckCommitted() {
     status: "PASS",
     criteria: 36,
     known_not_proven: KNOWN_GAP_IDS.length,
-    candidate_verdict_ceiling: "FAIL_INTERNAL",
+    candidate_verdict_ceiling: "BLOCKED_EXTERNAL_PERMISSION",
   }));
   console.log(JSON.stringify({
     gate: "F0_INDEPENDENT_REVIEW_CANDIDATE_INVENTORY",
     status: "PASS",
-    commits: 60,
-    files: 304,
-    added: 88,
+    commits: 62,
+    files: 314,
+    added: 98,
     modified: 216,
     deleted: 0,
     name_status_sha256: NAME_STATUS_SHA256,
@@ -638,11 +651,16 @@ async function runSelftest() {
   expectReject("CRITERION_SET_OR_ORDER_INVALID", function () {
     validateManifest(duplicate);
   });
-  const overclaim = clone(loaded.manifest);
-  overclaim.criteria.find(function (item) { return item.id === "W4-02"; }).status =
-    "PASS_LOCAL";
-  expectReject("KNOWN_GAP_STATUS_INVALID", function () {
-    validateManifest(overclaim);
+  const underclaim = clone(loaded.manifest);
+  underclaim.criteria.find(function (item) { return item.id === "W4-02"; }).status =
+    "NOT_PROVEN";
+  expectReject("CLOSED_W4_STATUS_INVALID", function () {
+    validateManifest(underclaim);
+  });
+  const inventedGap = clone(loaded.manifest);
+  inventedGap.known_gaps.push({ criterion_id: "W4-02", gap: "invented" });
+  expectReject("KNOWN_GAP_SET_INVALID", function () {
+    validateManifest(inventedGap);
   });
   const sourceDrift = clone(loaded.manifest);
   sourceDrift.source_files[0].sha256 = "0".repeat(64);
@@ -662,7 +680,7 @@ async function runSelftest() {
     validateMissionScope(loaded.manifest, forbiddenEntries);
   });
   const workingRecords = PACKAGE_PATHS.map(function (packagePath) {
-    return { status: "??", path: packagePath };
+    return { status: " M", path: packagePath };
   });
   expectReject("WORKTREE_HEAD_INVALID", function () {
     validateWorkingTreePackage("0".repeat(40), workingRecords);
@@ -671,7 +689,7 @@ async function runSelftest() {
     validateWorkingTreePackage(CANDIDATE, workingRecords.slice(1));
   });
   const packageEntries = PACKAGE_PATHS.map(function (packagePath) {
-    return "A\t" + packagePath;
+    return "M\t" + packagePath;
   });
   expectReject("PACKAGE_PARENT_INVALID", function () {
     validateCommittedPackage("1".repeat(40), ["0".repeat(40)], packageEntries, true);
@@ -684,7 +702,7 @@ async function runSelftest() {
     gate: "F0_INDEPENDENT_REVIEW_PACKAGE_SELFTEST",
     status: "PASS",
     mutation_free: true,
-    adversarial_cases: 11,
+    adversarial_cases: 12,
     overall_f0: "OPEN",
   }));
 }
