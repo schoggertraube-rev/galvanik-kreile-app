@@ -15,7 +15,7 @@ noch Remote-/Production-Autorität.
 | `CLAUDE-F0-006` | verbindlicher Akzeptanzblocker; `W4-09` (Claude: P2) | Die bestehende Negativmatrix deckt die fehlenden W4-02/03/04/08-Verträge naturgemäß nicht ab. | Bestehende W4-Integration wird um genau diese Verträge ergänzt; kein separates Mock-Erfolgssystem. | W4-Unit-/Action-/RTL-Tests; reale lokale W4-Integration; Read-Port-Checker; Workflow/Evidenz. | Private ACL, Legacy-Read-only, Extraction-Validation, Link-Polymorphie, append-only, Korrelation/Idempotenz und View-Exklusivität positiv/negativ; jeweils Null-Side-Effect-Snapshot. | `CLOSED_PASS_LOCAL` |
 | `CLAUDE-F0-007` | Capability-/Abnahmeblocker; `G-01/P1-P9` | Claudes Linux-VM hatte falsche Toolchain; der autorisierte Windows-Worktree hat Node `24.18.0`, Docker und die bereits belegte lokale CLI-/PG17-Kette. | Kein Produktfix. Nach Codeabschluss P1-P9 seriell in der kanonischen lokalen Umgebung frisch ausführen. | Nur finale Receipts/Evidenz. | Frische Exitcodes und Artefakt-SHAs am finalen SHA; keine Remoteverbindung. | `PASS_LOCAL` |
 | `CLAUDE-F0-008` | formaler Akzeptanzblocker; Missionsscope (Claude: P2) | Drei bestehende W2C-Sicherheits-/Testpfade sind notwendig, aber nicht wörtlich allowlisted. Rücknahme würde bereits belegte Fail-closed-Gates schwächen. | Missions-Allowlist eng um exakt `scripts/fetch_and_classify_orders.ts`, `scripts/test_order_source.ts` und `vitest.config.ts` ergänzen; keine Glob-Erweiterung. | Missionsdatei; T0/YAML-/Paketchecker und finales Scope-Inventar als Konsumenten. | Exakter Scope-Checker: keine weiteren Ausnahmen; die beiden Scripts bleiben fail-closed, Vitest-Alias bleibt test-only; Produktionspfad unverändert. | `CLOSED_PASS_LOCAL` |
-| `CLAUDE-F0-009` | Capability-/Paketgate | Claudes SMB-/Linux-Git-Brücke lief in Timeout; derselbe Checker war im nativen Worktree bereits grün. | Kein Produktfix. Finalen Paketchecker nach Commit nativ ausführen. | Prüfpaket und finale Receipts. | `--selftest` und `--check` Exit 0 am finalen sauberen SHA. | `PENDING_POSTCOMMIT_PACKAGE_CHECK` |
+| `CLAUDE-F0-009` | Capability-/Paketgate | Claudes SMB-/Linux-Git-Brücke lief in Timeout; derselbe Checker war im nativen Worktree bereits grün. | Kein Produktfix. Finalen Paketchecker nach Commit nativ ausführen. | Prüfpaket und finale Receipts. | `--selftest` und `--check` Exit 0 am finalen sauberen SHA. | `CLOSED_PASS_LOCAL` |
 
 ## Reparaturgrenze
 
@@ -39,5 +39,7 @@ noch Remote-/Production-Autorität.
 - TypeScript, vollständiges ESLint und Produktionsbuild: PASS.
 - Missions-Allowlist enthält ausschließlich die drei belegten engen
   W2C-Ausnahmen; keine Glob-Erweiterung.
+- Nativer Paketchecker: 12 adversariale Selftests und committed `--check`
+  einschließlich exakt eines Paketcommits auf dem Kandidaten: `PASS`.
 - Claude-F0-001 bleibt der einzige externe Delivery-Blocker. Kein Push,
   Draft-PR, Preview, CI oder Remote-/Productionzugriff wurde ausgeführt.
