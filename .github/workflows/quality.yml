@@ -487,4 +487,3 @@ jobs:
       - name: Stop isolated local Supabase
         if: always()
         run: npx --yes supabase@2.111.0 stop --no-backup
-
