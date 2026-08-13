@@ -46,8 +46,6 @@ import { KreileAppShell } from "@/components/layout/KreileAppShell";
 import { LicenseProvider } from "@/lib/license/LicenseContext";
 import { DiagnosticsProvider } from "@/lib/diagnostics/DiagnosticsContext";
 import { DiagnosticsWidget } from "@/components/diagnostics/DiagnosticsWidget";
-import { TestpilotProvider } from "@/components/testpilot/TestpilotProvider";
-import { TestpilotFloatingButton } from "@/components/testpilot/TestpilotFloatingButton";
 import { PermissionsProvider } from "@/lib/auth/PermissionsContext";
 import { AppShortcutProvider } from "@/components/ui/AppShortcutContext";
 import { SyncProvider } from "@/lib/offline/SyncContext";
@@ -75,7 +73,6 @@ export default async function RootLayout({
       <body>
         <ServiceWorkerRegister />
         <Suspense fallback={null}>
-        <TestpilotProvider isAdmin={isAdmin}>
           <SyncProvider>
             <PermissionsProvider initialAuthState={authState}>
               <DiagnosticsProvider>
@@ -93,11 +90,9 @@ export default async function RootLayout({
                   </AppShortcutProvider>
                 </LicenseProvider>
                 {isAdmin && <DiagnosticsWidget />}
-                <TestpilotFloatingButton />
               </DiagnosticsProvider>
             </PermissionsProvider>
           </SyncProvider>
-        </TestpilotProvider>
         </Suspense>
       </body>
     </html>

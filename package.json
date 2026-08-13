@@ -22,6 +22,7 @@
     "test:integration": "vitest run src/test/verify.integration.test.ts",
     "test:e2e": "playwright test",
     "verify:precommit": "npx tsc --noEmit && npm run lint:staged && npm run test:unit",
+    "quality:no-fake-production": "node scripts/quality/check-no-fake-production.mjs",
     "db:seed": "tsx src/db/seed.ts",
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",

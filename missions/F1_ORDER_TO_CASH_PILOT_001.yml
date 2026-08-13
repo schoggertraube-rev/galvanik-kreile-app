@@ -5,6 +5,18 @@ base_sha: d16363dee8e38bf64dbb31ed135a93972d91b6f1
 branch: f1/digital-wareneingang-20260812
 worktree: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\_worktrees\\f1-digital-wareneingang-20260812
 
+# ── M0 Konsolidierungsstand ───────────────────────────────────────
+m0_phase_3_status: COMPLETE
+m0_origin_main_at_start: c294c0564dc8a5e137eaa00de1276677cb1a1c53
+f0_w4_independent_pass: true
+f1_1_independent_pass: true
+f1_r0_local_gate: PASS
+f1_r0_independent_review: NOT_RUN
+f1_r0_gate_complete: false
+# Post-M0 Dauerprozess (gilt nach PR-Merge dieses Worktrees):
+#   02_app → kurzer Paketbranch von aktuellem main → Real-E2E →
+#   unabhaengiger PASS → PR/CI/Merge → Branch loeschen → zurueck auf main
+
 delivery_order:
   - F1.1_DIGITALER_WARENEINGANG
   - F1-R0_NO_FAKE_PRODUCTION_GATE
@@ -14,9 +26,9 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: F1.1_DIGITALER_WARENEINGANG
-next_gate_after_active_package: F1-R0_NO_FAKE_PRODUCTION_GATE
-f1_r0_status: pending_f1_1_independent_pass
+active_package: F1-R0_NO_FAKE_PRODUCTION_GATE
+next_gate_after_active_package: F1.2_WERKSTATTDURCHLAUF
+f1_r0_status: candidate_freeze_pending_independent_review
 
 rules:
   single_writer: true
@@ -88,6 +100,57 @@ definition_of_done:
   - tenant_safe_list_search_and_open
   - loading_empty_error_denial_conflict_data_states
   - positive_and_negative_local_end_to_end_evidence
+
+r0_allowlist:
+  # R0-A original five files
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
+  - scripts/quality/check-no-fake-production.mjs
+  - package.json
+  - .github/workflows/quality.yml
+  - scripts/quality/__tests__/check-no-fake-production.test.mjs
+  # R0-B: direct source files of belegten R0 findings
+  - src/components/warendurchlauf/WarendurchlaufStationNav.tsx
+  - src/app/kvp/KvpClient.tsx
+  - src/app/page.tsx
+  - src/app/actions/developerAnalytics.actions.ts
+  - src/app/admin/devices/AdminDevicesClient.tsx
+  - src/app/admin/import/AdminImportClient.tsx
+  - src/app/station/[slug]/page.tsx
+  - src/components/layout/MobileBottomNav.tsx
+  - src/app/cockpit/components/EngpassKachel.tsx
+  - src/app/admin/analytics/AnalyticsCockpitClient.tsx
+  - src/app/betrieb/BetriebDashboardClient.tsx
+  - src/app/layout.tsx
+  - src/app/admin/testanalyse/page.tsx
+  - src/app/admin/testanalyse/live/page.tsx
+  - src/components/layout/KreileHeader.tsx
+  - src/components/layout/__tests__/w2cHeaderTruth.realRender.test.tsx
+  - src/components/testpilot/TestpilotFloatingButton.tsx
+  - src/components/testpilot/TestpilotOverlay.tsx
+  - src/components/testpilot/TestpilotProvider.tsx
+  - src/app/actions/demoSetup.ts
+  - src/app/actions/__tests__/demoSetupAuthorization.test.ts
+  - src/components/feedback/FeedbackFooter.tsx
+  - src/app/buchhaltung/einstellungen/page.tsx
+  - src/app/__tests__/w2cB2m5u.homeDueTruth.realRender.test.tsx
+  - src/app/actions/__tests__/erfassungContainment.test.ts
+  - src/app/actions/__tests__/updateOrderDb.failClosed.test.ts
+  - src/app/quotes/__tests__/w2cB2m5a.inquiries.failClosed.test.ts
+  - src/app/actions/__tests__/w4OperationalOrdersRead.test.ts
+  # R0-C: M0 Phase 3 canonical control file updates
+  - AGENTS.md
+  - .gitignore
+  - docs/project/CURRENT_STATE.md
+  - docs/project/MASTERPLAN.md
+  - docs/project/NON_LOSS_REGISTER.md
+  - docs/project/DOCUMENT_AUTHORITY.md
+  # R0-D: stale active-path deletions
+  - docs/project/MISSION_QUEUE.md
+  - missions/MISSION_TEMPLATE.yml
+  - .codex/skills/kreile-build-repair/SKILL.md
+  - KREILE_CLAUDE_COWORK_MASCHINERIE/**
+  - Agentur für App und Web/KREILE_CLAUDE_COWORK_MASCHINERIE/**
 
 stop_conditions:
   - irreversible_product_decision_requires_new_authority

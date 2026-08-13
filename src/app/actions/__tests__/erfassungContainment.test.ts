@@ -81,7 +81,6 @@ describe("Erfassung caller containment (F0-W2C-B2M1)", () => {
   const callerFiles = [
     "components/erfassung/ErfassungCard.tsx",
     "components/erfassung/ErfassungSheet.tsx",
-    "components/erfassung/ManualFlow/ManualWizard.tsx",
     "components/orders/variants/ErfassungVariant.tsx",
     "components/orders/variants/WareneingangReadOnly.tsx",
   ];
@@ -95,6 +94,16 @@ describe("Erfassung caller containment (F0-W2C-B2M1)", () => {
       expect(source).not.toMatch(/\b(useEffect|fetch|supabase)\b/i);
       expect(source).not.toMatch(/onClick\s*=|<button\b|Mutation-CTA/);
     }
+  });
+
+  it("keeps the independently accepted F1.1 intake as the only reactivated ManualWizard path", async () => {
+    const source = await readFile(
+      path.join(srcRoot, "components/erfassung/ManualFlow/ManualWizard.tsx"),
+      "utf8",
+    );
+    expect(source).toContain('import { OrderIntakePanel } from "@/components/erfassung/OrderIntakePanel";');
+    expect(source).toContain("<OrderIntakePanel");
+    expect(source).not.toMatch(/erfassung\.actions|orderCost\.actions|createClient|supabase/);
   });
 
   it("removes fabricated Erfassung and Wareneingang values and paths", async () => {

@@ -1,6 +1,6 @@
 # Masterplan
 
-Stand: 2026-08-05
+Stand: 2026-08-13
 
 ## North Star
 
@@ -18,17 +18,35 @@ Primaerer Kundennutzen:
 
 - `main` ist die einzige Code-Lieferwahrheit.
 - Vercel Production und Supabase Production sind getrennte Runtime-Wahrheiten und muessen gegen `main` belegt werden.
-- Jede Mission hat einen isolierten Worktree, genau einen Writer und einen unabhaengigen Reviewer.
-- Umsetzung erfolgt ueber kleine PRs, reproduzierbare lokale Nachweise, GitHub-Gates, Vercel Preview und Red-Team-Abnahme.
+- Nach Abschluss von M0 wird ausschliesslich im kanonischen Checkout `02_app` auf einem kurzen
+  Paketbranch von aktuellem `main` gearbeitet; es entsteht kein neuer Worktree pro Mission.
+- Jedes Paket hat genau einen Writer und einen unabhaengigen Exact-SHA-Reviewer.
+- Umsetzung erfolgt ueber kleine PRs, reproduzierbare reale E2E-Nachweise, GitHub-Gates und
+  unabhaengige Abnahme. Preview oder Deployment erfolgen nur, wenn das Paket sie ausdruecklich verlangt.
 - Alt-Arbeit wird nicht pauschal gemergt oder geloescht. Sie wird klassifiziert, als Salvage erhalten und nur ueber neue kleine PRs verwertet.
 - Ein gemergter Infrastruktur- oder Security-Baustein ist kein Gesamtprodukt-PASS.
 
 ## Verbindliche aktive Reihenfolge
 
-**Recovery-Gate 2026-08-05:** Vor weiterer Struktur- oder Offline-Arbeit schliesst
-`FOUNDATION-RECOVERY-001` ausschliesslich die live verifizierten Luecken in
-Migrationswahrheit, Data-API-Grants, PIN-Bestand/Rate-Limit und oeffentlichem
-Start-Payload. Das ist kein neuer Masterplan und keine Ordner-Grossoperation.
+1. `M0_REPOSITORY_CONSOLIDATION`: verlustfrei archivieren, genau eine Steuerungs- und Lieferlinie
+   herstellen, den F1-R0-Kandidaten integrieren und `02_app` auf sauberes aktuelles `main` bringen.
+2. `F1-R0_NO_FAKE_PRODUCTION_GATE`: `REACHABLE_PRODUCTION_MOCKS=0`,
+   `UNREGISTERED_VISIBLE_CAPABILITIES=0`, `ACTIVE_CAPABILITY_REAL_E2E=PASS` und unabhaengiger
+   Exact-SHA-PASS. R0-A allein ist kein R0-PASS.
+3. `F1.2_WERKSTATTDURCHLAUF`
+4. `F1.3_LEISTUNGSABSCHLUSS`
+5. `F1.4_UNVERAENDERLICHE_RECHNUNG`
+6. `F1.5_BESTAETIGTER_ZAHLUNGSEINGANG`
+7. `F1.6_REALER_PILOT`
+
+F1.1 Digitaler Wareneingang ist unabhaengig abgenommen und wird nicht erneut geoeffnet, solange sein
+Vertrag unveraendert bleibt. Jedes folgende Paket liefert Quelle -> sicherer Vertrag -> Mutation ->
+Receipt -> Reload/Readback -> UI-Zustaende -> positiven und negativen realen Nachweis.
+
+## Historische Vor-F0-Roadmap (Erhalt, nicht aktive Ausfuehrungsreihenfolge)
+
+Der folgende Planstand vom 2026-08-05 bleibt als Produkt- und Herkunftsschutz erhalten. Er darf die
+oben festgelegte aktive F1-Reihenfolge nicht ueberschreiben.
 
 ### Phase 0 - Wahrheiten und Arbeitsflaeche
 

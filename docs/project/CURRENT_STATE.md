@@ -1,11 +1,28 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Massgeblicher Stand: 2026-08-10.** Diese Datei wurde nach dem Befundbericht 2026-08-10 vollstaendig
-neu geschrieben (BF-004). Fruehere Fassungen sind ausschliesslich Git-Historie; kein Absatz dieser
-Datei beschreibt einen ueberholten Zustand als aktuell. Konsistenz wird durch das CI-Gate
-`scripts/quality/check-f0-doc-truth.mjs` erzwungen.
+**Massgeblicher Steuerungsstand: 2026-08-13.** `main` ist die einzige Lieferwahrheit. Der folgende
+M0/F1-Block ist aktuell; die ausfuehrlichen F0-Tabellen darunter sind ein datierter historischer
+Snapshot und keine aktuelle Paket- oder Branchsteuerung.
 
-## F0-Fundament (Repo + Production)
+## Aktuelle Liefer- und Paketwahrheit
+
+| Wahrheit | Stand |
+|---|---|
+| `origin/main` bei M0-Start | `c294c0564dc8a5e137eaa00de1276677cb1a1c53` |
+| F0/W4 | unabhaengig `PASS`; Pruefpaket `d16363dee8e38bf64dbb31ed135a93972d91b6f1`, Produktkandidat `e3138f9286775bf6e79c0b5b1845ff72a0230b62` |
+| F1.1 Digitaler Wareneingang | unabhaengig `PASS`; Evidence-SHA `228316b7674d3363a9ab62d97b41500bd1409395` |
+| Aktives Paket | `F1-R0_NO_FAKE_PRODUCTION_GATE`; lokales Gate `0/0/PASS`, unabhaengige Abnahme `NOT_RUN` |
+| M0 Konsolidierung | aktiv; externes Verlustfrei-Archiv und kanonische Steuerung verifiziert, Integration steht aus |
+| F1.2 | `NOT_STARTED`; erst nach R0-PASS, unabhaengiger Exact-SHA-Abnahme und M0-Integrationsgate |
+| Remote/Production seit M0-Start | keine Push-, PR-, Merge-, Deployment- oder Remote-DB-Mutation |
+
+## Historischer F0-Snapshot vom 2026-08-10
+
+Dieser Abschnitt bewahrt den damaligen Befundwortlaut. Aktuelle Abschluss- und Lieferaussagen stehen
+ausschliesslich im Block oben; Konsistenz der historischen F0-Angaben prueft weiterhin
+`scripts/quality/check-f0-doc-truth.mjs`.
+
+### F0-Fundament (damaliger Repo- und Production-Stand)
 
 | Wahrheit | Stand |
 |---|---|
@@ -101,3 +118,17 @@ Stand vor 2026-08-10; fuer die aktuelle Disposition gilt ausschliesslich F0_BRAN
 - repair/m03-auth-foundation
 - review/G-2026-0001-scan-order-persistenz
 - test/r5-negativ-20260713
+
+## F1-R0 No-Fake-Production Gate (laufender Kandidat, 2026-08-13)
+
+| Pruefpunkt | Ergebnis |
+|---|---|
+| Branch | f1/digital-wareneingang-20260812 |
+| Paket | F1-R0_NO_FAKE_PRODUCTION_GATE |
+| REACHABLE_PRODUCTION_MOCKS | 0 |
+| UNREGISTERED_VISIBLE_CAPABILITIES | 0 |
+| ACTIVE_CAPABILITY_REAL_E2E | PASS (eingefrorener F1.1-Nachweis unveraendert) |
+| Unabhaengige R0-Abnahme | NOT_RUN |
+| Naechstes Paket | F1.2_WERKSTATTDURCHLAUF erst nach unabhaengigem R0-PASS und M0-Integrationsgate |
+
+Die historischen F0-Eintraege bleiben als Herkunftsnachweis erhalten, steuern aber nicht den aktiven F1-Lauf.

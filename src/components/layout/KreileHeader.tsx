@@ -8,7 +8,6 @@ import { useState, useEffect, useRef } from "react";
 import { logout } from "@/app/actions/auth";
 import { useRealtimeStatus } from "./RealtimeSyncManager";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { useTestpilot } from "@/components/testpilot/TestpilotProvider";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useSync } from "@/lib/offline/SyncContext";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
@@ -25,7 +24,6 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
   const { initials, status, name } = usePermissions();
   const { status: realtimeStatus } = useRealtimeStatus();
-  const { isRecording } = useTestpilot();
   const { isOnline, outboxItems } = useSync();
   const { openErfassung } = useErfassung();
   const pendingOutboxCount = outboxItems.filter((item) => item.status !== "synced").length;
@@ -177,14 +175,6 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
           <span className={`w-2 h-2 rounded-full ${!isOnline ? "bg-accent-orange" : (pendingOutboxCount > 0 ? "bg-gold-500 animate-pulse" : "bg-success-green")}`} />
           <span>{!isOnline ? "Offline" : (pendingOutboxCount > 0 ? `${pendingOutboxCount} lokal ausstehend` : "Netzwerk verfügbar")}</span>
         </div>
-
-        {/* Testpilot Recording Indicator */}
-        {isRecording && (
-          <Link href="/admin/testanalyse/live" className="hidden sm:flex items-center gap-2 rounded-full px-3 h-9 text-sm font-bold bg-red-100 border border-red-200 text-red-700 hover:bg-red-200 transition-colors shadow-sm animate-pulse" title="Zur Live-Testanalyse">
-            <span className="w-2 h-2 rounded-full bg-red-600" />
-            <span>Testaufzeichnung</span>
-          </Link>
-        )}
 
         {/* Live-Sync Indicator */}
         {realtimeStatus !== "disabled" && (

@@ -1,0 +1,2135 @@
+{
+  "schema_version": "1.0",
+  "registry_version": "F1-R0",
+  "generated_at": "2026-08-13T00:00:00Z",
+  "snapshot_sha": "228316b7674d3363a9ab62d97b41500bd1409395",
+  "tenant": "galvanik-kreile",
+  "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
+  "summary": {
+    "page_routes": 78,
+    "api_routes": 18,
+    "server_action_groups": 48,
+    "kpi_definitions": 7,
+    "provider_connections": 17,
+    "nav_links_without_page": 3,
+    "total": 171
+  },
+  "f1_1_evidence": {
+    "mission": "F1.1_DIGITALER_WARENEINGANG",
+    "product_sha": "333368cb2a0b8db06938a0f8d646493feb61537b",
+    "evidence_sha": "228316b7674d3363a9ab62d97b41500bd1409395",
+    "evidence_sha256": "69F7017DD45700D69FC65D2D2099AB33497D6D1705C2FC03B86260A68323BE9C",
+    "evidence_file": "docs/evidence/f1/F1_1_DIGITALER_WARENEINGANG_EVIDENCE.md",
+    "status": "PASS"
+  },
+  "classifications_doc": {
+    "REAL_VERIFIED": "End-to-end verified by independent evidence with SHA-pinned artifacts. F1.1 is the only accepted basis.",
+    "REAL_PENDING_SECRET": "Code correct and honest; activation requires an environment secret not present in CI.",
+    "PENDING_CONTRACT": "Planned capability or quarantined route. Returns NOT_AVAILABLE or not yet implemented.",
+    "TEST_ONLY": "Dev/test tooling only. Must not appear in the production user journey.",
+    "LEGACY_REMOVE": "Known broken, fake, or demo-mode element. Scheduled for removal. Gate will detect as violation."
+  },
+  "capabilities": [
+    {
+      "stable_id": "page.root",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/page.tsx",
+      "route": "/",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Root redirects to /warendurchlauf (F1-R0: demo HomeDashboard removed). No standalone root capability until after F1.2."
+    },
+    {
+      "stable_id": "page.admin.analytics",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/admin/analytics/page.tsx",
+      "route": "/admin/analytics",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Developer analytics cockpit. Fabricated fallback data and demo timeline removed in F1-R0; getDeveloperCockpitStats returns only real tracking events (empty when none present). Pending real analytics contract."
+    },
+    {
+      "stable_id": "page.admin.devices",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/admin/devices/page.tsx",
+      "route": "/admin/devices",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Devices admin page. Hardcoded device list removed in F1-R0; now returns NOT_CONFIGURED. Pending real device-management data source."
+    },
+    {
+      "stable_id": "page.admin.import",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/admin/import/page.tsx",
+      "route": "/admin/import",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Import admin page. Local simulation removed in F1-R0; now returns NOT_CONFIGURED. Pending real server-side import pipeline."
+    },
+    {
+      "stable_id": "page.admin.testanalyse.live",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/admin/testanalyse/live/page.tsx",
+      "route": "/admin/testanalyse/live",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Former production test-tool route is detached and fail-closed with FoundationUnavailable. No operational contract exists."
+    },
+    {
+      "stable_id": "page.admin.testanalyse",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/admin/testanalyse/page.tsx",
+      "route": "/admin/testanalyse",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Former production test-tool route is detached and fail-closed with FoundationUnavailable. No operational contract exists."
+    },
+    {
+      "stable_id": "page.analyse",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/analyse/page.tsx",
+      "route": "/analyse",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Analytics module. No verified read-model contract."
+    },
+    {
+      "stable_id": "page.archive",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/archive/page.tsx",
+      "route": "/archive",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Archive view. No verified contract."
+    },
+    {
+      "stable_id": "page.baeder",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/baeder/page.tsx",
+      "route": "/baeder",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Bath/process bath management. Supabase-connected but no E2E evidence."
+    },
+    {
+      "stable_id": "page.betrieb-kvp",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/betrieb-kvp/page.tsx",
+      "route": "/betrieb-kvp",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Operations KVP dashboard. No verified contract."
+    },
+    {
+      "stable_id": "page.betrieb",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/betrieb/page.tsx",
+      "route": "/betrieb",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Operations overview. Navigation hub with links to sub-modules."
+    },
+    {
+      "stable_id": "page.buchhaltung.ausgaben",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/ausgaben/page.tsx",
+      "route": "/buchhaltung/ausgaben",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Expense listing. Supabase-connected but no independent E2E evidence."
+    },
+    {
+      "stable_id": "page.buchhaltung.belege.id",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/belege/[id]/page.tsx",
+      "route": "/buchhaltung/belege/[id]",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Receipt detail view. No verified contract."
+    },
+    {
+      "stable_id": "page.buchhaltung.belege.neu",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/belege/neu/page.tsx",
+      "route": "/buchhaltung/belege/neu",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "New receipt creation. No verified contract."
+    },
+    {
+      "stable_id": "page.buchhaltung.belege",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/belege/page.tsx",
+      "route": "/buchhaltung/belege",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Receipt list. Supabase-connected but no independent E2E evidence."
+    },
+    {
+      "stable_id": "page.buchhaltung.bwa",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/bwa/page.tsx",
+      "route": "/buchhaltung/bwa",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Business management analysis. Supabase-connected, no E2E evidence."
+    },
+    {
+      "stable_id": "page.buchhaltung.einstellungen",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/einstellungen/page.tsx",
+      "route": "/buchhaltung/einstellungen",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Accounting settings route is fail-closed with FoundationUnavailable. No verified persistence or provider contract."
+    },
+    {
+      "stable_id": "page.buchhaltung.export",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/export/page.tsx",
+      "route": "/buchhaltung/export",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "DATEV/Lexware export. generateDatevExportAction exists but no verified E2E."
+    },
+    {
+      "stable_id": "page.buchhaltung.fristen",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/fristen/page.tsx",
+      "route": "/buchhaltung/fristen",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Tax deadlines/calendar. No verified contract."
+    },
+    {
+      "stable_id": "page.buchhaltung.kosten.id",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/kosten/[id]/page.tsx",
+      "route": "/buchhaltung/kosten/[id]",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Cost item detail. No verified contract."
+    },
+    {
+      "stable_id": "page.buchhaltung.kosten.neu",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/kosten/neu/page.tsx",
+      "route": "/buchhaltung/kosten/neu",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "New cost item. No verified contract."
+    },
+    {
+      "stable_id": "page.buchhaltung.kosten",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/kosten/page.tsx",
+      "route": "/buchhaltung/kosten",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Cost item list. No verified contract."
+    },
+    {
+      "stable_id": "page.buchhaltung.kraftstoff",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/kraftstoff/page.tsx",
+      "route": "/buchhaltung/kraftstoff",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Fuel/vehicle cost tracking. No verified E2E contract."
+    },
+    {
+      "stable_id": "page.buchhaltung",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/page.tsx",
+      "route": "/buchhaltung",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "page.tsx renders FoundationUnavailable placeholder only. RoiKachel and BuchhaltungCockpitClient internals are unreachable from this route. Activate contract when real data hook is wired."
+    },
+    {
+      "stable_id": "page.buchhaltung.periodenabschluss",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/periodenabschluss/page.tsx",
+      "route": "/buchhaltung/periodenabschluss",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Period closing workflow. No verified contract."
+    },
+    {
+      "stable_id": "page.buchhaltung.rechnungen.id",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/rechnungen/[id]/page.tsx",
+      "route": "/buchhaltung/rechnungen/[id]",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Invoice detail view. No verified contract."
+    },
+    {
+      "stable_id": "page.buchhaltung.rechnungen.neu",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/rechnungen/neu/page.tsx",
+      "route": "/buchhaltung/rechnungen/neu",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "New invoice creation. No verified contract."
+    },
+    {
+      "stable_id": "page.buchhaltung.rechnungen",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/rechnungen/page.tsx",
+      "route": "/buchhaltung/rechnungen",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Invoice list. Supabase-connected, no independent E2E evidence."
+    },
+    {
+      "stable_id": "page.buchhaltung.steuerprofil",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/steuerprofil/page.tsx",
+      "route": "/buchhaltung/steuerprofil",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Tax profile configuration. No verified contract."
+    },
+    {
+      "stable_id": "page.buchhaltung.zahlung",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/buchhaltung/zahlung/page.tsx",
+      "route": "/buchhaltung/zahlung",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Payment management. Mollie route quarantined. No verified contract."
+    },
+    {
+      "stable_id": "page.cockpit.jahresplan",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/cockpit/jahresplan/page.tsx",
+      "route": "/cockpit/jahresplan",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Annual plan view. No verified read-model contract."
+    },
+    {
+      "stable_id": "page.cockpit",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/cockpit/page.tsx",
+      "route": "/cockpit",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Owner cockpit dashboard. Supabase read-models connected, no independent E2E evidence."
+    },
+    {
+      "stable_id": "page.customers.id",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/customers/[id]/page.tsx",
+      "route": "/customers/[id]",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Customer detail/history view. No verified contract."
+    },
+    {
+      "stable_id": "page.customers",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/customers/page.tsx",
+      "route": "/customers",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Customer list. Supabase-connected, no independent E2E evidence."
+    },
+    {
+      "stable_id": "page.feedback.token",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/feedback/[token]/page.tsx",
+      "route": "/feedback/[token]",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Customer feedback form by token. Email route quarantined. No verified contract."
+    },
+    {
+      "stable_id": "page.finanzen",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/finanzen/page.tsx",
+      "route": "/finanzen",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Finance overview. No verified contract."
+    },
+    {
+      "stable_id": "page.items",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/items/page.tsx",
+      "route": "/items",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Item/part catalog. No verified contract."
+    },
+    {
+      "stable_id": "page.kalender",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/kalender/page.tsx",
+      "route": "/kalender",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Calendar view. No verified contract."
+    },
+    {
+      "stable_id": "page.kommunikation",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/kommunikation/page.tsx",
+      "route": "/kommunikation",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Communication center. Email/notification provider not activated. No verified contract."
+    },
+    {
+      "stable_id": "page.kontrolle",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/kontrolle/page.tsx",
+      "route": "/kontrolle",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Quality control view. No verified contract."
+    },
+    {
+      "stable_id": "page.kunden-auftraege",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/kunden-auftraege/page.tsx",
+      "route": "/kunden-auftraege",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Customer order view. No verified contract."
+    },
+    {
+      "stable_id": "page.kvp",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/kvp/page.tsx",
+      "route": "/kvp",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "KVP route is fail-closed with FoundationUnavailable. All localStorage and hardcoded business state were removed; a real server contract is still pending."
+    },
+    {
+      "stable_id": "page.lager",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/lager/page.tsx",
+      "route": "/lager",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Inventory/stock management. Supabase-connected, no independent E2E evidence."
+    },
+    {
+      "stable_id": "page.lieferanten.id",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/lieferanten/[id]/page.tsx",
+      "route": "/lieferanten/[id]",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Supplier detail. No verified contract."
+    },
+    {
+      "stable_id": "page.lieferanten",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/lieferanten/page.tsx",
+      "route": "/lieferanten",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Supplier list. No verified contract."
+    },
+    {
+      "stable_id": "page.marketing.aktion.neu",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/marketing/aktion/neu/page.tsx",
+      "route": "/marketing/aktion/neu",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "New marketing campaign. No verified contract."
+    },
+    {
+      "stable_id": "page.marketing.aktion",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/marketing/aktion/page.tsx",
+      "route": "/marketing/aktion",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Marketing campaign list. No verified external provider integration."
+    },
+    {
+      "stable_id": "page.marketing.attribution",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/marketing/attribution/page.tsx",
+      "route": "/marketing/attribution",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Marketing attribution analytics. No verified external data source."
+    },
+    {
+      "stable_id": "page.marketing.einwilligungen",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/marketing/einwilligungen/page.tsx",
+      "route": "/marketing/einwilligungen",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Marketing consent management. No verified contract."
+    },
+    {
+      "stable_id": "page.marketing.kanaele",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/marketing/kanaele/page.tsx",
+      "route": "/marketing/kanaele",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Marketing channels configuration. No verified external integration."
+    },
+    {
+      "stable_id": "page.marketing",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/marketing/page.tsx",
+      "route": "/marketing",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Marketing hub. No verified external provider integration."
+    },
+    {
+      "stable_id": "page.marketing.segmente.id",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/marketing/segmente/[id]/page.tsx",
+      "route": "/marketing/segmente/[id]",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Customer segment detail. No verified contract."
+    },
+    {
+      "stable_id": "page.marketing.segmente.neu",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/marketing/segmente/neu/page.tsx",
+      "route": "/marketing/segmente/neu",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "New customer segment. No verified contract."
+    },
+    {
+      "stable_id": "page.marketing.segmente",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/marketing/segmente/page.tsx",
+      "route": "/marketing/segmente",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Customer segment list. No verified contract."
+    },
+    {
+      "stable_id": "page.orders.id",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/orders/[id]/page.tsx",
+      "route": "/orders/[id]",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Order detail view. No verified contract."
+    },
+    {
+      "stable_id": "page.orders",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/orders/page.tsx",
+      "route": "/orders",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Order list. Supabase-connected, no independent E2E evidence."
+    },
+    {
+      "stable_id": "page.performance.baeder-material",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/performance/baeder-material/page.tsx",
+      "route": "/performance/baeder-material",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Bath material performance KPI. No verified read-model."
+    },
+    {
+      "stable_id": "page.performance.ki-empfehlungen",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/performance/ki-empfehlungen/page.tsx",
+      "route": "/performance/ki-empfehlungen",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "AI recommendations. Gemini integration pending secret configuration."
+    },
+    {
+      "stable_id": "page.performance.kunden-markt",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/performance/kunden-markt/page.tsx",
+      "route": "/performance/kunden-markt",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Customer/market performance KPI. No verified read-model."
+    },
+    {
+      "stable_id": "page.performance",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/performance/page.tsx",
+      "route": "/performance",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Performance dashboard hub. No verified read-model contract."
+    },
+    {
+      "stable_id": "page.performance.qualitaet-risiko",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/performance/qualitaet-risiko/page.tsx",
+      "route": "/performance/qualitaet-risiko",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Quality/risk KPI. No verified read-model."
+    },
+    {
+      "stable_id": "page.performance.umsatz-marge",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/performance/umsatz-marge/page.tsx",
+      "route": "/performance/umsatz-marge",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Revenue/margin KPI. No verified read-model."
+    },
+    {
+      "stable_id": "page.performance.werkstatt-puls",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/performance/werkstatt-puls/page.tsx",
+      "route": "/performance/werkstatt-puls",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Workshop pulse KPI. No verified read-model."
+    },
+    {
+      "stable_id": "page.print-queue",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/print-queue/page.tsx",
+      "route": "/print-queue",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Print queue management. No verified contract."
+    },
+    {
+      "stable_id": "page.quotes.new",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/quotes/new/page.tsx",
+      "route": "/quotes/new",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "New quote/inquiry form. No verified contract."
+    },
+    {
+      "stable_id": "page.quotes",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/quotes/page.tsx",
+      "route": "/quotes",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Quote/inquiry list. No verified contract."
+    },
+    {
+      "stable_id": "page.scan",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/scan/page.tsx",
+      "route": "/scan",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "QR/document scan entry point. OCR routes quarantined."
+    },
+    {
+      "stable_id": "page.settings",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/settings/page.tsx",
+      "route": "/settings",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "App settings. No verified contract."
+    },
+    {
+      "stable_id": "page.start",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/start/page.tsx",
+      "route": "/start",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Today/start page. today/* API routes connected but no independent E2E evidence."
+    },
+    {
+      "stable_id": "page.station.slug",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/station/[slug]/page.tsx",
+      "route": "/station/[slug]",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Station page uses real getOrdersDb(). Phantom /orders/new CTA replaced with /warendurchlauf/wareneingang in F1-R0. No independent E2E evidence."
+    },
+    {
+      "stable_id": "page.status",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/status/page.tsx",
+      "route": "/status",
+      "visible": true,
+      "reachable": true,
+      "classification": "REAL_VERIFIED",
+      "evidence": {
+        "mission": "F1.1_DIGITALER_WARENEINGANG",
+        "role": "Readback confirmation page proving order was written and readable",
+        "product_sha": "333368cb2a0b8db06938a0f8d646493feb61537b",
+        "evidence_sha": "228316b7674d3363a9ab62d97b41500bd1409395",
+        "evidence_sha256": "69F7017DD45700D69FC65D2D2099AB33497D6D1705C2FC03B86260A68323BE9C"
+      }
+    },
+    {
+      "stable_id": "page.telefonnotiz",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/telefonnotiz/page.tsx",
+      "route": "/telefonnotiz",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Phone note capture. No verified contract."
+    },
+    {
+      "stable_id": "page.today",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/today/page.tsx",
+      "route": "/today",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Today overview. API routes connected but no independent E2E evidence."
+    },
+    {
+      "stable_id": "page.warendurchlauf.galvanik",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/warendurchlauf/galvanik/page.tsx",
+      "route": "/warendurchlauf/galvanik",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Galvanik station view. DB-connected but F1.2 not yet released."
+    },
+    {
+      "stable_id": "page.warendurchlauf.neu",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/warendurchlauf/neu/page.tsx",
+      "route": "/warendurchlauf/neu",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "New order entry. No verified contract beyond F1.1 wareneingang."
+    },
+    {
+      "stable_id": "page.warendurchlauf",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/warendurchlauf/page.tsx",
+      "route": "/warendurchlauf",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Workflow overview hub. Supabase-connected, no independent hub-level E2E evidence."
+    },
+    {
+      "stable_id": "page.warendurchlauf.warenausgang",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/warendurchlauf/warenausgang/page.tsx",
+      "route": "/warendurchlauf/warenausgang",
+      "visible": true,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Goods-out station. F1.3 not yet released."
+    },
+    {
+      "stable_id": "page.warendurchlauf.wareneingang",
+      "kind": "PAGE_ROUTE",
+      "entry_point": "src/app/warendurchlauf/wareneingang/page.tsx",
+      "route": "/warendurchlauf/wareneingang",
+      "visible": true,
+      "reachable": true,
+      "classification": "REAL_VERIFIED",
+      "evidence": {
+        "mission": "F1.1_DIGITALER_WARENEINGANG",
+        "role": "Primary goods-intake page. Full vertical: customer search/create -> item entry -> photo -> receipt -> readback.",
+        "product_sha": "333368cb2a0b8db06938a0f8d646493feb61537b",
+        "evidence_sha": "228316b7674d3363a9ab62d97b41500bd1409395",
+        "evidence_sha256": "69F7017DD45700D69FC65D2D2099AB33497D6D1705C2FC03B86260A68323BE9C"
+      }
+    },
+    {
+      "stable_id": "nav.kundenservice",
+      "kind": "NAV_LINK_NO_PAGE",
+      "route": "/kundenservice",
+      "visible": false,
+      "reachable": false,
+      "classification": "LEGACY_REMOVE",
+      "open_reason": "Nav link /kundenservice removed from MobileBottomNav.tsx and BetriebDashboardClient.tsx in F1-R0; no page.tsx exists."
+    },
+    {
+      "stable_id": "nav.einstellungen",
+      "kind": "NAV_LINK_NO_PAGE",
+      "route": "/einstellungen",
+      "visible": false,
+      "reachable": false,
+      "classification": "LEGACY_REMOVE",
+      "open_reason": "Unsupported station-hours CTA to /einstellungen removed from EngpassKachel.tsx in F1-R0."
+    },
+    {
+      "stable_id": "api.cron.send-feedback",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/cron/send-feedback/route.ts",
+      "route": "/api/cron/send-feedback",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "provider": "mail",
+      "open_reason": "Returns notAvailableResponse (503). Email provider not activated. Cron trigger not configured."
+    },
+    {
+      "stable_id": "api.email.send",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/email/send/route.ts",
+      "route": "/api/email/send",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "provider": "mail",
+      "open_reason": "Returns notAvailableResponse (503). Email provider not activated."
+    },
+    {
+      "stable_id": "api.erfassung.customer-enrich",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/erfassung/customer-enrich/route.ts",
+      "route": "/api/erfassung/customer-enrich",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "provider": "gemini",
+      "open_reason": "Returns notAvailableResponse (503). Quarantined pending F0 command contract review."
+    },
+    {
+      "stable_id": "api.erfassung.customer-search",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/erfassung/customer-search/route.ts",
+      "route": "/api/erfassung/customer-search",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Returns notAvailableResponse (503). Quarantined pending F0 command contract review."
+    },
+    {
+      "stable_id": "api.erfassung.freetext-extract",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/erfassung/freetext-extract/route.ts",
+      "route": "/api/erfassung/freetext-extract",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "provider": "gemini",
+      "open_reason": "Returns notAvailableResponse (503). Quarantined pending provider contract."
+    },
+    {
+      "stable_id": "api.erfassung.inquiry-extract",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/erfassung/inquiry-extract/route.ts",
+      "route": "/api/erfassung/inquiry-extract",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "provider": "gemini",
+      "open_reason": "Returns notAvailableResponse (503). Quarantined pending provider contract."
+    },
+    {
+      "stable_id": "api.erfassung.item-photo-upload",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/erfassung/item-photo-upload/route.ts",
+      "route": "/api/erfassung/item-photo-upload",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "provider": "supabase-storage",
+      "open_reason": "Returns notAvailableResponse (503). Quarantined pending F0 command contract review. F1.1 photo upload uses a separate verified path."
+    },
+    {
+      "stable_id": "api.erfassung.notes-extract",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/erfassung/notes-extract/route.ts",
+      "route": "/api/erfassung/notes-extract",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "provider": "gemini",
+      "open_reason": "Returns notAvailableResponse (503). Quarantined pending provider contract."
+    },
+    {
+      "stable_id": "api.erfassung.scan-status.id",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/erfassung/scan-status/[id]/route.ts",
+      "route": "/api/erfassung/scan-status/[id]",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Returns notAvailableResponse (503). Quarantined pending OCR contract."
+    },
+    {
+      "stable_id": "api.erfassung.scan-upload",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/erfassung/scan-upload/route.ts",
+      "route": "/api/erfassung/scan-upload",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "provider": "klippa",
+      "open_reason": "Returns notAvailableResponse (503). Quarantined pending OCR provider contract."
+    },
+    {
+      "stable_id": "api.morning-message",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/morning-message/route.ts",
+      "route": "/api/morning-message",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "provider": "gemini",
+      "open_reason": "Returns notAvailableResponse (503). Quarantined pending cron and Gemini contract."
+    },
+    {
+      "stable_id": "api.ocr-process",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/ocr-process/route.ts",
+      "route": "/api/ocr-process",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "provider": "klippa",
+      "open_reason": "OCR processing route. Not quarantined but no verified E2E contract."
+    },
+    {
+      "stable_id": "api.payments.mollie.create",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/payments/mollie/create/route.ts",
+      "route": "/api/payments/mollie/create",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "provider": "mollie",
+      "open_reason": "Returns notAvailableResponse (503). Mollie payment integration not activated."
+    },
+    {
+      "stable_id": "api.today.has-deadlines",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/today/has-deadlines/route.ts",
+      "route": "/api/today/has-deadlines",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Today deadline check. Supabase-connected but no independent E2E evidence."
+    },
+    {
+      "stable_id": "api.today.important",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/today/important/route.ts",
+      "route": "/api/today/important",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Today important items. Supabase-connected but no independent E2E evidence."
+    },
+    {
+      "stable_id": "api.today.status",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/today/status/route.ts",
+      "route": "/api/today/status",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Today status summary. Supabase-connected but no independent E2E evidence."
+    },
+    {
+      "stable_id": "api.today.timeline",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/today/timeline/route.ts",
+      "route": "/api/today/timeline",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Today timeline feed. Supabase-connected but no independent E2E evidence."
+    },
+    {
+      "stable_id": "api.users",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/users/route.ts",
+      "route": "/api/users",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "User management API. Admin-only, no verified E2E contract."
+    },
+    {
+      "stable_id": "server-actions.auth",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/auth.ts",
+      "exported_functions": [
+        "login",
+        "logout"
+      ],
+      "classification": "REAL_PENDING_SECRET",
+      "open_reason": "Core login/logout. Supabase Auth required. Verified structurally in F0 but not under F1 evidence frame.",
+      "visible": false,
+      "reachable": true,
+      "env_vars": [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+      ]
+    },
+    {
+      "stable_id": "server-actions.auth-actions",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/auth.actions.ts",
+      "exported_functions": [
+        "getAuthorizationSnapshotAction",
+        "getRoleAction",
+        "getMyPermissionsAction",
+        "loginWithPin"
+      ],
+      "classification": "REAL_PENDING_SECRET",
+      "open_reason": "Authorization snapshot actions. Require Supabase Auth and PIN state.",
+      "visible": false,
+      "reachable": true,
+      "env_vars": [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+      ]
+    },
+    {
+      "stable_id": "server-actions.admin",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/admin.actions.ts",
+      "exported_functions": [
+        "getUsers",
+        "createUser",
+        "updateUserRole",
+        "updateUserPin",
+        "toggleUserStatus",
+        "getFeatureFlags",
+        "toggleFeatureFlag",
+        "updateFeatureFlagRoles",
+        "initializeDefaultFlags"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Admin user/feature-flag management. Supabase-connected, no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.ai-enrichment",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/ai-enrichment.actions.ts",
+      "exported_functions": [
+        "extractCustomerDataFromFreetext",
+        "enrichCustomerData"
+      ],
+      "classification": "REAL_PENDING_SECRET",
+      "provider": "gemini",
+      "open_reason": "AI enrichment via Gemini. GeminiClient throws GeminiConfigError on missing GEMINI_API_KEY (honest). Route quarantined.",
+      "visible": false,
+      "reachable": false,
+      "env_vars": [
+        "GEMINI_API_KEY"
+      ]
+    },
+    {
+      "stable_id": "server-actions.ai-search",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/aiSearch.ts",
+      "exported_functions": [
+        "askGlobalAiAction"
+      ],
+      "classification": "REAL_PENDING_SECRET",
+      "provider": "gemini",
+      "open_reason": "Global AI search via Gemini. Requires GEMINI_API_KEY.",
+      "visible": false,
+      "reachable": false,
+      "env_vars": [
+        "GEMINI_API_KEY"
+      ]
+    },
+    {
+      "stable_id": "server-actions.analyze-phone-note",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/analyzePhoneNote.ts",
+      "exported_functions": [
+        "analyzePhoneNoteWithAI"
+      ],
+      "classification": "REAL_PENDING_SECRET",
+      "provider": "gemini",
+      "open_reason": "Phone note AI analysis. Requires GEMINI_API_KEY.",
+      "visible": false,
+      "reachable": false,
+      "env_vars": [
+        "GEMINI_API_KEY"
+      ]
+    },
+    {
+      "stable_id": "server-actions.baths",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/baths.actions.ts",
+      "exported_functions": [
+        "getBathsDb",
+        "getBathByIdDb",
+        "getBathMeasurementsDb",
+        "createBathMeasurementDb",
+        "updateBathDb"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Bath/process management. Supabase-connected but no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.company",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/company.actions.ts",
+      "exported_functions": [
+        "getCompanySettings",
+        "updateCompanySettings"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Company settings CRUD. Supabase-connected but no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.complaints",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/complaints.actions.ts",
+      "exported_functions": [
+        "getComplaints",
+        "getByOrder",
+        "createComplaint",
+        "updateComplaint",
+        "resolveComplaint"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Complaint/Reklamation management. Supabase-connected but no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.customers",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/customers.actions.ts",
+      "exported_functions": [
+        "getCustomersDb",
+        "getCustomerByIdDb",
+        "createCustomerDb",
+        "updateCustomerDb",
+        "searchCustomersDb",
+        "getTopKunden"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Customer CRUD. Supabase-connected. searchCustomersDb and createCustomerDb exercised in F1.1 but not independently evidenced here.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.developer-analytics",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/developerAnalytics.actions.ts",
+      "exported_functions": [
+        "getDeveloperCockpitStats"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "getDeveloperCockpitStats — hardcoded frictionAnalysis, suggestions, and fallback numbers removed in F1-R0. Returns only real tracking events (empty when none). Pending real analytics data contract.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.erfassung",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/erfassung.actions.ts",
+      "exported_functions": [
+        "startZeit",
+        "stopZeit",
+        "erfasseZeitDirekt",
+        "erfasseVerbrauch",
+        "uebernehmeVorlage",
+        "createCustomerFromErfassung",
+        "createOrderFromErfassung"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Time/resource capture actions. Supabase-connected but quarantined route path. No independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.inquiries",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/inquiries.actions.ts",
+      "exported_functions": [
+        "getInquiries",
+        "getOpenInquiriesCount",
+        "createInquiry",
+        "updateInquiry"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Quote/inquiry management. Supabase-connected but no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.inventory",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/inventory.actions.ts",
+      "exported_functions": [
+        "getInventoryItemsAction",
+        "getInventoryMovementsAction",
+        "getInventoryItemAction",
+        "getInventoryMovementsByItemAction",
+        "createInventoryMovementAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Inventory/Lager management. Supabase-connected but no independent E2E evidence.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.items",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/items.actions.ts",
+      "exported_functions": [
+        "getItemsDb",
+        "getItemsByOrderDb",
+        "createItemDb",
+        "updateItemDb",
+        "deleteItemDb"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Item/part CRUD. Supabase-connected but no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.mahnung",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/mahnung.actions.ts",
+      "exported_functions": [
+        "sendeZahlungserinnerung",
+        "sendeMahnung"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "provider": "mail",
+      "open_reason": "Payment reminder email actions. Email route quarantined. No verified provider contract.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.ocr",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/ocr.actions.ts",
+      "exported_functions": [
+        "processImage",
+        "processImageWithAI"
+      ],
+      "classification": "REAL_PENDING_SECRET",
+      "provider": "gemini",
+      "open_reason": "OCR via Gemini or Klippa. GeminiClient throws on missing key (honest). Requires GEMINI_API_KEY.",
+      "visible": false,
+      "reachable": false,
+      "env_vars": [
+        "GEMINI_API_KEY"
+      ]
+    },
+    {
+      "stable_id": "server-actions.orders",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/orders.actions.ts",
+      "exported_functions": [
+        "transitionWareneingangToGalvanikAction",
+        "getOrdersDb",
+        "getOrderCountDb",
+        "createOrderDb",
+        "updateOrderDb",
+        "getRiskOrders",
+        "transitionOrderProcess",
+        "createOrderFromScan"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Order lifecycle actions. getRiskOrders returns NOT_AVAILABLE. transitionOrderProcess under F0-W2C quarantine. No independent E2E evidence beyond F1.1 intake path.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.pdf",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/pdf.actions.ts",
+      "exported_functions": [
+        "generateOrderLabel",
+        "generateDeliveryNote"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "PDF label/delivery note generation. No verified contract.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.performance",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/performance.actions.ts",
+      "exported_functions": [
+        "getOrdersKPIs",
+        "getInquiriesFunnel",
+        "getUsageStats"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Performance KPI actions. Supabase-connected but no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.phone-notes",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/phoneNotes.actions.ts",
+      "exported_functions": [
+        "createPhoneNote",
+        "getRecentPhoneNotes",
+        "updatePhoneNote"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Phone note CRUD. Functions return PhoneNoteUnavailable stub (honest not-available).",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.price-lines",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/price-lines.actions.ts",
+      "exported_functions": [
+        "getPriceLinesDb",
+        "createPriceLineDb",
+        "updatePriceLineDb",
+        "deletePriceLineDb"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Price line CRUD. Supabase-connected but no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.search",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/search.actions.ts",
+      "exported_functions": [
+        "globalSearch"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Global search action. Supabase full-text, no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.start",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/start.actions.ts",
+      "exported_functions": [
+        "getFeierabendEvents",
+        "notifyAdminPinReset"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Start/today page actions. Supabase-connected, no independent E2E evidence.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.status-events",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/status-events.actions.ts",
+      "exported_functions": [
+        "createStatusEvent",
+        "getStatusEventsByOrderId",
+        "getStatusEventsByItemId",
+        "getRecentStatusEvents"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Status event log. Supabase-connected, no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.timeline",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/timeline.actions.ts",
+      "exported_functions": [
+        "getGlobalTimelineDb",
+        "getTimelineForCustomerDb",
+        "getTimelineForOrderDb"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Timeline read actions. Supabase-connected, no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.tracking",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/tracking.actions.ts",
+      "exported_functions": [
+        "logUiEvent",
+        "getRealAnalyticsStats",
+        "getRecentUiEvents"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "UI event tracking. Internal telemetry, no verified external provider contract.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.vorlage",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/vorlage.actions.ts",
+      "exported_functions": [
+        "getVorlageFuerAuftrag",
+        "getWahrscheinlicheArtikel"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Template/suggested items for order. Supabase-connected, no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.baeder",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/baeder/actions.ts",
+      "exported_functions": [
+        "getBaederListAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Bath list action. Supabase-connected, no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.buchhaltung",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/buchhaltung/actions.ts",
+      "exported_functions": [
+        "listBelegeAction",
+        "getBelegAction",
+        "createBelegAction",
+        "freigebenBelegAction",
+        "stornoBelegAction",
+        "assignBelegeBatchAction",
+        "getKraftstoffTankungenAction",
+        "exportBelegeAction",
+        "listRechnungenAction",
+        "listOffenePostenAction",
+        "createRechnungAction",
+        "getRechnungAction",
+        "listKostenpostenAction",
+        "createKostenpostenAction",
+        "getKostenpostenAction",
+        "getCockpitMetricsAction",
+        "generateDatevExportAction",
+        "generateLexwareExportAction",
+        "getL7Daten"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Accounting CRUD and export. Supabase-connected via SupabaseBuchhaltungProvider. No independent E2E evidence. DATEV/Lexware export functions present but not verified.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.buchhaltung-search",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/buchhaltung/search-actions.ts",
+      "exported_functions": [
+        "searchBelegeByOcrTextAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "OCR-based receipt search. Supabase-connected, no verified E2E.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.buchhaltung-periodenabschluss",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/buchhaltung/periodenabschluss/actions.ts",
+      "exported_functions": [
+        "getPeriodenabschlussStatusAction",
+        "runEnergieVerteilungAction",
+        "schliessePeriodeAction",
+        "finalSchliessePeriodeAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Period closing workflow. Supabase-connected, no verified E2E.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.cockpit",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/cockpit/actions.ts",
+      "exported_functions": [
+        "getCockpitKpis",
+        "getTopKunden",
+        "getInaktiveKunden",
+        "getEngpassDaten",
+        "getAgingDaten",
+        "getAuftragDbRanking",
+        "getWhatIfKontext",
+        "getEngpassDetails",
+        "getAuftragDbDetails",
+        "getForecastDaten",
+        "getKundenDetails",
+        "getAgingRechnungen",
+        "getAktiveWarnungen",
+        "dismissWarnung",
+        "refreshWarnungen",
+        "getAktiverJahresplan",
+        "speichereJahresplan",
+        "savePhoneNote"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Owner cockpit KPI and scenario actions. Supabase read-models, no independent E2E evidence.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.customers-id",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/customers/[id]/actions.ts",
+      "exported_functions": [
+        "getCustomerDetailsAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Customer detail aggregation. Supabase-connected, no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.global-search",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/global-search-actions.ts",
+      "exported_functions": [
+        "globalSearchAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Global search action delegate. Supabase-connected, no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.kontrolle",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/kontrolle/actions.ts",
+      "exported_functions": [
+        "getQsListenAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Quality control list action. Supabase-connected, no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.lager",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/lager/actions.ts",
+      "exported_functions": [
+        "getLagerbestandAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Stock/inventory action. Supabase-connected, no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.marketing-aktion",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/marketing/aktion/actions.ts",
+      "exported_functions": [
+        "getAktionen",
+        "getAktionById",
+        "createAktion",
+        "changeAktionStatus"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Marketing campaign CRUD. Supabase-connected, no verified external integration.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.marketing-analysis",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/marketing/analysis.actions.ts",
+      "exported_functions": [
+        "getMarketingAnfragenAnalysisAction",
+        "getMarketingUmsatzAnalysisAction",
+        "getMarketingRoiAnalysisAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Marketing analytics. No verified external data source. ROI action uses getSparzaehlerAnalysisAction for real data but neukundenUmsatz is hardcoded (see page.buchhaltung LEGACY_REMOVE).",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.marketing-attribution",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/marketing/attribution/actions.ts",
+      "exported_functions": [
+        "getAttributionData"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Marketing attribution. No verified external provider integration.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.marketing-einwilligungen",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/marketing/einwilligungen/actions.ts",
+      "exported_functions": [
+        "getEinwilligungen",
+        "checkEinwilligung"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Marketing consent management. Supabase-connected, no verified E2E.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.marketing-kanaele",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/marketing/kanaele/actions.ts",
+      "exported_functions": [
+        "getKanaele",
+        "updateKanalConfig"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Marketing channel config. Supabase-connected, no verified external provider.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.marketing-segmente",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/marketing/segmente/actions.ts",
+      "exported_functions": [
+        "getSegments",
+        "getSegmentById",
+        "createSegment",
+        "updateSegment",
+        "deleteSegment"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Customer segment CRUD. Supabase-connected, no verified E2E.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.marketing-hub",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/marketing/marketing.actions.ts",
+      "exported_functions": [
+        "getBesteAktionAction",
+        "listVorschlaegeAction",
+        "getKampagnenAction",
+        "getSegmenteAction",
+        "getLernInsightsAction",
+        "getWirkungMiniAction",
+        "getFunnelAction",
+        "getStoryIdeenAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Marketing hub actions. Supabase-connected, no verified external provider integration.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.performance-actions",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/performance/actions.ts",
+      "exported_functions": [
+        "getPerformanceKPIsAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Performance KPI aggregation. Supabase read-models, no independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "server-actions.warendurchlauf",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/warendurchlauf/actions.ts",
+      "exported_functions": [
+        "getStationOrders",
+        "getStationReadyOrders",
+        "getWareneingangOrdersAction",
+        "getGalvanikOrdersAction",
+        "getOrderStationReceiptAction",
+        "createOrderIntakeAction",
+        "searchOrderIntakeCustomersAction",
+        "getOrderIntakeReceiptAction",
+        "getGalvanikHandoffAttachmentsAction",
+        "getGalvanikEvidenceByTargetAction",
+        "reserveGalvanikHandoffAttachmentAction",
+        "finalizeGalvanikHandoffAttachmentAction",
+        "getGalvanikHandoffAttachmentOriginalAction",
+        "getOrderIntakeAttachmentsAction",
+        "reserveOrderIntakeAttachmentAction",
+        "finalizeOrderIntakeAttachmentAction",
+        "getOrderIntakeAttachmentOriginalAction",
+        "startProcessingStation",
+        "getWarendurchlaufKPIs"
+      ],
+      "classification": "REAL_VERIFIED",
+      "evidence": {
+        "mission": "F1.1_DIGITALER_WARENEINGANG",
+        "verified_functions": [
+          "createOrderIntakeAction",
+          "searchOrderIntakeCustomersAction",
+          "getOrderIntakeReceiptAction",
+          "reserveOrderIntakeAttachmentAction",
+          "finalizeOrderIntakeAttachmentAction"
+        ],
+        "pending_functions": [
+          "getStationOrders",
+          "getStationReadyOrders",
+          "getGalvanikOrdersAction",
+          "getOrderStationReceiptAction",
+          "getGalvanikHandoffAttachmentsAction",
+          "getGalvanikEvidenceByTargetAction",
+          "reserveGalvanikHandoffAttachmentAction",
+          "finalizeGalvanikHandoffAttachmentAction",
+          "getGalvanikHandoffAttachmentOriginalAction",
+          "getOrderIntakeAttachmentsAction",
+          "getOrderIntakeAttachmentOriginalAction",
+          "startProcessingStation",
+          "getWarendurchlaufKPIs"
+        ],
+        "product_sha": "333368cb2a0b8db06938a0f8d646493feb61537b",
+        "evidence_sha": "228316b7674d3363a9ab62d97b41500bd1409395",
+        "evidence_sha256": "69F7017DD45700D69FC65D2D2099AB33497D6D1705C2FC03B86260A68323BE9C"
+      },
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "kpi.energie",
+      "kind": "KPI_DEFINITION",
+      "kpi_id": "energie",
+      "source_file": "src/lib/analytics/kpiRegistry.ts",
+      "label": "Energie",
+      "source_domain": "accounting",
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "KPI metadata defined. Runtime data from getBuchhaltungProvider() via SupabaseBuchhaltungProvider (not mock). No independent E2E evidence for energy cost KPI.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "kpi.kosten_kategorien",
+      "kind": "KPI_DEFINITION",
+      "kpi_id": "kosten_kategorien",
+      "source_file": "src/lib/analytics/kpiRegistry.ts",
+      "label": "Ausgaben & Kosten",
+      "source_domain": "accounting",
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "KPI metadata defined. Runtime data from SupabaseBuchhaltungProvider. No independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "kpi.bwa_ergebnis",
+      "kind": "KPI_DEFINITION",
+      "kpi_id": "bwa_ergebnis",
+      "source_file": "src/lib/analytics/kpiRegistry.ts",
+      "label": "BWA / Betriebsergebnis",
+      "source_domain": "accounting",
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "KPI metadata defined. Runtime data from SupabaseBuchhaltungProvider. No independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "kpi.offene_posten",
+      "kind": "KPI_DEFINITION",
+      "kpi_id": "offene_posten",
+      "source_file": "src/lib/analytics/kpiRegistry.ts",
+      "label": "Offene Posten",
+      "source_domain": "accounting",
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "KPI metadata defined. Runtime data from SupabaseBuchhaltungProvider. No independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "kpi.on_time_rate",
+      "kind": "KPI_DEFINITION",
+      "kpi_id": "on_time_rate",
+      "source_file": "src/lib/analytics/kpiRegistry.ts",
+      "label": "Termintreue",
+      "source_domain": "performance",
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "KPI metadata defined. Runtime data from operations Supabase views. No independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "kpi.reklamationen",
+      "kind": "KPI_DEFINITION",
+      "kpi_id": "reklamationen",
+      "source_file": "src/lib/analytics/kpiRegistry.ts",
+      "label": "Reklamationen",
+      "source_domain": "operations",
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "KPI metadata defined. Runtime data from Supabase. No independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "kpi.kraftstoff",
+      "kind": "KPI_DEFINITION",
+      "kpi_id": "kraftstoff",
+      "source_file": "src/lib/analytics/kpiRegistry.ts",
+      "label": "Kraftstoff & Kfz",
+      "source_domain": "accounting",
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "KPI metadata defined. Runtime data from SupabaseBuchhaltungProvider. No independent E2E evidence.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "provider.supabase-postgres",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Supabase/Postgres",
+      "adapter_file": "src/lib/supabase/server.ts",
+      "env_vars": [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "DATABASE_URL"
+      ],
+      "classification": "REAL_VERIFIED",
+      "evidence": {
+        "mission": "F1.1_DIGITALER_WARENEINGANG",
+        "note": "Primary relational database. Used in F1.1 order intake, F0 schema replay, and all Drizzle operations.",
+        "evidence_sha": "228316b7674d3363a9ab62d97b41500bd1409395"
+      },
+      "visible": false,
+      "reachable": true,
+      "evidence_files": [
+        "src/lib/buchhaltung/providers/BuchhaltungDataProvider.ts",
+        "src/lib/buchhaltung/providers/SupabaseBuchhaltungProvider.ts"
+      ]
+    },
+    {
+      "stable_id": "provider.supabase-auth",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Supabase/Auth",
+      "adapter_file": "src/lib/supabase/server.ts",
+      "env_vars": [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "NEXT_PUBLIC_SUPABASE_ANON_KEY"
+      ],
+      "classification": "REAL_VERIFIED",
+      "evidence": {
+        "note": "Auth/session management verified in F0 HTTP boundary tests (BF-006) and F0 RLS negative matrix.",
+        "evidence_sha": "228316b7674d3363a9ab62d97b41500bd1409395"
+      },
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "provider.supabase-storage",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Supabase/Storage",
+      "adapter_file": "src/lib/server/orderStationAttachmentStorage.ts",
+      "env_vars": [
+        "NEXT_PUBLIC_SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY"
+      ],
+      "classification": "REAL_VERIFIED",
+      "evidence": {
+        "note": "Object storage verified in F0 BF-007 Storage HTTP negative matrix (S1-S12) and F1.1 photo upload.",
+        "evidence_sha": "228316b7674d3363a9ab62d97b41500bd1409395"
+      },
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "provider.gemini",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Gemini/Google GenAI",
+      "adapter_file": "src/lib/ai/geminiClient.ts",
+      "env_vars": [
+        "GEMINI_API_KEY",
+        "GEMINI_MODEL_PRIMARY",
+        "GEMINI_MODEL_FALLBACK"
+      ],
+      "classification": "REAL_PENDING_SECRET",
+      "open_reason": "GeminiClient throws GeminiConfigError on missing GEMINI_API_KEY (honest, no fake fallback). Used for AI enrichment, OCR, morning messages. Activated when secret is provided.",
+      "visible": false,
+      "reachable": false,
+      "evidence_files": [
+        "src/lib/ocr/GeminiProvider.ts"
+      ]
+    },
+    {
+      "stable_id": "provider.klippa",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Klippa/OCR",
+      "adapter_file": "src/lib/ocr/KlippaProvider.ts",
+      "env_vars": [
+        "KLIPPA_API_KEY"
+      ],
+      "classification": "REAL_PENDING_SECRET",
+      "open_reason": "KlippaProvider throws on missing KLIPPA_API_KEY (honest, no fake fallback). Route /api/erfassung/scan-upload quarantined. OCR service for receipt processing.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "provider.mail-smtp",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Mail/SMTP",
+      "adapter_file": "src/lib/email/resendAdapter.ts",
+      "env_vars": [],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Email sending not activated. Route returns notAvailableResponse (503). Provider and credentials not configured. Required for feedback, reminders, and morning messages.",
+      "visible": false,
+      "reachable": false,
+      "evidence_files": [
+        "src/lib/email/emailProvider.ts"
+      ]
+    },
+    {
+      "stable_id": "provider.mollie",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Mollie/Payment",
+      "adapter_file": "src/lib/payments/mollieAdapter.ts",
+      "env_vars": [],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Payment integration not activated. Route returns notAvailableResponse (503). Planned for F1.5 confirmed payment receipt.",
+      "visible": false,
+      "reachable": false,
+      "evidence_files": [
+        "src/lib/payments/paymentProvider.ts"
+      ]
+    },
+    {
+      "stable_id": "provider.banking",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Banking/Account-Statement-Import",
+      "adapter_file": null,
+      "env_vars": [],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Banking integration planned but no adapter code found in current checkout. Required for confirmed payment matching (F1.5).",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "provider.datev-lexware",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "DATEV/Lexware Export",
+      "adapter_file": "src/lib/buchhaltung/export/ExportAdapter.ts",
+      "env_vars": [],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "generateDatevExportAction and generateLexwareExportAction exist in buchhaltung/actions.ts. Export file format logic present but no verified E2E delivery to DATEV/Lexware system.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "provider.meta-marketing",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Meta/Advertising (Facebook/Instagram Ads)",
+      "adapter_file": "src/lib/marketing/adapters/InstagramAdapter.ts",
+      "env_vars": [],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Marketing attribution and ad spend tracking planned. No adapter code or API integration found in current checkout.",
+      "visible": false,
+      "reachable": false
+    },
+    {
+      "stable_id": "provider.analytics-telemetry",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Analytics/Telemetry (internal PostHog or equivalent)",
+      "adapter_file": "src/app/actions/tracking.actions.ts",
+      "env_vars": [],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "logUiEvent and getRealAnalyticsStats in tracking.actions.ts. Internal event log to Supabase. No confirmed external analytics provider contract.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "provider.kommunikation",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Kommunikation/Notifications (WhatsApp/SMS/Push)",
+      "adapter_file": "src/app/kommunikation/page.tsx",
+      "env_vars": [],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Communication center page exists. No adapter, provider, or API integration found. Planned for customer status notifications.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.system-stats",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/systemStats.ts",
+      "exported_functions": [
+        "getSystemStats",
+        "runSupabaseWriteTest"
+      ],
+      "visible": false,
+      "reachable": false,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "System diagnostics and write-test actions. Supabase-connected but no independent E2E evidence."
+    },
+    {
+      "stable_id": "server-actions.buchhaltung-analysis",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/buchhaltung/analysis.actions.ts",
+      "exported_functions": [
+        "getUstvaAnalysisAction",
+        "getKraftstoffAnalysisAction",
+        "getOffenePostenAnalysisAction",
+        "getBwaAnalysisAction",
+        "getAusgabenAnalysisAction",
+        "getSparzaehlerAnalysisAction",
+        "getAusgabenKategorien"
+      ],
+      "visible": false,
+      "reachable": false,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Accounting period-analysis actions. Supabase-connected via SupabaseBuchhaltungProvider. No independent E2E evidence."
+    },
+    {
+      "stable_id": "nav.orders-new",
+      "kind": "NAV_LINK_NO_PAGE",
+      "entry_point": "src/app/station/[slug]/page.tsx",
+      "route": "/orders/new",
+      "visible": false,
+      "reachable": false,
+      "classification": "LEGACY_REMOVE",
+      "open_reason": "Link /orders/new in station/[slug]/page.tsx replaced with /warendurchlauf/wareneingang in F1-R0. No longer a phantom link."
+    },
+    {
+      "stable_id": "provider.ocr-buchhaltung-abstract",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "OCR/Buchhaltung-Abstract",
+      "adapter_file": "src/lib/buchhaltung/ocr/OcrProvider.ts",
+      "env_vars": [],
+      "visible": false,
+      "reachable": false,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Abstract OCR interface for accounting document processing. No external API dependency. Contract layer for future provider activation."
+    },
+    {
+      "stable_id": "provider.ocr-manual",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "OCR/Manual",
+      "adapter_file": "src/lib/ocr/ManualProvider.ts",
+      "env_vars": [],
+      "visible": false,
+      "reachable": false,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "Manual OCR data-entry provider. No external API dependency. Honest OCR contract capability without automation. No verified E2E evidence."
+    },
+    {
+      "stable_id": "provider.mock-ocr-buchhaltung",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Mock/OCR-Buchhaltung",
+      "adapter_file": "src/lib/buchhaltung/ocr/MockOcrProvider.ts",
+      "env_vars": [],
+      "visible": false,
+      "reachable": false,
+      "classification": "LEGACY_REMOVE",
+      "open_reason": "MockOcrProvider in src/lib is not an isolated test fixture it is a production-path mock in the provider layer. Scheduled for removal before F1.2."
+    },
+    {
+      "stable_id": "provider.mock-buchhaltung",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Mock/Buchhaltung",
+      "adapter_file": "src/lib/buchhaltung/providers/MockBuchhaltungProvider.ts",
+      "env_vars": [],
+      "visible": false,
+      "reachable": false,
+      "classification": "LEGACY_REMOVE",
+      "open_reason": "MockBuchhaltungProvider in src/lib is not an isolated test fixture it is a production-path mock provider. Scheduled for removal before F1.2."
+    },
+    {
+      "stable_id": "provider.mock-marketing",
+      "kind": "PROVIDER_CONNECTION",
+      "provider": "Mock/Marketing",
+      "adapter_file": "src/lib/marketing/marketingMockProvider.ts",
+      "env_vars": [],
+      "visible": false,
+      "reachable": false,
+      "classification": "LEGACY_REMOVE",
+      "open_reason": "marketingMockProvider in src/lib is not an isolated test fixture it is a production-path mock provider. Scheduled for removal before F1.2."
+    }
+  ]
+}

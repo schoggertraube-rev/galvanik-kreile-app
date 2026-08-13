@@ -40,9 +40,6 @@ vi.mock("@/app/actions/auth", () => ({ logout: boundary.logout }));
 vi.mock("@/components/layout/RealtimeSyncManager", () => ({
   useRealtimeStatus: () => boundary.realtime,
 }));
-vi.mock("@/components/testpilot/TestpilotProvider", () => ({
-  useTestpilot: () => ({ isRecording: false }),
-}));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
   usePermissions: () => ({ initials: "", name: "", status: "unauthenticated" }),
 }));

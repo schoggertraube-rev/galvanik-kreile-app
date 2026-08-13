@@ -131,7 +131,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
                   <Card className="bg-linear-to-r from-navy-900 to-navy-700 text-white p-6 rounded-xl shadow-md border border-white/10">
                     <div className="flex flex-col items-center">
                       <h2 className="text-xl font-bold font-serif mb-4 text-white">Neuen Auftrag erfassen</h2>
-                      <Link href="/orders/new" className="w-full max-w-sm">
+                      <Link href="/warendurchlauf/wareneingang" className="w-full max-w-sm">
                         <Button className="w-full bg-white text-navy-900 hover:bg-bg-app-soft py-6 text-base font-extrabold rounded-xl shadow-md transition-all">
                           Wareneingang erfassen
                         </Button>

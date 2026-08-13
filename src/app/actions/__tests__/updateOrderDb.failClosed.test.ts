@@ -102,7 +102,7 @@ describe("W2C-B1 caller containment", () => {
     expect(stationButton).not.toContain("transitionOrderProcess");
     expect(stationButton).not.toContain('action: "start"');
     for (const source of blockedFiles) {
-      expect(source).toMatch(/NOT_AVAILABLE|disabled/);
+      expect(source).toMatch(/FoundationUnavailable|NOT_AVAILABLE|disabled/);
     }
   });
 

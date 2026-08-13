@@ -420,7 +420,7 @@ process.exitCode = 1;
 
     const execution = spawnSync(
       process.execPath,
-      ["--import", "tsx", scriptPath],
+      [scriptPath],
       { cwd: projectRoot, encoding: "utf8" },
     );
     expect(execution.error).toBeUndefined();

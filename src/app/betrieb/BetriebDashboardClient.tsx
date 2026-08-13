@@ -3,7 +3,7 @@
 import { usePageView } from "@/hooks/usePageView";
 import { PageHeader } from "@/components/ui/PageHeader";
 import Link from "next/link";
-import { CheckSquare, MessageSquare, PhoneCall, Lightbulb, Droplet, Package, FileText, Lock, BarChart3 } from "lucide-react";
+import { CheckSquare, MessageSquare, Lightbulb, Droplet, Package, FileText, Lock, BarChart3 } from "lucide-react";
 
 interface ModuleConfig {
   id: string;
@@ -45,15 +45,6 @@ export function BetriebDashboardClient({ isAdminOrDev }: { isAdminOrDev: boolean
       href: "/kommunikation",
       hasAccess: true,
       color: "text-indigo-500",
-    },
-    {
-      id: "kundenservice",
-      label: "Kundenservice",
-      description: "Kundenanfragen & Support",
-      icon: PhoneCall,
-      href: "/kundenservice",
-      hasAccess: true,
-      color: "text-emerald-500",
     },
     {
       id: "kvp",

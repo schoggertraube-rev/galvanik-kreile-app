@@ -85,6 +85,14 @@ jobs:
       - name: Production migration ledger contract
         run: node scripts/check-migration-ledger.mjs --base "${{ steps.diff.outputs.base }}"
 
+      - name: F1-R0 No-fake-production gate selftest (proves rules fire, mutation-free)
+        run: node scripts/quality/check-no-fake-production.mjs --selftest
+
+      - name: F1-R0 No-fake-production gate (blocking)
+        # Blocking invariant: both counters must remain zero and the frozen F1.1
+        # evidence binding must keep ACTIVE_CAPABILITY_REAL_E2E at PASS.
+        run: node scripts/quality/check-no-fake-production.mjs
+
       - name: TypeScript
         run: npx tsc --noEmit --incremental false
 

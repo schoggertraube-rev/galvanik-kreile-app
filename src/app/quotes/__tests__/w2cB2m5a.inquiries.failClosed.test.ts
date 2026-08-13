@@ -84,10 +84,10 @@ describe("W2C-B2M5A inquiry containment", () => {
       expect(dashboard).not.toContain(forbidden);
       expect(intake).not.toContain(forbidden);
     }
-    expect(dashboard).toContain("Anfragen derzeit nicht verfügbar");
+    expect(dashboard).toContain('redirect("/warendurchlauf")');
     expect(intake).toContain("Anfragen derzeit nicht verfügbar");
-    expect(dashboard).toContain("getOrdersDb");
-    expect(dashboard).toContain('"kreile-orders-updated"');
+    expect(dashboard).not.toContain("getOrdersDb");
+    expect(dashboard).not.toContain('"kreile-orders-updated"');
     expect(intake).toContain("ordersRepository.getAll");
     expect(intake).toContain('window.addEventListener("storage", fetchStats)');
     expect(intake).toContain('href="/quotes"');

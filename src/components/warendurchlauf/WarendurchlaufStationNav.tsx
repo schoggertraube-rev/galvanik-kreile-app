@@ -214,7 +214,7 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
                         />
                       ))}
                     </div>
-                    <span className="text-[9px] text-[#9e9689] font-medium" title="Aus vorhandenen Testaufträgen berechnet (Demo-Auswertung)">
+                    <span className="text-[9px] text-[#9e9689] font-medium" title="Aus vorhandenen Aufträgen berechnet">
                       {station.trend.label}
                     </span>
                   </div>
@@ -233,16 +233,6 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
           );
         })}
 
-        {/* Demo badge */}
-        {process.env.NEXT_PUBLIC_DEMO_MODE === "true" && (
-          <div className="hidden xl:flex items-center shrink-0 ml-4">
-            <span
-              className="text-[9px] font-bold px-3 py-1 rounded-full uppercase tracking-wider bg-[#fef3e2] text-[#c8922a] border border-[#c8922a]/20"
-            >
-              Demo-Modus
-            </span>
-          </div>
-        )}
       </nav>
     </div>
   );
