@@ -245,7 +245,7 @@ jobs:
           node scripts/quality/fingerprint-compare.mjs "$FP_BASELINE" docs/evidence/f0/PROD_FINGERPRINT_REFERENCE.txt | tee replay-baseline-fingerprint.txt
 
       - name: Replay exact 13-migration W4 candidate from zero without seed
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed
+        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260812103446
 
       - name: Capture and check exact W4 candidate catalog, ledger, and fingerprint
         run: |
@@ -277,7 +277,7 @@ jobs:
         run: npx vitest run src/test/w3_order_station.integration.test.ts
 
       - name: Restore exact 13-migration W4 candidate without seed
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed
+        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260812103446
 
       - name: W4-03 Galvanik handoff attachment real DB, View, Actions, Panel, and Storage HTTP
         env:
@@ -374,7 +374,7 @@ jobs:
       - name: Second exact 13-migration replay and byte-identical W4 captures
         run: |
           set -euo pipefail
-          npx --yes supabase@2.111.0 db reset --local --no-seed
+          npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260812103446
           node scripts/quality/check-w4-candidate-schema.mjs --capture \
             --database-url postgresql://postgres:postgres@127.0.0.1:54322/postgres \
             --catalog w4-candidate-second.catalog --fingerprint w4-candidate-second-fingerprint.json --ledger w4-candidate-second-ledger.json
