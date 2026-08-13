@@ -127,7 +127,7 @@ describe("W4 canonical Evidence read port", () => {
     });
     expect(ports.withTransaction).toHaveBeenCalledWith(authorization, expect.any(Function));
     const query = ports.execute.mock.calls[0]?.[0] as { text: string; values: unknown[] };
-    expect(query.text).toContain("FROM private.v_evidence_records_v1");
+    expect(query.text).toContain("FROM private.v_evidence_records_v2");
     expect(query.text).not.toContain("public.scan_uploads");
     expect(query.values).toEqual([ORDER, ITEM]);
   });
@@ -148,7 +148,7 @@ describe("W4 canonical Evidence read port", () => {
       data: [expect.objectContaining({ source: "LEGACY_SCAN_UPLOAD", targets: row.target_links })],
     });
     const query = ports.execute.mock.calls.at(-1)?.[0] as { text: string; values: unknown[] };
-    expect(query.text).toContain("FROM private.v_evidence_records_v1");
+    expect(query.text).toContain("FROM private.v_evidence_records_v2");
     expect(query.values).toEqual([targetType, targetId]);
   });
 
@@ -182,7 +182,7 @@ describe("W4 canonical Evidence read port", () => {
   it("source-locks cross-module reads to the versioned view and never exposes legacy object URLs", async () => {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
     const source = await readFile(path.join(root, "src/lib/server/evidenceRead.ts"), "utf8");
-    expect(source).toContain("private.v_evidence_records_v1");
+    expect(source).toContain("private.v_evidence_records_v2");
     expect(source).not.toContain("public.scan_uploads");
     expect(source).not.toContain("file_url");
     expect(source).not.toContain("createAdminClient");

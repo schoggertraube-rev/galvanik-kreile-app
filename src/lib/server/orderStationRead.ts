@@ -26,6 +26,7 @@ type QueueRow = {
   risk: string | null;
   intake_date: Date | string | null;
   due_date: Date | string | null;
+  due_date_text: string | null;
   created_at: Date | string | null;
   tenant_integrity_ok: boolean;
   parts: unknown;
@@ -59,6 +60,27 @@ function toSafeIsoDate(value: Date | string | null | undefined): string {
   if (value === null || value === undefined) return "";
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString();
+}
+
+function parseDateOnlyText(textDate: string | null | undefined): string {
+  // Null/undefined is acceptable (unknown date, established tuple)
+  if (textDate === null || textDate === undefined) return "";
+
+  // Any non-null, non-undefined value must be valid YYYY-MM-DD
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(textDate.trim())) {
+    throw new Error("ORDER_DUE_DATE_TEXT_INVALID");
+  }
+
+  const trimmed = textDate.trim();
+  // Validate as actual calendar date
+  const [, month, day] = trimmed.split("-").map(Number);
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    throw new Error("ORDER_DUE_DATE_TEXT_INVALID");
+  }
+
+  // Construct canonical ISO format with UTC midnight
+  return `${trimmed}T00:00:00.000Z`;
 }
 
 function isPositiveVersion(value: unknown): value is number {
@@ -154,7 +176,7 @@ function mapOperationalQueueRow(row: QueueRow, tenantId: string): OperationalOrd
   }
 
   const parts = parseParts(row.parts, row);
-  const dueDate = toSafeIsoDate(row.due_date);
+  const dueDate = parseDateOnlyText(row.due_date_text);
   const priority = evaluateOrderPriority({
     dueDate,
     risk: row.risk || undefined,
@@ -204,8 +226,8 @@ export async function readTenantOperationalOrders(
 ): Promise<OperationalOrder[]> {
   return withPrivilegedTenantTransaction(authorization, async (tx) => {
     const rows = await tx.execute<QueueRow>(sql`
-      SELECT *
-      FROM private.v_operational_station_queue_v1
+      SELECT queue.*, queue.due_date::date::text AS due_date_text
+      FROM private.v_operational_station_queue_v1 queue
       ORDER BY created_at DESC, id
     `);
     return mapOperationalQueueRows(rows, authorization.tenantId);
@@ -260,15 +282,15 @@ export async function readTenantStationOrders(
   const { tenantId } = authorization;
   return withPrivilegedTenantTransaction({ tenantId }, async (tx) => {
     const rows = await tx.execute<QueueRow>(station === "galvanik" ? sql`
-      SELECT *
-      FROM private.v_operational_station_queue_v1
+      SELECT queue.*, queue.due_date::date::text AS due_date_text
+      FROM private.v_operational_station_queue_v1 queue
       WHERE station = 'galvanik'
         AND current_station = 'galvanik'
         AND current_station_id = 'galvanik'
       ORDER BY created_at DESC
     ` : sql`
-      SELECT *
-      FROM private.v_operational_station_queue_v1
+      SELECT queue.*, queue.due_date::date::text AS due_date_text
+      FROM private.v_operational_station_queue_v1 queue
       WHERE station = 'wareneingang'
         AND (current_station = 'wareneingang' OR current_station IS NULL)
         AND (current_station_id = 'wareneingang' OR current_station_id IS NULL)

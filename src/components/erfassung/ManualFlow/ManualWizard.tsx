@@ -1,7 +1,9 @@
 "use client";
 
-import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
+import { OrderIntakePanel } from "@/components/erfassung/OrderIntakePanel";
+import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 
 export function ManualWizard() {
-  return <FoundationUnavailable />;
+  const { closeErfassung, setIsDirty } = useErfassung();
+  return <OrderIntakePanel onClose={closeErfassung} setCloseBlocked={setIsDirty} />;
 }

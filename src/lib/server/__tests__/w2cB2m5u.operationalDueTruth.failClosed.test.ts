@@ -42,6 +42,7 @@ const baseOrder = (overrides: Record<string, unknown> = {}) => ({
   risk: null,
   intake_date: null,
   due_date: null,
+  due_date_text: null,
   created_at: new Date("2026-08-01T12:00:00.000Z"),
   tenant_integrity_ok: true,
   parts: [],
@@ -61,12 +62,13 @@ afterEach(() => vi.useRealTimers());
 describe("W2C-B2M5U operational mapper contract", () => {
   it("maps unusable persisted dates to the exact unknown tuple without createdAt or system-time fallbacks", async () => {
     queryState.rows = [
-      baseOrder({ id: "null", intake_date: null, due_date: null }),
-      baseOrder({ id: "blank", intake_date: "", due_date: "   " }),
+      baseOrder({ id: "null", intake_date: null, due_date: null, due_date_text: null }),
+      baseOrder({ id: "blank", intake_date: "", due_date: "   ", due_date_text: null }),
       baseOrder({
         id: "invalid",
         intake_date: "not-a-date",
         due_date: "invalid",
+        due_date_text: null,
         parts: [{
           id: "item-1",
           tenantId: "tenant-a",
@@ -94,19 +96,19 @@ describe("W2C-B2M5U operational mapper contract", () => {
   });
 
   it("normalizes persisted ISO dates and retains their real priority", async () => {
-    queryState.rows = [baseOrder({ intake_date: "2026-08-06", due_date: "2026-08-11T12:00:00+02:00" })];
+    queryState.rows = [baseOrder({ intake_date: "2026-08-06", due_date: "2026-08-11T12:00:00+02:00", due_date_text: "2026-08-11" })];
 
     const [order] = await readTenantOperationalOrders(authorization);
 
     expect(order.intakeDate).toBe("2026-08-06T00:00:00.000Z");
-    expect(order.dueDate).toBe("2026-08-11T10:00:00.000Z");
+    expect(order.dueDate).toBe("2026-08-11T00:00:00.000Z");
     expect(order.risk).toBe("orange");
     expect(order.statusText).toBe("GEFÄHRDET");
     expect(order.dueValue).not.toBe("Nicht erfasst");
   });
 
   it("keeps a valid intake date while a missing due date remains unknown", async () => {
-    queryState.rows = [baseOrder({ intake_date: "2026-08-06", due_date: null })];
+    queryState.rows = [baseOrder({ intake_date: "2026-08-06", due_date: null, due_date_text: null })];
 
     const [order] = await readTenantOperationalOrders(authorization);
 
@@ -122,7 +124,7 @@ describe("W2C-B2M5U operational mapper contract", () => {
   });
 
   it("keeps blocked authoritative even when the persisted due date is unusable", async () => {
-    queryState.rows = [baseOrder({ status: "blocked", due_date: "invalid", intake_date: "invalid" })];
+    queryState.rows = [baseOrder({ status: "blocked", due_date: "invalid", due_date_text: null, intake_date: "invalid" })];
 
     await expect(readTenantOperationalOrders(authorization)).resolves.toMatchObject([{ risk: "blocked" }]);
   });
@@ -161,5 +163,16 @@ describe("W2C-B2M5U operational mapper contract", () => {
 
     queryState.rows = [{ order_count: -1, invalid_count: 0 }];
     await expect(readTenantOperationalOrderCount(authorization)).rejects.toThrow("ORDER_COUNT_READMODEL_INVALID");
+  });
+
+  it("regression: uses date-only text to parse due_date, not the postgres Date which may be timezone-shifted", async () => {
+    queryState.rows = [baseOrder({
+      due_date: new Date("2026-08-19T22:00:00.000Z"),
+      due_date_text: "2026-08-20",
+    })];
+
+    const [order] = await readTenantOperationalOrders(authorization);
+
+    expect(order.dueDate).toBe("2026-08-20T00:00:00.000Z");
   });
 });

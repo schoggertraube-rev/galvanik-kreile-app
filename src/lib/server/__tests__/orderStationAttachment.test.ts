@@ -94,6 +94,8 @@ const pendingReceipt = {
   actor_id: ACTOR,
   actor_display_name: "Werkstatt",
   client_request_id: CLIENT_REQUEST_ID,
+  purpose: reservation.purpose,
+  station: reservation.station,
   mime_type: "image/png",
   file_bytes: PNG_BYTES.byteLength,
   content_sha256: PNG_SHA,
@@ -373,7 +375,7 @@ describe("W4 order-station attachment domain", () => {
         };
         return [createdReservation];
       }
-      if (query.text.includes("v_order_station_evidence_receipts_v2")) {
+      if (query.text.includes("v_order_evidence_attachment_receipts_v1")) {
         return [{
           ...pendingReceipt,
           reservation_id: createdReservation.id,
@@ -480,7 +482,7 @@ describe("W4 order-station attachment domain", () => {
       }
       if (query.text.includes("FROM private.order_station_evidence")) return finalized ? [evidence] : [];
       if (query.text.includes("SELECT (")) return [{ integrity_ok: true }];
-      if (query.text.includes("v_order_station_evidence_receipts_v2")) {
+      if (query.text.includes("v_order_evidence_attachment_receipts_v1")) {
         return [finalized ? finalizedReceipt : pendingReceipt];
       }
       throw new Error(`unexpected query: ${query.text}`);
@@ -534,7 +536,7 @@ describe("W4 order-station attachment domain", () => {
       if (query.text.includes("pg_advisory_xact_lock")) return [];
       if (query.text.includes("FROM private.order_station_evidence_reservations")) return [reservation];
       if (query.text.includes("FROM private.order_station_evidence")) return [evidence];
-      if (query.text.includes("v_order_station_evidence_receipts_v2")) return [finalizedReceipt];
+      if (query.text.includes("v_order_evidence_attachment_receipts_v1")) return [finalizedReceipt];
       throw new Error(`unexpected query: ${query.text}`);
     });
     await expect(finalizeOrderStationAttachment(authorization, {
@@ -552,7 +554,7 @@ describe("W4 order-station attachment domain", () => {
       if (query.text.includes("pg_advisory_xact_lock")) return [];
       if (query.text.includes("statement_timestamp()")) return [{ ...reservation, upload_grantable: true }];
       if (query.text.includes("FROM private.order_station_evidence")) return [evidence];
-      if (query.text.includes("v_order_station_evidence_receipts_v2")) {
+      if (query.text.includes("v_order_evidence_attachment_receipts_v1")) {
         return [{ ...finalizedReceipt, verified_at: "2026-08-11T01:01:01.000Z" }];
       }
       return [];
@@ -593,7 +595,7 @@ describe("W4 order-station attachment domain", () => {
         return evidenceReads === 1 ? [] : [evidence];
       }
       if (query.text.includes("SELECT (")) return [{ integrity_ok: true }];
-      if (query.text.includes("v_order_station_evidence_receipts_v2")) {
+      if (query.text.includes("v_order_evidence_attachment_receipts_v1")) {
         return [{ ...finalizedReceipt, verified_at: "2026-08-11T01:01:01.000Z" }];
       }
       throw new Error(`unexpected query: ${query.text}`);
@@ -629,7 +631,7 @@ describe("W4 order-station attachment domain", () => {
       }
       const contractRows = evidenceContractInsertRows(query);
       if (contractRows) return contractRows;
-      if (query.text.includes("v_order_station_evidence_receipts_v2")) {
+      if (query.text.includes("v_order_evidence_attachment_receipts_v1")) {
         return [{
           ...finalizedReceipt,
           receipt_id: storedEvidence?.id,
@@ -720,7 +722,7 @@ describe("W4 order-station attachment domain", () => {
         }
         const contractRows = evidenceContractInsertRows(query);
         if (contractRows) return contractRows;
-        if (query.text.includes("v_order_station_evidence_receipts_v2")) {
+        if (query.text.includes("v_order_evidence_attachment_receipts_v1")) {
           return [{ ...finalizedReceipt, receipt_id: storedEvidence?.id }];
         }
         return [];
@@ -732,7 +734,7 @@ describe("W4 order-station attachment domain", () => {
       reservationId: RESERVATION_ID,
     })).resolves.toMatchObject({ code: "UNAVAILABLE" });
     expect(ports.execute.mock.calls.map(([query]) => (query as FakeQuery).text).join("\n")).not.toContain(
-      "v_order_station_evidence_receipts_v2",
+      "v_order_evidence_attachment_receipts_v1",
     );
 
     for (const statusCode of ["429", "500"]) {
@@ -832,12 +834,13 @@ describe("W4 order-station attachment domain", () => {
 
   it("source-locks private-only schema, immutable tables, and guard ordering", async () => {
     const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
-    const [domain, storage, actions, migration, evidenceMigration] = await Promise.all([
+    const [domain, storage, actions, migration, evidenceMigration, f1Migration] = await Promise.all([
       readFile(path.join(root, "src/lib/server/orderStationAttachment.ts"), "utf8"),
       readFile(path.join(root, "src/lib/server/orderStationAttachmentStorage.ts"), "utf8"),
       readFile(path.join(root, "src/app/warendurchlauf/actions.ts"), "utf8"),
       readFile(path.join(root, "supabase/migrations/20260811184850_w4_order_station_attachment.sql"), "utf8"),
       readFile(path.join(root, "supabase/migrations/20260812103446_w4_evidence_read_contract.sql"), "utf8"),
+      readFile(path.join(root, "supabase/migrations/20260812133649_f1_order_intake_contract.sql"), "utf8"),
     ]);
     expect(domain).toContain("statement_timestamp() < reservation.upload_expires_at");
     expect(domain).toContain("sameReservation(reservation, first.reservation)");
@@ -868,5 +871,17 @@ describe("W4 order-station attachment domain", () => {
     expect(evidenceMigration).toContain("CREATE VIEW private.v_evidence_records_v1");
     expect(evidenceMigration).toContain("FROM public.scan_uploads scan");
     expect(evidenceMigration).not.toMatch(/\b(?:GRANT|CREATE POLICY|ALTER POLICY|ENABLE ROW LEVEL SECURITY)\b/i);
+
+    // F1.1 anti-duplicate guards: receipt cardinality repair
+    expect(f1Migration).toContain("CREATE VIEW private.v_order_evidence_attachment_receipts_v1");
+    expect(f1Migration).toContain("SELECT * FROM private.v_order_station_evidence_receipts_v2");
+    expect(f1Migration).toContain("WHERE purpose = 'GALVANIK_HANDOFF_ORIGINAL_V1'");
+    expect(f1Migration).toContain("UNION ALL");
+    expect(f1Migration).toContain("SELECT * FROM private.v_order_intake_evidence_receipts_v1");
+    expect(f1Migration).toContain("CREATE VIEW private.v_evidence_records_v2");
+    expect(f1Migration).toContain("source_kind = 'ORDER_STATION_ATTACHMENT'");
+    expect(f1Migration).toContain("EXISTS (");
+    expect(f1Migration).toContain("FROM private.v_order_intake_evidence_receipts_v1 intake");
+    expect(f1Migration).toContain("WHERE intake.receipt_id::text = source_id");
   });
 });

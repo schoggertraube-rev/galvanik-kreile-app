@@ -8,8 +8,6 @@ import {
   type PrivilegedTenantTransaction,
 } from "@/lib/server/privilegedDb";
 
-const PURPOSE = "GALVANIK_HANDOFF_ORIGINAL_V1";
-const STATION = "galvanik";
 const BUCKET_ID = "item-photos";
 const MAX_ID_LENGTH = 128;
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
@@ -20,6 +18,39 @@ const MIME_EXTENSION = {
   "image/png": "png",
   "image/webp": "webp",
 } as const;
+
+type AttachmentWorkflow = {
+  key: "HANDOFF" | "INTAKE";
+  purpose: "GALVANIK_HANDOFF_ORIGINAL_V1" | "ORDER_INTAKE_ORIGINAL_V1";
+  station: "galvanik" | "wareneingang";
+  orderStatus: "ready" | "in_progress";
+  eventType: "ORDER_STATION_MOVED_V1" | "ORDER_INTAKE_CREATED_V1";
+  fromStation: "wareneingang" | null;
+  pathPrefix: "order-station-evidence/v1" | "order-intake-evidence/v1";
+  downloadName: "galvanik-uebergabe-original" | "wareneingang-original";
+};
+
+const HANDOFF_WORKFLOW: AttachmentWorkflow = {
+  key: "HANDOFF",
+  purpose: "GALVANIK_HANDOFF_ORIGINAL_V1",
+  station: "galvanik",
+  orderStatus: "ready",
+  eventType: "ORDER_STATION_MOVED_V1",
+  fromStation: "wareneingang",
+  pathPrefix: "order-station-evidence/v1",
+  downloadName: "galvanik-uebergabe-original",
+};
+
+const INTAKE_WORKFLOW: AttachmentWorkflow = {
+  key: "INTAKE",
+  purpose: "ORDER_INTAKE_ORIGINAL_V1",
+  station: "wareneingang",
+  orderStatus: "in_progress",
+  eventType: "ORDER_INTAKE_CREATED_V1",
+  fromStation: null,
+  pathPrefix: "order-intake-evidence/v1",
+  downloadName: "wareneingang-original",
+};
 
 export type OrderStationAttachmentMime = keyof typeof MIME_EXTENSION;
 export type OrderStationAttachmentConflictReason =
@@ -157,6 +188,8 @@ type ReceiptViewRow = {
   actor_id: string;
   actor_display_name: string;
   client_request_id: string;
+  purpose: string;
+  station: string;
   mime_type: string;
   file_bytes: number | string;
   content_sha256: string;
@@ -311,11 +344,19 @@ function invalidSingleUuidInput(input: unknown, key: "reservationId" | "receiptI
   return !hasExactKeys(input, [key]) || !validUuid(input[key]);
 }
 
-function objectPath(reservationId: string, mimeType: OrderStationAttachmentMime): string {
-  return `order-station-evidence/v1/${reservationId}.${MIME_EXTENSION[mimeType]}`;
+function objectPath(
+  workflow: AttachmentWorkflow,
+  reservationId: string,
+  mimeType: OrderStationAttachmentMime,
+): string {
+  return `${workflow.pathPrefix}/${reservationId}.${MIME_EXTENSION[mimeType]}`;
 }
 
-function normalizeReservation(row: ReservationRow, authorization: AuthorizationSnapshot): InternalReservation {
+function normalizeReservation(
+  workflow: AttachmentWorkflow,
+  row: ReservationRow,
+  authorization: AuthorizationSnapshot,
+): InternalReservation {
   const fileBytes = parseBytes(row.file_bytes);
   const createdAt = toIso(row.created_at);
   const uploadExpiresAt = toIso(row.upload_expires_at);
@@ -329,12 +370,12 @@ function normalizeReservation(row: ReservationRow, authorization: AuthorizationS
     || !validVersion(row.order_version)
     || !validUuid(row.actor_id)
     || !validUuid(row.client_request_id)
-    || row.purpose !== PURPOSE
-    || row.station !== STATION
+    || row.purpose !== workflow.purpose
+    || row.station !== workflow.station
     || row.bucket_id !== BUCKET_ID
     || !validMime(row.mime_type)
     || !SHA256_PATTERN.test(row.content_sha256)
-    || row.object_path !== objectPath(row.id, row.mime_type)
+    || row.object_path !== objectPath(workflow, row.id, row.mime_type)
     || new Date(uploadExpiresAt).getTime() - new Date(createdAt).getTime() !== 2 * 60 * 60 * 1000
   ) {
     throw new Error("ORDER_STATION_ATTACHMENT_RESERVATION_INVALID");
@@ -364,6 +405,7 @@ function sameReservation(left: InternalReservation, right: InternalReservation):
 }
 
 function reservationMatchesCreateIntent(
+  workflow: AttachmentWorkflow,
   reservation: InternalReservation,
   authorization: AuthorizationSnapshot,
   input: ReserveOrderStationAttachmentInput,
@@ -380,16 +422,20 @@ function reservationMatchesCreateIntent(
     && reservation.order_version === input.expectedVersion
     && reservation.actor_id === authorization.userId
     && reservation.client_request_id === input.clientRequestId
-    && reservation.purpose === PURPOSE
-    && reservation.station === STATION
+    && reservation.purpose === workflow.purpose
+    && reservation.station === workflow.station
     && reservation.bucket_id === BUCKET_ID
-    && reservation.object_path === objectPath(reservationId, input.mimeType)
+    && reservation.object_path === objectPath(workflow, reservationId, input.mimeType)
     && reservation.mime_type === input.mimeType
     && reservation.file_bytes === input.fileBytes
     && reservation.content_sha256 === input.contentSha256;
 }
 
-function mapReceipt(row: ReceiptViewRow, authorization: Pick<AuthorizationSnapshot, "tenantId">): OrderStationAttachmentReceipt {
+function mapReceipt(
+  workflow: AttachmentWorkflow,
+  row: ReceiptViewRow,
+  authorization: Pick<AuthorizationSnapshot, "tenantId">,
+): OrderStationAttachmentReceipt {
   const fileBytes = parseBytes(row.file_bytes);
   const uploadExpiresAt = toIso(row.upload_expires_at);
   const reservedAt = toIso(row.reserved_at);
@@ -398,6 +444,8 @@ function mapReceipt(row: ReceiptViewRow, authorization: Pick<AuthorizationSnapsh
     row.integrity_ok !== true
     || (row.receipt_state !== "PENDING" && row.receipt_state !== "FINALIZED")
     || row.tenant_id !== authorization.tenantId
+    || row.purpose !== workflow.purpose
+    || row.station !== workflow.station
     || !validUuid(row.reservation_id)
     || (row.receipt_state === "PENDING" ? row.receipt_id !== null : !validUuid(row.receipt_id))
     || !validUuid(row.client_request_id)
@@ -488,11 +536,12 @@ async function lockFinalizeMutex(
   tx: PrivilegedTenantTransaction,
   authorization: AuthorizationSnapshot,
   reservationId: string,
+  workflow: AttachmentWorkflow,
 ): Promise<void> {
   await tx.execute(sql`
     SELECT pg_advisory_xact_lock(
       hashtextextended(
-        'w4:order-station-attachment:finalize:' || ${authorization.tenantId} || ':' || ${reservationId},
+        'order-attachment:' || ${workflow.key} || ':finalize:' || ${authorization.tenantId} || ':' || ${reservationId},
         0
       )
     )
@@ -503,6 +552,7 @@ async function loadOwnedReservation(
   tx: PrivilegedTenantTransaction,
   authorization: AuthorizationSnapshot,
   reservationId: string,
+  workflow: AttachmentWorkflow,
 ): Promise<InternalReservation | null> {
   const rows = await tx.execute<ReservationRow>(sql`
     SELECT *
@@ -510,11 +560,12 @@ async function loadOwnedReservation(
     WHERE id = ${reservationId}
       AND tenant_id = ${authorization.tenantId}
       AND actor_id = ${authorization.userId}
+      AND purpose = ${workflow.purpose}
     FOR UPDATE
   `);
   if (rows.length === 0) return null;
   if (rows.length !== 1 || !rows[0]) throw new Error("ORDER_STATION_ATTACHMENT_RESERVATION_INVALID");
-  const reservation = normalizeReservation(rows[0], authorization);
+  const reservation = normalizeReservation(workflow, rows[0], authorization);
   if (reservation.id !== reservationId || reservation.actor_id !== authorization.userId) {
     throw new Error("ORDER_STATION_ATTACHMENT_RESERVATION_INVALID");
   }
@@ -543,14 +594,16 @@ async function readReceiptByReservation(
   tx: PrivilegedTenantTransaction,
   authorization: AuthorizationSnapshot,
   reservation: InternalReservation,
+  workflow: AttachmentWorkflow,
 ): Promise<OrderStationAttachmentReceipt> {
   const rows = await tx.execute<ReceiptViewRow>(sql`
-    SELECT * FROM private.v_order_station_evidence_receipts_v2
+    SELECT * FROM private.v_order_evidence_attachment_receipts_v1
     WHERE reservation_id = ${reservation.id}
+      AND purpose = ${workflow.purpose}
     LIMIT 2
   `);
   if (rows.length !== 1 || !rows[0]) throw new Error("ORDER_STATION_ATTACHMENT_RECEIPT_INVALID");
-  const receipt = mapReceipt(rows[0], authorization);
+  const receipt = mapReceipt(workflow, rows[0], authorization);
   if (!receiptMatchesReservation(receipt, reservation)) {
     throw new Error("ORDER_STATION_ATTACHMENT_RECEIPT_INVALID");
   }
@@ -561,6 +614,7 @@ async function reservationGraphIsCurrent(
   tx: PrivilegedTenantTransaction,
   authorization: AuthorizationSnapshot,
   reservation: InternalReservation,
+  workflow: AttachmentWorkflow,
 ): Promise<boolean> {
   const rows = await tx.execute<{ integrity_ok: boolean }>(sql`
     SELECT (
@@ -570,10 +624,10 @@ async function reservationGraphIsCurrent(
           AND o.tenant_id = ${authorization.tenantId}
           AND o.customer_id = ${reservation.customer_id}
           AND o.version = ${reservation.order_version}
-          AND o.station = 'galvanik'
-          AND o.current_station = 'galvanik'
-          AND o.current_station_id = 'galvanik'
-          AND o.status = 'ready'
+          AND o.station = ${workflow.station}
+          AND o.current_station = ${workflow.station}
+          AND o.current_station_id = ${workflow.station}
+          AND o.status = ${workflow.orderStatus}
       )
       AND EXISTS (
         SELECT 1 FROM public.customers c
@@ -586,7 +640,7 @@ async function reservationGraphIsCurrent(
           AND i.order_id = ${reservation.order_id}
           AND i.tenant_id = ${authorization.tenantId}
           AND i.customer_id = ${reservation.customer_id}
-          AND i.current_station_id = 'galvanik'
+          AND i.current_station_id = ${workflow.station}
       )
       AND NOT EXISTS (
         SELECT 1 FROM public.items corrupt_item
@@ -594,7 +648,7 @@ async function reservationGraphIsCurrent(
           AND (
             corrupt_item.tenant_id IS DISTINCT FROM ${authorization.tenantId}
             OR corrupt_item.customer_id IS DISTINCT FROM ${reservation.customer_id}
-            OR corrupt_item.current_station_id IS DISTINCT FROM 'galvanik'
+            OR corrupt_item.current_station_id IS DISTINCT FROM ${workflow.station}
           )
       )
       AND EXISTS (
@@ -607,13 +661,13 @@ async function reservationGraphIsCurrent(
           AND event.tenant_id = ${authorization.tenantId}
           AND event.order_id = ${reservation.order_id}
           AND event.item_id IS NULL
-          AND event.event_type = 'ORDER_STATION_MOVED_V1'
+          AND event.event_type = ${workflow.eventType}
           AND event.client_event_id IS NOT NULL
           AND event.correlation_id IS NOT NULL
           AND event.event_schema_version = 1
           AND event.aggregate_version = ${reservation.order_version}
-          AND event.from_station = 'wareneingang'
-          AND event.station = 'galvanik'
+          AND event.from_station IS NOT DISTINCT FROM ${workflow.fromStation}
+          AND event.station = ${workflow.station}
           AND event.status = 'success'
       )
     ) AS integrity_ok
@@ -625,6 +679,7 @@ async function lockReservationGraphIsCurrent(
   tx: PrivilegedTenantTransaction,
   authorization: AuthorizationSnapshot,
   reservation: InternalReservation,
+  workflow: AttachmentWorkflow,
 ): Promise<boolean> {
   // This lock order mirrors the W3 station command (order -> customer -> all
   // order items), so a transition cannot pass between final validation and the
@@ -640,9 +695,9 @@ async function lockReservationGraphIsCurrent(
     orders.length !== 1 || !order || order.id !== reservation.order_id
     || order.tenant_id !== authorization.tenantId
     || order.customer_id !== reservation.customer_id
-    || order.version !== reservation.order_version || order.station !== STATION
-    || order.current_station !== STATION || order.current_station_id !== STATION
-    || order.status !== "ready"
+    || order.version !== reservation.order_version || order.station !== workflow.station
+    || order.current_station !== workflow.station || order.current_station_id !== workflow.station
+    || order.status !== workflow.orderStatus
   ) return false;
 
   const customers = await tx.execute<{ id: string; tenant_id: string | null }>(sql`
@@ -667,10 +722,10 @@ async function lockReservationGraphIsCurrent(
     || items.some((item) => item.order_id !== reservation.order_id
       || item.tenant_id !== authorization.tenantId
       || item.customer_id !== reservation.customer_id
-      || item.current_station_id !== STATION)
+      || item.current_station_id !== workflow.station)
   ) return false;
 
-  return reservationGraphIsCurrent(tx, authorization, reservation);
+  return reservationGraphIsCurrent(tx, authorization, reservation, workflow);
 }
 
 function evidenceMatchesStableObject(
@@ -698,7 +753,8 @@ function detectMime(bytes: Uint8Array): OrderStationAttachmentMime | null {
   return null;
 }
 
-export async function readOrderStationAttachments(
+async function readAttachmentsForWorkflow(
+  workflow: AttachmentWorkflow,
   authorization: AuthorizationSnapshot,
   input: GetOrderStationAttachmentsInput,
 ): Promise<OrderStationAttachmentResult<OrderStationAttachmentReceipt[]>> {
@@ -707,15 +763,16 @@ export async function readOrderStationAttachments(
   try {
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<ReceiptViewRow>(sql`
-        SELECT * FROM private.v_order_station_evidence_receipts_v2
+        SELECT * FROM private.v_order_evidence_attachment_receipts_v1
         WHERE order_id = ${input.orderId} AND item_id = ${input.itemId}
+          AND purpose = ${workflow.purpose}
         ORDER BY reserved_at DESC, reservation_id
       `);
       return rows.map((row) => {
         if (row.order_id !== input.orderId || row.item_id !== input.itemId) {
           throw new Error("ORDER_STATION_ATTACHMENT_RECEIPT_INVALID");
         }
-        return mapReceipt(row, authorization);
+        return mapReceipt(workflow, row, authorization);
       });
     });
     return { code: "OK", data };
@@ -724,7 +781,8 @@ export async function readOrderStationAttachments(
   }
 }
 
-export async function reserveOrderStationAttachment(
+async function reserveAttachmentForWorkflow(
+  workflow: AttachmentWorkflow,
   authorization: AuthorizationSnapshot,
   input: ReserveOrderStationAttachmentInput,
 ): Promise<OrderStationAttachmentResult<ReserveAttachmentData>> {
@@ -736,7 +794,7 @@ export async function reserveOrderStationAttachment(
       await tx.execute(sql`
         SELECT pg_advisory_xact_lock(
           hashtextextended(
-            'w4:order-station-attachment:reserve:' || ${authorization.tenantId} || ':' ||
+            'order-attachment:' || ${workflow.key} || ':reserve:' || ${authorization.tenantId} || ':' ||
               ${authorization.userId} || ':' || ${input.clientRequestId},
             0
           )
@@ -750,11 +808,12 @@ export async function reserveOrderStationAttachment(
         WHERE reservation.tenant_id = ${authorization.tenantId}
           AND reservation.actor_id = ${authorization.userId}
           AND reservation.client_request_id = ${input.clientRequestId}
+          AND reservation.purpose = ${workflow.purpose}
         LIMIT 2
       `);
       if (existingRows.length > 0) {
         if (existingRows.length !== 1 || !existingRows[0]) throw new Error("ORDER_STATION_ATTACHMENT_RESERVATION_INVALID");
-        const existing = normalizeReservation(existingRows[0], authorization);
+        const existing = normalizeReservation(workflow, existingRows[0], authorization);
         if (
           existing.tenant_id !== authorization.tenantId
           || existing.client_request_id !== input.clientRequestId
@@ -770,7 +829,7 @@ export async function reserveOrderStationAttachment(
         }
         const existingEvidence = await loadEvidence(tx, existing);
         if (existingEvidence) {
-          const receipt = await readReceiptByReservation(tx, authorization, existing);
+          const receipt = await readReceiptByReservation(tx, authorization, existing, workflow);
           if (
             receipt.state !== "FINALIZED"
             || receipt.receiptId !== existingEvidence.id
@@ -788,7 +847,7 @@ export async function reserveOrderStationAttachment(
         if (typeof existingRows[0].upload_grantable !== "boolean") {
           throw new Error("ORDER_STATION_ATTACHMENT_DB_TIME_INVALID");
         }
-        if (!(await reservationGraphIsCurrent(tx, authorization, existing))) {
+        if (!(await reservationGraphIsCurrent(tx, authorization, existing, workflow))) {
           return { terminal: { code: "CONFLICT", reason: "ORDER_CHANGED", message: "Auftragsstand hat sich geändert." } as const };
         }
         if (existingRows[0].upload_grantable !== true) {
@@ -812,10 +871,10 @@ export async function reserveOrderStationAttachment(
         order.id !== input.orderId
         || order.tenant_id !== authorization.tenantId
         || !order.customer_id
-        || order.station !== STATION
-        || order.current_station !== STATION
-        || order.current_station_id !== STATION
-        || order.status !== "ready"
+        || order.station !== workflow.station
+        || order.current_station !== workflow.station
+        || order.current_station_id !== workflow.station
+        || order.status !== workflow.orderStatus
       ) return { terminal: { code: "VALIDATION_ERROR", message: "Auftrag ist nicht übergabebereit." } as const };
 
       const customers = await tx.execute<{ id: string; tenant_id: string }>(sql`
@@ -836,7 +895,7 @@ export async function reserveOrderStationAttachment(
         items.some((item) => item.order_id !== order.id
           || item.tenant_id !== authorization.tenantId
           || item.customer_id !== order.customer_id
-          || item.current_station_id !== STATION)
+          || item.current_station_id !== workflow.station)
         || items.filter((item) => item.id === input.itemId).length !== 1
       ) return { terminal: { code: "VALIDATION_ERROR", message: "Teilezuordnung ist ungültig." } as const };
 
@@ -850,7 +909,7 @@ export async function reserveOrderStationAttachment(
         WHERE event.tenant_id = ${authorization.tenantId}
           AND event.order_id = ${order.id}
           AND event.aggregate_version = ${input.expectedVersion}
-          AND event.event_type = 'ORDER_STATION_MOVED_V1'
+          AND event.event_type = ${workflow.eventType}
         LIMIT 2
       `);
       const event = events[0];
@@ -860,7 +919,7 @@ export async function reserveOrderStationAttachment(
         || event.order_id !== order.id || event.item_id !== null
         || !validUuid(event.client_event_id) || !validUuid(event.correlation_id)
         || event.event_schema_version !== 1 || event.aggregate_version !== input.expectedVersion
-        || event.from_station !== "wareneingang" || event.station !== STATION
+        || event.from_station !== workflow.fromStation || event.station !== workflow.station
         || event.status !== "success" || !validUuid(event.actor_id)
         || event.actor_tenant_id !== authorization.tenantId
       ) return { terminal: { code: "VALIDATION_ERROR", message: "Übergabeereignis ist ungültig." } as const };
@@ -874,14 +933,15 @@ export async function reserveOrderStationAttachment(
         ) VALUES (
           ${reservationId}, ${authorization.tenantId}, ${order.customer_id}, ${order.id},
           ${input.itemId}, ${event.id}, ${input.expectedVersion}, ${authorization.userId},
-          ${input.clientRequestId}, ${PURPOSE}, ${STATION}, ${BUCKET_ID},
-          ${objectPath(reservationId, input.mimeType)}, ${input.mimeType}, ${input.fileBytes},
+          ${input.clientRequestId}, ${workflow.purpose}, ${workflow.station}, ${BUCKET_ID},
+          ${objectPath(workflow, reservationId, input.mimeType)}, ${input.mimeType}, ${input.fileBytes},
           ${input.contentSha256}
         ) RETURNING *
       `);
       if (inserted.length !== 1 || !inserted[0]) throw new Error("ORDER_STATION_ATTACHMENT_INSERT_FAILED");
-      const reservation = normalizeReservation(inserted[0], authorization);
+      const reservation = normalizeReservation(workflow, inserted[0], authorization);
       if (!reservationMatchesCreateIntent(
+        workflow,
         reservation,
         authorization,
         input,
@@ -896,7 +956,7 @@ export async function reserveOrderStationAttachment(
 
     if ("terminal" in decision) return decision.terminal;
     const receipt = await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      const current = await readReceiptByReservation(tx, authorization, decision.reservation);
+      const current = await readReceiptByReservation(tx, authorization, decision.reservation, workflow);
       if (current.state === "FINALIZED") {
         const evidence = await loadEvidence(tx, decision.reservation);
         if (
@@ -921,7 +981,8 @@ export async function reserveOrderStationAttachment(
   }
 }
 
-export async function finalizeOrderStationAttachment(
+async function finalizeAttachmentForWorkflow(
+  workflow: AttachmentWorkflow,
   authorization: AuthorizationSnapshot,
   input: FinalizeOrderStationAttachmentInput,
 ): Promise<OrderStationAttachmentResult<FinalizeAttachmentData>> {
@@ -930,12 +991,12 @@ export async function finalizeOrderStationAttachment(
 
   try {
     const first = await withPrivilegedTenantTransaction<FinalizePhaseOne>(authorization, async (tx) => {
-      await lockFinalizeMutex(tx, authorization, input.reservationId);
-      const reservation = await loadOwnedReservation(tx, authorization, input.reservationId);
+      await lockFinalizeMutex(tx, authorization, input.reservationId, workflow);
+      const reservation = await loadOwnedReservation(tx, authorization, input.reservationId, workflow);
       if (!reservation) return { terminal: { code: "NOT_FOUND", message: "Reservierung nicht verfügbar." } as const };
       const evidence = await loadEvidence(tx, reservation);
       if (evidence) {
-        const receipt = await readReceiptByReservation(tx, authorization, reservation);
+        const receipt = await readReceiptByReservation(tx, authorization, reservation, workflow);
         if (
           receipt.state !== "FINALIZED"
           || receipt.receiptId !== evidence.id
@@ -945,7 +1006,7 @@ export async function finalizeOrderStationAttachment(
         }
         return { terminal: { code: "OK", data: { receipt, replayed: true } } as const };
       }
-      if (!(await reservationGraphIsCurrent(tx, authorization, reservation))) {
+      if (!(await reservationGraphIsCurrent(tx, authorization, reservation, workflow))) {
         return { terminal: { code: "CONFLICT", reason: "ORDER_CHANGED", message: "Auftragsstand hat sich geändert." } as const };
       }
       return { reservation };
@@ -991,8 +1052,8 @@ export async function finalizeOrderStationAttachment(
     ) return { code: "CONFLICT", reason: "UPLOAD_OUTSIDE_WINDOW", message: "Upload liegt außerhalb der Freigabefrist." };
 
     return await withPrivilegedTenantTransaction(authorization, async (tx) => {
-      await lockFinalizeMutex(tx, authorization, input.reservationId);
-      const reservation = await loadOwnedReservation(tx, authorization, input.reservationId);
+      await lockFinalizeMutex(tx, authorization, input.reservationId, workflow);
+      const reservation = await loadOwnedReservation(tx, authorization, input.reservationId, workflow);
       if (!reservation) return { code: "NOT_FOUND", message: "Reservierung nicht verfügbar." };
       if (!sameReservation(reservation, first.reservation)) {
         throw new Error("ORDER_STATION_ATTACHMENT_RESERVATION_CHANGED");
@@ -1002,7 +1063,7 @@ export async function finalizeOrderStationAttachment(
         if (!evidenceMatchesStableObject(existing, reservation, before)) {
           throw new Error("ORDER_STATION_ATTACHMENT_EVIDENCE_INVALID");
         }
-        const receipt = await readReceiptByReservation(tx, authorization, reservation);
+        const receipt = await readReceiptByReservation(tx, authorization, reservation, workflow);
         if (
           receipt.state !== "FINALIZED"
           || receipt.receiptId !== existing.id
@@ -1012,7 +1073,7 @@ export async function finalizeOrderStationAttachment(
         }
         return { code: "OK", data: { receipt, replayed: true } };
       }
-      if (!(await lockReservationGraphIsCurrent(tx, authorization, reservation))) {
+      if (!(await lockReservationGraphIsCurrent(tx, authorization, reservation, workflow))) {
         return { code: "CONFLICT", reason: "ORDER_CHANGED", message: "Auftragsstand hat sich geändert." };
       }
       const evidenceId = randomUUID();
@@ -1084,7 +1145,7 @@ export async function finalizeOrderStationAttachment(
           || new Date(toIso(link.created_at)).getTime() < new Date(toIso(inserted[0].verified_at)).getTime())
       ) throw new Error("ORDER_STATION_ATTACHMENT_LINKS_INSERT_FAILED");
 
-      const receipt = await readReceiptByReservation(tx, authorization, reservation);
+      const receipt = await readReceiptByReservation(tx, authorization, reservation, workflow);
       if (
         receipt.state !== "FINALIZED"
         || receipt.receiptId !== evidenceId
@@ -1097,7 +1158,8 @@ export async function finalizeOrderStationAttachment(
   }
 }
 
-export async function getOrderStationAttachmentOriginal(
+async function getAttachmentOriginalForWorkflow(
+  workflow: AttachmentWorkflow,
   authorization: AuthorizationSnapshot,
   input: GetOrderStationAttachmentOriginalInput,
 ): Promise<OrderStationAttachmentResult<{
@@ -1110,13 +1172,14 @@ export async function getOrderStationAttachmentOriginal(
   try {
     const owned = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const viewRows = await tx.execute<ReceiptViewRow>(sql`
-        SELECT * FROM private.v_order_station_evidence_receipts_v2
+        SELECT * FROM private.v_order_evidence_attachment_receipts_v1
         WHERE receipt_id = ${input.receiptId}
+          AND purpose = ${workflow.purpose}
         LIMIT 2
       `);
       if (viewRows.length === 0) return null;
       if (viewRows.length !== 1 || !viewRows[0]) throw new Error("ORDER_STATION_ATTACHMENT_RECEIPT_INVALID");
-      const receipt = mapReceipt(viewRows[0], authorization);
+      const receipt = mapReceipt(workflow, viewRows[0], authorization);
       if (receipt.receiptId !== input.receiptId || receipt.state !== "FINALIZED") {
         throw new Error("ORDER_STATION_ATTACHMENT_RECEIPT_INVALID");
       }
@@ -1160,7 +1223,7 @@ export async function getOrderStationAttachmentOriginal(
       `);
       if (rows.length !== 1 || !rows[0]) throw new Error("ORDER_STATION_ATTACHMENT_RECEIPT_INVALID");
       const row = rows[0];
-      const reservation = normalizeReservation({
+      const reservation = normalizeReservation(workflow, {
         id: row.reservation_id_value,
         tenant_id: row.reservation_tenant_id,
         customer_id: row.reservation_customer_id,
@@ -1223,9 +1286,74 @@ export async function getOrderStationAttachmentOriginal(
     const signed = await storage.createOrderStationAttachmentOriginalUrl(
       owned.reservation.object_path,
       MIME_EXTENSION[owned.reservation.mime_type as OrderStationAttachmentMime],
+      workflow.downloadName,
     );
     return { code: "OK", data: { ...signed, mimeType: owned.reservation.mime_type as OrderStationAttachmentMime } };
   } catch {
     return { code: "UNAVAILABLE", message: "Originaldownload konnte nicht sicher erstellt werden." };
   }
+}
+
+export function readOrderStationAttachments(
+  authorization: AuthorizationSnapshot,
+  input: GetOrderStationAttachmentsInput,
+): Promise<OrderStationAttachmentResult<OrderStationAttachmentReceipt[]>> {
+  return readAttachmentsForWorkflow(HANDOFF_WORKFLOW, authorization, input);
+}
+
+export function readOrderIntakeAttachments(
+  authorization: AuthorizationSnapshot,
+  input: GetOrderStationAttachmentsInput,
+): Promise<OrderStationAttachmentResult<OrderStationAttachmentReceipt[]>> {
+  return readAttachmentsForWorkflow(INTAKE_WORKFLOW, authorization, input);
+}
+
+export function reserveOrderStationAttachment(
+  authorization: AuthorizationSnapshot,
+  input: ReserveOrderStationAttachmentInput,
+): Promise<OrderStationAttachmentResult<ReserveAttachmentData>> {
+  return reserveAttachmentForWorkflow(HANDOFF_WORKFLOW, authorization, input);
+}
+
+export function reserveOrderIntakeAttachment(
+  authorization: AuthorizationSnapshot,
+  input: ReserveOrderStationAttachmentInput,
+): Promise<OrderStationAttachmentResult<ReserveAttachmentData>> {
+  return reserveAttachmentForWorkflow(INTAKE_WORKFLOW, authorization, input);
+}
+
+export function finalizeOrderStationAttachment(
+  authorization: AuthorizationSnapshot,
+  input: FinalizeOrderStationAttachmentInput,
+): Promise<OrderStationAttachmentResult<FinalizeAttachmentData>> {
+  return finalizeAttachmentForWorkflow(HANDOFF_WORKFLOW, authorization, input);
+}
+
+export function finalizeOrderIntakeAttachment(
+  authorization: AuthorizationSnapshot,
+  input: FinalizeOrderStationAttachmentInput,
+): Promise<OrderStationAttachmentResult<FinalizeAttachmentData>> {
+  return finalizeAttachmentForWorkflow(INTAKE_WORKFLOW, authorization, input);
+}
+
+export function getOrderStationAttachmentOriginal(
+  authorization: AuthorizationSnapshot,
+  input: GetOrderStationAttachmentOriginalInput,
+): Promise<OrderStationAttachmentResult<{
+  downloadUrl: string;
+  expiresInSeconds: number;
+  mimeType: OrderStationAttachmentMime;
+}>> {
+  return getAttachmentOriginalForWorkflow(HANDOFF_WORKFLOW, authorization, input);
+}
+
+export function getOrderIntakeAttachmentOriginal(
+  authorization: AuthorizationSnapshot,
+  input: GetOrderStationAttachmentOriginalInput,
+): Promise<OrderStationAttachmentResult<{
+  downloadUrl: string;
+  expiresInSeconds: number;
+  mimeType: OrderStationAttachmentMime;
+}>> {
+  return getAttachmentOriginalForWorkflow(INTAKE_WORKFLOW, authorization, input);
 }

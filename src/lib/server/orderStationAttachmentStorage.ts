@@ -6,7 +6,8 @@ const BUCKET_ID = "item-photos";
 const ORIGINAL_DOWNLOAD_SECONDS = 60;
 const MAX_FILE_BYTES = 12 * 1024 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const OBJECT_PATH_PATTERN = /^order-station-evidence\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp)$/;
+const OBJECT_PATH_PATTERN = /^(?:order-station-evidence|order-intake-evidence)\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp)$/;
+const DOWNLOAD_NAME_PATTERN = /^(?:galvanik-uebergabe-original|wareneingang-original)$/;
 
 export type StoredObjectInfo = {
   id: string;
@@ -161,13 +162,17 @@ export async function readStableOrderStationAttachment(
 export async function createOrderStationAttachmentOriginalUrl(
   path: string,
   extension: "jpg" | "png" | "webp",
+  downloadName = "galvanik-uebergabe-original",
 ): Promise<{ downloadUrl: string; expiresInSeconds: typeof ORIGINAL_DOWNLOAD_SECONDS }> {
   assertObjectPath(path);
+  if (!DOWNLOAD_NAME_PATTERN.test(downloadName)) {
+    throw new OrderStationAttachmentStorageError("INVALID");
+  }
   const result = await createAdminClient()
     .storage
     .from(BUCKET_ID)
     .createSignedUrl(path, ORIGINAL_DOWNLOAD_SECONDS, {
-      download: `galvanik-uebergabe-original.${extension}`,
+      download: `${downloadName}.${extension}`,
     });
   if (
     result.error

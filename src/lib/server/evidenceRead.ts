@@ -8,13 +8,16 @@ const MAX_ID_LENGTH = 128;
 const MAX_STATION_ORIGINAL_BYTES = 12 * 1024 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
-const CURRENT_PATH_PATTERN = /^order-station-evidence\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp)$/;
+const CURRENT_PATH_PATTERNS = {
+  ORDER_STATION_ATTACHMENT: /^order-station-evidence\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp)$/,
+  ORDER_INTAKE_ATTACHMENT: /^order-intake-evidence\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(?:jpg|png|webp)$/,
+} as const;
 
 export type EvidenceTargetType = "ORDER" | "ORDER_ITEM" | "CUSTOMER" | "INVOICE";
 export type EvidenceTargetLink = { targetType: EvidenceTargetType; targetId: string };
 export type EvidenceReadRecord = {
   evidenceKey: string;
-  source: "ORDER_STATION_ATTACHMENT" | "LEGACY_SCAN_UPLOAD";
+  source: "ORDER_STATION_ATTACHMENT" | "ORDER_INTAKE_ATTACHMENT" | "LEGACY_SCAN_UPLOAD";
   sourceId: string;
   original: {
     state: "VERIFIED" | "LEGACY_RECORDED" | "LEGACY_PARTIAL" | "NOT_RECORDED";
@@ -149,8 +152,12 @@ function mapRecord(
     || row.tenant_id !== authorization.tenantId
     || !validId(row.source_id)
     || !validId(row.evidence_key)
-    || (row.source_kind !== "ORDER_STATION_ATTACHMENT" && row.source_kind !== "LEGACY_SCAN_UPLOAD")
-    || row.evidence_key !== `${row.source_kind === "ORDER_STATION_ATTACHMENT" ? "order-station-attachment" : "legacy-scan-upload"}:${row.source_id}`
+    || !["ORDER_STATION_ATTACHMENT", "ORDER_INTAKE_ATTACHMENT", "LEGACY_SCAN_UPLOAD"].includes(row.source_kind)
+    || row.evidence_key !== `${
+      row.source_kind === "ORDER_STATION_ATTACHMENT"
+        ? "order-station-attachment"
+        : row.source_kind === "ORDER_INTAKE_ATTACHMENT" ? "order-intake-attachment" : "legacy-scan-upload"
+    }:${row.source_id}`
     || !validNullableText(row.original_storage_path)
     || !validNullableText(row.original_hash)
     || !validNullableText(row.original_mime_type)
@@ -179,13 +186,14 @@ function mapRecord(
     throw new Error("EVIDENCE_EXTRACTION_INVALID");
   }
 
-  if (row.source_kind === "ORDER_STATION_ATTACHMENT") {
+  if (row.source_kind === "ORDER_STATION_ATTACHMENT" || row.source_kind === "ORDER_INTAKE_ATTACHMENT") {
+    const pathPattern = CURRENT_PATH_PATTERNS[row.source_kind];
     if (
       !UUID_PATTERN.test(row.source_id)
       || row.original_state !== "VERIFIED"
       || row.original_bucket_id !== "item-photos"
       || row.original_storage_path === null
-      || !CURRENT_PATH_PATTERN.test(row.original_storage_path)
+      || !pathPattern.test(row.original_storage_path)
       || row.original_hash === null
       || !SHA256_PATTERN.test(row.original_hash)
       || row.original_hash_algorithm !== "SHA256"
@@ -215,7 +223,7 @@ function mapRecord(
 
   return {
     evidenceKey: row.evidence_key,
-    source: row.source_kind,
+    source: row.source_kind as EvidenceReadRecord["source"],
     sourceId: row.source_id,
     original: {
       state: row.original_state as EvidenceReadRecord["original"]["state"],
@@ -256,7 +264,7 @@ export async function readEvidenceRecordsByTarget(
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<EvidenceViewRow>(sql`
         SELECT *
-        FROM private.v_evidence_records_v1
+        FROM private.v_evidence_records_v2
         WHERE target_links @> jsonb_build_array(
           jsonb_build_object(
             'targetType', ${input.targetType}::text,
@@ -287,7 +295,7 @@ export async function readOrderEvidenceRecords(
     const data = await withPrivilegedTenantTransaction(authorization, async (tx) => {
       const rows = await tx.execute<EvidenceViewRow>(sql`
         SELECT *
-        FROM private.v_evidence_records_v1
+        FROM private.v_evidence_records_v2
         WHERE target_links @> jsonb_build_array(
           jsonb_build_object('targetType', 'ORDER', 'targetId', ${input.orderId}::text)
         )
@@ -302,7 +310,7 @@ export async function readOrderEvidenceRecords(
       return rows.map((row) => {
         const record = mapRecord(row, authorization, { targetType: "ORDER", targetId: input.orderId });
         if (
-          record.source === "ORDER_STATION_ATTACHMENT"
+          (record.source === "ORDER_STATION_ATTACHMENT" || record.source === "ORDER_INTAKE_ATTACHMENT")
           && !record.targets.some((target) => target.targetType === "ORDER_ITEM" && target.targetId === input.itemId)
         ) throw new Error("EVIDENCE_ITEM_BINDING_INVALID");
         return record;

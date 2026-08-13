@@ -1,0 +1,95 @@
+mission_id: F1_ORDER_TO_CASH_PILOT_001
+title: Galvanik-Kreile Order-to-Cash Pilot
+status: active
+base_sha: d16363dee8e38bf64dbb31ed135a93972d91b6f1
+branch: f1/digital-wareneingang-20260812
+worktree: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\_worktrees\\f1-digital-wareneingang-20260812
+
+delivery_order:
+  - F1.1_DIGITALER_WARENEINGANG
+  - F1-R0_NO_FAKE_PRODUCTION_GATE
+  - F1.2_WERKSTATTDURCHLAUF
+  - F1.3_LEISTUNGSABSCHLUSS
+  - F1.4_UNVERAENDERLICHE_RECHNUNG
+  - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
+  - F1.6_REALER_PILOT
+
+active_package: F1.1_DIGITALER_WARENEINGANG
+next_gate_after_active_package: F1-R0_NO_FAKE_PRODUCTION_GATE
+f1_r0_status: pending_f1_1_independent_pass
+
+rules:
+  single_writer: true
+  max_read_only_reviewers: 1
+  max_repair_loops_per_gate: 2
+  f0_worktree_frozen: true
+  protected_checkout_untouched: true
+  no_parallel_architecture: true
+  no_production_mocks: true
+  no_remote_or_production_mutation_without_explicit_approval: true
+  no_merge_or_production_deployment_without_explicit_approval: true
+  f1_r0_required_before_f1_2: true
+
+reused_contracts:
+  - src/lib/server/authorization.ts
+  - src/lib/server/privilegedDb.ts
+  - src/lib/server/orderStationRead.ts
+  - src/lib/server/orderStationAttachment.ts
+  - src/lib/server/orderStationAttachmentStorage.ts
+  - src/lib/server/evidenceRead.ts
+  - private.v_operational_station_queue_v1
+  - private.v_evidence_records_v1
+
+f1_1_allowlist:
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - src/app/status/page.tsx
+  - supabase/migrations/20260812133649_f1_order_intake_contract.sql
+  - src/lib/server/commands/orderIntakeCommand.ts
+  - src/lib/server/commands/__tests__/orderIntakeCommand.test.ts
+  - src/lib/server/orderIntakeRead.ts
+  - src/lib/server/__tests__/orderIntakeRead.test.ts
+  - src/lib/server/orderStationAttachment.ts
+  - src/lib/server/orderStationAttachmentStorage.ts
+  - src/lib/server/evidenceRead.ts
+  - src/lib/server/__tests__/orderStationAttachment.test.ts
+  - src/lib/server/__tests__/evidenceRead.test.ts
+  - src/app/warendurchlauf/actions.ts
+  - src/app/warendurchlauf/__tests__/f1OrderIntakeActions.test.ts
+  - src/components/erfassung/ManualFlow/ManualWizard.tsx
+  - src/components/erfassung/ErfassungModal.tsx
+  - src/components/erfassung/OrderIntakePanel.tsx
+  - src/components/erfassung/__tests__/OrderIntakePanel.test.tsx
+  - src/components/erfassung/__tests__/ErfassungModal.test.tsx
+  - src/app/warendurchlauf/wareneingang/page.tsx
+  - src/app/warendurchlauf/__tests__/f1OrderIntakePage.test.tsx
+  - src/test/f1_order_intake.integration.test.ts
+  - .github/workflows/quality.yml
+  - src/lib/server/orderStationRead.ts
+  - src/lib/server/__tests__/w2cB2m5u.operationalDueTruth.failClosed.test.ts
+  - docs/evidence/f0/W2C_REENABLEMENT_MATRIX.md
+  - docs/evidence/f1/F1_1_DIGITALER_WARENEINGANG_EVIDENCE.md
+  - docs/evidence/f1/artifacts/f1-1/f1-1-final-empty-state.png
+  - docs/evidence/f1/artifacts/f1-1/f1-1-final-readonly-denial.png
+  - docs/evidence/f1/artifacts/f1-1/f1-1-final-foreign-tenant-denial.png
+  - docs/evidence/f1/artifacts/f1-1/f1-1-final-success-with-photo.png
+  - docs/evidence/f1/artifacts/f1-1/f1-1-final-readback-order-visible.png
+
+f1_r0_required_gates:
+  - REACHABLE_PRODUCTION_MOCKS=0
+  - UNREGISTERED_VISIBLE_CAPABILITIES=0
+  - ACTIVE_CAPABILITY_REAL_E2E=PASS|OPEN
+
+definition_of_done:
+  - authorized_user_can_choose_or_create_customer
+  - one_to_twenty_items_with_quantity_surface_due_date_and_note
+  - server_generated_unique_A_YYYY_NNNN_order_number
+  - write_receipt_and_exact_readback_before_success
+  - secure_real_photo_original_assignment
+  - tenant_safe_list_search_and_open
+  - loading_empty_error_denial_conflict_data_states
+  - positive_and_negative_local_end_to_end_evidence
+
+stop_conditions:
+  - irreversible_product_decision_requires_new_authority
+  - two_failed_repair_loops_on_same_real_gate
+  - F1_REVIEW_READY

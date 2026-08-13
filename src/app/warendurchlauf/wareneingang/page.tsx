@@ -104,6 +104,10 @@ function WarendurchlaufLeitstandContent() {
     };
     load();
 
+    const handleIntakeCreated = () => { void load(); };
+    window.addEventListener("order-intake:created", handleIntakeCreated);
+    return () => window.removeEventListener("order-intake:created", handleIntakeCreated);
+
   }, []);
 
   const countUeberfaellig = orders.filter(o => o.risk === 'red').length;
@@ -161,15 +165,15 @@ function WarendurchlaufLeitstandContent() {
 
               {/* Manuell anlegen */}
               <button
-                onClick={() => openErfassung({ mode: "gate" })}
+                onClick={() => openErfassung({ mode: "order" })}
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
                 style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
               >
                 <div className="w-[52px] h-[52px] rounded-[14px] bg-[#fef3e2] flex items-center justify-center">
                   <PenLine className="w-6 h-6 text-[#c8922a]" />
                 </div>
-                <span className="text-[15px] font-bold text-[#1a1a1a]">Manuell anlegen</span>
-                <span className="text-xs text-[#9e9689]">Kunde &middot; Auftrag</span>
+                <span className="text-[15px] font-bold text-[#1a1a1a]">Wareneingang anlegen</span>
+                <span className="text-xs text-[#9e9689]">Kunde &middot; Teile &middot; Termin</span>
               </button>
             </div>
 
