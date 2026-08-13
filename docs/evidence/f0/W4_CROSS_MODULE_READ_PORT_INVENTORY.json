@@ -14,11 +14,18 @@
     "public.scan_uploads"
   ],
   "readPorts": {
+    "src/lib/server/commands/orderIntakeCommand.ts": [
+      "private.v_order_intake_receipts_v1"
+    ],
     "src/lib/server/evidenceRead.ts": [
-      "private.v_evidence_records_v1"
+      "private.v_evidence_records_v2"
+    ],
+    "src/lib/server/orderIntakeRead.ts": [
+      "private.v_order_intake_customers_v1",
+      "private.v_order_intake_receipts_v1"
     ],
     "src/lib/server/orderStationAttachment.ts": [
-      "private.v_order_station_evidence_receipts_v2"
+      "private.v_order_evidence_attachment_receipts_v1"
     ],
     "src/lib/server/orderStationRead.ts": [
       "private.v_operational_station_queue_v1",
@@ -37,12 +44,25 @@
   "forbiddenProductionViewReferences": [
     "private.v_order_station_evidence_receipts_v1"
   ],
-  "migrationContract": {
-    "path": "supabase/migrations/20260812103446_w4_evidence_read_contract.sql",
-    "requiredSecurityInvokerViews": [
-      "private.v_evidence_records_v1",
-      "private.v_order_station_evidence_receipts_v2"
-    ],
-    "requiredLegacySource": "public.scan_uploads"
-  }
+  "migrationContracts": [
+    {
+      "path": "supabase/migrations/20260812103446_w4_evidence_read_contract.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_evidence_records_v1",
+        "private.v_order_station_evidence_receipts_v2"
+      ],
+      "requiredLegacySource": "public.scan_uploads"
+    },
+    {
+      "path": "supabase/migrations/20260812133649_f1_order_intake_contract.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_evidence_records_v2",
+        "private.v_order_evidence_attachment_receipts_v1",
+        "private.v_order_intake_customers_v1",
+        "private.v_order_intake_evidence_receipts_v1",
+        "private.v_order_intake_receipts_v1"
+      ],
+      "requiredLegacySource": null
+    }
+  ]
 }

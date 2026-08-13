@@ -56,7 +56,7 @@ function parseInventory(raw) {
     "commandOwners",
     "declarations",
     "forbiddenProductionViewReferences",
-    "migrationContract",
+    "migrationContracts",
   ], "inventory");
   if (inventory.schemaVersion !== 1 || inventory.contract !== "W4-08" || inventory.productionSourceRoot !== "src") {
     throw new Error("inventory: unsupported identity");
@@ -67,13 +67,20 @@ function parseInventory(raw) {
   validatePortMap(inventory.readPorts, "readPorts");
   validatePortMap(inventory.commandOwners, "commandOwners");
   validatePortMap(inventory.declarations, "declarations");
-  exactKeys(inventory.migrationContract, ["path", "requiredSecurityInvokerViews", "requiredLegacySource"], "migrationContract");
-  sortedUniqueStrings(inventory.migrationContract.requiredSecurityInvokerViews, "requiredSecurityInvokerViews");
-  if (
-    typeof inventory.migrationContract.path !== "string"
-    || !inventory.migrationContract.path.startsWith("supabase/migrations/")
-    || typeof inventory.migrationContract.requiredLegacySource !== "string"
-  ) throw new Error("migrationContract: invalid values");
+  if (!Array.isArray(inventory.migrationContracts) || inventory.migrationContracts.length === 0) {
+    throw new Error("migrationContracts: non-empty array required");
+  }
+  for (let i = 0; i < inventory.migrationContracts.length; i++) {
+    const entry = inventory.migrationContracts[i];
+    exactKeys(entry, ["path", "requiredSecurityInvokerViews", "requiredLegacySource"], `migrationContracts[${i}]`);
+    if (typeof entry.path !== "string" || !entry.path.startsWith("supabase/migrations/")) {
+      throw new Error(`migrationContracts[${i}]: invalid path`);
+    }
+    sortedUniqueStrings(entry.requiredSecurityInvokerViews, `migrationContracts[${i}].requiredSecurityInvokerViews`);
+    if (entry.requiredLegacySource !== null && typeof entry.requiredLegacySource !== "string") {
+      throw new Error(`migrationContracts[${i}]: requiredLegacySource must be string or null`);
+    }
+  }
   return inventory;
 }
 
@@ -150,20 +157,22 @@ function validateSources(inventory, sources) {
   return failures;
 }
 
-function validateMigration(inventory, content) {
+function validateMigration(contract, content) {
   const failures = [];
-  for (const view of inventory.migrationContract.requiredSecurityInvokerViews) {
+  for (const view of contract.requiredSecurityInvokerViews) {
     const pattern = new RegExp(
       `CREATE\\s+VIEW\\s+${escapeRegex(view)}\\s+WITH\\s*\\(\\s*security_invoker\\s*=\\s*true\\s*\\)`,
       "i",
     );
     if (!pattern.test(content)) failures.push(`migration: security_invoker view missing ${view}`);
   }
-  if (!containsRelation(content, inventory.migrationContract.requiredLegacySource)) {
-    failures.push(`migration: legacy source missing ${inventory.migrationContract.requiredLegacySource}`);
-  }
-  if (/\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE)\s+public\.scan_uploads\b/i.test(content)) {
-    failures.push("migration: legacy adapter mutates public.scan_uploads");
+  if (contract.requiredLegacySource !== null) {
+    if (!containsRelation(content, contract.requiredLegacySource)) {
+      failures.push(`migration: legacy source missing ${contract.requiredLegacySource}`);
+    }
+    if (/\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE)\s+public\.scan_uploads\b/i.test(content)) {
+      failures.push("migration: legacy adapter mutates public.scan_uploads");
+    }
   }
   return failures;
 }
@@ -187,14 +196,26 @@ function runSelftest(inventory) {
   for (const [label, fixture] of cases) {
     if (validateSources(inventory, fixture).length === 0) throw new Error(`selftest negative did not fire: ${label}`);
   }
-  const migrationPositive = inventory.migrationContract.requiredSecurityInvokerViews
-    .map((view) => `CREATE VIEW ${view} WITH (security_invoker = true) AS SELECT 1;`)
-    .join("\n") + `\nSELECT * FROM ${inventory.migrationContract.requiredLegacySource};`;
-  if (validateMigration(inventory, migrationPositive).length) throw new Error("selftest migration positive failed");
-  if (validateMigration(inventory, `${migrationPositive}\nUPDATE public.scan_uploads SET id=id;`).length === 0) {
-    throw new Error("selftest legacy mutation did not fire");
+  for (const contract of inventory.migrationContracts) {
+    const migrationPositive = contract.requiredSecurityInvokerViews
+      .map((view) => `CREATE VIEW ${view} WITH (security_invoker = true) AS SELECT 1;`)
+      .join("\n") + (contract.requiredLegacySource !== null ? `\nSELECT * FROM ${contract.requiredLegacySource};` : "");
+    if (validateMigration(contract, migrationPositive).length) {
+      throw new Error(`selftest migration positive failed: ${contract.path}`);
+    }
+    const noSecurity = contract.requiredSecurityInvokerViews
+      .map((view) => `CREATE VIEW ${view} AS SELECT 1;`)
+      .join("\n") + (contract.requiredLegacySource !== null ? `\nSELECT * FROM ${contract.requiredLegacySource};` : "");
+    if (validateMigration(contract, noSecurity).length === 0) {
+      throw new Error(`selftest missing security_invoker did not fire: ${contract.path}`);
+    }
+    if (contract.requiredLegacySource !== null) {
+      if (validateMigration(contract, `${migrationPositive}\nUPDATE public.scan_uploads SET id=id;`).length === 0) {
+        throw new Error("selftest legacy mutation did not fire");
+      }
+    }
   }
-  console.log("W4_READ_PORT_SELFTEST=PASS cases=6");
+  console.log("W4_READ_PORT_SELFTEST=PASS cases=10");
 }
 
 const inventory = parseInventory(readFileSync(path.join(ROOT, INVENTORY_PATH), "utf8"));
@@ -208,8 +229,13 @@ const files = collectSourceFiles(
   inventory.excludedPathSegments,
 ).sort();
 const sources = new Map(files.map((file) => [file, readFileSync(path.join(ROOT, file), "utf8")]));
-const migration = readFileSync(path.join(ROOT, inventory.migrationContract.path), "utf8");
-const failures = [...validateSources(inventory, sources), ...validateMigration(inventory, migration)];
+const failures = [
+  ...validateSources(inventory, sources),
+  ...inventory.migrationContracts.flatMap((contract) => {
+    const content = readFileSync(path.join(ROOT, contract.path), "utf8");
+    return validateMigration(contract, content);
+  }),
+];
 if (failures.length) {
   console.error("W4_READ_PORT_CONTRACT=FAIL");
   for (const failure of failures) console.error(` - ${failure}`);
