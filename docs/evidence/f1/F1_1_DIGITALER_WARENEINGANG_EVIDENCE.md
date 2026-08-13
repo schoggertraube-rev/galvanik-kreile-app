@@ -1,11 +1,11 @@
 # F1.1 Digitaler Wareneingang – Audit-Beleg
 
-**Datum:** 2026-08-13  
-**Basis-SHA:** `d16363dee8e38bf64dbb31ed135a93972d91b6f1`  
-**Produktkandidat-SHA:** `333368cb2a0b8db06938a0f8d646493feb61537b`  
-**Branch:** `f1/digital-wareneingang-20260812`  
-**Worktree:** `C:\Antygravityprojekte\04_Kundenprojekte\galvanik_kreile\_worktrees\f1-digital-wareneingang-20260812`  
-**Alleiniger Schreiber:** Claude Code  
+**Datum:** 2026-08-13
+**Basis-SHA:** `d16363dee8e38bf64dbb31ed135a93972d91b6f1`
+**Produktkandidat-SHA:** `333368cb2a0b8db06938a0f8d646493feb61537b`
+**Branch:** `f1/digital-wareneingang-20260812`
+**Worktree:** `C:\Antygravityprojekte\04_Kundenprojekte\galvanik_kreile\_worktrees\f1-digital-wareneingang-20260812`
+**Alleiniger Schreiber:** Claude Code
 **URL (Production Acceptance Path):** `http://127.0.0.1:3001/warendurchlauf/wareneingang`
 
 ---
@@ -89,8 +89,8 @@ A-2026-0001 bestätigt
 
 ### Fotoupload und Bestätigung
 
-Die **gleiche Browser/Auth-Kette** hat die echte Datei  
-`C:\Antygravityprojekte\04_Kundenprojekte\galvanik_kreile\10_dateien\portfolio-3.jpg`  
+Die **gleiche Browser/Auth-Kette** hat die echte Datei
+`C:\Antygravityprojekte\04_Kundenprojekte\galvanik_kreile\10_dateien\portfolio-3.jpg`
 hochgeladen. Sichtbare Bestätigung:
 
 ```
@@ -187,7 +187,7 @@ SHA256: 252b20b245fc5fcc96f26424c8dece6682ef91f4f05cd74418fd613a817671e0
 Dieser Login ist Administratoren vorbehalten. Bitte nutzen Sie den PIN-Login.
 ```
 
-**Mutation:** Keine  
+**Mutation:** Keine
 **Readback:** Keine neuen Reihen
 
 ### Echte Fremd-Mandanten-Auth-Ablehnung
@@ -197,7 +197,7 @@ Dieser Login ist Administratoren vorbehalten. Bitte nutzen Sie den PIN-Login.
 AUTH_ERROR: Benutzer nicht gefunden
 ```
 
-**Mutation:** Keine  
+**Mutation:** Keine
 **Readback:** Keine neuen Reihen
 
 ### Echte Integrations-Suite für Konfliktbeweise
@@ -240,10 +240,10 @@ Bestehende W4-Attachment-Tests decken falsches Versionskonflikt/Fail-Closed-Verh
 npm.cmd test -- src/test/f1_order_intake.integration.test.ts
 ```
 
-**Ergebnis:** PASS  
-**Umfang:** 1 Datei, 7/7 Tests  
-**Dauer:** 9,28s  
-**Gegen:** Echte lokale Supabase  
+**Ergebnis:** PASS
+**Umfang:** 1 Datei, 7/7 Tests
+**Dauer:** 9,28s
+**Gegen:** Echte lokale Supabase
 **Hinweis:** Der Integrations-Test mockt nur `appSession` als supplementärer Test-Harness; echte Auth wird durch den Browser-Pfad nachgewiesen, daher ist dies kein Akzeptanzpfad-Mock.
 
 ### Fokussierte F1/W3/W4-Regressions-Charge
@@ -252,8 +252,8 @@ npm.cmd test -- src/test/f1_order_intake.integration.test.ts
 Fokussierte F1/W3/W4-Regressions-Test-Batch
 ```
 
-**Ergebnis:** PASS  
-**Umfang:** 12/12 Dateien, 136/136 Tests  
+**Ergebnis:** PASS
+**Umfang:** 12/12 Dateien, 136/136 Tests
 **Dauer:** 35,36s
 
 ### Finale geänderte Test-Regression
@@ -262,8 +262,8 @@ Fokussierte F1/W3/W4-Regressions-Test-Batch
 Finale Regressions-Charge mit geändertem Test
 ```
 
-**Ergebnis:** PASS  
-**Umfang:** 2/2 Dateien, 62/62 Tests  
+**Ergebnis:** PASS
+**Umfang:** 2/2 Dateien, 62/62 Tests
 **Dauer:** 31,96s
 
 ### ESLint – Fokussiert auf alle 21 geänderten TypeScript/TSX-Pfade
@@ -272,8 +272,8 @@ Finale Regressions-Charge mit geändertem Test
 ESLint mit --max-warnings 0
 ```
 
-**Ergebnis:** PASS  
-**Exit-Code:** 0  
+**Ergebnis:** PASS
+**Exit-Code:** 0
 **Dauer:** 11,4s
 
 ### TypeScript-Compiler – Typ-Check
@@ -282,8 +282,8 @@ ESLint mit --max-warnings 0
 npx.cmd tsc --noEmit --pretty false
 ```
 
-**Ergebnis:** PASS  
-**Exit-Code:** 0  
+**Ergebnis:** PASS
+**Exit-Code:** 0
 **Dauer:** 17,9s
 
 ### Next.js Build – NODE_OPTIONS=--max-old-space-size=2048
@@ -292,9 +292,9 @@ npx.cmd tsc --noEmit --pretty false
 npm.cmd run build -- --webpack
 ```
 
-**Ergebnis:** FAIL  
-**Fehlschlag-Grund:** Nach 166,5s konnte Next.js 16.2.12 Inter-WOFF2-Dateien von `fonts.gstatic.com` nicht abrufen, und `next/font` ist dann in `src/app/layout.tsx` fehlgeschlagen.  
-**Ursache:** Externer Font-Abruf-Blocker außerhalb des F1.1-Deltas  
+**Ergebnis:** FAIL
+**Fehlschlag-Grund:** Nach 166,5s konnte Next.js 16.2.12 Inter-WOFF2-Dateien von `fonts.gstatic.com` nicht abrufen, und `next/font` ist dann in `src/app/layout.tsx` fehlgeschlagen.
+**Ursache:** Externer Font-Abruf-Blocker außerhalb des F1.1-Deltas
 **Hinweis:** Keine Build-PASS kann beansprucht werden. Keine Reparatur-Schleife wurde eröffnet.
 
 ### TypeScript-Reparatur-Schleifen
