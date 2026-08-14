@@ -412,7 +412,13 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           APP_SESSION_SECRET: f0-verify-http-tests-ci-secret-2026-08-10
         run: |
-          npx next start -p 3100 > next-start.log 2>&1 &
+          set -euo pipefail
+          if [ -d public ]; then
+            cp -r public .next/standalone/public
+          fi
+          mkdir -p .next/standalone/.next
+          cp -r .next/static .next/standalone/.next/static
+          HOSTNAME=127.0.0.1 PORT=3100 node .next/standalone/server.js > next-start.log 2>&1 &
           echo $! > next-start.pid
           ready=0
           for i in $(seq 1 60); do
@@ -420,6 +426,12 @@ jobs:
               echo "next start ready after ${i}s"
               ready=1
               break
+            fi
+            pid="$(cat next-start.pid)"
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "next process exited before readiness: PID=$pid"
+              cat next-start.log
+              exit 1
             fi
             sleep 1
           done
