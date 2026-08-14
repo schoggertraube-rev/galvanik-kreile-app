@@ -1,21 +1,28 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createHmac } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import process from "node:process";
 import { execFileSync } from "node:child_process";
 import vm from "node:vm";
 import bcrypt from "bcryptjs";
-import { createFromFetch } from "next/dist/compiled/react-server-dom-webpack/client.node.js";
+import { createFromFetch } from "next/dist/compiled/react-server-dom-turbopack/client.node.js";
 
 // BF-006: echte HTTP-Session-/Autorisierungskette gegen einen ECHTEN "next start"-Server im
 // Replay-Job. Testet die ECHTE Server Action reserveOrderIntakeAttachmentAction mit
 // deterministischer Action-ID-Aufloesung aus dem Next.js Build-Manifest und DB-State-Snapshots.
 //
+// Der installierte Next-Build ist Turbopack (kein Webpack): das generierte Standalone-Artefakt
+// hat KEINE .next/standalone/.next/server/webpack-runtime.js. Jede Route-Page laedt stattdessen
+// beim Require ihre eigene reale SSR-Turbopack-Runtime (server/chunks/ssr/[turbopack]_runtime.js)
+// und exportiert __next_app__ mit den echten Funktionen .require und .loadChunk.
+//
 // Dekodiert wird ausschliesslich mit dem ECHTEN React-Server-Components-Decoder
-// (createFromFetch aus next/dist/compiled/react-server-dom-webpack/client.node.js).
-// Kein handgebauter/toleranter Flight-Parser. Jede Vertragsverletzung wirft.
+// (createFromFetch aus next/dist/compiled/react-server-dom-turbopack/client.node.js). Dieser
+// Decoder loest Server-Module ueber globalThis.__next_require__ und globalThis.__next_chunk_load__
+// auf (NICHT __webpack_chunk_load__). Kein handgebauter/toleranter Flight-Parser. Jede
+// Vertragsverletzung wirft.
 //
 // Kern-Vertraege:
 //  1. loginWithPin: echter Login-POST -> HTTP 200 + text/x-component + dekodiertes
@@ -28,7 +35,7 @@ import { createFromFetch } from "next/dist/compiled/react-server-dom-webpack/cli
 //  6. Vor + nach den Reserve-Aufrufen: DB-State ist bit-for-bit unveraendert (Count+Digest).
 //
 // Manifest-basierte Action-ID-Aufloesung (keine Kandidaten, kein HTML-Scraping):
-//  - Liest .next/server/server-reference-manifest.json
+//  - Liest .next/standalone/.next/server/server-reference-manifest.json
 //  - Sucht nach exportedName="loginWithPin" im node + edge Mapping mit filename=auth.actions.ts
 //  - Sucht nach exportedName="reserveOrderIntakeAttachmentAction" mit filename=actions.ts (warendurchlauf)
 //  - Require genau eine Match pro Action, sonst FATAL.
@@ -43,36 +50,44 @@ const DATABASE_URL =
   process.env.DATABASE_URL ?? "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 const APP_SESSION_SECRET = process.env.APP_SESSION_SECRET;
 const APP_TENANT_ID = "galvanik-kreile";
-const MANIFEST_PATH = path.join(ROOT, ".next/server/server-reference-manifest.json");
+// Der per CI tatsaechlich gestartete Server ist IMMER der Standalone-Server
+// (HOSTNAME=... PORT=... node .next/standalone/server.js). Seine deploybare Next-Wurzel ist
+// NICHT ROOT/.next, sondern die innere Kopie ROOT/.next/standalone/.next (next.config.ts:
+// output=standalone). Genau EINE kanonische Wurzel: server-reference-manifest.json, beide
+// client-reference-manifest.js-Dateien, beide Route-Page-Artefakte und der Turbopack-Runtime-
+// Provenienznachweis werden ALLE deterministisch aus genau dieser inneren Wurzel gelesen/geladen
+// -- keine Kandidatenliste, kein Fallback/Mischen mit ROOT/.next, kein rekursives Scannen.
+const STANDALONE_SERVER_PATH = path.join(ROOT, ".next/standalone/server.js");
+const STANDALONE_NEXT_ROOT = path.join(ROOT, ".next/standalone/.next");
+const MANIFEST_PATH = path.join(STANDALONE_NEXT_ROOT, "server/server-reference-manifest.json");
 const START_CLIENT_REFERENCE_MANIFEST_PATH = path.join(
-  ROOT,
-  ".next/server/app/start/page_client-reference-manifest.js"
+  STANDALONE_NEXT_ROOT,
+  "server/app/start/page_client-reference-manifest.js"
 );
 const START_CLIENT_REFERENCE_MANIFEST_ROUTE = "/start/page";
 const WARENEINGANG_CLIENT_REFERENCE_MANIFEST_PATH = path.join(
-  ROOT,
-  ".next/server/app/warendurchlauf/wareneingang/page_client-reference-manifest.js"
+  STANDALONE_NEXT_ROOT,
+  "server/app/warendurchlauf/wareneingang/page_client-reference-manifest.js"
 );
 const WARENEINGANG_CLIENT_REFERENCE_MANIFEST_ROUTE = "/warendurchlauf/wareneingang/page";
-// Echte Route-Page-Artefakte des aktuellen generierten Builds. Jedes Artefakt gehoert
-// unverwechselbar zu genau einer Route und wird per echtem Node/CommonJS-Require geladen
-// (siehe loadRoutePageArtifact), damit es beim Laden seine eigenen Module in die geladene
-// .next/server/webpack-runtime.js registriert (__next_app__.require.m).
-const START_PAGE_ARTIFACT_PATH = path.join(ROOT, ".next/server/app/start/page.js");
+// Echte Route-Page-Artefakte des aktuellen generierten Builds, geladen aus der tatsaechlich
+// deployten Standalone-Next-Wurzel. Jedes Artefakt gehoert unverwechselbar zu genau einer Route
+// und wird per echtem Node/CommonJS-Require geladen (siehe loadRoutePageArtifact); dabei laedt es
+// intern seine eigene reale SSR-Turbopack-Runtime und befuellt seine eigenen __next_app__.require
+// / __next_app__.loadChunk-Funktionen. Es gibt keine geteilte Runtime-Instanz ueber Routen hinweg.
+const START_PAGE_ARTIFACT_PATH = path.join(STANDALONE_NEXT_ROOT, "server/app/start/page.js");
 const WARENEINGANG_PAGE_ARTIFACT_PATH = path.join(
-  ROOT,
-  ".next/server/app/warendurchlauf/wareneingang/page.js"
+  STANDALONE_NEXT_ROOT,
+  "server/app/warendurchlauf/wareneingang/page.js"
 );
-// Echte Webpack-Runtime des aktuellen generierten Builds. Ihr module.exports ist die reale
-// __webpack_require__-Funktion; ihre '.e'-Methode ist der reale Chunk-Loader. Vor dem Laden
-// eines Route-Page-Artefakts ist ihr Modul-Register '.m' leer -- sie wird erst durch das
-// jeweilige Route-Bootstrap (siehe loadRoutePageArtifact) befuellt. Fuer die Dauer der
-// RSC-Dekodierung wird ausschliesslich das routegebundene __next_app__.require (identisch mit
-// dieser Instanz, aber NACH Route-Bootstrap) an globalThis.__next_require__ /
-// __webpack_chunk_load__ gebunden (siehe decodeActionResult), weil der ECHTE
-// createFromFetch-Decoder (react-server-dom-webpack-client) SSR-Modul-Chunks der
-// ssrModuleMapping ueber genau diese beiden Globals aufloest.
-const WEBPACK_RUNTIME_PATH = path.join(ROOT, ".next/server/webpack-runtime.js");
+// Reiner Existenz-/Provenienznachweis: der aktuelle generierte Standalone-Build ist ein
+// Turbopack-Build (kein Webpack-Build). Diese Datei wird NICHT per Require geladen -- sie dient
+// ausschliesslich dazu, VOR jedem Route-Bootstrap fail-closed zu pruefen, dass die erwartete
+// Turbopack-Runtime-Chunk-Datei in der kanonischen Standalone-Next-Wurzel tatsaechlich existiert.
+const TURBOPACK_RUNTIME_PROVENANCE_PATH = path.join(
+  STANDALONE_NEXT_ROOT,
+  "server/chunks/[turbopack]_runtime.js"
+);
 const SESSION_COOKIE_NAME = "kreile_app_session";
 const LOGIN_ACTION_PATH = "/start";
 // V3/V4: unauthentifiziert -> proxy laesst /start unverandert durch.
@@ -301,64 +316,34 @@ function extractSessionCookie(response) {
   return null;
 }
 
-// Laedt und validiert die ECHTE Webpack-Runtime des aktuellen generierten Builds
-// (.next/server/webpack-runtime.js) ueber den echten Node-CommonJS-Require (kein vm-Sandbox,
-// keine Textauswertung), damit ihre eigenen relativen require("./chunks/...")-Aufrufe korrekt
-// aufgeloest werden. module.exports muss die reale __webpack_require__-Funktion sein, mit
-// echtem Modul-Register '.m', echtem Chunk-Handler-Register '.f' (mind. ein Handler, z.B.
-// 'require') und einer echten Chunk-Lade-Funktion '.e'. Fail-closed: jede Abweichung wirft.
-// Wird genau einmal pro Prozess geladen/validiert und danach wiederverwendet (siehe
-// getRealWebpackRuntime).
-function loadRealWebpackRuntime() {
-  const requireFromRuntimeDir = createRequire(WEBPACK_RUNTIME_PATH);
-
-  let runtimeExports;
-  try {
-    runtimeExports = requireFromRuntimeDir(WEBPACK_RUNTIME_PATH);
-  } catch (error) {
+// Validiert fail-closed, dass der tatsaechlich per CI gestartete Standalone-Server existiert,
+// BEVOR Runtime- oder Route-Page-Artefakte aus seiner inneren .next-Wurzel geladen werden. Keine
+// Kandidatenliste, kein Fallback auf ROOT/.next: der einzige zulaessige kanonische Ursprung ist
+// exakt .next/standalone/server.js mit seiner inneren Next-Wurzel .next/standalone/.next. Prueft
+// zusaetzlich die Turbopack-Runtime-Provenienzdatei, damit ein versehentlicher Webpack-Build
+// (fehlende [turbopack]_runtime.js) sofort fail-closed erkannt wird statt spaeter beim Route-
+// Bootstrap mit einer verwirrenden Require-Fehlermeldung zu scheitern.
+function assertCanonicalStandaloneServerExists() {
+  if (!existsSync(STANDALONE_SERVER_PATH)) {
     throw new Error(
-      `Webpack-Runtime ${WEBPACK_RUNTIME_PATH} konnte nicht geladen werden: ${error.message}`
+      `Kanonischer Standalone-Server ${STANDALONE_SERVER_PATH} existiert nicht. Erwartet wird ` +
+        `der tatsaechlich gestartete "next start"-Standalone-Server ` +
+        `(HOSTNAME=... PORT=... node .next/standalone/server.js) mit seiner inneren ` +
+        `Next-Wurzel ${STANDALONE_NEXT_ROOT}.`
     );
   }
-
-  if (typeof runtimeExports !== "function") {
+  if (!existsSync(STANDALONE_NEXT_ROOT)) {
     throw new Error(
-      `Webpack-Runtime ${WEBPACK_RUNTIME_PATH}: module.exports ist keine Funktion (typeof=${typeof runtimeExports}); erwartet wird die reale __webpack_require__-Funktion`
+      `Innere Standalone-Next-Wurzel ${STANDALONE_NEXT_ROOT} existiert nicht, obwohl ` +
+        `${STANDALONE_SERVER_PATH} vorhanden ist.`
     );
   }
-  if (typeof runtimeExports.m !== "object" || runtimeExports.m === null) {
+  if (!existsSync(TURBOPACK_RUNTIME_PROVENANCE_PATH)) {
     throw new Error(
-      `Webpack-Runtime ${WEBPACK_RUNTIME_PATH}: kein Modul-Register '.m' gefunden`
+      `Turbopack-Runtime-Provenienzdatei ${TURBOPACK_RUNTIME_PROVENANCE_PATH} existiert nicht. ` +
+        `Erwartet wird ein Turbopack-Standalone-Build (kein Webpack-Build).`
     );
   }
-  if (typeof runtimeExports.f !== "object" || runtimeExports.f === null) {
-    throw new Error(
-      `Webpack-Runtime ${WEBPACK_RUNTIME_PATH}: kein Chunk-Handler-Register '.f' gefunden`
-    );
-  }
-  const chunkHandlerKeys = Object.keys(runtimeExports.f).filter(
-    (key) => typeof runtimeExports.f[key] === "function"
-  );
-  if (chunkHandlerKeys.length === 0) {
-    throw new Error(
-      `Webpack-Runtime ${WEBPACK_RUNTIME_PATH}: '.f' enthaelt keinen registrierten Chunk-Handler`
-    );
-  }
-  if (typeof runtimeExports.e !== "function") {
-    throw new Error(
-      `Webpack-Runtime ${WEBPACK_RUNTIME_PATH}: keine Funktion '.e' gefunden (erwartet wird der reale Chunk-Loader)`
-    );
-  }
-
-  return runtimeExports;
-}
-
-let cachedRealWebpackRuntime = null;
-function getRealWebpackRuntime() {
-  if (cachedRealWebpackRuntime === null) {
-    cachedRealWebpackRuntime = loadRealWebpackRuntime();
-  }
-  return cachedRealWebpackRuntime;
 }
 
 // Liest den aktuellen Property-Descriptor von globalThis[propertyName] und wirft FAIL-CLOSED,
@@ -376,12 +361,72 @@ function assertRestorableDescriptor(propertyName) {
   return descriptor;
 }
 
-// Laedt das ECHTE Route-Page-Artefakt (.next/server/app/<route>/page.js) per echtem
-// Node/CommonJS-Require (kein vm-Sandbox, keine Textauswertung), damit dessen eigene relative
-// require(...)-Aufrufe -- insbesondere der Require der Webpack-Runtime -- ueber den Node
-// Require-Cache korrekt und identisch mit der bereits geladenen .next/server/webpack-runtime.js
-// aufgeloest werden. Genau dieser Ladevorgang befuellt das Modul-Register '.m' der Runtime
-// (Route-Bootstrap).
+// Prueft fail-closed, dass die extrahierten Route-Runtime-Funktionen ECHT sind und keine
+// No-op/Immer-Erfolg-Emulation. Ruft __next_app__.require mit einer garantiert unbekannten,
+// einmaligen Modul-ID auf und verlangt, dass dieser Aufruf wirft (ein echter Turbopack-Require
+// kennt diese ID nicht und wirft "Cannot find module"; ein No-op wuerde still durchlaufen oder
+// undefined liefern). Ruft __next_app__.loadChunk mit einem garantiert unbekannten, einmaligen
+// Chunk-Pfad auf und verlangt ein Thenable, das ablehnt statt aufzuloesen (ein echter Turbopack-
+// Chunk-Loader schlaegt beim Laden einer nicht existierenden Datei fehl; ein No-op wuerde sich
+// immer/sofort aufloesen).
+async function assertRouteRuntimeIsReal(pageArtifactPath, routeRequire, routeLoadChunk) {
+  const uniqueSuffix = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  const missingModuleId = `__f0-verify-missing-module__${uniqueSuffix}`;
+  let requireThrew = false;
+  try {
+    routeRequire(missingModuleId);
+  } catch {
+    requireThrew = true;
+  }
+  if (!requireThrew) {
+    throw new Error(
+      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.require('${missingModuleId}') wirft ` +
+        `NICHT -- kein echter Turbopack-Require (No-op/Emulation ist nicht zulaessig)`
+    );
+  }
+
+  const missingChunkPath = `server/chunks/__f0-verify-missing-chunk__${uniqueSuffix}.js`;
+  let chunkPromise;
+  try {
+    chunkPromise = routeLoadChunk(missingChunkPath);
+  } catch (error) {
+    throw new Error(
+      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.loadChunk('${missingChunkPath}') ` +
+        `wirft synchron statt ein ablehnendes Thenable zurueckzugeben: ${error.message}`
+    );
+  }
+  if (
+    chunkPromise === null ||
+    typeof chunkPromise !== "object" ||
+    typeof chunkPromise.then !== "function"
+  ) {
+    throw new Error(
+      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.loadChunk('${missingChunkPath}') ` +
+        `liefert kein Thenable (typeof=${typeof chunkPromise}) -- kein echter Turbopack-Chunk-Loader`
+    );
+  }
+  let chunkPromiseRejected = false;
+  try {
+    await chunkPromise;
+  } catch {
+    chunkPromiseRejected = true;
+  }
+  if (!chunkPromiseRejected) {
+    throw new Error(
+      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.loadChunk('${missingChunkPath}') hat ` +
+        `sich NICHT abgelehnt -- kein No-op/Immer-Erfolg-Loader zulaessig`
+    );
+  }
+}
+
+// Laedt das ECHTE Route-Page-Artefakt (.next/standalone/.next/server/app/<route>/page.js) per
+// echtem Node/CommonJS-Require (kein vm-Sandbox, keine Textauswertung), damit dessen eigene
+// relative require(...)-Aufrufe -- insbesondere der Require seiner eigenen realen SSR-Turbopack-
+// Runtime (server/chunks/ssr/[turbopack]_runtime.js) -- korrekt aufgeloest werden. Extrahiert
+// ausschliesslich die realen Funktionen __next_app__.require und __next_app__.loadChunk dieser
+// EINEN Route; es gibt keine geteilte/verglichene Runtime-Instanz ueber Routen hinweg und keine
+// Pruefung auf Webpack-Eigenschaften wie .m/.f/.e.
 //
 // Next.js-Route-Artefakte pruefen beim Laden global auf AsyncLocalStorage. Falls sie noch nicht
 // vorhanden ist, wird sie hier NUR FUER DIE DAUER DES REQUIRE temporaer mit der echten
@@ -389,15 +434,7 @@ function assertRestorableDescriptor(propertyName) {
 // wiederhergestellt (auch wenn vorher gar keine Property existierte).
 //
 // Fail-closed: jede Abweichung von der erwarteten Route-Bootstrap-Struktur wirft eine Exception.
-// expectedWebpackRuntime muss dieselbe Funktionsinstanz sein wie das Ergebnis von
-// getRealWebpackRuntime() -- keine strukturelle Aehnlichkeit, sondern Referenzgleichheit.
-function loadRoutePageArtifact(pageArtifactPath, expectedWebpackRuntime) {
-  if (typeof expectedWebpackRuntime !== "function") {
-    throw new Error(
-      `loadRoutePageArtifact(${pageArtifactPath}): expectedWebpackRuntime ist keine Funktion`
-    );
-  }
-
+async function loadRoutePageArtifact(pageArtifactPath) {
   const previousAsyncLocalStorageDescriptor = assertRestorableDescriptor("AsyncLocalStorage");
   const needsAsyncLocalStorage = typeof globalThis.AsyncLocalStorage !== "function";
 
@@ -456,71 +493,54 @@ function loadRoutePageArtifact(pageArtifactPath, expectedWebpackRuntime) {
         `(typeof=${typeof routeRequire})`
     );
   }
-  if (routeRequire !== expectedWebpackRuntime) {
+  const routeLoadChunk = nextApp.loadChunk;
+  if (typeof routeLoadChunk !== "function") {
     throw new Error(
-      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.require ist NICHT identisch mit ` +
-        `der geladenen ${WEBPACK_RUNTIME_PATH}`
-    );
-  }
-  if (
-    typeof routeRequire.m !== "object" ||
-    routeRequire.m === null ||
-    Object.keys(routeRequire.m).length === 0
-  ) {
-    throw new Error(
-      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.require.m ist nach Route-Bootstrap leer`
-    );
-  }
-  if (
-    typeof routeRequire.f !== "object" ||
-    routeRequire.f === null ||
-    typeof routeRequire.f.require !== "function"
-  ) {
-    throw new Error(
-      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.require.f.require ist keine echte Funktion`
-    );
-  }
-  if (typeof routeRequire.e !== "function") {
-    throw new Error(
-      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.require.e ist keine echte Funktion`
+      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.loadChunk ist keine Funktion ` +
+        `(typeof=${typeof routeLoadChunk})`
     );
   }
 
-  return { require: routeRequire };
+  await assertRouteRuntimeIsReal(pageArtifactPath, routeRequire, routeLoadChunk);
+
+  return { require: routeRequire, loadChunk: routeLoadChunk };
 }
 
 // ECHTER React-Server-Components-Decoder. Kein Eigenbau-Parser, keine Toleranz.
 // Fail-closed: jede Verletzung des Envelope-Vertrags wirft eine Exception.
 //
-// Der Decoder (react-server-dom-webpack-client) loest SSR-Modul-Chunks der ssrModuleMapping
-// ueber globalThis.__next_require__ (Modul-Aufloesung) und globalThis.__webpack_chunk_load__
-// (Chunk-Ladung) auf. routeRequire MUSS das routegebundene __next_app__.require aus
-// loadRoutePageArtifact sein (NIEMALS __next_app__.loadChunk, das im Build ein reines
-// () => Promise.resolve()-Noop ist). Beide Globals werden fuer die GESAMTE Dauer der
-// Dekodierung (inklusive des asynchronen Aufloesens von envelope.a, da Chunk-Ladungen dort
-// verzoegert ausgeloest werden koennen) gebunden und in finally exakt auf ihren vorherigen
-// Zustand zurueckgesetzt -- einschliesslich vorher nicht vorhandener Properties. Die
-// Restorability beider Ziel-Properties wird VOR jeder Mutation gepueft (fail-closed); beide
-// Zuweisungen liegen INNERHALB des try-Blocks, damit auch ein Fehlschlag der zweiten Zuweisung
-// den finally-Block mit der Wiederherstellung in umgekehrter Reihenfolge ausloest.
-async function decodeActionResult(response, clientReferenceManifest, routeRequire) {
+// Der Decoder (react-server-dom-turbopack-client) loest SSR-Module ueber globalThis.__next_require__
+// (Modul-Aufloesung) und globalThis.__next_chunk_load__ (Chunk-Ladung) auf -- NIEMALS
+// __webpack_chunk_load__, das ist ein Webpack-Global und wird von diesem Decoder nicht gelesen.
+// routeRuntime MUSS das exakte { require, loadChunk }-Paar der aufrufenden Route aus
+// loadRoutePageArtifact sein. Beide Globals werden fuer die GESAMTE Dauer der Dekodierung
+// (inklusive des asynchronen Aufloesens von envelope.a, da Chunk-Ladungen dort verzoegert
+// ausgeloest werden koennen) gebunden und in finally exakt auf ihren vorherigen Zustand
+// zurueckgesetzt -- einschliesslich vorher nicht vorhandener Properties. Die Restorability beider
+// Ziel-Properties wird VOR jeder Mutation gepueft (fail-closed); beide Zuweisungen liegen
+// INNERHALB des try-Blocks, damit auch ein Fehlschlag der zweiten Zuweisung den finally-Block mit
+// der Wiederherstellung in umgekehrter Reihenfolge ausloest.
+async function decodeActionResult(response, clientReferenceManifest, routeRuntime) {
+  if (typeof routeRuntime !== "object" || routeRuntime === null) {
+    throw new Error("decodeActionResult: routeRuntime ist kein Objekt");
+  }
+  const { require: routeRequire, loadChunk: routeLoadChunk } = routeRuntime;
   if (typeof routeRequire !== "function") {
     throw new Error("decodeActionResult: routegebundenes __next_app__.require ist keine Funktion");
   }
-  if (typeof routeRequire.e !== "function") {
+  if (typeof routeLoadChunk !== "function") {
     throw new Error(
-      "decodeActionResult: routegebundenes __next_app__.require.e ist keine echte Funktion " +
-        "(Chunk-Loader erwartet)"
+      "decodeActionResult: routegebundenes __next_app__.loadChunk ist keine echte Funktion"
     );
   }
 
   const previousRequireDescriptor = assertRestorableDescriptor("__next_require__");
-  const previousChunkLoadDescriptor = assertRestorableDescriptor("__webpack_chunk_load__");
+  const previousChunkLoadDescriptor = assertRestorableDescriptor("__next_chunk_load__");
 
   try {
     // Object.defineProperty statt Zuweisung: bei einer vorhandenen konfigurierbaren
     // Accessor-Property wuerde eine einfache Zuweisung deren Setter aufrufen, ohne den
-    // Decoder-Global sicher durch das routegebundene __next_app__.require zu ersetzen.
+    // Decoder-Global sicher durch das routegebundene __next_app__.require/.loadChunk zu ersetzen.
     // Ein eigener Data-Descriptor ersetzt jede der beiden Properties immer vollstaendig.
     Object.defineProperty(globalThis, "__next_require__", {
       value: routeRequire,
@@ -528,8 +548,8 @@ async function decodeActionResult(response, clientReferenceManifest, routeRequir
       writable: true,
       enumerable: previousRequireDescriptor ? previousRequireDescriptor.enumerable : true,
     });
-    Object.defineProperty(globalThis, "__webpack_chunk_load__", {
-      value: routeRequire.e,
+    Object.defineProperty(globalThis, "__next_chunk_load__", {
+      value: routeLoadChunk,
       configurable: true,
       writable: true,
       enumerable: previousChunkLoadDescriptor ? previousChunkLoadDescriptor.enumerable : true,
@@ -572,12 +592,12 @@ async function decodeActionResult(response, clientReferenceManifest, routeRequir
     return result;
   } finally {
     // Restore in umgekehrter Reihenfolge der Installation -- auch wenn die zweite Zuweisung
-    // (__webpack_chunk_load__) oben eine Exception geworfen hat, laeuft dieser Block und macht
+    // (__next_chunk_load__) oben eine Exception geworfen hat, laeuft dieser Block und macht
     // beide Mutationen exakt rueckgaengig.
     if (previousChunkLoadDescriptor) {
-      Object.defineProperty(globalThis, "__webpack_chunk_load__", previousChunkLoadDescriptor);
+      Object.defineProperty(globalThis, "__next_chunk_load__", previousChunkLoadDescriptor);
     } else {
-      delete globalThis.__webpack_chunk_load__;
+      delete globalThis.__next_chunk_load__;
     }
     if (previousRequireDescriptor) {
       Object.defineProperty(globalThis, "__next_require__", previousRequireDescriptor);
@@ -596,7 +616,7 @@ async function invokeServerAction({
   cookieHeader = null,
   pathname,
   clientReferenceManifest,
-  routeRequire,
+  routeRuntime,
 }) {
   if (typeof actionId !== "string" || actionId.length === 0) {
     throw new Error("Action-ID fehlt oder ist keine nicht-leere Zeichenkette");
@@ -634,7 +654,7 @@ async function invokeServerAction({
 
   // Cookies aus den Headern lesen, bevor der Body-Stream konsumiert wird.
   const cookie = extractSessionCookie(response);
-  const result = await decodeActionResult(response, clientReferenceManifest, routeRequire);
+  const result = await decodeActionResult(response, clientReferenceManifest, routeRuntime);
 
   return { status: response.status, contentType, cookie, result };
 }
@@ -649,7 +669,7 @@ async function loginAndAssert({
   pin,
   expectedRole,
   clientReferenceManifest,
-  routeRequire,
+  routeRuntime,
 }) {
   const invocation = await invokeServerAction({
     actionId,
@@ -657,7 +677,7 @@ async function loginAndAssert({
     cookieHeader: null,
     pathname: LOGIN_ACTION_PATH,
     clientReferenceManifest,
-    routeRequire,
+    routeRuntime,
   });
 
   const keys = Object.keys(invocation.result).sort();
@@ -835,21 +855,22 @@ async function main() {
     );
 
     // ── Setup: echtes Route-Bootstrap ───────────────────────────────────────────────────────
-    // Webpack-Runtime zuerst laden (primed den Node-Require-Cache fuer WEBPACK_RUNTIME_PATH),
-    // danach jedes Route-Page-Artefakt per echtem Require laden. Jedes Page-Artefakt requiret
-    // intern denselben Pfad und trifft dadurch ueber den Require-Cache exakt dieselbe Runtime-
-    // Instanz, wodurch __next_app__.require.m fuer diese Route real befuellt wird.
-    const webpackRuntime = getRealWebpackRuntime();
-    const startRouteRequire = loadRoutePageArtifact(START_PAGE_ARTIFACT_PATH, webpackRuntime)
-      .require;
-    const wareneingangRouteRequire = loadRoutePageArtifact(
-      WARENEINGANG_PAGE_ARTIFACT_PATH,
-      webpackRuntime
-    ).require;
+    // Fail-closed VOR jedem Zugriff auf die Standalone-Next-Wurzel: der kanonische
+    // Standalone-Server muss tatsaechlich vorhanden sein (kein Fallback auf ROOT/.next).
+    assertCanonicalStandaloneServerExists();
+    // Jedes Route-Page-Artefakt einzeln per echtem Node/CommonJS-Require laden. Jede Route laedt
+    // dabei intern ihre eigene reale SSR-Turbopack-Runtime; es gibt keine geteilte Runtime-Instanz
+    // ueber Routen hinweg. loadRoutePageArtifact validiert fail-closed, dass __next_app__.require
+    // und __next_app__.loadChunk echte, nicht-emulierte Funktionen sind (siehe
+    // assertRouteRuntimeIsReal).
+    const startRouteRuntime = await loadRoutePageArtifact(START_PAGE_ARTIFACT_PATH);
+    const wareneingangRouteRuntime = await loadRoutePageArtifact(
+      WARENEINGANG_PAGE_ARTIFACT_PATH
+    );
     report(
       "SETUP-ROUTE-BOOTSTRAP",
       true,
-      "beide Route-Page-Artefakte real geladen; __next_app__.require identisch mit webpack-runtime.js, .m befuellt"
+      "beide Route-Page-Artefakte real geladen; __next_app__.require/.loadChunk pro Route validiert (echter Turbopack-Require wirft bei unbekannter Modul-ID, echter Chunk-Loader lehnt bei unbekanntem Chunk ab)"
     );
 
     // ── Setup: Test-Fixtures ────────────────────────────────────────────────────────────────
@@ -872,7 +893,7 @@ async function main() {
         pin: writerPin,
         expectedRole: "meister",
         clientReferenceManifest: startClientReferenceManifest,
-        routeRequire: startRouteRequire,
+        routeRuntime: startRouteRuntime,
       });
       report(
         "V1",
@@ -892,7 +913,7 @@ async function main() {
         pin: readonlyPin,
         expectedRole: "readonly",
         clientReferenceManifest: startClientReferenceManifest,
-        routeRequire: startRouteRequire,
+        routeRuntime: startRouteRuntime,
       });
       report(
         "V1-READONLY",
@@ -921,7 +942,7 @@ async function main() {
           cookieHeader: writerCookie,
           pathname: AUTHENTICATED_RESERVE_ACTION_PATH,
           clientReferenceManifest: wareneingangClientReferenceManifest,
-          routeRequire: wareneingangRouteRequire,
+          routeRuntime: wareneingangRouteRuntime,
         });
         const code = assertReserveCode(invocation.result, "VALIDATION_ERROR");
         report("V2", true, `code=${code}`);
@@ -940,7 +961,7 @@ async function main() {
         cookieHeader: null,
         pathname: UNAUTHENTICATED_RESERVE_ACTION_PATH,
         clientReferenceManifest: startClientReferenceManifest,
-        routeRequire: startRouteRequire,
+        routeRuntime: startRouteRuntime,
       });
       const code = assertReserveCode(invocation.result, "UNAUTHENTICATED");
       report("V3", true, `code=${code}`);
@@ -959,7 +980,7 @@ async function main() {
           cookieHeader: tampered,
           pathname: UNAUTHENTICATED_RESERVE_ACTION_PATH,
           clientReferenceManifest: startClientReferenceManifest,
-          routeRequire: startRouteRequire,
+          routeRuntime: startRouteRuntime,
         });
         const code = assertReserveCode(invocation.result, "UNAUTHENTICATED");
         report("V4", true, `code=${code}`);
@@ -979,7 +1000,7 @@ async function main() {
           cookieHeader: readonlyCookie,
           pathname: AUTHENTICATED_RESERVE_ACTION_PATH,
           clientReferenceManifest: wareneingangClientReferenceManifest,
-          routeRequire: wareneingangRouteRequire,
+          routeRuntime: wareneingangRouteRuntime,
         });
         const code = assertReserveCode(invocation.result, "FORBIDDEN");
         report("V5", true, `code=${code}`);
