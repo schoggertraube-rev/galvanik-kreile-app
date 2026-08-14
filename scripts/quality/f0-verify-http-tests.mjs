@@ -1,5 +1,7 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import process from "node:process";
 import { execFileSync } from "node:child_process";
@@ -52,6 +54,25 @@ const WARENEINGANG_CLIENT_REFERENCE_MANIFEST_PATH = path.join(
   ".next/server/app/warendurchlauf/wareneingang/page_client-reference-manifest.js"
 );
 const WARENEINGANG_CLIENT_REFERENCE_MANIFEST_ROUTE = "/warendurchlauf/wareneingang/page";
+// Echte Route-Page-Artefakte des aktuellen generierten Builds. Jedes Artefakt gehoert
+// unverwechselbar zu genau einer Route und wird per echtem Node/CommonJS-Require geladen
+// (siehe loadRoutePageArtifact), damit es beim Laden seine eigenen Module in die geladene
+// .next/server/webpack-runtime.js registriert (__next_app__.require.m).
+const START_PAGE_ARTIFACT_PATH = path.join(ROOT, ".next/server/app/start/page.js");
+const WARENEINGANG_PAGE_ARTIFACT_PATH = path.join(
+  ROOT,
+  ".next/server/app/warendurchlauf/wareneingang/page.js"
+);
+// Echte Webpack-Runtime des aktuellen generierten Builds. Ihr module.exports ist die reale
+// __webpack_require__-Funktion; ihre '.e'-Methode ist der reale Chunk-Loader. Vor dem Laden
+// eines Route-Page-Artefakts ist ihr Modul-Register '.m' leer -- sie wird erst durch das
+// jeweilige Route-Bootstrap (siehe loadRoutePageArtifact) befuellt. Fuer die Dauer der
+// RSC-Dekodierung wird ausschliesslich das routegebundene __next_app__.require (identisch mit
+// dieser Instanz, aber NACH Route-Bootstrap) an globalThis.__next_require__ /
+// __webpack_chunk_load__ gebunden (siehe decodeActionResult), weil der ECHTE
+// createFromFetch-Decoder (react-server-dom-webpack-client) SSR-Modul-Chunks der
+// ssrModuleMapping ueber genau diese beiden Globals aufloest.
+const WEBPACK_RUNTIME_PATH = path.join(ROOT, ".next/server/webpack-runtime.js");
 const SESSION_COOKIE_NAME = "kreile_app_session";
 const LOGIN_ACTION_PATH = "/start";
 // V3/V4: unauthentifiziert -> proxy laesst /start unverandert durch.
@@ -280,44 +301,290 @@ function extractSessionCookie(response) {
   return null;
 }
 
+// Laedt und validiert die ECHTE Webpack-Runtime des aktuellen generierten Builds
+// (.next/server/webpack-runtime.js) ueber den echten Node-CommonJS-Require (kein vm-Sandbox,
+// keine Textauswertung), damit ihre eigenen relativen require("./chunks/...")-Aufrufe korrekt
+// aufgeloest werden. module.exports muss die reale __webpack_require__-Funktion sein, mit
+// echtem Modul-Register '.m', echtem Chunk-Handler-Register '.f' (mind. ein Handler, z.B.
+// 'require') und einer echten Chunk-Lade-Funktion '.e'. Fail-closed: jede Abweichung wirft.
+// Wird genau einmal pro Prozess geladen/validiert und danach wiederverwendet (siehe
+// getRealWebpackRuntime).
+function loadRealWebpackRuntime() {
+  const requireFromRuntimeDir = createRequire(WEBPACK_RUNTIME_PATH);
+
+  let runtimeExports;
+  try {
+    runtimeExports = requireFromRuntimeDir(WEBPACK_RUNTIME_PATH);
+  } catch (error) {
+    throw new Error(
+      `Webpack-Runtime ${WEBPACK_RUNTIME_PATH} konnte nicht geladen werden: ${error.message}`
+    );
+  }
+
+  if (typeof runtimeExports !== "function") {
+    throw new Error(
+      `Webpack-Runtime ${WEBPACK_RUNTIME_PATH}: module.exports ist keine Funktion (typeof=${typeof runtimeExports}); erwartet wird die reale __webpack_require__-Funktion`
+    );
+  }
+  if (typeof runtimeExports.m !== "object" || runtimeExports.m === null) {
+    throw new Error(
+      `Webpack-Runtime ${WEBPACK_RUNTIME_PATH}: kein Modul-Register '.m' gefunden`
+    );
+  }
+  if (typeof runtimeExports.f !== "object" || runtimeExports.f === null) {
+    throw new Error(
+      `Webpack-Runtime ${WEBPACK_RUNTIME_PATH}: kein Chunk-Handler-Register '.f' gefunden`
+    );
+  }
+  const chunkHandlerKeys = Object.keys(runtimeExports.f).filter(
+    (key) => typeof runtimeExports.f[key] === "function"
+  );
+  if (chunkHandlerKeys.length === 0) {
+    throw new Error(
+      `Webpack-Runtime ${WEBPACK_RUNTIME_PATH}: '.f' enthaelt keinen registrierten Chunk-Handler`
+    );
+  }
+  if (typeof runtimeExports.e !== "function") {
+    throw new Error(
+      `Webpack-Runtime ${WEBPACK_RUNTIME_PATH}: keine Funktion '.e' gefunden (erwartet wird der reale Chunk-Loader)`
+    );
+  }
+
+  return runtimeExports;
+}
+
+let cachedRealWebpackRuntime = null;
+function getRealWebpackRuntime() {
+  if (cachedRealWebpackRuntime === null) {
+    cachedRealWebpackRuntime = loadRealWebpackRuntime();
+  }
+  return cachedRealWebpackRuntime;
+}
+
+// Liest den aktuellen Property-Descriptor von globalThis[propertyName] und wirft FAIL-CLOSED,
+// wenn eine bereits vorhandene Property nicht-konfigurierbar ist -- dann koennte sie nach einer
+// temporaeren Ersetzung nicht mehr exakt wiederhergestellt werden. Wird VOR jeder Mutation
+// aufgerufen (kein Fallback, kein stiller Ueberschreib-Versuch).
+function assertRestorableDescriptor(propertyName) {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, propertyName);
+  if (descriptor && descriptor.configurable === false) {
+    throw new Error(
+      `globalThis.${propertyName} ist bereits als nicht-konfigurierbare Property gesetzt ` +
+        `und kann nicht sicher temporaer ersetzt und wiederhergestellt werden.`
+    );
+  }
+  return descriptor;
+}
+
+// Laedt das ECHTE Route-Page-Artefakt (.next/server/app/<route>/page.js) per echtem
+// Node/CommonJS-Require (kein vm-Sandbox, keine Textauswertung), damit dessen eigene relative
+// require(...)-Aufrufe -- insbesondere der Require der Webpack-Runtime -- ueber den Node
+// Require-Cache korrekt und identisch mit der bereits geladenen .next/server/webpack-runtime.js
+// aufgeloest werden. Genau dieser Ladevorgang befuellt das Modul-Register '.m' der Runtime
+// (Route-Bootstrap).
+//
+// Next.js-Route-Artefakte pruefen beim Laden global auf AsyncLocalStorage. Falls sie noch nicht
+// vorhanden ist, wird sie hier NUR FUER DIE DAUER DES REQUIRE temporaer mit der echten
+// node:async_hooks-Implementierung gesetzt und in finally property-descriptor-genau
+// wiederhergestellt (auch wenn vorher gar keine Property existierte).
+//
+// Fail-closed: jede Abweichung von der erwarteten Route-Bootstrap-Struktur wirft eine Exception.
+// expectedWebpackRuntime muss dieselbe Funktionsinstanz sein wie das Ergebnis von
+// getRealWebpackRuntime() -- keine strukturelle Aehnlichkeit, sondern Referenzgleichheit.
+function loadRoutePageArtifact(pageArtifactPath, expectedWebpackRuntime) {
+  if (typeof expectedWebpackRuntime !== "function") {
+    throw new Error(
+      `loadRoutePageArtifact(${pageArtifactPath}): expectedWebpackRuntime ist keine Funktion`
+    );
+  }
+
+  const previousAsyncLocalStorageDescriptor = assertRestorableDescriptor("AsyncLocalStorage");
+  const needsAsyncLocalStorage = typeof globalThis.AsyncLocalStorage !== "function";
+
+  let pageExports;
+  try {
+    if (needsAsyncLocalStorage) {
+      // Object.defineProperty statt Zuweisung: bei einer vorhandenen konfigurierbaren
+      // Accessor-Property wuerde eine einfache Zuweisung deren Setter aufrufen, ohne den
+      // Decoder-Global sicher durch die echte AsyncLocalStorage-Implementierung zu ersetzen.
+      // Ein eigener Data-Descriptor ersetzt die Property immer vollstaendig.
+      Object.defineProperty(globalThis, "AsyncLocalStorage", {
+        value: AsyncLocalStorage,
+        configurable: true,
+        writable: true,
+        enumerable: previousAsyncLocalStorageDescriptor
+          ? previousAsyncLocalStorageDescriptor.enumerable
+          : true,
+      });
+    }
+
+    const requireFromPageDir = createRequire(pageArtifactPath);
+    try {
+      pageExports = requireFromPageDir(pageArtifactPath);
+    } catch (error) {
+      throw new Error(
+        `Route-Page-Artefakt ${pageArtifactPath} konnte nicht geladen werden: ${error.message}`
+      );
+    }
+  } finally {
+    if (needsAsyncLocalStorage) {
+      if (previousAsyncLocalStorageDescriptor) {
+        Object.defineProperty(
+          globalThis,
+          "AsyncLocalStorage",
+          previousAsyncLocalStorageDescriptor
+        );
+      } else {
+        delete globalThis.AsyncLocalStorage;
+      }
+    }
+  }
+
+  if (typeof pageExports !== "object" || pageExports === null) {
+    throw new Error(`Route-Page-Artefakt ${pageArtifactPath} hat keinen Objekt-Export`);
+  }
+
+  const nextApp = pageExports.__next_app__;
+  if (typeof nextApp !== "object" || nextApp === null) {
+    throw new Error(`Route-Page-Artefakt ${pageArtifactPath} hat kein Objekt '__next_app__'`);
+  }
+
+  const routeRequire = nextApp.require;
+  if (typeof routeRequire !== "function") {
+    throw new Error(
+      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.require ist keine Funktion ` +
+        `(typeof=${typeof routeRequire})`
+    );
+  }
+  if (routeRequire !== expectedWebpackRuntime) {
+    throw new Error(
+      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.require ist NICHT identisch mit ` +
+        `der geladenen ${WEBPACK_RUNTIME_PATH}`
+    );
+  }
+  if (
+    typeof routeRequire.m !== "object" ||
+    routeRequire.m === null ||
+    Object.keys(routeRequire.m).length === 0
+  ) {
+    throw new Error(
+      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.require.m ist nach Route-Bootstrap leer`
+    );
+  }
+  if (
+    typeof routeRequire.f !== "object" ||
+    routeRequire.f === null ||
+    typeof routeRequire.f.require !== "function"
+  ) {
+    throw new Error(
+      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.require.f.require ist keine echte Funktion`
+    );
+  }
+  if (typeof routeRequire.e !== "function") {
+    throw new Error(
+      `Route-Page-Artefakt ${pageArtifactPath}: __next_app__.require.e ist keine echte Funktion`
+    );
+  }
+
+  return { require: routeRequire };
+}
+
 // ECHTER React-Server-Components-Decoder. Kein Eigenbau-Parser, keine Toleranz.
 // Fail-closed: jede Verletzung des Envelope-Vertrags wirft eine Exception.
-async function decodeActionResult(response, clientReferenceManifest) {
-  const envelope = await createFromFetch(Promise.resolve(response), {
-    serverConsumerManifest: {
-      moduleLoading: clientReferenceManifest.moduleLoading,
-      moduleMap: clientReferenceManifest.ssrModuleMapping,
-      serverModuleMap: null,
-    },
-    replayConsoleLogs: false,
-  });
-
-  if (envelope === null || envelope === undefined) {
-    throw new Error("RSC-Envelope ist null/undefined");
+//
+// Der Decoder (react-server-dom-webpack-client) loest SSR-Modul-Chunks der ssrModuleMapping
+// ueber globalThis.__next_require__ (Modul-Aufloesung) und globalThis.__webpack_chunk_load__
+// (Chunk-Ladung) auf. routeRequire MUSS das routegebundene __next_app__.require aus
+// loadRoutePageArtifact sein (NIEMALS __next_app__.loadChunk, das im Build ein reines
+// () => Promise.resolve()-Noop ist). Beide Globals werden fuer die GESAMTE Dauer der
+// Dekodierung (inklusive des asynchronen Aufloesens von envelope.a, da Chunk-Ladungen dort
+// verzoegert ausgeloest werden koennen) gebunden und in finally exakt auf ihren vorherigen
+// Zustand zurueckgesetzt -- einschliesslich vorher nicht vorhandener Properties. Die
+// Restorability beider Ziel-Properties wird VOR jeder Mutation gepueft (fail-closed); beide
+// Zuweisungen liegen INNERHALB des try-Blocks, damit auch ein Fehlschlag der zweiten Zuweisung
+// den finally-Block mit der Wiederherstellung in umgekehrter Reihenfolge ausloest.
+async function decodeActionResult(response, clientReferenceManifest, routeRequire) {
+  if (typeof routeRequire !== "function") {
+    throw new Error("decodeActionResult: routegebundenes __next_app__.require ist keine Funktion");
   }
-  if (Array.isArray(envelope)) {
-    throw new Error("RSC-Envelope ist ein Array; erwartet wird ein Objekt");
-  }
-  if (typeof envelope !== "object") {
-    throw new Error(`RSC-Envelope ist kein Objekt (typeof=${typeof envelope})`);
-  }
-  if (!Object.prototype.hasOwnProperty.call(envelope, "a")) {
-    throw new Error("RSC-Envelope hat kein eigenes Feld 'a' (Action-Result-Referenz)");
-  }
-
-  const result = await envelope.a;
-
-  if (result === null || result === undefined) {
-    throw new Error("Action-Result (envelope.a) ist null/undefined");
-  }
-  if (Array.isArray(result)) {
-    throw new Error("Action-Result ist ein Array; erwartet wird ein Objekt");
-  }
-  if (typeof result !== "object") {
-    throw new Error(`Action-Result ist kein Objekt (typeof=${typeof result})`);
+  if (typeof routeRequire.e !== "function") {
+    throw new Error(
+      "decodeActionResult: routegebundenes __next_app__.require.e ist keine echte Funktion " +
+        "(Chunk-Loader erwartet)"
+    );
   }
 
-  return result;
+  const previousRequireDescriptor = assertRestorableDescriptor("__next_require__");
+  const previousChunkLoadDescriptor = assertRestorableDescriptor("__webpack_chunk_load__");
+
+  try {
+    // Object.defineProperty statt Zuweisung: bei einer vorhandenen konfigurierbaren
+    // Accessor-Property wuerde eine einfache Zuweisung deren Setter aufrufen, ohne den
+    // Decoder-Global sicher durch das routegebundene __next_app__.require zu ersetzen.
+    // Ein eigener Data-Descriptor ersetzt jede der beiden Properties immer vollstaendig.
+    Object.defineProperty(globalThis, "__next_require__", {
+      value: routeRequire,
+      configurable: true,
+      writable: true,
+      enumerable: previousRequireDescriptor ? previousRequireDescriptor.enumerable : true,
+    });
+    Object.defineProperty(globalThis, "__webpack_chunk_load__", {
+      value: routeRequire.e,
+      configurable: true,
+      writable: true,
+      enumerable: previousChunkLoadDescriptor ? previousChunkLoadDescriptor.enumerable : true,
+    });
+
+    const envelope = await createFromFetch(Promise.resolve(response), {
+      serverConsumerManifest: {
+        moduleLoading: clientReferenceManifest.moduleLoading,
+        moduleMap: clientReferenceManifest.ssrModuleMapping,
+        serverModuleMap: null,
+      },
+      replayConsoleLogs: false,
+    });
+
+    if (envelope === null || envelope === undefined) {
+      throw new Error("RSC-Envelope ist null/undefined");
+    }
+    if (Array.isArray(envelope)) {
+      throw new Error("RSC-Envelope ist ein Array; erwartet wird ein Objekt");
+    }
+    if (typeof envelope !== "object") {
+      throw new Error(`RSC-Envelope ist kein Objekt (typeof=${typeof envelope})`);
+    }
+    if (!Object.prototype.hasOwnProperty.call(envelope, "a")) {
+      throw new Error("RSC-Envelope hat kein eigenes Feld 'a' (Action-Result-Referenz)");
+    }
+
+    const result = await envelope.a;
+
+    if (result === null || result === undefined) {
+      throw new Error("Action-Result (envelope.a) ist null/undefined");
+    }
+    if (Array.isArray(result)) {
+      throw new Error("Action-Result ist ein Array; erwartet wird ein Objekt");
+    }
+    if (typeof result !== "object") {
+      throw new Error(`Action-Result ist kein Objekt (typeof=${typeof result})`);
+    }
+
+    return result;
+  } finally {
+    // Restore in umgekehrter Reihenfolge der Installation -- auch wenn die zweite Zuweisung
+    // (__webpack_chunk_load__) oben eine Exception geworfen hat, laeuft dieser Block und macht
+    // beide Mutationen exakt rueckgaengig.
+    if (previousChunkLoadDescriptor) {
+      Object.defineProperty(globalThis, "__webpack_chunk_load__", previousChunkLoadDescriptor);
+    } else {
+      delete globalThis.__webpack_chunk_load__;
+    }
+    if (previousRequireDescriptor) {
+      Object.defineProperty(globalThis, "__next_require__", previousRequireDescriptor);
+    } else {
+      delete globalThis.__next_require__;
+    }
+  }
 }
 
 // Gemeinsamer Action-Aufruf fuer ALLE Pruefungen.
@@ -329,6 +596,7 @@ async function invokeServerAction({
   cookieHeader = null,
   pathname,
   clientReferenceManifest,
+  routeRequire,
 }) {
   if (typeof actionId !== "string" || actionId.length === 0) {
     throw new Error("Action-ID fehlt oder ist keine nicht-leere Zeichenkette");
@@ -366,7 +634,7 @@ async function invokeServerAction({
 
   // Cookies aus den Headern lesen, bevor der Body-Stream konsumiert wird.
   const cookie = extractSessionCookie(response);
-  const result = await decodeActionResult(response, clientReferenceManifest);
+  const result = await decodeActionResult(response, clientReferenceManifest, routeRequire);
 
   return { status: response.status, contentType, cookie, result };
 }
@@ -375,13 +643,21 @@ async function invokeServerAction({
 // HTTP 200 + text/x-component (im gemeinsamen Aufruf), dekodiertes Ergebnis mit exakt
 // den Keys {ok, role}, ok === true, role === erwartete Rolle und echtes Session-Cookie.
 // Ein Cookie allein ist NIEMALS ausreichend.
-async function loginAndAssert({ actionId, userId, pin, expectedRole, clientReferenceManifest }) {
+async function loginAndAssert({
+  actionId,
+  userId,
+  pin,
+  expectedRole,
+  clientReferenceManifest,
+  routeRequire,
+}) {
   const invocation = await invokeServerAction({
     actionId,
     args: [loginHandleFor(userId), pin],
     cookieHeader: null,
     pathname: LOGIN_ACTION_PATH,
     clientReferenceManifest,
+    routeRequire,
   });
 
   const keys = Object.keys(invocation.result).sort();
@@ -558,6 +834,24 @@ async function main() {
       WARENEINGANG_CLIENT_REFERENCE_MANIFEST_ROUTE
     );
 
+    // ── Setup: echtes Route-Bootstrap ───────────────────────────────────────────────────────
+    // Webpack-Runtime zuerst laden (primed den Node-Require-Cache fuer WEBPACK_RUNTIME_PATH),
+    // danach jedes Route-Page-Artefakt per echtem Require laden. Jedes Page-Artefakt requiret
+    // intern denselben Pfad und trifft dadurch ueber den Require-Cache exakt dieselbe Runtime-
+    // Instanz, wodurch __next_app__.require.m fuer diese Route real befuellt wird.
+    const webpackRuntime = getRealWebpackRuntime();
+    const startRouteRequire = loadRoutePageArtifact(START_PAGE_ARTIFACT_PATH, webpackRuntime)
+      .require;
+    const wareneingangRouteRequire = loadRoutePageArtifact(
+      WARENEINGANG_PAGE_ARTIFACT_PATH,
+      webpackRuntime
+    ).require;
+    report(
+      "SETUP-ROUTE-BOOTSTRAP",
+      true,
+      "beide Route-Page-Artefakte real geladen; __next_app__.require identisch mit webpack-runtime.js, .m befuellt"
+    );
+
     // ── Setup: Test-Fixtures ────────────────────────────────────────────────────────────────
     const writerHash = bcrypt.hashSync(writerPin, 10);
     const readonlyHash = bcrypt.hashSync(readonlyPin, 10);
@@ -578,6 +872,7 @@ async function main() {
         pin: writerPin,
         expectedRole: "meister",
         clientReferenceManifest: startClientReferenceManifest,
+        routeRequire: startRouteRequire,
       });
       report(
         "V1",
@@ -597,6 +892,7 @@ async function main() {
         pin: readonlyPin,
         expectedRole: "readonly",
         clientReferenceManifest: startClientReferenceManifest,
+        routeRequire: startRouteRequire,
       });
       report(
         "V1-READONLY",
@@ -625,6 +921,7 @@ async function main() {
           cookieHeader: writerCookie,
           pathname: AUTHENTICATED_RESERVE_ACTION_PATH,
           clientReferenceManifest: wareneingangClientReferenceManifest,
+          routeRequire: wareneingangRouteRequire,
         });
         const code = assertReserveCode(invocation.result, "VALIDATION_ERROR");
         report("V2", true, `code=${code}`);
@@ -643,6 +940,7 @@ async function main() {
         cookieHeader: null,
         pathname: UNAUTHENTICATED_RESERVE_ACTION_PATH,
         clientReferenceManifest: startClientReferenceManifest,
+        routeRequire: startRouteRequire,
       });
       const code = assertReserveCode(invocation.result, "UNAUTHENTICATED");
       report("V3", true, `code=${code}`);
@@ -661,6 +959,7 @@ async function main() {
           cookieHeader: tampered,
           pathname: UNAUTHENTICATED_RESERVE_ACTION_PATH,
           clientReferenceManifest: startClientReferenceManifest,
+          routeRequire: startRouteRequire,
         });
         const code = assertReserveCode(invocation.result, "UNAUTHENTICATED");
         report("V4", true, `code=${code}`);
@@ -680,6 +979,7 @@ async function main() {
           cookieHeader: readonlyCookie,
           pathname: AUTHENTICATED_RESERVE_ACTION_PATH,
           clientReferenceManifest: wareneingangClientReferenceManifest,
+          routeRequire: wareneingangRouteRequire,
         });
         const code = assertReserveCode(invocation.result, "FORBIDDEN");
         report("V5", true, `code=${code}`);
