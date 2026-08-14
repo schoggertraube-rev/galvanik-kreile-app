@@ -124,61 +124,6 @@ function validateIdentifier(value: unknown, field: string): string {
   return value;
 }
 
-function validateMovementInput(input: unknown): CreateStockMovementInput {
-  if (!input || typeof input !== "object" || Array.isArray(input)) {
-    throw new InventoryDomainError("VALIDATION_ERROR", "Buchungsdaten fehlen.");
-  }
-
-  const candidate = input as Record<string, unknown>;
-  const inventoryItemId = validateIdentifier(candidate.inventoryItemId, "Artikel-ID");
-
-  if (
-    typeof candidate.movementType !== "string" ||
-    !MOVEMENT_TYPES.has(candidate.movementType as StockMovementType)
-  ) {
-    throw new InventoryDomainError(
-      "VALIDATION_ERROR",
-      "Buchungstyp ist ungültig.",
-    );
-  }
-
-  if (
-    typeof candidate.quantity !== "number" ||
-    !Number.isSafeInteger(candidate.quantity) ||
-    candidate.quantity === 0 ||
-    Math.abs(candidate.quantity) > 1_000_000
-  ) {
-    throw new InventoryDomainError(
-      "VALIDATION_ERROR",
-      "Menge muss eine ganze Zahl ungleich null sein.",
-    );
-  }
-
-  let orderId: string | undefined;
-  if (candidate.orderId !== undefined && candidate.orderId !== "") {
-    orderId = validateIdentifier(candidate.orderId, "Auftrags-ID");
-  }
-
-  let reason: string | undefined;
-  if (candidate.reason !== undefined && candidate.reason !== "") {
-    if (typeof candidate.reason !== "string" || candidate.reason.length > 500) {
-      throw new InventoryDomainError(
-        "VALIDATION_ERROR",
-        "Buchungsgrund ist ungültig.",
-      );
-    }
-    reason = candidate.reason.trim() || undefined;
-  }
-
-  return {
-    inventoryItemId,
-    movementType: candidate.movementType as StockMovementType,
-    quantity: candidate.quantity,
-    orderId,
-    reason,
-  };
-}
-
 function movementSelection() {
   return {
     id: stockMovements.id,

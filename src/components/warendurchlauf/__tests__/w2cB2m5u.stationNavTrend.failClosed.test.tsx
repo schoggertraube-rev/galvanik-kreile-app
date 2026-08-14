@@ -4,7 +4,7 @@ const getAll = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/repositories/ordersRepository", () => ({ ordersRepository: { getAll }, Order: {} }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/warendurchlauf/galvanik" }));
 vi.mock("next/link", () => ({ default: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }));
-vi.mock("next/image", () => ({ default: () => <img alt="" /> }));
+vi.mock("next/image", () => ({ default: () => null }));
 vi.mock("@/lib/warendurchlaufIconResolver", () => ({ getCurrentTimeOfDay: () => "noon", getCurrentWeather: () => "normal", getWareneingangVolumeState: () => "normal", getStationIcon: () => "/x.png" }));
 import { WarendurchlaufStationNav } from "@/components/warendurchlauf/WarendurchlaufStationNav";
 
