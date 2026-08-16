@@ -116,47 +116,16 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t files < <(git diff --name-only --diff-filter=ACMR "${{ steps.diff.outputs.base }}" "${{ steps.diff.outputs.head }}" -- '*.ts' '*.tsx')
-          declare -A frozen_r0_warning_blobs=(
-            ["src/app/actions/inventory.actions.ts"]="07b69e29758e56a52e88c7e1ddab79844e5fbb16"
-            ["src/components/warendurchlauf/__tests__/w2cB2m5u.stationNavTrend.failClosed.test.tsx"]="cd5253f8df10ff30f136f53625cf8271ec66c4e1"
-          )
-          lint_files=()
-          for file in "${files[@]}"; do
-            expected="${frozen_r0_warning_blobs[$file]:-}"
-            if [ -z "$expected" ]; then
-              lint_files+=("$file")
-              continue
-            fi
-            actual="$(git rev-parse "${{ steps.diff.outputs.head }}:$file")"
-            if [ "$actual" != "$expected" ]; then
-              echo "Frozen R0 lint baseline changed: $file expected=$expected actual=$actual" >&2
-              exit 1
-            fi
-            echo "Frozen unchanged R0 lint baseline: $file ($actual)"
-          done
-          if [ "${#lint_files[@]}" -eq 0 ]; then
+          if [ "${#files[@]}" -eq 0 ]; then
             echo "No changed TS/TSX files to lint."
             exit 0
           fi
-          npx eslint --max-warnings 0 "${lint_files[@]}"
+          npx eslint --max-warnings 0 "${files[@]}"
 
       - name: Repository ESLint ratchet
         shell: bash
         run: |
           set -euo pipefail
-          declare -A frozen_r0_warning_blobs=(
-            ["src/app/actions/inventory.actions.ts"]="07b69e29758e56a52e88c7e1ddab79844e5fbb16"
-            ["src/components/warendurchlauf/__tests__/w2cB2m5u.stationNavTrend.failClosed.test.tsx"]="cd5253f8df10ff30f136f53625cf8271ec66c4e1"
-          )
-          for file in "${!frozen_r0_warning_blobs[@]}"; do
-            expected="${frozen_r0_warning_blobs[$file]}"
-            actual="$(git rev-parse "${{ steps.diff.outputs.head }}:$file")"
-            if [ "$actual" != "$expected" ]; then
-              echo "Frozen R0 ratchet baseline changed: $file expected=$expected actual=$actual" >&2
-              exit 1
-            fi
-          done
-
           ratchet_config="$RUNNER_TEMP/eslint-ratchet-frozen-r0.mjs"
           cat > "$ratchet_config" <<'EOF'
           import { pathToFileURL } from "node:url";
@@ -167,18 +136,6 @@ jobs:
 
           export default [
             ...canonicalConfig,
-            {
-              name: "frozen-r0-inventory-warning",
-              files: ["src/app/actions/inventory.actions.ts"],
-              rules: { "@typescript-eslint/no-unused-vars": "off" },
-            },
-            {
-              name: "frozen-r0-station-nav-warning",
-              files: [
-                "src/components/warendurchlauf/__tests__/w2cB2m5u.stationNavTrend.failClosed.test.tsx",
-              ],
-              rules: { "@next/next/no-img-element": "off" },
-            },
           ];
           EOF
 
