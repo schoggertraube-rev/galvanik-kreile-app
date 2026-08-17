@@ -121,6 +121,7 @@ f1_1_allowlist:
 
 f1_2_allowlist:
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - .github/workflows/quality.yml
   - src/lib/orders/orderLifecycleContract.ts
   - src/lib/server/commands/orderStationCommand.ts
   - src/lib/server/commands/orderIntakeCommand.ts

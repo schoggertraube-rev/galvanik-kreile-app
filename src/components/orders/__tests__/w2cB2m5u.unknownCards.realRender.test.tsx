@@ -5,6 +5,9 @@ vi.mock("@/app/warendurchlauf/actions", () => ({ getGalvanikOrdersAction }));
 vi.mock("@/components/orders/GalvanikHandoffAttachmentPanel", () => ({
   GalvanikHandoffAttachmentPanel: () => null,
 }));
+vi.mock("@/components/orders/GalvanikCorrectionButton", () => ({
+  GalvanikCorrectionButton: () => null,
+}));
 vi.mock("@/components/orders/OrderModalProvider", () => ({ useOrderModal: () => ({ openOrder: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }));
 vi.mock("lucide-react", () => ({ ArrowRight: () => null, Layers: () => null, PlayCircle: () => null, CheckCircle2: () => null, AlertTriangle: () => null, Loader2: () => null, ChevronRight: () => null }));

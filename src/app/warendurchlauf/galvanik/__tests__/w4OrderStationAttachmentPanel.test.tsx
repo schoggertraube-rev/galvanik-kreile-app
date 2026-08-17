@@ -54,6 +54,9 @@ vi.mock("lucide-react", () => {
     Upload: Icon,
   };
 });
+vi.mock("@/components/orders/GalvanikCorrectionButton", () => ({
+  GalvanikCorrectionButton: () => null,
+}));
 
 import { GalvanikHandoffAttachmentPanel } from "@/components/orders/GalvanikHandoffAttachmentPanel";
 import GalvanikPage from "@/app/warendurchlauf/galvanik/page";

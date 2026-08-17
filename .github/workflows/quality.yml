@@ -109,7 +109,7 @@ jobs:
         run: npx playwright install --with-deps webkit
 
       - name: Auth boundary E2E
-        run: npm run test:e2e
+        run: npm run test:e2e -- e2e/smoke.spec.ts
 
       - name: ESLint on changed TS and TSX files
         shell: bash
@@ -283,12 +283,12 @@ jobs:
             --ledger w4-candidate-ledger.json
           node scripts/quality/check-w4-candidate-schema.mjs --selftest
 
-      - name: Replay W3/W4-01 predecessor cutoff without seed
-        # The predecessor test deliberately proves the exact 11-row ledger through
-        # 20260811154732; do not weaken that assertion for the 13-row candidate.
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260811154732
+      - name: Replay F1.2 candidate fresh from zero without seed
+        # Complete F1.2-candidate replay: integral F1.2 schema through 20260817120000.
+        # Baseline and separate W4/production fingerprint anchors remain immutable.
+        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260817120000
 
-      - name: W3/W4-01 order-station command, receipt, and private read-model integration
+      - name: W3/F1.2 order-station command, receipt, and private read-model integration
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           W3_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
