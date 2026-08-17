@@ -440,6 +440,7 @@ describe("W4 order-station attachment local acceptance", () => {
       "20260811154732",
       "20260811184850",
       "20260812103446",
+      "20260812133649",
     ]);
 
     const columns = await pool.query<{ table_name: string; count: number; names: string[] }>(

@@ -135,6 +135,7 @@ f1_2_allowlist:
   - src/lib/server/__tests__/orderIntakeRead.test.ts
   - src/lib/server/__tests__/orderStationAttachment.test.ts
   - src/test/w3_order_station.integration.test.ts
+  - src/test/w4_order_station_attachment.integration.test.ts
   - src/test/f1_order_intake.integration.test.ts
   # F1.2 Atom A: belegte P1-/Gate-Korrekturen — direkte Verbraucher und Tests des
   # zentralen orderLifecycleContract

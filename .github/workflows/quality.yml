@@ -296,8 +296,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/w3_order_station.integration.test.ts
 
-      - name: Restore exact 13-migration W4 candidate without seed
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260812103446
+      - name: M1-source-compatible 14-migration W4-03 replay
+        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260812133649
 
       - name: W4-03 Galvanik handoff attachment real DB, View, Actions, Panel, and Storage HTTP
         shell: bash
