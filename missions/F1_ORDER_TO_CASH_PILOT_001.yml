@@ -159,6 +159,7 @@ f1_2_allowlist:
   - e2e/f1-2-werkstattdurchlauf.real.spec.ts
   - docs/evidence/f1/F1_2_WERKSTATTDURCHLAUF_E2E_EVIDENCE.md
   - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
+  - docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json
   - docs/evidence/f1/artifacts/f1-2/01-galvanik-loading.png
   - docs/evidence/f1/artifacts/f1-2/02-galvanik-empty.png
   - docs/evidence/f1/artifacts/f1-2/03-intake-photo-confirmed.png
