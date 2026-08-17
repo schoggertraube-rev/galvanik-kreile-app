@@ -1,20 +1,20 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Massgeblicher Steuerungsstand: 2026-08-13.** `main` ist die einzige Lieferwahrheit. Der folgende
-M0/F1-Block ist aktuell; die ausfuehrlichen F0-Tabellen darunter sind ein datierter historischer
+**Massgeblicher Steuerungsstand: 2026-08-17.** `main` ist die einzige Lieferwahrheit. Der folgende
+M1/F1-Block ist aktuell; die ausfuehrlichen F0-Tabellen darunter sind ein datierter historischer
 Snapshot und keine aktuelle Paket- oder Branchsteuerung.
 
 ## Aktuelle Liefer- und Paketwahrheit
 
 | Wahrheit | Stand |
 |---|---|
-| `origin/main` bei M0-Start | `c294c0564dc8a5e137eaa00de1276677cb1a1c53` |
+| M1-Integration | PR #61 am eingefrorenen Head `75bdaf8458aef3606ede50b393a0b06fa0fbe9f3` als Merge-Commit `6b4d482bae9f2797bb5171c8cdf4b817cb1b549d` nach `main` integriert |
 | F0/W4 | unabhaengig `PASS`; Pruefpaket `d16363dee8e38bf64dbb31ed135a93972d91b6f1`, Produktkandidat `e3138f9286775bf6e79c0b5b1845ff72a0230b62` |
 | F1.1 Digitaler Wareneingang | unabhaengig `PASS`; Evidence-SHA `228316b7674d3363a9ab62d97b41500bd1409395` |
-| Aktives Paket | `F1-R0_NO_FAKE_PRODUCTION_GATE`; lokales Gate `0/0/PASS`, unabhaengige Abnahme `NOT_RUN` |
-| M0 Konsolidierung | aktiv; externes Verlustfrei-Archiv und kanonische Steuerung verifiziert, Integration steht aus |
-| F1.2 | `NOT_STARTED`; erst nach R0-PASS, unabhaengiger Exact-SHA-Abnahme und M0-Integrationsgate |
-| Remote/Production seit M0-Start | keine Push-, PR-, Merge-, Deployment- oder Remote-DB-Mutation |
+| F1-R0 | `PASS`; Gate `0/0/PASS`, unabhaengige Exact-SHA-Abnahme `PASS`, `OPEN_P0_P1_ACCEPTANCE=NONE` |
+| M0 Konsolidierung | PR-Integration `PASS`; `02_app` ist wieder der kanonische Checkout auf `main`; Altinhalte wurden vor der Bereinigung verlustfrei extern gesichert |
+| F1.2 | `NOT_STARTED`; eigener Folgeauftrag erforderlich |
+| Remote/Production in M1 | ausschliesslich PR #61 nach `main` integriert; keine Deployment-, Production-, Provider- oder Remote-DB-Mutation |
 
 ## Historischer F0-Snapshot vom 2026-08-10
 
@@ -119,7 +119,7 @@ Stand vor 2026-08-10; fuer die aktuelle Disposition gilt ausschliesslich F0_BRAN
 - review/G-2026-0001-scan-order-persistenz
 - test/r5-negativ-20260713
 
-## F1-R0 No-Fake-Production Gate (laufender Kandidat, 2026-08-13)
+## F1-R0 No-Fake-Production Gate (abgeschlossen, 2026-08-17)
 
 | Pruefpunkt | Ergebnis |
 |---|---|
@@ -128,7 +128,8 @@ Stand vor 2026-08-10; fuer die aktuelle Disposition gilt ausschliesslich F0_BRAN
 | REACHABLE_PRODUCTION_MOCKS | 0 |
 | UNREGISTERED_VISIBLE_CAPABILITIES | 0 |
 | ACTIVE_CAPABILITY_REAL_E2E | PASS (eingefrorener F1.1-Nachweis unveraendert) |
-| Unabhaengige R0-Abnahme | NOT_RUN |
-| Naechstes Paket | F1.2_WERKSTATTDURCHLAUF erst nach unabhaengigem R0-PASS und M0-Integrationsgate |
+| Unabhaengige R0-Abnahme | PASS am exakten SHA `75bdaf8458aef3606ede50b393a0b06fa0fbe9f3`; keine P0/P1-, Akzeptanz-, Scope- oder False-Pass-Befunde |
+| Integration | PR #61, Merge-Commit `6b4d482bae9f2797bb5171c8cdf4b817cb1b549d` |
+| Naechstes Paket | F1.2_WERKSTATTDURCHLAUF `NOT_STARTED`; M1 stoppt nach Konsolidierung |
 
 Die historischen F0-Eintraege bleiben als Herkunftsnachweis erhalten, steuern aber nicht den aktiven F1-Lauf.
