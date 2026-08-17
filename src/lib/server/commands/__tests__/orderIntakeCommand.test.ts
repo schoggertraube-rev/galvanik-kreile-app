@@ -56,7 +56,7 @@ const receiptRow = {
   recorded_at: "2026-08-12T12:00:00.000Z",
   current_order_version: 1,
   current_station: "wareneingang",
-  current_status: "in_progress",
+  current_status: "angenommen",
   integrity_ok: true,
 };
 
@@ -158,7 +158,7 @@ describe("createOrderIntake", () => {
         recordedAt: "2026-08-12T12:00:00.000Z",
         orderVersion: 1,
         station: "wareneingang",
-        status: "in_progress",
+        status: "angenommen",
       },
     });
     const sqlText = execute.mock.calls.map(([query]) => query.text).join("\n");

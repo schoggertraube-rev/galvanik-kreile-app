@@ -1,9 +1,9 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: d16363dee8e38bf64dbb31ed135a93972d91b6f1
-branch: f1/digital-wareneingang-20260812
-worktree: C:\\Antygravityprojekte\\04_Kundenprojekte\\galvanik_kreile\\_worktrees\\f1-digital-wareneingang-20260812
+base_sha: ef9a8411cad56b968dcbe97b089260d38c67f7d5
+branch: f1/werkstattdurchlauf-m2-20260817
+worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
 m0_phase_3_status: COMPLETE
@@ -11,9 +11,12 @@ m0_origin_main_at_start: c294c0564dc8a5e137eaa00de1276677cb1a1c53
 f0_w4_independent_pass: true
 f1_1_independent_pass: true
 f1_r0_local_gate: PASS
-f1_r0_independent_review: NOT_RUN
-f1_r0_gate_complete: false
-# Post-M0 Dauerprozess (gilt nach PR-Merge dieses Worktrees):
+f1_r0_independent_review: PASS
+f1_r0_gate_complete: true
+# M1 abgeschlossen: PR #61 gemergt (6b4d482b), CURRENT_STATE via PR #62,
+# main = ef9a8411cad56b968dcbe97b089260d38c67f7d5, Worktree sauber, F1-Branch
+# geloescht. F1-R0-Gates PASS, unabhaengige Reviews (Claude + Cowork) PASS.
+# Post-M0 Dauerprozess (gilt nach Merge des F1-Worktrees):
 #   02_app → kurzer Paketbranch von aktuellem main → Real-E2E →
 #   unabhaengiger PASS → PR/CI/Merge → Branch loeschen → zurueck auf main
 
@@ -26,9 +29,38 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: F1-R0_NO_FAKE_PRODUCTION_GATE
-next_gate_after_active_package: F1.2_WERKSTATTDURCHLAUF
-f1_r0_status: candidate_freeze_pending_independent_review
+active_package: F1.2_WERKSTATTDURCHLAUF
+next_gate_after_active_package: F1.3_LEISTUNGSABSCHLUSS
+f1_r0_status: complete
+f1_2_status: candidate_freeze_pending_independent_review
+f1_3_status: locked # F1.3 darf erst nach F1.2-Review-PASS und ausdruecklicher Freigabe starten
+
+# ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
+# D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
+#   wareneingang(angenommen) -> galvanik. Kein ready->in_progress, kein
+#   Start-Klick — ersatzlos gestrichen. Zweck: Ware digital auffindbar
+#   statt Regal-Suche.
+# D-ARCH-001: galvanik = eine stabile Aussenstation = gesamte Produktion
+#   (inkl. Vorbehandlung/Schleifen). Keine Innenschritte, keine
+#   Workflow-Engine.
+# D-ARCH-002: globale Zustandskette als Namensvertrag jetzt fixiert:
+#   angenommen -> galvanik -> fertig -> abgeholt (+ bezahlt als
+#   accounting-Status, separate Achse). F1.2 baut nur den ersten
+#   Uebergang; fertig/abgeholt sind Namen only (F1.3/F1.5).
+# D-F12-002: genau eine aktive Station je Auftrag. Kein QS-Zwischenschritt.
+#   Keine Teillieferung.
+# D-F12-003: Rollen buero, werkstatt, meister, admin duerfen den
+#   Uebergang und die Korrektur ausloesen. readonly und developer sind
+#   FORBIDDEN. Tenant-, Rollen-, Ownership- und Versionspruefung bleiben
+#   vollstaendig im Command.
+# D-F12-004: Ruecknahme nie still — eigener Korrektur-Command mit
+#   Pflicht-Begruendung (5..500 Zeichen, getrimmt) + eigenes
+#   ORDER_STATION_CORRECTED_V1 Ereignis; keine Loeschung.
+#   Versionskonflikt = kein Write, neu laden.
+# D-F12-005: keine Extra-Pflichtfelder. Nachweise automatisch: Actor,
+#   Zeitpunkt, Auftrag, Version, Receipt.
+# Leitplanke: Stationsstatus ist Ortswahrheit, nie Zeitwahrheit — aus
+#   Uebergangs-Zeitstempeln wird niemals Arbeitszeit/Abrechnung abgeleitet.
 
 rules:
   single_writer: true
@@ -41,6 +73,7 @@ rules:
   no_remote_or_production_mutation_without_explicit_approval: true
   no_merge_or_production_deployment_without_explicit_approval: true
   f1_r0_required_before_f1_2: true
+  f1_3_locked_until_f1_2_review_pass_and_explicit_merge_approval: true
 
 reused_contracts:
   - src/lib/server/authorization.ts
@@ -85,6 +118,60 @@ f1_1_allowlist:
   - docs/evidence/f1/artifacts/f1-1/f1-1-final-foreign-tenant-denial.png
   - docs/evidence/f1/artifacts/f1-1/f1-1-final-success-with-photo.png
   - docs/evidence/f1/artifacts/f1-1/f1-1-final-readback-order-visible.png
+
+f1_2_allowlist:
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - src/lib/orders/orderLifecycleContract.ts
+  - src/lib/server/commands/orderStationCommand.ts
+  - src/lib/server/commands/orderIntakeCommand.ts
+  - src/lib/server/orderStationRead.ts
+  - src/lib/server/orderIntakeRead.ts
+  - src/lib/server/orderStationAttachment.ts
+  - src/app/actions/orders.actions.ts
+  - src/app/warendurchlauf/actions.ts
+  - src/lib/server/commands/__tests__/orderStationCommand.test.ts
+  - src/lib/server/commands/__tests__/orderIntakeCommand.test.ts
+  - src/lib/server/__tests__/orderIntakeRead.test.ts
+  - src/lib/server/__tests__/orderStationAttachment.test.ts
+  - src/test/w3_order_station.integration.test.ts
+  - src/test/f1_order_intake.integration.test.ts
+  # F1.2 Atom A: belegte P1-/Gate-Korrekturen — direkte Verbraucher und Tests des
+  # zentralen orderLifecycleContract
+  - src/components/erfassung/OrderIntakePanel.tsx
+  - src/components/erfassung/__tests__/OrderIntakePanel.test.tsx
+  - src/components/orders/WareneingangHandoffButton.tsx
+  - src/components/orders/__tests__/WareneingangHandoffButton.test.tsx
+  - src/app/warendurchlauf/galvanik/page.tsx
+  - src/app/warendurchlauf/galvanik/__tests__/orderStationReadback.test.tsx
+  - src/app/warendurchlauf/galvanik/__tests__/w4OrderStationAttachmentPanel.test.tsx
+  - src/components/orders/__tests__/w2cB2m5u.unknownCards.realRender.test.tsx
+  - src/components/orders/GalvanikCorrectionButton.tsx
+  - src/components/orders/__tests__/GalvanikCorrectionButton.test.tsx
+  - src/app/warendurchlauf/wareneingang/page.tsx
+  - src/app/warendurchlauf/__tests__/f1OrderIntakePage.test.tsx
+  - src/app/actions/auth.ts
+  - src/components/start/StartScreenClient.tsx
+  - src/app/start/__tests__/start-page-payload.test.tsx
+  # P1-Tablet-Gate: coarse-pointer Navigation darf bei 1024px keine Actions ueberlagern
+  - src/components/layout/KreileAppShell.tsx
+  - src/components/layout/KreileHeader.tsx
+  - src/components/layout/__tests__/w2cB2m5v.globalBrowserProviders.failClosed.test.tsx
+  - e2e/f1-2-werkstattdurchlauf.real.spec.ts
+  - docs/evidence/f1/F1_2_WERKSTATTDURCHLAUF_E2E_EVIDENCE.md
+  - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
+  - docs/evidence/f1/artifacts/f1-2/01-galvanik-loading.png
+  - docs/evidence/f1/artifacts/f1-2/02-galvanik-empty.png
+  - docs/evidence/f1/artifacts/f1-2/03-intake-photo-confirmed.png
+  - docs/evidence/f1/artifacts/f1-2/04-source-order-data.png
+  - docs/evidence/f1/artifacts/f1-2/05-forward-success.png
+  - docs/evidence/f1/artifacts/f1-2/06-stale-conflict.png
+  - docs/evidence/f1/artifacts/f1-2/07-target-reload-data.png
+  - docs/evidence/f1/artifacts/f1-2/08-correction-success.png
+  - docs/evidence/f1/artifacts/f1-2/09-source-reload-readback.png
+  - docs/evidence/f1/artifacts/f1-2/10-readonly-denial.png
+  - docs/evidence/f1/artifacts/f1-2/11-foreign-tenant-denial.png
+  - docs/evidence/f1/artifacts/f1-2/12-galvanik-real-error.png
+  - supabase/migrations/20260817120000_f1_2_order_lifecycle_contract.sql
 
 f1_r0_required_gates:
   - REACHABLE_PRODUCTION_MOCKS=0

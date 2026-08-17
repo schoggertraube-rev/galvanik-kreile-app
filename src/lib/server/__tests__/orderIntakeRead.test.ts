@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
 
 const { withTransaction, execute } = vi.hoisted(() => ({ withTransaction: vi.fn(), execute: vi.fn() }));
 vi.mock("server-only", () => ({}));
@@ -33,7 +34,7 @@ const receiptRow = {
   recorded_at: "2026-08-12T12:00:00.000Z",
   current_order_version: 1,
   current_station: "wareneingang",
-  current_status: "in_progress",
+  current_status: ORDER_LIFECYCLE_STATUS.ANGENOMMEN,
   integrity_ok: true,
 };
 

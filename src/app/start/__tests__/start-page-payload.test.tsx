@@ -1,5 +1,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockWhere = vi.fn();
@@ -199,5 +201,16 @@ describe("StartPage payload sanitization", () => {
     expect(screen.getByText("Mit E-Mail anmelden", { exact: true })).toBeInTheDocument();
     expect(screen.getByPlaceholderText("E-Mail Adresse")).toBeInTheDocument();
     expect(login).not.toHaveBeenCalled();
+  });
+
+  it("routes successful email and PIN authentication directly to the operational entry point", () => {
+    const root = process.cwd();
+    const emailAuth = readFileSync(path.join(root, "src/app/actions/auth.ts"), "utf8");
+    const pinAuth = readFileSync(path.join(root, "src/components/start/StartScreenClient.tsx"), "utf8");
+    const rootPage = readFileSync(path.join(root, "src/app/page.tsx"), "utf8");
+
+    expect(emailAuth).toContain("redirect('/warendurchlauf')");
+    expect(pinAuth).toContain('window.location.href = "/warendurchlauf"');
+    expect(rootPage).toContain('redirect("/warendurchlauf")');
   });
 });

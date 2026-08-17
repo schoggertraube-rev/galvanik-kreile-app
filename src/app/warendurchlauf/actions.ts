@@ -4,10 +4,15 @@ import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
   readTenantOrderStationReceipt,
+  readTenantOrderStationCorrectionReceipt,
   readTenantStationOrders,
   type OrderStationReceiptReadInput,
+  type OrderStationCorrectionReceiptReadInput,
 } from "@/lib/server/orderStationRead";
-import type { OrderStationTransitionReceipt } from "@/lib/server/commands/orderStationCommand";
+import type {
+  OrderStationTransitionReceipt,
+  OrderStationCorrectionReceipt,
+} from "@/lib/server/commands/orderStationCommand";
 import type {
   CreateOrderIntakeInput,
   OrderIntakeCommandResult,
@@ -117,6 +122,39 @@ export async function getOrderStationReceiptAction(
     };
   } catch {
     return { ok: false, error: "QUERY_ERROR", message: "Stationsbeleg konnte nicht sicher geladen werden." };
+  }
+}
+
+/** D-F12-004: tenant-/rollenrichtiger Read fuer den persistierten Korrekturbeleg. */
+export async function getOrderStationCorrectionReceiptAction(
+  input: OrderStationCorrectionReceiptReadInput,
+): Promise<WarendurchlaufActionResult<OrderStationCorrectionReceipt | null>> {
+  noStore();
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+  }
+
+  if (!authorization.ok) {
+    if (authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
+      return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+    }
+    return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  }
+
+  if (!authorization.data.permissions.includes("perm_view_leitstand")) {
+    return { ok: false, error: "FORBIDDEN", message: "Korrekturbeleg ist nicht erlaubt." };
+  }
+
+  try {
+    return {
+      ok: true,
+      data: await readTenantOrderStationCorrectionReceipt(authorization.data, input),
+    };
+  } catch {
+    return { ok: false, error: "QUERY_ERROR", message: "Korrekturbeleg konnte nicht sicher geladen werden." };
   }
 }
 

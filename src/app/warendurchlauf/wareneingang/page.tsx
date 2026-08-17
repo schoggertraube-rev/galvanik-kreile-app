@@ -47,6 +47,7 @@ function WarendurchlaufLeitstandContent() {
   const [stationUnavailableMessage, setStationUnavailableMessage] = useState<string | null>(null);
   const [stationListPending, setStationListPending] = useState(true);
   const [handoffSuccessMessage, setHandoffSuccessMessage] = useState<string | null>(null);
+  const [handoffConflictMessage, setHandoffConflictMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -309,6 +310,7 @@ function WarendurchlaufLeitstandContent() {
           ) : <>
             <p className="mb-3 text-xs text-[#9e9689]">Die Übergabe an Galvanik wird erst nach einem bestätigten Reload als erfolgreich angezeigt. Weitere Auftragsbearbeitung bleibt nicht verfügbar.</p>
             {handoffSuccessMessage ? <p className="mb-3 text-xs text-[#1a6b38]" role="status">{handoffSuccessMessage}</p> : null}
+            {handoffConflictMessage ? <p className="mb-3 text-xs text-[#c0392b]" role="alert">{handoffConflictMessage}</p> : null}
             <div className="flex flex-col gap-2">
               {stationOrders.length > 0 ? (
                 stationOrders.map((order) => {
@@ -339,11 +341,13 @@ function WarendurchlaufLeitstandContent() {
                         expectedVersion={order.version}
                         onConfirmedReadback={(nextWeOrders) => {
                           setStationOrders(nextWeOrders);
+                          setHandoffConflictMessage(null);
                           setHandoffSuccessMessage("Übergabe an Galvanik bestätigt.");
                         }}
-                        onConflictReadback={(nextWeOrders) => {
+                        onConflictReadback={(nextWeOrders, message) => {
                           setStationOrders(nextWeOrders);
                           setHandoffSuccessMessage(null);
+                          setHandoffConflictMessage(message);
                         }}
                       />
                     ) : null}

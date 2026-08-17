@@ -8,12 +8,13 @@ import {
   type WarendurchlaufOrder,
 } from "@/app/warendurchlauf/actions";
 import { transitionWareneingangToGalvanikAction } from "@/app/actions/orders.actions";
+import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
 
 type Props = {
   orderId: string;
   expectedVersion: number;
   onConfirmedReadback: (nextWeOrders: WarendurchlaufOrder[]) => void;
-  onConflictReadback?: (nextWeOrders: WarendurchlaufOrder[]) => void;
+  onConflictReadback?: (nextWeOrders: WarendurchlaufOrder[], message: string) => void;
 };
 
 const UNCONFIRMED_MESSAGE = "Übergabe wurde nicht bestätigt; erneut prüfen.";
@@ -55,7 +56,7 @@ export function WareneingangHandoffButton({
       if (command.code === "CONFLICT") {
         try {
           const sourceRead = await getWareneingangOrdersAction();
-          if (sourceRead.ok) onConflictReadback?.(sourceRead.data);
+          if (sourceRead.ok) onConflictReadback?.(sourceRead.data, command.message);
         } catch {
           // The conflict remains truthful even when its optional refresh fails.
         }
@@ -102,7 +103,7 @@ export function WareneingangHandoffButton({
         !sourceRead.data.some((order) => order.id === orderId) &&
         targetOrder?.station === "galvanik" &&
         targetOrder.currentStationId === "galvanik" &&
-        targetOrder.status === "ready" &&
+        targetOrder.status === ORDER_LIFECYCLE_STATUS.GALVANIK &&
         command.receipt.clientEventId === clientEventId &&
         command.receipt.aggregateVersion === expectedVersion + 1 &&
         targetOrder.version === command.receipt.aggregateVersion &&

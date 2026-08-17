@@ -55,6 +55,12 @@ const CLIENT_EVENTS = {
   raceA: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa6",
   raceB: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7",
   tenantNamespace: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa8",
+  buero: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa9",
+  validationForeignChild: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  validationNullChild: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab",
+  validationCustomerMismatch: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac",
+  validationItemCustomerAOther: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaad",
+  validationItemCustomerB: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaae",
 } as const;
 
 const ALL_ORDER_IDS = Object.values(ORDERS);
@@ -75,8 +81,10 @@ const pool = {
 };
 
 let transitionWareneingangToGalvanik: typeof import("@/lib/server/commands/orderStationCommand").transitionWareneingangToGalvanik;
+let correctGalvanikToWareneingang: typeof import("@/lib/server/commands/orderStationCommand").correctGalvanikToWareneingang;
 let readTenantStationOrders: typeof import("@/lib/server/orderStationRead").readTenantStationOrders;
 let readTenantOrderStationReceipt: typeof import("@/lib/server/orderStationRead").readTenantOrderStationReceipt;
+let readTenantOrderStationCorrectionReceipt: typeof import("@/lib/server/orderStationRead").readTenantOrderStationCorrectionReceipt;
 let readTenantOperationalOrders: typeof import("@/lib/server/orderStationRead").readTenantOperationalOrders;
 let readTenantOperationalOrderCount: typeof import("@/lib/server/orderStationRead").readTenantOperationalOrderCount;
 let withPrivilegedTenantTransaction: typeof import("@/lib/server/privilegedDb").withPrivilegedTenantTransaction;
@@ -143,7 +151,7 @@ async function seedFixtures() {
          (id, tenant_id, order_number, customer_id, title, task, station,
           current_station, current_station_id, status, version, source, intake_date, due_date)
        VALUES ($1, $2, $3, $4, $5, 'W3 fixture', 'wareneingang',
-               'wareneingang', 'wareneingang', 'in_progress', 1, 'manual',
+               'wareneingang', 'wareneingang', 'angenommen', 1, 'manual',
                '2026-08-10T08:00:00Z', '2026-08-20T08:00:00Z')`,
       row,
     );
@@ -203,10 +211,11 @@ beforeAll(async () => {
     throw new Error(`W3_LOCAL_DATABASE_REQUIRED: PostgreSQL 17 required, got ${version.rows[0]?.server_version_num}`);
   }
 
-  ({ transitionWareneingangToGalvanik } = await import("@/lib/server/commands/orderStationCommand"));
+  ({ transitionWareneingangToGalvanik, correctGalvanikToWareneingang } = await import("@/lib/server/commands/orderStationCommand"));
   ({
     readTenantStationOrders,
     readTenantOrderStationReceipt,
+    readTenantOrderStationCorrectionReceipt,
     readTenantOperationalOrders,
     readTenantOperationalOrderCount,
   } = await import("@/lib/server/orderStationRead"));
@@ -247,6 +256,10 @@ describe.sequential("W3 order station local replay integration", () => {
       "20260810100000",
       "20260811150000",
       "20260811154732",
+      "20260811184850",
+      "20260812103446",
+      "20260812133649",
+      "20260817120000",
     ]);
 
     const eventColumns = await pool.query<{ column_name: string; data_type: string }>(
@@ -587,13 +600,12 @@ describe.sequential("W3 order station local replay integration", () => {
     ).rejects.toThrow("W4_ROLLBACK_HISTORICAL_FIXTURE");
   });
 
-  it("uses the real resolver for readonly and buero reads while denying commands before writes", async () => {
+  it("uses the real resolver for readonly and buero reads identically", async () => {
     for (const [role, userId] of [
       ["readonly", USERS.readonly],
       ["buero", USERS.buero],
     ] as const) {
       setSession(userId, role);
-      const before = await aggregateSnapshot(ORDERS.visible);
       const read = await getWareneingangOrdersAction();
       expect(read.ok).toBe(true);
       if (read.ok) {
@@ -609,11 +621,16 @@ describe.sequential("W3 order station local replay integration", () => {
         );
       }
       await expect(getOrderCountDb()).resolves.toEqual({ ok: true, data: { count: 5 } });
-      await expect(
-        transitionWareneingangToGalvanik({ orderId: ORDERS.visible, expectedVersion: 1, clientEventId: CLIENT_EVENTS.visible }),
-      ).resolves.toMatchObject({ code: "FORBIDDEN" });
-      expect(await aggregateSnapshot(ORDERS.visible)).toEqual(before);
     }
+  });
+
+  it("rejects a readonly station-transition command without changing the shared order snapshot", async () => {
+    setSession(USERS.readonly, "readonly");
+    const before = await aggregateSnapshot(ORDERS.visible);
+    await expect(
+      transitionWareneingangToGalvanik({ orderId: ORDERS.visible, expectedVersion: 1, clientEventId: CLIENT_EVENTS.visible }),
+    ).resolves.toMatchObject({ code: "FORBIDDEN" });
+    expect(await aggregateSnapshot(ORDERS.visible)).toEqual(before);
   });
 
   it("alternates exact tenant sets and counts without cache bleed through the real v1 read port", async () => {
@@ -687,9 +704,9 @@ describe.sequential("W3 order station local replay integration", () => {
   it("rejects foreign and null tenant children without partial reads or writes", async () => {
     setSession(USERS.werkstatt, "werkstatt");
 
-    for (const [itemId, tenantId] of [
-      ["w3-local-item-foreign-child", TENANT_B],
-      ["w3-local-item-null-child", null],
+    for (const [itemId, tenantId, clientEventId] of [
+      ["w3-local-item-foreign-child", TENANT_B, CLIENT_EVENTS.validationForeignChild],
+      ["w3-local-item-null-child", null, CLIENT_EVENTS.validationNullChild],
     ] as const) {
       await pool.query(
         `INSERT INTO public.items
@@ -699,7 +716,7 @@ describe.sequential("W3 order station local replay integration", () => {
       );
       const before = await aggregateSnapshot(ORDERS.visible);
       await expect(
-        transitionWareneingangToGalvanik({ orderId: ORDERS.visible, expectedVersion: 1, clientEventId: CLIENT_EVENTS.visible }),
+        transitionWareneingangToGalvanik({ orderId: ORDERS.visible, expectedVersion: 1, clientEventId }),
       ).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
       expect(await aggregateSnapshot(ORDERS.visible)).toEqual(before);
       await expect(
@@ -734,7 +751,7 @@ describe.sequential("W3 order station local replay integration", () => {
     ]);
     const before = await aggregateSnapshot(ORDERS.visible);
     await expect(
-      transitionWareneingangToGalvanik({ orderId: ORDERS.visible, expectedVersion: 1, clientEventId: CLIENT_EVENTS.visible }),
+      transitionWareneingangToGalvanik({ orderId: ORDERS.visible, expectedVersion: 1, clientEventId: CLIENT_EVENTS.validationCustomerMismatch }),
     ).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
     expect(await aggregateSnapshot(ORDERS.visible)).toEqual(before);
     await expect(
@@ -755,14 +772,17 @@ describe.sequential("W3 order station local replay integration", () => {
   it("rejects tenant-A items assigned to another tenant-A or tenant-B customer without changing the snapshot", async () => {
     setSession(USERS.werkstatt, "werkstatt");
 
-    for (const customerId of [CUSTOMERS.aOther, CUSTOMERS.b]) {
+    for (const [customerId, clientEventId] of [
+      [CUSTOMERS.aOther, CLIENT_EVENTS.validationItemCustomerAOther],
+      [CUSTOMERS.b, CLIENT_EVENTS.validationItemCustomerB],
+    ] as const) {
       await pool.query("UPDATE public.items SET customer_id=$1 WHERE id=$2", [
         customerId,
         "w3-local-item-1",
       ]);
       const before = await aggregateSnapshot(ORDERS.visible);
       await expect(
-        transitionWareneingangToGalvanik({ orderId: ORDERS.visible, expectedVersion: 1, clientEventId: CLIENT_EVENTS.visible }),
+        transitionWareneingangToGalvanik({ orderId: ORDERS.visible, expectedVersion: 1, clientEventId }),
       ).resolves.toMatchObject({ code: "VALIDATION_ERROR" });
       expect(await aggregateSnapshot(ORDERS.visible)).toEqual(before);
       await expect(
@@ -815,7 +835,7 @@ describe.sequential("W3 order station local replay integration", () => {
         station: "galvanik",
         current_station: "galvanik",
         current_station_id: "galvanik",
-        status: "ready",
+        status: "galvanik",
         version: 2,
       }),
     ]);
@@ -849,7 +869,7 @@ describe.sequential("W3 order station local replay integration", () => {
     ]);
     expect(wareneingang.map((order) => order.id)).not.toContain(ORDERS.happy);
     expect(galvanik).toContainEqual(
-      expect.objectContaining({ id: ORDERS.happy, status: "ready", version: 2 }),
+      expect.objectContaining({ id: ORDERS.happy, status: "galvanik", version: 2 }),
     );
 
     const stateBeforeStale = await aggregateSnapshot(ORDERS.happy);
@@ -1030,7 +1050,12 @@ describe.sequential("W3 order station local replay integration", () => {
     await expect(
       pool.query("DELETE FROM public.events WHERE id='w4-local-event-insert-guard'"),
     ).rejects.toMatchObject({ code: "P0001" });
-    await expect(pool.query("TRUNCATE public.events")).rejects.toMatchObject({ code: "P0001" });
+    // Either the audit-mutation trigger (P0001) or Postgres itself blocking the
+    // TRUNCATE first because another table's foreign key references public.events
+    // (0A000) is an acceptable rejection; both leave the table fully intact.
+    await expect(pool.query("TRUNCATE public.events")).rejects.toMatchObject({
+      code: expect.stringMatching(/^(P0001|0A000)$/),
+    });
     await expect(
       fixtureSql.begin(async (tx) => {
         await tx.unsafe("SET LOCAL ROLE service_role");
@@ -1081,5 +1106,485 @@ describe.sequential("W3 order station local replay integration", () => {
       `);
       expect(context[0]?.tenant_id).toBe(TENANT_B);
     });
+  });
+
+  it("D-F12-003: allows buero to execute a real station transition on an isolated order with a readable receipt", async () => {
+    const BUERO_ORDER_ID = "w3-local-order-buero";
+    const BUERO_ITEM_ID = "w3-local-item-buero";
+    await pool.query(
+      `INSERT INTO public.orders
+         (id, tenant_id, order_number, customer_id, title, task, station,
+          current_station, current_station_id, status, version, source, intake_date, due_date)
+       VALUES ($1, $2, 'W3-LOCAL-BUERO', $3, 'W3 Buero Isolated', 'W3 fixture', 'wareneingang',
+               'wareneingang', 'wareneingang', 'angenommen', 1, 'manual',
+               '2026-08-10T08:00:00Z', '2026-08-20T08:00:00Z')`,
+      [BUERO_ORDER_ID, TENANT_A, CUSTOMERS.a],
+    );
+    await pool.query(
+      `INSERT INTO public.items
+         (id, tenant_id, order_id, customer_id, name, quantity, current_station_id)
+       VALUES ($1, $2, $3, $4, 'W3 Buero Teil', 1, 'wareneingang')`,
+      [BUERO_ITEM_ID, TENANT_A, BUERO_ORDER_ID, CUSTOMERS.a],
+    );
+
+    setSession(USERS.buero, "buero");
+    const result = await transitionWareneingangToGalvanik({
+      orderId: BUERO_ORDER_ID,
+      expectedVersion: 1,
+      clientEventId: CLIENT_EVENTS.buero,
+    });
+    expect(result).toMatchObject({
+      code: "OK",
+      replayed: false,
+      receipt: {
+        clientEventId: CLIENT_EVENTS.buero,
+        orderId: BUERO_ORDER_ID,
+        aggregateVersion: 2,
+        fromStation: "wareneingang",
+        toStation: "galvanik",
+        actorId: USERS.buero,
+      },
+    });
+    if (result.code !== "OK") throw new Error("W3_BUERO_EXPECTED_OK");
+
+    const committed = await aggregateSnapshot(BUERO_ORDER_ID);
+    expect(committed.order).toEqual([
+      expect.objectContaining({
+        station: "galvanik",
+        current_station: "galvanik",
+        current_station_id: "galvanik",
+        status: "galvanik",
+        version: 2,
+      }),
+    ]);
+    expect(committed.items.every((item) => item.current_station_id === "galvanik")).toBe(true);
+
+    const persistedReceipt = await readTenantOrderStationReceipt(
+      { tenantId: TENANT_A },
+      { orderId: BUERO_ORDER_ID, clientEventId: CLIENT_EVENTS.buero },
+    );
+    expect(persistedReceipt).toEqual(result.receipt);
+  });
+
+  it("D-F12-004: enforces the correction DB contract shape — CHECK, immutability triggers, combined indexes, and the private readback view", async () => {
+    const correctionConstraint = await pool.query<{ definition: string; validated: boolean }>(
+      `SELECT pg_get_constraintdef(oid) AS definition, convalidated AS validated
+       FROM pg_constraint
+       WHERE conname='events_order_station_corrected_v1_contract_chk'`,
+    );
+    expect(correctionConstraint.rows).toHaveLength(1);
+    expect(correctionConstraint.rows[0]?.validated).toBe(false);
+    expect(correctionConstraint.rows[0]?.definition).toContain("ORDER_STATION_CORRECTED_V1");
+    expect(correctionConstraint.rows[0]?.definition).toMatch(/description/);
+
+    const correctionTriggers = await pool.query<{
+      trigger_name: string;
+      enabled: string;
+      internal: boolean;
+      row_level: boolean;
+      has_qualification: boolean;
+      definition: string;
+      function_schema: string;
+      function_name: string;
+    }>(
+      `SELECT t.tgname AS trigger_name,
+              t.tgenabled AS enabled,
+              t.tgisinternal AS internal,
+              (t.tgtype & 1) = 1 AS row_level,
+              t.tgqual IS NOT NULL AS has_qualification,
+              pg_get_triggerdef(t.oid) AS definition,
+              pn.nspname AS function_schema,
+              p.proname AS function_name
+       FROM pg_trigger t
+       JOIN pg_class c ON c.oid=t.tgrelid
+       JOIN pg_namespace n ON n.oid=c.relnamespace
+       JOIN pg_proc p ON p.oid=t.tgfoid
+       JOIN pg_namespace pn ON pn.oid=p.pronamespace
+       WHERE n.nspname='public' AND c.relname='events'
+         AND t.tgname IN (
+           'events_order_station_corrected_v1_update_immutable',
+           'events_order_station_corrected_v1_delete_immutable'
+         )
+       ORDER BY t.tgname`,
+    );
+    expect(correctionTriggers.rows).toHaveLength(2);
+    expect(correctionTriggers.rows.every((trigger) => (
+      trigger.enabled === "O"
+      && trigger.internal === false
+      && trigger.row_level === true
+      && trigger.has_qualification === true
+      && trigger.function_schema === "public"
+      && trigger.function_name === "prevent_audit_mutation"
+    ))).toBe(true);
+
+    // No redundant per-type TRUNCATE trigger: the existing statement-level
+    // guard on public.events already covers TRUNCATE fail-closed.
+    const correctionTruncateTrigger = await pool.query<{ count: number }>(
+      `SELECT count(*)::int AS count
+       FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+       WHERE n.nspname='public' AND c.relname='events'
+         AND t.tgname='events_order_station_corrected_v1_truncate_immutable'`,
+    );
+    expect(correctionTruncateTrigger.rows[0]?.count).toBe(0);
+
+    const indexDefs = await pool.query<{ indexname: string; indexdef: string }>(
+      `SELECT indexname, indexdef
+       FROM pg_indexes
+       WHERE schemaname='public' AND tablename='events'
+         AND indexname IN ('events_order_station_aggregate_version_uidx', 'events_order_station_correlation_uidx')
+       ORDER BY indexname`,
+    );
+    expect(indexDefs.rows).toHaveLength(2);
+    for (const row of indexDefs.rows) {
+      expect(row.indexdef).toContain("ORDER_STATION_MOVED_V1");
+      expect(row.indexdef).toContain("ORDER_STATION_CORRECTED_V1");
+    }
+
+    const correctionView = await pool.query<{ relname: string; reloptions: string[]; public_select: boolean }>(
+      `SELECT c.relname, c.reloptions,
+              EXISTS (
+                SELECT 1
+                FROM aclexplode(coalesce(c.relacl, acldefault('r', c.relowner))) privilege
+                WHERE privilege.grantee=0 AND privilege.privilege_type='SELECT'
+              ) AS public_select
+       FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
+       WHERE n.nspname='private' AND c.relname='v_order_station_correction_receipts_v1'`,
+    );
+    expect(correctionView.rows).toHaveLength(1);
+    expect(correctionView.rows[0]?.reloptions).toContain("security_invoker=true");
+    expect(correctionView.rows[0]?.public_select).toBe(false);
+  });
+
+  it("D-F12-004: runs an isolated forward/correction cycle with DB and read-port readback, replay, cross-intent CONFLICT, tenant/role guard, and immutability", async () => {
+    const W4C_CUSTOMER = "w4c-local-customer-cycle";
+    const W4C_ORDER = "w4c-local-order-cycle";
+    const W4C_ITEM = "w4c-local-item-cycle";
+    const W4C_EVENTS = {
+      forward1: "dddddddd-dddd-4ddd-8ddd-ddddddddddd1",
+      correction1: "dddddddd-dddd-4ddd-8ddd-ddddddddddd2",
+      forward2: "dddddddd-dddd-4ddd-8ddd-ddddddddddd3",
+      correction2: "dddddddd-dddd-4ddd-8ddd-ddddddddddd4",
+    } as const;
+    const REASON_1 = "  Falsche Station im isolierten Testzyklus versehentlich gewählt  ";
+    const TRIMMED_REASON_1 = REASON_1.trim();
+    const REASON_2 = "Zweite Rücknahme im isolierten Testzyklus";
+
+    await pool.query(
+      `INSERT INTO public.customers (id, tenant_id, customer_number, name, type, source)
+       VALUES ($1, $2, 'W4C-A', 'W4C Kunde', 'business', 'manual')`,
+      [W4C_CUSTOMER, TENANT_A],
+    );
+    await pool.query(
+      `INSERT INTO public.orders
+         (id, tenant_id, order_number, customer_id, title, task, station,
+          current_station, current_station_id, status, version, source, intake_date, due_date)
+       VALUES ($1, $2, 'W4C-LOCAL-1', $3, 'W4C Zyklus', 'W4C fixture', 'wareneingang',
+               'wareneingang', 'wareneingang', 'angenommen', 1, 'manual',
+               '2026-08-17T08:00:00Z', '2026-08-27T08:00:00Z')`,
+      [W4C_ORDER, TENANT_A, W4C_CUSTOMER],
+    );
+    await pool.query(
+      `INSERT INTO public.items
+         (id, tenant_id, order_id, customer_id, name, quantity, current_station_id)
+       VALUES ($1, $2, $3, $4, 'W4C Teil', 1, 'wareneingang')`,
+      [W4C_ITEM, TENANT_A, W4C_ORDER, W4C_CUSTOMER],
+    );
+
+    setSession(USERS.werkstatt, "werkstatt");
+
+    // V1 -> V2: forward transition.
+    const forward1 = await transitionWareneingangToGalvanik({
+      orderId: W4C_ORDER,
+      expectedVersion: 1,
+      clientEventId: W4C_EVENTS.forward1,
+    });
+    expect(forward1).toMatchObject({ code: "OK", replayed: false, receipt: { aggregateVersion: 2 } });
+    if (forward1.code !== "OK") throw new Error("W4C_EXPECTED_FORWARD1_OK");
+
+    // V2 -> V3: correction with a mandatory, trimmed reason.
+    const correction1 = await correctGalvanikToWareneingang({
+      orderId: W4C_ORDER,
+      expectedVersion: 2,
+      clientEventId: W4C_EVENTS.correction1,
+      reason: REASON_1,
+    });
+    expect(correction1).toMatchObject({
+      code: "OK",
+      replayed: false,
+      receipt: {
+        orderId: W4C_ORDER,
+        aggregateVersion: 3,
+        fromStation: "galvanik",
+        toStation: "wareneingang",
+        actorId: USERS.werkstatt,
+        reason: TRIMMED_REASON_1,
+      },
+    });
+    if (correction1.code !== "OK") throw new Error("W4C_EXPECTED_CORRECTION1_OK");
+
+    const afterCorrection1 = await aggregateSnapshot(W4C_ORDER);
+    expect(afterCorrection1.order).toEqual([
+      expect.objectContaining({
+        station: "wareneingang",
+        current_station: "wareneingang",
+        current_station_id: "wareneingang",
+        status: "angenommen",
+        version: 3,
+      }),
+    ]);
+    expect(afterCorrection1.items.every((item) => item.current_station_id === "wareneingang")).toBe(true);
+
+    const correctionRow = await pool.query<{
+      id: string; tenant_id: string; order_id: string; item_id: string | null; event_type: string;
+      description: string; status: string; user_id: string; station: string; client_event_id: string;
+      event_schema_version: number; correlation_id: string; aggregate_version: number; from_station: string;
+    }>(
+      `SELECT id, tenant_id, order_id, item_id, event_type, description, status, user_id, station,
+              client_event_id, event_schema_version, correlation_id, aggregate_version, from_station
+       FROM public.events WHERE id=$1`,
+      [correction1.receipt.eventId],
+    );
+    expect(correctionRow.rows).toEqual([{
+      id: correction1.receipt.eventId,
+      tenant_id: TENANT_A,
+      order_id: W4C_ORDER,
+      item_id: null,
+      event_type: "ORDER_STATION_CORRECTED_V1",
+      description: TRIMMED_REASON_1,
+      status: "success",
+      user_id: USERS.werkstatt,
+      station: "wareneingang",
+      client_event_id: W4C_EVENTS.correction1,
+      event_schema_version: 1,
+      correlation_id: correction1.receipt.correlationId,
+      aggregate_version: 3,
+      from_station: "galvanik",
+    }]);
+
+    // Full DB row and the new tenant-bound read port must agree exactly.
+    const correctionReadPort = await readTenantOrderStationCorrectionReceipt(
+      { tenantId: TENANT_A },
+      { orderId: W4C_ORDER, clientEventId: W4C_EVENTS.correction1 },
+    );
+    expect(correctionReadPort).toEqual(correction1.receipt);
+    await expect(
+      readTenantOrderStationCorrectionReceipt(
+        { tenantId: TENANT_B },
+        { orderId: W4C_ORDER, clientEventId: W4C_EVENTS.correction1 },
+      ),
+    ).resolves.toBeNull();
+
+    // Identical retry replays the same receipt without a second event.
+    await expect(
+      correctGalvanikToWareneingang({
+        orderId: W4C_ORDER,
+        expectedVersion: 2,
+        clientEventId: W4C_EVENTS.correction1,
+        reason: REASON_1,
+      }),
+    ).resolves.toEqual({ code: "OK", receipt: correction1.receipt, replayed: true });
+    const correctedCountAfterReplay = await pool.query<{ count: number }>(
+      "SELECT count(*)::int AS count FROM public.events WHERE order_id=$1 AND event_type='ORDER_STATION_CORRECTED_V1'",
+      [W4C_ORDER],
+    );
+    expect(correctedCountAfterReplay.rows[0]?.count).toBe(1);
+
+    // Reusing the same clientEventId for a different intent is a clean
+    // CONFLICT; the snapshot stays exactly as it was.
+    const beforeConflict = await aggregateSnapshot(W4C_ORDER);
+    await expect(
+      correctGalvanikToWareneingang({
+        orderId: W4C_ORDER,
+        expectedVersion: 2,
+        clientEventId: W4C_EVENTS.correction1,
+        reason: "Eine völlig andere Begründung als zuvor",
+      }),
+    ).resolves.toEqual({ code: "CONFLICT", message: "Anfragekennung wurde bereits anders verwendet." });
+    expect(await aggregateSnapshot(W4C_ORDER)).toEqual(beforeConflict);
+
+    // V3 -> V4 -> V5: a second full forward/correction round on the same order.
+    const forward2 = await transitionWareneingangToGalvanik({
+      orderId: W4C_ORDER,
+      expectedVersion: 3,
+      clientEventId: W4C_EVENTS.forward2,
+    });
+    expect(forward2).toMatchObject({ code: "OK", replayed: false, receipt: { aggregateVersion: 4 } });
+
+    const correction2 = await correctGalvanikToWareneingang({
+      orderId: W4C_ORDER,
+      expectedVersion: 4,
+      clientEventId: W4C_EVENTS.correction2,
+      reason: REASON_2,
+    });
+    expect(correction2).toMatchObject({
+      code: "OK",
+      replayed: false,
+      receipt: { orderId: W4C_ORDER, aggregateVersion: 5, reason: REASON_2 },
+    });
+    if (correction2.code !== "OK") throw new Error("W4C_EXPECTED_CORRECTION2_OK");
+    const correctionReadPort2 = await readTenantOrderStationCorrectionReceipt(
+      { tenantId: TENANT_A },
+      { orderId: W4C_ORDER, clientEventId: W4C_EVENTS.correction2 },
+    );
+    expect(correctionReadPort2).toEqual(correction2.receipt);
+    const finalSnapshot = await aggregateSnapshot(W4C_ORDER);
+    expect(finalSnapshot.order).toEqual([
+      expect.objectContaining({ station: "wareneingang", status: "angenommen", version: 5 }),
+    ]);
+    expect(finalSnapshot.events.filter((event) => event.event_type === "ORDER_STATION_CORRECTED_V1")).toHaveLength(2);
+    expect(finalSnapshot.events.filter((event) => event.event_type === "ORDER_STATION_MOVED_V1")).toHaveLength(2);
+
+    // readonly is rejected by the role gate before any write.
+    setSession(USERS.readonly, "readonly");
+    const beforeReadonly = await aggregateSnapshot(W4C_ORDER);
+    await expect(
+      correctGalvanikToWareneingang({
+        orderId: W4C_ORDER,
+        expectedVersion: 5,
+        clientEventId: "dddddddd-dddd-4ddd-8ddd-ddddddddddd5",
+        reason: "Sollte niemals geschrieben werden",
+      }),
+    ).resolves.toMatchObject({ code: "FORBIDDEN" });
+    expect(await aggregateSnapshot(W4C_ORDER)).toEqual(beforeReadonly);
+
+    // A foreign-tenant session is rejected as an invalid app session before order lookup.
+    // The resolver checks sessionTenantId and rejects non-galvanik-kreile sessions as UNAUTHENTICATED.
+    setSession(USERS.werkstattB, "werkstatt", TENANT_B);
+    const beforeForeign = await aggregateSnapshot(W4C_ORDER);
+    await expect(
+      correctGalvanikToWareneingang({
+        orderId: W4C_ORDER,
+        expectedVersion: 5,
+        clientEventId: "dddddddd-dddd-4ddd-8ddd-ddddddddddd6",
+        reason: "Sollte niemals geschrieben werden",
+      }),
+    ).resolves.toMatchObject({ code: "UNAUTHENTICATED" });
+    expect(await aggregateSnapshot(W4C_ORDER)).toEqual(beforeForeign);
+
+    // Direct UPDATE, type-flip, and DELETE attempts on the CORRECTED event
+    // are all blocked by the immutability triggers (P0001).
+    const receiptBeforeMutationAttempts = await aggregateSnapshot(W4C_ORDER);
+    await expect(
+      pool.query("UPDATE public.events SET description='changed' WHERE id=$1", [correction1.receipt.eventId]),
+    ).rejects.toMatchObject({ code: "P0001" });
+    await expect(
+      pool.query("UPDATE public.events SET event_type='W3_BASELINE' WHERE id=$1", [correction1.receipt.eventId]),
+    ).rejects.toMatchObject({ code: "P0001" });
+    await expect(
+      pool.query("UPDATE public.events SET event_type='ORDER_STATION_CORRECTED_V1' WHERE id=$1", [forward1.receipt.eventId]),
+    ).rejects.toMatchObject({ code: "P0001" });
+    await expect(
+      pool.query("DELETE FROM public.events WHERE id=$1", [correction1.receipt.eventId]),
+    ).rejects.toMatchObject({ code: "P0001" });
+    expect(await aggregateSnapshot(W4C_ORDER)).toEqual(receiptBeforeMutationAttempts);
+
+    // Invalid direct CORRECTED inserts are rejected by the CHECK contract.
+    const validCorrectedControl = {
+      tenantId: TENANT_A as string | null,
+      orderId: W4C_ORDER as string | null,
+      itemId: null as string | null,
+      userId: USERS.werkstatt as string | null,
+      clientEventId: "70000000-0000-4000-8000-000000000001" as string | null,
+      eventSchemaVersion: 1 as number | null,
+      correlationId: "80000000-0000-4000-8000-000000000001" as string | null,
+      aggregateVersion: 900 as number | null,
+      fromStation: "galvanik" as string | null,
+      station: "wareneingang" as string | null,
+      status: "success" as string | null,
+      description: "Gültige Kontrollbegründung" as string | null,
+    };
+    const invalidCorrectedContracts = [
+      ["tenant_id", { ...validCorrectedControl, tenantId: null }],
+      ["order_id", { ...validCorrectedControl, orderId: null }],
+      ["item_id", { ...validCorrectedControl, itemId: W4C_ITEM }],
+      ["user_id", { ...validCorrectedControl, userId: null }],
+      ["client_event_id", { ...validCorrectedControl, clientEventId: null }],
+      ["event_schema_version", { ...validCorrectedControl, eventSchemaVersion: null }],
+      ["correlation_id", { ...validCorrectedControl, correlationId: null }],
+      ["aggregate_version", { ...validCorrectedControl, aggregateVersion: null }],
+      ["from_station", { ...validCorrectedControl, fromStation: "wareneingang" }],
+      ["station", { ...validCorrectedControl, station: "galvanik" }],
+      ["status", { ...validCorrectedControl, status: null }],
+      ["description_null", { ...validCorrectedControl, description: null }],
+      ["description_short", { ...validCorrectedControl, description: "kurz" }],
+      ["description_untrimmed", { ...validCorrectedControl, description: " Begründung mit Leerzeichen " }],
+    ] as const;
+    for (const [field, contract] of invalidCorrectedContracts) {
+      const eventId = `w4c-local-contract-invalid-${field}`;
+      await expect(
+        fixtureSql.begin(async (tx) => {
+          await tx.unsafe(
+            `INSERT INTO public.events (
+               id, tenant_id, order_id, item_id, event_type, description, status, user_id, station,
+               client_event_id, event_schema_version, correlation_id, aggregate_version, from_station
+             ) VALUES ($1, $2, $3, $4, 'ORDER_STATION_CORRECTED_V1', $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+            [
+              eventId,
+              contract.tenantId,
+              contract.orderId,
+              contract.itemId,
+              contract.description,
+              contract.status,
+              contract.userId,
+              contract.station,
+              contract.clientEventId,
+              contract.eventSchemaVersion,
+              contract.correlationId,
+              contract.aggregateVersion,
+              contract.fromStation,
+            ],
+          );
+          throw new Error("W4C_EXPECTED_CHECK_FAILURE");
+        }),
+      ).rejects.toMatchObject({ code: "23514" });
+      const absent = await pool.query<{ count: number }>(
+        "SELECT count(*)::int AS count FROM public.events WHERE id=$1",
+        [eventId],
+      );
+      expect(absent.rows[0]?.count).toBe(0);
+    }
+
+    // Duplicate aggregate_version or correlation_id across the forward and
+    // correction event types are rejected by the widened unique indexes.
+    await expect(
+      fixtureSql.begin(async (tx) => {
+        await tx.unsafe(
+          `INSERT INTO public.events (
+             id, tenant_id, order_id, item_id, event_type, description, status, user_id, station,
+             client_event_id, event_schema_version, correlation_id, aggregate_version, from_station
+           ) VALUES (
+             'w4c-local-duplicate-aggregate-version', $1, $2, NULL, 'ORDER_STATION_CORRECTED_V1',
+             'Duplikat Aggregate-Version', 'success', $3, 'wareneingang',
+             '90000000-0000-4000-8000-000000000001', 1, '90000000-0000-4000-8000-000000000002',
+             2, 'galvanik'
+           )`,
+          [TENANT_A, W4C_ORDER, USERS.werkstatt],
+        );
+        throw new Error("W4C_EXPECTED_UNIQUE_AGGREGATE_VERSION_FAILURE");
+      }),
+    ).rejects.toMatchObject({ code: "23505" });
+    await expect(
+      fixtureSql.begin(async (tx) => {
+        await tx.unsafe(
+          `INSERT INTO public.events (
+             id, tenant_id, order_id, item_id, event_type, description, status, user_id, station,
+             client_event_id, event_schema_version, correlation_id, aggregate_version, from_station
+           ) VALUES (
+             'w4c-local-duplicate-correlation', $1, $2, NULL, 'ORDER_STATION_CORRECTED_V1',
+             'Duplikat Correlation', 'success', $3, 'wareneingang',
+             '90000000-0000-4000-8000-000000000003', 1, $4,
+             901, 'galvanik'
+           )`,
+          [TENANT_A, W4C_ORDER, USERS.werkstatt, forward1.receipt.correlationId],
+        );
+        throw new Error("W4C_EXPECTED_UNIQUE_CORRELATION_FAILURE");
+      }),
+    ).rejects.toMatchObject({ code: "23505" });
+    const duplicateAttempts = await pool.query<{ count: number }>(
+      "SELECT count(*)::int AS count FROM public.events WHERE id IN ('w4c-local-duplicate-aggregate-version', 'w4c-local-duplicate-correlation')",
+    );
+    expect(duplicateAttempts.rows[0]?.count).toBe(0);
+
+    expect(await aggregateSnapshot(W4C_ORDER)).toEqual(finalSnapshot);
   });
 });

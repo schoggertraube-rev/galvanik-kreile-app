@@ -58,9 +58,9 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
           {/* Body: Hauptinhalt */}
           <div className="flex flex-1 min-h-0">   {/* min-h-0 verhindert Flex-Overflow */}
 
-            {/* Linke Navigation (Desktop Sidebar, sichtbar ab lg) */}
-            <div className="hidden lg:flex shrink-0 w-[72px] relative z-30">
-              {/* Desktop (≥1024px): RightNav permanent sichtbar */}
+            {/* Linke Navigation (Desktop Sidebar, sichtbar ab xl) */}
+            <div className="hidden xl:flex shrink-0 w-[72px] relative z-30">
+              {/* Desktop (≥1280px): RightNav permanent sichtbar */}
               <RightNav />
             </div>
 

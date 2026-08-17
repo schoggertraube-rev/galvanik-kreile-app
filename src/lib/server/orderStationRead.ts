@@ -4,7 +4,10 @@ import { sql } from "drizzle-orm";
 import { evaluateOrderPriority } from "@/lib/priority";
 import type { OperationalOrder, OperationalOrderItem } from "@/lib/types/operationalOrder";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
-import type { OrderStationTransitionReceipt } from "@/lib/server/commands/orderStationCommand";
+import type {
+  OrderStationCorrectionReceipt,
+  OrderStationTransitionReceipt,
+} from "@/lib/server/commands/orderStationCommand";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
 
 type Station = "wareneingang" | "galvanik";
@@ -52,6 +55,26 @@ type ReceiptRow = {
 };
 
 export type OrderStationReceiptReadInput = {
+  orderId: string;
+  clientEventId: string;
+};
+
+type CorrectionReceiptRow = {
+  event_id: string;
+  tenant_id: string;
+  order_id: string;
+  client_event_id: string;
+  correlation_id: string;
+  event_schema_version: number;
+  aggregate_version: number;
+  from_station: string;
+  to_station: string;
+  actor_id: string;
+  occurred_at: Date | string;
+  reason: string;
+};
+
+export type OrderStationCorrectionReceiptReadInput = {
   orderId: string;
   clientEventId: string;
 };
@@ -355,6 +378,73 @@ export async function readTenantOrderStationReceipt(
       toStation: "galvanik",
       actorId: row.actor_id,
       occurredAt,
+    };
+  });
+}
+
+/**
+ * D-F12-004: fresh, tenant-bound read port for the persisted correction
+ * receipt, mirroring readTenantOrderStationReceipt exactly but against
+ * private.v_order_station_correction_receipts_v1. Absence is a plain `null`;
+ * any inconsistent multi-row or invalid projection fails closed.
+ */
+export async function readTenantOrderStationCorrectionReceipt(
+  authorization: Pick<AuthorizationSnapshot, "tenantId">,
+  input: OrderStationCorrectionReceiptReadInput,
+): Promise<OrderStationCorrectionReceipt | null> {
+  if (
+    !input ||
+    typeof input.orderId !== "string" ||
+    input.orderId.trim().length === 0 ||
+    typeof input.clientEventId !== "string" ||
+    !UUID_PATTERN.test(input.clientEventId)
+  ) {
+    throw new Error("ORDER_STATION_CORRECTION_RECEIPT_INPUT_INVALID");
+  }
+
+  return withPrivilegedTenantTransaction(authorization, async (tx) => {
+    const rows = await tx.execute<CorrectionReceiptRow>(sql`
+      SELECT *
+      FROM private.v_order_station_correction_receipts_v1
+      WHERE order_id = ${input.orderId}
+        AND client_event_id = ${input.clientEventId}
+      LIMIT 2
+    `);
+
+    if (rows.length === 0) return null;
+    const row = rows[0];
+    const occurredAt = row ? toSafeIsoDate(row.occurred_at) : "";
+    if (
+      rows.length !== 1 ||
+      !row ||
+      row.tenant_id !== authorization.tenantId ||
+      row.order_id !== input.orderId ||
+      row.client_event_id !== input.clientEventId ||
+      !UUID_PATTERN.test(row.correlation_id) ||
+      row.event_schema_version !== 1 ||
+      !isPositiveVersion(row.aggregate_version) ||
+      row.from_station !== "galvanik" ||
+      row.to_station !== "wareneingang" ||
+      !UUID_PATTERN.test(row.actor_id) ||
+      typeof row.reason !== "string" ||
+      row.reason.trim().length === 0 ||
+      !occurredAt
+    ) {
+      throw new Error("ORDER_STATION_CORRECTION_RECEIPT_INVALID");
+    }
+
+    return {
+      eventId: row.event_id,
+      clientEventId: row.client_event_id,
+      correlationId: row.correlation_id,
+      eventSchemaVersion: 1,
+      orderId: row.order_id,
+      aggregateVersion: row.aggregate_version,
+      fromStation: "galvanik",
+      toStation: "wareneingang",
+      actorId: row.actor_id,
+      occurredAt,
+      reason: row.reason,
     };
   });
 }

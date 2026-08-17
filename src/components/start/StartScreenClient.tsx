@@ -53,7 +53,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
 
         if (res.ok) {
           // Redirect to home — PermissionsContext picks up identity atomically via server action
-          window.location.href = "/";
+          window.location.href = "/warendurchlauf";
         } else {
           setError(true);
           setTimeout(() => setPin(""), 600);

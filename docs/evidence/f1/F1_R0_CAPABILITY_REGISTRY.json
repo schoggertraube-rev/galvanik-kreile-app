@@ -1312,6 +1312,7 @@
       "entry_point": "src/app/actions/orders.actions.ts",
       "exported_functions": [
         "transitionWareneingangToGalvanikAction",
+        "correctGalvanikToWareneingangAction",
         "getOrdersDb",
         "getOrderCountDb",
         "createOrderDb",
@@ -1321,7 +1322,7 @@
         "createOrderFromScan"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "Order lifecycle actions. getRiskOrders returns NOT_AVAILABLE. transitionOrderProcess under F0-W2C quarantine. No independent E2E evidence beyond F1.1 intake path.",
+      "open_reason": "Order lifecycle action group. The F1.2 transition and correction actions have real local E2E evidence but remain pending independent review; getRiskOrders returns NOT_AVAILABLE and transitionOrderProcess remains under F0-W2C quarantine.",
       "visible": false,
       "reachable": true
     },
@@ -1732,6 +1733,7 @@
         "getWareneingangOrdersAction",
         "getGalvanikOrdersAction",
         "getOrderStationReceiptAction",
+        "getOrderStationCorrectionReceiptAction",
         "createOrderIntakeAction",
         "searchOrderIntakeCustomersAction",
         "getOrderIntakeReceiptAction",
@@ -1762,6 +1764,7 @@
           "getStationReadyOrders",
           "getGalvanikOrdersAction",
           "getOrderStationReceiptAction",
+          "getOrderStationCorrectionReceiptAction",
           "getGalvanikHandoffAttachmentsAction",
           "getGalvanikEvidenceByTargetAction",
           "reserveGalvanikHandoffAttachmentAction",
