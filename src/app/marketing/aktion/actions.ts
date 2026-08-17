@@ -29,9 +29,11 @@ export async function getAktionById(id: string) {
 }
 
 export async function createAktion(formData: FormData) {
-  const titel = formData.get("titel")?.toString();
-  const typ = formData.get("typ")?.toString(); // post, mail, review_request
-  const kanalId = formData.get("kanalId")?.toString();
+  throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
+
+  const titel = formData.get("titel")?.toString() ?? "";
+  const typ = formData.get("typ")?.toString() ?? ""; // post, mail, review_request
+  const kanalId = formData.get("kanalId")?.toString() ?? "";
   const segmentId = formData.get("segmentId")?.toString();
   const inhalt = formData.get("inhalt")?.toString();
 
@@ -51,6 +53,8 @@ export async function createAktion(formData: FormData) {
 }
 
 export async function changeAktionStatus(id: string, newStatus: string) {
+  throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
+
   const target = await getAktionById(id);
   if (!target) throw new Error("Aktion nicht gefunden");
 

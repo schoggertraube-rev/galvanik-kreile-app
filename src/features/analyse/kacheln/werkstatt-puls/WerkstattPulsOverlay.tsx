@@ -36,7 +36,6 @@ export const WerkstattPulsOverlay: React.FC<WerkstattPulsOverlayProps> = ({ isOp
     schwachste_station: schwachsteStation,
     teile_im_stau: teileImStau,
     wochenziel_ist: wochenziel.fertig_diese_woche,
-    wochenziel_soll: 25,
   }), [
     durchlauf.avg_tage,
     schwachsteStation,

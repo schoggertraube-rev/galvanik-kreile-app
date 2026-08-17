@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 import { X, Printer, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { customersRepository } from "@/lib/repositories/customersRepository";
-import { labelService } from "@/lib/services/labelService";
 
 interface LabelPrintViewProps {
   order: {
@@ -24,7 +23,6 @@ interface LabelPrintViewProps {
 export function LabelPrintView({ order, customerName: propCustomerName, onClose, showPreviewModal = true }: LabelPrintViewProps) {
   const [mounted, setMounted] = useState(false);
   const [customerName, setCustomerName] = useState(propCustomerName || "Lade Kunde...");
-  const [printing, setPrinting] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -60,19 +58,7 @@ export function LabelPrintView({ order, customerName: propCustomerName, onClose,
     }
   }, [order.customerId, propCustomerName]);
 
-  const handlePrint = async () => {
-    setPrinting(true);
-    try {
-      // Trigger native print dialog
-      window.print();
-      // Record print log event via label service
-      await labelService.generateLabel(order.id);
-    } catch (e) {
-      console.error("Drucken fehlgeschlagen:", e);
-    } finally {
-      setPrinting(false);
-    }
-  };
+  const handlePrint = () => window.print();
 
   if (!mounted) return null;
 
@@ -206,20 +192,9 @@ export function LabelPrintView({ order, customerName: propCustomerName, onClose,
               )}
               <Button 
                 onClick={handlePrint}
-                disabled={printing}
                 className="flex-1 h-14 rounded-2xl bg-navy-700 hover:bg-navy-700 text-white font-black shadow-lg shadow-blue-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
               >
-                {printing ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Wird gedruckt...
-                  </>
-                ) : (
-                  <>
-                    <Printer className="w-5 h-5" />
-                    Etikett drucken
-                  </>
-                )}
+                <><Printer className="w-5 h-5" />Etikett drucken</>
               </Button>
             </div>
           </div>

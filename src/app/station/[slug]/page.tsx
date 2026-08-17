@@ -17,6 +17,7 @@ import { GalvanikQueue } from "@/components/galvanik/GalvanikQueue";
 import { WarenausgangQueue } from "@/components/warenausgang/WarenausgangQueue";
 
 const VALID_SLUGS = ["wareneingang", "entmetallisierung", "schleiferei", "beschichtung", "warenausgang"];
+type OrdersReadState = "loading" | "unavailable" | "loaded";
 
 export default function StationPage({ params }: { params: Promise<{ slug: string }> }) {
   usePageView();
@@ -29,26 +30,45 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
 
   const [orders, setOrders] = useState<OrderResponse[]>([]);
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [ordersReadState, setOrdersReadState] = useState<OrdersReadState>("loading");
 
   useEffect(() => {
+    let active = true;
     const loadData = async () => {
+      setOrders([]);
+      setSelectedOrderId(null);
+      setOrdersReadState("loading");
       try {
         const dbOrdersRes = await getOrdersDb();
+        if (!active) return;
         if (dbOrdersRes && !dbOrdersRes.ok && dbOrdersRes.error === "UNAUTHORIZED") {
+          setOrdersReadState("unavailable");
           router.push("/start?reason=session_expired");
           return;
         }
-        if (dbOrdersRes.ok && dbOrdersRes.data && dbOrdersRes.data.length > 0) {
-          setOrders(dbOrdersRes.data);
+        if (!dbOrdersRes.ok) {
+          setOrdersReadState("unavailable");
+          return;
         }
+        setOrders(dbOrdersRes.data);
+        setOrdersReadState("loaded");
       } catch (e) {
         console.error("Fehler beim Laden aus dem Repository", e);
+        if (active) {
+          setOrders([]);
+          setSelectedOrderId(null);
+          setOrdersReadState("unavailable");
+        }
       }
     };
-    loadData();
+    void loadData();
+    return () => {
+      active = false;
+    };
   }, [router]);
 
-  const filteredOrders = orders.filter(o => (o.currentStationId || o.station) === slug);
+  const internalStationId = slug === "beschichtung" ? "galvanik" : slug;
+  const filteredOrders = orders.filter(o => (o.currentStationId || o.station) === internalStationId);
   const selectedOrder = orders.find(o => o.id === selectedOrderId) || null;
   const config = getStationConfig(slug);
 
@@ -81,7 +101,19 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
         </div>
       </div>
 
-      {slug === "beschichtung" ? (
+      {ordersReadState === "loading" ? (
+        <Card role="status" className="border-dashed border-2 border-neutral-gray-300 bg-bg-app-soft/50 p-12 text-center rounded-2xl space-y-3">
+          <Package className="h-8 w-8 mx-auto text-text-muted animate-pulse" />
+          <p className="font-extrabold text-navy-900">Stationsaufträge werden geladen</p>
+          <p className="text-sm text-text-muted">Die tenantgebundene Warteschlange wird sicher gelesen.</p>
+        </Card>
+      ) : ordersReadState === "unavailable" ? (
+        <Card role="alert" className="border-2 border-neutral-gray-300 bg-bg-app-soft/50 p-12 text-center rounded-2xl space-y-3">
+          <Package className="h-8 w-8 mx-auto text-text-muted" />
+          <p className="font-extrabold text-navy-900">Stationsaufträge derzeit nicht verfügbar</p>
+          <p className="text-sm text-text-muted">Es werden keine veralteten oder fremden Auftragsdaten angezeigt.</p>
+        </Card>
+      ) : slug === "beschichtung" ? (
         <GalvanikQueue orders={filteredOrders} />
       ) : slug === "warenausgang" ? (
         <WarenausgangQueue allOrders={orders} />
@@ -99,7 +131,7 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
                   <Card className="bg-linear-to-r from-navy-900 to-navy-700 text-white p-6 rounded-xl shadow-md border border-white/10">
                     <div className="flex flex-col items-center">
                       <h2 className="text-xl font-bold font-serif mb-4 text-white">Neuen Auftrag erfassen</h2>
-                      <Link href="/orders/new" className="w-full max-w-sm">
+                      <Link href="/warendurchlauf/wareneingang" className="w-full max-w-sm">
                         <Button className="w-full bg-white text-navy-900 hover:bg-bg-app-soft py-6 text-base font-extrabold rounded-xl shadow-md transition-all">
                           Wareneingang erfassen
                         </Button>
@@ -166,7 +198,11 @@ export default function StationPage({ params }: { params: Promise<{ slug: string
             ) : (
               <div className="p-12 text-center text-text-muted bg-white border border-neutral-gray-300 rounded-xl space-y-2">
                 <Package className="h-8 w-8 mx-auto text-text-muted animate-pulse" />
-                <p className="font-bold text-text-muted">Noch keine Aufträge erfasst</p>
+                <p className="font-bold text-text-muted">
+                  {orders.length === 0
+                    ? "Noch keine Aufträge erfasst"
+                    : "Keine Aufträge an dieser Station"}
+                </p>
               </div>
             )}
           </div>

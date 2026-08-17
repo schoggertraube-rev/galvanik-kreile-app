@@ -111,11 +111,6 @@ export function EngpassKachel() {
             </div>
           )}
         </div>
-        <div className="p-4 border-t border-neutral-gray-100 bg-neutral-gray-50 rounded-b-2xl">
-          <Link href="/einstellungen" className="text-xs font-semibold text-navy-600 hover:text-navy-800 flex items-center justify-center gap-1">
-            Stunden pro Station anpassen <ArrowRight className="w-3 h-3" />
-          </Link>
-        </div>
       </div>
 
       <ResponsiveDetailDrawer

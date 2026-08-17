@@ -1,5 +1,4 @@
 import {
-  createInventoryMovementAction,
   getInventoryItemAction,
   getInventoryItemsAction,
   getInventoryMovementsAction,
@@ -45,7 +44,8 @@ export const inventoryRepository = {
   },
 
   async createMovement(data: CreateStockMovementInput): Promise<StockMovement> {
-    return unwrap(await createInventoryMovementAction(data));
+    void data;
+    throw new Error("NOT_AVAILABLE: Sicherer W3-Lagerbewegungs-Command-Vertrag fehlt.");
   },
 
   async hasCriticalStock(): Promise<boolean> {

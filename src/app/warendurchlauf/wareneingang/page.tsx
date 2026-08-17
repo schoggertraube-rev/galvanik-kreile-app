@@ -9,11 +9,14 @@ import { useState, Suspense, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useErfassung } from "@/components/erfassung/ErfassungProvider";
 import { OrderCompactCard } from "@/components/orders/OrderCompactCard";
-import { OrderEditModal } from "@/components/orders/OrderEditModal";
 import { getUrgency } from "@/lib/orders/getUrgency";
 import { useOverlayStore } from "@/lib/overlayStore";
-import type { WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
-import type { Order } from "@/lib/repositories/ordersRepository";
+import {
+  getWareneingangOrdersAction,
+  getWarendurchlaufKPIs,
+  type WarendurchlaufOrder,
+} from "@/app/warendurchlauf/actions";
+import { WareneingangHandoffButton } from "@/components/orders/WareneingangHandoffButton";
 
 function getLegacyStatusText(order: WarendurchlaufOrder) {
   if (
@@ -40,16 +43,20 @@ function WarendurchlaufLeitstandContent() {
   const [orders, setOrders] = useState<WarendurchlaufOrder[]>([]);
   const [stationOrders, setStationOrders] = useState<WarendurchlaufOrder[]>([]);
   const [todos, setTodos] = useState<{ id: number; title: string; subtitle: string; tags: string[]; action: string; priority?: string; live?: boolean; targetHref?: string; done: boolean }[]>([]);
-  const [selectedOrderForEdit, setSelectedOrderForEdit] = useState<Order | null>(null);
+  const [kpiUnavailableMessage, setKpiUnavailableMessage] = useState<string | null>(null);
+  const [stationUnavailableMessage, setStationUnavailableMessage] = useState<string | null>(null);
+  const [stationListPending, setStationListPending] = useState(true);
+  const [handoffSuccessMessage, setHandoffSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const { getWarendurchlaufKPIs, getStationOrders } = await import("@/app/warendurchlauf/actions");
-        
-        // 1. Load KPIs and checklist separately
         const resKPI = await getWarendurchlaufKPIs();
-        if (resKPI.ok && resKPI.data) {
+        if (!resKPI.ok) {
+          setKpiUnavailableMessage(resKPI.message);
+          setOrders([]);
+          setTodos([]);
+        } else {
           const typedOrders = resKPI.data.orders;
           setOrders(typedOrders);
 
@@ -72,20 +79,35 @@ function WarendurchlaufLeitstandContent() {
              });
           }
           setTodos(newTodos);
+          setKpiUnavailableMessage(null);
         }
+      } catch (error) {
+        setKpiUnavailableMessage(String(error));
+        setOrders([]);
+        setTodos([]);
+      }
 
-        // 2. Load dedicated station orders
-        const resList = await getStationOrders("wareneingang");
-        if (resList.ok && resList.data) {
+      setStationListPending(true);
+      try {
+        const resList = await getWareneingangOrdersAction();
+        if (!resList.ok) {
+          setStationUnavailableMessage(resList.message);
+        } else {
           setStationOrders(resList.data);
+          setStationUnavailableMessage(null);
         }
-      } catch {}
+      } catch {
+        setStationUnavailableMessage("NOT_AVAILABLE: Stationsliste konnte nicht sicher geladen werden.");
+      } finally {
+        setStationListPending(false);
+      }
     };
     load();
 
-    const handleUpdate = () => load();
-    window.addEventListener("kreile-orders-updated", handleUpdate);
-    return () => window.removeEventListener("kreile-orders-updated", handleUpdate);
+    const handleIntakeCreated = () => { void load(); };
+    window.addEventListener("order-intake:created", handleIntakeCreated);
+    return () => window.removeEventListener("order-intake:created", handleIntakeCreated);
+
   }, []);
 
   const countUeberfaellig = orders.filter(o => o.risk === 'red').length;
@@ -143,15 +165,15 @@ function WarendurchlaufLeitstandContent() {
 
               {/* Manuell anlegen */}
               <button
-                onClick={() => openErfassung({ mode: "gate" })}
+                onClick={() => openErfassung({ mode: "order" })}
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
                 style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
               >
                 <div className="w-[52px] h-[52px] rounded-[14px] bg-[#fef3e2] flex items-center justify-center">
                   <PenLine className="w-6 h-6 text-[#c8922a]" />
                 </div>
-                <span className="text-[15px] font-bold text-[#1a1a1a]">Manuell anlegen</span>
-                <span className="text-xs text-[#9e9689]">Kunde &middot; Auftrag</span>
+                <span className="text-[15px] font-bold text-[#1a1a1a]">Wareneingang anlegen</span>
+                <span className="text-xs text-[#9e9689]">Kunde &middot; Teile &middot; Termin</span>
               </button>
             </div>
 
@@ -189,6 +211,11 @@ function WarendurchlaufLeitstandContent() {
 
           {/* RECHTE SEITE */}
           <div className="flex flex-col gap-3">
+            {kpiUnavailableMessage ? (
+              <div className="p-3 rounded-[14px] text-sm text-[#5e5850]" role="status" style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}>
+                {kpiUnavailableMessage}
+              </div>
+            ) : <>
             {/* Tagesstand */}
             <div className="p-3 rounded-[14px]" style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}>
               <div className="text-[10px] font-bold tracking-[1px] uppercase text-[#9e9689] mb-2" style={{ fontFamily: "monospace" }}>
@@ -257,6 +284,7 @@ function WarendurchlaufLeitstandContent() {
                 )}
               </div>
             </div>
+            </>}
 
             {/* Demo-Badge removed */}
           </div>
@@ -267,60 +295,70 @@ function WarendurchlaufLeitstandContent() {
           <div className="text-[15px] font-bold text-[#5e5850] mb-4 flex items-center gap-2">
             Aktuelle Aufträge im Wareneingang
             <span className="flex-1 h-px bg-[#d8d0c4]" />
-            <span className="text-xs bg-[#f4f0e8] px-2 py-1 rounded text-[#9e9689]">{stationOrders.length}</span>
+            {!stationListPending && !stationUnavailableMessage && <span className="text-xs bg-[#f4f0e8] px-2 py-1 rounded text-[#9e9689]">{stationOrders.length}</span>}
           </div>
 
-          <div className="flex flex-col gap-2">
-            {stationOrders.length > 0 ? (
-              stationOrders.map((order) => {
-                const u = getUrgency(order.dueDate);
-                let urgencyType: "ok" | "soon" | "crit" | "wait" = "ok";
-                if (order.risk === "red") urgencyType = "crit";
-                else if (order.risk === "orange" || u === "gefaehrdet") urgencyType = "soon";
-                else if (order.risk === "blocked") urgencyType = "wait";
+          {stationListPending ? (
+            <div className="p-3 rounded-[14px] text-sm text-[#5e5850]" role="status" style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}>
+              Stationsliste wird geladen.
+            </div>
+          ) : stationUnavailableMessage ? (
+            <div className="p-3 rounded-[14px] text-sm text-[#5e5850]" role="status" style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}>
+              {stationUnavailableMessage}
+            </div>
+          ) : <>
+            <p className="mb-3 text-xs text-[#9e9689]">Die Übergabe an Galvanik wird erst nach einem bestätigten Reload als erfolgreich angezeigt. Weitere Auftragsbearbeitung bleibt nicht verfügbar.</p>
+            {handoffSuccessMessage ? <p className="mb-3 text-xs text-[#1a6b38]" role="status">{handoffSuccessMessage}</p> : null}
+            <div className="flex flex-col gap-2">
+              {stationOrders.length > 0 ? (
+                stationOrders.map((order) => {
+                  const u = getUrgency(order.dueDate);
+                  let urgencyType: "ok" | "soon" | "crit" | "wait" | "unknown" = "ok";
+                  if (order.risk === "red") urgencyType = "crit";
+                  else if (order.risk === "orange" || u === "gefaehrdet") urgencyType = "soon";
+                  else if (order.risk === "blocked") urgencyType = "wait";
+                  else if (order.risk === "unknown" || u === "unknown") urgencyType = "unknown";
 
-                return (
-                  <OrderCompactCard
-                    key={order.id}
-                    id={order.id}
-                    orderNumber={order.orderNumber}
-                    customerName={order.customerName || "Kunde nicht hinterlegt"}
-                    article={order.itemDescription || "Artikel nicht hinterlegt"}
-                    surface={order.surfaceRequested || "Oberfläche nicht hinterlegt"}
-                    urgency={urgencyType}
-                    dueValue={order.dueValue || "14 T"}
-                    dueLabel={order.dueLabel || "Fällig in"}
-                    badgeText={getLegacyStatusText(order) || "Wartend"}
-                    onClick={() => openOrder(order.id)}
-                  />
-                );
-              })
-            ) : (
-              <div className="p-8 text-center border-2 border-dashed border-[#d8d0c4] rounded-[14px] text-[#9e9689]">
-                Aktuell keine Aufträge in dieser Station.
-              </div>
-            )}
-          </div>
+                  return (
+                    <div key={order.id}>
+                    <OrderCompactCard
+                      id={order.id}
+                      orderNumber={order.orderNumber}
+                      customerName={order.customerName || "Kunde nicht hinterlegt"}
+                      article={order.itemDescription || "Artikel nicht hinterlegt"}
+                      surface={order.surfaceRequested || "Oberfläche nicht hinterlegt"}
+                      urgency={urgencyType}
+                      dueValue={order.dueValue || (urgencyType === "unknown" ? "Nicht erfasst" : "--")}
+                      dueLabel={order.dueLabel || (urgencyType === "unknown" ? "Termin" : "Fällig")}
+                      badgeText={getLegacyStatusText(order) || "Wartend"}
+                      onClick={() => openOrder(order.id)}
+                    />
+                    {Number.isSafeInteger(order.version) && order.version > 0 ? (
+                      <WareneingangHandoffButton
+                        orderId={order.id}
+                        expectedVersion={order.version}
+                        onConfirmedReadback={(nextWeOrders) => {
+                          setStationOrders(nextWeOrders);
+                          setHandoffSuccessMessage("Übergabe an Galvanik bestätigt.");
+                        }}
+                        onConflictReadback={(nextWeOrders) => {
+                          setStationOrders(nextWeOrders);
+                          setHandoffSuccessMessage(null);
+                        }}
+                      />
+                    ) : null}
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-8 text-center border-2 border-dashed border-[#d8d0c4] rounded-[14px] text-[#9e9689]">
+                  Noch keine Daten erfasst. <Link href="/orders">Aufträge anzeigen</Link>
+                </div>
+              )}
+            </div>
+          </>}
         </div>
       </div>
-
-      {selectedOrderForEdit && (
-        <OrderEditModal
-          order={selectedOrderForEdit}
-          customers={[]} // Can be extended to load customers if needed
-          onClose={() => setSelectedOrderForEdit(null)}
-          onSave={async (changes) => {
-            // Placeholder: Call server action to update order
-            const { updateOrderDb } = await import("@/app/actions/orders.actions");
-            await updateOrderDb(selectedOrderForEdit.id, changes);
-            setSelectedOrderForEdit(null);
-            // Trigger reload
-            window.dispatchEvent(new CustomEvent("kreile-orders-updated"));
-          }}
-        />
-      )}
-
-
 
       {/* Animation */}
       <style>{`

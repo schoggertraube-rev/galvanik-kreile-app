@@ -3,11 +3,7 @@
 import { db } from "@/db";
 import { priceLines } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
-import type { InferInsertModel } from "drizzle-orm";
-import { createId } from "@paralleldrive/cuid2";
 import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
-
-type DbPriceLineInsert = InferInsertModel<typeof priceLines>;
 
 type PriceLineListItem = {
   id: string;
@@ -66,81 +62,17 @@ export async function getPriceLinesDb(orderId: string, itemId?: string | null): 
 }
 
 export async function createPriceLineDb(data: PriceLinePayload): Promise<ActionResult<PriceLineMutationResult>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  
-  try {
-    const id = createId();
-    const newLine: DbPriceLineInsert = {
-      id,
-      tenantId: "galvanik-kreile",
-      orderId: data.order_id,
-      itemId: data.item_id || null,
-      positionText: data.position_text,
-      qty: data.qty === undefined ? undefined : String(data.qty),
-      unitPriceEur: String(data.unit_price_eur),
-      unitTotalEur: data.unit_total_eur === undefined ? undefined : String(data.unit_total_eur),
-      sortOrder: data.sort_order || 0
-    };
-    
-    await db.insert(priceLines).values(newLine);
-    return {
-      ok: true,
-      data: {
-        id,
-        tenantId: "galvanik-kreile",
-        orderId: data.order_id,
-        itemId: data.item_id || null,
-        positionText: data.position_text,
-        qty: data.qty,
-        unitPriceEur: data.unit_price_eur,
-        unitTotalEur: data.unit_total_eur,
-        sortOrder: data.sort_order || 0,
-      },
-    };
-  } catch (error) {
-    console.error("Failed to create price line in DB:", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Erstellen des Preises", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
-  }
+  void data;
+  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Sicherer Server-Command-Vertrag fehlt." };
 }
 
 export async function updatePriceLineDb(id: string, data: Partial<PriceLinePayload>): Promise<ActionResult<{ id: string }>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  
-  try {
-    const updateData: Partial<DbPriceLineInsert> = {};
-    if (data.position_text !== undefined) updateData.positionText = data.position_text;
-    if (data.qty !== undefined) updateData.qty = String(data.qty);
-    if (data.unit_price_eur !== undefined) updateData.unitPriceEur = String(data.unit_price_eur);
-    if (data.unit_total_eur !== undefined) updateData.unitTotalEur = String(data.unit_total_eur);
-    if (data.sort_order !== undefined) updateData.sortOrder = data.sort_order;
-    
-    if (Object.keys(updateData).length > 0) {
-      await db.update(priceLines).set(updateData).where(eq(priceLines.id, id));
-    }
-    return { ok: true, data: { id } };
-  } catch (error) {
-    console.error("Failed to update price line in DB:", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Aktualisieren des Preises", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
-  }
+  void id;
+  void data;
+  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Sicherer Server-Command-Vertrag fehlt." };
 }
 
 export async function deletePriceLineDb(id: string): Promise<ActionResult<{ success: boolean }>> {
-  const auth = await checkAppAuth("write");
-  if (!auth.ok) return auth;
-
-  if (!db) return { ok: false, error: "DB_ERROR", message: "Database not available" };
-  
-  try {
-    await db.delete(priceLines).where(eq(priceLines.id, id));
-    return { ok: true, data: { success: true } };
-  } catch (error) {
-    console.error("Failed to delete price line from DB:", error);
-    return { ok: false, error: "DB_ERROR", message: "Fehler beim Löschen des Preises", details: error instanceof Error ? error.message : "Unbekannter Fehler" };
-  }
+  void id;
+  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Sicherer Server-Command-Vertrag fehlt." };
 }

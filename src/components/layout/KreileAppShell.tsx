@@ -5,13 +5,7 @@ import { KreileHeader } from "./KreileHeader";
 import { RightNav } from "./RightNav";
 import { MobileNav } from "./MobileNav";
 import { MobileBottomNav } from "./MobileBottomNav";
-import { PwaRegister } from "./PwaRegister";
 import { useEffect, useState } from "react";
-import { getSystemStats } from "@/app/actions/systemStats";
-import { AlertTriangle } from "lucide-react";
-import { RealtimeSyncProvider } from "./RealtimeSyncManager";
-import { ParkedCallProvider } from "@/contexts/ParkedCallContext";
-import { FloatingParkedCall } from "@/components/telefonnotiz/FloatingParkedCall";
 import { OrderOverlay } from "@/components/orders/OrderOverlay";
 import { CustomerOverlay } from "@/components/customers/CustomerOverlay";
 import { getAuthorizationSnapshotAction } from "@/app/actions/auth.actions";
@@ -19,19 +13,8 @@ import { SessionWarningBanner } from "./SessionWarningBanner";
 
 export function KreileAppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [isDemoMode, setIsDemoMode] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isSessionExpired, setIsSessionExpired] = useState(false);
-
-  useEffect(() => {
-    if (process.env.NEXT_PUBLIC_DEMO_MODE === "true") {
-      getSystemStats().then(stats => {
-        if (!stats.reachable || stats.provider !== 'supabase') {
-          setIsDemoMode(true);
-        }
-      }).catch(() => setIsDemoMode(true));
-    }
-  }, []);
 
   useEffect(() => {
     if (pathname !== "/start" && pathname !== "/login") {
@@ -51,38 +34,20 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
 
   if (isStartScreen) {
     return (
-      <ParkedCallProvider>
-        <RealtimeSyncProvider>
           <div className="min-h-screen bg-bg-app text-kreile-text antialiased">
-            <PwaRegister />
             {children}
-            <FloatingParkedCall />
             <OrderOverlay />
             <CustomerOverlay />
           </div>
-        </RealtimeSyncProvider>
-      </ParkedCallProvider>
     );
   }
 
   return (
-    <ParkedCallProvider>
-      <RealtimeSyncProvider>
         <div
           className="flex flex-col bg-bg-app text-navy-900 antialiased"
           style={{ height: "100dvh" }}          // dvh für korrekte mobile Viewport-Höhe
         >
-          <PwaRegister />
-
           <SessionWarningBanner show={isSessionExpired} />
-
-          {/* Demo/Offline Banner */}
-          {isDemoMode && (
-            <div className="bg-accent-orange text-white px-4 py-1.5 text-xs font-bold flex items-center justify-center gap-2 z-50">
-              <AlertTriangle className="w-4 h-4" />
-              ⚠️ Demo-/Offline-Modus aktiv: Supabase nicht erreichbar oder deaktiviert. Änderungen werden ggf. nicht dauerhaft gespeichert.
-            </div>
-          )}
 
           {/* Header — fixe Höhe 72px */}
           <KreileHeader onMenuToggle={() => setMobileNavOpen(true)} />
@@ -119,16 +84,11 @@ export function KreileAppShell({ children }: { children: React.ReactNode }) {
           {/* Mobile Bottom Nav (nur auf Handys sichtbar) */}
           <MobileBottomNav className="flex md:hidden z-40" />
 
-          {/* Global Floating Parked Call Button & Prompt */}
-          <FloatingParkedCall />
-          
           {/* Global Order Overlay Drawer */}
           <OrderOverlay />
           
           {/* Global Customer Overlay */}
           <CustomerOverlay />
         </div>
-      </RealtimeSyncProvider>
-    </ParkedCallProvider>
   );
 }

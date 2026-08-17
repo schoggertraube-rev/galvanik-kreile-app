@@ -5,23 +5,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Shield, Mail, XCircle, Loader2 } from "lucide-react";
-import { getUsers, createUser, toggleUserStatus, updateUserRole, updateUserPin } from "@/app/actions/admin.actions";
+import { Users, Plus, Shield, Mail } from "lucide-react";
+import { getUsers } from "@/app/actions/admin.actions";
 import type { AdminUserDto } from "@/lib/auth/userDtos";
 
 export function UserManagement() {
   const [users, setUsers] = useState<AdminUserDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pinDrafts, setPinDrafts] = useState<Record<string, string>>({});
-
-  // Create User State
-  const [showCreate, setShowCreate] = useState(false);
-  const [newEmail, setNewEmail] = useState("");
-  const [newName, setNewName] = useState("");
-  const [newPin, setNewPin] = useState("");
-  const [newRole, setNewRole] = useState("werkstatt");
-  const [isCreating, setIsCreating] = useState(false);
 
   const fetchUsers = async () => {
     try {
@@ -41,53 +32,6 @@ export function UserManagement() {
     })();
   }, []);
 
-  const handleCreateUser = async () => {
-    if (!newEmail || !newName) return;
-    setIsCreating(true);
-    setError(null);
-    try {
-      await createUser({ email: newEmail, fullName: newName, role: newRole, pin: newPin });
-      setShowCreate(false);
-      setNewEmail("");
-      setNewName("");
-      setNewPin("");
-      await fetchUsers();
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
-  const handleToggleStatus = async (id: string, currentStatus: boolean) => {
-    try {
-      await toggleUserStatus(id, !currentStatus);
-      await fetchUsers();
-    } catch (err) {
-      alert(String(err));
-    }
-  };
-
-  const handleRoleChange = async (id: string, newRole: string) => {
-    try {
-      await updateUserRole(id, newRole);
-      await fetchUsers();
-    } catch (err) {
-      alert(String(err));
-    }
-  };
-
-  const handlePinChange = async (id: string, newPin: string) => {
-    if (newPin.length !== 4) return;
-    try {
-      await updateUserPin(id, newPin);
-      await fetchUsers();
-      alert("PIN erfolgreich geändert!");
-    } catch (err) {
-      alert(String(err));
-    }
-  };
-
   if (loading && users.length === 0) {
     return <div className="p-8 text-center text-text-muted animate-pulse">Lade Benutzer...</div>;
   }
@@ -99,9 +43,9 @@ export function UserManagement() {
           <CardTitle className="flex items-center gap-2"><Users className="h-5 w-5"/> Benutzerverwaltung</CardTitle>
           <CardDescription>Mitarbeiter, Rollen und Zugänge steuern</CardDescription>
         </div>
-        <Button onClick={() => setShowCreate(!showCreate)} variant="outline" size="sm" className="gap-2">
-          {showCreate ? <XCircle className="w-4 h-4"/> : <Plus className="w-4 h-4"/>}
-          {showCreate ? "Abbrechen" : "Neuer Benutzer"}
+        <Button disabled variant="outline" size="sm" className="gap-2">
+          <Plus className="w-4 h-4"/>
+          Neuer Benutzer
         </Button>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -112,52 +56,9 @@ export function UserManagement() {
           </div>
         )}
 
-        {showCreate && (
-          <div className="p-4 bg-bg-app-soft border border-neutral-gray-200 rounded-xl space-y-4">
-            <h4 className="font-bold text-navy-900 text-sm">Neuen Benutzer anlegen</h4>
-            <p className="text-xs text-text-muted">Der Benutzer erhält eine Einladung per E-Mail von Supabase Auth.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-navy-700">Name</label>
-                <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Max Mustermann" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-navy-700">E-Mail</label>
-                <Input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} placeholder="max@kreile.de" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-navy-700">Rolle</label>
-                <select 
-                  className="flex h-10 w-full rounded-md border border-neutral-gray-200 bg-white px-3 py-2 text-sm text-navy-900 outline-none focus:border-navy-900"
-                  value={newRole}
-                  onChange={e => setNewRole(e.target.value)}
-                >
-                  <option value="developer">Developer (Voller Zugriff)</option>
-                  <option value="admin">Admin (Alle Daten)</option>
-                  <option value="meister">Meister (Produktion)</option>
-                  <option value="buero">Büro (Kunden und Rechnungen)</option>
-                  <option value="werkstatt">Werkstatt (Status & Fotos)</option>
-                  <option value="readonly">Nur Lesen</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-navy-700">Tablet-PIN (4 Ziffern)</label>
-                <Input
-                  type="password"
-                  inputMode="numeric"
-                  value={newPin}
-                  onChange={e => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                  maxLength={4}
-                  placeholder="••••"
-                />
-              </div>
-            </div>
-            <Button onClick={handleCreateUser} disabled={isCreating || !newEmail || !newName || newPin.length !== 4} className="w-full md:w-auto">
-              {isCreating ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-              Benutzer anlegen
-            </Button>
-          </div>
-        )}
+        <div className="p-3 bg-bg-app-soft border border-neutral-gray-200 rounded-md text-sm text-text-muted">
+          NOT_AVAILABLE: Sichere Benutzerverwaltung benötigt den W3-Command-Vertrag. Benutzermutationen warten auf W3.
+        </div>
 
         <div className="space-y-3">
           {users.map(user => (
@@ -183,8 +84,7 @@ export function UserManagement() {
                   <select 
                     className="bg-transparent text-xs font-bold text-navy-900 outline-none cursor-pointer"
                     value={user.role}
-                    onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                    disabled={!user.active}
+                    disabled
                   >
                     <option value="developer">Developer</option>
                     <option value="admin">Admin</option>
@@ -197,22 +97,16 @@ export function UserManagement() {
                 
                 <div className="flex items-center gap-1 border border-neutral-gray-200 rounded-lg bg-white px-2 py-1">
                   <span className="text-[10px] text-text-muted font-bold">PIN:</span>
-                  <Input 
+                  <Input
                     type="password"
-                    value={pinDrafts[user.id] ?? ""}
+                    disabled
+                    readOnly
+                    inputMode="numeric"
                     maxLength={4}
-                    placeholder="Neu"
-                    className="w-12 h-6 text-xs text-center p-0 bg-transparent border-none focus-visible:ring-0"
-                    onChange={(e) => {
-                      const nextValue = e.target.value.replace(/\D/g, "").slice(0, 4);
-                      setPinDrafts((current) => ({ ...current, [user.id]: nextValue }));
-                    }}
-                    onBlur={(e) => {
-                      if (e.target.value.length === 4) {
-                        handlePinChange(user.id, e.target.value);
-                      }
-                    }}
-                    disabled={!user.active}
+                    placeholder="Nicht verfügbar"
+                    aria-label={`PIN für ${user.fullName} ist nicht verfügbar`}
+                    title="PIN-Änderung ist nicht verfügbar"
+                    className="w-24 h-6 text-xs text-center p-0 bg-transparent border-none focus-visible:ring-0"
                   />
                 </div>
                 
@@ -220,7 +114,7 @@ export function UserManagement() {
                   variant={user.active ? "outline" : "default"} 
                   size="sm"
                   className={`text-xs h-8 ${user.active ? 'text-danger-red hover:bg-danger-red hover:text-white border-danger-red/30' : 'bg-emerald-600 hover:bg-emerald-700'}`}
-                  onClick={() => handleToggleStatus(user.id, user.active)}
+                  disabled
                 >
                   {user.active ? "Deaktivieren" : "Aktivieren"}
                 </Button>

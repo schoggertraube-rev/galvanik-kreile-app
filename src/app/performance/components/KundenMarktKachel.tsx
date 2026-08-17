@@ -58,11 +58,7 @@ export function KundenMarktKachel({ summary, onClick }: Props) {
           </div>
         )}
         
-        <div className="custrow">
-          <span>🚗 82% Abholung</span>
-          <span>📦 18% Versand</span>
-          <span>🌍 3 Länder</span>
-        </div>
+        <div className="custrow">NOT_AVAILABLE · Logistikanteile benötigen eine kanonische Quelle.</div>
         <div className="t-arr">Details →</div>
       </div>
     </div>

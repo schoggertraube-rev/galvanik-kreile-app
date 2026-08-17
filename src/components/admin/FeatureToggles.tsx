@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Power } from "lucide-react";
-import { getFeatureFlags, toggleFeatureFlag, initializeDefaultFlags } from "@/app/actions/admin.actions";
+import { getFeatureFlags } from "@/app/actions/admin.actions";
 
 type FeatureFlag = {
   id: string;
@@ -16,34 +16,9 @@ export function FeatureToggles() {
   const [flags, setFlags] = useState<FeatureFlag[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchFlags = async () => {
-    try {
-      setLoading(true);
-      const data = await getFeatureFlags();
-      if (data.length === 0) {
-        await initializeDefaultFlags();
-        const newData = await getFeatureFlags();
-        setFlags(newData);
-      } else {
-        setFlags(data);
-      }
-    } catch (err) {
-      console.error("Failed to load feature flags", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
     void getFeatureFlags()
-      .then(async (data) => {
-        if (data.length === 0) {
-          await initializeDefaultFlags();
-          return getFeatureFlags();
-        }
-
-        return data;
-      })
+      .then((data) => data)
       .then(setFlags)
       .catch((err) => {
         console.error("Failed to load feature flags", err);
@@ -53,18 +28,6 @@ export function FeatureToggles() {
       });
   }, []);
 
-  const handleToggle = async (id: string, current: boolean) => {
-    try {
-      // Optimistic update
-      setFlags(flags.map(f => f.id === id ? { ...f, enabled: !current } : f));
-      await toggleFeatureFlag(id, !current);
-    } catch (err) {
-      // Revert on error
-      console.error(err);
-      fetchFlags();
-    }
-  };
-
   if (loading && flags.length === 0) {
     return <div className="p-8 text-center text-text-muted animate-pulse">Lade Feature-Toggles...</div>;
   }
@@ -73,9 +36,10 @@ export function FeatureToggles() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Power className="h-5 w-5"/> Feature-Toggles</CardTitle>
-        <CardDescription>Funktionen modulweise aktivieren oder deaktivieren</CardDescription>
+        <CardDescription>Read-only-Übersicht der geladenen Feature-Toggles. Änderungen warten auf den W3-Command-Vertrag.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-950">NOT_AVAILABLE: Sichere Feature- und Rollenverwaltung benötigt den W3-Command-Vertrag.</p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {flags.map(flag => (
             <div 
@@ -89,7 +53,7 @@ export function FeatureToggles() {
                 </div>
               </div>
               <button
-                onClick={() => handleToggle(flag.id, flag.enabled || false)}
+                disabled
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-navy-900 focus:ring-offset-2 ${
                   flag.enabled ? 'bg-navy-900' : 'bg-neutral-gray-300'
                 }`}

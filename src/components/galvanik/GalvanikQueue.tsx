@@ -31,7 +31,7 @@ export function GalvanikQueue({ orders }: GalvanikQueueProps) {
         // Sort: critical -> warning -> ok, dann nach Datum aufsteigend
         const getUrgencyScore = (o: OperationalOrder) => {
           const u = getUrgency(o.dueDate);
-          return { "kritisch": 1, "gefaehrdet": 2, "im_plan": 3 }[u] || 3;
+          return { "kritisch": 1, "gefaehrdet": 2, "im_plan": 3, "unknown": 4 }[u];
         };
 
         const urgA = getUrgencyScore(a);

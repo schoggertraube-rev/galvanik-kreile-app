@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, PackageCheck, Scan, Search, Menu, Users, ClipboardList, TrendingUp, Settings, MessageSquare, ShieldCheck, Lightbulb, HeartHandshake, Beaker, Warehouse, Database } from "lucide-react";
+import { Home, PackageCheck, Scan, Search, Menu, Users, ClipboardList, TrendingUp, Settings, MessageSquare, ShieldCheck, Lightbulb, Beaker, Warehouse, Database } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -86,7 +86,6 @@ export function MobileBottomNav({ className = "" }: { className?: string }) {
                 <div className="grid grid-cols-4 gap-y-4 gap-x-2">
                   <SheetLink href="/kontrolle" icon={<ShieldCheck />} label="Kontrolle" onClick={() => setMoreOpen(false)} />
                   <SheetLink href="/kommunikation" icon={<MessageSquare />} label="Messenger" onClick={() => setMoreOpen(false)} />
-                  <SheetLink href="/kundenservice" icon={<HeartHandshake />} label="Service" onClick={() => setMoreOpen(false)} />
                   <SheetLink href="/betrieb-kvp" icon={<Lightbulb />} label="KVP" onClick={() => setMoreOpen(false)} />
                   <SheetLink href="/baeder" icon={<Beaker />} label="Bäder" onClick={() => setMoreOpen(false)} />
                   <SheetLink href="/items" icon={<Warehouse />} label="Lager" onClick={() => setMoreOpen(false)} />

@@ -32,11 +32,6 @@ export default function ItemsPage() {
   // Selection States
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   
-  // Forms States
-  const [bookingQty, setBookingQty] = useState<number>(5);
-  const [bookingType, setBookingType] = useState<"stock_in" | "stock_out">("stock_in");
-  const [bookingReason, setBookingReason] = useState<string>("");
-
   // Load repositories data
   const loadData = useCallback(async () => {
     const items = await inventoryRepository.getAllItems();
@@ -69,49 +64,6 @@ export default function ItemsPage() {
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
   }, [loadData]);
-
-  // Handlers for Quick Action Stock Increment/Decrement directly in list row
-  const handleQuickAdjust = async (itemId: string, direction: "plus" | "minus", event: React.MouseEvent) => {
-    event.stopPropagation(); // Avoid selecting row when pressing button
-    const targetItem = inventoryItems.find(i => i.id === itemId);
-    if (!targetItem) return;
-
-    try {
-      await inventoryRepository.createMovement({
-        inventoryItemId: itemId,
-        movementType: direction === "plus" ? "stock_in" : "stock_out",
-        quantity: 1,
-        reason: direction === "plus" ? "Schnellbuchung Zugang" : "Schnellbuchung Entnahme",
-      });
-      loadData();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  // Detailed Form Stock booking handler
-  const handleDetailedBooking = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedItemId) return;
-    const targetItem = inventoryItems.find(i => i.id === selectedItemId);
-    if (!targetItem) return;
-
-    try {
-      await inventoryRepository.createMovement({
-        inventoryItemId: selectedItemId,
-        movementType: bookingType,
-        quantity: bookingQty,
-        reason: bookingReason || (bookingType === "stock_in" ? "Bestandserhöhung" : "Bestandsminderung"),
-      });
-      setBookingQty(5);
-      setBookingReason("");
-      loadData();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-
 
   // Category and Search Filtering for Inventory Items
   const filteredInventoryItems = inventoryItems.filter(item => {
@@ -261,7 +213,7 @@ export default function ItemsPage() {
                                 size="icon"
                                 variant="outline"
                                 className="h-9 w-9 bg-white text-navy-900 rounded-lg shadow-sm hover:bg-bg-app-soft border border-neutral-gray-300 cursor-pointer"
-                                onClick={(e) => handleQuickAdjust(item.id, "minus", e)}
+                                disabled
                               >
                                 <Minus className="h-4.5 w-4.5 font-bold" />
                               </Button>
@@ -269,7 +221,7 @@ export default function ItemsPage() {
                                 size="icon"
                                 variant="outline"
                                 className="h-9 w-9 bg-white text-navy-900 rounded-lg shadow-sm hover:bg-bg-app-soft border border-neutral-gray-300 cursor-pointer"
-                                onClick={(e) => handleQuickAdjust(item.id, "plus", e)}
+                                disabled
                               >
                                 <Plus className="h-4.5 w-4.5 font-bold" />
                               </Button>
@@ -354,32 +306,27 @@ export default function ItemsPage() {
 
               {/* Action 1 Form: Book inventory transaction */}
               <CardContent className="p-5 space-y-6">
-                <form onSubmit={handleDetailedBooking} className="space-y-4 bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-300">
+                <form className="space-y-4 bg-bg-app-soft p-4 rounded-xl border border-neutral-gray-300">
                   <span className="text-xs font-black text-navy-900 uppercase tracking-wider block mb-1">
                     Bestand buchen
                   </span>
+                  <p className="text-xs font-bold text-danger-red">
+                    NOT_AVAILABLE: Lagerbuchungen sind bis zum sicheren W3-Command-Vertrag deaktiviert.
+                  </p>
                   
                   {/* Stock direction switcher buttons */}
                   <div className="grid grid-cols-2 gap-2 bg-neutral-gray-100/50 p-1 rounded-xl border">
                     <button
                       type="button"
-                      onClick={() => setBookingType("stock_in")}
-                      className={`py-2 rounded-lg font-bold text-xs transition-all ${
-                        bookingType === "stock_in"
-                          ? "bg-white text-navy-900 shadow-sm border border-neutral-gray-300"
-                          : "text-text-muted hover:text-navy-900 bg-transparent border-0"
-                      }`}
+                      disabled
+                      className="py-2 rounded-lg font-bold text-xs bg-white text-navy-900 shadow-sm border border-neutral-gray-300"
                     >
                       <Plus className="h-3.5 w-3.5 inline mr-1" /> Stock In (Eingang)
                     </button>
                     <button
                       type="button"
-                      onClick={() => setBookingType("stock_out")}
-                      className={`py-2 rounded-lg font-bold text-xs transition-all ${
-                        bookingType === "stock_out"
-                          ? "bg-white text-danger-red shadow-sm border border-neutral-gray-300"
-                          : "text-text-muted hover:text-navy-900 bg-transparent border-0"
-                      }`}
+                      disabled
+                      className="py-2 rounded-lg font-bold text-xs text-text-muted bg-transparent border-0"
                     >
                       <Minus className="h-3.5 w-3.5 inline mr-1" /> Stock Out (Abgang)
                     </button>
@@ -394,15 +341,15 @@ export default function ItemsPage() {
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 rounded-lg shrink-0"
-                        onClick={() => setBookingQty(q => Math.max(1, q - 1))}
+                        disabled
                       >
                         <Minus className="h-3.5 w-3.5" />
                       </Button>
                       <input
                         type="number"
                         min="1"
-                        value={bookingQty}
-                        onChange={(e) => setBookingQty(Math.max(1, parseInt(e.target.value) || 1))}
+                        value={5}
+                        disabled
                         className="w-full text-center font-extrabold text-lg text-navy-900 bg-transparent border-0 outline-none"
                       />
                       <Button
@@ -410,7 +357,7 @@ export default function ItemsPage() {
                         variant="outline"
                         size="icon"
                         className="h-8 w-8 rounded-lg shrink-0"
-                        onClick={() => setBookingQty(q => q + 1)}
+                        disabled
                       >
                         <Plus className="h-3.5 w-3.5" />
                       </Button>
@@ -423,18 +370,17 @@ export default function ItemsPage() {
                       type="text"
                       className="bg-white border-neutral-gray-300 rounded-xl font-semibold text-navy-900 text-sm h-10"
                       placeholder="z.B. Lieferung Fa. BASF, Materialbruch etc."
-                      value={bookingReason}
-                      onChange={(e) => setBookingReason(e.target.value)}
+                      value=""
+                      disabled
                     />
                   </div>
 
                   <Button
                     type="submit"
-                    className={`w-full h-11 text-xs font-black rounded-xl text-white shadow-sm hover:brightness-95 cursor-pointer flex items-center justify-center gap-1.5 ${
-                      bookingType === "stock_in" ? "bg-navy-900 border-navy-900" : "bg-danger-red border-danger-red"
-                    }`}
+                    disabled
+                    className="w-full h-11 text-xs font-black rounded-xl text-white shadow-sm flex items-center justify-center gap-1.5 bg-navy-900 border-navy-900"
                   >
-                    {bookingType === "stock_in" ? <Plus className="h-4 w-4" /> : <Minus className="h-4 w-4" />}
+                    <Plus className="h-4 w-4" />
                     <span>Buchung abschließen</span>
                   </Button>
                 </form>

@@ -9,7 +9,7 @@ export interface PriorityEvaluation {
 }
 
 export function evaluateOrderPriority(order: {
-  dueDate: string; // "YYYY-MM-DD" or similar text
+  dueDate: string | null | undefined; // "YYYY-MM-DD" or similar text
   risk?: RiskLevel | string;
   isBlocked?: boolean;
 }): PriorityEvaluation {
@@ -26,12 +26,14 @@ export function evaluateOrderPriority(order: {
     };
   }
 
+  if (typeof order.dueDate !== "string" || !order.dueDate.trim() || Number.isNaN(new Date(order.dueDate).getTime())) {
+    const config = getRiskConfig("unknown");
+    return { risk: "unknown", config, statusText: "TERMIN NICHT ERFASST", dueLabel: "Termin", dueValue: "Nicht erfasst" };
+  }
+
   const now = new Date();
   now.setHours(0, 0, 0, 0);
   const due = new Date(order.dueDate);
-  if (isNaN(due.getTime())) {
-    due.setTime(now.getTime());
-  }
   
   const diffTime = due.getTime() - now.getTime();
   const diffHours = diffTime / (1000 * 60 * 60);

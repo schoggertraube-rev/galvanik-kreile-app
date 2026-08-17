@@ -8,7 +8,7 @@ import { AnalyseTileSummary, AnalyseTileKey } from '@/lib/analyse/dataContracts'
 import { AnalyseDrillOverlay } from '@/features/analyse/AnalyseDrillOverlay';
 
 import { 
-  Moon, Sun, Sparkles, TrendingUp
+  Moon, Sun, Sparkles
 } from 'lucide-react';
 
 import { WerkstattPulsKachel } from "./components/WerkstattPulsKachel";
@@ -25,9 +25,6 @@ interface Props {
 export function PerformanceCockpitClient({ overviews }: Props) {
   const [drillTile, setDrillTile] = useState<AnalyseTileKey | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
-  const [tab, setTab] = useState('Monat');
-  const [cmpOn, setCmpOn] = useState(false);
-  const [cmpPer, setCmpPer] = useState('vormonat');
   
   // Sync theme
   useEffect(() => {
@@ -84,35 +81,11 @@ export function PerformanceCockpitClient({ overviews }: Props) {
         
         .hd { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; flex-wrap: wrap; justify-content: flex-end; }
         .ctrls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-        .tabs { display: flex; gap: 1px; background: var(--sf2); border-radius: 10px; padding: 3px; }
-        .tabb { font-size: 11px; padding: 6px 11px; border-radius: 8px; border: none; background: none; color: var(--ink2); cursor: pointer; font-family: var(--font); font-weight: 500; transition: 0.15s; }
-        .tabb.on { background: var(--sf); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
         .tsw { display: flex; background: var(--sf2); border-radius: 10px; padding: 3px; gap: 1px; }
         .tw { font-size: 11px; padding: 6px 10px; border-radius: 8px; border: none; background: none; color: var(--ink2); cursor: pointer; font-family: var(--font); font-weight: 500; transition: 0.15s; display:flex; align-items:center; gap:4px; }
         .tw.on { background: var(--sf); color: var(--ink); box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
         .stamp { font-size: 11px; color: var(--ink3); margin: 0 0 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .stamp b { font-weight: 500; color: var(--ink2); }
-
-        .cmp-row { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; flex-wrap: wrap; }
-        .cmp-btn { display: flex; align-items: center; gap: 7px; padding: 8px 14px; border: 1px solid var(--bd); border-radius: 10px; background: var(--sf); color: var(--ink2); font-size: 12px; font-family: var(--font); font-weight: 500; cursor: pointer; transition: all 0.25s; white-space: nowrap; }
-        .cmp-btn:hover { border-color: var(--info); color: var(--ink); }
-        .cmp-btn.active { background: var(--infobg); border-color: var(--info); color: var(--info); }
-        .cmp-dd { display: flex; gap: 1px; background: var(--sf2); border-radius: 8px; padding: 2px; }
-        .cmp-opt { font-size: 10px; padding: 5px 10px; border-radius: 6px; border: none; background: none; color: var(--ink3); cursor: pointer; font-family: var(--font); font-weight: 500; transition: 0.15s; }
-        .cmp-opt.on { background: var(--sf); color: var(--ink); }
-        .cmp-opt:hover { color: var(--ink2); }
-        .cmp-lbl { font-size: 11px; color: var(--info); font-weight: 600; display: none; align-items: center; gap: 5px; }
-        .cmp-lbl.show { display: flex; }
-        .cmp-x { cursor: pointer; opacity: 0.6; transition: opacity 0.2s; font-size: 13px; }
-        .cmp-x:hover { opacity: 1; }
-
-        .delta { display: none; margin-top: 4px; padding: 3px 9px; border-radius: 6px; font-size: 10px; font-weight: 600; width: fit-content; animation: fadeIn 0.35s ease; }
-        .delta.show { display: inline-block; }
-        .d-pos { background: var(--posbg); color: var(--pos); }
-        .d-neg { background: var(--negbg); color: var(--neg); }
-        .d-warn { background: var(--warnbg); color: var(--warn); }
-        .d-neutral { background: var(--sf2); color: var(--ink2); }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
 
         .t-grid { display: grid; gap: 16px; margin: 0 0 16px; }
         .t-g2 { display: grid; gap: 16px; grid-template-columns: 1fr; }
@@ -187,36 +160,13 @@ export function PerformanceCockpitClient({ overviews }: Props) {
         {/* 1. Obere Steuerung */}
         <div className="hd">
           <div className="ctrls">
-            <div className="tabs">
-              {['Woche', 'Monat', 'Quartal', 'Jahr'].map(t => (
-                <button key={t} className={`tabb ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>{t}</button>
-              ))}
-            </div>
             <div className="tsw">
               <button className={`tw ${theme === 'dark' ? 'on' : ''}`} onClick={() => toggleTheme('dark')}><Moon className="w-3 h-3"/> Dark</button>
               <button className={`tw ${theme === 'light' ? 'on' : ''}`} onClick={() => toggleTheme('light')}><Sun className="w-3 h-3"/> Hell</button>
             </div>
           </div>
         </div>
-        <div className="stamp"><b>Mai 2026</b><span>·</span>Stand 09:14<span>·</span>22 Werktage · 5 MA</div>
-
-        <div className="cmp-row">
-          <button className={`cmp-btn ${cmpOn ? 'active' : ''}`} onClick={() => setCmpOn(!cmpOn)}>
-            <TrendingUp className="w-4 h-4" />
-            Zeig mir die Veränderungen zu
-          </button>
-          <div className="cmp-dd">
-            {['vorwoche', 'vormongat', 'vorquartal', 'vorjahr'].map(p => (
-              <button key={p} className={`cmp-opt ${cmpPer === p ? 'on' : ''}`} onClick={() => { setCmpPer(p); setCmpOn(true); }}>
-                {p.charAt(0).toUpperCase() + p.slice(1)}
-              </button>
-            ))}
-          </div>
-          <div className={`cmp-lbl ${cmpOn ? 'show' : ''}`}>
-            <span>Vergleich: {cmpPer.charAt(0).toUpperCase() + cmpPer.slice(1)}</span>
-            <span className="cmp-x" onClick={() => setCmpOn(false)}>✕</span>
-          </div>
-        </div>
+        <div className="stamp"><b>NOT_AVAILABLE</b><span>·</span>Keine kanonische, quellgestützte Betriebsbasis verfügbar</div>
 
         {/* 2. KI-Kachel */}
         <div className="t-grid">
@@ -230,10 +180,10 @@ export function PerformanceCockpitClient({ overviews }: Props) {
                 <div className="t-tl" style={{gap:0}}>
                   <div>
                     <div className="t-name" style={{color: 'var(--pos)'}}>Was kann ich besser machen?</div>
-                    <div className="ki-hint">KI-Analyse · Tipps · Handlungsempfehlungen für alle Bereiche</div>
+                    <div className="ki-hint">Demo · keine quellgestützten Handlungsempfehlungen verfügbar</div>
                   </div>
                 </div>
-                <span className="t-pill t-pill-g">6 TIPPS</span>
+                <span className="t-pill t-pill-g">DEMO</span>
               </div>
               <div className="t-arr" style={{opacity:1, color:'var(--pos)'}}>Ansehen →</div>
             </div>
@@ -263,7 +213,7 @@ export function PerformanceCockpitClient({ overviews }: Props) {
       {drillTile && (
         <AnalyseDrillOverlay 
           tileKey={drillTile} 
-          period={tab} 
+          period="Monat"
           onClose={() => setDrillTile(null)} 
         />
       )}

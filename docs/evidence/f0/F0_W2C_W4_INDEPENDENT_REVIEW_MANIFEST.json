@@ -1,0 +1,911 @@
+{
+  "schema_version": 1,
+  "package_kind": "F0_W2C_W4_READ_ONLY_ACCEPTANCE_PACKET",
+  "overall_status": "OPEN",
+  "expected_maximum_current_verdict": "BLOCKED_EXTERNAL_PERMISSION",
+  "candidate": {
+    "base": "c294c0564dc8a5e137eaa00de1276677cb1a1c53",
+    "head": "e3138f9286775bf6e79c0b5b1845ff72a0230b62",
+    "commits": 64
+  },
+  "diff": {
+    "files": 314,
+    "added": 98,
+    "modified": 216,
+    "deleted": 0,
+    "canonical_format": "UTF-8; one STATUS<TAB>PATH record per line; LF after every record including final record; --no-renames",
+    "canonical_name_status_sha256": "075c21a5b733fb45843e814917b4f744b28849b5312e75d3fea8361e0b673a6f",
+    "canonical_name_status": [
+      "M\t.github/workflows/quality.yml",
+      "A\tdocs/evidence/f0/F0_CLAUDE_REPAIR_LEDGER.md",
+      "M\tdocs/evidence/f0/F0_PRECHECK.md",
+      "A\tdocs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_MANIFEST.json",
+      "A\tdocs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_PACKET.md",
+      "A\tdocs/evidence/f0/W2C_EDGE_LIVE_RECONCILIATION.md",
+      "A\tdocs/evidence/f0/W2C_REENABLEMENT_MATRIX.md",
+      "A\tdocs/evidence/f0/W3_ORDER_STATION_TRANSITION_EVIDENCE.md",
+      "A\tdocs/evidence/f0/W4_CANDIDATE_FINGERPRINT_EVIDENCE.md",
+      "A\tdocs/evidence/f0/W4_CANDIDATE_SCHEMA_CONTRACT.json",
+      "A\tdocs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json",
+      "A\tdocs/evidence/f0/W4_EVIDENCE_READ_CONTRACT_EVIDENCE.md",
+      "A\tdocs/evidence/f0/W4_OPERATIONAL_ORDER_READ_EVIDENCE.md",
+      "A\tdocs/evidence/f0/W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md",
+      "A\tdocs/evidence/f0/W4_ORDER_STATION_EVENT_READMODEL_EVIDENCE.md",
+      "A\tmissions/F0_FOUNDATION_CONVERGENCE_W2C_W4_001.yml",
+      "M\tpublic/sw.js",
+      "M\tscripts/fetch_and_classify_orders.ts",
+      "A\tscripts/quality/check-f0-independent-review-package.mjs",
+      "A\tscripts/quality/check-w4-candidate-schema.mjs",
+      "A\tscripts/quality/check-w4-cross-module-read-ports.mjs",
+      "M\tscripts/test_order_source.ts",
+      "A\tsrc/app/__tests__/f0W2cB2s.test.ts",
+      "A\tsrc/app/__tests__/w2cB2m5u.homeDueTruth.realRender.test.tsx",
+      "A\tsrc/app/actions/__tests__/admin-feature-flags-security.test.ts",
+      "M\tsrc/app/actions/__tests__/admin-pin-security.test.ts",
+      "A\tsrc/app/actions/__tests__/commerceAccountingContainment.test.ts",
+      "A\tsrc/app/actions/__tests__/erfassungContainment.test.ts",
+      "M\tsrc/app/actions/__tests__/inquiries.actions.test.ts",
+      "M\tsrc/app/actions/__tests__/inventory.actions.test.ts",
+      "A\tsrc/app/actions/__tests__/updateOrderDb.failClosed.test.ts",
+      "A\tsrc/app/actions/__tests__/w2cB2m3a.failClosed.test.ts",
+      "A\tsrc/app/actions/__tests__/w2cB2m3b.failClosed.test.ts",
+      "A\tsrc/app/actions/__tests__/w2cB2m4a.offlineQueue.failClosed.test.ts",
+      "A\tsrc/app/actions/__tests__/w2cB2m4c.externalProvider.failClosed.test.ts",
+      "A\tsrc/app/actions/__tests__/w2cB2m5c.orderTransition.failClosed.test.ts",
+      "A\tsrc/app/actions/__tests__/w2cB2m5d.orderCreate.failClosed.test.ts",
+      "A\tsrc/app/actions/__tests__/w2cB2m5g.customerMutation.failClosed.test.ts",
+      "A\tsrc/app/actions/__tests__/w2cB2m5i.tracking.failClosed.test.ts",
+      "A\tsrc/app/actions/__tests__/w2cCompanySettings.failClosed.test.ts",
+      "A\tsrc/app/actions/__tests__/w4OperationalOrdersRead.test.ts",
+      "M\tsrc/app/actions/admin.actions.ts",
+      "M\tsrc/app/actions/ai-enrichment.actions.ts",
+      "M\tsrc/app/actions/aiSearch.ts",
+      "M\tsrc/app/actions/analyzePhoneNote.ts",
+      "M\tsrc/app/actions/company.actions.ts",
+      "M\tsrc/app/actions/customers.actions.ts",
+      "M\tsrc/app/actions/erfassung.actions.ts",
+      "M\tsrc/app/actions/inquiries.actions.ts",
+      "M\tsrc/app/actions/inventory.actions.ts",
+      "M\tsrc/app/actions/items.actions.ts",
+      "M\tsrc/app/actions/mahnung.actions.ts",
+      "M\tsrc/app/actions/ocr.actions.ts",
+      "M\tsrc/app/actions/orders.actions.ts",
+      "M\tsrc/app/actions/pdf.actions.ts",
+      "M\tsrc/app/actions/phoneNotes.actions.ts",
+      "M\tsrc/app/actions/price-lines.actions.ts",
+      "M\tsrc/app/actions/start.actions.ts",
+      "M\tsrc/app/actions/status-events.actions.ts",
+      "M\tsrc/app/actions/systemStats.ts",
+      "M\tsrc/app/actions/tracking.actions.ts",
+      "M\tsrc/app/analyse/page.tsx",
+      "A\tsrc/app/api/__tests__/quarantine.test.ts",
+      "M\tsrc/app/api/cron/send-feedback/route.ts",
+      "M\tsrc/app/api/email/send/route.ts",
+      "M\tsrc/app/api/erfassung/__tests__/upload-auth.test.ts",
+      "M\tsrc/app/api/erfassung/customer-enrich/route.ts",
+      "M\tsrc/app/api/erfassung/customer-search/route.ts",
+      "M\tsrc/app/api/erfassung/freetext-extract/route.ts",
+      "M\tsrc/app/api/erfassung/inquiry-extract/route.ts",
+      "M\tsrc/app/api/erfassung/item-photo-upload/route.ts",
+      "M\tsrc/app/api/erfassung/notes-extract/route.ts",
+      "M\tsrc/app/api/erfassung/scan-status/[id]/route.ts",
+      "M\tsrc/app/api/erfassung/scan-upload/route.ts",
+      "M\tsrc/app/api/morning-message/route.ts",
+      "M\tsrc/app/api/ocr-process/route.ts",
+      "M\tsrc/app/api/payments/mollie/create/route.ts",
+      "M\tsrc/app/api/today/has-deadlines/route.ts",
+      "M\tsrc/app/api/today/important/route.ts",
+      "M\tsrc/app/api/today/status/route.ts",
+      "M\tsrc/app/api/today/timeline/route.ts",
+      "M\tsrc/app/api/users/route.ts",
+      "A\tsrc/app/archive/__tests__/w4ArchiveOrdersReadStates.test.tsx",
+      "M\tsrc/app/archive/page.tsx",
+      "M\tsrc/app/baeder/page.tsx",
+      "M\tsrc/app/betrieb-kvp/BetriebKvpClient.tsx",
+      "M\tsrc/app/betrieb-kvp/page.tsx",
+      "A\tsrc/app/buchhaltung/__tests__/w2c.activeRouteContainment.test.tsx",
+      "M\tsrc/app/buchhaltung/actions.ts",
+      "M\tsrc/app/buchhaltung/ausgaben/page.tsx",
+      "M\tsrc/app/buchhaltung/belege/BelegeClient.tsx",
+      "M\tsrc/app/buchhaltung/belege/[id]/BelegDetailClient.tsx",
+      "M\tsrc/app/buchhaltung/belege/[id]/page.tsx",
+      "M\tsrc/app/buchhaltung/belege/neu/page.tsx",
+      "M\tsrc/app/buchhaltung/belege/page.tsx",
+      "M\tsrc/app/buchhaltung/bwa/page.tsx",
+      "M\tsrc/app/buchhaltung/export/page.tsx",
+      "M\tsrc/app/buchhaltung/kosten/[id]/page.tsx",
+      "M\tsrc/app/buchhaltung/kosten/neu/KostenForm.tsx",
+      "M\tsrc/app/buchhaltung/kosten/page.tsx",
+      "M\tsrc/app/buchhaltung/kraftstoff/page.tsx",
+      "M\tsrc/app/buchhaltung/page.tsx",
+      "M\tsrc/app/buchhaltung/periodenabschluss/PeriodenabschlussClient.tsx",
+      "A\tsrc/app/buchhaltung/periodenabschluss/__tests__/w2c.periodenabschluss.failClosed.test.ts",
+      "M\tsrc/app/buchhaltung/periodenabschluss/actions.ts",
+      "M\tsrc/app/buchhaltung/periodenabschluss/page.tsx",
+      "M\tsrc/app/buchhaltung/rechnungen/[id]/page.tsx",
+      "M\tsrc/app/buchhaltung/rechnungen/neu/RechnungForm.tsx",
+      "M\tsrc/app/buchhaltung/rechnungen/page.tsx",
+      "M\tsrc/app/buchhaltung/steuerprofil/page.tsx",
+      "A\tsrc/app/cockpit/__tests__/w2cB2m5s.cockpitReadGuard.failClosed.test.ts",
+      "M\tsrc/app/cockpit/actions.ts",
+      "M\tsrc/app/cockpit/components/AgingKachel.tsx",
+      "M\tsrc/app/cockpit/components/FruehwarnungenKachel.tsx",
+      "M\tsrc/app/cockpit/jahresplan/JahresplanClient.tsx",
+      "A\tsrc/app/cockpit/jahresplan/__tests__/w2cB2m5n.jahresplan.failClosed.test.tsx",
+      "A\tsrc/app/customers/[id]/__tests__/w2cB2m5f.customerDetailPrivacy.failClosed.test.ts",
+      "M\tsrc/app/customers/[id]/actions.ts",
+      "M\tsrc/app/customers/[id]/page.tsx",
+      "A\tsrc/app/feedback/[token]/__tests__/w2cB2m6.feedbackToken.failClosed.test.tsx",
+      "M\tsrc/app/feedback/[token]/page.tsx",
+      "A\tsrc/app/items/__tests__/w2cB2m5b.inventoryMovement.failClosed.test.ts",
+      "M\tsrc/app/items/page.tsx",
+      "M\tsrc/app/kommunikation/KommunikationClient.tsx",
+      "M\tsrc/app/kommunikation/PhoneNoteDetailView.tsx",
+      "M\tsrc/app/kontrolle/page.tsx",
+      "M\tsrc/app/kvp/KvpClient.tsx",
+      "M\tsrc/app/lager/page.tsx",
+      "A\tsrc/app/marketing/__tests__/w2cMarketingTruth.failClosed.test.ts",
+      "M\tsrc/app/marketing/aktion/actions.ts",
+      "M\tsrc/app/marketing/aktion/neu/page.tsx",
+      "M\tsrc/app/marketing/aktion/page.tsx",
+      "M\tsrc/app/marketing/attribution/page.tsx",
+      "M\tsrc/app/marketing/einwilligungen/page.tsx",
+      "M\tsrc/app/marketing/kanaele/actions.ts",
+      "M\tsrc/app/marketing/kanaele/page.tsx",
+      "M\tsrc/app/marketing/page.tsx",
+      "M\tsrc/app/marketing/segmente/[id]/page.tsx",
+      "M\tsrc/app/marketing/segmente/actions.ts",
+      "M\tsrc/app/marketing/segmente/neu/page.tsx",
+      "M\tsrc/app/marketing/segmente/page.tsx",
+      "A\tsrc/app/orders/[id]/__tests__/w2cOrderDetail.failClosed.test.tsx",
+      "M\tsrc/app/orders/[id]/page.tsx",
+      "A\tsrc/app/orders/__tests__/w4OperationalOrdersReadStates.test.tsx",
+      "M\tsrc/app/orders/page.tsx",
+      "M\tsrc/app/page.tsx",
+      "M\tsrc/app/performance/PerformanceCockpitClient.tsx",
+      "M\tsrc/app/performance/baeder-material/page.tsx",
+      "M\tsrc/app/performance/components/KundenMarktKachel.tsx",
+      "M\tsrc/app/performance/components/UmsatzMargeKachel.tsx",
+      "M\tsrc/app/performance/ki-empfehlungen/page.tsx",
+      "M\tsrc/app/performance/kunden-markt/page.tsx",
+      "M\tsrc/app/performance/page.tsx",
+      "M\tsrc/app/performance/qualitaet-risiko/page.tsx",
+      "M\tsrc/app/performance/umsatz-marge/page.tsx",
+      "M\tsrc/app/performance/werkstatt-puls/page.tsx",
+      "A\tsrc/app/print-queue/__tests__/f0W2cPrintQueue.unavailable.test.tsx",
+      "M\tsrc/app/print-queue/page.tsx",
+      "A\tsrc/app/quotes/__tests__/w2cB2m5a.inquiries.failClosed.test.ts",
+      "M\tsrc/app/quotes/new/page.tsx",
+      "M\tsrc/app/quotes/page.tsx",
+      "M\tsrc/app/scan/page.tsx",
+      "M\tsrc/app/settings/page.tsx",
+      "M\tsrc/app/start/__tests__/start-page-payload.test.tsx",
+      "M\tsrc/app/start/page.tsx",
+      "A\tsrc/app/station/[slug]/__tests__/w4StationOrdersReadStates.test.tsx",
+      "M\tsrc/app/station/[slug]/page.tsx",
+      "M\tsrc/app/status/page.tsx",
+      "M\tsrc/app/today/page.tsx",
+      "A\tsrc/app/warendurchlauf/__tests__/w2cB2m5j.stationKpi.failClosed.test.ts",
+      "A\tsrc/app/warendurchlauf/__tests__/w2cB2m5j.unavailable.realRender.test.tsx",
+      "A\tsrc/app/warendurchlauf/__tests__/w3StationTenantRead.test.ts",
+      "A\tsrc/app/warendurchlauf/__tests__/w4OrderStationAttachmentActions.test.ts",
+      "M\tsrc/app/warendurchlauf/actions.ts",
+      "A\tsrc/app/warendurchlauf/galvanik/__tests__/orderStationReadback.test.tsx",
+      "A\tsrc/app/warendurchlauf/galvanik/__tests__/w4OrderStationAttachmentPanel.test.tsx",
+      "M\tsrc/app/warendurchlauf/galvanik/page.tsx",
+      "M\tsrc/app/warendurchlauf/page.tsx",
+      "A\tsrc/app/warendurchlauf/warenausgang/__tests__/w2cB2m5t.warenausgangFinance.failClosed.test.tsx",
+      "M\tsrc/app/warendurchlauf/warenausgang/page.tsx",
+      "M\tsrc/app/warendurchlauf/wareneingang/page.tsx",
+      "A\tsrc/components/__tests__/serviceWorkerRegister.contract.test.tsx",
+      "A\tsrc/components/__tests__/serviceWorkerScript.contract.test.ts",
+      "M\tsrc/components/admin/AdminDashboard.tsx",
+      "M\tsrc/components/admin/BackupRestoreCenter.tsx",
+      "M\tsrc/components/admin/CompanySettingsForm.tsx",
+      "M\tsrc/components/admin/FeatureToggles.tsx",
+      "M\tsrc/components/admin/RoleMatrix.tsx",
+      "M\tsrc/components/admin/UserManagement.tsx",
+      "A\tsrc/components/admin/__tests__/w2cB2m5m1.backupRestoreCenter.realRender.test.tsx",
+      "M\tsrc/components/customers/CustomerOverlay.tsx",
+      "M\tsrc/components/customers/NewCustomerForm.tsx",
+      "A\tsrc/components/customers/__tests__/w2cB2m5e.customerOverlay.failClosed.test.tsx",
+      "M\tsrc/components/erfassung/ErfassungCard.tsx",
+      "M\tsrc/components/erfassung/ErfassungSheet.tsx",
+      "M\tsrc/components/erfassung/ManualFlow/CustomerWizard.tsx",
+      "M\tsrc/components/erfassung/ManualFlow/ManualWizard.tsx",
+      "M\tsrc/components/erfassung/ScanFlow/ScanUpload.tsx",
+      "M\tsrc/components/erfassung/shared/ItemPhotoUploader.tsx",
+      "A\tsrc/components/foundation/FoundationUnavailable.tsx",
+      "M\tsrc/components/galvanik/GalvanikOrderRow.tsx",
+      "M\tsrc/components/galvanik/GalvanikQueue.tsx",
+      "M\tsrc/components/intake/CameraCapture.tsx",
+      "M\tsrc/components/intake/IntakeCompletionSummary.tsx",
+      "M\tsrc/components/intake/IntakeEntry.tsx",
+      "M\tsrc/components/intake/OcrMatchResult.tsx",
+      "M\tsrc/components/layout/GlobalSearch.tsx",
+      "M\tsrc/components/layout/KreileAppShell.tsx",
+      "M\tsrc/components/layout/KreileHeader.tsx",
+      "A\tsrc/components/layout/__tests__/f0W2cGlobalSearch.unavailable.test.tsx",
+      "A\tsrc/components/layout/__tests__/w2cB2m5i.rightNav.realRender.test.tsx",
+      "A\tsrc/components/layout/__tests__/w2cB2m5v.globalBrowserProviders.failClosed.test.tsx",
+      "A\tsrc/components/layout/__tests__/w2cHeaderTruth.realRender.test.tsx",
+      "A\tsrc/components/orders/GalvanikHandoffAttachmentPanel.tsx",
+      "M\tsrc/components/orders/ItemDrawer.tsx",
+      "M\tsrc/components/orders/LabelPrintView.tsx",
+      "M\tsrc/components/orders/NewOrderForm.tsx",
+      "M\tsrc/components/orders/OrderActionGrid.tsx",
+      "M\tsrc/components/orders/OrderCompactCard.tsx",
+      "M\tsrc/components/orders/OrderMaterialTimeDrawer.tsx",
+      "M\tsrc/components/orders/OrderOverlay.tsx",
+      "M\tsrc/components/orders/OrderWideCard.tsx",
+      "M\tsrc/components/orders/PaymentDrawer.tsx",
+      "M\tsrc/components/orders/PriceLinesEditor.tsx",
+      "M\tsrc/components/orders/StationCompletionModal.tsx",
+      "M\tsrc/components/orders/StationStatusButton.tsx",
+      "M\tsrc/components/orders/StatusMailDrawer.tsx",
+      "A\tsrc/components/orders/WareneingangHandoffButton.tsx",
+      "A\tsrc/components/orders/__tests__/WareneingangHandoffButton.test.tsx",
+      "A\tsrc/components/orders/__tests__/w2cB2m5u.unknownCards.realRender.test.tsx",
+      "A\tsrc/components/orders/__tests__/w2cOrderOverlay.failClosed.test.tsx",
+      "M\tsrc/components/orders/variants/ErfassungVariant.tsx",
+      "M\tsrc/components/orders/variants/VersandVariant.tsx",
+      "M\tsrc/components/orders/variants/WareneingangActive.tsx",
+      "M\tsrc/components/orders/variants/WareneingangReadOnly.tsx",
+      "M\tsrc/components/start/StartScreenClient.tsx",
+      "M\tsrc/components/telefonnotiz/TelefonnotizDesktop.tsx",
+      "M\tsrc/components/warenausgang/WarenausgangQueue.tsx",
+      "M\tsrc/components/warendurchlauf/WarendurchlaufStationNav.tsx",
+      "A\tsrc/components/warendurchlauf/__tests__/w2cB2m5u.stationNavTrend.failClosed.test.tsx",
+      "M\tsrc/constants/status.ts",
+      "M\tsrc/db/schema.ts",
+      "M\tsrc/features/analyse/hooks/useKiInsight.ts",
+      "M\tsrc/features/analyse/kacheln/werkstatt-puls/WerkstattPulsOverlay.tsx",
+      "A\tsrc/features/customers/customer-card/__tests__/w2cB2m5e.customerCardPrivacy.failClosed.test.ts",
+      "M\tsrc/features/customers/customer-card/customerCard.actions.ts",
+      "A\tsrc/features/orders/__tests__/w2cB2m5l.orderPhoto.failClosed.test.ts",
+      "M\tsrc/features/orders/orderCost.actions.ts",
+      "M\tsrc/features/orders/orderPhoto.actions.ts",
+      "M\tsrc/features/orders/shipment.actions.ts",
+      "A\tsrc/hooks/__tests__/w2cB2m5i.usePageView.realRender.test.tsx",
+      "A\tsrc/lib/__tests__/w2cB2m5u.priorityDueTruth.failClosed.test.ts",
+      "A\tsrc/lib/__tests__/w2cOrderRead.failClosed.test.tsx",
+      "M\tsrc/lib/email/resendAdapter.ts",
+      "M\tsrc/lib/offline/OfflineManager.ts",
+      "A\tsrc/lib/orders/__tests__/w2cB2m5u.urgencyDueTruth.failClosed.test.ts",
+      "M\tsrc/lib/orders/getUrgency.ts",
+      "M\tsrc/lib/payments/mollieAdapter.ts",
+      "M\tsrc/lib/pdf/OrderLabel.tsx",
+      "A\tsrc/lib/pdf/__tests__/w2cB2m5u.orderLabelDateTruth.test.tsx",
+      "M\tsrc/lib/priority.ts",
+      "M\tsrc/lib/repositories/companySettingsRepository.ts",
+      "M\tsrc/lib/repositories/customersRepository.ts",
+      "M\tsrc/lib/repositories/eventsRepository.ts",
+      "M\tsrc/lib/repositories/inquiriesRepository.ts",
+      "M\tsrc/lib/repositories/inventoryRepository.ts",
+      "M\tsrc/lib/repositories/itemsRepository.ts",
+      "M\tsrc/lib/repositories/kvpRepository.ts",
+      "M\tsrc/lib/repositories/orderQueries.ts",
+      "M\tsrc/lib/repositories/ordersRepository.ts",
+      "A\tsrc/lib/server/__tests__/evidenceRead.test.ts",
+      "A\tsrc/lib/server/__tests__/orderStationAttachment.test.ts",
+      "A\tsrc/lib/server/__tests__/privilegedDb.test.ts",
+      "A\tsrc/lib/server/__tests__/w2cB2m5u.operationalDueTruth.failClosed.test.ts",
+      "A\tsrc/lib/server/commands/__tests__/orderStationCommand.test.ts",
+      "A\tsrc/lib/server/commands/orderStationCommand.ts",
+      "A\tsrc/lib/server/evidenceRead.ts",
+      "M\tsrc/lib/server/operationalOrders.ts",
+      "A\tsrc/lib/server/orderStationAttachment.ts",
+      "A\tsrc/lib/server/orderStationAttachmentStorage.ts",
+      "A\tsrc/lib/server/orderStationRead.ts",
+      "A\tsrc/lib/server/privilegedDb.ts",
+      "A\tsrc/lib/server/quarantine.ts",
+      "M\tsrc/lib/services/intakeService.ts",
+      "M\tsrc/lib/services/labelService.ts",
+      "M\tsrc/lib/services/photoService.ts",
+      "A\tsrc/lib/tracking/__tests__/w2cB2m5i.clientBoundary.failClosed.test.ts",
+      "M\tsrc/lib/tracking/tracking.ts",
+      "M\tsrc/lib/types/operationalOrder.ts",
+      "M\tsrc/lib/useOrderLive.ts",
+      "M\tsrc/test/scan_order.integration.test.ts",
+      "A\tsrc/test/serverOnlyMock.ts",
+      "M\tsrc/test/verify.integration.test.ts",
+      "A\tsrc/test/w3_order_station.integration.test.ts",
+      "A\tsrc/test/w4_order_station_attachment.integration.test.ts",
+      "A\tsupabase/functions/_shared/notAvailable.ts",
+      "M\tsupabase/functions/customer-enrich/index.ts",
+      "M\tsupabase/functions/email-send/index.ts",
+      "M\tsupabase/functions/email-webhook/index.ts",
+      "M\tsupabase/functions/freetext-extract/index.ts",
+      "M\tsupabase/functions/inquiry-extract/index.ts",
+      "M\tsupabase/functions/item-photo-analyze/index.ts",
+      "M\tsupabase/functions/kpi-insight/index.ts",
+      "M\tsupabase/functions/mollie-create-payment/index.ts",
+      "M\tsupabase/functions/mollie-webhook/index.ts",
+      "M\tsupabase/functions/notes-extract/index.ts",
+      "M\tsupabase/functions/payments-intent/index.ts",
+      "M\tsupabase/functions/payments-webhook-mollie/index.ts",
+      "M\tsupabase/functions/scan-analyze/index.ts",
+      "A\tsupabase/migrations/20260811150000_w3_order_station_version.sql",
+      "A\tsupabase/migrations/20260811154732_w4_order_station_event_readmodels.sql",
+      "A\tsupabase/migrations/20260811184850_w4_order_station_attachment.sql",
+      "A\tsupabase/migrations/20260812103446_w4_evidence_read_contract.sql",
+      "M\tvitest.config.ts"
+    ]
+  },
+  "mission_scope": {
+    "allowed_patterns": [
+      "public/sw.js",
+      "src/**",
+      "supabase/migrations/**",
+      "supabase/functions/**",
+      "supabase/config.toml",
+      "scripts/quality/**",
+      "scripts/fetch_and_classify_orders.ts",
+      "scripts/test_order_source.ts",
+      "vitest.config.ts",
+      ".github/workflows/quality.yml",
+      ".github/workflows/agentur-gate.yml",
+      "tests/**",
+      "playwright.config.*",
+      "package.json",
+      "docs/project/**",
+      "docs/evidence/f0/**",
+      "missions/F0_FOUNDATION_CONVERGENCE_W2C_W4_001.yml"
+    ],
+    "forbidden_patterns": [
+      "node_modules/**",
+      ".env",
+      ".env.*",
+      "**/*.pem",
+      "**/*.key",
+      "**/*.p12",
+      "**/*.pfx",
+      "outside this repository",
+      "old worktrees or clones"
+    ],
+    "outside_allowed_paths_requiring_reviewer_adjudication": [],
+    "forbidden_paths_in_candidate_diff": [],
+    "deleted_paths_in_candidate_diff": []
+  },
+  "package_paths": [
+    "docs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_PACKET.md",
+    "docs/evidence/f0/F0_W2C_W4_INDEPENDENT_REVIEW_MANIFEST.json",
+    "scripts/quality/check-f0-independent-review-package.mjs"
+  ],
+  "source_files": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "e83a80bf8632783a0d2364e6f9246a4cdd8510b33c355e28ac4aa96906caa25f",
+      "bytes": 4440
+    },
+    {
+      "path": "missions/F0_FOUNDATION_CONVERGENCE_W2C_W4_001.yml",
+      "sha256": "e01c32902ae5c6ede263d26cce800dd2d700372c57afcb132706dc1ead41fd7d",
+      "bytes": 8244
+    },
+    {
+      "path": "docs/project/MASTERPLAN.md",
+      "sha256": "3506038938e265b9e268d3c478a0f708dbb37e078af6cac985cdc00aa395c85a",
+      "bytes": 8495
+    },
+    {
+      "path": "docs/project/CURRENT_STATE.md",
+      "sha256": "d253d8d422f206f2db82f037cf154e15ee048190a33767a4517928c14b050e67",
+      "bytes": 6405
+    },
+    {
+      "path": "docs/project/NON_LOSS_REGISTER.md",
+      "sha256": "1d09574389a2289984fe355c9b14833b24be3afe15ed4e2c1f4d1e602c6e15da",
+      "bytes": 18158
+    },
+    {
+      "path": "docs/project/DOCUMENT_AUTHORITY.md",
+      "sha256": "65256df05176279477da003407217081fdfb44b2ae157502e6c4ec7cb6e61c6e",
+      "bytes": 4881
+    },
+    {
+      "path": "docs/project/MODULARITY_STRATEGY.md",
+      "sha256": "441c7ac48c3d1ae6553a32c6fca6247cb6208d88587124c7dd47b1403f7587fa",
+      "bytes": 7307
+    },
+    {
+      "path": "docs/evidence/f0/F0_CONTRACT_V1.md",
+      "sha256": "f6b95f99e572f12226df9bf341f4d3364fa5fc995e32796559914e968de3ec97",
+      "bytes": 27593
+    },
+    {
+      "path": "docs/evidence/f0/F0_PRECHECK.md",
+      "sha256": "7648cf2b350ce27b845bb7be62c57c07d4b971efd84ee911282a18ab6befc8fb",
+      "bytes": 5443
+    },
+    {
+      "path": "docs/evidence/f0/W2C_EDGE_LIVE_RECONCILIATION.md",
+      "sha256": "38e71ae7ff6d1514df2a65a46bd9a3e4e8d33a4e47f7c309db8c8ffe69b1fe24",
+      "bytes": 1366
+    },
+    {
+      "path": "docs/evidence/f0/W2C_REENABLEMENT_MATRIX.md",
+      "sha256": "570cb3d236d5534fe45c3bb7aa3c1ed168f3583b21061526b284185462887ab1",
+      "bytes": 23511
+    },
+    {
+      "path": "docs/evidence/f0/W3_ORDER_STATION_TRANSITION_EVIDENCE.md",
+      "sha256": "de2333700a8444ee284f0e4443ed549b4a954aa3095a9ae49a64f17f79b2f4a4",
+      "bytes": 6302
+    },
+    {
+      "path": "docs/evidence/f0/W4_ORDER_STATION_EVENT_READMODEL_EVIDENCE.md",
+      "sha256": "c60898493f8f360c6588c4519e54e8e792d7cb1521f672146fe2a6c54bade193",
+      "bytes": 6698
+    },
+    {
+      "path": "docs/evidence/f0/W4_OPERATIONAL_ORDER_READ_EVIDENCE.md",
+      "sha256": "2ac7567324078d59d1df4d29cf7028ce5b4d27635f7efcb90e81fc3a6780958b",
+      "bytes": 6808
+    },
+    {
+      "path": "docs/evidence/f0/W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md",
+      "sha256": "47bbc1e52c3da1d463f2e39f0cd345e6486051211418db33ee2af51379d5de9a",
+      "bytes": 14603
+    },
+    {
+      "path": "docs/evidence/f0/W4_EVIDENCE_READ_CONTRACT_EVIDENCE.md",
+      "sha256": "83680067b7d614b9877b4c5fa324aa536765f01ca53d97f131c408c6c3aad911",
+      "bytes": 7212
+    },
+    {
+      "path": "docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json",
+      "sha256": "81b59e510927c6b9caab38b633e0e1ca5f0c25bcc567e4ff19cd0bc3ae669582",
+      "bytes": 1402
+    },
+    {
+      "path": "docs/evidence/f0/F0_CLAUDE_REPAIR_LEDGER.md",
+      "sha256": "62a81b4e7ffe76cde2b2bc3e35fcec35b7f5ca2fd7fbd9265776bdf23ef91493",
+      "bytes": 7649
+    },
+    {
+      "path": "docs/evidence/f0/W4_CANDIDATE_FINGERPRINT_EVIDENCE.md",
+      "sha256": "15fb812f42180daabcf63933ae16fb6e0b9f3782f7d8522f17034db88b119235",
+      "bytes": 12206
+    },
+    {
+      "path": "docs/evidence/f0/W4_CANDIDATE_SCHEMA_CONTRACT.json",
+      "sha256": "f17e2abbb78144ef87bdc11a0cfdd520b40123c295665e13c7ebf0061597cb53",
+      "bytes": 94379
+    },
+    {
+      "path": ".github/workflows/quality.yml",
+      "sha256": "b587dc7502b9335f4e1180da6d498a67bd3772211941cc8ed93fb22e56c2504d",
+      "bytes": 19743
+    },
+    {
+      "path": "scripts/quality/check-w4-candidate-schema.mjs",
+      "sha256": "6e39de0341fbae85bb736934da838415eb6a32012a1d21ec3b7e28547c167806",
+      "bytes": 38950
+    },
+    {
+      "path": "scripts/quality/check-w4-cross-module-read-ports.mjs",
+      "sha256": "210d535882f3fc50057734c3df521d97e33b726020d4790389825747e6447f8c",
+      "bytes": 9703
+    },
+    {
+      "path": "supabase/migrations/20260811150000_w3_order_station_version.sql",
+      "sha256": "034cc8d6509aabe093948ff84c2e092289ddc211123d087a87e5bdfe7cbb45d7",
+      "bytes": 269
+    },
+    {
+      "path": "supabase/migrations/20260811154732_w4_order_station_event_readmodels.sql",
+      "sha256": "44ecf82b34023c763c1f0773266483cfe6a0a87809fc5970d0406370aea00595",
+      "bytes": 5958
+    },
+    {
+      "path": "supabase/migrations/20260811184850_w4_order_station_attachment.sql",
+      "sha256": "70aaead2150d95069829997bfdb128c2496b292d59cb6b69c8440dd1dfd2b6cb",
+      "bytes": 9943
+    },
+    {
+      "path": "supabase/migrations/20260812103446_w4_evidence_read_contract.sql",
+      "sha256": "dfd01b52b146ecbea34499b535ff4833cf18e7fa1dcecc1182ff6f8bb93cfd3f",
+      "bytes": 14447
+    },
+    {
+      "path": "src/lib/server/evidenceRead.ts",
+      "sha256": "add2ebdd3b64c12094f452ecdcf48cd9080f3d44f13a11e4282199fea641670d",
+      "bytes": 12639
+    },
+    {
+      "path": "src/lib/server/orderStationAttachment.ts",
+      "sha256": "47c496a4356fc455440a8a107aa35d6963133148849966fb51b17d610427247f",
+      "bytes": 52036
+    },
+    {
+      "path": "src/app/warendurchlauf/actions.ts",
+      "sha256": "e379cf05f8c6ee8b7d6a9a3f6ace1d101db6576507512eae9161f06339d65623",
+      "bytes": 8404
+    },
+    {
+      "path": "src/components/orders/GalvanikHandoffAttachmentPanel.tsx",
+      "sha256": "410772109a51627285012642a92bd57b0b966750a0b37848583576734b9641b8",
+      "bytes": 39519
+    },
+    {
+      "path": "src/test/w4_order_station_attachment.integration.test.ts",
+      "sha256": "293d77790e02f509487f0650f536465c557e01512f02453795d16bbf8b42bf76",
+      "bytes": 76361
+    }
+  ],
+  "criteria": [
+    {
+      "id": "T0-01",
+      "status": "PASS_STATIC",
+      "evidence": [
+        "docs/evidence/f0/F0_PRECHECK.md"
+      ],
+      "reviewer_task": "Verify one current T0 truth with anchors, risks, gates, and conclusion."
+    },
+    {
+      "id": "T0-02",
+      "status": "PASS_STATIC",
+      "evidence": [
+        "docs/evidence/f0/F0_PRECHECK.md"
+      ],
+      "reviewer_task": "Re-evaluate the documented tenant, ledger, RLS/default-ACL, evidence, event, and active-path risks."
+    },
+    {
+      "id": "T0-03",
+      "status": "PASS_STATIC",
+      "evidence": [
+        "docs/evidence/f0/F0_PRECHECK.md"
+      ],
+      "reviewer_task": "Confirm every named denial boundary is explicit and no prohibited side effect occurred."
+    },
+    {
+      "id": "T0-04",
+      "status": "PASS_STATIC",
+      "evidence": [
+        "docs/evidence/f0/F0_PRECHECK.md"
+      ],
+      "reviewer_task": "Confirm local W2C-W4 evidence is separated from external F0, remote, and legacy gates."
+    },
+    {
+      "id": "W2C-01",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W2C_REENABLEMENT_MATRIX.md"
+      ],
+      "reviewer_task": "Re-run positive and negative checks proving active browser upload and public-URL paths fail closed."
+    },
+    {
+      "id": "W2C-02",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W2C_REENABLEMENT_MATRIX.md"
+      ],
+      "reviewer_task": "Re-run denial cases for ID-only operations without server authorization."
+    },
+    {
+      "id": "W2C-03",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W2C_REENABLEMENT_MATRIX.md"
+      ],
+      "reviewer_task": "Verify no second active station writer bypasses the canonical command contract."
+    },
+    {
+      "id": "W2C-04",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W2C_EDGE_LIVE_RECONCILIATION.md"
+      ],
+      "reviewer_task": "Verify unsafe extraction/provider paths remain fail closed and produce no provider call."
+    },
+    {
+      "id": "W2C-05",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W2C_REENABLEMENT_MATRIX.md"
+      ],
+      "reviewer_task": "Verify Today/Cron truth has a canonical source or stays unavailable without synthetic data."
+    },
+    {
+      "id": "W2C-06",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W2C_REENABLEMENT_MATRIX.md"
+      ],
+      "reviewer_task": "Verify non-atomic effects are denied unless repeatability is proven."
+    },
+    {
+      "id": "W2C-07",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W2C_REENABLEMENT_MATRIX.md"
+      ],
+      "reviewer_task": "Reproduce null write, upload, event, and external effects for each denial."
+    },
+    {
+      "id": "W2C-08",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W2C_REENABLEMENT_MATRIX.md"
+      ],
+      "reviewer_task": "Run the complete current-head negative matrix for every closed active path and retain exact receipts."
+    },
+    {
+      "id": "W2C-09",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W2C_REENABLEMENT_MATRIX.md"
+      ],
+      "reviewer_task": "Verify the single service-worker registration and all cache/network denial cases including no synthetic 200."
+    },
+    {
+      "id": "W3-01",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W3_ORDER_STATION_TRANSITION_EVIDENCE.md"
+      ],
+      "reviewer_task": "At exact 11 migrations, verify exactly one server command contract serves affected mutations."
+    },
+    {
+      "id": "W3-02",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W3_ORDER_STATION_TRANSITION_EVIDENCE.md"
+      ],
+      "reviewer_task": "Verify actor and tenant are derived only from the server session."
+    },
+    {
+      "id": "W3-03",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W3_ORDER_STATION_TRANSITION_EVIDENCE.md"
+      ],
+      "reviewer_task": "Reproduce capability denial before any mutation."
+    },
+    {
+      "id": "W3-04",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W3_ORDER_STATION_TRANSITION_EVIDENCE.md"
+      ],
+      "reviewer_task": "Reproduce domain-object ownership denial without side effects."
+    },
+    {
+      "id": "W3-05",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W3_ORDER_STATION_TRANSITION_EVIDENCE.md"
+      ],
+      "reviewer_task": "Reproduce version conflict and verify explicit conflict output."
+    },
+    {
+      "id": "W3-06",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W3_ORDER_STATION_TRANSITION_EVIDENCE.md"
+      ],
+      "reviewer_task": "Inspect and exercise the discriminated success, denial, and conflict result union."
+    },
+    {
+      "id": "W3-07",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W3_ORDER_STATION_TRANSITION_EVIDENCE.md"
+      ],
+      "reviewer_task": "Verify privileged access is server-only and no secret enters a client payload."
+    },
+    {
+      "id": "W3-08",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W3_ORDER_STATION_TRANSITION_EVIDENCE.md"
+      ],
+      "reviewer_task": "Run tenant, capability, ownership, and version negatives and prove zero side effects."
+    },
+    {
+      "id": "W4-01",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md"
+      ],
+      "reviewer_task": "Reproduce stable private attachment identity and path, MIME, size, hash, and provenance metadata."
+    },
+    {
+      "id": "W4-02",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W4_EVIDENCE_READ_CONTRACT_EVIDENCE.md"
+      ],
+      "reviewer_task": "Independently reproduce extraction/confidence metadata, original preservation, validation failures, and zero-mutation snapshots."
+    },
+    {
+      "id": "W4-03",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W4_EVIDENCE_READ_CONTRACT_EVIDENCE.md"
+      ],
+      "reviewer_task": "Independently reproduce ORDER, ORDER_ITEM, CUSTOMER, and INVOICE target reads, including pure Customer/Invoice Legacy Evidence and all tenant/type/id negatives."
+    },
+    {
+      "id": "W4-04",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W4_EVIDENCE_READ_CONTRACT_EVIDENCE.md"
+      ],
+      "reviewer_task": "Independently reproduce the read-only Legacy Evidence adapter and byte-identical Legacy/source snapshots."
+    },
+    {
+      "id": "W4-05",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W4_ORDER_STATION_EVENT_READMODEL_EVIDENCE.md"
+      ],
+      "reviewer_task": "Re-run append-only update, delete, and truncate denials for facts/events and compare snapshots."
+    },
+    {
+      "id": "W4-06",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md"
+      ],
+      "reviewer_task": "Reproduce correlation and idempotent replay for the proven station transition and attachment core."
+    },
+    {
+      "id": "W4-07",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md"
+      ],
+      "reviewer_task": "Reproduce server-derived tenant consistency across the proven evidence, fact, and event graph."
+    },
+    {
+      "id": "W4-08",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json",
+        "docs/evidence/f0/W4_EVIDENCE_READ_CONTRACT_EVIDENCE.md"
+      ],
+      "reviewer_task": "Run the versioned read-port checker and its adversarial selftest; confirm every declared consumer and no undeclared base-table bypass."
+    },
+    {
+      "id": "W4-09",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W4_EVIDENCE_READ_CONTRACT_EVIDENCE.md",
+        "docs/evidence/f0/W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md"
+      ],
+      "reviewer_task": "Re-run the complete positive and negative matrix for extraction, polymorphic links, Legacy read-only behavior, append-only, replay, tenant, capability, storage, and read-port boundaries."
+    },
+    {
+      "id": "W4-10",
+      "status": "PASS_LOCAL",
+      "evidence": [
+        "docs/evidence/f0/W4_ORDER_STATION_ATTACHMENT_EVIDENCE.md"
+      ],
+      "reviewer_task": "Reproduce the real core path through reload readback without developer-only state, then stop after the W4 report."
+    },
+    {
+      "id": "G-01",
+      "status": "NOT_PROVEN",
+      "evidence": [
+        ".github/workflows/quality.yml"
+      ],
+      "reviewer_task": "Run P1-P12 on the exact package commit and record command, exit code, environment, and commit for every gate."
+    },
+    {
+      "id": "G-02",
+      "status": "PASS_STATIC",
+      "evidence": [
+        "missions/F0_FOUNDATION_CONVERGENCE_W2C_W4_001.yml"
+      ],
+      "reviewer_task": "Confirm local-only database work and prove zero remote migration/RLS/policy/grant/default-ACL mutation."
+    },
+    {
+      "id": "G-03",
+      "status": "NOT_RUN",
+      "evidence": [
+        "missions/F0_FOUNDATION_CONVERGENCE_W2C_W4_001.yml"
+      ],
+      "reviewer_task": "Verify a Draft PR for the exact package commit and confirm no merge to main; do not create it during this read-only review."
+    },
+    {
+      "id": "G-04",
+      "status": "NOT_RUN",
+      "evidence": [
+        "missions/F0_FOUNDATION_CONVERGENCE_W2C_W4_001.yml"
+      ],
+      "reviewer_task": "Verify a Vercel Preview for the exact PR head and no Production deployment or promotion."
+    },
+    {
+      "id": "G-05",
+      "status": "NOT_RUN",
+      "evidence": [
+        "missions/F0_FOUNDATION_CONVERGENCE_W2C_W4_001.yml"
+      ],
+      "reviewer_task": "Produce the organizationally independent read-only verdict before any merge recommendation."
+    }
+  ],
+  "known_gaps": [],
+  "p1_p12": [
+    {
+      "id": "P1",
+      "status": "NOT_RUN",
+      "command": "npm ci"
+    },
+    {
+      "id": "P2",
+      "status": "NOT_RUN",
+      "command": "npx tsc --noEmit --incremental false"
+    },
+    {
+      "id": "P3",
+      "status": "NOT_RUN",
+      "command": "npm run lint:full"
+    },
+    {
+      "id": "P4",
+      "status": "NOT_RUN",
+      "command": "npm run test:unit"
+    },
+    {
+      "id": "P5",
+      "status": "NOT_RUN",
+      "command": "Run the exact local-only 13-migration Supabase, W3 19/19, and W4 14/14 integration sequence in the packet."
+    },
+    {
+      "id": "P6",
+      "status": "NOT_RUN",
+      "command": "npm run build"
+    },
+    {
+      "id": "P7",
+      "status": "NOT_RUN",
+      "command": "Run fresh local Supabase replays at exact 9, 11, and 13 migration cutoffs, including a second full-13 replay."
+    },
+    {
+      "id": "P8",
+      "status": "NOT_RUN",
+      "command": "Run ledger, exact 312-object schema, grant, RLS, storage, read-port, and deterministic candidate parity gates from quality.yml."
+    },
+    {
+      "id": "P9",
+      "status": "NOT_RUN",
+      "command": "Run positive and negative auth, role, tenant, extraction, polymorphic target, Legacy read-only, storage, append-only, replay, and read-port evidence."
+    },
+    {
+      "id": "P10",
+      "status": "NOT_RUN",
+      "command": "Verify Vercel Preview for the exact PR head and run relevant browser smokes."
+    },
+    {
+      "id": "P11",
+      "status": "NOT_RUN",
+      "command": "git diff --check <candidate-base>..<package-commit>"
+    },
+    {
+      "id": "P12",
+      "status": "NOT_RUN",
+      "command": "git diff --stat <candidate-base>..<package-commit> && git status --short"
+    }
+  ],
+  "delivery_gates": {
+    "current_ci": "NOT_RUN",
+    "full_build": "PASS_LOCAL",
+    "draft_pr": "NOT_RUN",
+    "vercel_preview": "NOT_RUN",
+    "organizational_independent_review": "NOT_RUN",
+    "current_production_full_catalog": "BLOCKED_EXTERNAL_PERMISSION/BOOTSTRAP_DECISION"
+  },
+  "review_boundary": {
+    "review_mode": "READ_ONLY_STOP_AFTER_VERDICT_NO_FIXES",
+    "remote_or_production_actions": "FORBIDDEN",
+    "rls_policy_grant_default_acl_mutation": "FORBIDDEN",
+    "merge_or_deploy": "FORBIDDEN",
+    "contract_materialization_or_mutation": "FORBIDDEN",
+    "f0_pass_claim": "FORBIDDEN_AT_PACKET_CREATION",
+    "merge_recommendation": "FORBIDDEN_AT_PACKET_CREATION",
+    "zip_readiness_green": "FORBIDDEN_AT_PACKET_CREATION",
+    "claude_zip": "REQUIRES_SEPARATE_LITERAL_USER_AUTHORIZATION_CLAUDE-ZIP ERSTELLEN_AFTER_INDEPENDENT_F0_GREEN"
+  }
+}

@@ -1,10 +1,3 @@
-import {
-  getInquiries,
-  getOpenInquiriesCount,
-  createInquiry,
-  updateInquiry,
-} from "@/app/actions/inquiries.actions";
-
 export type QuoteRequest = {
   id: string;
   customerName: string;
@@ -29,39 +22,29 @@ export type QuoteRequest = {
   };
 };
 
-// All data access delegates to the inquiries server action (Drizzle,
-// privileged). The browser Supabase client is intentionally NOT used here:
-// with the Data-API locked down it cannot read or write, and previously
-// masked failures as success, silently losing quote requests.
 export const inquiriesRepository = {
   async getAll(): Promise<QuoteRequest[]> {
-    return getInquiries();
+    throw new Error("NOT_AVAILABLE: Sicherer W3-Read-Vertrag fehlt.");
   },
 
   async getOpenCount(): Promise<number> {
-    return getOpenInquiriesCount();
+    throw new Error("NOT_AVAILABLE: Sicherer W3-Read-Vertrag fehlt.");
   },
 
   async create(data: Omit<QuoteRequest, "id" | "receivedAt" | "status" | "pricing">): Promise<QuoteRequest> {
-    const result = await createInquiry(data as Record<string, unknown>);
-    if (!result.success) {
-      const detail = result.errors
-        ? JSON.stringify(result.errors)
-        : (result.error ?? "Unbekannter Fehler");
-      throw new Error(`Anfrage konnte nicht gespeichert werden: ${detail}`);
-    }
-    return result.data as QuoteRequest;
+    void data;
+    throw new Error("NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.");
   },
 
   async updateStatus(id: string, status: QuoteRequest["status"]): Promise<QuoteRequest | null> {
-    const updated = await updateInquiry(id, { status });
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event("kreile-inquiries-updated"));
-    }
-    return updated;
+    void id;
+    void status;
+    return null;
   },
 
   async updatePricing(id: string, pricing: QuoteRequest["pricing"]): Promise<QuoteRequest | null> {
-    return updateInquiry(id, { pricing });
+    void id;
+    void pricing;
+    return null;
   },
 };

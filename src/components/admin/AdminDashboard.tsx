@@ -2,15 +2,9 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, FlaskConical, Loader2, Server } from "lucide-react";
+import { CheckCircle2, XCircle, FlaskConical, Server } from "lucide-react";
 import { useEffect, useState } from "react";
-import { getSystemStats, runSupabaseWriteTest } from "@/app/actions/systemStats";
-
-type WriteTestResult = {
-  success: boolean;
-  message: string;
-  durationMs: number;
-} | null;
+import { getSystemStats } from "@/app/actions/systemStats";
 
 export function AdminDashboard() {
   const [stats, setStats] = useState<{
@@ -23,25 +17,10 @@ export function AdminDashboard() {
     lastCheck: string;
     lastError: string | null;
   } | null>(null);
-  const [writeTest, setWriteTest] = useState<WriteTestResult>(null);
-  const [testRunning, setTestRunning] = useState(false);
 
   useEffect(() => {
     getSystemStats().then(setStats);
   }, []);
-
-  const handleWriteTest = async () => {
-    setTestRunning(true);
-    setWriteTest(null);
-    try {
-      const result = await runSupabaseWriteTest();
-      setWriteTest(result);
-    } catch (err) {
-      setWriteTest({ success: false, message: String(err), durationMs: 0 });
-    } finally {
-      setTestRunning(false);
-    }
-  };
 
   return (
     <Card>
@@ -121,27 +100,16 @@ export function AdminDashboard() {
                   <p className="text-xs text-text-muted">Prüft, ob RLS-Policies und Schreibrechte korrekt konfiguriert sind (Schreibt ein leeres UI-Event).</p>
                 </div>
                 <Button 
-                  onClick={handleWriteTest} 
-                  disabled={testRunning || !stats.reachable || stats.provider !== 'supabase'}
+                  disabled
                   variant="outline"
                   className="w-full sm:w-auto text-xs font-bold"
                 >
-                  {testRunning ? <><Loader2 className="w-4 h-4 mr-2 animate-spin"/> Prüfe...</> : <><FlaskConical className="w-4 h-4 mr-2"/> Test starten</>}
+                  <><FlaskConical className="w-4 h-4 mr-2"/> Test starten (NOT_AVAILABLE)</>
                 </Button>
               </div>
-
-              {writeTest && (
-                <div className={`mt-4 p-4 rounded-xl border flex flex-col gap-2 ${writeTest.success ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
-                  <div className="flex items-center gap-2">
-                    {writeTest.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600"/> : <XCircle className="w-4 h-4 text-danger-red"/>}
-                    <span className={`text-sm font-bold ${writeTest.success ? 'text-emerald-800' : 'text-danger-red'}`}>
-                      {writeTest.success ? 'Schreibtest erfolgreich' : 'Schreibtest fehlgeschlagen'}
-                    </span>
-                  </div>
-                  <p className="text-xs font-mono text-slate-700 whitespace-pre-wrap">{writeTest.message}</p>
-                  {writeTest.success && <p className="text-[10px] text-emerald-700/70 text-right">Dauer: {writeTest.durationMs}ms</p>}
-                </div>
-              )}
+              <p className="mt-3 text-xs text-danger-red">
+                NOT_AVAILABLE: Sicherer Server-Command-Vertrag fehlt.
+              </p>
             </div>
 
           </div>

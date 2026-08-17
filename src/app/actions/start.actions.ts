@@ -14,26 +14,6 @@ const RESET_RATE_LIMIT = 3;
 const RESET_RATE_WINDOW_MS = 15 * 60 * 1000;
 
 export async function getFeierabendEvents() {
-  try {
-    const res = await fetch('https://www.frankfurt-tipp.de/veranstaltungen.html', {
-      next: { revalidate: 3600 } // Cache for 1 hour
-    });
-    const html = await res.text();
-    
-    // Simple regex to find the first event title
-    // Searching for <h3 itemprop="name">...</h3>
-    const match = html.match(/<h3 itemprop="name">([^<]+)<\/h3>/);
-    if (match && match[1]) {
-      return {
-        event: match[1].trim(),
-        success: true
-      };
-    }
-  } catch (error) {
-    console.error("Error fetching events:", error);
-  }
-
-  // Fallback
   return {
     event: null,
     success: false

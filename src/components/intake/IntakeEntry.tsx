@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { inquiriesRepository } from "@/lib/repositories/inquiriesRepository";
 import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import {
   Clock,
@@ -22,24 +21,19 @@ export function IntakeEntry({
 }: {
   onSelect: (mode: "camera" | "manual") => void;
 }) {
-  const [openQuotes, setOpenQuotes] = useState(0);
   const [totalOrders, setTotalOrders] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [modalSlide, setModalSlide] = useState(0);
 
   useEffect(() => {
     const fetchStats = async () => {
-      const qCount = await inquiriesRepository.getOpenCount();
-      setOpenQuotes(qCount);
       const oList = await ordersRepository.getAll();
       setTotalOrders(oList?.length ?? 0);
     };
     fetchStats();
     
-    window.addEventListener("kreile-inquiries-updated", fetchStats);
     window.addEventListener("storage", fetchStats);
     return () => {
-      window.removeEventListener("kreile-inquiries-updated", fetchStats);
       window.removeEventListener("storage", fetchStats);
     };
   }, []);
@@ -126,13 +120,8 @@ export function IntakeEntry({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-navy-900 text-lg">Anfragen</span>
-                {openQuotes > 0 && (
-                  <span className="bg-danger-red text-white text-xs font-black px-2.5 py-0.5 rounded-full shadow-sm">
-                    {openQuotes}
-                  </span>
-                )}
               </div>
-              <p className="text-xs text-text-muted mt-0.5">Offene Angebotsanfragen</p>
+              <p className="text-xs text-text-muted mt-0.5">Anfragen derzeit nicht verfügbar</p>
             </div>
           </div>
           <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm border border-neutral-gray-100 group-hover:bg-accent-orange transition-all duration-200">

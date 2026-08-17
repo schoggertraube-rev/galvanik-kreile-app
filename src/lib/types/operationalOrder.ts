@@ -19,6 +19,7 @@ export type OperationalOrderItem = {
 
 export type OperationalOrder = {
   id: string;
+  version: number;
   orderNumber: string;
   customerId: string;
   customerName: string | null;
@@ -28,6 +29,7 @@ export type OperationalOrder = {
   surfaceRequested: string | null;
   station: string;
   status: string;
+  statusText: string;
   risk: string;
   currentStationId: string;
   parts: OperationalOrderItem[];

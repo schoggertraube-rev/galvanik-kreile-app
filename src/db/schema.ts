@@ -98,7 +98,9 @@ export const orders = pgTable("orders", {
   title: text("title").notNull(),
   task: text("task"),
   station: varchar("station", { length: 100 }).notNull().default("wareneingang"),
+  currentStation: text("current_station").default("wareneingang"),
   currentStationId: varchar("current_station_id", { length: 100 }),
+  version: integer("version").notNull().default(1),
   status: varchar("status", { length: 50 }).notNull().default("in_progress"),
   risk: varchar("risk", { length: 50 }).default("green"),
   priorityComputed: varchar("priority_computed", { length: 50 }).default("green"),
@@ -177,6 +179,11 @@ export const events = pgTable("events", {
   userId: uuid("user_id").references(() => appUsers.id),
   workerId: varchar("worker_id", { length: 100 }),
   station: text("station"),
+  clientEventId: uuid("client_event_id"),
+  eventSchemaVersion: integer("event_schema_version"),
+  correlationId: uuid("correlation_id"),
+  aggregateVersion: integer("aggregate_version"),
+  fromStation: text("from_station"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -3,11 +3,10 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, Layers, PlayCircle, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { OrderCompactCard, UrgencyType } from "@/components/orders/OrderCompactCard";
+import { GalvanikHandoffAttachmentPanel } from "@/components/orders/GalvanikHandoffAttachmentPanel";
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
-import { getStationOrders, getStationReadyOrders, startProcessingStation } from "@/app/warendurchlauf/actions";
-import type { WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
+import { getGalvanikOrdersAction, type WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
 
 type GalvanikBucket = "ready" | "in_progress" | "finished";
 type GalvanikOrder = WarendurchlaufOrder & { statusText?: string };
@@ -19,6 +18,7 @@ function sortByUrgency(orders: GalvanikOrder[]) {
     yellow: 2,
     green: 3,
     blocked: 4,
+    unknown: 5,
   };
   return [...orders].sort((a, b) => {
     const aRank = priorityRank[a.risk] ?? 5;
@@ -31,6 +31,7 @@ function mapRiskToUrgency(risk: string): UrgencyType {
   if (risk === "red") return "crit";
   if (risk === "orange" || risk === "yellow") return "soon";
   if (risk === "blocked") return "wait";
+  if (risk === "unknown") return "unknown";
   return "ok";
 }
 
@@ -40,29 +41,31 @@ export default function GalvanikPage() {
   const [inProgressOrders, setInProgressOrders] = useState<GalvanikOrder[]>([]);
   const [finishedOrders, setFinishedOrders] = useState<GalvanikOrder[]>([]);
   const [topUrgent, setTopUrgent] = useState<GalvanikOrder[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [dataState, setDataState] = useState<"loading" | "loaded" | "unavailable">("loading");
+  const [unavailableMessage, setUnavailableMessage] = useState("NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.");
   const { openOrder } = useOrderModal();
 
   useEffect(() => {
     async function load() {
+      setDataState("loading");
+      setReadyOrders([]);
+      setInProgressOrders([]);
+      setFinishedOrders([]);
+      setTopUrgent([]);
+      setUnavailableMessage("NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.");
       try {
-        const [resReady, resActive] = await Promise.all([
-          getStationReadyOrders("galvanik"),
-          getStationOrders("galvanik")
-        ]);
-        
-        let ready: GalvanikOrder[] = [];
-        if (resReady.ok && resReady.data) {
-          ready = sortByUrgency(resReady.data);
+        const result = await getGalvanikOrdersAction();
+
+        if (!result.ok) {
+          setUnavailableMessage(result.message);
+          setDataState("unavailable");
+          return;
         }
-        
-        let active: GalvanikOrder[] = [];
-        let done: GalvanikOrder[] = [];
-        if (resActive.ok && resActive.data) {
-          const allActive = resActive.data;
-          active = sortByUrgency(allActive.filter(o => o.status === "in_progress"));
-          done = sortByUrgency(allActive.filter(o => o.status === "done" || o.status === "quality_check"));
-        }
+
+        const allGalvanik = result.data;
+        const ready = sortByUrgency(allGalvanik.filter((order) => order.status === "ready"));
+        const active = sortByUrgency(allGalvanik.filter((order) => order.status === "in_progress"));
+        const done = sortByUrgency(allGalvanik.filter((order) => order.status === "done" || order.status === "quality_check"));
         
         setReadyOrders(ready);
         setInProgressOrders(active);
@@ -70,36 +73,19 @@ export default function GalvanikPage() {
         
         const combined = [...ready, ...active, ...done];
         setTopUrgent(sortByUrgency(combined).filter(o => o.risk === "red" || o.risk === "orange").slice(0, 3));
+        setDataState("loaded");
 
-      } catch (err) {
-        console.error("Failed to load orders in Galvanik", err);
-      } finally {
-        setIsLoading(false);
+      } catch {
+        setReadyOrders([]);
+        setInProgressOrders([]);
+        setFinishedOrders([]);
+        setTopUrgent([]);
+        setUnavailableMessage("NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.");
+        setDataState("unavailable");
       }
     }
     load();
   }, []);
-
-  const handleAdvance = async (e: React.MouseEvent, orderId: string, currentBucket: GalvanikBucket) => {
-    e.stopPropagation();
-    
-    if (currentBucket === "ready") {
-      // Move to in progress
-      const order = readyOrders.find(o => o.id === orderId);
-      if (order) {
-         setReadyOrders(prev => prev.filter(o => o.id !== orderId));
-         setInProgressOrders(prev => sortByUrgency([...prev, { ...order, status: "in_progress", statusText: "In Bearbeitung" }]));
-         await startProcessingStation(orderId, "galvanik");
-      }
-    } else if (currentBucket === "in_progress") {
-      // Move to warenausgang via existing repo locally for demo
-      const order = inProgressOrders.find(o => o.id === orderId);
-      if (order) {
-        setInProgressOrders(prev => prev.filter(o => o.id !== orderId));
-        await ordersRepository.updateOrder(orderId, { station: "warenausgang", status: "ready" });
-      }
-    }
-  };
 
   const renderOrderList = (orders: GalvanikOrder[], bucket: GalvanikBucket) => {
     const isActive = activeBucket === bucket;
@@ -107,24 +93,31 @@ export default function GalvanikPage() {
       <div className={`flex flex-col gap-3 transition-all duration-500 ${isActive ? 'opacity-100' : ''}`}>
         {orders.length === 0 ? (
           <div className="text-xs text-[#9e9689] italic p-4 border border-dashed border-[#d8d0c4] rounded-[14px] text-center">
-            {isActive ? "Keine Aufträge in dieser Kategorie" : "-"}
+            {isActive ? <>Noch keine Daten erfasst. <Link href="/orders">Aufträge anzeigen</Link></> : "-"}
           </div>
         ) : (
           orders.map((o) => (
+            <div key={o.id}>
             <OrderCompactCard
-              key={o.id}
               id={o.id}
               orderNumber={o.orderNumber}
               customerName={o.customerName || "Kunde nicht hinterlegt"}
               article={o.itemDescription || "Artikel nicht hinterlegt"}
               surface={o.surfaceRequested || "Oberfläche nicht hinterlegt"}
               urgency={mapRiskToUrgency(o.risk)}
-              dueValue={o.dueValue || "--"}
-              dueLabel={o.dueLabel || "Tage"}
+              dueValue={o.dueValue || (o.risk === "unknown" ? "Nicht erfasst" : "--")}
+              dueLabel={o.dueLabel || (o.risk === "unknown" ? "Termin" : "Fällig")}
               badgeText={o.statusText || o.status}
               onClick={() => isActive ? openOrder(o.id) : setActiveBucket(bucket)}
-              onAdvance={isActive ? (e) => handleAdvance(e, o.id, bucket) : undefined}
             />
+            {isActive && bucket === "ready" && o.status === "ready" && (
+              <GalvanikHandoffAttachmentPanel
+                orderId={o.id}
+                expectedVersion={o.version}
+                items={o.parts.map((item) => ({ id: item.id, name: item.name }))}
+              />
+            )}
+            </div>
           ))
         )}
       </div>
@@ -140,12 +133,15 @@ export default function GalvanikPage() {
           Galvanik Bearbeitung
           <span className="flex-1 h-px bg-[#d8d0c4]" />
         </div>
+        <p className="mb-4 text-sm text-[#9e9689]">Die Übergabe aus dem Wareneingang ist aktiv. Start und Abschluss bleiben NOT_AVAILABLE.</p>
 
-        {isLoading ? (
+        {dataState === "loading" ? (
           <div className="flex flex-col items-center justify-center py-20 text-[#9e9689]">
             <Loader2 className="w-8 h-8 animate-spin mb-4" />
             <p>Lade Galvanik Aufträge...</p>
           </div>
+        ) : dataState === "unavailable" ? (
+          <div className="py-20 text-center text-[#9e9689]" role="status">{unavailableMessage}</div>
         ) : (
           <>
 
@@ -165,8 +161,8 @@ export default function GalvanikPage() {
                       article={o.itemDescription || "Artikel nicht hinterlegt"}
                       surface={o.surfaceRequested || "Oberfläche nicht hinterlegt"}
                       urgency={mapRiskToUrgency(o.risk)}
-                      dueValue={o.dueValue || "--"}
-                      dueLabel={o.dueLabel || "Tage"}
+                      dueValue={o.dueValue || (o.risk === "unknown" ? "Nicht erfasst" : "--")}
+                      dueLabel={o.dueLabel || (o.risk === "unknown" ? "Termin" : "Fällig")}
                       badgeText={o.statusText || o.status}
                       onClick={() => openOrder(o.id)}
                     />

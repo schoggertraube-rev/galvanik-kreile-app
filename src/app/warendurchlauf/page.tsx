@@ -3,6 +3,9 @@ import { getWarendurchlaufKPIs } from "./actions";
 
 export default async function WarendurchlaufIndex() {
   const result = await getWarendurchlaufKPIs();
-  const data = result.ok ? result.data : null;
-  return <WarendurchlaufCockpitClient data={data} />;
+  if (!result.ok) {
+    return <div className="p-8 text-center" role="status">{result.message}</div>;
+  }
+
+  return <WarendurchlaufCockpitClient data={result.data} />;
 }

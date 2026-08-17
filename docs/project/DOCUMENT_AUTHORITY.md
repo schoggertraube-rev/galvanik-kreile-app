@@ -1,6 +1,6 @@
 # Dokumentenautorität
 
-Stand: 2026-08-01
+Stand: 2026-08-13
 
 ## Zweck
 
@@ -28,6 +28,8 @@ Diese Ebenen koennen voneinander abweichen. Dann gewinnt nicht still eine andere
 ### Aktuelle Mission
 
 - Die ausdruecklich freigegebene Missionsdatei oder die aktuellen nummerierten Akzeptanzkriterien bestimmen Scope und Abnahme der Mission.
+- Fuer den laufenden F1-Lauf ist allein `missions/F1_ORDER_TO_CASH_PILOT_001.yml` aktiv. Die
+  F0-Mission und ihre Evidence sind eingefrorene Historie; R0-A ist nur ein Checkpoint, kein R0-PASS.
 - Sie duerfen weder reale Systemfakten umdeuten noch Sicherheitsgesetze aushebeln.
 - Verlangt die Mission eine neue Produktentscheidung ausserhalb ihres Scopes oder widerspricht sie einer geschuetzten Produktentscheidung, wird der Konflikt explizit eskaliert.
 
@@ -60,7 +62,8 @@ Bestätigte Inhalte daraus werden in `MASTERPLAN.md`, `CURRENT_STATE.md` oder `N
 Die folgenden lokalen Quellen wurden als potenziell veraltet oder widersprüchlich gemeldet und sind nicht autoritativ:
 
 - lokales `AGENTS.md` im Dirty-Worktree `feature/capture-auth-tenant`,
-- `KREILE_CLAUDE_COWORK_MASCHINERIE/`,
+- die vor M0 vorhandenen `KREILE_CLAUDE_COWORK_MASCHINERIE/`-Kopien (im externen
+  Konsolidierungsarchiv einzeln gehasht; aus dem aktiven Repository entfernt),
 - `PRODUKTFIRMA_LIVE_V3/`,
 - `PRODUKTFIRMA_EXTRACTED/`,
 - `KREILE_IDEENSAMMLUNG_*`,
@@ -71,6 +74,10 @@ Die folgenden lokalen Quellen wurden als potenziell veraltet oder widersprüchli
 - ältere Übergaben, deren Branch-/Deployment-Angaben nicht mehr mit `main` übereinstimmen.
 
 Diese Dateien werden nicht automatisch gelöscht. Sie werden erst nach Snapshot, Inhaltsprüfung und ausdrücklicher Freigabe archiviert oder entfernt.
+
+Der M0-Snapshot fuer beide Cowork-Maschinerie-Kopien sowie die stale Missions- und
+Build-Steuerung liegt in `repository-consolidation-20260813-193554/tracked-control-plane/MANIFEST.csv`;
+123 Dateien wurden einzeln per SHA-256 gegen die Quelle verifiziert.
 
 ## Agentenregel
 

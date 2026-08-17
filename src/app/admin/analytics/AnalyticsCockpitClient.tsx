@@ -106,7 +106,7 @@ export function AnalyticsCockpitClient({ data }: { data: DeveloperCockpitData })
               <AlertCircle className="w-5 h-5" />
               <h2 className="font-bold font-serif text-lg">Friktionsanalyse</h2>
             </div>
-            <span className="bg-error-red text-white text-xs px-2 py-1 rounded font-bold">Demo-Auswertung</span>
+            <span className="bg-error-red text-white text-xs px-2 py-1 rounded font-bold">Erfasste Ereignisse</span>
           </div>
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4 flex-1">
             {frictionAnalysis.map((f: FrictionSignal) => (
@@ -211,12 +211,10 @@ export function AnalyticsCockpitClient({ data }: { data: DeveloperCockpitData })
             </div>
             
             <div>
-              <h4 className="font-bold mb-2 border-b border-neutral-gray-200 pb-2">Rohdaten / Sequenz (Demo)</h4>
-              <div className="text-xs text-text-muted font-mono bg-bg-app-soft p-3 rounded-lg border border-neutral-gray-100 space-y-2">
-                <div>[10:45:01] page_view: {activeFriction.page}</div>
-                <div>[10:45:15] click: input_field</div>
-                <div>[10:45:40] abort_action: cancel_button_clicked</div>
-              </div>
+              <h4 className="font-bold mb-2 border-b border-neutral-gray-200 pb-2">Beobachtetes Signal</h4>
+              <p className="text-sm text-text-muted bg-bg-app-soft p-3 rounded-lg border border-neutral-gray-100">
+                {activeFriction.detail}
+              </p>
             </div>
             
             <div className="pt-4 border-t border-neutral-gray-200 flex justify-end">

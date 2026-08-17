@@ -1,7 +1,6 @@
 'use server'
 
 import { createAuthorizedDataClient } from '@/lib/supabase/server'
-import { APP_TENANT_ID } from '@/lib/server/appSession'
 
 export interface PeriodenabschlussStatus {
   id: string;
@@ -15,6 +14,12 @@ export interface PeriodenabschlussStatus {
   rechnungen_offen: number;
   auftraege_ohne_db: number;
 }
+
+export type PeriodenabschlussCommandDenial = {
+  ok: false;
+  error: "CONFLICT";
+  message: "NOT_AVAILABLE: Periodenabschluss benötigt den W3-Command-Vertrag.";
+};
 
 export async function getPeriodenabschlussStatusAction(): Promise<PeriodenabschlussStatus | null> {
   const supabase = await createAuthorizedDataClient('read');
@@ -35,70 +40,18 @@ export async function getPeriodenabschlussStatusAction(): Promise<Periodenabschl
   return data || null;
 }
 
-export async function runEnergieVerteilungAction(jahr: number, monat: number) {
-  const supabase = await createAuthorizedDataClient('write');
-  const { error } = await supabase.rpc('fn_verteile_energiekosten', {
-    p_jahr: jahr,
-    p_monat: monat,
-    p_tenant: APP_TENANT_ID,
-  });
-  if (error) {
-    console.error("Fehler bei der Energie-Verteilung:", error);
-    throw new Error('Fehler bei der Energie-Verteilung.');
-  }
-  return true;
+export async function runEnergieVerteilungAction(jahr: number, monat: number): Promise<PeriodenabschlussCommandDenial> {
+  void jahr;
+  void monat;
+  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Periodenabschluss benötigt den W3-Command-Vertrag." };
 }
 
-export async function schliessePeriodeAction(periodeId: string) {
-  const supabase = await createAuthorizedDataClient('write');
-
-  // 1. Serverseitige Blocker-Prüfung
-  const { data: statusData, error: statusError } = await supabase
-    .from('v_periodenabschluss_status')
-    .select('*')
-    .eq('id', periodeId)
-    .single();
-
-  if (statusError || !statusData) {
-    throw new Error('Fehler beim Laden des Status für die Validierung.');
-  }
-
-  const blockerCount = statusData.belege_ohne_konto + 
-                       statusData.belege_ohne_kostenstelle + 
-                       statusData.rechnungen_ohne_auftrag + 
-                       statusData.auftraege_ohne_db;
-
-  if (blockerCount > 0) {
-    throw new Error(`Periode kann nicht geschlossen werden. Es gibt noch ${blockerCount} Blocker.`);
-  }
-
-  // 2. Vorläufig schließen
-  const { error } = await supabase.from('periode').update({ 
-    status: 'vorlaeufig_geschlossen', 
-    geschlossen_am: new Date().toISOString() 
-  })
-    .eq('id', periodeId)
-    .eq('tenant_id', APP_TENANT_ID);
-  
-  if (error) {
-    console.error("Fehler beim Schließen der Periode:", error);
-    throw new Error('Fehler beim Schließen der Periode.');
-  }
-  return true;
+export async function schliessePeriodeAction(periodeId: string): Promise<PeriodenabschlussCommandDenial> {
+  void periodeId;
+  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Periodenabschluss benötigt den W3-Command-Vertrag." };
 }
 
-export async function finalSchliessePeriodeAction(periodeId: string) {
-  const supabase = await createAuthorizedDataClient('write');
-  const { error } = await supabase.from('periode').update({ 
-    status: 'final_geschlossen', 
-    geschlossen_am: new Date().toISOString() 
-  })
-    .eq('id', periodeId)
-    .eq('tenant_id', APP_TENANT_ID);
-  
-  if (error) {
-    console.error("Fehler beim finalen Schließen der Periode:", error);
-    throw new Error('Fehler beim finalen Schließen der Periode.');
-  }
-  return true;
+export async function finalSchliessePeriodeAction(periodeId: string): Promise<PeriodenabschlussCommandDenial> {
+  void periodeId;
+  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Periodenabschluss benötigt den W3-Command-Vertrag." };
 }

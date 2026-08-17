@@ -3,7 +3,6 @@
 import { db } from '@/db'
 import { orders, customers, appUsers } from '@/db/schema'
 import { count } from 'drizzle-orm'
-import { createClient } from '@/lib/supabase/server'
 import { checkAppAuthorization } from '@/lib/server/authHelper'
 
 export async function getSystemStats() {
@@ -70,70 +69,9 @@ export async function runSupabaseWriteTest(): Promise<{
   message: string;
   durationMs: number;
 }> {
-  const provider = process.env.NEXT_PUBLIC_DATA_PROVIDER || 'local'
-  if (provider !== 'supabase') {
-    return { success: false, message: 'Datenquelle ist nicht Supabase', durationMs: 0 }
-  }
-
-  const start = Date.now()
-  const testId = `__writetest__${Date.now()}`
-
-  try {
-    const supabase = await createClient()
-
-    // 1. Insert test customer
-    const { error: insertError } = await supabase.from('customers').insert({
-      id: testId,
-      name: '__SCHREIBTEST__',
-      type: 'test',
-    })
-
-    if (insertError) {
-      return {
-        success: false,
-        message: `Insert fehlgeschlagen: ${insertError.message} | ${insertError.details || ''} | ${insertError.hint || ''}`,
-        durationMs: Date.now() - start,
-      }
-    }
-
-    // 2. Read back
-    const { data: readBack, error: readError } = await supabase
-      .from('customers')
-      .select('id, name')
-      .eq('id', testId)
-      .single()
-
-    if (readError || !readBack) {
-      // Cleanup attempt
-      await supabase.from('customers').delete().eq('id', testId)
-      return {
-        success: false,
-        message: `Read-Back fehlgeschlagen: ${readError?.message || 'Kein Datensatz zurück'}`,
-        durationMs: Date.now() - start,
-      }
-    }
-
-    // 3. Delete test customer
-    const { error: deleteError } = await supabase.from('customers').delete().eq('id', testId)
-
-    if (deleteError) {
-      return {
-        success: false,
-        message: `Delete fehlgeschlagen: ${deleteError.message}`,
-        durationMs: Date.now() - start,
-      }
-    }
-
-    return {
-      success: true,
-      message: `Schreibtest erfolgreich: Insert → Read → Delete in ${Date.now() - start}ms`,
-      durationMs: Date.now() - start,
-    }
-  } catch (error) {
-    return {
-      success: false,
-      message: `Unerwarteter Fehler: ${String(error)}`,
-      durationMs: Date.now() - start,
-    }
+  return {
+    success: false,
+    message: 'NOT_AVAILABLE: Sicherer Server-Command-Vertrag fehlt.',
+    durationMs: 0,
   }
 }

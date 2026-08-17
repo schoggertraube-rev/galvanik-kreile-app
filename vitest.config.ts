@@ -11,6 +11,8 @@ export default defineConfig({
     include: ['src/**/*.test.{ts,tsx}', 'src/**/*.spec.{ts,tsx}'],
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Vitest-only stub: production keeps the real server-only boundary marker.
+      'server-only': path.resolve(__dirname, './src/test/serverOnlyMock.ts'),
     },
   },
 });

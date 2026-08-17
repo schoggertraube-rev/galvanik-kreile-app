@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Shield, Loader2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
-import { getFeatureFlags, updateFeatureFlagRoles } from "@/app/actions/admin.actions";
+import { getFeatureFlags } from "@/app/actions/admin.actions";
 
 const roles = [
   { id: 'developer', name: 'Developer', description: 'Voller Systemzugriff' },
@@ -24,7 +24,6 @@ type PermissionItem = {
 export function RoleMatrix() {
   const [permissions, setPermissions] = useState<PermissionItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
     void getFeatureFlags()
@@ -42,53 +41,6 @@ export function RoleMatrix() {
       .catch((err) => console.error("Failed to fetch permissions", err))
       .finally(() => setLoading(false));
   }, []);
-
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const flags = await getFeatureFlags();
-      const perms = flags
-        .filter(f => f.id.startsWith("perm_"))
-        .map(f => ({
-          id: f.id,
-          name: f.name,
-          description: f.description || "Allgemein",
-          rolesAllowed: f.rolesAllowed || []
-        }));
-      setPermissions(perms);
-    } catch (err) {
-      console.error("Failed to fetch permissions", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleToggle = async (permId: string, roleId: string) => {
-    setSaving(permId);
-    
-    // Optimistic update
-    setPermissions(prev => prev.map(p => {
-      if (p.id === permId) {
-        const hasIt = p.rolesAllowed.includes(roleId);
-        const newRoles = hasIt 
-          ? p.rolesAllowed.filter(r => r !== roleId)
-          : [...p.rolesAllowed, roleId];
-        
-        // Developer is now just a normal role in the array, no special override here
-        // Fire background API
-        updateFeatureFlagRoles(permId, newRoles).then(() => {
-          setSaving(null);
-        }).catch(() => {
-          setSaving(null);
-          alert("Fehler beim Speichern");
-          fetchData(); // Rollback
-        });
-
-        return { ...p, rolesAllowed: newRoles };
-      }
-      return p;
-    }));
-  };
 
   // Group permissions by description (category)
   const grouped = permissions.reduce((acc, curr) => {
@@ -111,9 +63,10 @@ export function RoleMatrix() {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2"><Shield className="h-5 w-5"/> Rollen und Rechte</CardTitle>
-        <CardDescription>Übersicht der Berechtigungen im System (Klicken zum Ändern)</CardDescription>
+        <CardDescription>Read-only-Übersicht der geladenen Rollenrechte. Änderungen warten auf den W3-Command-Vertrag.</CardDescription>
       </CardHeader>
       <CardContent>
+        <p className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-950">NOT_AVAILABLE: Sichere Feature- und Rollenverwaltung benötigt den W3-Command-Vertrag.</p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
             <thead className="bg-bg-app-soft text-navy-900 border-b">
@@ -139,18 +92,17 @@ export function RoleMatrix() {
                     <tr key={item.id} className="border-b last:border-0 hover:bg-bg-app-soft/50 transition-colors">
                       <td className="px-4 py-3 font-medium text-navy-900 flex items-center gap-2">
                         {item.name}
-                        {saving === item.id && <Loader2 className="w-3 h-3 animate-spin text-text-muted" />}
                       </td>
                       {roles.map(role => {
                         const hasAccess = item.rolesAllowed.includes(role.id);
                         return (
                           <td key={role.id} className="px-4 py-3 text-center">
-                            <label className="inline-flex items-center justify-center w-6 h-6 rounded cursor-pointer hover:bg-neutral-gray-100 transition-colors">
+                            <label className="inline-flex items-center justify-center w-6 h-6 rounded">
                               <input 
                                 type="checkbox"
+                                disabled
                                 className="w-4 h-4 text-emerald-600 rounded border-neutral-gray-300 focus:ring-emerald-500 cursor-pointer"
                                 checked={hasAccess}
-                                onChange={() => handleToggle(item.id, role.id)}
                               />
                             </label>
                           </td>

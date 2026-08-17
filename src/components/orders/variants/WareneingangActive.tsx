@@ -1,39 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
-import { transitionOrderProcess } from '@/app/actions/orders.actions';
-import { Loader2 } from 'lucide-react';
+import React from 'react';
 
 interface WareneingangActiveProps {
   orderId: string;
 }
 
-function getCaughtErrorMessage(error: unknown): string | null {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "object" && error !== null && "message" in error) {
-    return typeof error.message === "string" ? error.message : null;
-  }
-  return null;
-}
-
 export const WareneingangActive: React.FC<WareneingangActiveProps> = ({ orderId }) => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const handleTransition = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await transitionOrderProcess({ orderId, action: 'complete' });
-      if (!res.ok) {
-        setError(res.error || res.message || 'Fehler bei der Übergabe');
-      }
-    } catch (error: unknown) {
-      setError(getCaughtErrorMessage(error));
-    } finally {
-      setLoading(false);
-    }
-  };
+  void orderId;
 
   return (
     <div className="station-context highlight" style={{ background: 'var(--ci-bg)', border: '1px solid var(--ci-border)', borderLeft: '3px solid var(--ci-accent)', borderRadius: '18px', padding: '16px 18px', marginTop: '4px' }}>
@@ -51,15 +25,14 @@ export const WareneingangActive: React.FC<WareneingangActiveProps> = ({ orderId 
           Bitte prüfen Sie, ob Auftrag und Kunde korrekt erfasst sind, alle Teile mit Mengen und Fotos dokumentiert sind und das gewünschte Zielfinish festgelegt wurde.
         </p>
 
-        {error && <div style={{ color: 'var(--ci-danger)', fontSize: '12px', marginBottom: '10px' }}>{error}</div>}
-
-        <button 
-          onClick={handleTransition}
-          disabled={loading}
-          style={{ width: '100%', padding: '12px', background: 'var(--ci-ink)', color: 'var(--ci-surface)', borderRadius: '8px', fontWeight: 500, fontSize: '13px', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', opacity: loading ? 0.7 : 1 }}
+        <p style={{ color: 'var(--ci-danger)', fontSize: '12px', marginBottom: '10px' }}>
+          NOT_AVAILABLE: Stationswechsel benötigen den W3-Command-Vertrag.
+        </p>
+        <button
+          disabled
+          style={{ width: '100%', padding: '12px', background: 'var(--ci-ink)', color: 'var(--ci-surface)', borderRadius: '8px', fontWeight: 500, fontSize: '13px', border: 'none', cursor: 'not-allowed', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', opacity: 0.7 }}
         >
-          {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-          {loading ? 'Wird übergeben...' : 'Übergabe zur Bearbeitung'}
+          Übergabe zur Bearbeitung
         </button>
       </div>
     </div>

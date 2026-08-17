@@ -1,21 +1,7 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import { checkAppAuth } from '@/lib/server/authHelper'
 import type { Beleg, BelegDetail, BelegFilter, Ausgangsrechnung, RechnungFilter, AusgangsrechnungPosition , Kostenposten, KostenpostenFilter } from '@/lib/buchhaltung/types'
-
-type BelegUpdatePayload = {
-  status?: Beleg['status'];
-  brutto?: number;
-  netto?: number;
-  ust_betrag?: number;
-  lieferant_id?: string;
-  kategorie_id?: string;
-  belegart?: string;
-  belegdatum?: string;
-  konto_id?: string;
-  kostenstelle_id?: string;
-};
 
 type RechnungRow = {
   id: string;
@@ -105,219 +91,44 @@ export async function listBelegeAction(filter?: BelegFilter): Promise<Beleg[]> {
   
   return data.map(mapToClientBeleg)
 }
-
 /**
  * Lädt einen einzelnen Beleg anhand der ID.
  */
 export async function getBelegAction(id: string): Promise<BelegDetail> {
-  const supabase = await createClient()
-  
-  const { data, error } = await supabase.from('beleg').select(`
-    *,
-    beleg_position (*),
-    kraftstoff_detail (*),
-    kategorie (*),
-    lieferant (*)
-  `).eq('id', id).single()
-  
-  if (error || !data) {
-    console.error('Fehler beim Laden des Belegs:', error)
-    throw new Error('Beleg nicht gefunden.')
-  }
-  
-  // Wenn der Beleg eine Datei hat, erzeugen wir eine Signed URL für die Vorschau
-  let originalDatei = data.original_datei;
-  if (originalDatei && !originalDatei.startsWith('http')) {
-    const { data: urlData } = await supabase
-      .storage
-      .from('buchhaltung-belege')
-      .createSignedUrl(originalDatei, 3600); // 1h gültig
-      
-    if (urlData) {
-      originalDatei = urlData.signedUrl;
-    }
-  }
-
-  const detail: BelegDetail = {
-    ...mapToClientBeleg(data),
-    originalDatei,
-    positionen: data.beleg_position || [],
-    kraftstoffDetail: data.kraftstoff_detail?.[0], // Assuming 1:1 or 1:M where first is picked
-    kategorie: data.kategorie,
-    lieferant: data.lieferant,
-    kiHinweise: [] // TODO: KI-Logik ggf. serverseitig integrieren
-  }
-  
-  return detail
+  void id
+  throw new Error('NOT_AVAILABLE: Sicherer W3-Read-Vertrag fehlt.')
 }
 
 /**
  * Erstellt einen Beleg inkl. Upload in den Storage Bucket.
  */
 export async function createBelegAction(formData: FormData): Promise<Beleg> {
-  // F0-W2b (SEC-02-Sperre): kanonische Autorisierung vor jeder Mutation.
-  const auth = await checkAppAuth("write")
-  if (!auth.ok) {
-    throw new Error(`PERMISSION_DENIED: ${auth.message}`)
-  }
-
-  const supabase = await createClient()
-
-  const { data: authData } = await supabase.auth.getUser()
-  if (!authData.user) {
-    throw new Error('Nicht authentifiziert.')
-  }
-  const userId = authData.user.id
-  
-  const file = formData.get('file') as File
-  const filename = formData.get('filename') as string
-  const mimeType = formData.get('mimeType') as string
-  
-  if (!file) {
-    throw new Error('Keine Datei vorhanden.')
-  }
-  
-  // 1. In den Bucket buchhaltung-belege hochladen
-  const date = new Date()
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const belegId = crypto.randomUUID()
-  const safeFilename = filename.replace(/[^a-zA-Z0-9.\-_]/g, '_')
-  const storagePath = `${year}/${month}/${belegId}/${safeFilename}`
-  
-  const { error: uploadError } = await supabase
-    .storage
-    .from('buchhaltung-belege')
-    .upload(storagePath, file, {
-      contentType: mimeType,
-      upsert: false
-    })
-    
-  if (uploadError) {
-    console.error('Upload Error:', uploadError)
-    throw new Error('Fehler beim Speichern der Beleg-Datei.')
-  }
-  
-  // 2. Beleg-Datensatz anlegen
-  // F0-W2b (BUC-01): keine erfundenen Beträge/Steuerwerte beim Anlegen. brutto/netto/
-  // vorsteuer_abzug/absetzbar_prozent sind in der DB nullable bzw. haben einen neutralen
-  // Schema-Default (supabase/migrations/20260805180624_production_schema_baseline.sql,
-  // Tabelle "beleg" — keiner dieser vier Spalten ist NOT NULL). Bis eine echte OCR-
-  // Erkennung oder die manuelle Freigabe (freigebenBelegAction) reale Werte liefert,
-  // behauptet die Anlage hier keine Zahl.
-  const belegData = {
-    id: belegId,
-    status: 'pruefen',
-    original_datei: storagePath,
-    original_format: mimeType,
-    erfasst_am: new Date().toISOString(),
-    erstellt_von: userId,
-  }
-  
-  const { data: dbData, error: insertError } = await supabase
-    .from('beleg')
-    .insert(belegData)
-    .select()
-    .single()
-    
-  if (insertError) {
-    console.error('Insert Error:', insertError)
-    throw new Error('Fehler beim Speichern des Belegs in der Datenbank.')
-  }
-  
-  return mapToClientBeleg(dbData)
+  void formData
+  throw new Error('NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.')
 }
 
 /**
  * Gibt einen Beleg frei.
  */
 export async function freigebenBelegAction(id: string, korrektur?: Partial<Beleg>): Promise<Beleg> {
-  // F0-W2b (SEC-02-Sperre): kanonische Autorisierung vor jeder Mutation.
-  const auth = await checkAppAuth("write")
-  if (!auth.ok) {
-    throw new Error(`PERMISSION_DENIED: ${auth.message}`)
-  }
-
-  const supabase = await createClient()
-
-  // Nur 'pruefen' oder 'erfasst' dürfen bearbeitet/freigegeben werden
-  const { data: current, error: fetchError } = await supabase.from('beleg').select('status').eq('id', id).single()
-  if (fetchError || !current) throw new Error('Beleg nicht gefunden.')
-  if (current.status === 'festgeschrieben' || current.status === 'storniert') {
-    throw new Error('Dieser Beleg ist bereits festgeschrieben oder storniert und kann nicht freigegeben werden.')
-  }
-  
-  const payload: BelegUpdatePayload = { status: 'erfasst' }
-  
-  if (korrektur) {
-    // Map client fields back to DB schema
-    if (korrektur.brutto !== undefined) payload.brutto = korrektur.brutto
-    if (korrektur.netto !== undefined) payload.netto = korrektur.netto
-    if (korrektur.ustBetrag !== undefined) payload.ust_betrag = korrektur.ustBetrag
-    if (korrektur.lieferantId !== undefined) payload.lieferant_id = korrektur.lieferantId
-    if (korrektur.kategorieId !== undefined) payload.kategorie_id = korrektur.kategorieId
-    if (korrektur.belegart !== undefined) payload.belegart = korrektur.belegart
-    if (korrektur.belegdatum !== undefined) payload.belegdatum = korrektur.belegdatum
-  }
-  
-  const { data, error } = await supabase.from('beleg').update(payload).eq('id', id).select().single()
-  
-  if (error) {
-    console.error('Fehler bei Freigabe:', error)
-    throw new Error('Fehler beim Freigeben des Belegs.')
-  }
-  
-  return mapToClientBeleg(data)
+  void id
+  void korrektur
+  throw new Error('NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.')
 }
 
 /**
  * Storniert einen Beleg.
  */
 export async function stornoBelegAction(id: string, grund: string): Promise<Beleg> {
-  void grund;
-  // F0-W2b (SEC-02-Sperre): kanonische Autorisierung vor jeder Mutation.
-  const auth = await checkAppAuth("write")
-  if (!auth.ok) {
-    throw new Error(`PERMISSION_DENIED: ${auth.message}`)
-  }
-
-  const supabase = await createClient()
-
-  const { data: authData } = await supabase.auth.getUser()
-  const userId = authData.user?.id
-  // F0-W2b: bisheriger "kein Abbruch bei fehlendem User"-Pfad entfernt — bricht jetzt ab.
-  if (!userId) {
-    throw new Error('Nicht authentifiziert.')
-  }
-
-  const { data, error } = await supabase.from('beleg').update({
-    status: 'storniert',
-    storniert_von: userId
-  }).eq('id', id).select().single()
-  
-  if (error) {
-    console.error('Fehler bei Storno:', error)
-    throw new Error('Beleg konnte nicht storniert werden.')
-  }
-  
-  return mapToClientBeleg(data)
+  void id
+  void grund
+  throw new Error('NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.')
 }
 
 export async function assignBelegeBatchAction(belegIds: string[], updates: { kontoId?: string, kostenstelleId?: string }) {
-  if (!belegIds.length) return true;
-  const supabase = await createClient();
-  const payload: BelegUpdatePayload = {};
-  if (updates.kontoId) payload.konto_id = updates.kontoId;
-  if (updates.kostenstelleId) payload.kostenstelle_id = updates.kostenstelleId;
-
-  if (Object.keys(payload).length === 0) return true;
-
-  const { error } = await supabase.from('beleg').update(payload).in('id', belegIds);
-  if (error) {
-    console.error('Fehler bei Massenzuordnung:', error);
-    throw new Error('Fehler bei Massenzuordnung.');
-  }
-  return true;
+  void belegIds
+  void updates
+  throw new Error('NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.')
 }
 
 export async function getKraftstoffTankungenAction() {
@@ -338,44 +149,9 @@ export async function getKraftstoffTankungenAction() {
   }));
 }
 
-export async function exportBelegeAction(format: "DATEV" | "Lexware" | "CSV") {
-  void format;
-  // F0-W2b (SEC-02-Sperre): kanonische Autorisierung vor jeder Mutation.
-  const auth = await checkAppAuth("write")
-  if (!auth.ok) {
-    throw new Error(`PERMISSION_DENIED: ${auth.message}`)
-  }
-
-  const supabase = await createClient()
-
-  const { data, error } = await supabase.from('beleg')
-    .select('*')
-    .eq('status', 'festgeschrieben')
-    .order('belegdatum', { ascending: false });
-
-  if (error) {
-    console.error('Fehler bei exportBelegeAction:', error);
-    throw new Error('Export fehlgeschlagen.');
-  }
-
-  const belege = data.map(mapToClientBeleg);
-
-  // F0-W2b (BUC-02): kein Steuer-Default; unvollständige Steuerwahrheit wird verweigert (DEC-01 offen).
-  // Belege ohne echten USt-Satz/USt-Betrag werden nicht exportiert statt einen Satz zu erfinden.
-  const belegeMitVollstaendigerSteuerwahrheit = belege.filter(
-    b => b.ustSatz !== undefined && b.ustSatz !== null && b.ustBetrag !== undefined && b.ustBetrag !== null
-  );
-
-  const rows = belegeMitVollstaendigerSteuerwahrheit.map(b => {
-    return `${b.belegdatum || b.erfasstAm};${b.lieferantText || "Unbekannt"};${b.skrKonto || ""};${b.kategorieId};${b.brutto};${b.ustSatz};${b.ustBetrag};${b.id};${b.status}`;
-  });
-
-  return {
-    header: "Datum;Lieferant/Kunde;Konto;Kategorie;Betrag;USt-Satz;USt-Betrag;Belegnummer;Status",
-    rows,
-    csv: "Datum;Lieferant/Kunde;Konto;Kategorie;Betrag;USt-Satz;USt-Betrag;Belegnummer;Status\n" + rows.join('\n'),
-    skippedIncompleteTaxCount: belege.length - belegeMitVollstaendigerSteuerwahrheit.length
-  };
+export async function exportBelegeAction(format: "DATEV" | "Lexware" | "CSV"): Promise<{ header: string; rows: string[]; csv: string }> {
+  void format
+  throw new Error('NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.')
 }
 
 export async function listRechnungenAction(filter?: RechnungFilter): Promise<Ausgangsrechnung[]> {
@@ -486,113 +262,14 @@ function mapToClientBeleg(dbData: BelegRow): Beleg {
 }
 
 export async function createRechnungAction(formData: FormData, positionen: AusgangsrechnungPosition[]): Promise<Ausgangsrechnung> {
-  // F0-W2b (SEC-02-Sperre): kanonische Autorisierung vor jeder Mutation.
-  const auth = await checkAppAuth("write")
-  if (!auth.ok) {
-    throw new Error(`PERMISSION_DENIED: ${auth.message}`)
-  }
-
-  const supabase = await createClient();
-
-  // Validate basic fields
-  const nummer = formData.get('nummer') as string;
-  const kundeId = formData.get('kundeId') as string;
-  const datum = formData.get('datum') as string;
-  const faelligAm = formData.get('faelligAm') as string;
-  // F0-W2b (BUC-02): kein Steuer-Default; unvollständige Steuerwahrheit wird verweigert (DEC-01 offen).
-  const ustSatzRaw = formData.get('ustSatz') as string | null;
-  if (!ustSatzRaw || ustSatzRaw.trim() === '') {
-    throw new Error('VALIDATION_FAILED: USt-Satz ist ein Pflichtfeld und darf nicht angenommen werden.');
-  }
-  const ustSatz = parseFloat(ustSatzRaw);
-  if (isNaN(ustSatz)) {
-    throw new Error('VALIDATION_FAILED: USt-Satz ist ungültig.');
-  }
-  const bemerkung = formData.get('bemerkung') as string || null;
-  const leadId = formData.get('leadId') as string || null;
-  const isDemo = formData.get('isDemo') === "true";
-
-  if (!nummer || !kundeId || !datum || !faelligAm) {
-    throw new Error('Bitte füllen Sie alle Pflichtfelder aus.');
-  }
-
-  if (positionen.length === 0) {
-    throw new Error('Mindestens eine Position muss angegeben werden.');
-  }
-
-  let netto = 0;
-  for (const pos of positionen) {
-    netto += pos.menge * pos.einzelpreisNetto;
-  }
-  const ustBetrag = netto * (ustSatz / 100);
-  const brutto = netto + ustBetrag;
-
-  // Insert Rechnung
-  const { data: arData, error: arError } = await supabase.from('ausgangsrechnung').insert({
-    nummer,
-    kunde_id: kundeId,
-    datum,
-    faellig_am: faelligAm,
-    netto,
-    ust_satz: ustSatz,
-    ust_betrag: ustBetrag,
-    brutto,
-    bemerkung,
-    lead_id: leadId,
-    is_demo: isDemo,
-    status: 'offen',
-  }).select().single();
-
-  if (arError) {
-    console.error("Fehler beim Erstellen der Rechnung:", arError);
-    throw new Error('Fehler beim Speichern der Rechnung.');
-  }
-
-  // Insert Positionen
-  const positionsToInsert = positionen.map(p => ({
-    ausgangsrechnung_id: arData.id,
-    beschreibung: p.beschreibung,
-    menge: p.menge,
-    einzelpreis_netto: p.einzelpreisNetto
-  }));
-
-  const { error: posError } = await supabase.from('ausgangsrechnung_position').insert(positionsToInsert);
-  
-  if (posError) {
-    console.error("Fehler beim Speichern der Positionen:", posError);
-    // Ideally rollback here, but we will keep it simple
-  }
-
-  return mapToClientRechnung(arData);
+  void formData
+  void positionen
+  throw new Error('NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.')
 }
 
-
 export async function getRechnungAction(id: string): Promise<Ausgangsrechnung> {
-  const supabase = await createClient();
-  const { data: arData, error: arError } = await supabase
-    .from('ausgangsrechnung')
-    .select('*')
-    .eq('id', id)
-    .single();
-
-  if (arError) {
-    throw new Error('Rechnung nicht gefunden.');
-  }
-
-  const { data: posData } = await supabase
-    .from('ausgangsrechnung_position')
-    .select('*')
-    .eq('ausgangsrechnung_id', id);
-
-  const rechnung = mapToClientRechnung(arData);
-  rechnung.positionen = posData?.map(p => ({
-    id: p.id,
-    beschreibung: p.beschreibung,
-    menge: Number(p.menge),
-    einzelpreisNetto: Number(p.einzelpreis_netto)
-  })) || [];
-
-  return rechnung;
+  void id
+  throw new Error('NOT_AVAILABLE: Sicherer W3-Read-Vertrag fehlt.')
 }
 
 // === KOSTENPOSTEN ===
@@ -630,80 +307,13 @@ export async function listKostenpostenAction(filter?: KostenpostenFilter): Promi
 }
 
 export async function createKostenpostenAction(formData: FormData): Promise<Kostenposten> {
-  const supabase = await createClient();
-
-  const bezeichnung = formData.get('bezeichnung') as string;
-  const art = formData.get('art') as "fix" | "variabel";
-  const kategorie = formData.get('kategorie') as string || null;
-  const betragStr = formData.get('betrag') as string;
-  const intervall = formData.get('intervall') as "einmalig" | "monatlich" | "jaehrlich";
-  const belegId = formData.get('belegId') as string || null;
-  const kampagneId = formData.get('kampagneId') as string || null;
-  const giltAb = formData.get('giltAb') as string || null;
-  const giltBis = formData.get('giltBis') as string || null;
-  const isDemo = formData.get('isDemo') === "true";
-
-  if (!bezeichnung || !art || !betragStr || !intervall) {
-    throw new Error('Bitte füllen Sie alle Pflichtfelder aus.');
-  }
-
-  const betrag = parseFloat(betragStr.replace(',', '.'));
-  if (isNaN(betrag) || betrag <= 0) {
-    throw new Error('Bitte geben Sie einen gültigen Betrag größer 0 ein.');
-  }
-
-  const { data, error } = await supabase.from('kostenposten').insert({
-    bezeichnung,
-    art,
-    kategorie,
-    betrag,
-    intervall,
-    beleg_id: belegId,
-    kampagne_id: kampagneId,
-    gilt_ab: giltAb,
-    gilt_bis: giltBis,
-    is_demo: isDemo
-  }).select().single();
-
-  if (error) {
-    console.error("Fehler beim Erstellen des Kostenpostens:", error);
-    throw new Error('Fehler beim Speichern des Kostenpostens.');
-  }
-
-  return {
-    id: data.id,
-    bezeichnung: data.bezeichnung,
-    art: data.art as "fix" | "variabel",
-    kategorie: data.kategorie || undefined,
-    betrag: Number(data.betrag),
-    intervall: data.intervall as "einmalig" | "monatlich" | "jaehrlich",
-    belegId: data.beleg_id || undefined,
-    kampagneId: data.kampagne_id || undefined,
-    giltAb: data.gilt_ab || undefined,
-    giltBis: data.gilt_bis || undefined,
-    isDemo: data.is_demo || false
-  };
+  void formData
+  throw new Error('NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt.')
 }
 
 export async function getKostenpostenAction(id: string): Promise<Kostenposten> {
-  const supabase = await createClient();
-  const { data, error } = await supabase.from('kostenposten').select('*').eq('id', id).single();
-  if (error) {
-    throw new Error('Kostenposten nicht gefunden.');
-  }
-  return {
-    id: data.id,
-    bezeichnung: data.bezeichnung,
-    art: data.art as "fix" | "variabel",
-    kategorie: data.kategorie || undefined,
-    betrag: Number(data.betrag),
-    intervall: data.intervall as "einmalig" | "monatlich" | "jaehrlich",
-    belegId: data.beleg_id || undefined,
-    kampagneId: data.kampagne_id || undefined,
-    giltAb: data.gilt_ab || undefined,
-    giltBis: data.gilt_bis || undefined,
-    isDemo: data.is_demo || false
-  };
+  void id
+  throw new Error('NOT_AVAILABLE: Sicherer W3-Read-Vertrag fehlt.')
 }
 
 

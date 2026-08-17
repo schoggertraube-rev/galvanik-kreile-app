@@ -2,7 +2,6 @@
 
 import { useMemo, useState } from "react";
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
-import { format } from "date-fns";
 import { PackageCheck, Mail, CheckCircle2, AlertCircle, FileText, Loader2 } from "lucide-react";
 
 import { getUrgency } from "@/lib/orders/getUrgency";
@@ -144,7 +143,7 @@ export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
                   const u = getUrgency(o.dueDate);
                   const isCrit = u === "kritisch";
                   const bgClass = isCrit ? "bg-danger-red/10 border-danger-red/30" : "bg-bg-app-soft border-neutral-gray-100";
-                  const dotColor = u === "kritisch" ? "bg-danger-red" : u === "gefaehrdet" ? "bg-accent-orange" : "bg-success-green";
+                  const dotColor = u === "kritisch" ? "bg-danger-red" : u === "gefaehrdet" ? "bg-accent-orange" : u === "unknown" ? "bg-slate-500" : "bg-success-green";
 
                   return (
                     <div key={o.id} className={`flex items-center justify-between rounded-2xl p-4 border ${bgClass}`}>
@@ -156,7 +155,7 @@ export function WarenausgangQueue({ allOrders }: WarenausgangQueueProps) {
                         <div>
                           <div className="font-extrabold text-sm text-navy-900 font-mono tracking-tight">#{o.id.slice(0, 8).toUpperCase()}</div>
                           <div className="text-xs text-text-muted font-medium mt-0.5">
-                            Fertiggestellt am {format(new Date(), "dd.MM.yy")}
+                            Fertigstellungsdatum nicht erfasst
                           </div>
                         </div>
                       </div>

@@ -1,95 +1,61 @@
-﻿# F0_PRECHECK â€” Preflight und Driftinventur
+# F0_PRECHECK – T0-Wahrheit und Driftinventur
 
-**Mission:** KREILE_F0_FOUNDATION_TRUTH_AND_ZIP_READINESS
-**Erstellt:** 2026-08-06 (Cowork/Opus, Writer)
-**Charakter:** read-only Inventur. Kein Schreibschritt an Prod/main erfolgte auf Basis dieses Dokuments.
+**Mission:** `F0_FOUNDATION_CONVERGENCE_W2C_W4_001`
 
-> Hinweis: Diese Datei ist der Arbeitsstand im Workspace. Sie wird fÃ¼r den F0-Kandidaten nach
-> `docs/evidence/f0/F0_PRECHECK.md` Ã¼bernommen.
+**Stufe:** `T0`
 
-## 1. Wahrheitsanker
+**Status:** `FAIL_INTERNAL`
+**Scope:** Dokumentation; keine Production-, Datenbank-, Vercel-, Browser-, Paket-, Git-Remote- oder Merge-Aktion in T0.
 
-| Ebene | Wert | Quelle |
-|---|---|---|
-| `main` HEAD | `62af22d7b20ec4deb29dc0c1c8474baa8a1f6f65` (Squash-Merge PR #42) | GitHub API |
-| Vorheriger `main` | `6e0c74893ed10e5337e03b10457477f4b6d8cbf7` | GitHub API |
-| Vercel Production Commit | **NOCH ZU VERIFIZIEREN (read-only)** | offen |
-| Supabase Projekt | `syhaigjhsbpjmtnggqka` (eu-central-1, PG 17.6) | Supabase MCP |
+## Aktuelle Wahrheitsanker
 
-## 2. Supabase Production â€” read-only Inventar (public + private)
+| Wahrheit | Feststellung |
+|---|---|
+| Kanonischer Stand | Die nachfolgende Inventur ist die einzige aktuelle T0-Wahrheit dieser Mission. |
+| GitHub `main` und Vercel Production | `c294c0564dc8a5e137eaa00de1276677cb1a1c53`. |
+| Pull Requests und Wellen | 0 offene PRs; W1, W2a und W2b sind gemergt. |
+| Missionsstart | Missionsbranch mit sauberem Start. Der geschützte Checkout `feature/capture-auth-tenant@8cf9e6c` enthält 53 untracked Dateien und bleibt unangetastet. |
+| Missionszustand | W2C bis W4 dürfen lokal und sequenziell umgesetzt sowie als Kandidat abgenommen werden. |
+| Vertragsratifikation | Ausstehend; sie ist Voraussetzung für einen `F0-PASS`-Claim, nicht für den Abschluss von W4. |
+| Externe Gates | Sie blockieren Remote- oder Legacy-Mutationen und `F0-PASS`, nicht die lokale W2C-W4-Implementierung. |
 
-| Metrik | Wert |
-|---|---:|
-| Tabellen (public) | 94 |
-| davon RLS aktiv / ohne RLS | 68 / 26 |
-| Views | 17 |
-| Indizes | 177 |
-| Custom-Trigger | 7 |
-| Constraints / Foreign Keys | 252 / 79 |
-| Funktionen public / private | 20 / 1 |
-| RLS-Policies | 67 |
-| **Grants an anon/authenticated/PUBLIC** | **0** (Data-API entzogen) |
-| Public Default-ACL-Zeilen | 6 |
-| Custom-Schemas | `public`, `private`, `drizzle` |
-| Nicht-Default-Extension | `pg_trgm` in `public` (weiter: pgcrypto/uuid-ossp/pg_stat_statements in `extensions`, supabase_vault) |
-| Production-Ledger | 96 EintrÃ¤ge (`scripts/migration-ledger-manifest.txt`) |
-| Migrationsdateien im Repo | 98 `.sql` + fremdes `0001_app_schema.sql` (Alt-Naming, nicht im Ledger) |
+## Aktuelle Supabase- und Storage-Fakten
 
-## 3. Bereits erbrachte F0-relevante Nachweise (diese Session)
+| Bereich | Feststellung |
+|---|---|
+| Remote-Supabase | `syhaigjhsbpjmtnggqka`, `ACTIVE_HEALTHY`, PostgreSQL `17.6.1.121`. |
+| Remote-Ledger | Exakt 9 Einträge bis `20260810100000_normalize_view_invoker_spelling`; kein belastbarer Statement-/Hash-Digest. |
+| `beleg` | Exakt 19 Datensätze, kein `tenant_id`; Defaults `vorsteuer_abzug=true` und `absetzbar_prozent=100`. |
+| Tabellen und RLS | 94 `public`-Basistabellen, 62 mit `tenant_id`, 26 ohne RLS. |
+| Rechte | Keine direkten DML-Grants für `anon` oder `authenticated` festgestellt; riskante Default-ACLs von `supabase_admin` bestehen fort. |
+| Private Buckets | `belege`: 5 MiB/3 Objekte; `buchhaltung-belege`: 5 MiB/1 Objekt; `item-photos`: 12 MiB/0 Objekte; `scans`: 20 MiB/4 Objekte. Nur `scans` hat App-Policies; keine Objektinhalte wurden abgerufen. |
 
-- **Baseline (public+private, +pg_trgm-Preamble):** `PROD_BASELINE_2026-08-06.sql`,
-  SHA-256 `030A6893112941C095EFA65A7347D754B741E1501A5974445C22F852F35CB6AD`; Secret-Scan 0 Hochrisiko.
-- **Fresh-Replay** (lokal, leere DB): fehlerfrei (`db reset`), Struktur 11/11 Metriken = Prod.
-- **ACL-Regression gefunden + gefixt:** Schema-Dump reproduziert Lockdown nicht (Fresh-Replay 666 Grants);
-  `PROD_LOCKDOWN_GRANTS.sql` bringt lokal auf 0 = Prod.
-- **B1/B4-Negativtests** grÃ¼n (fail-closed Auth), auf PR #43/#46 gepusht.
-- **PIN-Bestand** (frÃ¼her verifiziert): 6/6 bcrypt cost 12, 0 Klartext â€” in F0-05 formal neu zu belegen.
+## T0-Drift- und Risikoregister
 
-## 4. Offene Foundation-Parallelarbeit (A02) â€” Snapshot
+| ID | Befund und Vorwärtskorrektur | Owner | Schwere | Nachweis |
+|---|---|---|---|---|
+| T0-01 | Veraltete Dokumentation und fehlende Missionsinstanz: nur diese T0-Inventur und verifizierbare Wahrheit fortschreiben. | Governance | hoch | Dokumenten- und Diff-Review |
+| T0-02 | Vertragsratifikation steht aus: explizite Entscheidung vor einem `F0-PASS` einholen. | Auftraggeber/Ratifizierer | hoch | Ratifikationsnachweis |
+| T0-03 | Ledger ohne belastbaren Digest: reproduzierbaren lokalen Digest vor Remote-Anfragen herstellen. | Datenbank-Owner | hoch | Unabhängiger Digest-Review |
+| T0-04 | `beleg` ohne Tenant-Attribution und mit ungeprüften Steuer-Defaults: Klassifikation vor Mapping oder Legacy-Mutation entscheiden. | Produkt/Accounting | hoch | Freigegebenes Mapping und Tenant-Negativtests |
+| T0-05 | RLS-/Default-ACL-Risiko: relationenweise fail-closed-Remediation planen; keine Remote-Änderung ohne Gate. | Production-DB-Owner | kritisch | Grant-/RLS-/Default-ACL-Negativmatrix |
+| T0-06 | `scan_uploads`, die `beleg`-Textpfade sowie `items.photo_ids`/`item_photos` bilden mehrere Evidence-Wahrheiten: W4 definiert stabile private Preservation-Metadaten und Legacy-Adapter ohne Umklassifikation alter Objekte. | Evidence-Owner | hoch | Link-, Preservation- und Adaptertests |
+| T0-07 | `events.tenant_id` ist nullable und hat einen Default-Literal; außerdem fehlt `correlation_id`. W4 erzwingt serverseitigen Tenant, Korrelation und Idempotenz. | Event-Owner | hoch | Tenant-, Korrelations- und Idempotenztests |
+| T0-08 | Browser-Upload/Public-URL, ID-only-Operationen, zweiter Stationsschreiber, Extraction-/Provider-Pfade, synthetische Today-/Cron-Wahrheit und nichtatomare Side-Effects sind aktiv riskant. W2C schließt unsichere Pfade; W3/W4 führen Command-, Event- und Read-Port-Verträge ein. | Command-/Storage-/Read-Model-Owner | kritisch | Negativtests und Reload-Readback-Evidenz |
 
-| PR | Inhalt | Disposition (F0-02 Vorschlag) |
-|---|---|---|
-| #40 (Draft) | Baseline-Ersatz (migrations_legacy-Archiv, 1 Baseline) | Material fÃ¼r F0-03/04 â€” evaluieren, nicht blind mergen |
-| #41 | Docs + Offline-Containment | **SUPERSEDED** durch #45 â€” nicht mergen (kÃ¼rzt Anforderungen) |
-| #42 | C1 SyncContext | **INTEGRATED** â€” nach `main` gemergt (`62af22d7`) auf **ausdrÃ¼ckliche Nutzerfreigabe** ("mergen, wenn sinnvoll"). Danach Pivot auf Konsolidierung. |
-| #43 | C2 inquiries + B1-Tests | in F0-Kandidat falten |
-| #44 | C3/C4 Today + B2 | in F0-Kandidat falten |
-| #45 | Docs G1 (wahrheitsgetreu, additiv) | in F0-Kandidat falten |
-| #46 | B4 Upload-Auth + B4-Tests | in F0-Kandidat falten |
-| #47 | D1/D2 als Migrationen | Material fÃ¼r F0-03/04 |
+## Sequenz und externe Gates
 
-## 5. Drift-Register (Owner / Severity / betroffene Wahrheit / VorwÃ¤rtskorrektur / Verifikationsweg)
+1. `T0`: Wahrheit und Drift inventarisieren.
+2. `W2C`: unsichere oder erfundene aktive Pfade fail-closed schließen.
+3. `W3`: einen serverseitigen Vertrag für Actor, Session-Tenant, fachliche Capability, Ownership und Version mit Result-Union und server-only Service-Role-Provider herstellen.
+4. `W4`: private Evidence-Metadaten, append-only Fakten/Ereignisse mit Korrelation und Idempotenz, versionierte `v_*`-Read-Ports sowie negative und End-to-End-Nachweise herstellen.
+5. `P1` bis `P12`, Kandidatenbranch-Push, Draft-PR, Vercel Preview und unabhängige Review sind nach F0-Vertrag erlaubt und Teil der Kandidatenabnahme; sie benötigen keine neue Nutzerfreigabe.
+6. Nach W4 stoppen; die unabhängige Review erfolgt vor jeder Mergeempfehlung.
 
-Format nach F0-01 DoD. Severity: H=hoch, M=mittel, N=niedrig.
+- Externe Gates: Production-Default-ACL/Rechte, Legacy-`beleg`-Tenant-/Steuerklassifikation, Bucket-Zwecke/Legacy-Objekte und Vertragsratifikation.
+- Diese Gates blockieren `F0-PASS` sowie Remote- und Legacy-Mutationen. Sie blockieren weder lokale W2C-W4-Arbeit noch die W4-Kandidatenabnahme.
+- Geschützt bleiben Daten, alte Worktrees und Klone. Keine Löschung, Remote-Migration, RLS-, Grant-, Default-ACL-, Production-, Merge- oder sonstige Remote-Mutation.
 
-| # | Drift | Owner | Sev | Betroffene Wahrheit | VorwÃ¤rtskorrektur | Verifikationsweg |
-|---|---|---|---|---|---|---|
-| D-1 | `CURRENT_STATE.md` auf `main` veraltet | Docs | M | Zustandsdoku | #45-Inhalt in F0-Kandidat | DriftprÃ¼fung F0-09 gegen Endcommit |
-| D-2 | Migrationsquelle nicht replaybar; fremdes `0001` â‰  Prod | DB | H | Migrationswahrheit | Baseline vor Historie (F0-03) | 2Ã— Fresh-Replay + Digest |
-| D-3 | D1/D2 produktiv, nicht ledgergebunden | DB/Ledger | H | Ledger | Reconciliation-Plan (F0-04) | versions/namens/hash-Digest, freigabepflichtig |
-| D-4 | Schema-Dump reproduziert Data-API-Lockdown nicht (666 Grants) | Security | H | Grants | Lockdown-Migration (belegt) | Fresh-Replay Grants=0 |
-| D-5 | `supabase_admin` Default-Privileges fail-open | Security/Owner | H | Default Privileges | Dashboard/Owner-Fix | read-only Recheck â€” **BLOCKED_EXTERNAL** |
-| D-6 | ParitÃ¤t bisher nur zÃ¤hlbasiert (11 Metriken) | DB/Security | H | Prod-ParitÃ¤t | per-Objekt-DDL/`search_path`/Storage-Diff (F0-05/06) | kanonischer Objekt-Diff, nicht nur Counts |
-| D-7 | Storage-Buckets/Policies im Preflight nicht inventarisiert | Storage | M | Storage-Vertrag | Bucket/Policy/Signed-URL-Inventar (F0-06) | Negativtest-Matrix |
-| D-8 | Drizzle-Schema (`src/db/schema*`) nicht gegen Prod abgeglichen | DB | M | Codemodellâ†”DB | Abgleich im Klon (F0-01 Rest) | Feld/Typ-Diff |
-| D-9 | Kanonische Docs `DOCUMENT_AUTHORITY`/`MODULARITY_STRATEGY`/`OWNERSHIP_MAP` Existenz unklar | Docs | M | Quellenrang | im Klon prÃ¼fen/anlegen | Datei-Existenz + Inhalt |
-| D-10 | DB-Passwort nach einmaliger Nutzung nicht rotiert | Security | M | Credential | Nutzer setzt neu | Dashboard-BestÃ¤tigung |
+## T0-Schlussfolgerung
 
-## 6. Definition of Done (F0-01) â€” Reststand
-
-- [x] `main`-HEAD gesichert (`62af22d7`).
-- [x] Prod read-only inventarisiert (Schema/Grants/RLS/Functions/Extensions/Ledger).
-- [x] Offene PRs erfasst + Disposition (F0-02-Vorschlag).
-- [x] Drift strukturiert (Owner/Severity/Verifikationsweg) â€” D-1..D-10.
-- [ ] Vercel Production Commit read-only ermittelt.
-- [ ] Storage-Buckets/Policies read-only inventarisiert (D-7).
-- [ ] Drizzle-Schemaâ†”Prod-Abgleich (D-8).
-- [ ] Kanonische-Docs-Existenz auf `main` verifiziert (D-9).
-- [ ] `git`-Worktree/Branch-Vollstand im frischen Klon.
-
-## 7. UnabhÃ¤ngige Review (Selbstkontrolle)
-
-Ein unabhÃ¤ngiger read-only Agent hat Precheck, Einordnung und Pivot geprÃ¼ft: **REVIEW_CONCERNS**.
-Kernpunkte Ã¼bernommen: (a) Reifegrad **~30 %** statt ~50 % (kriteriengewichtet A01â€“A15); (b) Storage-
-und Drizzle-Preflight-LÃ¼cken ergÃ¤nzt (D-7/D-8); (c) Drift jetzt strukturiert; (d) #42-Merge als
-nutzerfreigegeben dokumentiert; (e) A04/A05/A07/A08/A11/A13 als praktisch unbegonnen/blockiert markiert.
+`FAIL_INTERNAL`: Die dokumentierten Drift- und fail-closed-Lücken verhindern einen `F0-PASS`-Claim. Die lokale, sequenzielle W2C-W4-Implementierung und W4-Kandidatenabnahme bleiben im Missionsvertrag zulässig; externe Gates bleiben offen.

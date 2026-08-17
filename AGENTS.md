@@ -37,7 +37,10 @@ Vor jeder Mission aus aktuellem `origin/main` lesen:
 
 ## Arbeitsmodell
 
-- Jede Mission nutzt immer einen isolierten Worktree.
+- Post-M0-Dauerprozess (gilt nach Merge des F1-Worktrees): Arbeit laeuft in `02_app` auf einem
+  kurzen Paketbranch von aktuellem `main`. Ablauf: Real-E2E → unabhaengiger PASS →
+  PR/CI/Merge → Branch loeschen → zurueck auf sauberes `main`. Kein neuer Worktree pro Mission.
+- Waehrend des aktuellen F1-Laufs bleibt ausschliesslich der autorisierte F1-Worktree aktiv.
 - Pro Mission gibt es genau einen Writer und genau einen unabhaengigen Reviewer.
 - Parallele Writer sind nur auf nachweislich unabhaengigen, nicht ueberlappenden Pfaden und ohne gemeinsame Migration erlaubt.
 - Der Writer trifft gewoehnliche technische Entscheidungen selbststaendig im freigegebenen Scope.

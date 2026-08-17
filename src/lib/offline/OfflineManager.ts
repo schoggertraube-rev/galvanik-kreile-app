@@ -1,6 +1,4 @@
 import { IndexedDBHelper, OfflineAction } from "./IndexedDBHelper";
-import type { Order } from "@/lib/repositories/ordersRepository";
-import type { CreateStockMovementInput } from "@/lib/repositories/inventoryRepository";
 
 export const OfflineManager = {
   isOffline(): boolean {
@@ -64,127 +62,16 @@ export const OfflineManager = {
       return;
     }
 
-    const rawQueue = await IndexedDBHelper.getQueue();
-    if (rawQueue.length === 0) {
-      return;
-    }
-
-    const now = new Date();
-    const queue = [];
-    let expiredCount = 0;
-
-    for (const item of rawQueue) {
-      if (item.expiresAt && new Date(item.expiresAt) < now) {
-        expiredCount++;
-        console.warn(`[OfflineManager] Item ${item.id} expired and was removed from outbox.`);
-        await IndexedDBHelper.removeFromQueue(item.id);
-      } else {
-        queue.push(item);
-      }
-    }
-
-    if (expiredCount > 0 && typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("kreile-sync-expired", { detail: { count: expiredCount } }));
-      window.dispatchEvent(new Event("kreile-sync-queue-updated"));
-      window.dispatchEvent(new Event("storage"));
-    }
-
-    if (queue.length === 0) {
-      return;
-    }
-
-    console.log(`🔄 Syncing offline queue... Found ${queue.length} valid actions (${expiredCount} expired).`);
-
-    // Dynamic imports of repositories to prevent circular import loops at bundle time
-    const { ordersRepository } = await import("@/lib/repositories/ordersRepository");
-    const { inventoryRepository } = await import("@/lib/repositories/inventoryRepository");
-    const { eventsRepository } = await import("@/lib/repositories/eventsRepository");
+    const queue = await IndexedDBHelper.getQueue();
+    if (queue.length === 0) return;
 
     for (const item of queue) {
-      try {
-        console.log(`Executing synced action: ${item.actionType} (${item.id})`);
-        
-        switch (item.actionType) {
-          case "ORDER_CREATE": {
-            await ordersRepository.create(item.payload as Omit<Order, "id" | "orderNumber" | "status" | "risk">);
-            break;
-          }
-          
-          case "ORDER_STATUS_UPDATE": {
-            const payload = item.payload as { id?: string; orderNumber?: string; changes?: Partial<Order> };
-            await ordersRepository.updateOrder(payload.id || payload.orderNumber || "", payload.changes || {});
-            break;
-          }
-
-          case "CUSTOMER_CREATE": {
-            const { customersRepository } = await import("@/lib/repositories/customersRepository");
-            await customersRepository.create(item.payload as Omit<import('@/lib/repositories/customersRepository').Customer, "customerNumber" | "prefComm" | "risk">);
-            break;
-          }
-          
-          case "CUSTOMER_UPDATE": {
-            const { customersRepository } = await import("@/lib/repositories/customersRepository");
-            const payload = item.payload as { id: string; changes: Partial<import('@/lib/repositories/customersRepository').Customer> };
-            await customersRepository.updateCustomer(payload.id, payload.changes);
-            break;
-          }
-          
-          case "MATERIAL_BOOKING": {
-            await inventoryRepository.createMovement(item.payload as CreateStockMovementInput);
-            break;
-          }
-          
-          case "TIME_BOOKING": {
-            await eventsRepository.addEvent(item.payload as import('../repositories/eventsRepository').StatusEvent);
-            break;
-          }
-          
-          case "INQUIRY_CREATE": {
-            const { inquiriesRepository } = await import("@/lib/repositories/inquiriesRepository");
-            await inquiriesRepository.create(item.payload as Parameters<typeof inquiriesRepository.create>[0]);
-            break;
-          }
-          case "INQUIRY_UPDATE_STATUS": {
-            const { inquiriesRepository } = await import("@/lib/repositories/inquiriesRepository");
-            const payload = item.payload as { id: string; status: Parameters<typeof inquiriesRepository.updateStatus>[1] };
-            await inquiriesRepository.updateStatus(payload.id, payload.status);
-            break;
-          }
-          case "INQUIRY_UPDATE_PRICING": {
-            const { inquiriesRepository } = await import("@/lib/repositories/inquiriesRepository");
-            const payload = item.payload as { id: string; pricing: Parameters<typeof inquiriesRepository.updatePricing>[1] };
-            await inquiriesRepository.updatePricing(payload.id, payload.pricing);
-            break;
-          }
-          case "APP_KVP_CREATE":
-          case "BUSINESS_KVP_CREATE": {
-            // Mock backend sync for now
-            console.log("Mocking backend sync for KVP:", item.payload);
-            await new Promise(resolve => setTimeout(resolve, 300));
-            break;
-          }
-        }
-        
-        // Remove item from queue on success
-        await IndexedDBHelper.removeFromQueue(item.id);
-        console.log(`Action ${item.id} successfully synced and deleted from queue.`);
-        
-      } catch (err) {
-        console.error(`Failed to sync queued item ${item.id}:`, err);
-        // In a live system, we would handle retry limits or mark as error.
-        // For our offline-first LWW prototype, we continue to prevent queue blockage.
-        await IndexedDBHelper.removeFromQueue(item.id);
-      }
+      console.warn(`NOT_AVAILABLE: queued ${item.actionType} action ${item.id} remains pending until a secure command contract exists.`);
     }
 
-    // Dispatch completion events
     if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event("kreile-sync-queue-updated"));
-      window.dispatchEvent(new CustomEvent("kreile-sync-success", { detail: { count: queue.length } }));
-      window.dispatchEvent(new Event("storage")); // force layout state sync
+      window.dispatchEvent(new CustomEvent("kreile-sync-success", { detail: { count: 0, blockedCount: queue.length } }));
     }
-
-    console.log("✅ Offline sync queue completed successfully.");
   }
 };
 

@@ -1,4 +1,4 @@
-export type RiskLevel = "green" | "yellow" | "orange" | "red" | "blocked";
+export type RiskLevel = "green" | "yellow" | "orange" | "red" | "blocked" | "unknown";
 
 export interface RiskConfig {
   risk: RiskLevel;
@@ -47,6 +47,15 @@ export const RISK_LEVEL_CONFIGS: Record<RiskLevel, RiskConfig> = {
     textColor: "text-kreile-muted",
     accentColor: "#475569"
   },
+  unknown: {
+    risk: "unknown",
+    label: "Termin nicht erfasst",
+    badgeClass: "bg-slate-100 text-slate-600 border-slate-200",
+    cardClass: "border-slate-300 bg-slate-50 hover:shadow-md border-l-4 transition-all",
+    leftBorderClass: "border-l-slate-500",
+    textColor: "text-slate-600",
+    accentColor: "#64748b"
+  },
   green: {
     risk: "green",
     label: "Im Plan",
@@ -59,6 +68,6 @@ export const RISK_LEVEL_CONFIGS: Record<RiskLevel, RiskConfig> = {
 };
 
 export function getRiskConfig(risk: RiskLevel | string): RiskConfig {
-  const norm = (risk || "green").toLowerCase() as RiskLevel;
-  return RISK_LEVEL_CONFIGS[norm] || RISK_LEVEL_CONFIGS.green;
+  const norm = (risk || "unknown").toLowerCase() as RiskLevel;
+  return RISK_LEVEL_CONFIGS[norm] || RISK_LEVEL_CONFIGS.unknown;
 }

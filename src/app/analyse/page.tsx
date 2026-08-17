@@ -1,7 +1,6 @@
-import AnalysePage from '@/features/analyse/AnalysePage';
+import { FoundationUnavailable } from "@/components/foundation/FoundationUnavailable";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-export default function Page() {
-  return <AnalysePage />;
-}
+export default function AnalysePage() { return <FoundationUnavailable />; }

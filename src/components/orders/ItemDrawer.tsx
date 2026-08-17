@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { X, Save, Box, Trash2, Tag } from 'lucide-react';
 import { PriceLinesEditor } from './PriceLinesEditor';
-import { createItemDb, updateItemDb, deleteItemDb, type ItemMutationPayload } from '@/app/actions/items.actions';
 import type { getOrderWithDetails } from '@/lib/repositories/orderQueries';
 
 type OrderDetails = NonNullable<Awaited<ReturnType<typeof getOrderWithDetails>>>;
@@ -56,54 +55,11 @@ function toItemForm(item: EditableOrderItem | undefined): ItemFormData {
   };
 }
 
-export function ItemDrawer({ orderId, itemId, existingItems, onClose, onSaved }: ItemDrawerProps) {
+export function ItemDrawer({ orderId, itemId, existingItems, onClose }: ItemDrawerProps) {
   const isNew = itemId === 'new';
   const existingItem = isNew ? null : existingItems.find(i => i.id === itemId);
 
-  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<ItemFormData>(() => toItemForm(existingItem ?? undefined));
-
-  const handleSave = async () => {
-    setLoading(true);
-    
-    const payload: ItemMutationPayload = {
-      orderId,
-      name: formData.name,
-      quantity: formData.quantity,
-      material: formData.material,
-      surfaceRequested: formData.surfaceRequested,
-      stationSequence: formData.stationSequence,
-      internalNotes: formData.internalNotes,
-    };
-
-    if (isNew) {
-      await createItemDb({ ...payload, currentStationId: 'wareneingang' });
-    } else if (existingItem) {
-      await updateItemDb(existingItem.id, payload);
-    } else {
-      setLoading(false);
-      return;
-    }
-    
-    setLoading(false);
-    onSaved();
-    onClose();
-  };
-
-  const handleDelete = async () => {
-    if (isNew || !existingItem) return;
-    if (confirm('Dieses Teil wirklich löschen?')) {
-      setLoading(true);
-      await deleteItemDb(existingItem.id);
-      setLoading(false);
-      onSaved();
-      onClose();
-    }
-  };
-
-  const applyTemplate = (sequence: string[]) => {
-    setFormData(prev => ({ ...prev, stationSequence: sequence }));
-  };
 
   if (!itemId) return null;
 
@@ -128,6 +84,7 @@ export function ItemDrawer({ orderId, itemId, existingItems, onClose, onSaved }:
               <label className="text-xs uppercase tracking-wider -() mb-1 block">Bezeichnung</label>
               <input 
                 value={formData.name}
+                disabled
                 onChange={e => setFormData({...formData, name: e.target.value})}
                 className="w-full p-3 -() border -() rounded-lg text-sm outline-none focus:-()"
                 placeholder="z.B. Kotflügel Vorne Links"
@@ -140,6 +97,7 @@ export function ItemDrawer({ orderId, itemId, existingItems, onClose, onSaved }:
                   type="number"
                   min="1"
                   value={formData.quantity}
+                  disabled
                   onChange={e => setFormData({...formData, quantity: parseInt(e.target.value) || 1})}
                   className="w-full p-3 -() border -() rounded-lg text-sm outline-none focus:-()"
                 />
@@ -148,6 +106,7 @@ export function ItemDrawer({ orderId, itemId, existingItems, onClose, onSaved }:
                 <label className="text-xs uppercase tracking-wider -() mb-1 block">Material (Ausgang)</label>
                 <input 
                   value={formData.material}
+                  disabled
                   onChange={e => setFormData({...formData, material: e.target.value})}
                   className="w-full p-3 -() border -() rounded-lg text-sm outline-none focus:-()"
                   placeholder="z.B. Stahl"
@@ -159,6 +118,7 @@ export function ItemDrawer({ orderId, itemId, existingItems, onClose, onSaved }:
               <label className="text-xs uppercase tracking-wider -() mb-1 block">Zielfinish (Oberfläche)</label>
               <input 
                 value={formData.surfaceRequested}
+                disabled
                 onChange={e => setFormData({...formData, surfaceRequested: e.target.value})}
                 className="w-full p-3 -() border -() rounded-lg text-sm outline-none focus:-()"
                 placeholder="z.B. Zink Blau"
@@ -172,7 +132,7 @@ export function ItemDrawer({ orderId, itemId, existingItems, onClose, onSaved }:
               {WORKFLOW_TEMPLATES.map((tmpl, i) => (
                 <button 
                   key={i} 
-                  onClick={() => applyTemplate(tmpl.sequence)}
+                  disabled
                   className="text-xs px-3 py-1.5 rounded-md -() border -() hover:-() transition-colors -()"
                 >
                   {tmpl.label}
@@ -197,6 +157,7 @@ export function ItemDrawer({ orderId, itemId, existingItems, onClose, onSaved }:
              <label className="text-xs uppercase tracking-wider -() mb-1 block">Interne Notizen</label>
              <textarea 
                 value={formData.internalNotes}
+                disabled
                 onChange={e => setFormData({...formData, internalNotes: e.target.value})}
                 className="w-full p-3 -() border -() rounded-lg text-sm outline-none focus:-() min-h-[100px]"
                 placeholder="Besonderheiten für die Produktion..."
@@ -217,20 +178,19 @@ export function ItemDrawer({ orderId, itemId, existingItems, onClose, onSaved }:
         <div className="p-6 border-t -() -() flex gap-3">
           {!isNew && (
             <button 
-              onClick={handleDelete}
-              disabled={loading}
+              disabled
               className="p-3 -() -() rounded-xl hover:bg-opacity-80 transition-colors"
-              title="Teil löschen"
+              title="Teil löschen (NOT_AVAILABLE)"
             >
               <Trash2 className="w-5 h-5"/>
+              <span className="text-xs">Löschen (NOT_AVAILABLE)</span>
             </button>
           )}
           <button 
-            onClick={handleSave} 
-            disabled={loading || !formData.name}
+            disabled
             className="flex-1 flex items-center justify-center gap-2 -() -() py-3 rounded-xl font-medium hover:bg-opacity-90 disabled:opacity-50 transition-all"
           >
-            {loading ? "Speichern..." : <><Save className="w-5 h-5"/> {isNew ? 'Anlegen' : 'Speichern'}</>}
+            <><Save className="w-5 h-5"/> {isNew ? 'Anlegen' : 'Speichern'} (NOT_AVAILABLE)</>
           </button>
         </div>
 

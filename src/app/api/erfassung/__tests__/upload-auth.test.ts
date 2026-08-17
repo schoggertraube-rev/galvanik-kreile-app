@@ -1,63 +1,23 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-// Negative authorization tests for B4 (OCR/photo upload routes).
-// Prove fail-closed: an unauthorized caller gets 401 and never reaches storage.
+type UploadHandler = (request: Request) => Promise<Response>;
 
-const mockCheckAppAuthorization = vi.fn();
-const mockUpload = vi.fn();
-const mockCreateSignedUrl = vi.fn();
+const uploadRoutes: Array<{ name: string; load: () => Promise<unknown> }> = [
+  { name: "scan-upload", load: async () => (await import("@/app/api/erfassung/scan-upload/route")).POST },
+  { name: "item-photo-upload", load: async () => (await import("@/app/api/erfassung/item-photo-upload/route")).POST },
+];
 
-vi.mock("@supabase/supabase-js", () => ({
-  createClient: vi.fn(() => ({
-    storage: {
-      from: vi.fn(() => ({
-        upload: mockUpload,
-        createSignedUrl: mockCreateSignedUrl,
-      })),
-    },
-  })),
-}));
+describe("erfassung upload routes — quarantine", () => {
+  it.each(uploadRoutes)("returns 503 before parsing the upload body: $name", async ({ load }) => {
+    const formData = vi.fn(() => { throw new Error("formData must not be read"); });
+    const request = { formData } as unknown as Request;
+    const handler = (await load()) as UploadHandler;
 
-vi.mock("@/lib/server/authHelper", () => ({
-  checkAppAuthorization: mockCheckAppAuthorization,
-}));
+    const response = await handler(request);
 
-vi.mock("@/db", () => ({ db: { insert: vi.fn(), select: vi.fn(), update: vi.fn() } }));
-vi.mock("@/db/schema", () => ({ scanUploads: { id: "scan_uploads.id" } }));
-vi.mock("drizzle-orm", () => ({ eq: vi.fn((c: unknown, v: unknown) => ({ c, v })) }));
-vi.mock("@/lib/ocr/geminiOcr", () => ({ extractDocumentData: vi.fn() }));
-
-const unauthorized = { ok: false as const, error: "UNAUTHORIZED", message: "Nicht angemeldet" };
-
-function postRequest(url: string) {
-  return new Request(url, { method: "POST" });
-}
-
-describe("erfassung upload routes — fail-closed authorization", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockCheckAppAuthorization.mockResolvedValue(unauthorized);
-  });
-
-  it("scan-upload returns 401 and never touches storage without a write role", async () => {
-    const { POST } = await import("@/app/api/erfassung/scan-upload/route");
-
-    const res = await POST(postRequest("http://test/api/erfassung/scan-upload"));
-
-    expect(res.status).toBe(401);
-    await expect(res.json()).resolves.toEqual({ error: "UNAUTHORIZED" });
-    expect(mockCheckAppAuthorization).toHaveBeenCalledWith("write");
-    expect(mockUpload).not.toHaveBeenCalled();
-  });
-
-  it("item-photo-upload returns 401 and never touches storage without a write role", async () => {
-    const { POST } = await import("@/app/api/erfassung/item-photo-upload/route");
-
-    const res = await POST(postRequest("http://test/api/erfassung/item-photo-upload"));
-
-    expect(res.status).toBe(401);
-    await expect(res.json()).resolves.toEqual({ error: "UNAUTHORIZED" });
-    expect(mockCheckAppAuthorization).toHaveBeenCalledWith("write");
-    expect(mockUpload).not.toHaveBeenCalled();
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({ error: "NOT_AVAILABLE" });
+    expect(formData).not.toHaveBeenCalled();
   });
 });

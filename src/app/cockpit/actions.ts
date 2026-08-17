@@ -2,10 +2,22 @@
 
 import {
   createAuthorizedDataClient,
-  createAuthorizedDataContext,
   createClient,
 } from '@/lib/supabase/server';
+import { resolveAuthorization } from '@/lib/server/authorization';
+import { APP_TENANT_ID } from '@/lib/server/appSession';
 import type { KontextDaten } from '@/lib/whatif/engine';
+
+async function requireCockpitRead(): Promise<void> {
+  const result = await resolveAuthorization();
+  if (
+    !result.ok ||
+    result.data.tenantId !== APP_TENANT_ID ||
+    (result.data.role !== 'admin' && result.data.role !== 'developer')
+  ) {
+    throw new Error('NOT_AVAILABLE: Cockpit-Datenzugriff erfordert kanonische Admin- oder Entwickler-Autorisierung.');
+  }
+}
 
 export interface EngpassStation {
   kostenstelle_id: string;
@@ -118,6 +130,7 @@ export interface KundenDetailAuftrag {
 }
 
 export async function getCockpitKpis() {
+  await requireCockpitRead();
   const supabase = await createClient();
   
   // v_monatsergebnis for current month
@@ -183,6 +196,7 @@ export async function getCockpitKpis() {
 }
 
 export async function getTopKunden(limit = 10): Promise<KundeClvKachelRow[]> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_kunde_clv')
@@ -198,6 +212,7 @@ export async function getTopKunden(limit = 10): Promise<KundeClvKachelRow[]> {
 }
 
 export async function getInaktiveKunden(): Promise<KundeClvKachelRow[]> {
+  await requireCockpitRead();
   const supabase = await createClient();
   
   const nineMonthsAgo = new Date();
@@ -217,6 +232,7 @@ export async function getInaktiveKunden(): Promise<KundeClvKachelRow[]> {
 }
 
 export async function getEngpassDaten(): Promise<EngpassStation[]> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_engpass')
@@ -231,6 +247,7 @@ export async function getEngpassDaten(): Promise<EngpassStation[]> {
 }
 
 export async function getAgingDaten(): Promise<AgingData[]> {
+  await requireCockpitRead();
   const supabase = await createClient();
   
   const { data, error } = await supabase
@@ -269,6 +286,7 @@ export async function getAgingDaten(): Promise<AgingData[]> {
 }
 
 export async function getAuftragDbRanking(limit = 10): Promise<AuftragDbRankingRow[]> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_auftrag_db')
@@ -285,6 +303,7 @@ export async function getAuftragDbRanking(limit = 10): Promise<AuftragDbRankingR
 }
 
 export async function getWhatIfKontext(): Promise<KontextDaten> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const privileged = await createAuthorizedDataClient('read');
   
@@ -378,6 +397,7 @@ export async function getWhatIfKontext(): Promise<KontextDaten> {
 }
 
 export async function getEngpassDetails(station: string): Promise<EngpassDetails> {
+  await requireCockpitRead();
   const supabase = await createClient();
   
   const { data: waitingOrders } = await supabase.from('orders')
@@ -393,12 +413,14 @@ export async function getEngpassDetails(station: string): Promise<EngpassDetails
 }
 
 export async function getAuftragDbDetails(orderId: string): Promise<AuftragDbDetails | null> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const { data } = await supabase.from('v_auftrag_db').select('*').eq('order_id', orderId).single();
   return data;
 }
 
 export async function getForecastDaten(): Promise<ForecastDaten> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const privileged = await createAuthorizedDataClient('read');
   const { data: results, error } = await supabase.from('v_monatsergebnis')
@@ -427,6 +449,7 @@ export async function getForecastDaten(): Promise<ForecastDaten> {
 }
 
 export async function getKundenDetails(customerId: string): Promise<{ clv: KundeClvDetail | null; letzeAuftraege: KundenDetailAuftrag[] }> {
+  await requireCockpitRead();
   const supabase = await createClient();
   
   const { data: clv } = await supabase.from('v_kunde_clv').select('*').eq('customer_id', customerId).single();
@@ -456,6 +479,7 @@ export async function getKundenDetails(customerId: string): Promise<{ clv: Kunde
 
 
 export async function getAgingRechnungen(bucket: string): Promise<AgingInvoiceRow[]> {
+  await requireCockpitRead();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('v_aging')
@@ -471,6 +495,7 @@ export async function getAgingRechnungen(bucket: string): Promise<AgingInvoiceRo
 }
 
 export async function getAktiveWarnungen(): Promise<ActiveWarning[]> {
+  await requireCockpitRead();
   const supabase = await createAuthorizedDataClient('read');
   const { data, error } = await supabase
     .from('warning_event')
@@ -497,46 +522,17 @@ export async function getAktiveWarnungen(): Promise<ActiveWarning[]> {
 }
 
 export async function dismissWarnung(id: string, begruendung: string) {
-  if (!begruendung || begruendung.length < 10) {
-    throw new Error("Begründung muss mindestens 10 Zeichen lang sein.");
-  }
-  
-  const { client: supabase, authorization } = await createAuthorizedDataContext('write');
-  const userId = authorization.userId;
-  
-  // Set suppress_bis to 7 days in future
-  const suppressDate = new Date();
-  suppressDate.setDate(suppressDate.getDate() + 7);
-
-  const { error } = await supabase
-    .from('warning_event')
-    .update({
-      dismissed_am: new Date().toISOString(),
-      dismissed_von: userId,
-      begruendung: begruendung,
-      suppress_bis: suppressDate.toISOString()
-    })
-    .eq('id', id)
-    .eq('tenant_id', authorization.tenantId);
-
-  if (error) {
-    console.error("Error dismissWarnung:", error.message, error.details, error.hint);
-    throw new Error(error.message);
-  }
-  return true;
+  void id;
+  void begruendung;
+  return { ok: false as const, error: "NOT_AVAILABLE" as const, message: "NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt." };
 }
 
 export async function refreshWarnungen() {
-  const supabase = await createAuthorizedDataClient('write');
-  const { error } = await supabase.rpc('fn_compute_warnings', { p_tenant: 'galvanik-kreile' });
-  if (error) {
-    console.error("Error refreshWarnungen:", error.message, error.details, error.hint);
-    return false;
-  }
-  return true;
+  return { ok: false as const, error: "NOT_AVAILABLE" as const, message: "NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt." };
 }
 
 export async function getAktiverJahresplan(jahr: number) {
+  await requireCockpitRead();
   const supabase = await createAuthorizedDataClient('read');
   const { data, error } = await supabase
     .from('forecast_version')
@@ -555,46 +551,12 @@ export async function getAktiverJahresplan(jahr: number) {
 }
 
 export async function speichereJahresplan(jahr: number, monate: Record<string, number>) {
-  const { client: supabase, authorization } = await createAuthorizedDataContext('write');
-  
-  await supabase
-    .from('forecast_version')
-    .update({ ist_aktiv: false })
-    .eq('tenant_id', authorization.tenantId)
-    .eq('jahr', jahr)
-    .eq('version_typ', 'plan')
-    .eq('ist_aktiv', true);
-    
-  const userId = authorization.userId;
-
-  const { error } = await supabase
-    .from('forecast_version')
-    .insert({
-      tenant_id: authorization.tenantId,
-      jahr,
-      version_typ: 'plan',
-      ist_aktiv: true,
-      erstellt_von: userId,
-      werte: { monate }
-    });
-
-  if (error) {
-    console.error("Error speichereJahresplan:", error);
-    throw new Error(error.message);
-  }
-  return true;
+  void jahr;
+  void monate;
+  return { ok: false as const, error: "NOT_AVAILABLE" as const, message: "NOT_AVAILABLE: Jahresplan-Speichern benötigt den W3-Command-Vertrag." };
 }
 
-export async function savePhoneNote(data: { customer_id?: string, caller_name?: string, raw_text: string, category: string, urgency: string }) {
-  const supabase = await createClient();
-  const { error } = await supabase.from('phone_notes').insert({
-    tenant_id: 'galvanik-kreile',
-    customer_id: data.customer_id || null,
-    caller_name: data.caller_name || '',
-    raw_text: data.raw_text,
-    category: data.category,
-    urgency: data.urgency,
-    status: 'open'
-  });
-  if (error) throw error;
+export async function savePhoneNote(_data: { customer_id?: string, caller_name?: string, raw_text: string, category: string, urgency: string }) {
+  void _data;
+  return { ok: false as const, error: "NOT_AVAILABLE" as const, message: "NOT_AVAILABLE: Sicherer W3-Command-Vertrag fehlt." };
 }

@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
+import { notAvailableResponse } from "@/lib/server/quarantine";
 
 export async function GET() {
-  return NextResponse.json({ hasDeadlines: true });
+  return notAvailableResponse();
 }

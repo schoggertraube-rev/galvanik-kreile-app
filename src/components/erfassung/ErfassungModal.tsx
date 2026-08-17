@@ -52,7 +52,10 @@ export function ErfassungModal() {
         {/* Header (optional, if flows provide their own headers this can be minimized) */}
         <div className="absolute top-4 right-4 z-10">
           <button
-            onClick={closeErfassung}
+            type="button"
+            onClick={() => { if (!isDirty) closeErfassung(); }}
+            disabled={isDirty}
+            aria-label={isDirty ? "Speichern oder Prüfen läuft" : "Erfassung schließen"}
             className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-500 hover:text-gray-700 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />

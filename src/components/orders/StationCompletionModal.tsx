@@ -3,17 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { X, Plus, Minus, Search, AlertTriangle } from "lucide-react";
 import { inventoryRepository, InventoryItem } from "@/lib/repositories/inventoryRepository";
-import { eventsRepository } from "@/lib/repositories/eventsRepository";
-import { ordersRepository } from "@/lib/repositories/ordersRepository";
 import { getNextStation } from "@/lib/stations/nextStation";
 import { computeStationCost, ConsumableUse } from "@/lib/costs/stationCost";
-import { createStatusEvent } from "@/app/actions/status-events.actions";
 import { STATION_CONFIGS } from "@/constants/stations";
 import { DEFAULT_HOURLY_RATE_EUR } from "@/constants/pricing";
 
 export function StationCompletionModal({ 
   orderId, 
-  customerId, 
   currentStationId, 
   onClose 
 }: { 
@@ -75,56 +71,6 @@ export function StationCompletionModal({
     DEFAULT_HOURLY_RATE_EUR,
     multiplier
   );
-
-  const canSubmit = minutes > 0 || bookedMaterials.length > 0;
-
-  const handleSubmit = async () => {
-    if (!canSubmit) return;
-    try {
-      for (const mat of bookedMaterials) {
-        await inventoryRepository.createMovement({
-          inventoryItemId: mat.inventoryItemId,
-          movementType: "consumption",
-          quantity: mat.quantity,
-          orderId: orderId,
-          reason: `Verbrauchsbuchung in ${currentStationLabel}`,
-        });
-      }
-
-      await eventsRepository.addEvent({
-        orderId, customerId,
-        eventType: "COSTS_BOOKED",
-        metadata: { minutes, taskType, note, multiplier, materials: bookedMaterials.map(m => ({ id: m.inventoryItemId, qty: m.quantity })) }
-      });
-
-      await eventsRepository.addEvent({
-        orderId, customerId,
-        eventType: "STATION_COMPLETED",
-        metadata: { stationId: currentStationId }
-      });
-      createStatusEvent({ orderId, eventType: "STATION_COMPLETED", notes: `Station: ${currentStationId}` }).catch(e => console.warn(e));
-
-      if (nextStation) {
-        await ordersRepository.updateOrder(orderId, { currentStationId: nextStation, station: nextStation, status: "ready" });
-        await eventsRepository.addEvent({
-          orderId, customerId,
-          eventType: "STATION_READY",
-          metadata: { stationId: nextStation }
-        });
-        createStatusEvent({ orderId, eventType: "STATION_READY", notes: `Station: ${nextStation}` }).catch(e => console.warn(e));
-      } else {
-        await ordersRepository.updateOrder(orderId, { status: "shipped", currentStationId: "warenausgang", station: "warenausgang" });
-      }
-
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("storage"));
-      }
-
-      onClose();
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex justify-center items-center z-50 p-4">
@@ -279,10 +225,11 @@ export function StationCompletionModal({
         {/* Footer */}
         <div className="p-6 border-t border-neutral-gray-100 flex justify-between items-center bg-bg-app-soft">
           <Button variant="ghost" onClick={onClose}>Abbrechen</Button>
+          <p className="text-xs text-text-muted">NOT_AVAILABLE: Kombinierter Stationsabschluss wird erst mit atomarem Command aktiviert.</p>
           <Button 
-            disabled={!canSubmit} 
+            disabled
+            title="NOT_AVAILABLE: Nichtatomarer Ablauf ist gesperrt"
             className="bg-navy-700 hover:bg-navy-700 text-white font-bold" 
-            onClick={handleSubmit}
           >
             {nextStation ? `Abschließen und zu ${nextStationLabel} ›` : "Auftrag versendet markieren"}
           </Button>

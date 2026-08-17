@@ -1,10 +1,8 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Minus, X, Search, Package, Check } from "lucide-react";
+import { Plus, Minus, X, Search, Package } from "lucide-react";
 import { inventoryRepository, InventoryItem } from "@/lib/repositories/inventoryRepository";
-import { eventsRepository } from "@/lib/repositories/eventsRepository";
-import { createStatusEvent } from "@/app/actions/status-events.actions";
 
 interface MaterialBooking {
   id: string;
@@ -13,12 +11,11 @@ interface MaterialBooking {
   unit: string;
 }
 
-export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orderId: string, customerId?: string, onClose: () => void }) {
+export function OrderMaterialTimeDrawer({ orderId, onClose }: { orderId: string, customerId?: string, onClose: () => void }) {
   const [minutes, setMinutes] = useState(45);
   const [allConsumables, setAllConsumables] = useState<InventoryItem[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [showSearchList, setShowSearchList] = useState(false);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Material state representing currently selected materials to book
   const [bookedMaterials, setBookedMaterials] = useState<MaterialBooking[]>([
@@ -64,57 +61,6 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
     setBookedMaterials(newMats.filter(m => m.qty > 0));
   };
 
-  const handleSubmit = async () => {
-    try {
-      // 1. Book and subtract each material from inventory item stock
-      for (const mat of bookedMaterials) {
-        if (mat.qty <= 0) continue;
-        
-        await inventoryRepository.createMovement({
-          inventoryItemId: mat.id,
-          movementType: "consumption",
-          quantity: mat.qty,
-          orderId: orderId,
-          reason: `Verbrauchsbuchung in Auftrag ${orderId}`,
-        });
-
-        // Add timeline status event for stock deduction
-        await eventsRepository.addEvent({
-          orderId: orderId,
-          customerId: customerId,
-          eventType: "COSTS_BOOKED",
-          metadata: { description: `MATERIAL_CONSUMED: ${mat.qty}x ${mat.name}`, materialId: mat.id, quantity: mat.qty, unit: mat.unit }
-        });
-        createStatusEvent({ orderId, eventType: "COSTS_BOOKED", notes: `MATERIAL_CONSUMED: ${mat.qty}x ${mat.name}` }).catch(e => console.warn(e));
-      }
-
-      // 2. Book time and add time logging timeline event
-      if (minutes > 0) {
-        await eventsRepository.addEvent({
-          orderId: orderId,
-          customerId: customerId,
-          eventType: "COSTS_BOOKED",
-          metadata: { description: `WORK_TIME_LOGGED: ${minutes} Minuten`, minutes }
-        });
-        createStatusEvent({ orderId, eventType: "COSTS_BOOKED", notes: `WORK_TIME_LOGGED: ${minutes} Minuten` }).catch(e => console.warn(e));
-      }
-
-      setSuccessMsg("Erfolgreich gebucht! Aktualisiere Cockpit...");
-      
-      // Dispatch custom storage event for header / other widgets to instantly repaint
-      if (typeof window !== "undefined") {
-        window.dispatchEvent(new Event("storage"));
-      }
-
-      setTimeout(() => {
-        onClose();
-      }, 1000);
-
-    } catch (e) {
-      console.error("Fehler beim Buchen des Verbrauchs", e);
-    }
-  };
-
   return (
     <div className="fixed inset-0 bg-black/50 flex justify-end z-50 animate-in fade-in duration-200">
       <div className="w-full max-w-md bg-white h-full shadow-2xl flex flex-col animate-in slide-in-from-right-full duration-300">
@@ -129,13 +75,6 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
         </div>
         
         {/* Success Alert Banner */}
-        {successMsg && (
-          <div className="bg-success-green-soft text-success-green border-y border-success-green py-3.5 px-6 font-bold text-sm flex items-center gap-2">
-            <Check className="h-5 w-5 text-success-green animate-bounce" />
-            {successMsg}
-          </div>
-        )}
-
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
           
           {/* Time Picker Stepper */}
@@ -236,10 +175,11 @@ export function OrderMaterialTimeDrawer({ orderId, customerId, onClose }: { orde
 
         {/* Footer actions */}
         <div className="p-6 border-t border-neutral-gray-100 bg-bg-app-soft">
+          <p className="mb-3 text-xs text-text-muted">NOT_AVAILABLE: Material- und Zeitbuchung wird erst mit atomarem Command aktiviert.</p>
           <Button 
             className="w-full h-15 text-base font-black rounded-2xl bg-navy-700 hover:bg-navy-700 text-white shadow-xl active:scale-95 transition-all cursor-pointer" 
-            onClick={handleSubmit}
-            disabled={successMsg !== null || (bookedMaterials.length === 0 && minutes === 0)}
+            disabled
+            title="NOT_AVAILABLE: Nichtatomare Buchung ist gesperrt"
           >
             Buchen & Speichern
           </Button>

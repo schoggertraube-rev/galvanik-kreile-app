@@ -1,9 +1,34 @@
 "use server";
 
-import { getOperationalOrders, getOperationalOrdersByStation, getOperationalOrdersReadyForStation, startProcessingStationService } from "@/lib/server/operationalOrders";
-import { checkAppAuth } from "@/lib/server/authHelper";
+import { unstable_noStore as noStore } from "next/cache";
+import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
+import {
+  readTenantOrderStationReceipt,
+  readTenantStationOrders,
+  type OrderStationReceiptReadInput,
+} from "@/lib/server/orderStationRead";
+import type { OrderStationTransitionReceipt } from "@/lib/server/commands/orderStationCommand";
+import type {
+  CreateOrderIntakeInput,
+  OrderIntakeCommandResult,
+  OrderIntakeReceipt,
+} from "@/lib/server/commands/orderIntakeCommand";
+import type {
+  OrderIntakeCustomerOption,
+  OrderIntakeCustomerSearchInput,
+  OrderIntakeReceiptReadInput,
+} from "@/lib/server/orderIntakeRead";
+import type {
+  FinalizeOrderStationAttachmentInput,
+  GetOrderStationAttachmentOriginalInput,
+  GetOrderStationAttachmentsInput,
+  OrderStationAttachmentResult,
+  ReserveOrderStationAttachmentInput,
+} from "@/lib/server/orderStationAttachment";
+import type { EvidenceReadRecord, ReadEvidenceTargetInput } from "@/lib/server/evidenceRead";
+import type { OperationalOrder } from "@/lib/types/operationalOrder";
 
-export type WarendurchlaufOrder = Awaited<ReturnType<typeof getOperationalOrders>>[number];
+export type WarendurchlaufOrder = OperationalOrder;
 
 export interface WarendurchlaufKpiData {
   termintreue: number;
@@ -16,118 +41,307 @@ export interface WarendurchlaufKpiData {
 
 export type WarendurchlaufActionResult<T> =
   | { ok: true; data: T }
-  | { ok: false; error: "AUTH_ERROR" | "QUERY_ERROR"; message: string };
+  | { ok: false; error: "AUTH_ERROR" | "FORBIDDEN" | "QUERY_ERROR" | "UNAVAILABLE" | "NOT_AVAILABLE"; message: string };
 
 export async function getStationOrders(stationId: string): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
-  try {
-    const orders = await getOperationalOrdersByStation(stationId);
-    return { ok: true, data: orders };
-  } catch (error) {
-    return { ok: false, error: "QUERY_ERROR", message: String(error) };
-  }
+  void stationId;
+  return { ok: false, error: "NOT_AVAILABLE", message: "NOT_AVAILABLE: Generische Stationslisten sind nicht verfügbar." };
 }
 
 export async function getStationReadyOrders(stationId: string): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
+  void stationId;
+  return { ok: false, error: "NOT_AVAILABLE", message: "NOT_AVAILABLE: Generische Stationslisten sind nicht verfügbar." };
+}
+
+async function getFixedStationOrders(station: "wareneingang" | "galvanik"): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
+  noStore();
+  let authorization;
   try {
-    const orders = await getOperationalOrdersReadyForStation(stationId);
-    return { ok: true, data: orders };
-  } catch (error) {
-    return { ok: false, error: "QUERY_ERROR", message: String(error) };
+    authorization = await resolveAuthorization();
+  } catch {
+    return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+  }
+
+  if (!authorization.ok) {
+    if (authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
+      return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+    }
+    return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  }
+
+  if (!authorization.data.permissions.includes("perm_view_leitstand")) {
+    return { ok: false, error: "FORBIDDEN", message: "Stationsliste ist nicht erlaubt." };
+  }
+
+  try {
+    return { ok: true, data: await readTenantStationOrders(authorization.data, station) };
+  } catch {
+    return { ok: false, error: "QUERY_ERROR", message: "Stationsliste konnte nicht sicher geladen werden." };
   }
 }
 
-export async function startProcessingStation(orderId: string, stationId: string) {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
+export async function getWareneingangOrdersAction(): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
+  return getFixedStationOrders("wareneingang");
+}
+
+export async function getGalvanikOrdersAction(): Promise<WarendurchlaufActionResult<WarendurchlaufOrder[]>> {
+  return getFixedStationOrders("galvanik");
+}
+
+export async function getOrderStationReceiptAction(
+  input: OrderStationReceiptReadInput,
+): Promise<WarendurchlaufActionResult<OrderStationTransitionReceipt | null>> {
+  noStore();
+  let authorization;
   try {
-    const res = await startProcessingStationService(orderId, stationId);
-    return { ok: true, data: res };
-  } catch (error) {
-    return { ok: false, error: "QUERY_ERROR", message: String(error) };
+    authorization = await resolveAuthorization();
+  } catch {
+    return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+  }
+
+  if (!authorization.ok) {
+    if (authorization.reason === "AUTHORIZATION_UNAVAILABLE") {
+      return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+    }
+    return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  }
+
+  if (!authorization.data.permissions.includes("perm_view_leitstand")) {
+    return { ok: false, error: "FORBIDDEN", message: "Stationsbeleg ist nicht erlaubt." };
+  }
+
+  try {
+    return {
+      ok: true,
+      data: await readTenantOrderStationReceipt(authorization.data, input),
+    };
+  } catch {
+    return { ok: false, error: "QUERY_ERROR", message: "Stationsbeleg konnte nicht sicher geladen werden." };
   }
 }
 
-export async function getWarendurchlaufKPIs(): Promise<WarendurchlaufActionResult<WarendurchlaufKpiData>> {
-  const auth = await checkAppAuth();
-  if (!auth.ok) return { ok: false, error: "AUTH_ERROR", message: auth.message };
+export async function createOrderIntakeAction(
+  input: CreateOrderIntakeInput,
+): Promise<OrderIntakeCommandResult> {
+  noStore();
+  const domain = await import("@/lib/server/commands/orderIntakeCommand");
+  return domain.createOrderIntake(input);
+}
 
+export async function searchOrderIntakeCustomersAction(
+  input: OrderIntakeCustomerSearchInput,
+): Promise<WarendurchlaufActionResult<{
+  customers: OrderIntakeCustomerOption[];
+  canCreateCustomer: boolean;
+}>> {
+  noStore();
+  const authorization = await resolveAuthorization().catch(() => null);
+  if (!authorization) {
+    return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+  }
+  if (!authorization.ok) {
+    return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
+      ? { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." }
+      : { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  }
+  if (
+    !authorization.data.permissions.includes("perm_data_orders") ||
+    !authorization.data.permissions.includes("perm_view_customers")
+  ) {
+    return { ok: false, error: "FORBIDDEN", message: "Wareneingang ist mit dieser Rolle nicht erlaubt." };
+  }
   try {
-    const allOrdersQuery = await getOperationalOrders();
-
-    const totalOrders = allOrdersQuery.length;
-    
-    // Engpass
-    const stations: Record<string, number> = {};
-    allOrdersQuery.forEach(o => {
-      if (o.status !== "completed" && o.status !== "abgeschlossen" && o.status !== "versendet") {
-        const station = o.currentStationId || "wareneingang";
-        stations[station] = (stations[station] || 0) + 1;
-      }
-    });
-    
-    let engpassStation = "Kein Engpass";
-    let maxCount = 0;
-    for (const [station, count] of Object.entries(stations)) {
-      if (count > maxCount) {
-        maxCount = count;
-        engpassStation = station;
-      }
-    }
-
-    // Offene Aufträge
-    const offene = allOrdersQuery.filter(o => o.status !== "completed" && o.status !== "abgeschlossen" && o.status !== "versendet").length;
-
-    let termintreue = 0;
-    let durchlaufzeitTage = 0;
-    
-    if (totalOrders > 0) {
-      let onTime = 0;
-      let totalDays = 0;
-      let countWithDate = 0;
-
-      allOrdersQuery.forEach(o => {
-        // Termintreue: if due date exists, and it's not red risk, or intakeDate + 10 days > now
-        if (o.dueDate && o.intakeDate) {
-          const due = new Date(o.dueDate).getTime();
-          const created = new Date(o.intakeDate).getTime();
-          const now = Date.now();
-          
-          if (o.status === "completed" || o.status === "abgeschlossen") {
-             // For completed, we don't have ist_am, so we just assume on-time if it was completed
-             onTime++;
-          } else {
-             if (now <= due) onTime++;
-          }
-          
-          const diffTime = Math.abs(now - created);
-          totalDays += diffTime / (1000 * 60 * 60 * 24);
-          countWithDate++;
-        } else {
-          // If no dates, we just skip from strict calculation
-        }
-      });
-      
-      termintreue = totalOrders > 0 ? Math.round((onTime / totalOrders) * 100) : 0;
-      durchlaufzeitTage = countWithDate > 0 ? Number((totalDays / countWithDate).toFixed(1)) : 0;
-    }
-
+    const domain = await import("@/lib/server/orderIntakeRead");
     return {
       ok: true,
       data: {
-        termintreue,
-        durchlaufzeitTage,
-        engpassStation,
-        engpassCount: maxCount,
-        offeneAuftraege: offene,
-        orders: allOrdersQuery
-      }
+        customers: await domain.searchOrderIntakeCustomers(authorization.data, input),
+        canCreateCustomer: authorization.data.permissions.includes("perm_data_customers"),
+      },
     };
-  } catch (error) {
-    console.error("Error in getWarendurchlaufKPIs:", error);
-    return { ok: false, error: "QUERY_ERROR", message: String(error) };
+  } catch {
+    return { ok: false, error: "QUERY_ERROR", message: "Kunden konnten nicht sicher geladen werden." };
   }
+}
+
+export async function getOrderIntakeReceiptAction(
+  input: OrderIntakeReceiptReadInput,
+): Promise<WarendurchlaufActionResult<OrderIntakeReceipt | null>> {
+  noStore();
+  const authorization = await resolveAuthorization().catch(() => null);
+  if (!authorization) {
+    return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
+  }
+  if (!authorization.ok) {
+    return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
+      ? { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." }
+      : { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  }
+  if (!authorization.data.permissions.includes("perm_view_leitstand")) {
+    return { ok: false, error: "FORBIDDEN", message: "Wareneingangsbeleg ist nicht erlaubt." };
+  }
+  try {
+    const domain = await import("@/lib/server/orderIntakeRead");
+    return { ok: true, data: await domain.readOrderIntakeReceipt(authorization.data, input) };
+  } catch {
+    return { ok: false, error: "QUERY_ERROR", message: "Wareneingangsbeleg konnte nicht sicher geladen werden." };
+  }
+}
+
+async function authorizeOrderStationAttachment(
+  permission: "perm_view_leitstand" | "perm_op_photos",
+): Promise<
+  | { ok: true; data: AuthorizationSnapshot }
+  | { ok: false; result: OrderStationAttachmentResult<never> }
+> {
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return {
+      ok: false,
+      result: { code: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." },
+    };
+  }
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      result: authorization.reason === "AUTHORIZATION_UNAVAILABLE"
+        ? { code: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." }
+        : { code: "UNAUTHENTICATED", message: "Sitzung ist nicht verfügbar." },
+    };
+  }
+  if (!authorization.data.permissions.includes(permission)) {
+    return {
+      ok: false,
+      result: { code: "FORBIDDEN", message: "Originalbelege sind nicht erlaubt." },
+    };
+  }
+  return { ok: true, data: authorization.data };
+}
+
+export async function getGalvanikHandoffAttachmentsAction(
+  input: GetOrderStationAttachmentsInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_view_leitstand");
+  if (!authorization.ok) return authorization.result;
+  const domain = await import("@/lib/server/orderStationAttachment");
+  const result = await domain.readOrderStationAttachments(authorization.data, input);
+  if (result.code !== "OK") return result;
+  const evidenceDomain = await import("@/lib/server/evidenceRead");
+  const evidence = await evidenceDomain.readOrderEvidenceRecords(authorization.data, input);
+  if (evidence.code !== "OK") return evidence;
+  return {
+    code: "OK" as const,
+    data: {
+      receipts: result.data,
+      evidenceRecords: evidence.data satisfies EvidenceReadRecord[],
+      canOperate: authorization.data.permissions.includes("perm_op_photos"),
+      currentActorId: authorization.data.userId,
+    },
+  };
+}
+
+export async function getGalvanikEvidenceByTargetAction(
+  input: ReadEvidenceTargetInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_view_leitstand");
+  if (!authorization.ok) return authorization.result;
+  const evidenceDomain = await import("@/lib/server/evidenceRead");
+  return evidenceDomain.readEvidenceRecordsByTarget(authorization.data, input);
+}
+
+export async function reserveGalvanikHandoffAttachmentAction(
+  input: ReserveOrderStationAttachmentInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_op_photos");
+  if (!authorization.ok) return authorization.result;
+  const domain = await import("@/lib/server/orderStationAttachment");
+  return domain.reserveOrderStationAttachment(authorization.data, input);
+}
+
+export async function finalizeGalvanikHandoffAttachmentAction(
+  input: FinalizeOrderStationAttachmentInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_op_photos");
+  if (!authorization.ok) return authorization.result;
+  const domain = await import("@/lib/server/orderStationAttachment");
+  return domain.finalizeOrderStationAttachment(authorization.data, input);
+}
+
+export async function getGalvanikHandoffAttachmentOriginalAction(
+  input: GetOrderStationAttachmentOriginalInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_op_photos");
+  if (!authorization.ok) return authorization.result;
+  const domain = await import("@/lib/server/orderStationAttachment");
+  return domain.getOrderStationAttachmentOriginal(authorization.data, input);
+}
+
+export async function getOrderIntakeAttachmentsAction(
+  input: GetOrderStationAttachmentsInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_view_leitstand");
+  if (!authorization.ok) return authorization.result;
+  const domain = await import("@/lib/server/orderStationAttachment");
+  const result = await domain.readOrderIntakeAttachments(authorization.data, input);
+  if (result.code !== "OK") return result;
+  const evidenceDomain = await import("@/lib/server/evidenceRead");
+  const evidence = await evidenceDomain.readOrderEvidenceRecords(authorization.data, input);
+  if (evidence.code !== "OK") return evidence;
+  return {
+    code: "OK" as const,
+    data: {
+      receipts: result.data,
+      evidenceRecords: evidence.data satisfies EvidenceReadRecord[],
+      canOperate: authorization.data.permissions.includes("perm_op_photos"),
+      currentActorId: authorization.data.userId,
+    },
+  };
+}
+
+export async function reserveOrderIntakeAttachmentAction(
+  input: ReserveOrderStationAttachmentInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_op_photos");
+  if (!authorization.ok) return authorization.result;
+  const domain = await import("@/lib/server/orderStationAttachment");
+  return domain.reserveOrderIntakeAttachment(authorization.data, input);
+}
+
+export async function finalizeOrderIntakeAttachmentAction(
+  input: FinalizeOrderStationAttachmentInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_op_photos");
+  if (!authorization.ok) return authorization.result;
+  const domain = await import("@/lib/server/orderStationAttachment");
+  return domain.finalizeOrderIntakeAttachment(authorization.data, input);
+}
+
+export async function getOrderIntakeAttachmentOriginalAction(
+  input: GetOrderStationAttachmentOriginalInput,
+) {
+  noStore();
+  const authorization = await authorizeOrderStationAttachment("perm_op_photos");
+  if (!authorization.ok) return authorization.result;
+  const domain = await import("@/lib/server/orderStationAttachment");
+  return domain.getOrderIntakeAttachmentOriginal(authorization.data, input);
+}
+
+export async function startProcessingStation(orderId: string, stationId: string) {
+  void orderId;
+  void stationId;
+  return { ok: false, error: "CONFLICT", message: "NOT_AVAILABLE: Stationsstart benötigt den W3-Command-Vertrag." };
+}
+
+export async function getWarendurchlaufKPIs(): Promise<WarendurchlaufActionResult<WarendurchlaufKpiData>> {
+  return { ok: false, error: "NOT_AVAILABLE", message: "NOT_AVAILABLE: Warendurchlauf-KPIs benötigen einen kanonischen SQL-Read-Model-Vertrag." };
 }
