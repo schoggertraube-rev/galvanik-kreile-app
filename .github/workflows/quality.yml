@@ -306,7 +306,7 @@ jobs:
           W4_ATTACHMENT_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: |
           set -euo pipefail
-          W4_SOURCE_SHA="d16363dee8e38bf64dbb31ed135a93972d91b6f1"
+          W4_SOURCE_SHA="ef9a8411cad56b968dcbe97b089260d38c67f7d5"
           CURRENT_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           git cat-file -e "${W4_SOURCE_SHA}^{commit}"
           git merge-base --is-ancestor "$W4_SOURCE_SHA" "$CURRENT_SOURCE_SHA"
