@@ -1147,7 +1147,7 @@ describe("W4 Galvanik page placement", () => {
     render(<GalvanikPage />);
     await screen.findAllByText("A-1");
     expect(screen.getAllByLabelText("Galvanik-Übergabeoriginal")).toHaveLength(1);
-    expect(ports.getAttachments).toHaveBeenCalledWith({ orderId: ORDER_ID, itemId: ITEM_ID });
+    await waitFor(() => expect(ports.getAttachments).toHaveBeenCalledWith({ orderId: ORDER_ID, itemId: ITEM_ID }));
     expect(await screen.findByText("Neues Original für Teil A")).toBeInTheDocument();
     await chooseFile();
     await waitFor(() => expect(ports.reserve).toHaveBeenCalledWith(expect.objectContaining({
