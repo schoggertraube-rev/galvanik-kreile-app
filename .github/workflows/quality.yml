@@ -313,6 +313,15 @@ jobs:
 
           w4_source="$(mktemp -d)"
           git archive "$W4_SOURCE_SHA" | tar -x -C "$w4_source"
+          W4_TEST_PATH="src/test/w4_order_station_attachment.integration.test.ts"
+          W4_TEST_BLOB="d2e7d4346114c9dd14649003939a3ef9182a53bd"
+          git cat-file -e "${W4_SOURCE_SHA}:${W4_TEST_PATH}"
+          actual_w4_test_blob="$(git rev-parse "${CURRENT_SOURCE_SHA}:${W4_TEST_PATH}")"
+          test "$actual_w4_test_blob" = "$W4_TEST_BLOB"
+          overlay_tmp="$w4_source/.w4-test-overlay.tmp"
+          git cat-file blob "$actual_w4_test_blob" > "$overlay_tmp"
+          test "$(git hash-object "$overlay_tmp")" = "$W4_TEST_BLOB"
+          mv "$overlay_tmp" "$w4_source/$W4_TEST_PATH"
           ln -s "$GITHUB_WORKSPACE/node_modules" "$w4_source/node_modules"
           cd "$w4_source"
           "$GITHUB_WORKSPACE/node_modules/.bin/vitest" run \
