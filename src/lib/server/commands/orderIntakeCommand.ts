@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { resolveAuthorization } from "@/lib/server/authorization";
 import { withPrivilegedTenantTransaction, type PrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
+import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
 
 const EVENT_TYPE = "ORDER_INTAKE_CREATED_V1";
 const EVENT_SCHEMA_VERSION = 1 as const;
@@ -62,7 +63,7 @@ export type OrderIntakeReceipt = {
   recordedAt: string;
   orderVersion: 1;
   station: typeof STATION;
-  status: "in_progress";
+  status: typeof ORDER_LIFECYCLE_STATUS.ANGENOMMEN;
 };
 
 export type OrderIntakeCommandResult =
@@ -270,7 +271,7 @@ function toReceipt(
     !/^A-\d{4}-\d{4,}$/.test(row.order_number) || !normalizedText(row.customer_display_name, 2, 160) ||
     !dueDate || !validDate(dueDate) || (row.note !== null && !normalizedText(row.note, 1, 2000)) ||
     !items || !recordedAt || row.current_order_version !== 1 || row.current_station !== STATION ||
-    row.current_status !== "in_progress"
+    row.current_status !== ORDER_LIFECYCLE_STATUS.ANGENOMMEN
   ) return null;
   return {
     receiptId: row.receipt_id,
@@ -289,7 +290,7 @@ function toReceipt(
     recordedAt,
     orderVersion: 1,
     station: STATION,
-    status: "in_progress",
+    status: ORDER_LIFECYCLE_STATUS.ANGENOMMEN,
   };
 }
 
@@ -444,7 +445,7 @@ export async function createOrderIntake(input: unknown): Promise<OrderIntakeComm
           intake_date, due_date, source, source_ref, freetext_original, created_at
         ) VALUES (
           ${orderId}, ${expected.tenantId}, ${orderNumber}, ${customer.id}, ${title}, ${task}, ${STATION},
-          ${STATION}, ${STATION}, 1, 'in_progress', 'green', 'green',
+          ${STATION}, ${STATION}, 1, ${ORDER_LIFECYCLE_STATUS.ANGENOMMEN}, 'green', 'green',
           statement_timestamp() AT TIME ZONE 'UTC', ${normalized.dueDate}::date,
           'F1_ORDER_INTAKE', ${normalized.clientEventId}, ${normalized.note}, statement_timestamp() AT TIME ZONE 'UTC'
         )

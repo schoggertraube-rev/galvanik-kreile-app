@@ -1,6 +1,7 @@
 import "server-only";
 
 import { sql } from "drizzle-orm";
+import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import type { OrderIntakeReceipt, OrderIntakeReceiptItem } from "@/lib/server/commands/orderIntakeCommand";
 import { withPrivilegedTenantTransaction } from "@/lib/server/privilegedDb";
@@ -146,7 +147,7 @@ function mapReceipt(
     !/^A-\d{4}-\d{4,}$/.test(row.order_number) || !trimmed(row.customer_display_name, 2, 160) ||
     !dueDate || !DATE_PATTERN.test(dueDate) || (row.note !== null && !trimmed(row.note, 1, 2000)) ||
     Number.isNaN(recorded.getTime()) || row.current_order_version !== 1 ||
-    row.current_station !== "wareneingang" || row.current_status !== "in_progress"
+    row.current_station !== "wareneingang" || row.current_status !== ORDER_LIFECYCLE_STATUS.ANGENOMMEN
   ) return null;
   const items = parseItems(row.items_snapshot);
   if (!items) return null;
@@ -167,7 +168,7 @@ function mapReceipt(
     recordedAt: recorded.toISOString(),
     orderVersion: 1,
     station: "wareneingang",
-    status: "in_progress",
+    status: ORDER_LIFECYCLE_STATUS.ANGENOMMEN,
   };
 }
 

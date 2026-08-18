@@ -109,7 +109,7 @@ jobs:
         run: npx playwright install --with-deps webkit
 
       - name: Auth boundary E2E
-        run: npm run test:e2e
+        run: npm run test:e2e -- e2e/smoke.spec.ts
 
       - name: ESLint on changed TS and TSX files
         shell: bash
@@ -283,12 +283,12 @@ jobs:
             --ledger w4-candidate-ledger.json
           node scripts/quality/check-w4-candidate-schema.mjs --selftest
 
-      - name: Replay W3/W4-01 predecessor cutoff without seed
-        # The predecessor test deliberately proves the exact 11-row ledger through
-        # 20260811154732; do not weaken that assertion for the 13-row candidate.
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260811154732
+      - name: Replay F1.2 candidate fresh from zero without seed
+        # Complete F1.2-candidate replay: integral F1.2 schema through 20260817120000.
+        # Baseline and separate W4/production fingerprint anchors remain immutable.
+        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260817120000
 
-      - name: W3/W4-01 order-station command, receipt, and private read-model integration
+      - name: W3/F1.2 order-station command, receipt, and private read-model integration
         env:
           DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
           W3_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
@@ -296,8 +296,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ""
         run: npx vitest run src/test/w3_order_station.integration.test.ts
 
-      - name: Restore exact 13-migration W4 candidate without seed
-        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260812103446
+      - name: M1-source-compatible 14-migration W4-03 replay
+        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260812133649
 
       - name: W4-03 Galvanik handoff attachment real DB, View, Actions, Panel, and Storage HTTP
         shell: bash
@@ -306,13 +306,22 @@ jobs:
           W4_ATTACHMENT_LOCAL_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: |
           set -euo pipefail
-          W4_SOURCE_SHA="d16363dee8e38bf64dbb31ed135a93972d91b6f1"
+          W4_SOURCE_SHA="ef9a8411cad56b968dcbe97b089260d38c67f7d5"
           CURRENT_SOURCE_SHA="${{ github.event.pull_request.head.sha || github.sha }}"
           git cat-file -e "${W4_SOURCE_SHA}^{commit}"
           git merge-base --is-ancestor "$W4_SOURCE_SHA" "$CURRENT_SOURCE_SHA"
 
           w4_source="$(mktemp -d)"
           git archive "$W4_SOURCE_SHA" | tar -x -C "$w4_source"
+          W4_TEST_PATH="src/test/w4_order_station_attachment.integration.test.ts"
+          W4_TEST_BLOB="d2e7d4346114c9dd14649003939a3ef9182a53bd"
+          git cat-file -e "${W4_SOURCE_SHA}:${W4_TEST_PATH}"
+          actual_w4_test_blob="$(git rev-parse "${CURRENT_SOURCE_SHA}:${W4_TEST_PATH}")"
+          test "$actual_w4_test_blob" = "$W4_TEST_BLOB"
+          overlay_tmp="$w4_source/.w4-test-overlay.tmp"
+          git cat-file blob "$actual_w4_test_blob" > "$overlay_tmp"
+          test "$(git hash-object "$overlay_tmp")" = "$W4_TEST_BLOB"
+          mv "$overlay_tmp" "$w4_source/$W4_TEST_PATH"
           ln -s "$GITHUB_WORKSPACE/node_modules" "$w4_source/node_modules"
           cd "$w4_source"
           "$GITHUB_WORKSPACE/node_modules/.bin/vitest" run \

@@ -17,6 +17,9 @@
     "src/lib/server/commands/orderIntakeCommand.ts": [
       "private.v_order_intake_receipts_v1"
     ],
+    "src/lib/server/commands/orderStationCommand.ts": [
+      "private.v_order_station_correction_receipts_v1"
+    ],
     "src/lib/server/evidenceRead.ts": [
       "private.v_evidence_records_v2"
     ],
@@ -29,6 +32,7 @@
     ],
     "src/lib/server/orderStationRead.ts": [
       "private.v_operational_station_queue_v1",
+      "private.v_order_station_correction_receipts_v1",
       "private.v_order_station_receipts_v1"
     ]
   },
@@ -61,6 +65,13 @@
         "private.v_order_intake_customers_v1",
         "private.v_order_intake_evidence_receipts_v1",
         "private.v_order_intake_receipts_v1"
+      ],
+      "requiredLegacySource": null
+    },
+    {
+      "path": "supabase/migrations/20260817120000_f1_2_order_lifecycle_contract.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_order_station_correction_receipts_v1"
       ],
       "requiredLegacySource": null
     }

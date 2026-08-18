@@ -30,6 +30,7 @@ import {
   finalizeOrderStationAttachment,
   getOrderStationAttachmentOriginal,
   readOrderStationAttachments,
+  reserveOrderIntakeAttachment,
   reserveOrderStationAttachment,
 } from "@/lib/server/orderStationAttachment";
 import {
@@ -135,7 +136,7 @@ const order = {
   station: "galvanik",
   current_station: "galvanik",
   current_station_id: "galvanik",
-  status: "ready",
+  status: "galvanik",
 };
 const customer = { id: reservation.customer_id, tenant_id: TENANT };
 const item = {
@@ -355,6 +356,101 @@ describe("W4 order-station attachment domain", () => {
     }, { reservationId: RESERVATION_ID })).resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(ports.withTransaction).not.toHaveBeenCalled();
     expect(ports.createAdminClient).not.toHaveBeenCalled();
+  });
+
+  it("binds intake and handoff reservations to the canonical lifecycle statuses", async () => {
+    const input = {
+      orderId: reservation.order_id,
+      itemId: reservation.item_id,
+      expectedVersion: 1,
+      clientRequestId: CLIENT_REQUEST_ID,
+      mimeType: "image/png" as const,
+      fileBytes: PNG_BYTES.byteLength,
+      contentSha256: PNG_SHA,
+    };
+    const intakeOrder = {
+      ...order,
+      version: 1,
+      station: "wareneingang",
+      current_station: "wareneingang",
+      current_station_id: "wareneingang",
+      status: "angenommen",
+    };
+    const intakeItem = { ...item, current_station_id: "wareneingang" };
+    const intakeEvent = {
+      ...event,
+      event_type: "ORDER_INTAKE_CREATED_V1",
+      aggregate_version: 1,
+      from_station: null,
+      station: "wareneingang",
+    };
+    let createdReservation = {
+      ...reservation,
+      purpose: "ORDER_INTAKE_ORIGINAL_V1",
+      station: "wareneingang",
+      order_version: 1,
+      object_path: `order-intake-evidence/v1/${RESERVATION_ID}.png`,
+    };
+
+    ports.execute.mockImplementation(async (query: FakeQuery) => {
+      if (query.text.includes("pg_advisory_xact_lock")) return [];
+      if (query.text.includes("statement_timestamp()")) return [];
+      if (query.text.includes("FROM public.orders")) return [intakeOrder];
+      if (query.text.includes("FROM public.customers")) return [customer];
+      if (query.text.includes("FROM public.items")) return [intakeItem];
+      if (query.text.includes("FROM public.events")) return [intakeEvent];
+      if (query.text.includes("INSERT INTO private.order_station_evidence_reservations")) {
+        const id = query.values[0] as string;
+        createdReservation = {
+          ...createdReservation,
+          id,
+          object_path: `order-intake-evidence/v1/${id}.png`,
+        };
+        return [createdReservation];
+      }
+      if (query.text.includes("v_order_evidence_attachment_receipts_v1")) {
+        return [{
+          ...pendingReceipt,
+          reservation_id: createdReservation.id,
+          order_version: 1,
+          purpose: createdReservation.purpose,
+          station: createdReservation.station,
+        }];
+      }
+      throw new Error(`unexpected query: ${query.text}`);
+    });
+    ports.createSignedUploadUrl.mockImplementation(async (objectPath: string) => ({
+      data: { path: objectPath, token: "intake-upload-token" },
+      error: null,
+    }));
+
+    await expect(reserveOrderIntakeAttachment(authorization, input)).resolves.toMatchObject({
+      code: "OK",
+      data: {
+        receipt: { orderVersion: 1, state: "PENDING" },
+        upload: { token: "intake-upload-token" },
+      },
+    });
+
+    for (const [reserve, legacyOrder] of [
+      [reserveOrderIntakeAttachment, { ...intakeOrder, status: "in_progress" }],
+      [reserveOrderStationAttachment, { ...order, status: "ready" }],
+    ] as const) {
+      ports.execute.mockReset();
+      ports.execute.mockImplementation(async (query: FakeQuery) => {
+        if (query.text.includes("pg_advisory_xact_lock")) return [];
+        if (query.text.includes("statement_timestamp()")) return [];
+        if (query.text.includes("FROM public.orders")) return [legacyOrder];
+        throw new Error(`legacy status passed lifecycle gate: ${query.text}`);
+      });
+      const legacyInput = reserve === reserveOrderStationAttachment
+        ? { ...input, expectedVersion: 2 }
+        : input;
+      await expect(reserve(authorization, legacyInput)).resolves.toMatchObject({
+        code: "VALIDATION_ERROR",
+        message: "Auftrag ist nicht übergabebereit.",
+      });
+    }
   });
 
   it("creates one exactly bound reservation and only then mints its canonical upload grant", async () => {

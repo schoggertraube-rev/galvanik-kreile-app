@@ -9,8 +9,11 @@ import {
 import type { OperationalOrder } from "@/lib/types/operationalOrder";
 import {
   transitionWareneingangToGalvanik,
+  correctGalvanikToWareneingang,
   type OrderStationCommandInput,
   type OrderStationCommandResult,
+  type OrderStationCorrectionCommandInput,
+  type OrderStationCorrectionCommandResult,
 } from "@/lib/server/commands/orderStationCommand";
 
 // DTO Typen (zur Vereinfachung)
@@ -20,6 +23,13 @@ export async function transitionWareneingangToGalvanikAction(
   input: OrderStationCommandInput,
 ): Promise<OrderStationCommandResult> {
   return transitionWareneingangToGalvanik(input);
+}
+
+/** D-F12-004: reversal (galvanik -> wareneingang/angenommen) with a mandatory reason. */
+export async function correctGalvanikToWareneingangAction(
+  input: OrderStationCorrectionCommandInput,
+): Promise<OrderStationCorrectionCommandResult> {
+  return correctGalvanikToWareneingang(input);
 }
 
 async function resolveOperationalReadAuthorization(): Promise<ActionResult<AuthorizationSnapshot>> {

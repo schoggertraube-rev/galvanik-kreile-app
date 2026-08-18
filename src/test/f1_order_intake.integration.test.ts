@@ -400,7 +400,7 @@ describe("F1.1: Digital Order Intake", () => {
     // OperationalOrder has station and currentStationId, not currentStation
     expect(matchingOrder.station).toBe("wareneingang");
     expect(matchingOrder.currentStationId).toBe("wareneingang");
-    expect(matchingOrder.status).toBe("in_progress");
+    expect(matchingOrder.status).toBe("angenommen");
 
     // Parts: exact length and exact ordered mapping.
     // Sort both sides by id (stable, deterministic); reject missing/extra/duplicate implicitly

@@ -5,6 +5,9 @@ vi.mock("@/app/warendurchlauf/actions", () => ({ getGalvanikOrdersAction }));
 vi.mock("@/components/orders/GalvanikHandoffAttachmentPanel", () => ({
   GalvanikHandoffAttachmentPanel: () => null,
 }));
+vi.mock("@/components/orders/GalvanikCorrectionButton", () => ({
+  GalvanikCorrectionButton: () => null,
+}));
 vi.mock("@/components/orders/OrderModalProvider", () => ({ useOrderModal: () => ({ openOrder: vi.fn() }) }));
 vi.mock("next/link", () => ({ default: ({ children }: { children: React.ReactNode }) => <a>{children}</a> }));
 vi.mock("lucide-react", () => ({ ArrowRight: () => null, Layers: () => null, PlayCircle: () => null, CheckCircle2: () => null, AlertTriangle: () => null, Loader2: () => null, ChevronRight: () => null }));
@@ -12,7 +15,12 @@ import { OrderWideCard } from "@/components/orders/OrderWideCard";
 import { OrderCompactCard } from "@/components/orders/OrderCompactCard";
 import GalvanikPage from "@/app/warendurchlauf/galvanik/page";
 
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); });
+afterEach(() => {
+  cleanup();
+  getGalvanikOrdersAction.mockReset();
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
+});
 const unavailable = "NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.";
 
 describe("W2C-B2M5U unknown order cards", () => {
@@ -39,18 +47,19 @@ describe("W2C-B2M5U unknown order cards", () => {
     expect(screen.queryByText("Dringlich in Galvanik")).not.toBeInTheDocument();
   });
 
-  it("keeps the initial deferred state free of empty success claims", () => {
+  it("keeps the initial deferred state free of empty success claims", async () => {
     getGalvanikOrdersAction.mockReturnValueOnce(new Promise(() => {}));
     render(<GalvanikPage />);
     expect(screen.getByText("Lade Galvanik Aufträge...")).toBeInTheDocument();
     expect(screen.queryByText("Noch keine Daten erfasst.")).not.toBeInTheDocument();
     expect(screen.queryByText("0 Aufträge")).not.toBeInTheDocument();
+    await waitFor(() => expect(getGalvanikOrdersAction).toHaveBeenCalledTimes(1));
   });
 
   it("renders the real empty state only after the fixed action succeeds", async () => {
     getGalvanikOrdersAction.mockResolvedValueOnce({ ok: true, data: [] });
     render(<GalvanikPage />);
     expect(await screen.findByText("Noch keine Daten erfasst.")).toBeInTheDocument();
-    expect(screen.getAllByText("0 Aufträge").length).toBe(3);
+    expect(screen.getAllByText("0 Aufträge").length).toBe(2);
   });
 });

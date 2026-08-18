@@ -77,7 +77,7 @@ export async function login(formData: FormData) {
   if (dbUser.role === 'developer') {
     redirect('/settings')
   } else {
-    redirect('/')
+    redirect('/warendurchlauf')
   }
 }
 

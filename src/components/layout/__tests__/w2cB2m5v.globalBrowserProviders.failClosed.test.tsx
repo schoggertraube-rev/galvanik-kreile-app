@@ -144,4 +144,20 @@ describe("W2C-B2M5V global browser provider containment", () => {
     expect(source.match(/<OrderOverlay\s*\/>/g)).toHaveLength(2);
     expect(source.match(/<CustomerOverlay\s*\/>/g)).toHaveLength(2);
   });
+
+  it("keeps the touch-tablet navigation out of the desktop sidebar overlap", () => {
+    const shellSource = readFileSync(
+      resolve(process.cwd(), "src/components/layout/KreileAppShell.tsx"),
+      "utf8",
+    );
+    const headerSource = readFileSync(
+      resolve(process.cwd(), "src/components/layout/KreileHeader.tsx"),
+      "utf8",
+    );
+
+    expect(shellSource).toContain('className="hidden xl:flex shrink-0 w-[72px] relative z-30"');
+    expect(shellSource).not.toContain('className="hidden lg:flex shrink-0 w-[72px] relative z-30"');
+    expect(headerSource).toContain('className="flex xl:hidden p-3');
+    expect(headerSource).not.toContain('className="flex lg:hidden p-3');
+  });
 });

@@ -2,6 +2,10 @@ import "server-only";
 
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
+import {
+  ORDER_LIFECYCLE_STATUS,
+  type OrderLifecycleStatus,
+} from "@/lib/orders/orderLifecycleContract";
 import type { AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
   withPrivilegedTenantTransaction,
@@ -23,7 +27,7 @@ type AttachmentWorkflow = {
   key: "HANDOFF" | "INTAKE";
   purpose: "GALVANIK_HANDOFF_ORIGINAL_V1" | "ORDER_INTAKE_ORIGINAL_V1";
   station: "galvanik" | "wareneingang";
-  orderStatus: "ready" | "in_progress";
+  orderStatus: OrderLifecycleStatus;
   eventType: "ORDER_STATION_MOVED_V1" | "ORDER_INTAKE_CREATED_V1";
   fromStation: "wareneingang" | null;
   pathPrefix: "order-station-evidence/v1" | "order-intake-evidence/v1";
@@ -34,7 +38,7 @@ const HANDOFF_WORKFLOW: AttachmentWorkflow = {
   key: "HANDOFF",
   purpose: "GALVANIK_HANDOFF_ORIGINAL_V1",
   station: "galvanik",
-  orderStatus: "ready",
+  orderStatus: ORDER_LIFECYCLE_STATUS.GALVANIK,
   eventType: "ORDER_STATION_MOVED_V1",
   fromStation: "wareneingang",
   pathPrefix: "order-station-evidence/v1",
@@ -45,7 +49,7 @@ const INTAKE_WORKFLOW: AttachmentWorkflow = {
   key: "INTAKE",
   purpose: "ORDER_INTAKE_ORIGINAL_V1",
   station: "wareneingang",
-  orderStatus: "in_progress",
+  orderStatus: ORDER_LIFECYCLE_STATUS.ANGENOMMEN,
   eventType: "ORDER_INTAKE_CREATED_V1",
   fromStation: null,
   pathPrefix: "order-intake-evidence/v1",

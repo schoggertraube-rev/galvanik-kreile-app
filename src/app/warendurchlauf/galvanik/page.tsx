@@ -1,14 +1,21 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowRight, Layers, PlayCircle, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
+import { ArrowRight, Layers, CheckCircle2, AlertTriangle, Loader2 } from "lucide-react";
 import { OrderCompactCard, UrgencyType } from "@/components/orders/OrderCompactCard";
 import { GalvanikHandoffAttachmentPanel } from "@/components/orders/GalvanikHandoffAttachmentPanel";
+import { GalvanikCorrectionButton } from "@/components/orders/GalvanikCorrectionButton";
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import { getGalvanikOrdersAction, type WarendurchlaufOrder } from "@/app/warendurchlauf/actions";
+import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
 
-type GalvanikBucket = "ready" | "in_progress" | "finished";
+// D-ARCH-001: galvanik is a single stable outside station covering all
+// production (no internal steps, no workflow engine). This route therefore
+// exposes exactly one active bucket (status=galvanik) plus a read-only
+// historical view of already-finished orders. No start or complete command
+// is built here.
+type GalvanikBucket = "galvanik" | "finished";
 type GalvanikOrder = WarendurchlaufOrder & { statusText?: string };
 
 function sortByUrgency(orders: GalvanikOrder[]) {
@@ -36,56 +43,74 @@ function mapRiskToUrgency(risk: string): UrgencyType {
 }
 
 export default function GalvanikPage() {
-  const [activeBucket, setActiveBucket] = useState<GalvanikBucket>("ready");
-  const [readyOrders, setReadyOrders] = useState<GalvanikOrder[]>([]);
-  const [inProgressOrders, setInProgressOrders] = useState<GalvanikOrder[]>([]);
+  const [activeBucket, setActiveBucket] = useState<GalvanikBucket>("galvanik");
+  const [galvanikOrders, setGalvanikOrders] = useState<GalvanikOrder[]>([]);
   const [finishedOrders, setFinishedOrders] = useState<GalvanikOrder[]>([]);
   const [topUrgent, setTopUrgent] = useState<GalvanikOrder[]>([]);
-  const [dataState, setDataState] = useState<"loading" | "loaded" | "unavailable">("loading");
+  const [dataState, setDataState] = useState<"loading" | "loaded" | "denied" | "error">("loading");
   const [unavailableMessage, setUnavailableMessage] = useState("NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.");
+  // Page-level so it survives the correction removing the order's card from the list.
+  const [correctionSuccessMessage, setCorrectionSuccessMessage] = useState<string | null>(null);
+  const [correctionConflictMessage, setCorrectionConflictMessage] = useState<string | null>(null);
   const { openOrder } = useOrderModal();
 
-  useEffect(() => {
-    async function load() {
-      setDataState("loading");
-      setReadyOrders([]);
-      setInProgressOrders([]);
+  // Consistently derives galvanikOrders/finishedOrders/topUrgent from one fresh
+  // getGalvanikOrdersAction dataset. Reused by the initial load AND by the
+  // GalvanikCorrectionButton confirmed/conflict readback callbacks, so a
+  // corrected order can never remain stale in topUrgent or finished.
+  const applyGalvanikDataset = useCallback((allGalvanik: GalvanikOrder[]) => {
+    const active = sortByUrgency(
+      allGalvanik.filter((order) => order.status === ORDER_LIFECYCLE_STATUS.GALVANIK),
+    );
+    const done = sortByUrgency(
+      allGalvanik.filter(
+        (order) =>
+          order.status === "done"
+          || order.status === "quality_check"
+          || order.status === ORDER_LIFECYCLE_STATUS.FERTIG,
+      ),
+    );
+
+    setGalvanikOrders(active);
+    setFinishedOrders(done);
+
+    const combined = [...active, ...done];
+    setTopUrgent(sortByUrgency(combined).filter(o => o.risk === "red" || o.risk === "orange").slice(0, 3));
+  }, []);
+
+  const load = useCallback(async () => {
+    setDataState("loading");
+    setGalvanikOrders([]);
+    setFinishedOrders([]);
+    setTopUrgent([]);
+    setUnavailableMessage("NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.");
+    try {
+      const result = await getGalvanikOrdersAction();
+
+      if (!result.ok) {
+        setUnavailableMessage(result.message);
+        setDataState(result.error === "AUTH_ERROR" || result.error === "FORBIDDEN" ? "denied" : "error");
+        return;
+      }
+
+      applyGalvanikDataset(result.data);
+      setDataState("loaded");
+
+    } catch {
+      setGalvanikOrders([]);
       setFinishedOrders([]);
       setTopUrgent([]);
       setUnavailableMessage("NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.");
-      try {
-        const result = await getGalvanikOrdersAction();
-
-        if (!result.ok) {
-          setUnavailableMessage(result.message);
-          setDataState("unavailable");
-          return;
-        }
-
-        const allGalvanik = result.data;
-        const ready = sortByUrgency(allGalvanik.filter((order) => order.status === "ready"));
-        const active = sortByUrgency(allGalvanik.filter((order) => order.status === "in_progress"));
-        const done = sortByUrgency(allGalvanik.filter((order) => order.status === "done" || order.status === "quality_check"));
-        
-        setReadyOrders(ready);
-        setInProgressOrders(active);
-        setFinishedOrders(done);
-        
-        const combined = [...ready, ...active, ...done];
-        setTopUrgent(sortByUrgency(combined).filter(o => o.risk === "red" || o.risk === "orange").slice(0, 3));
-        setDataState("loaded");
-
-      } catch {
-        setReadyOrders([]);
-        setInProgressOrders([]);
-        setFinishedOrders([]);
-        setTopUrgent([]);
-        setUnavailableMessage("NOT_AVAILABLE: Galvanik-Auftragsdaten konnten nicht geladen werden.");
-        setDataState("unavailable");
-      }
+      setDataState("error");
     }
-    load();
-  }, []);
+  }, [applyGalvanikDataset]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
 
   const renderOrderList = (orders: GalvanikOrder[], bucket: GalvanikBucket) => {
     const isActive = activeBucket === bucket;
@@ -110,12 +135,28 @@ export default function GalvanikPage() {
               badgeText={o.statusText || o.status}
               onClick={() => isActive ? openOrder(o.id) : setActiveBucket(bucket)}
             />
-            {isActive && bucket === "ready" && o.status === "ready" && (
-              <GalvanikHandoffAttachmentPanel
-                orderId={o.id}
-                expectedVersion={o.version}
-                items={o.parts.map((item) => ({ id: item.id, name: item.name }))}
-              />
+            {isActive && bucket === "galvanik" && o.status === ORDER_LIFECYCLE_STATUS.GALVANIK && (
+              <>
+                <GalvanikHandoffAttachmentPanel
+                  orderId={o.id}
+                  expectedVersion={o.version}
+                  items={o.parts.map((item) => ({ id: item.id, name: item.name }))}
+                />
+                <GalvanikCorrectionButton
+                  orderId={o.id}
+                  expectedVersion={o.version}
+                  onConfirmedReadback={(nextGalvanikOrders) => {
+                    applyGalvanikDataset(nextGalvanikOrders);
+                    setCorrectionConflictMessage(null);
+                    setCorrectionSuccessMessage("Rücknahme nach Wareneingang bestätigt.");
+                  }}
+                  onConflictReadback={(nextGalvanikOrders, message) => {
+                    applyGalvanikDataset(nextGalvanikOrders);
+                    setCorrectionSuccessMessage(null);
+                    setCorrectionConflictMessage(message);
+                  }}
+                />
+              </>
             )}
             </div>
           ))
@@ -135,13 +176,42 @@ export default function GalvanikPage() {
         </div>
         <p className="mb-4 text-sm text-[#9e9689]">Die Übergabe aus dem Wareneingang ist aktiv. Start und Abschluss bleiben NOT_AVAILABLE.</p>
 
+        {/* Page-level so a correction success/conflict stays visible even after the
+            affected order's card is removed from the fresh list below. */}
+        {correctionSuccessMessage ? (
+          <p className="mb-3 text-xs text-[#1a6b38]" role="status">{correctionSuccessMessage}</p>
+        ) : null}
+        {correctionConflictMessage ? (
+          <div className="mb-3 flex items-center gap-3 text-xs text-[#c0392b]" role="alert">
+            <span>{correctionConflictMessage}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setCorrectionConflictMessage(null);
+                load();
+              }}
+              className="rounded-md border border-[#c0392b]/40 px-2 py-1 font-semibold"
+            >
+              Stationsliste neu laden
+            </button>
+          </div>
+        ) : null}
+
         {dataState === "loading" ? (
           <div className="flex flex-col items-center justify-center py-20 text-[#9e9689]">
             <Loader2 className="w-8 h-8 animate-spin mb-4" />
             <p>Lade Galvanik Aufträge...</p>
           </div>
-        ) : dataState === "unavailable" ? (
-          <div className="py-20 text-center text-[#9e9689]" role="status">{unavailableMessage}</div>
+        ) : dataState === "denied" ? (
+          <div className="py-20 text-center text-[#9e9689]" role="status">
+            <p className="mb-2 text-sm font-bold text-[#c0392b]">Zugriff nicht erlaubt</p>
+            {unavailableMessage}
+          </div>
+        ) : dataState === "error" ? (
+          <div className="py-20 text-center text-[#9e9689]" role="status">
+            <p className="mb-2 text-sm font-bold text-[#c0392b]">Daten konnten nicht geladen werden</p>
+            {unavailableMessage}
+          </div>
         ) : (
           <>
 
@@ -172,36 +242,20 @@ export default function GalvanikPage() {
             )}
 
             {/* Buckets Header */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
               <button
-                onClick={() => setActiveBucket("ready")}
-                className={`flex flex-row items-center gap-3 p-3 rounded-[14px] cursor-pointer transition-all text-left ${activeBucket === "ready"
+                onClick={() => setActiveBucket("galvanik")}
+                className={`flex flex-row items-center gap-3 p-3 rounded-[14px] cursor-pointer transition-all text-left ${activeBucket === "galvanik"
                     ? "bg-[#e6f4ea] border-2 border-[#1a6b38] shadow-md transform scale-[1.02]"
                     : "bg-[#faf8f4] border-[1.5px] border-[#d8d0c4] hover:bg-[#f4f0e8] opacity-70"
                   }`}
               >
-                <div className={`w-8 h-8 rounded-[8px] shrink-0 flex items-center justify-center ${activeBucket === "ready" ? "bg-white" : "bg-[#fef3e2]"}`}>
-                  <Layers className={`w-4 h-4 ${activeBucket === "ready" ? "text-[#1a6b38]" : "text-[#c8922a]"}`} />
+                <div className={`w-8 h-8 rounded-[8px] shrink-0 flex items-center justify-center ${activeBucket === "galvanik" ? "bg-white" : "bg-[#fef3e2]"}`}>
+                  <Layers className={`w-4 h-4 ${activeBucket === "galvanik" ? "text-[#1a6b38]" : "text-[#c8922a]"}`} />
                 </div>
                 <div className="flex flex-col flex-1 min-w-0">
-                  <span className={`text-[13px] font-bold truncate ${activeBucket === "ready" ? "text-[#1a6b38]" : "text-[#1a1a1a]"}`}>Bereit</span>
-                  <span className="text-[10px] text-[#9e9689]">{readyOrders.length} Aufträge</span>
-                </div>
-              </button>
-
-              <button
-                onClick={() => setActiveBucket("in_progress")}
-                className={`flex flex-row items-center gap-3 p-3 rounded-[14px] cursor-pointer transition-all text-left ${activeBucket === "in_progress"
-                    ? "bg-[#e6f4ea] border-2 border-[#1a6b38] shadow-md transform scale-[1.02]"
-                    : "bg-[#faf8f4] border-[1.5px] border-[#d8d0c4] hover:bg-[#f4f0e8] opacity-70"
-                  }`}
-              >
-                <div className={`w-8 h-8 rounded-[8px] shrink-0 flex items-center justify-center ${activeBucket === "in_progress" ? "bg-white" : "bg-[#e6f4ea]"}`}>
-                  <PlayCircle className={`w-4 h-4 ${activeBucket === "in_progress" ? "text-[#1a6b38]" : "text-[#1a6b38]"}`} />
-                </div>
-                <div className="flex flex-col flex-1 min-w-0">
-                  <span className={`text-[13px] font-bold truncate ${activeBucket === "in_progress" ? "text-[#1a6b38]" : "text-[#1a1a1a]"}`}>In Bearbeitung</span>
-                  <span className="text-[10px] text-[#9e9689]">{inProgressOrders.length} Aufträge</span>
+                  <span className={`text-[13px] font-bold truncate ${activeBucket === "galvanik" ? "text-[#1a6b38]" : "text-[#1a1a1a]"}`}>Galvanik</span>
+                  <span className="text-[10px] text-[#9e9689]">{galvanikOrders.length} Aufträge</span>
                 </div>
               </button>
 
@@ -236,23 +290,17 @@ export default function GalvanikPage() {
               </Link>
             </div>
 
-            {/* Listen Bereich (3 Spalten mit Verdrängungslogik) */}
-            <div className="flex gap-3 overflow-x-auto snap-x md:grid md:grid-cols-3 md:overflow-visible w-full pb-4">
-              <div className={`transition-all duration-500 ease-in-out snap-center min-w-[85vw] md:min-w-0 ${activeBucket === "ready" ? "w-full md:w-[80%]" : "w-full md:w-[10%] opacity-50 grayscale-[0.8]"}`}>
-                <h3 className="text-sm font-bold text-[#9e9689] uppercase tracking-wider mb-4 border-b border-[#d8d0c4] pb-2 truncate">Bereit</h3>
-                {renderOrderList(readyOrders, "ready")}
-              </div>
-              <div className={`transition-all duration-500 ease-in-out snap-center min-w-[85vw] md:min-w-0 ${activeBucket === "in_progress" ? "w-full md:w-[80%]" : "w-full md:w-[10%] opacity-50 grayscale-[0.8]"}`}>
-                <h3 className="text-sm font-bold text-[#9e9689] uppercase tracking-wider mb-4 border-b border-[#d8d0c4] pb-2 truncate">In Bearbeitung</h3>
-                {renderOrderList(inProgressOrders, "in_progress")}
+            {/* Listen Bereich (2 Spalten mit Verdrängungslogik) */}
+            <div className="flex gap-3 overflow-x-auto snap-x md:grid md:grid-cols-2 md:overflow-visible w-full pb-4">
+              <div className={`transition-all duration-500 ease-in-out snap-center min-w-[85vw] md:min-w-0 ${activeBucket === "galvanik" ? "w-full md:w-[80%]" : "w-full md:w-[10%] opacity-50 grayscale-[0.8]"}`}>
+                <h3 className="text-sm font-bold text-[#9e9689] uppercase tracking-wider mb-4 border-b border-[#d8d0c4] pb-2 truncate">Galvanik</h3>
+                {renderOrderList(galvanikOrders, "galvanik")}
               </div>
               <div className={`transition-all duration-500 ease-in-out snap-center min-w-[85vw] md:min-w-0 ${activeBucket === "finished" ? "w-full md:w-[80%]" : "w-full md:w-[10%] opacity-50 grayscale-[0.8]"}`}>
                 <h3 className="text-sm font-bold text-[#9e9689] uppercase tracking-wider mb-4 border-b border-[#d8d0c4] pb-2 truncate">Fertig (QS)</h3>
                 {renderOrderList(finishedOrders, "finished")}
               </div>
             </div>
-
-            {/* Demo Tag Removed */}
 
           </>
         )}

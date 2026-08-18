@@ -54,10 +54,14 @@ vi.mock("lucide-react", () => {
     Upload: Icon,
   };
 });
+vi.mock("@/components/orders/GalvanikCorrectionButton", () => ({
+  GalvanikCorrectionButton: () => null,
+}));
 
 import { GalvanikHandoffAttachmentPanel } from "@/components/orders/GalvanikHandoffAttachmentPanel";
 import GalvanikPage from "@/app/warendurchlauf/galvanik/page";
 import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
+import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
 
 const ACTOR = "11111111-1111-4111-8111-111111111111";
 const OTHER_ACTOR = "22222222-2222-4222-8222-222222222222";
@@ -1112,7 +1116,7 @@ describe("W4 Galvanik handoff attachment panel", () => {
 });
 
 describe("W4 Galvanik page placement", () => {
-  it("mounts exactly one panel only in the active canonical Ready card", async () => {
+  it("mounts exactly one panel only in the active canonical Galvanik card", async () => {
     ports.getOrders.mockResolvedValueOnce({
       ok: true,
       data: [{
@@ -1127,7 +1131,7 @@ describe("W4 Galvanik page placement", () => {
         surfaceRequested: "Zink",
         station: "galvanik",
         currentStationId: "galvanik",
-        status: "ready",
+        status: ORDER_LIFECYCLE_STATUS.GALVANIK,
         statusText: "DRINGEND",
         risk: "red",
         parts: [{ id: ITEM_ID, name: "Teil A" }],
@@ -1143,7 +1147,7 @@ describe("W4 Galvanik page placement", () => {
     render(<GalvanikPage />);
     await screen.findAllByText("A-1");
     expect(screen.getAllByLabelText("Galvanik-Übergabeoriginal")).toHaveLength(1);
-    expect(ports.getAttachments).toHaveBeenCalledWith({ orderId: ORDER_ID, itemId: ITEM_ID });
+    await waitFor(() => expect(ports.getAttachments).toHaveBeenCalledWith({ orderId: ORDER_ID, itemId: ITEM_ID }));
     expect(await screen.findByText("Neues Original für Teil A")).toBeInTheDocument();
     await chooseFile();
     await waitFor(() => expect(ports.reserve).toHaveBeenCalledWith(expect.objectContaining({
@@ -1151,7 +1155,7 @@ describe("W4 Galvanik page placement", () => {
       itemId: ITEM_ID,
       expectedVersion: 2,
     })));
-    fireEvent.click(screen.getByRole("button", { name: /In Bearbeitung/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Fertig \(QS\)/ }));
     expect(screen.queryByLabelText("Galvanik-Übergabeoriginal")).not.toBeInTheDocument();
   });
 });

@@ -42,7 +42,7 @@ const targetOrder = {
   itemDescription: null,
   surfaceRequested: null,
   station: "galvanik",
-  status: "ready",
+  status: "galvanik",
   statusText: "IM PLAN",
   risk: "green",
   currentStationId: "galvanik",
@@ -230,7 +230,7 @@ describe("WareneingangHandoffButton", () => {
     const { onConfirmedReadback, onConflictReadback } = renderButton();
 
     fireEvent.click(screen.getByRole("button", { name: "An Galvanik übergeben" }));
-    await waitFor(() => expect(onConflictReadback).toHaveBeenCalledWith([]));
+    await waitFor(() => expect(onConflictReadback).toHaveBeenCalledWith([], "Auftrag wurde bereits geändert."));
     expect(onConfirmedReadback).not.toHaveBeenCalled();
     expect(getGalvanikSpy).not.toHaveBeenCalled();
     expect(screen.getByRole("status")).toHaveTextContent("Auftrag wurde bereits geändert.");

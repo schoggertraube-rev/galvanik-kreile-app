@@ -69,9 +69,9 @@ export function KreileHeader({ onMenuToggle }: KreileHeaderProps) {
 
   return (
     <header className={`h-[72px] shrink-0 bg-transparent flex items-center px-4 md:px-6 gap-4 relative transition-all duration-300 ${isAnyDropdownOpen ? "z-[200]" : "z-[100]"}`}>
-      {/* Hamburger Menu Mobile & Tablet (< 1024px) */}
+      {/* Hamburger Menu Mobile & Tablet (< 1280px) */}
       <button
-        className="flex lg:hidden p-3 -ml-2 text-navy-900 hover:bg-neutral-gray-100 rounded-full min-w-[48px] min-h-[48px] items-center justify-center shrink-0"
+        className="flex xl:hidden p-3 -ml-2 text-navy-900 hover:bg-neutral-gray-100 rounded-full min-w-[48px] min-h-[48px] items-center justify-center shrink-0"
         onClick={onMenuToggle}
       >
         <Menu className="w-6 h-6" />
