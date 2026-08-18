@@ -1,7 +1,7 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Massgeblicher Steuerungsstand: 2026-08-17.** `main` ist die einzige Lieferwahrheit. Der folgende
-M1/F1-Block ist aktuell; die ausfuehrlichen F0-Tabellen darunter sind ein datierter historischer
+**Massgeblicher Steuerungsstand: 2026-08-18.** `main` ist die einzige Lieferwahrheit. Der folgende
+M1/M2/F1-Block ist aktuell; die ausfuehrlichen F0-Tabellen darunter sind ein datierter historischer
 Snapshot und keine aktuelle Paket- oder Branchsteuerung.
 
 ## Aktuelle Liefer- und Paketwahrheit
@@ -13,8 +13,10 @@ Snapshot und keine aktuelle Paket- oder Branchsteuerung.
 | F1.1 Digitaler Wareneingang | unabhaengig `PASS`; Evidence-SHA `228316b7674d3363a9ab62d97b41500bd1409395` |
 | F1-R0 | `PASS`; Gate `0/0/PASS`, unabhaengige Exact-SHA-Abnahme `PASS`, `OPEN_P0_P1_ACCEPTANCE=NONE` |
 | M0 Konsolidierung | PR-Integration `PASS`; `02_app` ist wieder der kanonische Checkout auf `main`; Altinhalte wurden vor der Bereinigung verlustfrei extern gesichert |
-| F1.2 | `NOT_STARTED`; eigener Folgeauftrag erforderlich |
-| Remote/Production in M1 | ausschliesslich PR #61 nach `main` integriert; keine Deployment-, Production-, Provider- oder Remote-DB-Mutation |
+| F1.2 Werkstattdurchlauf | `PASS`; D-F12-001A (`angenommen -> galvanik`) am eingefrorenen Head `66abf36aec49a7032db97d0b01a36c2044147674` real E2E, CI-gruen und unabhaengig durch Claude und Cowork ohne P0/P1-, Scope- oder False-Pass-Befund abgenommen |
+| M2-Integration | PR #63 als Merge-Commit `733c22e5df95fd00987ba45408b9dac70f8638e1` nach `main` integriert; Paketbranch lokal und remote geloescht; `02_app` sauber auf diesem `main`-Stand |
+| Naechstes Paket | F1.3 `NOT_STARTED`; kein Produktatom ohne eigenen Folgeauftrag |
+| Remote/Production in M2 | ausschliesslich PR #63 nach `main` integriert; keine Deployment-, Production-, Provider-, RLS- oder Remote-DB-Mutation |
 
 ## Historischer F0-Snapshot vom 2026-08-10
 
