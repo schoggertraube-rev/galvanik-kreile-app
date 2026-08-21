@@ -178,6 +178,7 @@ f1_2_allowlist:
 
 f1_3_allowlist:
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - .github/workflows/quality.yml
   - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
   - docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json
   - docs/evidence/f1/F1_3_LEISTUNGSABSCHLUSS_E2E_EVIDENCE.md

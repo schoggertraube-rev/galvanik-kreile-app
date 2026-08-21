@@ -327,6 +327,18 @@ jobs:
           "$GITHUB_WORKSPACE/node_modules/.bin/vitest" run \
             src/test/w4_order_station_attachment.integration.test.ts
 
+      - name: F1.3 candidate replay fresh from zero without seed
+        # Complete F1.3-candidate replay: integral F1.3 schema through 20260820143000.
+        # Enables F1.3 integration tests against foundation ports and live card.
+        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260820143000
+
+      - name: F1.3 foundation ports and live card integration tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          F1_3_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/f1_3_foundation_ports.integration.test.ts src/test/f1_3_live_card.integration.test.ts
+
       - name: Persist W4 candidate fingerprint artifact
         run: |
           node -e "const f=require('./w4-candidate-fingerprint.json'); console.log(JSON.stringify(f))" | tee replay-fingerprint.txt
