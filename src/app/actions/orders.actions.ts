@@ -15,6 +15,35 @@ import {
   type OrderStationCorrectionCommandInput,
   type OrderStationCorrectionCommandResult,
 } from "@/lib/server/commands/orderStationCommand";
+import type {
+  ConfigureExtraWorkCatalogInput,
+  ConfigureExtraWorkCatalogResult,
+  SetExtraWorkHourlyRateInput,
+  SetExtraWorkHourlyRateResult,
+} from "@/lib/server/commands/extraWorkAdminCommand";
+import type {
+  ChangeOrderItemExtraWorkInput,
+  ChangeOrderItemExtraWorkResult,
+} from "@/lib/server/commands/orderExtraWorkCommand";
+import type {
+  FreezeOrderInput,
+  FreezeOrderResult,
+} from "@/lib/server/commands/orderFreezeCommand";
+import type {
+  ReopenFrozenOrderInput,
+  ReopenFrozenOrderResult,
+} from "@/lib/server/commands/orderFreezeCorrectionCommand";
+import type {
+  AssignOrderTaskInput,
+  HandBackOrderTaskInput,
+  OrderTaskAssignmentResult,
+} from "@/lib/server/commands/orderTaskAssignmentCommand";
+import type {
+  ExtraWorkMasterData,
+  LiveOrderCard,
+  OrderCardReadResult,
+} from "@/lib/server/orderCardRead";
+import type { EvidenceReadRecord } from "@/lib/server/evidenceRead";
 
 // DTO Typen (zur Vereinfachung)
 export type OrderResponse = OperationalOrder;
@@ -30,6 +59,198 @@ export async function correctGalvanikToWareneingangAction(
   input: OrderStationCorrectionCommandInput,
 ): Promise<OrderStationCorrectionCommandResult> {
   return correctGalvanikToWareneingang(input);
+}
+
+export async function changeOrderItemExtraWorkAction(
+  input: ChangeOrderItemExtraWorkInput,
+): Promise<ChangeOrderItemExtraWorkResult> {
+  const { changeOrderItemExtraWork } = await import(
+    "@/lib/server/commands/orderExtraWorkCommand"
+  );
+  return changeOrderItemExtraWork(input);
+}
+
+export async function freezeOrderAction(input: FreezeOrderInput): Promise<FreezeOrderResult> {
+  const { freezeOrder } = await import("@/lib/server/commands/orderFreezeCommand");
+  return freezeOrder(input);
+}
+
+export async function reopenFrozenOrderAction(
+  input: ReopenFrozenOrderInput,
+): Promise<ReopenFrozenOrderResult> {
+  const { reopenFrozenOrder } = await import(
+    "@/lib/server/commands/orderFreezeCorrectionCommand"
+  );
+  return reopenFrozenOrder(input);
+}
+
+export async function assignOrderTaskAction(
+  input: AssignOrderTaskInput,
+): Promise<OrderTaskAssignmentResult> {
+  const { assignOrderTask } = await import(
+    "@/lib/server/commands/orderTaskAssignmentCommand"
+  );
+  return assignOrderTask(input);
+}
+
+export async function handBackOrderTaskAction(
+  input: HandBackOrderTaskInput,
+): Promise<OrderTaskAssignmentResult> {
+  const { handBackOrderTask } = await import(
+    "@/lib/server/commands/orderTaskAssignmentCommand"
+  );
+  return handBackOrderTask(input);
+}
+
+export async function configureExtraWorkCatalogPositionAction(
+  input: ConfigureExtraWorkCatalogInput,
+): Promise<ConfigureExtraWorkCatalogResult> {
+  const { configureExtraWorkCatalogPosition } = await import(
+    "@/lib/server/commands/extraWorkAdminCommand"
+  );
+  return configureExtraWorkCatalogPosition(input);
+}
+
+export async function setExtraWorkHourlyRateAction(
+  input: SetExtraWorkHourlyRateInput,
+): Promise<SetExtraWorkHourlyRateResult> {
+  const { setExtraWorkHourlyRate } = await import(
+    "@/lib/server/commands/extraWorkAdminCommand"
+  );
+  return setExtraWorkHourlyRate(input);
+}
+
+type OrderCardActionResult<T> = OrderCardReadResult<T> | {
+  code: "UNAUTHENTICATED";
+  message: string;
+};
+
+async function resolveOrderCardAuthorization(): Promise<
+  | { ok: true; data: AuthorizationSnapshot }
+  | { ok: false; result: OrderCardActionResult<never> }
+> {
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return {
+      ok: false,
+      result: { code: "UNAVAILABLE", message: "Auftragskarte ist derzeit nicht verfügbar." },
+    };
+  }
+  if (!authorization.ok) {
+    return {
+      ok: false,
+      result: authorization.reason === "AUTHORIZATION_UNAVAILABLE"
+        ? { code: "UNAVAILABLE", message: "Auftragskarte ist derzeit nicht verfügbar." }
+        : { code: "UNAUTHENTICATED", message: "Sitzung oder Berechtigung ist nicht verfügbar." },
+    };
+  }
+  return { ok: true, data: authorization.data };
+}
+
+export async function getLiveOrderCardAction(
+  input: { orderId: string },
+): Promise<OrderCardActionResult<{ card: LiveOrderCard; evidence: EvidenceReadRecord[] }>> {
+  noStore();
+  const authorization = await resolveOrderCardAuthorization();
+  if (!authorization.ok) return authorization.result;
+  const [{ readLiveOrderCard }, { readEvidenceRecordsByTarget }] = await Promise.all([
+    import("@/lib/server/orderCardRead"),
+    import("@/lib/server/evidenceRead"),
+  ]);
+  const card = await readLiveOrderCard(authorization.data, input);
+  if (card.code !== "OK") return card;
+  const evidence = await readEvidenceRecordsByTarget(authorization.data, {
+    targetType: "ORDER",
+    targetId: input.orderId,
+  });
+  if (evidence.code !== "OK") return evidence;
+  return { code: "OK", data: { card: card.data, evidence: evidence.data } };
+}
+
+export async function getExtraWorkMasterDataAction(): Promise<OrderCardActionResult<ExtraWorkMasterData>> {
+  noStore();
+  const authorization = await resolveOrderCardAuthorization();
+  if (!authorization.ok) return authorization.result;
+  const { readExtraWorkMasterData } = await import("@/lib/server/orderCardRead");
+  return readExtraWorkMasterData(authorization.data);
+}
+
+export async function getOrderFrozenReceiptAction(input: {
+  orderId: string;
+  clientEventId: string;
+}) {
+  noStore();
+  const authorization = await resolveOrderCardAuthorization();
+  if (!authorization.ok) return authorization.result;
+  const { readOrderFrozenReceipt } = await import("@/lib/server/orderFreezeRead");
+  return readOrderFrozenReceipt(authorization.data, input);
+}
+
+export async function getOrderFreezeCorrectionReceiptAction(input: {
+  orderId: string;
+  clientEventId: string;
+}) {
+  noStore();
+  const authorization = await resolveOrderCardAuthorization();
+  if (!authorization.ok) return authorization.result;
+  const { readOrderFreezeCorrectionReceipt } = await import(
+    "@/lib/server/orderFreezeCorrectionRead"
+  );
+  return readOrderFreezeCorrectionReceipt(authorization.data, input);
+}
+
+export async function getOrderTaskAssignmentReceiptAction(input: {
+  orderId: string;
+  clientEventId: string;
+}) {
+  noStore();
+  const authorization = await resolveOrderCardAuthorization();
+  if (!authorization.ok) return authorization.result;
+  const { readOrderTaskAssignmentReceipt } = await import(
+    "@/lib/server/orderTaskAssignmentRead"
+  );
+  return readOrderTaskAssignmentReceipt(authorization.data, input);
+}
+
+export async function getOrderItemExtraWorkReceiptAction(input: {
+  orderId: string;
+  clientEventId: string;
+}) {
+  noStore();
+  const authorization = await resolveOrderCardAuthorization();
+  if (!authorization.ok) return authorization.result;
+  const { readOrderItemExtraWorkReceipt } = await import(
+    "@/lib/server/extraWorkReceiptRead"
+  );
+  return readOrderItemExtraWorkReceipt(authorization.data, input);
+}
+
+export async function getExtraWorkCatalogReceiptAction(input: {
+  positionId: string;
+  clientEventId: string;
+}) {
+  noStore();
+  const authorization = await resolveOrderCardAuthorization();
+  if (!authorization.ok) return authorization.result;
+  const { readExtraWorkCatalogReceipt } = await import(
+    "@/lib/server/extraWorkReceiptRead"
+  );
+  return readExtraWorkCatalogReceipt(authorization.data, input);
+}
+
+export async function getExtraWorkRateReceiptAction(input: {
+  rateId: string;
+  clientEventId: string;
+}) {
+  noStore();
+  const authorization = await resolveOrderCardAuthorization();
+  if (!authorization.ok) return authorization.result;
+  const { readExtraWorkRateReceipt } = await import(
+    "@/lib/server/extraWorkReceiptRead"
+  );
+  return readExtraWorkRateReceipt(authorization.data, input);
 }
 
 async function resolveOperationalReadAuthorization(): Promise<ActionResult<AuthorizationSnapshot>> {

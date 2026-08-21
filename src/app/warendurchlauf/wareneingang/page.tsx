@@ -166,6 +166,7 @@ function WarendurchlaufLeitstandContent() {
 
               {/* Manuell anlegen */}
               <button
+                data-testid="wareneingang-create-order"
                 onClick={() => openErfassung({ mode: "order" })}
                 className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
                 style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
@@ -309,7 +310,7 @@ function WarendurchlaufLeitstandContent() {
             </div>
           ) : <>
             <p className="mb-3 text-xs text-[#9e9689]">Die Übergabe an Galvanik wird erst nach einem bestätigten Reload als erfolgreich angezeigt. Weitere Auftragsbearbeitung bleibt nicht verfügbar.</p>
-            {handoffSuccessMessage ? <p className="mb-3 text-xs text-[#1a6b38]" role="status">{handoffSuccessMessage}</p> : null}
+            {handoffSuccessMessage ? <p className="mb-3 text-xs text-[#1a6b38]" data-testid="wareneingang-handoff-status" role="status">{handoffSuccessMessage}</p> : null}
             {handoffConflictMessage ? <p className="mb-3 text-xs text-[#c0392b]" role="alert">{handoffConflictMessage}</p> : null}
             <div className="flex flex-col gap-2">
               {stationOrders.length > 0 ? (
@@ -322,7 +323,7 @@ function WarendurchlaufLeitstandContent() {
                   else if (order.risk === "unknown" || u === "unknown") urgencyType = "unknown";
 
                   return (
-                    <div key={order.id}>
+                    <div data-testid={`wareneingang-order-${order.id}`} key={order.id}>
                     <OrderCompactCard
                       id={order.id}
                       orderNumber={order.orderNumber}

@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: ef9a8411cad56b968dcbe97b089260d38c67f7d5
-branch: f1/werkstattdurchlauf-m2-20260817
+base_sha: 54858e4ffebb5472b02d5dbdafdc42b2241e588a
+branch: f1/leistungsabschluss-m3-20260820
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -29,11 +29,11 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: F1.2_WERKSTATTDURCHLAUF
-next_gate_after_active_package: F1.3_LEISTUNGSABSCHLUSS
+active_package: F1.3_LEISTUNGSABSCHLUSS
+next_gate_after_active_package: F1.4_UNVERAENDERLICHE_RECHNUNG
 f1_r0_status: complete
-f1_2_status: candidate_freeze_pending_independent_review
-f1_3_status: locked # F1.3 darf erst nach F1.2-Review-PASS und ausdruecklicher Freigabe starten
+f1_2_status: complete
+f1_3_status: candidate_freeze_pending_independent_review
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -175,6 +175,73 @@ f1_2_allowlist:
   - docs/evidence/f1/artifacts/f1-2/11-foreign-tenant-denial.png
   - docs/evidence/f1/artifacts/f1-2/12-galvanik-real-error.png
   - supabase/migrations/20260817120000_f1_2_order_lifecycle_contract.sql
+
+f1_3_allowlist:
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
+  - docs/evidence/f1/F1_3_LEISTUNGSABSCHLUSS_E2E_EVIDENCE.md
+  - docs/evidence/f1/artifacts/f1-3/01-intake-storage-receipt.png
+  - docs/evidence/f1/artifacts/f1-3/02-galvanik-empty.png
+  - docs/evidence/f1/artifacts/f1-3/03-live-card-data-tablet.png
+  - docs/evidence/f1/artifacts/f1-3/04-assignment-admin-confirmed.png
+  - docs/evidence/f1/artifacts/f1-3/05-handback-workshop-confirmed.png
+  - docs/evidence/f1/artifacts/f1-3/04-live-card-data-desktop.png
+  - docs/evidence/f1/artifacts/f1-3/05-extra-work-receipt-readback.png
+  - docs/evidence/f1/artifacts/f1-3/06-version-conflict.png
+  - docs/evidence/f1/artifacts/f1-3/07-readonly-denial.png
+  - docs/evidence/f1/artifacts/f1-3/08-foreign-tenant-denial.png
+  - docs/evidence/f1/artifacts/f1-3/09-freeze-confirmed.png
+  - docs/evidence/f1/artifacts/f1-3/10-customer-ware-im-haus.png
+  - docs/evidence/f1/artifacts/f1-3/11-freeze-correction-confirmed.png
+  - docs/evidence/f1/artifacts/f1-3/12-refreeze-confirmed.png
+  - docs/evidence/f1/artifacts/f1-3/13-invoice-conflict.png
+  - e2e/f1-3-leistungsabschluss.real.spec.ts
+  - supabase/migrations/20260820121500_f1_3_foundation_ports.sql
+  - supabase/migrations/20260820133000_f1_3_extra_work_contract.sql
+  - supabase/migrations/20260820140000_f1_3_order_freeze_contract.sql
+  - supabase/migrations/20260820143000_f1_3_customer_summary.sql
+  - src/app/actions/customers.actions.ts
+  - src/app/actions/auth.actions.ts
+  - src/app/actions/auth.ts
+  - src/app/actions/__tests__/loginWithPin.test.ts
+  - src/app/actions/orders.actions.ts
+  - src/app/warendurchlauf/galvanik/page.tsx
+  - src/app/warendurchlauf/galvanik/__tests__/orderStationReadback.test.tsx
+  # F1.3 Real-E2E: ausschliesslich stabile, eindeutige Testanker an direkten
+  # Verbrauchern des bestehenden Intake-/Handoff-/Login-Pfads; keine Logikaenderung.
+  - src/app/warendurchlauf/wareneingang/page.tsx
+  - src/components/customers/CustomerOverlay.tsx
+  - src/components/customers/__tests__/w2cB2m5e.customerOverlay.failClosed.test.tsx
+  - src/components/erfassung/ErfassungModal.tsx
+  - src/components/orders/ExtraWorkAdminPanel.tsx
+  - src/components/orders/OrderCompactCard.tsx
+  - src/components/orders/OrderExtraWorkEditor.tsx
+  - src/components/orders/OrderFreezeButton.tsx
+  - src/components/orders/OrderFreezeCorrectionButton.tsx
+  - src/components/orders/OrderOverlay.tsx
+  - src/components/orders/OrderTaskAssignmentPanel.tsx
+  - src/components/orders/WareneingangHandoffButton.tsx
+  - src/components/orders/__tests__/w2cOrderOverlay.failClosed.test.tsx
+  - src/components/start/EmailLoginDialog.tsx
+  - src/components/start/StartScreenClient.tsx
+  - src/lib/server/userLastSeen.ts
+  - src/lib/server/cardSearchRead.ts
+  - src/lib/server/commands/extraWorkAdminCommand.ts
+  - src/lib/server/commands/orderExtraWorkCommand.ts
+  - src/lib/server/commands/orderFreezeCommand.ts
+  - src/lib/server/commands/orderFreezeCorrectionCommand.ts
+  - src/lib/server/commands/orderTaskAssignmentCommand.ts
+  - src/lib/server/customerSummaryRead.ts
+  - src/lib/server/extraWorkReceiptRead.ts
+  - src/lib/server/orderCardRead.ts
+  - src/lib/server/orderFreezeRead.ts
+  - src/lib/server/orderFreezeCorrectionRead.ts
+  - src/lib/server/orderStationRead.ts
+  - src/lib/server/orderTaskAssignmentRead.ts
+  - src/lib/server/__tests__/userLastSeen.test.ts
+  - src/lib/server/__tests__/cardSearchRead.test.ts
+  - src/test/f1_3_foundation_ports.integration.test.ts
+  - src/test/f1_3_live_card.integration.test.ts
 
 f1_r0_required_gates:
   - REACHABLE_PRODUCTION_MOCKS=0

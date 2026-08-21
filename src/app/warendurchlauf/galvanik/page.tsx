@@ -12,9 +12,9 @@ import { ORDER_LIFECYCLE_STATUS } from "@/lib/orders/orderLifecycleContract";
 
 // D-ARCH-001: galvanik is a single stable outside station covering all
 // production (no internal steps, no workflow engine). This route therefore
-// exposes exactly one active bucket (status=galvanik) plus a read-only
-// historical view of already-finished orders. No start or complete command
-// is built here.
+// exposes exactly one active bucket (status=galvanik) plus the finished view.
+// F1.3 performs the atomic finish/freeze from the central live order card;
+// there remains deliberately no separate start command.
 type GalvanikBucket = "galvanik" | "finished";
 type GalvanikOrder = WarendurchlaufOrder & { statusText?: string };
 
@@ -115,7 +115,10 @@ export default function GalvanikPage() {
   const renderOrderList = (orders: GalvanikOrder[], bucket: GalvanikBucket) => {
     const isActive = activeBucket === bucket;
     return (
-      <div className={`flex flex-col gap-3 transition-all duration-500 ${isActive ? 'opacity-100' : ''}`}>
+      <div
+        className={`flex flex-col gap-3 transition-all duration-500 ${isActive ? 'opacity-100' : ''}`}
+        data-testid={`galvanik-${bucket}-orders`}
+      >
         {orders.length === 0 ? (
           <div className="text-xs text-[#9e9689] italic p-4 border border-dashed border-[#d8d0c4] rounded-[14px] text-center">
             {isActive ? <>Noch keine Daten erfasst. <Link href="/orders">Aufträge anzeigen</Link></> : "-"}
@@ -174,7 +177,7 @@ export default function GalvanikPage() {
           Galvanik Bearbeitung
           <span className="flex-1 h-px bg-[#d8d0c4]" />
         </div>
-        <p className="mb-4 text-sm text-[#9e9689]">Die Übergabe aus dem Wareneingang ist aktiv. Start und Abschluss bleiben NOT_AVAILABLE.</p>
+        <p className="mb-4 text-sm text-[#9e9689]">Auftrag öffnen, Mehrarbeit je Teil erfassen und anschließend mit bestätigtem Beleg fertigsetzen. Ein separater Start-Klick bleibt bewusst entfallen.</p>
 
         {/* Page-level so a correction success/conflict stays visible even after the
             affected order's card is removed from the fresh list below. */}
@@ -260,6 +263,7 @@ export default function GalvanikPage() {
               </button>
 
               <button
+                data-testid="galvanik-finished-tab"
                 onClick={() => setActiveBucket("finished")}
                 className={`flex flex-row items-center gap-3 p-3 rounded-[14px] cursor-pointer transition-all text-left ${activeBucket === "finished"
                     ? "bg-[#e6f4ea] border-2 border-[#1a6b38] shadow-md transform scale-[1.02]"

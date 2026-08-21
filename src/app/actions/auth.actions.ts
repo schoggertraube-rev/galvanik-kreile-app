@@ -6,6 +6,7 @@ import { db } from "@/db";
 import { appUsers } from "@/db/schema";
 import {
   APP_TENANT_ID,
+  clearAppSession,
   setAppSession,
   SESSION_TTL_MS,
 } from "@/lib/server/appSession";
@@ -15,6 +16,7 @@ import {
   isValidPinLoginHandle,
   resolvePinLoginCandidate,
 } from "@/lib/server/pinLoginHandle";
+import { recordUserLastSeenForLogin } from "@/lib/server/userLastSeen";
 
 export async function getAuthorizationSnapshotAction(): Promise<AuthorizationResult> {
   return await resolveAuthorization();
@@ -150,6 +152,12 @@ export async function loginWithPin(
       issuedAt: now,
       expiresAt: now + SESSION_TTL_MS,
     });
+
+    const lastSeen = await recordUserLastSeenForLogin();
+    if (lastSeen.code !== "OK") {
+      await clearAppSession();
+      return { ok: false, message: "Login konnte nicht sicher bestätigt werden." };
+    }
 
     return { ok: true, role: user.role };
   } catch {

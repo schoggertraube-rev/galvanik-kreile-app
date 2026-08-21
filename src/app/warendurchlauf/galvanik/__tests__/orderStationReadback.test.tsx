@@ -83,12 +83,12 @@ describe("W3 Galvanik readback", () => {
     expect(screen.getByRole("link", { name: "Aufträge anzeigen" })).toHaveAttribute("href", "/orders");
   });
 
-  it("shows an order handed over to galvanik in the active bucket while start and completion remain unavailable", async () => {
+  it("shows an order handed over to galvanik while the separate start action remains unavailable", async () => {
     getGalvanikOrdersAction.mockResolvedValueOnce({ ok: true, data: [galvanikOrder] });
     render(<GalvanikPage />);
     expect(await screen.findByText("A-1")).toBeInTheDocument();
-    expect(screen.getByText("Die Übergabe aus dem Wareneingang ist aktiv. Start und Abschluss bleiben NOT_AVAILABLE.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /start|abschluss/i })).not.toBeInTheDocument();
+    expect(screen.getByText("Auftrag öffnen, Mehrarbeit je Teil erfassen und anschließend mit bestätigtem Beleg fertigsetzen. Ein separater Start-Klick bleibt bewusst entfallen.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /start/i })).not.toBeInTheDocument();
   });
 
   it("renders the correction control for an active galvanik order and keeps its page-level success message after the card disappears", async () => {
