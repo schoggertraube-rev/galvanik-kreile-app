@@ -117,6 +117,37 @@ function queryForSnapshot(query) {
   return result.trim();
 }
 
+function assertFreshLocalReplayDatabase(fixtureIds) {
+  let parsedDatabaseUrl;
+  try {
+    parsedDatabaseUrl = new URL(DATABASE_URL);
+  } catch {
+    throw new Error("BF006_FRESH_LOCAL_REPLAY_REQUIRED: DATABASE_URL ist ungueltig");
+  }
+
+  if (
+    parsedDatabaseUrl.protocol !== "postgresql:" ||
+    !["127.0.0.1", "localhost"].includes(parsedDatabaseUrl.hostname) ||
+    parsedDatabaseUrl.port !== "54322" ||
+    parsedDatabaseUrl.pathname !== "/postgres" ||
+    parsedDatabaseUrl.username !== "postgres"
+  ) {
+    throw new Error(
+      "BF006_FRESH_LOCAL_REPLAY_REQUIRED: erwartet lokale Replay-DB postgresql://postgres@127.0.0.1:54322/postgres"
+    );
+  }
+
+  const fixtureIdList = fixtureIds.map((id) => `'${id}'`).join(", ");
+  const existingFixtureCount = queryForSnapshot(
+    `select count(*)::int from public.app_users where id in (${fixtureIdList})`
+  );
+  if (!/^\d+$/.test(existingFixtureCount) || Number(existingFixtureCount) !== 0) {
+    throw new Error(
+      `BF006_FRESH_LOCAL_REPLAY_REQUIRED: feste BF-006-Fixtures bereits vorhanden (count=${existingFixtureCount})`
+    );
+  }
+}
+
 function loginHandleFor(userId) {
   return createHmac("sha256", APP_SESSION_SECRET)
     .update(`pin-login:${APP_TENANT_ID}:${userId}`)
@@ -831,6 +862,7 @@ async function main() {
   const readonlyId = "00000000-f0be-4006-a000-000000000002";
   const writerPin = "4711";
   const readonlyPin = "4712";
+  let fixturesInserted = false;
 
   try {
     if (!APP_SESSION_SECRET) {
@@ -876,12 +908,13 @@ async function main() {
     // ── Setup: Test-Fixtures ────────────────────────────────────────────────────────────────
     const writerHash = bcrypt.hashSync(writerPin, 10);
     const readonlyHash = bcrypt.hashSync(readonlyPin, 10);
-    runSql(`delete from public.app_users where id in ('${writerId}', '${readonlyId}')`);
+    assertFreshLocalReplayDatabase([writerId, readonlyId]);
     runSql(
       `insert into public.app_users (id, tenant_id, email, full_name, role, pin_hash, active) values ` +
         `('${writerId}', '${APP_TENANT_ID}', 'f0-verify-writer@example.invalid', 'F0 Verify Writer', 'meister', '${writerHash}', true), ` +
         `('${readonlyId}', '${APP_TENANT_ID}', 'f0-verify-readonly@example.invalid', 'F0 Verify Readonly', 'readonly', '${readonlyHash}', true)`
     );
+    fixturesInserted = true;
     report("SETUP", true, "app_users fixtures (writer=meister, readonly=readonly)");
 
     // ── V1: echter Login meister (HTTP/RSC + exakte Keys + ok + role + Cookie) ───────────────
@@ -1063,11 +1096,15 @@ async function main() {
       report("SNAPSHOT-COMPARE", false, "Snapshot vorher und/oder nachher fehlt");
     }
   } finally {
-    // ── Cleanup: Fixtures immer entfernen ───────────────────────────────────────────────────
-    try {
-      runSql(`delete from public.app_users where id in ('${writerId}', '${readonlyId}')`);
-    } catch (error) {
-      report("CLEANUP", false, `app_users delete failed: ${error.message}`);
+    // Last-Seen-Events sind absichtlich append-only und referenzieren ihre Akteure.
+    // Der synthetische Fixture-Graph wird zusammen mit der frischen lokalen Replay-DB
+    // durch den verpflichtenden `supabase stop --no-backup`-Schritt entsorgt.
+    if (fixturesInserted) {
+      report(
+        "FIXTURE-LIFECYCLE",
+        true,
+        "append-only Login-Fixtures bis zum isolierten Supabase-Teardown ohne Backup erhalten"
+      );
     }
   }
 
