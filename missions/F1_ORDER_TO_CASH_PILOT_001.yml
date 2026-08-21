@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: 54858e4ffebb5472b02d5dbdafdc42b2241e588a
-branch: f1/leistungsabschluss-m3-20260820
+base_sha: fc551b0732c52a0867cc4b0bbdfe4f8a52ad3550
+branch: main
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -16,6 +16,13 @@ f1_r0_gate_complete: true
 # M1 abgeschlossen: PR #61 gemergt (6b4d482b), CURRENT_STATE via PR #62,
 # main = ef9a8411cad56b968dcbe97b089260d38c67f7d5, Worktree sauber, F1-Branch
 # geloescht. F1-R0-Gates PASS, unabhaengige Reviews (Claude + Cowork) PASS.
+# M3 abgeschlossen: PR #66 am unabhaengig geprueften Kandidaten
+# fb19c224e1542afdf1436f5f0fb76995fec3935b als Merge-Commit
+# fc551b0732c52a0867cc4b0bbdfe4f8a52ad3550 nach main integriert; Tree
+# 0a77f85f8268ac721d8f15fc7edce5e2623482c5 ist bytegleich zum Kandidaten.
+# Das automatische Vercel-Git-Deployment dpl_67UsPkCLodKUS8Fa2Lp7vLhX6Par
+# ist fuer exakt diesen Merge-SHA target=production und READY; keine manuelle
+# Promotion sowie keine Remote-DB- oder RLS-Mutation.
 # Post-M0 Dauerprozess (gilt nach Merge des F1-Worktrees):
 #   02_app → kurzer Paketbranch von aktuellem main → Real-E2E →
 #   unabhaengiger PASS → PR/CI/Merge → Branch loeschen → zurueck auf main
@@ -29,11 +36,13 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: F1.3_LEISTUNGSABSCHLUSS
+active_package: NONE
+# F1.4 bleibt bis zu einem eigenen Auftrag ausdruecklich NOT_STARTED.
 next_gate_after_active_package: F1.4_UNVERAENDERLICHE_RECHNUNG
 f1_r0_status: complete
 f1_2_status: complete
-f1_3_status: candidate_freeze_pending_independent_review
+f1_3_status: complete
+f1_4_status: NOT_STARTED
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -178,6 +187,7 @@ f1_2_allowlist:
 
 f1_3_allowlist:
   - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - docs/project/CURRENT_STATE.md
   - .github/workflows/quality.yml
   - scripts/quality/f0-verify-http-tests.mjs
   - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
