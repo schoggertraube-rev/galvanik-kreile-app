@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockSetAppSession = vi.fn();
+const mockClearAppSession = vi.fn();
+const mockRecordUserLastSeenForLogin = vi.fn();
 const mockBcryptCompare = vi.fn();
 const mockBcryptHash = vi.fn();
 const mockRunPinAttempt = vi.fn();
@@ -26,8 +28,13 @@ vi.mock("@/lib/server/pinRateLimit", () => ({
 
 vi.mock("@/lib/server/appSession", () => ({
   APP_TENANT_ID: "galvanik-kreile",
+  clearAppSession: mockClearAppSession,
   setAppSession: mockSetAppSession,
   SESSION_TTL_MS: 12 * 60 * 60 * 1000,
+}));
+
+vi.mock("@/lib/server/userLastSeen", () => ({
+  recordUserLastSeenForLogin: mockRecordUserLastSeenForLogin,
 }));
 
 vi.mock("@/lib/server/pinLoginHandle", () => ({
@@ -99,6 +106,12 @@ describe("loginWithPin() – PIN-Security (M4: SEC-PIN-002B)", () => {
     );
     mockDbUpdateWhere.mockResolvedValue(undefined);
     mockSetAppSession.mockResolvedValue(undefined);
+    mockClearAppSession.mockResolvedValue(undefined);
+    mockRecordUserLastSeenForLogin.mockResolvedValue({
+      code: "OK",
+      receipt: {},
+      replayed: false,
+    });
   });
 
   it("erstellt bei gültigem bcrypt-PIN eine vollständige AppSession", async () => {
@@ -120,7 +133,24 @@ describe("loginWithPin() – PIN-Security (M4: SEC-PIN-002B)", () => {
       "user-abc",
       expect.any(Function),
     );
+    expect(mockRecordUserLastSeenForLogin).toHaveBeenCalledOnce();
     expect(mockBcryptHash).not.toHaveBeenCalled();
+  });
+
+  it("verwirft die neue Session, wenn der Login-Blick nicht bestätigt wird", async () => {
+    mockDbSelect.mockResolvedValue([makeUser()]);
+    mockRecordUserLastSeenForLogin.mockResolvedValue({
+      code: "UNAVAILABLE",
+      message: "Letzter Blick konnte nicht gespeichert werden.",
+    });
+
+    const { loginWithPin } = await import("@/app/actions/auth.actions");
+    await expect(loginWithPin(handleFor("user-abc"), "1234")).resolves.toEqual({
+      ok: false,
+      message: "Login konnte nicht sicher bestätigt werden.",
+    });
+    expect(mockSetAppSession).toHaveBeenCalledOnce();
+    expect(mockClearAppSession).toHaveBeenCalledOnce();
   });
 
   it("verweigert einen fehlenden Anzeigenamen ohne eine Session zu setzen", async () => {

@@ -30,13 +30,14 @@ export function OrderCompactCard({
   onClick,
   onAdvance
 }: OrderCompactCardProps) {
-  void id;
   const isCrit = urgency === "crit";
   const isWait = urgency === "wait";
   const isUnknown = urgency === "unknown";
 
   return (
     <div
+      data-order-id={id}
+      data-testid="order-compact-card"
       onClick={onClick}
       className={`
         w-full group cursor-pointer border rounded-xl bg-white

@@ -307,9 +307,10 @@ export async function readTenantStationOrders(
     const rows = await tx.execute<QueueRow>(station === "galvanik" ? sql`
       SELECT queue.*, queue.due_date::date::text AS due_date_text
       FROM private.v_operational_station_queue_v1 queue
-      WHERE station = 'galvanik'
-        AND current_station = 'galvanik'
-        AND current_station_id = 'galvanik'
+      WHERE station IN ('galvanik', 'fertig')
+        AND current_station = station
+        AND current_station_id = station
+        AND status = station
       ORDER BY created_at DESC
     ` : sql`
       SELECT queue.*, queue.due_date::date::text AS due_date_text

@@ -14,14 +14,61 @@
     "public.scan_uploads"
   ],
   "readPorts": {
+    "src/lib/server/cardSearchRead.ts": [
+      "private.v_card_search_documents_v1"
+    ],
+    "src/lib/server/commands/extraWorkAdminCommand.ts": [
+      "private.v_extra_work_catalog_receipts_v1",
+      "private.v_extra_work_rate_receipts_v1"
+    ],
+    "src/lib/server/commands/orderExtraWorkCommand.ts": [
+      "private.v_order_freeze_state_v1",
+      "private.v_order_item_extra_work_receipts_v1"
+    ],
+    "src/lib/server/commands/orderFreezeCommand.ts": [
+      "private.v_order_freeze_state_v1",
+      "private.v_order_frozen_receipts_v1"
+    ],
+    "src/lib/server/commands/orderFreezeCorrectionCommand.ts": [
+      "private.v_order_freeze_correction_receipts_v1",
+      "private.v_order_freeze_state_v1",
+      "private.v_order_invoice_presence_v1"
+    ],
     "src/lib/server/commands/orderIntakeCommand.ts": [
       "private.v_order_intake_receipts_v1"
     ],
     "src/lib/server/commands/orderStationCommand.ts": [
       "private.v_order_station_correction_receipts_v1"
     ],
+    "src/lib/server/commands/orderTaskAssignmentCommand.ts": [
+      "private.v_order_task_assignment_receipts_v1"
+    ],
+    "src/lib/server/customerSummaryRead.ts": [
+      "private.v_customer_summary_v1"
+    ],
     "src/lib/server/evidenceRead.ts": [
       "private.v_evidence_records_v2"
+    ],
+    "src/lib/server/extraWorkReceiptRead.ts": [
+      "private.v_extra_work_catalog_receipts_v1",
+      "private.v_extra_work_rate_receipts_v1",
+      "private.v_order_item_extra_work_receipts_v1"
+    ],
+    "src/lib/server/orderCardRead.ts": [
+      "private.v_extra_work_catalog_v1",
+      "private.v_extra_work_current_rate_v1",
+      "private.v_operational_station_queue_v1",
+      "private.v_order_extra_work_live_v1",
+      "private.v_order_frozen_receipts_v1",
+      "private.v_order_intake_receipts_v1",
+      "private.v_order_task_assignee_options_v1",
+      "private.v_order_task_assignment_v1"
+    ],
+    "src/lib/server/orderFreezeCorrectionRead.ts": [
+      "private.v_order_freeze_correction_receipts_v1"
+    ],
+    "src/lib/server/orderFreezeRead.ts": [
+      "private.v_order_frozen_receipts_v1"
     ],
     "src/lib/server/orderIntakeRead.ts": [
       "private.v_order_intake_customers_v1",
@@ -34,6 +81,16 @@
       "private.v_operational_station_queue_v1",
       "private.v_order_station_correction_receipts_v1",
       "private.v_order_station_receipts_v1"
+    ],
+    "src/lib/server/orderTaskAssignmentRead.ts": [
+      "private.v_operational_station_queue_v1",
+      "private.v_order_task_assignee_options_v1",
+      "private.v_order_task_assignment_receipts_v1",
+      "private.v_order_task_assignment_v1"
+    ],
+    "src/lib/server/userLastSeen.ts": [
+      "private.v_user_last_seen_receipts_v1",
+      "private.v_user_last_seen_v1"
     ]
   },
   "commandOwners": {
@@ -72,6 +129,48 @@
       "path": "supabase/migrations/20260817120000_f1_2_order_lifecycle_contract.sql",
       "requiredSecurityInvokerViews": [
         "private.v_order_station_correction_receipts_v1"
+      ],
+      "requiredLegacySource": null
+    },
+    {
+      "path": "supabase/migrations/20260820121500_f1_3_foundation_ports.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_card_search_documents_v1",
+        "private.v_order_task_assignee_options_v1",
+        "private.v_order_task_assignment_receipts_v1",
+        "private.v_order_task_assignment_v1",
+        "private.v_user_last_seen_receipts_v1",
+        "private.v_user_last_seen_v1"
+      ],
+      "requiredLegacySource": null
+    },
+    {
+      "path": "supabase/migrations/20260820133000_f1_3_extra_work_contract.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_extra_work_catalog_receipts_v1",
+        "private.v_extra_work_catalog_v1",
+        "private.v_extra_work_current_rate_v1",
+        "private.v_extra_work_rate_receipts_v1",
+        "private.v_order_item_extra_work_receipts_v1",
+        "private.v_order_item_extra_work_v1"
+      ],
+      "requiredLegacySource": null
+    },
+    {
+      "path": "supabase/migrations/20260820140000_f1_3_order_freeze_contract.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_order_extra_work_live_v1",
+        "private.v_order_freeze_correction_receipts_v1",
+        "private.v_order_freeze_state_v1",
+        "private.v_order_frozen_receipts_v1",
+        "private.v_order_invoice_presence_v1"
+      ],
+      "requiredLegacySource": null
+    },
+    {
+      "path": "supabase/migrations/20260820143000_f1_3_customer_summary.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_customer_summary_v1"
       ],
       "requiredLegacySource": null
     }

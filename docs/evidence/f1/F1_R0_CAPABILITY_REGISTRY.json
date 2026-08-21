@@ -774,7 +774,7 @@
       "visible": true,
       "reachable": true,
       "classification": "PENDING_CONTRACT",
-      "open_reason": "Galvanik station view. DB-connected but F1.2 not yet released."
+      "open_reason": "Galvanik station view. F1.2 is released with real E2E evidence. The F1.3 live order-card, shared task assignment, finish/freeze and append-only freeze-correction extensions passed the real local DB/Auth/Storage/browser E2E on 2026-08-21; exact-SHA CI and independent review remain pending."
     },
     {
       "stable_id": "page.warendurchlauf.neu",
@@ -1186,6 +1186,7 @@
       "kind": "SERVER_ACTION_GROUP",
       "entry_point": "src/app/actions/customers.actions.ts",
       "exported_functions": [
+        "getCustomerSummaryAction",
         "getCustomersDb",
         "getCustomerByIdDb",
         "createCustomerDb",
@@ -1313,6 +1314,21 @@
       "exported_functions": [
         "transitionWareneingangToGalvanikAction",
         "correctGalvanikToWareneingangAction",
+        "changeOrderItemExtraWorkAction",
+        "freezeOrderAction",
+        "reopenFrozenOrderAction",
+        "assignOrderTaskAction",
+        "handBackOrderTaskAction",
+        "configureExtraWorkCatalogPositionAction",
+        "setExtraWorkHourlyRateAction",
+        "getLiveOrderCardAction",
+        "getExtraWorkMasterDataAction",
+        "getOrderFrozenReceiptAction",
+        "getOrderFreezeCorrectionReceiptAction",
+        "getOrderTaskAssignmentReceiptAction",
+        "getOrderItemExtraWorkReceiptAction",
+        "getExtraWorkCatalogReceiptAction",
+        "getExtraWorkRateReceiptAction",
         "getOrdersDb",
         "getOrderCountDb",
         "createOrderDb",
@@ -1322,7 +1338,7 @@
         "createOrderFromScan"
       ],
       "classification": "PENDING_CONTRACT",
-      "open_reason": "Order lifecycle action group. The F1.2 transition and correction actions have real local E2E evidence but remain pending independent review; getRiskOrders returns NOT_AVAILABLE and transitionOrderProcess remains under F0-W2C quarantine.",
+      "open_reason": "Order lifecycle action group. F1.2 transition and correction are released with real E2E evidence. F1.3 extra-work, live-card, shared task assignment, finish/freeze and append-only freeze-correction actions passed the real local DB/Auth/Storage/browser E2E on 2026-08-21; exact-SHA CI and independent review remain pending. getRiskOrders returns NOT_AVAILABLE and transitionOrderProcess remains under F0-W2C quarantine.",
       "visible": false,
       "reachable": true
     },

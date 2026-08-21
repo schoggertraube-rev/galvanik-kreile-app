@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { clearAppSession, setAppSession, SESSION_TTL_MS } from '@/lib/server/appSession'
 import { resolveLoginIdentityByEmail } from '@/lib/server/authorization'
+import { recordUserLastSeenForLogin } from '@/lib/server/userLastSeen'
 
 // ─── Logout-Ergebnistyp ───────────────────────────────────────────────────────
 export type LogoutResult = {
@@ -71,6 +72,13 @@ export async function login(formData: FormData) {
     issuedAt: now,
     expiresAt: now + SESSION_TTL_MS,
   });
+
+  const lastSeen = await recordUserLastSeenForLogin();
+  if (lastSeen.code !== 'OK') {
+    await clearAppSession();
+    await supabase.auth.signOut();
+    redirect('/start?message=Systemfehler: Login konnte nicht sicher bestätigt werden.')
+  }
 
   revalidatePath('/', 'layout')
 

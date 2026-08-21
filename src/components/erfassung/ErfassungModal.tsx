@@ -45,6 +45,7 @@ export function ErfassungModal() {
   return (
     <div 
       className="fixed inset-0 z-[2000] flex items-center justify-center p-4 sm:p-6 bg-[#1a1c23]/40 backdrop-blur-md animate-in fade-in duration-200"
+      data-testid="order-intake-modal"
       onClick={handleBackdropClick}
     >
       <div className="relative w-[calc(100vw-16px)] sm:w-[calc(100vw-24px)] md:w-[92vw] lg:w-[860px] max-w-5xl bg-white rounded-2xl shadow-2xl border border-gray-100 flex flex-col max-h-[calc(100dvh-16px)] overflow-hidden animate-in slide-in-from-bottom-4 duration-300">

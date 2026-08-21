@@ -24,7 +24,7 @@ export function EmailLoginDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 backdrop-blur-sm" data-testid="email-login-dialog">
       <div className="bg-white rounded-3xl shadow-elevated border border-neutral-gray-100 w-full max-w-sm overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="bg-bg-app-soft px-6 py-5 border-b border-neutral-gray-100 flex items-center justify-between">
           <div>

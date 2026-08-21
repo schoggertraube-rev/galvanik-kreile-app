@@ -8,6 +8,23 @@ import { checkAppAuth, ActionResult } from "@/lib/server/authHelper";
 import { Customer } from "@/lib/types/customer";
 import { unstable_noStore as noStore } from "next/cache";
 import { resolveAuthorization } from "@/lib/server/authorization";
+import { readCustomerSummary } from "@/lib/server/customerSummaryRead";
+
+export async function getCustomerSummaryAction(input: { customerId: string }) {
+  noStore();
+  let authorization;
+  try {
+    authorization = await resolveAuthorization();
+  } catch {
+    return { code: "UNAVAILABLE" as const, message: "Kundenkarte ist derzeit nicht verfügbar." };
+  }
+  if (!authorization.ok) {
+    return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
+      ? { code: "UNAVAILABLE" as const, message: "Kundenkarte ist derzeit nicht verfügbar." }
+      : { code: "UNAUTHENTICATED" as const, message: "Sitzung oder Berechtigung ist nicht verfügbar." };
+  }
+  return readCustomerSummary(authorization.data, input);
+}
 
 type DbCustomer = InferSelectModel<typeof customers>;
 

@@ -87,7 +87,7 @@ function PinDialog({ user, onClose }: { user: StartUserDto; onClose: () => void 
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-900/40 backdrop-blur-sm" data-testid="pin-login-dialog">
       <div className="bg-white rounded-3xl shadow-elevated border border-neutral-gray-100 w-full max-w-[320px] overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="bg-bg-app-soft px-6 py-5 border-b border-neutral-gray-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -240,6 +240,7 @@ function StartScreenContent({
           return (
             <button
               key={user.loginHandle}
+              data-testid={`pin-user-card-${user.loginHandle}`}
               onClick={() => setSelectedUser(user)}
               className="w-[220px] h-[260px] shrink-0 snap-center bg-bg-app-soft rounded-[28px] border border-neutral-gray-100 shadow-card hover:shadow-md hover:-translate-y-1 transition-all duration-300 active:scale-95 flex flex-col items-center justify-center gap-6 p-6 group cursor-pointer"
             >

@@ -124,7 +124,7 @@ export function WareneingangHandoffButton({
   }
 
   return (
-    <div className="mt-2" onClick={(event) => event.stopPropagation()}>
+    <div className="mt-2" data-testid="wareneingang-handoff" onClick={(event) => event.stopPropagation()}>
       <button
         type="button"
         onClick={handleHandoff}
