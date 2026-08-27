@@ -27,6 +27,7 @@ vi.mock("../OrderExtraWorkEditor", () => ({ OrderExtraWorkEditor: () => null }))
 vi.mock("../OrderFreezeButton", () => ({ OrderFreezeButton: () => null }));
 vi.mock("../OrderFreezeCorrectionButton", () => ({ OrderFreezeCorrectionButton: () => null }));
 vi.mock("../OrderTaskAssignmentPanel", () => ({ OrderTaskAssignmentPanel: () => null }));
+vi.mock("../OrderImmutableInvoiceButton", () => ({ OrderImmutableInvoiceButton: () => null }));
 
 import { OrderOverlay } from "../OrderOverlay";
 

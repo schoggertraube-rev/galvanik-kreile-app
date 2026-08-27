@@ -65,17 +65,6 @@ const SESSION_TIME_ZONE = "Pacific/Honolulu";
 /** UTC 2026-08-21, Pacific/Honolulu 2026-08-21, Europe/Berlin 2026-08-22. */
 const FREEZE_INSTANT = "2026-08-21T22:30:00.000Z";
 const SERVICE_DATE = "2026-08-22";
-const SELLER_DEFAULTS = {
-  company_name: "F1.4 Synthetic Galvanik GmbH",
-  street: "Testweg 1",
-  zip: "70173",
-  city: "Stuttgart",
-  country: "Deutschland",
-  iban: "DE02120300000000202051",
-  bic: "BYLADEM1001",
-  bank_name: "F1.4 Testbank",
-  tax_id: "DE-SYNTHETIC-TAX",
-} as const;
 const FREEZE_PAYLOAD = {
   freezeId: FREEZE_ID,
   rateId: RATE_ID,
