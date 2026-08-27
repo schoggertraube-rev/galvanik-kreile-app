@@ -11,6 +11,7 @@ import { ExtraWorkAdminPanel } from "@/components/orders/ExtraWorkAdminPanel";
 import { OrderExtraWorkEditor } from "@/components/orders/OrderExtraWorkEditor";
 import { OrderFreezeButton } from "@/components/orders/OrderFreezeButton";
 import { OrderFreezeCorrectionButton } from "@/components/orders/OrderFreezeCorrectionButton";
+import { OrderImmutableInvoiceButton } from "@/components/orders/OrderImmutableInvoiceButton";
 import { OrderTaskAssignmentPanel } from "@/components/orders/OrderTaskAssignmentPanel";
 import { usePermissions } from "@/lib/auth/PermissionsContext";
 import { useOverlayStore } from "@/lib/overlayStore";
@@ -223,6 +224,8 @@ export function OrderOverlay() {
                   ) : null}
 
                   <OrderFreezeButton order={card} rateConfigured={masterData.currentRate !== null} onConfirmedCard={setCard} />
+
+                  <OrderImmutableInvoiceButton order={card} />
 
                   <OrderFreezeCorrectionButton
                     order={card}
