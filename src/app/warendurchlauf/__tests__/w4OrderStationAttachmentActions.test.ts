@@ -6,11 +6,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const ports = vi.hoisted(() => ({
   resolveAuthorization: vi.fn(),
   read: vi.fn(),
+  readIntake: vi.fn(),
   readEvidence: vi.fn(),
   readEvidenceByTarget: vi.fn(),
   reserve: vi.fn(),
+  reserveIntake: vi.fn(),
   finalize: vi.fn(),
+  finalizeIntake: vi.fn(),
   original: vi.fn(),
+  originalIntake: vi.fn(),
   noStore: vi.fn(),
   domainLoaded: vi.fn(),
 }));
@@ -27,9 +31,13 @@ vi.mock("@/lib/server/orderStationAttachment", () => {
   ports.domainLoaded();
   return {
     readOrderStationAttachments: ports.read,
+    readOrderIntakeAttachments: ports.readIntake,
     reserveOrderStationAttachment: ports.reserve,
+    reserveOrderIntakeAttachment: ports.reserveIntake,
     finalizeOrderStationAttachment: ports.finalize,
+    finalizeOrderIntakeAttachment: ports.finalizeIntake,
     getOrderStationAttachmentOriginal: ports.original,
+    getOrderIntakeAttachmentOriginal: ports.originalIntake,
   };
 });
 vi.mock("@/lib/server/evidenceRead", () => {
@@ -66,11 +74,15 @@ beforeEach(() => {
   vi.clearAllMocks();
   ports.resolveAuthorization.mockResolvedValue({ ok: true, data: snapshot });
   ports.read.mockResolvedValue({ code: "OK", data: [] });
+  ports.readIntake.mockResolvedValue({ code: "OK", data: [] });
   ports.readEvidence.mockResolvedValue({ code: "OK", data: [] });
   ports.readEvidenceByTarget.mockResolvedValue({ code: "OK", data: [] });
   ports.reserve.mockResolvedValue({ code: "OK", data: { receipt: {}, upload: {}, replayed: false } });
+  ports.reserveIntake.mockResolvedValue({ code: "OK", data: { receipt: {}, upload: {}, replayed: false } });
   ports.finalize.mockResolvedValue({ code: "OK", data: { receipt: {}, replayed: false } });
+  ports.finalizeIntake.mockResolvedValue({ code: "OK", data: { receipt: {}, replayed: false } });
   ports.original.mockResolvedValue({ code: "OK", data: { downloadUrl: "https://local.invalid", expiresInSeconds: 60 } });
+  ports.originalIntake.mockResolvedValue({ code: "OK", data: { downloadUrl: "https://local.invalid", expiresInSeconds: 60 } });
 });
 
 describe("W4 attachment server actions", () => {
@@ -105,24 +117,57 @@ describe("W4 attachment server actions", () => {
     expect(ports.domainLoaded).not.toHaveBeenCalled();
   });
 
-  it("lets readonly and buero read tenant metadata while deriving canOperate=false", async () => {
-    const { getGalvanikHandoffAttachmentsAction } = await import("../actions");
-    for (const role of ["readonly", "buero"] as const) {
-      const readOnlySnapshot = {
+  it.each(["developer", "readonly"] as const)(
+    "rejects %s before every attachment and evidence read port",
+    async (role) => {
+      const deniedSnapshot = {
+        ...snapshot,
+        role,
+        permissions: ["perm_view_leitstand", "perm_op_photos"] as const,
+      };
+      ports.resolveAuthorization.mockResolvedValue({ ok: true, data: deniedSnapshot });
+      const {
+        getGalvanikEvidenceByTargetAction,
+        getGalvanikHandoffAttachmentOriginalAction,
+        getGalvanikHandoffAttachmentsAction,
+        getOrderIntakeAttachmentOriginalAction,
+        getOrderIntakeAttachmentsAction,
+      } = await import("../actions");
+
+      await expect(getGalvanikHandoffAttachmentsAction(readInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
+      await expect(getGalvanikEvidenceByTargetAction(targetInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
+      await expect(getGalvanikHandoffAttachmentOriginalAction(originalInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
+      await expect(getOrderIntakeAttachmentsAction(readInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
+      await expect(getOrderIntakeAttachmentOriginalAction(originalInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
+
+      expect(ports.read).not.toHaveBeenCalled();
+      expect(ports.readIntake).not.toHaveBeenCalled();
+      expect(ports.readEvidence).not.toHaveBeenCalled();
+      expect(ports.readEvidenceByTarget).not.toHaveBeenCalled();
+      expect(ports.original).not.toHaveBeenCalled();
+      expect(ports.originalIntake).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["buero", "werkstatt", "meister", "admin"] as const)(
+    "lets product role %s read tenant metadata with the existing capability",
+    async (role) => {
+      const roleSnapshot = {
         ...snapshot,
         role,
         permissions: ["perm_view_leitstand"] as const,
       };
-      ports.resolveAuthorization.mockResolvedValueOnce({ ok: true, data: readOnlySnapshot });
+      ports.resolveAuthorization.mockResolvedValueOnce({ ok: true, data: roleSnapshot });
+      const { getGalvanikHandoffAttachmentsAction } = await import("../actions");
       const result = await getGalvanikHandoffAttachmentsAction(readInput);
       expect(result).toEqual({
         code: "OK",
         data: { receipts: [], evidenceRecords: [], canOperate: false, currentActorId: USER_ID },
       });
-      expect(ports.read).toHaveBeenLastCalledWith(readOnlySnapshot, readInput);
-      expect(ports.readEvidence).toHaveBeenLastCalledWith(readOnlySnapshot, readInput);
-    }
-  });
+      expect(ports.read).toHaveBeenLastCalledWith(roleSnapshot, readInput);
+      expect(ports.readEvidence).toHaveBeenLastCalledWith(roleSnapshot, readInput);
+    },
+  );
 
   it("separates perm_view_leitstand from perm_op_photos in both directions", async () => {
     const {

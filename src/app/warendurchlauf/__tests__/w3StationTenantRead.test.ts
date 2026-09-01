@@ -6,12 +6,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const resolveAuthorizationSpy = vi.hoisted(() => vi.fn());
 const readTenantStationOrdersSpy = vi.hoisted(() => vi.fn());
 const readTenantOrderStationReceiptSpy = vi.hoisted(() => vi.fn());
+const readTenantOrderStationCorrectionReceiptSpy = vi.hoisted(() => vi.fn());
+const searchOrderIntakeCustomersSpy = vi.hoisted(() => vi.fn());
+const readOrderIntakeReceiptSpy = vi.hoisted(() => vi.fn());
 
 vi.mock("next/cache", () => ({ unstable_noStore: vi.fn() }));
 vi.mock("@/lib/server/authorization", () => ({ resolveAuthorization: resolveAuthorizationSpy }));
 vi.mock("@/lib/server/orderStationRead", () => ({
   readTenantStationOrders: readTenantStationOrdersSpy,
   readTenantOrderStationReceipt: readTenantOrderStationReceiptSpy,
+  readTenantOrderStationCorrectionReceipt: readTenantOrderStationCorrectionReceiptSpy,
+}));
+vi.mock("@/lib/server/orderIntakeRead", () => ({
+  searchOrderIntakeCustomers: searchOrderIntakeCustomersSpy,
+  readOrderIntakeReceipt: readOrderIntakeReceiptSpy,
 }));
 
 const authorization = {
@@ -20,8 +28,8 @@ const authorization = {
     userId: "user-1",
     tenantId: "tenant-a",
     displayName: "Werkstatt",
-    role: "readonly" as const,
-    permissions: ["perm_view_leitstand"] as const,
+    role: "werkstatt" as const,
+    permissions: ["perm_view_leitstand", "perm_data_orders", "perm_view_customers"] as const,
     active: true as const,
   },
 };
@@ -32,6 +40,9 @@ describe("W3 tenant station reads", () => {
     resolveAuthorizationSpy.mockResolvedValue(authorization);
     readTenantStationOrdersSpy.mockResolvedValue([]);
     readTenantOrderStationReceiptSpy.mockResolvedValue(null);
+    readTenantOrderStationCorrectionReceiptSpy.mockResolvedValue(null);
+    searchOrderIntakeCustomersSpy.mockResolvedValue([]);
+    readOrderIntakeReceiptSpy.mockResolvedValue(null);
   });
 
   it("reads the two fixed stations only after session authorization and capability", async () => {
@@ -44,17 +55,55 @@ describe("W3 tenant station reads", () => {
     expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(2, authorization.data, "galvanik");
   });
 
-  it("allows a buero snapshot to use only the tenant-bound read capability", async () => {
-    const bueroAuthorization = {
+  it.each(["buero", "werkstatt", "meister", "admin"] as const)(
+    "allows the ratified product role %s to use the tenant-bound station read",
+    async (role) => {
+    const roleAuthorization = {
       ...authorization,
-      data: { ...authorization.data, role: "buero" as const },
+      data: { ...authorization.data, role },
     };
-    resolveAuthorizationSpy.mockResolvedValueOnce(bueroAuthorization);
+    resolveAuthorizationSpy.mockResolvedValueOnce(roleAuthorization);
     const { getGalvanikOrdersAction } = await import("../actions");
 
     await expect(getGalvanikOrdersAction()).resolves.toEqual({ ok: true, data: [] });
-    expect(readTenantStationOrdersSpy).toHaveBeenCalledWith(bueroAuthorization.data, "galvanik");
+    expect(readTenantStationOrdersSpy).toHaveBeenCalledWith(roleAuthorization.data, "galvanik");
   });
+
+  it.each(["developer", "readonly"] as const)(
+    "denies %s before every user-reachable station and intake read port",
+    async (role) => {
+      const deniedAuthorization = {
+        ...authorization,
+        data: { ...authorization.data, role },
+      };
+      resolveAuthorizationSpy.mockResolvedValue(deniedAuthorization);
+      const {
+        getGalvanikOrdersAction,
+        getOrderIntakeReceiptAction,
+        getOrderStationCorrectionReceiptAction,
+        getOrderStationReceiptAction,
+        getWareneingangOrdersAction,
+        searchOrderIntakeCustomersAction,
+      } = await import("../actions");
+      const receiptInput = {
+        orderId: "order-role-denial",
+        clientEventId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      };
+
+      await expect(getWareneingangOrdersAction()).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
+      await expect(getGalvanikOrdersAction()).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
+      await expect(getOrderStationReceiptAction(receiptInput)).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
+      await expect(getOrderStationCorrectionReceiptAction(receiptInput)).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
+      await expect(searchOrderIntakeCustomersAction({ query: "Sentinel" })).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
+      await expect(getOrderIntakeReceiptAction(receiptInput)).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
+
+      expect(readTenantStationOrdersSpy).not.toHaveBeenCalled();
+      expect(readTenantOrderStationReceiptSpy).not.toHaveBeenCalled();
+      expect(readTenantOrderStationCorrectionReceiptSpy).not.toHaveBeenCalled();
+      expect(searchOrderIntakeCustomersSpy).not.toHaveBeenCalled();
+      expect(readOrderIntakeReceiptSpy).not.toHaveBeenCalled();
+    },
+  );
 
   it("keeps missing session, unavailable authorization, and missing capability out of the database reader", async () => {
     const { getWareneingangOrdersAction } = await import("../actions");
