@@ -4,12 +4,10 @@ import { resolve } from "node:path";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const denial = "NOT_AVAILABLE: Warendurchlauf-KPIs benötigen einen kanonischen SQL-Read-Model-Vertrag.";
 const stationDenial = "NOT_AVAILABLE: Stationsliste ist nicht verfügbar.";
 const stationThrowDenial = "NOT_AVAILABLE: Stationsliste konnte nicht sicher geladen werden.";
 const ports = vi.hoisted(() => ({
   resolveAuthorization: vi.fn(),
-  getWarendurchlaufKPIs: vi.fn(),
   getWareneingangOrdersAction: vi.fn(),
   getGalvanikOrdersAction: vi.fn(),
   openErfassung: vi.fn(),
@@ -18,7 +16,6 @@ const ports = vi.hoisted(() => ({
 }));
 
 vi.mock("@/app/warendurchlauf/actions", () => ({
-  getWarendurchlaufKPIs: ports.getWarendurchlaufKPIs,
   getWareneingangOrdersAction: ports.getWareneingangOrdersAction,
   getGalvanikOrdersAction: ports.getGalvanikOrdersAction,
 }));
@@ -95,7 +92,6 @@ const order = (id: string, orderNumber: string, title: string, station: string, 
 beforeEach(() => {
   vi.clearAllMocks();
   ports.resolveAuthorization.mockResolvedValue(allowedAuthorization());
-  ports.getWarendurchlaufKPIs.mockResolvedValue({ ok: false, error: "NOT_AVAILABLE", message: denial });
   ports.getWareneingangOrdersAction.mockResolvedValue({ ok: true, data: [] });
   ports.getGalvanikOrdersAction.mockResolvedValue({ ok: true, data: [] });
   ports.useSelectedLayoutSegment.mockReturnValue(null);
@@ -341,22 +337,21 @@ describe("W2C-B2M5J unavailable UI", () => {
     expect(screen.queryByText("Noch keine Daten erfasst.")).not.toBeInTheDocument();
   });
 
-  it("keeps a successful empty station list distinct from KPI denial", async () => {
+  it("keeps a successful empty station list free of any derived KPI display", async () => {
     ports.getWareneingangOrdersAction.mockResolvedValueOnce({ ok: true, data: [] });
     const { default: WareneingangPage } = await import("../wareneingang/page");
     render(<WareneingangPage />);
 
     await waitFor(() => expect(screen.getByText("Noch keine Daten erfasst.")).toBeInTheDocument());
     expect(screen.getByText("0")).toBeInTheDocument();
-    expect(screen.getByText(denial).closest('[role="status"]')).not.toBeNull();
     expect(screen.queryByText("Termintreue Durchlaufzeit Engpass Offene Aufträge")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Tagesstand|Checkliste Heute|Überfällig|Diese Woche|Im Plan/)).not.toBeInTheDocument();
   });
 
-  it("source-locks explicit KPI-unavailable handling without treating the station list as KPI success", () => {
+  it("source-locks the truthful station states without any KPI-derived display", () => {
     const source = readFileSync(resolve(process.cwd(), "src/app/warendurchlauf/wareneingang/page.tsx"), "utf8");
-    expect(source).toContain("const [kpiUnavailableMessage, setKpiUnavailableMessage]");
-    expect(source).toContain("setKpiUnavailableMessage(resKPI.message)");
-    expect(source).toContain("{kpiUnavailableMessage ? (");
+    expect(source).not.toContain("getWarendurchlaufKPIs");
+    expect(source).not.toContain("kpiUnavailableMessage");
     expect(source).toContain("const [stationUnavailableMessage, setStationUnavailableMessage]");
     expect(source).toContain("const [stationListPending, setStationListPending] = useState(true);");
     expect(source).toContain("setStationListPending(true);");
