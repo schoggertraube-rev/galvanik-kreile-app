@@ -27,8 +27,8 @@ const authorization = {
   data: {
     userId: "user-1",
     tenantId: "tenant-a",
-    displayName: "Werkstatt",
-    role: "werkstatt" as const,
+    displayName: "Readonly",
+    role: "readonly" as const,
     permissions: ["perm_view_leitstand", "perm_data_orders", "perm_view_customers"] as const,
     active: true as const,
   },
@@ -45,7 +45,7 @@ describe("W3 tenant station reads", () => {
     readOrderIntakeReceiptSpy.mockResolvedValue(null);
   });
 
-  it("reads the two fixed stations only after session authorization and capability", async () => {
+  it("allows readonly to read both fixed stations with the tenant-bound capability", async () => {
     const { getGalvanikOrdersAction, getWareneingangOrdersAction } = await import("../actions");
 
     await expect(getWareneingangOrdersAction()).resolves.toEqual({ ok: true, data: [] });
@@ -55,55 +55,59 @@ describe("W3 tenant station reads", () => {
     expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(2, authorization.data, "galvanik");
   });
 
-  it.each(["buero", "werkstatt", "meister", "admin"] as const)(
-    "allows the ratified product role %s to use the tenant-bound station read",
-    async (role) => {
-    const roleAuthorization = {
+  it("allows buero to read both fixed stations with the tenant-bound capability", async () => {
+    const bueroAuthorization = {
       ...authorization,
-      data: { ...authorization.data, role },
+      data: { ...authorization.data, role: "buero" as const },
     };
-    resolveAuthorizationSpy.mockResolvedValueOnce(roleAuthorization);
-    const { getGalvanikOrdersAction } = await import("../actions");
+    resolveAuthorizationSpy.mockResolvedValue(bueroAuthorization);
+    const { getGalvanikOrdersAction, getWareneingangOrdersAction } = await import("../actions");
 
+    await expect(getWareneingangOrdersAction()).resolves.toEqual({ ok: true, data: [] });
     await expect(getGalvanikOrdersAction()).resolves.toEqual({ ok: true, data: [] });
-    expect(readTenantStationOrdersSpy).toHaveBeenCalledWith(roleAuthorization.data, "galvanik");
+    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(1, bueroAuthorization.data, "wareneingang");
+    expect(readTenantStationOrdersSpy).toHaveBeenNthCalledWith(2, bueroAuthorization.data, "galvanik");
   });
 
-  it.each(["developer", "readonly"] as const)(
-    "denies %s before every user-reachable station and intake read port",
-    async (role) => {
-      const deniedAuthorization = {
-        ...authorization,
-        data: { ...authorization.data, role },
-      };
-      resolveAuthorizationSpy.mockResolvedValue(deniedAuthorization);
-      const {
-        getGalvanikOrdersAction,
-        getOrderIntakeReceiptAction,
-        getOrderStationCorrectionReceiptAction,
-        getOrderStationReceiptAction,
-        getWareneingangOrdersAction,
-        searchOrderIntakeCustomersAction,
-      } = await import("../actions");
-      const receiptInput = {
-        orderId: "order-role-denial",
-        clientEventId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      };
+  it("authorizes intake customer and receipt reads by capability instead of role", async () => {
+    const { getOrderIntakeReceiptAction, searchOrderIntakeCustomersAction } = await import("../actions");
+    const receiptInput = {
+      orderId: "order-capability-read",
+      clientEventId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    };
 
-      await expect(getWareneingangOrdersAction()).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
-      await expect(getGalvanikOrdersAction()).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
-      await expect(getOrderStationReceiptAction(receiptInput)).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
-      await expect(getOrderStationCorrectionReceiptAction(receiptInput)).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
-      await expect(searchOrderIntakeCustomersAction({ query: "Sentinel" })).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
-      await expect(getOrderIntakeReceiptAction(receiptInput)).resolves.toMatchObject({ ok: false, error: "FORBIDDEN" });
+    await expect(searchOrderIntakeCustomersAction({ query: "Sentinel" })).resolves.toEqual({
+      ok: true,
+      data: { customers: [], canCreateCustomer: false },
+    });
+    await expect(getOrderIntakeReceiptAction(receiptInput)).resolves.toEqual({ ok: true, data: null });
 
-      expect(readTenantStationOrdersSpy).not.toHaveBeenCalled();
-      expect(readTenantOrderStationReceiptSpy).not.toHaveBeenCalled();
-      expect(readTenantOrderStationCorrectionReceiptSpy).not.toHaveBeenCalled();
-      expect(searchOrderIntakeCustomersSpy).not.toHaveBeenCalled();
-      expect(readOrderIntakeReceiptSpy).not.toHaveBeenCalled();
-    },
-  );
+    expect(searchOrderIntakeCustomersSpy).toHaveBeenCalledWith(authorization.data, { query: "Sentinel" });
+    expect(readOrderIntakeReceiptSpy).toHaveBeenCalledWith(authorization.data, receiptInput);
+  });
+
+  it("blocks missing intake capabilities before either intake read port", async () => {
+    resolveAuthorizationSpy.mockResolvedValue({
+      ...authorization,
+      data: { ...authorization.data, permissions: [] },
+    });
+    const { getOrderIntakeReceiptAction, searchOrderIntakeCustomersAction } = await import("../actions");
+    const receiptInput = {
+      orderId: "order-capability-denial",
+      clientEventId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    };
+
+    await expect(searchOrderIntakeCustomersAction({ query: "Sentinel" })).resolves.toMatchObject({
+      ok: false,
+      error: "FORBIDDEN",
+    });
+    await expect(getOrderIntakeReceiptAction(receiptInput)).resolves.toMatchObject({
+      ok: false,
+      error: "FORBIDDEN",
+    });
+    expect(searchOrderIntakeCustomersSpy).not.toHaveBeenCalled();
+    expect(readOrderIntakeReceiptSpy).not.toHaveBeenCalled();
+  });
 
   it("keeps missing session, unavailable authorization, and missing capability out of the database reader", async () => {
     const { getWareneingangOrdersAction } = await import("../actions");

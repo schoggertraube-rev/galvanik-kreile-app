@@ -1,7 +1,6 @@
 "use server";
 
 import { unstable_noStore as noStore } from "next/cache";
-import { isOrderStationForwardRole } from "@/lib/orders/orderLifecycleContract";
 import { resolveAuthorization, type AuthorizationSnapshot } from "@/lib/server/authorization";
 import {
   readTenantOrderStationReceipt,
@@ -75,10 +74,6 @@ async function getFixedStationOrders(station: "wareneingang" | "galvanik"): Prom
     return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
 
-  if (!isOrderStationForwardRole(authorization.data.role)) {
-    return { ok: false, error: "FORBIDDEN", message: "Stationsliste ist nicht erlaubt." };
-  }
-
   if (!authorization.data.permissions.includes("perm_view_leitstand")) {
     return { ok: false, error: "FORBIDDEN", message: "Stationsliste ist nicht erlaubt." };
   }
@@ -116,10 +111,6 @@ export async function getOrderStationReceiptAction(
     return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
 
-  if (!isOrderStationForwardRole(authorization.data.role)) {
-    return { ok: false, error: "FORBIDDEN", message: "Stationsbeleg ist nicht erlaubt." };
-  }
-
   if (!authorization.data.permissions.includes("perm_view_leitstand")) {
     return { ok: false, error: "FORBIDDEN", message: "Stationsbeleg ist nicht erlaubt." };
   }
@@ -151,10 +142,6 @@ export async function getOrderStationCorrectionReceiptAction(
       return { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." };
     }
     return { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
-  }
-
-  if (!isOrderStationForwardRole(authorization.data.role)) {
-    return { ok: false, error: "FORBIDDEN", message: "Korrekturbeleg ist nicht erlaubt." };
   }
 
   if (!authorization.data.permissions.includes("perm_view_leitstand")) {
@@ -195,9 +182,6 @@ export async function searchOrderIntakeCustomersAction(
       ? { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." }
       : { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
   }
-  if (!isOrderStationForwardRole(authorization.data.role)) {
-    return { ok: false, error: "FORBIDDEN", message: "Wareneingang ist mit dieser Rolle nicht erlaubt." };
-  }
   if (
     !authorization.data.permissions.includes("perm_data_orders") ||
     !authorization.data.permissions.includes("perm_view_customers")
@@ -230,9 +214,6 @@ export async function getOrderIntakeReceiptAction(
     return authorization.reason === "AUTHORIZATION_UNAVAILABLE"
       ? { ok: false, error: "UNAVAILABLE", message: "Berechtigungen sind derzeit nicht verfügbar." }
       : { ok: false, error: "AUTH_ERROR", message: "Sitzung oder Berechtigung ist nicht verfügbar." };
-  }
-  if (!isOrderStationForwardRole(authorization.data.role)) {
-    return { ok: false, error: "FORBIDDEN", message: "Wareneingangsbeleg ist nicht erlaubt." };
   }
   if (!authorization.data.permissions.includes("perm_view_leitstand")) {
     return { ok: false, error: "FORBIDDEN", message: "Wareneingangsbeleg ist nicht erlaubt." };
@@ -283,9 +264,6 @@ export async function getGalvanikHandoffAttachmentsAction(
   noStore();
   const authorization = await authorizeOrderStationAttachment("perm_view_leitstand");
   if (!authorization.ok) return authorization.result;
-  if (!isOrderStationForwardRole(authorization.data.role)) {
-    return { code: "FORBIDDEN" as const, message: "Originalbelege sind nicht erlaubt." };
-  }
   const domain = await import("@/lib/server/orderStationAttachment");
   const result = await domain.readOrderStationAttachments(authorization.data, input);
   if (result.code !== "OK") return result;
@@ -309,9 +287,6 @@ export async function getGalvanikEvidenceByTargetAction(
   noStore();
   const authorization = await authorizeOrderStationAttachment("perm_view_leitstand");
   if (!authorization.ok) return authorization.result;
-  if (!isOrderStationForwardRole(authorization.data.role)) {
-    return { code: "FORBIDDEN" as const, message: "Originalbelege sind nicht erlaubt." };
-  }
   const evidenceDomain = await import("@/lib/server/evidenceRead");
   return evidenceDomain.readEvidenceRecordsByTarget(authorization.data, input);
 }
@@ -342,9 +317,6 @@ export async function getGalvanikHandoffAttachmentOriginalAction(
   noStore();
   const authorization = await authorizeOrderStationAttachment("perm_op_photos");
   if (!authorization.ok) return authorization.result;
-  if (!isOrderStationForwardRole(authorization.data.role)) {
-    return { code: "FORBIDDEN" as const, message: "Originalbelege sind nicht erlaubt." };
-  }
   const domain = await import("@/lib/server/orderStationAttachment");
   return domain.getOrderStationAttachmentOriginal(authorization.data, input);
 }
@@ -355,9 +327,6 @@ export async function getOrderIntakeAttachmentsAction(
   noStore();
   const authorization = await authorizeOrderStationAttachment("perm_view_leitstand");
   if (!authorization.ok) return authorization.result;
-  if (!isOrderStationForwardRole(authorization.data.role)) {
-    return { code: "FORBIDDEN" as const, message: "Originalbelege sind nicht erlaubt." };
-  }
   const domain = await import("@/lib/server/orderStationAttachment");
   const result = await domain.readOrderIntakeAttachments(authorization.data, input);
   if (result.code !== "OK") return result;
@@ -401,9 +370,6 @@ export async function getOrderIntakeAttachmentOriginalAction(
   noStore();
   const authorization = await authorizeOrderStationAttachment("perm_op_photos");
   if (!authorization.ok) return authorization.result;
-  if (!isOrderStationForwardRole(authorization.data.role)) {
-    return { code: "FORBIDDEN" as const, message: "Originalbelege sind nicht erlaubt." };
-  }
   const domain = await import("@/lib/server/orderStationAttachment");
   return domain.getOrderIntakeAttachmentOriginal(authorization.data, input);
 }

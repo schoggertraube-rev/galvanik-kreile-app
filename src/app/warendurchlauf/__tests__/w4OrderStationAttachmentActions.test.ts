@@ -117,55 +117,36 @@ describe("W4 attachment server actions", () => {
     expect(ports.domainLoaded).not.toHaveBeenCalled();
   });
 
-  it.each(["developer", "readonly"] as const)(
-    "rejects %s before every attachment and evidence read port",
+  it.each(["readonly", "buero"] as const)(
+    "lets %s read tenant metadata and evidence with perm_view_leitstand",
     async (role) => {
-      const deniedSnapshot = {
-        ...snapshot,
-        role,
-        permissions: ["perm_view_leitstand", "perm_op_photos"] as const,
-      };
-      ports.resolveAuthorization.mockResolvedValue({ ok: true, data: deniedSnapshot });
-      const {
-        getGalvanikEvidenceByTargetAction,
-        getGalvanikHandoffAttachmentOriginalAction,
-        getGalvanikHandoffAttachmentsAction,
-        getOrderIntakeAttachmentOriginalAction,
-        getOrderIntakeAttachmentsAction,
-      } = await import("../actions");
-
-      await expect(getGalvanikHandoffAttachmentsAction(readInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
-      await expect(getGalvanikEvidenceByTargetAction(targetInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
-      await expect(getGalvanikHandoffAttachmentOriginalAction(originalInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
-      await expect(getOrderIntakeAttachmentsAction(readInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
-      await expect(getOrderIntakeAttachmentOriginalAction(originalInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
-
-      expect(ports.read).not.toHaveBeenCalled();
-      expect(ports.readIntake).not.toHaveBeenCalled();
-      expect(ports.readEvidence).not.toHaveBeenCalled();
-      expect(ports.readEvidenceByTarget).not.toHaveBeenCalled();
-      expect(ports.original).not.toHaveBeenCalled();
-      expect(ports.originalIntake).not.toHaveBeenCalled();
-    },
-  );
-
-  it.each(["buero", "werkstatt", "meister", "admin"] as const)(
-    "lets product role %s read tenant metadata with the existing capability",
-    async (role) => {
-      const roleSnapshot = {
+      const readOnlySnapshot = {
         ...snapshot,
         role,
         permissions: ["perm_view_leitstand"] as const,
       };
-      ports.resolveAuthorization.mockResolvedValueOnce({ ok: true, data: roleSnapshot });
-      const { getGalvanikHandoffAttachmentsAction } = await import("../actions");
-      const result = await getGalvanikHandoffAttachmentsAction(readInput);
-      expect(result).toEqual({
+      ports.resolveAuthorization.mockResolvedValue({ ok: true, data: readOnlySnapshot });
+      const {
+        getGalvanikEvidenceByTargetAction,
+        getGalvanikHandoffAttachmentsAction,
+        getOrderIntakeAttachmentsAction,
+      } = await import("../actions");
+
+      await expect(getGalvanikHandoffAttachmentsAction(readInput)).resolves.toEqual({
         code: "OK",
         data: { receipts: [], evidenceRecords: [], canOperate: false, currentActorId: USER_ID },
       });
-      expect(ports.read).toHaveBeenLastCalledWith(roleSnapshot, readInput);
-      expect(ports.readEvidence).toHaveBeenLastCalledWith(roleSnapshot, readInput);
+      await expect(getGalvanikEvidenceByTargetAction(targetInput)).resolves.toEqual({ code: "OK", data: [] });
+      await expect(getOrderIntakeAttachmentsAction(readInput)).resolves.toEqual({
+        code: "OK",
+        data: { receipts: [], evidenceRecords: [], canOperate: false, currentActorId: USER_ID },
+      });
+
+      expect(ports.read).toHaveBeenCalledWith(readOnlySnapshot, readInput);
+      expect(ports.readIntake).toHaveBeenCalledWith(readOnlySnapshot, readInput);
+      expect(ports.readEvidence).toHaveBeenNthCalledWith(1, readOnlySnapshot, readInput);
+      expect(ports.readEvidence).toHaveBeenNthCalledWith(2, readOnlySnapshot, readInput);
+      expect(ports.readEvidenceByTarget).toHaveBeenCalledWith(readOnlySnapshot, targetInput);
     },
   );
 
@@ -173,6 +154,7 @@ describe("W4 attachment server actions", () => {
     const {
       getGalvanikEvidenceByTargetAction,
       getGalvanikHandoffAttachmentsAction,
+      getOrderIntakeAttachmentsAction,
       reserveGalvanikHandoffAttachmentAction,
     } = await import("../actions");
 
@@ -186,7 +168,13 @@ describe("W4 attachment server actions", () => {
       data: { ...snapshot, permissions: ["perm_op_photos"] },
     });
     await expect(getGalvanikEvidenceByTargetAction(targetInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
+    ports.resolveAuthorization.mockResolvedValueOnce({
+      ok: true,
+      data: { ...snapshot, permissions: ["perm_op_photos"] },
+    });
+    await expect(getOrderIntakeAttachmentsAction(readInput)).resolves.toMatchObject({ code: "FORBIDDEN" });
     expect(ports.read).not.toHaveBeenCalled();
+    expect(ports.readIntake).not.toHaveBeenCalled();
     expect(ports.readEvidenceByTarget).not.toHaveBeenCalled();
 
     ports.resolveAuthorization.mockResolvedValueOnce({
