@@ -9,7 +9,6 @@ import BwaPage from '../bwa/page';
 import KostenPage from '../kosten/page';
 import KraftstoffPage from '../kraftstoff/page';
 import PeriodenabschlussPage from '../periodenabschluss/page';
-import RechnungenPage from '../rechnungen/page';
 import SteuerprofilPage from '../steuerprofil/page';
 
 const repoRoot = resolve(process.cwd());
@@ -39,7 +38,6 @@ export default function AccountingUnavailablePage() {
 
 const activeRoutes = [
   ['buchhaltung/page.tsx', AccountingPage],
-  ['buchhaltung/rechnungen/page.tsx', RechnungenPage],
   ['buchhaltung/kosten/page.tsx', KostenPage],
   ['buchhaltung/kraftstoff/page.tsx', KraftstoffPage],
   ['buchhaltung/ausgaben/page.tsx', AusgabenPage],
