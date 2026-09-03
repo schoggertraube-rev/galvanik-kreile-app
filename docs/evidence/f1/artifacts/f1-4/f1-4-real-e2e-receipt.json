@@ -1,0 +1,51 @@
+{
+  "realE2ePath": "local Supabase -> real Auth/tenant roles -> final F1.3 freeze -> createInvoice -> stored PDF -> live source mutation -> immutable snapshot readback -> cancelInvoice -> stored cancellation PDF -> original byte equality -> reissue",
+  "orderId": "d710c631-ec85-4a64-8cb6-15fb5cb26888",
+  "orderNumber": "A-2026-0001",
+  "liveCustomerName": "F1.4 geänderter Live-Kunde",
+  "serviceDate": "2026-08-26",
+  "firstInvoice": {
+    "id": "721dc44e-f94c-476a-906e-41af4e3b9897",
+    "number": "R-2026-0001",
+    "originalPdfSha256": "4465309e520a93cce2189039333910544e33b51af47fa3276633eb8c749c30d2",
+    "cancellationPdfSha256": "74dfe26c941ba4459e58ceed3d290fea04162ee3f8963b87bf9496bf56c26a33"
+  },
+  "secondInvoice": {
+    "id": "88cd6bdb-4044-4521-aaed-ceb422bdf324",
+    "invoice_number": "R-2026-0002",
+    "status": "issued",
+    "pdf_sha256": "b1c849366e6b782afe905cb7960b5462a658155d82c7876648155c723680c2de"
+  },
+  "receipts": [
+    {
+      "event_id": "80634df6-65ca-4c85-8283-608501c3bce4",
+      "event_type": "INVOICE_CREATED_V1",
+      "client_event_id": "5725e5e2-5c88-4202-9d62-e690d0b195ea",
+      "correlation_id": "b07a7bfa-b7c4-4ea5-857b-53918373b36c",
+      "aggregate_version": 1,
+      "invoice_id": "721dc44e-f94c-476a-906e-41af4e3b9897",
+      "invoice_number": "R-2026-0001",
+      "pdf_sha256": "4465309e520a93cce2189039333910544e33b51af47fa3276633eb8c749c30d2",
+      "integrity_ok": true
+    },
+    {
+      "event_id": "23e9a8d7-d37b-4366-ac88-341c95e8c3f8",
+      "event_type": "INVOICE_CANCELLED_V1",
+      "client_event_id": "5d3a4c51-dd61-497d-ac1b-f89d56cf068a",
+      "correlation_id": "80f9b3ca-d0ed-4ceb-a113-c419092cb0f6",
+      "aggregate_version": 2,
+      "invoice_id": "721dc44e-f94c-476a-906e-41af4e3b9897",
+      "invoice_number": "R-2026-0001",
+      "pdf_sha256": "74dfe26c941ba4459e58ceed3d290fea04162ee3f8963b87bf9496bf56c26a33",
+      "integrity_ok": true
+    }
+  ],
+  "negativeProof": {
+    "activeInvoiceConflict": "PASS_NO_SECOND_WRITE",
+    "officeCancellationControl": "ABSENT",
+    "readonly": "DENIAL_NO_DATA",
+    "foreignTenant": "DENIAL_NO_APP_SESSION"
+  },
+  "productionPathMocks": "NONE",
+  "acceptancePathMocks": "NONE"
+}

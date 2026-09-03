@@ -1,0 +1,327 @@
+mission_id: FRONTEND_IMPLEMENTATION_001
+title: Galvanik-Kreile Frontend-Umsetzung der ratifizierten Zieloberflaechen
+status: PARALLEL_PLANNING_ACTIVE
+implementation_status: IMPLEMENTATION_NOT_STARTED
+owner_package_ratified: true # Frontend ist als Parallelpaket ratifiziert
+clean_separation_proven: false # ratifizierte Parallelitaet ist keine belegte Trennung
+lane: FRONTEND
+parallel_to: F1_ORDER_TO_CASH_PILOT_001 # nur Parallelplanung; nie parallele Code-Writer
+# Historischer Uebergabestand, ausschliesslich Herkunft. Kein UI-Writer verwendet ihn als aktuelle
+# Implementierungsbasis.
+handoff_snapshot_sha:
+  value: f1c34b8f36c05912a094eb163950a24a9710df97
+  classification: HISTORICAL_HANDOFF_SNAPSHOT_ONLY
+  usable_as_implementation_base: false
+implementation_base_sha: BIND_CURRENT_MAIN_AT_WRITER_START # fail-closed
+implementation_base_rule: >-
+  Fail-closed: Die Implementierungsbasis wird erst beim Writerstart an den live aktuellen
+  origin/main gebunden und exakt protokolliert. Ist diese Bindung nicht moeglich, startet kein
+  Writer. Der historische handoff_snapshot_sha ist niemals Basis.
+branch: none # je Teilphase ein eigener sauberer kurzer Paketbranch vom live aktuellen main
+worktree: none
+
+# ── Herkunft ──────────────────────────────────────────────────────
+# Die physischen Owner-Dateien liegen ausserhalb des Repositories und sind
+# ausschliesslich Provenienz. Nach dieser Kanonisierung ist die Mission
+# autoritativ; die Quellen werden nicht Autoritaet, werden nicht veraendert
+# oder kopiert und ersetzen keinen Gatebeweis.
+owner_sources:
+  - file: KREILE_UEBERGABE_FRONTEND_UMSETZUNG_V1_2026-08-21.md
+    sha256: 1CC0BDD969E1E5BB8F437542FCD8208FCDD2DF5B3B7FC8A0B18030AAC21B5C8C
+    bytes: 4054
+    role: PROVENANCE_OF_TARGET_PICTURE # Zielbild-Provenienz, keine Autoritaetsquelle
+    carries: Zielbildnamen der vier Oberflaechen, Routen- und Dispositionsentscheidung
+  - file: KREILE_AUTONOMIE_MANDAT_2026-08-27.md
+    sha256: C244EC1C5F1FF1493420F4DCC44FEFCD8F0E76CEAEFD16853BE2A4E4C539364A
+    bytes: 4904
+    role: PROVENANCE_OF_ACTIVE_OWNER_AUTHORITY
+    valid_from: 2026-08-27
+    valid_until: NEXT_REAL_JOINT_OWNER_ORCHESTRATOR_DECISION
+    revoked: false # Teil 3 war Abschluss derselben Uebergabe, keine Revokation
+    carries: >-
+      Ratifikation des Frontends als Parallelpaket, getrennte Statusachsen, die
+      globale Ein-Writer-Regel und die stehende Merge-Autoritaet.
+
+# ── Parallelitaet zur Order-to-Cash-Lane ──────────────────────────
+parallelism:
+  authorized_package_lanes: 2 # zwei autorisierte Paket-Lanes, nicht zwei aktive Implementierungen
+  only_parallel_planning_active: true
+  implementation_disjointness_required: true
+  implementation_disjointness_proven: false
+  disjoint_paths_required: true
+  shared_migration_forbidden: true
+  order_to_cash_files_untouched: true
+  uses_only_existing_ports: true # bestehende F1.2/F1.3-Ports, keine neuen Vertraege
+  may_not_change: missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  # Globale Ein-Writer-Regel des Autonomie-Mandats: genau EIN aktiver Code-Writer insgesamt.
+  single_active_code_writer_across_frontend_and_f1: true
+  frontend_and_f1_writer_in_parallel: FORBIDDEN
+  read_only_reviewers_and_inventories_may_run_in_parallel: true
+  if_separation_not_provable: SEQUENTIAL
+
+# ── Arbeitskontext (Voraussetzung fuer jeden Writer) ───────────────
+work_context:
+  phase_0_read_only_in_current_dirty_f1_checkout: ALLOWED
+  read_only_mode_implies_repo_write_permission: false
+  read_only_audit_outputs_separate_from_evidence_writes: true
+  required_before_any_repo_evidence_or_mission_write_after_this_control_plane_pass:
+    - sauberer_kurzer_paketbranch_oder_kontext_vom_live_aktuellen_main_nach_projektregeln
+    - implementation_base_sha_an_live_aktuellen_main_gebunden_und_protokolliert
+    - kein_laufender_F1_writer_und_kein_laufendes_F1_gate
+    - kein_zweiter_aktiver_code_writer_ueber_frontend_und_f1_hinweg
+    - vorab_berechnete_exakte_produkt_allowlist
+    - allowlist_intersection_with_order_to_cash_allowlist_must_be_0
+  required_before_any_ui_writer: same_as_above
+  new_worktree_or_clone: FORBIDDEN_WITHOUT_SEPARATE_AUTHORITY
+  fallback_if_separation_not_provable: >-
+    Sequenziell arbeiten: zuerst F1.4 korrigieren und mergen, danach der
+    Frontend-Writer.
+
+# ── Ratifizierte Zieloberflaechen (Zielbild, nicht Lieferung) ─────
+# Die Ratifikation der vier Zielbildnamen ist eigene Metadatenwahrheit. Sie
+# ersetzt weder gebundene Referenzassets noch UI_REFERENCE_PASS oder OWNER_UX_PASS.
+ratified_target_surfaces:
+  - id: ROLF_DER_TAG_V8
+    twin: Rolf
+    route: /cockpit
+    reference_status: OWNER_REFERENCE_RATIFIED
+    implementation_status: NOT_IMPLEMENTED
+  - id: PHILLIP_WERKSTATT_V4
+    twin: Phillip
+    route: /warendurchlauf # rollenbasierter Werkstatt-Einstieg, exakt gebunden
+    route_binding: EXACT_/warendurchlauf
+    station_subpages_only_below: /warendurchlauf/**
+    new_dashboard_route: FORBIDDEN
+    reference_status: OWNER_REFERENCE_RATIFIED
+    implementation_status: NOT_IMPLEMENTED
+  - id: AUFTRAGSKARTE_MACHART_V8
+    twin: alle operativen Rollen
+    reference_status: OWNER_REFERENCE_RATIFIED
+    implementation_status: NOT_IMPLEMENTED
+  - id: KUNDENKARTE_MACHART_V2
+    twin: buero und Rolf
+    reference_status: OWNER_REFERENCE_RATIFIED
+    implementation_status: NOT_IMPLEMENTED
+
+# ── Bindende Routen- und Dispositionsentscheidung ─────────────────
+route_decisions:
+  start_is_login_and_session_boundary_only: true
+  cockpit_is_single_rolf_surface_der_tag: true # bestehende rollenbegrenzte Chefroute mit Read-Ports
+  root_becomes_server_side_role_router:
+    admin: /cockpit # Rolf
+    developer: /settings
+    werkstatt: /warendurchlauf
+    meister: /warendurchlauf
+    buero: /warendurchlauf
+  today_and_kontrolle_are_compat_aliases_to_root_only: true # keine eigene Datenwahrheit
+  no_fifth_dashboard: true
+  no_new_role_inhaber: true # Rolle inhaber bleibt verboten
+  baeder_disposition:
+    task_id: BAEDER_DISPOSITION_001
+    scope: separater Task, nicht Frontend Phase 1
+    status: NOT_DONE
+    acceptance:
+      - alle_sichtbaren_baeder_links_und_bezeichnungen_aus_produktiver_navigation_entfernt
+      - redirect_baeder_nach_/warendurchlauf/galvanik
+      - performance_baeder_material_entfernt_oder_gleicher_redirect
+      - keine_erreichbaren_toten_oder_mock_bath_adapter
+      - galvanik_bleibt_exakt_ein_step
+    tables_data_migrations_provenance: PROTECTED_SALVAGE # rein technisch, kein Produktziel
+    remote_or_data_deletion: FORBIDDEN
+    baeder_ui: FORBIDDEN
+    baeder_as_product_roadmap_or_later_product_goal: FORBIDDEN # D-ARCH-010
+
+# ── Phasen ────────────────────────────────────────────────────────
+phases:
+  - id: PHASE_0_INVENTAR_UND_RECONCILE
+    mode: READ_ONLY # Inventarisierungserlaubnis, keine implizite Repo-Schreibfreigabe
+    may_run_in_current_dirty_f1_checkout: true # ausschliesslich lesend
+    goal: >-
+      Bestehende Routen, Rollen, Tokens, Komponenten und die real vorhandenen
+      F1.2/F1.3-Read-Ports inventarisieren und die exakten ratifizierten
+      Visual-Referenzdateien aller vier Zieloberflaechen wiederfinden, erhalten
+      und binden.
+    required_outputs:
+      - reference_asset_binding_je_oberflaeche_mit_sha256_und_bytes
+      - unterscheidung_owner_ratifizierte_referenz_vs_unbestaetigter_kandidat
+      - route_und_rollen_inventar_inklusive_today_kontrolle_baeder
+      - port_inventar_station_queue_intake_evidence_auftrag_kunde
+      - token_und_komponenten_inventar_aus_globals_css
+      - exakte_produkt_allowlist_fuer_phase_1
+      - exakter_route_binding_output_PHILLIP_WERKSTATT_V4_auf_/warendurchlauf_mit_stationsunterseiten_darunter_und_ohne_neue_dashboardroute
+    exit_gate: PHILLIP_ROUTE_BINDING_GATE # hart, fail-closed; ohne PASS darf Phase 1 nicht schreiben
+    rules:
+      - kein_ui_code_in_dieser_phase
+      - phase_1_schreibt_erst_nach_PHILLIP_ROUTE_BINDING_GATE_PASS
+      - bekannte_html_kandidaten_werden_nicht_still_zur_autoritaet_erklaert
+      - fehlt_ein_asset_dann_REFERENCE_ASSET_RECOVERY_REQUIRED_und_stopp
+      - kein_gestalten_nach_gefuehl
+      - read_only_auditoutputs_bleiben_getrennt_von_spaeteren_evidence_writes
+      - jeder_evidence_write_erfordert_den_work_context_vertrag_dieser_mission
+  - id: PHASE_1_PHILLIP_WERKSTATT_PROOFSCREEN
+    route: /warendurchlauf # rollenbasierter Werkstatt-Einstieg
+    entry_gate: PHILLIP_ROUTE_BINDING_GATE # muss aus Phase 0 auf PASS stehen
+    goal: >-
+      Genau EIN Phillip-Proofscreen "Werkstatt" auf /warendurchlauf gegen die
+      echten F1.2/F1.3-Station-Queue-, Intake-, Evidence- und Auftrags-Ports.
+    rules:
+      - genau_eine_oberflaeche_pro_teilphase
+      - stationsunterseiten_nur_unterhalb_von_/warendurchlauf
+      - keine_neue_dashboardroute
+      - keine_demo_oder_mockdaten
+      - keine_zweite_datenwahrheit
+  - id: PHASE_2_ROLF_DER_TAG
+    route: /cockpit
+    goal: Rolf-Oberflaeche nach demselben Muster wie Phase 1.
+  - id: PHASE_3_AUFTRAGSKARTE
+    goal: Auftragskarte MACHART_V8 nach demselben Muster.
+  - id: PHASE_4_KUNDENKARTE
+    goal: Kundenkarte MACHART_V2 nach demselben Muster.
+
+# Diese Allowlist gilt erst, wenn der work_context-Vertrag erfuellt ist. Read-only
+# Inventarisierung im aktuellen dirty F1-Checkout erzeugt keine Schreibfreigabe darauf.
+phase_0_allowlist:
+  - missions/FRONTEND_IMPLEMENTATION_001.yml
+  - docs/evidence/frontend/phase0/**
+# Die exakte Produkt-Allowlist der Phasen 1 bis 4 wird erst aus dem Phase-0-Inventar
+# abgeleitet und dann hier nachgetragen. Vorher existiert keine UI-Schreibfreigabe.
+product_allowlist_after_phase_0: PENDING_PHASE_0
+
+# ── Designvertrag ─────────────────────────────────────────────────
+design_contract:
+  consolidate_existing: src/app/globals.css und bestehende Tokens/Komponenten
+  second_design_system: FORBIDDEN
+  palette: Navy, Cream, Brand
+  typography: Fraunces und Inter
+  min_touch_target_px: 48
+  required_states:
+    - loading
+    - empty
+    - error
+    - data
+    - denial
+    - conflict
+  fail_closed: true
+
+role_matrix:
+  product_roles:
+    - buero
+    - werkstatt
+    - meister
+    - admin
+  developer_as_product_role: FORBIDDEN
+
+# ── Verbote ───────────────────────────────────────────────────────
+forbidden:
+  - neue_datenbank_tabelle_view_oder_migration
+  - neue_rls_auth_session_oder_provider_wahrheit
+  - neue_dependency
+  - remote_write_oder_remote_mutation
+  - mockdaten_localstorage_oder_math_random_im_produktionspfad
+  - zweite_datenwahrheit_oder_paralleles_read_model
+  - aenderung_an_dateien_der_order_to_cash_lane
+  - zusaetzliche_steuerungsdatei_docs_project_FRONTEND_x_md
+  - mission_queue_oder_mission_template
+
+# ── Harte Gates ───────────────────────────────────────────────────
+hard_gates:
+  - REFERENCE_ASSET_BINDING # sha256 und Bytes je Oberflaeche, Owner-Status unterschieden
+  - PHASE_0_INVENTORY_COMPLETE
+  - PHILLIP_ROUTE_BINDING_GATE # /warendurchlauf exakt gebunden, vor jedem Phase-1-Write
+  - EXACT_PRODUCT_ALLOWLIST_DERIVED_AFTER_PHASE_0
+  - SOURCE_TO_PORT_TO_QUERY_OR_ACTION_TO_COMPONENT_TO_STATE_TRACE
+  - TARGET_VS_ACTUAL_SCREENSHOT_PAIRS
+  - SCREENSHOT_MATRIX_EXACT
+  - TOUCH_KEYBOARD_FOCUS_OVERFLOW_AND_HIT_TESTING
+  - ROLE_MATRIX_POSITIVE_AND_NEGATIVE
+  - INDEPENDENT_REVIEW
+
+# Exakte Screenshotmatrix; keine zusaetzlichen und keine fehlenden Viewports.
+screenshot_matrix:
+  - 390x844
+  - 768x1024
+  - 1024x768
+  - 1366x1024
+  - 1440x900
+
+# OWNER_UX_PASS ist ein eigenes Gate, aber ausdruecklich nicht mergeblockierend.
+non_merge_blocking_gates:
+  - OWNER_UX_PASS
+
+# ── Getrennte Statusachsen (kein Gesamt-PASS aus einem Teilgate) ──
+status_axes:
+  FUNCTIONAL_SLICE_PASS: NOT_STARTED
+  DATA_TRUTH_PASS: NOT_STARTED
+  UI_REFERENCE_PASS: NOT_STARTED
+  OWNER_UX_PASS: OPEN_NOT_GRANTED # offen, nicht erteilt, nicht mergeblockierend
+  PRODUCT_READY: false
+# Metadatenwahrheit, kein Gate-Ersatz:
+owner_reference_names_ratified: true # gilt nur fuer die vier Zielbildnamen
+merge_status: NOT_MERGED
+deployment_status: NOT_DEPLOYED
+status_rule: >-
+  Kein Teilgate darf als Gesamt-PASS, als Merge, als Deployment oder als
+  Produktreife dargestellt werden. Jede Achse wird einzeln belegt.
+  OWNER_UX_PASS wird niemals als erteilt dargestellt.
+
+# ── Merge-Autoritaet ──────────────────────────────────────────────
+# Autoritaet und Paketreife sind zwei getrennte Achsen. Die Autoritaet ist erteilt; das konkrete
+# Paket ist heute noch nicht merge-eligible.
+merge_authority:
+  source: KREILE_AUTONOMIE_MANDAT_2026-08-27.md # PROVENANCE_OF_ACTIVE_OWNER_AUTHORITY
+  authority_status: STANDING_GRANTED
+  eligibility_status: NOT_MATURED
+  additional_owner_merge_approval_required: false
+  valid_from: 2026-08-27
+  valid_until: NEXT_REAL_JOINT_OWNER_ORCHESTRATOR_DECISION
+  owner_ux_pass_blocks_merge: false
+  mandate_revoked: false # Teil 3 war Abschluss derselben Uebergabe, keine Revokation
+  eligibility_conditions_all_required:
+    - alle_mergeblockierenden_gates_am_exakten_sha_gruen
+    - keine_offenen_P0_oder_P1
+    - scope_vollstaendig_ratifiziert
+    - review_und_ci_und_e2e_PASS
+  manual_production_promotion: FORBIDDEN
+  manual_deploy: FORBIDDEN
+  existing_automatic_vercel_deployment_after_authorized_main_merge: >-
+    Wird nicht manuell ausgeloest. Es entsteht als Folge eines spaeter autorisierten
+    main-Merges und wird danach ausschliesslich beobachtet und belegt.
+
+rules:
+  single_active_code_writer_across_frontend_and_f1: true # genau EIN Writer insgesamt
+  frontend_and_f1_writer_in_parallel: FORBIDDEN
+  read_only_reviewers_and_inventories_may_run_in_parallel: true
+  single_writer_per_subphase: true # zusaetzlich, ersetzt die globale Regel nicht
+  owner_boundary_handling: queue_and_continue_elsewhere
+  own_pr_per_subphase: true
+  max_read_only_reviewers: 1
+  max_repair_loops_per_gate: 2
+  merge_only_under_merge_authority_conditions: true
+  no_deployment_without_owner_approval: true
+  no_production_mocks: true
+  no_remote_or_production_mutation_without_explicit_approval: true
+
+# ── Rueckkehrbericht ──────────────────────────────────────────────
+# Verbindliches Abschlussformat je Rueckkehr an den Owner.
+return_report:
+  max_length: 1 Seite
+  required_content:
+    - PLAN_TREU_je_paket
+    - gemergte_shas_plus_gatebelege
+    - ziel_und_ist_screenshots
+    - entscheidungsregister
+    - ehrliche_nichtergebnisse_mit_grund
+  after_merge:
+    - doku_nachziehen
+    - paketbranch_loeschen
+    - sauber_auf_main_zurueck
+
+stop_conditions:
+  - REFERENCE_ASSET_RECOVERY_REQUIRED
+  - zweiter_aktiver_code_writer_ueber_frontend_und_f1_hinweg
+  - implementation_base_sha_nicht_an_live_aktuellen_main_bindbar
+  - PHILLIP_ROUTE_BINDING_GATE_nicht_bestanden
+  - irreversible_product_decision_requires_new_authority
+  - two_failed_repair_loops_on_same_real_gate
+  - path_or_migration_overlap_with_order_to_cash_lane
+  - work_context_vertrag_nicht_erfuellt_oder_trennung_nicht_beweisbar
