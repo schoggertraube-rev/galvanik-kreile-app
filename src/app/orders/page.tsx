@@ -19,6 +19,7 @@ import { OrderWideCard, type UrgencyType } from "@/components/orders/OrderWideCa
 import { useAppShortcut } from "@/components/ui/AppShortcutContext";
 import { useOrderModal } from "@/components/orders/OrderModalProvider";
 import { getUrgency } from "@/lib/orders/getUrgency";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 const safe = (value: unknown) => String(value ?? "").toLowerCase();
 type OrdersReadState = "loading" | "unavailable" | "loaded";
@@ -29,6 +30,10 @@ function OrdersPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { openShortcut } = useAppShortcut();
+  const { hasPermission, loading: permissionsLoading } = usePermissions();
+  // Fail-closed: ohne geladene Berechtigung bleibt der Erstellungs-CTA verborgen.
+  // Die serverseitigen Prüfungen im Intake-Command bleiben unverändert massgeblich.
+  const canCreateOrder = !permissionsLoading && hasPermission("perm_data_orders");
   const stationFilter = searchParams.get("station");
   const [searchTerm, setSearchTerm] = useState("");
   
@@ -183,12 +188,12 @@ function OrdersPageInner() {
       </div>
       
       <style dangerouslySetInnerHTML={{__html: `
-        .topbar { display: flex; align-items: center; height: 44px; margin-bottom: 16px; }
+        .topbar { display: flex; align-items: center; gap: 8px; min-height: 56px; margin-bottom: 16px; }
         .top-tabs { display: flex; background: #faf8f4; border: 1.5px solid #d8d0c4; border-radius: 24px; padding: 3px; }
         .top-tab { padding: 6px 18px; border-radius: 20px; font-size: 13px; font-weight: 600; border: none; cursor: pointer; background: transparent; color: #5e5850; transition: all 0.15s; }
         .top-tab.active { background: #2c2c2c; color: #fff; }
         .topbar-title { flex: 1; text-align: center; font-size: 16px; font-weight: 700; letter-spacing: 0.5px; color: #1a1a1a; }
-        .btn-new { padding: 7px 18px; background: #2c2c2c; color: #fff; border: none; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+        .btn-new { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 7px 18px; background: #2c2c2c; color: #fff; border: none; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
         .btn-new:hover { background: #444; }
 
         .status-strip { display: flex; gap: 3px; height: 10px; border-radius: 5px; overflow: hidden; margin-bottom: 14px; }
@@ -231,13 +236,17 @@ function OrdersPageInner() {
           <button className="top-tab" onClick={() => window.location.href='/customers'}>Kundenkartei</button>
         </div>
         <div className="topbar-title">{getStationHeadline()}</div>
-        <button className="btn-new" onClick={() => openShortcut("new_order")}>+ Neuer Auftrag</button>
+        {canCreateOrder && (
+          <button className="btn-new" onClick={() => openShortcut("new_order")}>+ Neuer Auftrag</button>
+        )}
       </div>
-      
+
       {/* Mobile topbar fallback */}
       <div className="flex sm:hidden justify-between items-center mb-4">
         <div className="font-bold text-lg">{getStationHeadline()}</div>
-        <button className="btn-new py-1.5 px-3 text-xs" onClick={() => openShortcut("new_order")}>+ Neu</button>
+        {canCreateOrder && (
+          <button className="btn-new px-3 text-xs" onClick={() => openShortcut("new_order")}>+ Neu</button>
+        )}
       </div>
 
       {ordersReadState === "loading" ? (

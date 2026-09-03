@@ -1,8 +1,9 @@
 # CURRENT_STATE — Galvanik-Kreile WerkstattCockpit
 
-**Massgeblicher Steuerungsstand: 2026-08-21.** `main` ist die einzige Lieferwahrheit. Der folgende
-M1/M2/M3/F1-Block ist aktuell; die ausfuehrlichen F0-Tabellen darunter sind ein datierter historischer
-Snapshot und keine aktuelle Paket- oder Branchsteuerung.
+**Massgeblicher Steuerungsstand: 2026-08-27.** `main` ist die einzige Lieferwahrheit. Der folgende
+M1/M2/M3/F1-Block sowie die Abschnitte zu Vertragsdrift, F1.5-Status und Oberflaechenwahrheit sind
+aktuell; die ausfuehrlichen F0-Tabellen darunter sind ein datierter historischer Snapshot und keine
+aktuelle Paket- oder Branchsteuerung.
 
 ## Aktuelle Liefer- und Paketwahrheit
 
@@ -17,9 +18,151 @@ Snapshot und keine aktuelle Paket- oder Branchsteuerung.
 | M2-Integration | PR #63 als Merge-Commit `733c22e5df95fd00987ba45408b9dac70f8638e1` nach `main` integriert; Statuspflege via PR #64 als Merge-Commit `c3489e9ad7f75286c23b45577ba5240e600e71f2`; Paket- und Statusbranch lokal und remote geloescht; `02_app` sauber auf aktuellem `main` |
 | F1.3 Leistungsabschluss | `PASS`; `galvanik -> fertig`, echte Mehrarbeit, Freeze, L6-Korrektur und fail-closed Rechnungssperre am Kandidaten `fb19c224e1542afdf1436f5f0fb76995fec3935b`; Real-E2E, CI und unabhaengige Exact-SHA-Abnahme ohne offene P0/P1-, Scope- oder False-Pass-Befunde |
 | M3-Integration | PR #66 als GitHub-verifizierter Merge-Commit `fc551b0732c52a0867cc4b0bbdfe4f8a52ad3550` nach `main` integriert; Main-Tree `0a77f85f8268ac721d8f15fc7edce5e2623482c5` bytegleich zum geprueften Kandidaten; `02_app` getrackt sauber auf `main`; der erhaltene Paketbranch ist ohne Writer keine aktive Produktwahrheit |
-| Naechstes Paket | F1.4 `NOT_STARTED`; kein Produktatom ohne eigenen Folgeauftrag |
+| F1.4 Unveraenderliche Rechnung | laut `missions/F1_ORDER_TO_CASH_PILOT_001.yml` `IN_PROGRESS`; Kandidatenarbeit liegt lokal auf Branch `f1/immutable-invoice-m4-20260821` ueber Basis `f1c34b8f36c05912a094eb163950a24a9710df97`. Vertragsinhalt ist vom Owner vollstaendig ratifiziert; offen ist der Implementierungs- und Vertragsabgleich `RATIFIED_CONTRACT_DRIFT` (Klasse `FAIL_INTERNAL`, siehe unten). Kein Merge und keine unabhaengige Abnahme des korrigierten Kandidaten; keine Production |
+| Naechstes Paket | F1.5 `PENDING_OWNER_RATIFICATION`; Baustart ausschliesslich nach F1.4-Merge und neuer Owner- plus Orchestrator-Ratifikation/Startfreigabe. Kein F1.5-Code, kein Produktatom ohne eigenen Folgeauftrag |
 | Remote/Production in M2 | `main`-Merges loesen ueber die vorhandene Vercel-GitHub-Integration automatisch erfolgreiche Deployments mit Environment `Production` aus; fuer `733c22e5df95fd00987ba45408b9dac70f8638e1` (Deployment `5958527416`) und `c3489e9ad7f75286c23b45577ba5240e600e71f2` (Deployment `5958812163`) belegt; keine manuelle Promotion sowie keine Provider-, RLS-, Remote-DB- oder Datenmutation |
 | Remote/Production in M3 | Automatisches Vercel-Git-Deployment `dpl_67UsPkCLodKUS8Fa2Lp7vLhX6Par` fuer exakt `fc551b0732c52a0867cc4b0bbdfe4f8a52ad3550`: `target=production`, `READY`; keine manuelle Promotion sowie keine Provider-, RLS-, Remote-DB- oder Datenmutation |
+
+## Owner-Autoritaet, Vertrags- und Ratifikationsstaende (2026-08-27)
+
+### Owner-Provenienz: Autonomie-Mandat
+
+Owner-Quelle `KREILE_AUTONOMIE_MANDAT_2026-08-27.md`, SHA-256
+`C244EC1C5F1FF1493420F4DCC44FEFCD8F0E76CEAEFD16853BE2A4E4C539364A`, 4904 Bytes. Die Datei liegt
+ausserhalb des Repositories und ist ausschliesslich Herkunft; sie wird nicht veraendert, nicht
+kopiert und ersetzt keinen Gatebeweis. Sie traegt drei Owner-Entscheidungen: die vollstaendige
+F1.4-Ratifikation, die Ratifikation des Frontends als Parallelpaket samt getrennter Statusachsen und
+eine bedingte stehende Merge-Autoritaet.
+
+### F1.4: vollstaendig ratifiziert, `RATIFIED_CONTRACT_DRIFT` (Klasse `FAIL_INTERNAL`)
+
+Der Owner hat F1.4 vollstaendig ratifiziert: `EVOLVE_PUBLIC_INVOICES` additiv und
+rueckwaertskompatibel; Umsatzsteuer ausschliesslich 19 Prozent (1900 Basispunkte); `R-JJJJ-NNNN`
+lueckenlos; Korrektur ausschliesslich als Storno plus Neuausstellung; Stammdaten aus der
+Tenant-Config fail-closed; `PAYMENT_TERM_DAYS` exakt 14; PDF-Download-Uebergang. Dazu fehlt **keine**
+weitere Ownerentscheidung; dies ist ausdruecklich kein `BLOCKED_PRODUCT_DECISION`.
+
+Offen ist ausschliesslich der Implementierungs- und Vertragsabgleich gegen den heute gebundenen
+Stand:
+
+| Punkt | Gebundener Kandidatenstand | Ratifizierter Owner-Stand |
+|---|---|---|
+| Zahlungsziel | `f1_4_payment_term_rule: TENANT_CONFIG_REQUIRED_FAIL_CLOSED`, DB-Check `BETWEEN 1 AND 365` (`supabase/migrations/20260821152949_f1_4_immutable_invoice_contract.sql`) | `PAYMENT_TERM_DAYS` exakt 14 |
+| Umsatzsteuer | Check `IN (700, 1900)` in `company_settings` und im Rechnungsvertrag | ausschliesslich 1900 |
+
+Eine eigene physische F1.4-Bauvertragsdatei liegt nicht im Owner-Ordner; die Provenienz der
+Ratifikation ist das Autonomie-Mandat oben. Es wird keine Datei-Provenienz erfunden.
+`missions/F1_ORDER_TO_CASH_PILOT_001.yml` bindet weiterhin
+`f1_4_contract_sha256 = B1F4E10ECB0C907085D9BE90E859AAFEF1C9798AE5DEEE2E3CE0DD849AD2634A`. Die
+Aufloesung gehoert dem zustaendigen F1-Writer (Mission, Migration, Code, Evidence); die
+Dokumentation passt nichts still an und behauptet nicht, der ratifizierte Inhalt sei bereits
+umgesetzt.
+
+### F1.4: historischer Nachweisstand (vor der ratifizierten Korrektur)
+
+Aus der Owner-Uebergabe belegt und unveraendert bewahrt: PR `#68`, Head-Prefix `d61bb966`,
+Real-Gate, CI und Preview historisch `PASS` beziehungsweise `healthy`; der PR ist als Draft offen und
+unmerged; keine Production. Diese Nachweise wurden **vor** der neu ratifizierten Korrektur auf
+ausschliesslich 19 Prozent und `PAYMENT_TERM_DAYS` exakt 14 erhoben. Sie gelten deshalb nicht als
+Mergebeleg fuer den korrigierten Kandidaten. Dieses Dokument behauptet keinen Live-Refresh dieser
+Zustaende.
+
+### F1.5 Bestaetigter Zahlungseingang: `PENDING_OWNER_RATIFICATION`
+
+Der F1.5-Bauvertrag liegt als Owner-Quelle
+`KREILE_F1_5_BAUVERTRAG_ZAHLUNGSEINGANG_WARENAUSGANG_V1_2026-08-21.md` mit SHA-256
+`5BCD70BFC2BD9D6A6DF06CF48D0D95C4A288DD5C6364BE2783954DDA1196BDE1` und 5592 Bytes vor. Er ist
+eingereicht, aber nicht ratifiziert. Baustart ausschliesslich nach dem F1.4-Merge und nach einer
+neuen Owner- plus Orchestrator-Ratifikation mit ausdruecklicher Startfreigabe. Bisher existieren nur
+Provenienz und Status; es gibt keinen F1.5-Code, keine F1.5-Migration und keine F1.5-Evidence.
+
+## Oberflaechenwahrheit und Frontend-Lane (2026-08-27)
+
+- Reale Ist-Wahrheit der Oberflaeche ist ausschliesslich die heute ausgelieferte alte UI: bestehende
+  Routen, Komponenten und `src/app/globals.css`. Sie bleibt bis zum belegten Ersatz die einzige
+  Nutzeroberflaeche.
+- Die vier Zielbildnamen sind ratifiziert und nicht implementiert: Rolf "Der Tag" V8, Phillip
+  "Werkstatt" V4, Auftragskarte `MACHART_V8`, Kundenkarte `MACHART_V2`. Owner-Provenienz:
+  `KREILE_UEBERGABE_FRONTEND_UMSETZUNG_V1_2026-08-21.md`, SHA-256
+  `1CC0BDD969E1E5BB8F437542FCD8208FCDD2DF5B3B7FC8A0B18030AAC21B5C8C`, 4054 Bytes; kanonisiert in
+  `missions/FRONTEND_IMPLEMENTATION_001.yml`. Diese Namensratifikation ist eigene Metadatenwahrheit
+  und ersetzt weder gebundene Referenzassets noch `UI_REFERENCE_PASS` oder `OWNER_UX_PASS`.
+- Der Owner hat das Frontend mit dem Autonomie-Mandat vom 2026-08-27 (SHA-256
+  `C244EC1C5F1FF1493420F4DCC44FEFCD8F0E76CEAEFD16853BE2A4E4C539364A`, 4904 Bytes) als
+  Parallelpaket ratifiziert. Es gibt damit zwei autorisierte Paket-Lanes, nicht zwei aktive
+  Implementierungen: aktiv ist ausschliesslich die Parallelplanung
+  (`PARALLEL_PLANNING_ACTIVE` / `IMPLEMENTATION_NOT_STARTED`). Disjunktheit der Implementierung ist
+  erforderlich, aber noch nicht belegt. Es gibt keinen Code, keinen Screenshot-Vergleich, keine
+  Rollenmatrix-Abnahme und keine Owner-UX-Ratifikation. Kein Teil dieser Lane ist produktreif; ein
+  ratifiziertes Zielbild ist keine Lieferung.
+- Globale Ein-Writer-Regel des Mandats: `single_active_code_writer_across_frontend_and_f1 = true`.
+  Es gibt insgesamt genau EINEN aktiven Code-Writer, nicht je Teilphase einen; ein Frontend-Writer
+  und ein F1-Writer laufen niemals parallel. Read-only Reviewer und Inventare duerfen parallel
+  laufen.
+- Arbeitskontext der Lane: Phase 0 darf im aktuellen dirty F1-Checkout read-only inventarisieren.
+  Der Modus `READ_ONLY` ist keine implizite Repo-Schreibfreigabe; read-only Auditoutputs bleiben von
+  spaeteren Evidence-Writes getrennt. Jede Repo-Evidence- oder Missionsschreibung nach diesem
+  Control-Plane-Abgleich und jeder UI-Writer verlangt einen von den Projektregeln erlaubten sauberen
+  kurzen Paketbranch beziehungsweise -kontext vom live aktuellen `main`, keinen laufenden F1-Writer
+  oder F1-Gate und eine vorab berechnete exakte Produkt-Allowlist mit Schnittmenge 0 zur aktiven
+  Order-to-Cash-Allowlist. Kein neuer Worktree und kein Clone ohne gesonderte Autoritaet. Ist die
+  Trennung nicht beweisbar, wird sequenziell gearbeitet: erst F1.4 korrigieren und mergen, danach
+  der Frontend-Writer.
+- Basisbindung der Lane: Der in der Mission gefuehrte SHA
+  `f1c34b8f36c05912a094eb163950a24a9710df97` ist ausschliesslich `handoff_snapshot_sha`
+  (`HISTORICAL_HANDOFF_SNAPSHOT_ONLY`) und niemals Implementierungsbasis. Es gilt fail-closed
+  `implementation_base_sha = BIND_CURRENT_MAIN_AT_WRITER_START`: die Basis wird erst beim Writerstart
+  an den live aktuellen `origin/main` gebunden und protokolliert; ohne diese Bindung startet kein
+  UI-Writer.
+- Die exakten ratifizierten Visual-Referenzdateien sind derzeit nicht im Repository gebunden. Bis
+  Phase 0 sie wiedergefunden, erhalten und per SHA-256 und Bytegroesse gebunden hat, gilt
+  `REFERENCE_ASSET_RECOVERY_REQUIRED`: kein UI-Code, kein Gestalten nach Gefuehl und keine stille
+  Aufwertung eines bekannten HTML-Kandidaten zur Autoritaet.
+- Bindend dokumentiert, aber noch nicht umgesetzt: `/start` bleibt ausschliesslich Login- und
+  Sessiongrenze; `/cockpit` ist die einzige Rolf-Oberflaeche "Der Tag"; `/` wird spaeter
+  serverseitiger Rollenrouter (admin/Rolf -> `/cockpit`; developer -> `/settings`; `werkstatt`,
+  `meister`, `buero` -> `/warendurchlauf`); `/today` und `/kontrolle` werden ausschliesslich
+  Kompatibilitaetsaliase auf `/` ohne eigene Datenwahrheit; kein fuenftes Dashboard; die Rolle
+  `inhaber` bleibt verboten.
+- `PHILLIP_WERKSTATT_V4` ist exakt an `/warendurchlauf` als rollenbasierten Werkstatt-Einstieg
+  gebunden. Stationsunterseiten liegen ausschliesslich darunter; es entsteht keine neue
+  Dashboardroute. Phase 0 liefert dazu den exakten Route-Binding-Output und muss das harte
+  `PHILLIP_ROUTE_BINDING_GATE` bestehen, bevor Phase 1 schreiben darf.
+- `BAEDER_DISPOSITION_001` ist ein separater Task, nicht Frontend Phase 1, und ist nicht erledigt.
+  Akzeptanz: alle sichtbaren `/baeder`-Links und Baeder-Bezeichnungen aus der produktiven Navigation
+  entfernt; `/baeder` leitet nach `/warendurchlauf/galvanik` um; `/performance/baeder-material`
+  entfernt oder mit identischem Redirect; kein erreichbarer toter oder gemockter Bath-Adapter;
+  Galvanik bleibt exakt ein Step. Tabellen, Daten, Migrationen und Provenienz bleiben technische
+  `PROTECTED_SALVAGE`; keine Remote- oder Datenloeschung. Baeder sind nach `D-ARCH-010` kein
+  Produktziel und keine Roadmapzeile: keine Baeder-UI und kein spaeteres Baeder-Produktziel.
+- Statusachsen der Lane (getrennt, kein Gesamt-PASS aus einem Teilgate): `FUNCTIONAL_SLICE_PASS`
+  `NOT_STARTED`, `DATA_TRUTH_PASS` `NOT_STARTED`, `UI_REFERENCE_PASS` `NOT_STARTED`, `OWNER_UX_PASS`
+  `OPEN_NOT_GRANTED`, `PRODUCT_READY` `false`. `OWNER_UX_PASS` blockiert den Merge nicht und wird nie
+  als erteilt dargestellt. Screenshotmatrix exakt `390x844`, `768x1024`, `1024x768`, `1366x1024`,
+  `1440x900`.
+- Merge-Autoritaet aus dem Autonomie-Mandat, semantisch getrennt: `authority_status:
+  STANDING_GRANTED`, `eligibility_status: NOT_MATURED`,
+  `additional_owner_merge_approval_required: false`, `valid_from: 2026-08-27`,
+  `valid_until: NEXT_REAL_JOINT_OWNER_ORCHESTRATOR_DECISION`, `owner_ux_pass_blocks_merge: false`.
+  Das Mandat ist weiterhin gueltig; sein Teil 3 war der Abschluss derselben Uebergabe und keine
+  Revokation. Die Autoritaet ist erteilt; das konkrete Paket ist heute noch nicht merge-eligible,
+  weil die mergeblockierenden Gates am exakten SHA noch nicht gruen sind, der Scope-Abgleich offen
+  ist und Review, CI und E2E noch nicht `PASS` melden. Manuelle Production-Promotion und manueller
+  Deploy bleiben `FORBIDDEN`; ein bereits bestehendes automatisches Vercel-Deployment als Folge eines
+  spaeter autorisierten `main`-Merges wird nicht manuell ausgeloest, sondern danach nur beobachtet
+  und belegt.
+
+## ENTSCHEIDUNGSREGISTER (echte Owner-Grenzen)
+
+Hier stehen ausschliesslich Fragen, die eine echte Ownerentscheidung brauchen und deshalb nicht
+autonom entschieden werden. Bereits entschiedene Fragen werden nicht erneut eingetragen; eine
+Owner-Grenze stoppt die Arbeit nicht, sondern wird nach
+`owner_boundary_handling = queue_and_continue_elsewhere` eingereiht, waehrend anderswo weitergebaut
+wird.
+
+| Thema | Empfehlung | Wesentlicher Nachteil | Status |
+|---|---|---|---|
+| F1.5-Ratifikation und Baustart | Erst nach dem F1.4-Merge ratifizieren und starten. | Kein paralleler F1.5-Bau; die Zahlungseingangs-/Warenausgangsstrecke verzoegert sich um die F1.4-Restarbeit. | `QUEUED_OWNER_BOUNDARY` |
 
 ## Historischer F0-Snapshot vom 2026-08-10
 

@@ -1,6 +1,6 @@
 # Masterplan
 
-Stand: 2026-08-13
+Stand: 2026-08-27
 
 ## North Star
 
@@ -18,9 +18,13 @@ Primaerer Kundennutzen:
 
 - `main` ist die einzige Code-Lieferwahrheit.
 - Vercel Production und Supabase Production sind getrennte Runtime-Wahrheiten und muessen gegen `main` belegt werden.
-- Nach Abschluss von M0 wird ausschliesslich im kanonischen Checkout `02_app` auf einem kurzen
-  Paketbranch von aktuellem `main` gearbeitet; es entsteht kein neuer Worktree pro Mission.
-- Jedes Paket hat genau einen Writer und einen unabhaengigen Exact-SHA-Reviewer.
+- Nach Abschluss von M0 wird ausschliesslich im kanonischen Checkout `02_app` auf einem sauberen
+  kurzen Paketbranch vom live aktuellen `main` gearbeitet; es entsteht kein neuer Worktree pro
+  Mission. Ein historischer Handoff-SHA ist niemals die Implementierungsbasis.
+- Jedes Paket hat genau einen Writer und einen unabhaengigen Exact-SHA-Reviewer. Ueber alle Lanes
+  hinweg gilt `single_active_code_writer_across_frontend_and_f1 = true`: insgesamt genau EIN aktiver
+  Code-Writer, nicht je Teilphase einer. Frontend-Writer und F1-Writer laufen niemals parallel;
+  read-only Reviewer und Inventare duerfen parallel laufen.
 - Umsetzung erfolgt ueber kleine PRs, reproduzierbare reale E2E-Nachweise, GitHub-Gates und
   unabhaengige Abnahme. Preview oder Deployment erfolgen nur, wenn das Paket sie ausdruecklich verlangt.
 - Alt-Arbeit wird nicht pauschal gemergt oder geloescht. Sie wird klassifiziert, als Salvage erhalten und nur ueber neue kleine PRs verwertet.
@@ -35,13 +39,94 @@ Primaerer Kundennutzen:
    Exact-SHA-PASS. R0-A allein ist kein R0-PASS.
 3. `F1.2_WERKSTATTDURCHLAUF`
 4. `F1.3_LEISTUNGSABSCHLUSS`
-5. `F1.4_UNVERAENDERLICHE_RECHNUNG`
-6. `F1.5_BESTAETIGTER_ZAHLUNGSEINGANG`
+5. `F1.4_UNVERAENDERLICHE_RECHNUNG`: Vertragsinhalt ist vom Owner vollstaendig ratifiziert; offen ist
+   nur der Implementierungs- und Vertragsabgleich (`RATIFIED_CONTRACT_DRIFT`, `FAIL_INTERNAL`).
+6. `F1.5_BESTAETIGTER_ZAHLUNGSEINGANG`: `PENDING_OWNER_RATIFICATION`; Baustart ausschliesslich nach
+   F1.4-Merge und neuer Owner- plus Orchestrator-Ratifikation/Startfreigabe. Bis dahin kein
+   F1.5-Code, keine F1.5-Migration, keine F1.5-Evidence.
 7. `F1.6_REALER_PILOT`
 
 F1.1 Digitaler Wareneingang ist unabhaengig abgenommen und wird nicht erneut geoeffnet, solange sein
 Vertrag unveraendert bleibt. Jedes folgende Paket liefert Quelle -> sicherer Vertrag -> Mutation ->
 Receipt -> Reload/Readback -> UI-Zustaende -> positiven und negativen realen Nachweis.
+
+## Parallele Frontend-Lane (2026-08-27, als Paket ratifiziert, Implementierung nicht begonnen)
+
+Die Reihenfolge F1.4 -> F1.5 -> F1.6 bleibt unveraendert. Der Owner hat das Frontend als
+Parallelpaket ratifiziert; es laeuft unter `missions/FRONTEND_IMPLEMENTATION_001.yml`, ohne Pfad-,
+Migrations- oder Datenwahrheitsueberlappung mit der Order-to-Cash-Lane und ohne neue Datenbank-,
+Auth- oder Session-Wahrheit.
+
+Es gibt zwei autorisierte Paket-Lanes, nicht zwei aktive Implementierungen. Belegter Lane-Status ist
+heute ausschliesslich `PARALLEL_PLANNING_ACTIVE` / `IMPLEMENTATION_NOT_STARTED`; aktiv ist nur die
+Parallelplanung. Disjunktheit der Implementierung ist erforderlich, aber noch nicht belegt und wird
+nicht behauptet. Es gilt `single_active_code_writer_across_frontend_and_f1 = true`: insgesamt genau
+EIN aktiver Code-Writer ueber Frontend und F1 hinweg; Frontend- und F1-Writer laufen nie parallel,
+read-only Reviewer und Inventare duerfen parallel laufen. Ein Frontend-Writer startet erst mit einem
+von den Projektregeln erlaubten sauberen kurzen Paketbranch vom live aktuellen `main` (kein
+historischer Handoff-SHA als Basis), ohne laufenden F1-Writer oder F1-Gate und mit vorab berechneter
+exakter Produkt-Allowlist, deren Schnittmenge zur aktiven Order-to-Cash-Allowlist 0 ist. Kein neuer
+Worktree und kein Clone ohne gesonderte Autoritaet. Ist die Trennung nicht beweisbar, wird
+sequenziell gearbeitet: erst F1.4 korrigieren und mergen, danach der Frontend-Writer.
+
+1. Phase 0 `INVENTAR_UND_RECONCILE`, read-only: bestehende Routen, Rollen, Tokens, Komponenten und
+   die real vorhandenen F1.2/F1.3-Read-Ports inventarisieren; die exakten ratifizierten
+   Visual-Referenzdateien aller vier Zieloberflaechen wiederfinden, erhalten und per SHA-256 und
+   Bytegroesse binden. Ohne gebundene Referenz entsteht kein UI-Code und wird nicht nach Gefuehl
+   gestaltet. Phase 0 darf im aktuellen dirty F1-Checkout read-only inventarisieren; der Modus
+   `READ_ONLY` ist keine implizite Repo-Schreibfreigabe. Read-only Auditoutputs bleiben getrennt von
+   spaeteren Evidence- oder Missionsschreibungen, die den oben genannten sauberen Kontext brauchen.
+   Phase 0 liefert zusaetzlich den exakten Route-Binding-Output `PHILLIP_WERKSTATT_V4` ->
+   `/warendurchlauf` samt darunterliegender Stationsunterseiten und muss das harte
+   `PHILLIP_ROUTE_BINDING_GATE` bestehen; ohne dieses Gate darf Phase 1 nicht schreiben.
+2. Phase 1: genau EIN Phillip-Proofscreen "Werkstatt" auf `/warendurchlauf` als rollenbasierter
+   Werkstatt-Einstieg gegen die echten Station-Queue-, Intake-, Evidence- und Auftrags-Ports;
+   Stationsunterseiten liegen ausschliesslich darunter, es entsteht keine neue Dashboardroute und es
+   gibt keine Demo- oder Mockdaten.
+3. Danach nach demselben Muster Rolf "Der Tag" auf `/cockpit`, dann Auftragskarte, dann Kundenkarte.
+
+Ratifizierte Zieloberflaechen: Rolf "Der Tag" V8, Phillip "Werkstatt" V4, Auftragskarte
+`MACHART_V8`, Kundenkarte `MACHART_V2`. Ratifiziert heisst ausschliesslich: die vier Zielbildnamen
+sind bestaetigt; implementiert ist davon nichts. Diese Namensratifikation ist eigene
+Metadatenwahrheit und ersetzt weder gebundene Referenzassets noch `UI_REFERENCE_PASS` oder
+`OWNER_UX_PASS`.
+
+Bindende Routen- und Dispositionsentscheidung:
+
+- `/cockpit` ist die einzige Rolf-Oberflaeche "Der Tag"; es ist die bestehende rollenbegrenzte
+  Chefroute mit Read-Ports.
+- `/start` bleibt ausschliesslich Login- und Sessiongrenze.
+- `/` wird spaeter serverseitiger Rollenrouter: admin/Rolf -> `/cockpit`; developer -> `/settings`;
+  `werkstatt`, `meister` und `buero` -> `/warendurchlauf`. Eine Rolle `inhaber` wird nicht
+  eingefuehrt und bleibt verboten.
+- `/today` und `/kontrolle` werden spaeter ausschliesslich Kompatibilitaetsaliase auf `/`, ohne
+  eigenes Dashboard und ohne eigene Datenwahrheit. Es entsteht kein fuenftes Dashboard.
+- Die Baeder-Disposition laeuft als eigener kleiner Task `BAEDER_DISPOSITION_001`, nicht als
+  Frontend Phase 1, und ist noch nicht erledigt. Akzeptanz: alle sichtbaren `/baeder`-Links und
+  Baeder-Bezeichnungen sind aus der produktiven Navigation entfernt; `/baeder` leitet nach
+  `/warendurchlauf/galvanik` um; `/performance/baeder-material` ist entfernt oder leitet identisch
+  um; es existiert kein erreichbarer toter oder gemockter Bath-Adapter; Galvanik bleibt exakt ein
+  Step. Tabellen, Daten, Migrationen und Provenienz bleiben technische `PROTECTED_SALVAGE`; keine
+  Remote- oder Datenloeschung. Es entsteht keine Baeder-UI und kein spaeteres Baeder-Produktziel.
+
+Verbindliche UI- und Statusgates der Lane (Details in der Mission):
+
+- Screenshotmatrix exakt `390x844`, `768x1024`, `1024x768`, `1366x1024`, `1440x900`.
+- Getrennte Statusachsen `FUNCTIONAL_SLICE_PASS`, `DATA_TRUTH_PASS`, `UI_REFERENCE_PASS`,
+  `OWNER_UX_PASS`, `PRODUCT_READY`; Initialwerte `NOT_STARTED` beziehungsweise `false`.
+  `OWNER_UX_PASS` steht auf `OPEN_NOT_GRANTED`, blockiert den Merge ausdruecklich nicht und wird
+  niemals als erteilt dargestellt.
+- Merge-Autoritaet aus dem Autonomie-Mandat, semantisch getrennt: `authority_status:
+  STANDING_GRANTED`, `additional_owner_merge_approval_required: false`, `valid_from: 2026-08-27`,
+  `valid_until: NEXT_REAL_JOINT_OWNER_ORCHESTRATOR_DECISION`, `owner_ux_pass_blocks_merge: false`.
+  Das Mandat ist weiterhin gueltig; sein Teil 3 war Abschluss derselben Uebergabe und keine
+  Revokation. Davon getrennt steht die Reife des konkreten Pakets: `eligibility_status: NOT_MATURED`,
+  weil noch nicht alle mergeblockierenden Gates am exakten SHA gruen sind, der Scope-Abgleich offen
+  ist und Review, CI und E2E noch nicht `PASS` melden. Die Autoritaet ist also erteilt, das konkrete
+  Paket ist heute noch nicht merge-eligible. Manuelle Production-Promotion und manueller Deploy
+  bleiben `FORBIDDEN`; ein bereits bestehendes automatisches Vercel-Deployment als Folge eines
+  spaeter autorisierten `main`-Merges wird nicht manuell ausgeloest, sondern danach nur beobachtet
+  und belegt.
 
 ## Historische Vor-F0-Roadmap (Erhalt, nicht aktive Ausfuehrungsreihenfolge)
 
@@ -185,7 +270,9 @@ Dieser Ablauf ist der erste verkaufsrelevante End-to-End-Meilenstein.
 5. Kontroll-Cockpit, Liquiditaet und Investitionsplanung.
 6. Such-Gehirn und KI-Entscheidungen mit Quellen und Konfidenz.
 7. Marketing-Attribution und Kundenreaktivierung.
-8. Lager, Baeder, Energie, Qualitaet und KVP.
+8. Lager, Energie, Qualitaet/QS und KVP. Baeder sind nach `D-ARCH-010` kein Produktziel und keine
+   Roadmapzeile; sie existieren ausschliesslich als technische `PROTECTED_SALVAGE` unter
+   `BAEDER_DISPOSITION_001` (Tabellen, Daten, Migrationen, Provenienz) ohne Baeder-UI.
 9. Backup/Restore, Observability, Performance/Jank und Go-live-Haertung.
 10. `LEDGER-CORE-PREP-001` und spaeter einmalig `LEDGER-CORE-EXTRACT-001`, sobald der Buchkern real stabil ist.
 
@@ -194,7 +281,7 @@ Keiner dieser Punkte ist gestrichen. Status, Abhaengigkeiten und Verschiebungsgr
 ## Nutzer-Twins
 
 - **Rolf:** Desktop; Kontrolle, Geld, Termine, Freigaben und Planbarkeit.
-- **Philipp:** Tablet; Produktion, naechste Handlung und Zahlen ohne Mehrarbeit.
+- **Phillip:** Tablet; Produktion, naechste Handlung und Zahlen ohne Mehrarbeit.
 - **Michael:** stark gefuehrte Aufnahme, Telefon, E-Mail, Eingang und Ausgang.
 
 ## STOPP-Regeln
@@ -207,3 +294,7 @@ Keiner dieser Punkte ist gestrichen. Status, Abhaengigkeiten und Verschiebungsgr
 - Kein P0-Abschluss ohne reproduzierbaren Angriffsfall, legitimen Kontrollfall und unabhaengige Abnahme.
 - Keine Cockpit-Zahl ohne reale Datenquelle, Definition und Reload-Nachweis.
 - Keine weitere Agentur-/Control-Plane-Runde ohne konkreten Lieferblocker.
+- Kein UI-Code der Frontend-Lane, bevor Phase 0 die exakten Referenzassets aller betroffenen
+  Oberflaechen mit SHA-256 und Bytegroesse gebunden hat; ein bekannter HTML-Kandidat wird nicht
+  still zur Autoritaet erklaert.
+- Kein Teilgate der Frontend-Lane wird als Gesamt-PASS, als Merge oder als Produktreife dargestellt.

@@ -35,14 +35,16 @@ export function SearchToolbar({
           value={value}
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full pl-9 pr-8 py-2 bg-bg-app border border-neutral-gray-100 rounded-xl text-sm text-navy-900 placeholder-text-muted focus:outline-none focus:border-neutral-gray-300 transition-colors"
+          className="w-full min-h-[48px] pl-9 pr-14 py-2 bg-bg-app border border-neutral-gray-100 rounded-xl text-sm text-navy-900 placeholder-text-muted focus:outline-none focus:border-neutral-gray-300 transition-colors"
         />
         {value && (
           <button
+            aria-label="Suche zurücksetzen"
             onClick={() => onChange("")}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-navy-900 transition-colors"
+            className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center w-12 h-12 min-w-[48px] min-h-[48px] rounded-xl text-text-muted hover:text-navy-900 transition-colors"
+            type="button"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-4 h-4" />
           </button>
         )}
       </div>
@@ -54,8 +56,9 @@ export function SearchToolbar({
             <button
               key={f.id}
               onClick={() => onFilterChange(f.id)}
+              type="button"
               className={[
-                "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border",
+                "flex items-center justify-center gap-1.5 px-3 py-2 min-h-[48px] rounded-xl text-xs font-bold whitespace-nowrap transition-all border",
                 f.id === activeFilter
                   ? "bg-navy-900 text-white border-navy-900 shadow-sm"
                   : "bg-bg-app text-text-muted border-neutral-gray-100 hover:bg-white hover:text-navy-900 hover:border-neutral-gray-300",

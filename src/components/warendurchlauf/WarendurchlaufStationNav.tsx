@@ -137,7 +137,11 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
     <div className="w-full pt-6 pb-2 relative z-[105]">
       {dataState === "loading" && <p className="text-center text-xs text-[#9e9689]">Stationsdaten werden geladen...</p>}
       {dataState === "unavailable" && <p className="text-center text-xs text-[#9e9689]">NOT_AVAILABLE: Stationsdaten konnten nicht geladen werden.</p>}
-      <nav className="w-full px-5 md:px-8 lg:px-12 xl:px-16 mx-auto flex items-center justify-around gap-2">
+      {/* Basis: echte 3-Spalten-Struktur (Pfeile sind erst ab md sichtbar), ab md das bestehende Flow-Layout */}
+      <nav
+        data-testid="station-nav"
+        className="w-full min-w-0 px-2 sm:px-4 md:px-8 lg:px-12 xl:px-16 mx-auto grid grid-cols-3 items-end gap-1 sm:gap-2 md:flex md:items-center md:justify-around"
+      >
         {STATIONS.map((station, i) => {
           const isActive = getIsActive(station);
 
@@ -145,14 +149,15 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
             <React.Fragment key={station.id}>
               <Link
                 href={station.path}
-                className={`group flex flex-col items-center gap-3 cursor-pointer transition-all duration-300 shrink-0 px-2 py-2 rounded-2xl relative ${isActive ? "opacity-100 z-20 -translate-y-6 md:-translate-y-10 lg:-translate-y-12" : "opacity-80 hover:opacity-100 z-10 hover:-translate-y-1"
+                data-testid={`station-nav-item-${station.id}`}
+                className={`group flex flex-col items-center gap-1.5 sm:gap-2 md:gap-3 cursor-pointer transition-all duration-300 min-w-0 w-full md:w-auto md:shrink-0 px-1 py-1 sm:px-2 sm:py-2 rounded-2xl relative ${isActive ? "opacity-100 z-20 -translate-y-4 sm:-translate-y-6 md:-translate-y-10 lg:-translate-y-12" : "opacity-80 hover:opacity-100 z-10 hover:-translate-y-1"
                   }`}
               >
                 {/* Circle with image */}
                 <div
-                  className={`rounded-full overflow-hidden flex items-center justify-center transition-all duration-300 bg-white shadow-sm ${compact
+                  className={`rounded-full overflow-hidden shrink-0 max-w-full flex items-center justify-center transition-all duration-300 bg-white shadow-sm ${compact
                       ? "w-[76px] h-[76px]"
-                      : "w-[115px] h-[115px] md:w-[144px] md:h-[144px] lg:w-[168px] lg:h-[168px]"
+                      : "w-[76px] h-[76px] sm:w-[96px] sm:h-[96px] md:w-[144px] md:h-[144px] lg:w-[168px] lg:h-[168px]"
                     } ${isActive ? "relative ring-4 ring-[#1a6b38] ring-opacity-100" : ""}`}
                   style={{
                     border: isActive
@@ -173,7 +178,7 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
 
                 {/* Name */}
                 <span
-                  className={`text-sm md:text-base font-bold transition-colors ${isActive ? "text-[#1a1a1a]" : "text-[#9e9689]"
+                  className={`text-[11px] sm:text-sm md:text-base font-bold leading-tight text-center min-w-0 max-w-full transition-colors ${isActive ? "text-[#1a1a1a]" : "text-[#9e9689]"
                     }`}
                 >
                   {station.name}
@@ -181,7 +186,7 @@ function NavContent({ activeStation, compact }: WarendurchlaufStationNavProps) {
 
                 {/* Chips */}
                 {!compact && dataState === "loaded" && (
-                  <div className="flex gap-1 flex-wrap justify-center">
+                  <div className="flex gap-1 flex-wrap justify-center min-w-0 max-w-full">
                     {station.chips.map((chip) => (
                       <span
                         key={chip.label}

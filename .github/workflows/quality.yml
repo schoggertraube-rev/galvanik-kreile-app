@@ -474,6 +474,18 @@ jobs:
             docs/evidence/f0/W4_CANDIDATE_SCHEMA_CONTRACT.json
             docs/evidence/f0/W4_CANDIDATE_FINGERPRINT_EVIDENCE.md
 
+      - name: F1.4 candidate replay fresh from zero without seed
+        # Blocking F1.4 contract: integral F1.4 invoice schema through 20260821152949.
+        # Fail-closed: ohne Always-Bedingung stoppt ein fehlgeschlagener Reset den Job hart.
+        run: npx --yes supabase@2.111.0 db reset --local --no-seed --version 20260821152949
+
+      - name: F1.4 immutable invoice contract and integration tests (blocking)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          F1_4_EXPECTED_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          SUPABASE_SERVICE_ROLE_KEY: ""
+        run: npx vitest run src/test/f1_4_immutable_invoice.integration.test.ts src/test/f1_4_immutable_invoice_contract.integration.test.ts --maxWorkers=1 --no-file-parallelism
+
       - name: Stop isolated local Supabase
         if: always()
         run: npx --yes supabase@2.111.0 stop --no-backup

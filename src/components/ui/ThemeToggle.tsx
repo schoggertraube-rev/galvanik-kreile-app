@@ -35,14 +35,14 @@ export function ThemeToggle() {
 
   if (!mounted) {
     return (
-      <button 
+      <button
         type="button"
         disabled
-        className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-[var(--ink)] transition-colors opacity-50 font-bold text-sm"
+        className="flex items-center justify-center gap-2 px-3 xl:px-4 py-2 w-12 xl:w-auto h-12 min-w-[48px] min-h-[48px] shrink-0 rounded-xl bg-[var(--surface)] border border-[var(--border)] text-[var(--ink)] transition-colors opacity-50 font-bold text-sm"
         aria-label="Lade Theme..."
       >
-        <Sun className="w-4 h-4" />
-        <span>Hell / Dunkel</span>
+        <Sun className="w-4 h-4 shrink-0" />
+        <span className="hidden xl:inline">Hell / Dunkel</span>
       </button>
     );
   }
@@ -51,11 +51,11 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggleTheme}
-      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--surface)] hover:bg-[var(--surface-2)] border border-[var(--border)] text-[var(--ink)] transition-colors font-bold text-sm"
+      className="flex items-center justify-center gap-2 px-3 xl:px-4 py-2 w-12 xl:w-auto h-12 min-w-[48px] min-h-[48px] shrink-0 rounded-xl bg-[var(--surface)] hover:bg-[var(--surface-2)] border border-[var(--border)] text-[var(--ink)] transition-colors font-bold text-sm"
       aria-label={`Aktuelles Theme: ${theme === 'light' ? 'Hell' : 'Dunkel'}. Klicken zum Umschalten.`}
     >
-      {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-      <span>{theme === "light" ? "Design: Dunkel" : "Design: Hell"}</span>
+      {theme === "light" ? <Moon className="w-4 h-4 shrink-0" /> : <Sun className="w-4 h-4 shrink-0" />}
+      <span className="hidden xl:inline whitespace-nowrap">{theme === "light" ? "Design: Dunkel" : "Design: Hell"}</span>
     </button>
   );
 }

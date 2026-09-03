@@ -8,6 +8,7 @@ const ports = vi.hoisted(() => ({
   routerPush: vi.fn(),
   openShortcut: vi.fn(),
   openOrder: vi.fn(),
+  permissions: { granted: [] as string[], loading: false },
 }));
 
 vi.mock("next/navigation", () => {
@@ -28,6 +29,12 @@ vi.mock("@/components/ui/AppShortcutContext", () => ({
 }));
 vi.mock("@/components/orders/OrderModalProvider", () => ({
   useOrderModal: () => ({ openOrder: ports.openOrder }),
+}));
+vi.mock("@/lib/auth/PermissionsContext", () => ({
+  usePermissions: () => ({
+    hasPermission: (key: string) => ports.permissions.granted.includes(key),
+    loading: ports.permissions.loading,
+  }),
 }));
 
 const order = (id = "order-1", orderNumber = "A-100"): OperationalOrder => ({
@@ -55,6 +62,8 @@ const order = (id = "order-1", orderNumber = "A-100"): OperationalOrder => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  ports.permissions.granted = [];
+  ports.permissions.loading = false;
 });
 
 afterEach(() => cleanup());
@@ -103,6 +112,40 @@ describe("W4 orders read states", () => {
     expect(await screen.findByText("Keine passenden Aufträge")).toBeInTheDocument();
     expect(screen.queryByText("Noch keine Aufträge erfasst")).not.toBeInTheDocument();
     expect(screen.getByText("0 Aufträge gefunden")).toBeInTheDocument();
+  });
+
+  it("hides both create CTAs without perm_data_orders", async () => {
+    ports.permissions.granted = ["perm_view_leitstand"];
+    ports.getOrdersDb.mockResolvedValue({ ok: true, data: [order()] });
+    render(<OrdersPage />);
+
+    expect(await screen.findByText("A-100")).toBeInTheDocument();
+    expect(screen.queryByText("+ Neuer Auftrag")).not.toBeInTheDocument();
+    expect(screen.queryByText("+ Neu")).not.toBeInTheDocument();
+    expect(ports.openShortcut).not.toHaveBeenCalled();
+  });
+
+  it("hides both create CTAs fail-closed while permissions are still loading", async () => {
+    ports.permissions.granted = ["perm_data_orders"];
+    ports.permissions.loading = true;
+    ports.getOrdersDb.mockResolvedValue({ ok: true, data: [order()] });
+    render(<OrdersPage />);
+
+    expect(await screen.findByText("A-100")).toBeInTheDocument();
+    expect(screen.queryByText("+ Neuer Auftrag")).not.toBeInTheDocument();
+    expect(screen.queryByText("+ Neu")).not.toBeInTheDocument();
+  });
+
+  it("shows both create CTAs with perm_data_orders and opens the real shortcut", async () => {
+    ports.permissions.granted = ["perm_data_orders"];
+    ports.getOrdersDb.mockResolvedValue({ ok: true, data: [order()] });
+    render(<OrdersPage />);
+
+    expect(await screen.findByText("A-100")).toBeInTheDocument();
+    expect(screen.getByText("+ Neu")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("+ Neuer Auftrag"));
+
+    expect(ports.openShortcut).toHaveBeenCalledWith("new_order");
   });
 
   it("clears stale values and metrics when a sync reload returns non-ok", async () => {

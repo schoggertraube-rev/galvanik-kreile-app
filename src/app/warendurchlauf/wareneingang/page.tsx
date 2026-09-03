@@ -17,6 +17,7 @@ import {
   type WarendurchlaufOrder,
 } from "@/app/warendurchlauf/actions";
 import { WareneingangHandoffButton } from "@/components/orders/WareneingangHandoffButton";
+import { usePermissions } from "@/lib/auth/PermissionsContext";
 
 function getLegacyStatusText(order: WarendurchlaufOrder) {
   if (
@@ -40,6 +41,9 @@ function WarendurchlaufLeitstandContent() {
   const router = useRouter();
   const { openErfassung } = useErfassung();
   const { openOrder } = useOverlayStore();
+  const { hasPermission, loading: permissionsLoading } = usePermissions();
+  // Fail-closed: solange die Berechtigungen nicht geladen sind, bleibt der Erfassungseinstieg verborgen.
+  const canCreateOrder = !permissionsLoading && hasPermission("perm_data_orders");
   const [orders, setOrders] = useState<WarendurchlaufOrder[]>([]);
   const [stationOrders, setStationOrders] = useState<WarendurchlaufOrder[]>([]);
   const [todos, setTodos] = useState<{ id: number; title: string; subtitle: string; tags: string[]; action: string; priority?: string; live?: boolean; targetHref?: string; done: boolean }[]>([]);
@@ -138,18 +142,21 @@ function WarendurchlaufLeitstandContent() {
 
             {/* Aktionskarten */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-              {/* Kamera — primary */}
-              <button
-                onClick={() => openErfassung({ mode: "scan" })}
-                className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md text-center text-white"
-                style={{ background: "#1a6b38", border: "1.5px solid #1a6b38" }}
-              >
-                <div className="w-[52px] h-[52px] rounded-[14px] bg-white/15 flex items-center justify-center">
-                  <Camera className="w-6 h-6 text-white" />
-                </div>
-                <span className="text-[15px] font-bold">Kamera</span>
-                <span className="text-xs text-white/60">Foto &middot; Scan</span>
-              </button>
+              {/* Kamera — primary; nur mit Auftragsrecht (Serverchecks bleiben massgeblich) */}
+              {canCreateOrder && (
+                <button
+                  data-testid="wareneingang-scan-order"
+                  onClick={() => openErfassung({ mode: "scan" })}
+                  className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md text-center text-white"
+                  style={{ background: "#1a6b38", border: "1.5px solid #1a6b38" }}
+                >
+                  <div className="w-[52px] h-[52px] rounded-[14px] bg-white/15 flex items-center justify-center">
+                    <Camera className="w-6 h-6 text-white" />
+                  </div>
+                  <span className="text-[15px] font-bold">Kamera</span>
+                  <span className="text-xs text-white/60">Foto &middot; Scan</span>
+                </button>
+              )}
 
               {/* Telefonnotiz (ersetzt Datei-Upload) */}
               <Link
@@ -164,19 +171,21 @@ function WarendurchlaufLeitstandContent() {
                 <span className="text-xs text-[#9e9689]">Schnellerfassung</span>
               </Link>
 
-              {/* Manuell anlegen */}
-              <button
-                data-testid="wareneingang-create-order"
-                onClick={() => openErfassung({ mode: "order" })}
-                className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
-                style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
-              >
-                <div className="w-[52px] h-[52px] rounded-[14px] bg-[#fef3e2] flex items-center justify-center">
-                  <PenLine className="w-6 h-6 text-[#c8922a]" />
-                </div>
-                <span className="text-[15px] font-bold text-[#1a1a1a]">Wareneingang anlegen</span>
-                <span className="text-xs text-[#9e9689]">Kunde &middot; Teile &middot; Termin</span>
-              </button>
+              {/* Manuell anlegen — nur mit Auftragsrecht (Serverchecks bleiben massgeblich) */}
+              {canCreateOrder && (
+                <button
+                  data-testid="wareneingang-create-order"
+                  onClick={() => openErfassung({ mode: "order" })}
+                  className="flex flex-col items-center gap-3 p-6 rounded-[14px] cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md hover:bg-[#f4f0e8] text-center"
+                  style={{ background: "#faf8f4", border: "1.5px solid #d8d0c4" }}
+                >
+                  <div className="w-[52px] h-[52px] rounded-[14px] bg-[#fef3e2] flex items-center justify-center">
+                    <PenLine className="w-6 h-6 text-[#c8922a]" />
+                  </div>
+                  <span className="text-[15px] font-bold text-[#1a1a1a]">Wareneingang anlegen</span>
+                  <span className="text-xs text-[#9e9689]">Kunde &middot; Teile &middot; Termin</span>
+                </button>
+              )}
             </div>
 
             {/* Breite Verweiskarten */}
@@ -205,7 +214,7 @@ function WarendurchlaufLeitstandContent() {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-[13px] font-bold text-[#1a1a1a]">Letzte Annahmen</div>
-                <div className="text-[11px] text-[#9e9689]">28 gesamt anzeigen</div>
+                <div className="text-[11px] text-[#9e9689]">Aufträge anzeigen</div>
               </div>
               <ChevronRight className="w-4 h-4 text-[#9e9689] shrink-0" />
             </Link>

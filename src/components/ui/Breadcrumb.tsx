@@ -30,9 +30,10 @@ export function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
               style={{
                 color: "var(--ink-faint, #94a3b8)",
                 textDecoration: "none",
-                minHeight: "24px", // Slight padding for better touch
+                minHeight: "48px", // Touch target
                 display: "inline-flex",
                 alignItems: "center",
+                padding: "0 4px",
               }}
             >
               {item.label}

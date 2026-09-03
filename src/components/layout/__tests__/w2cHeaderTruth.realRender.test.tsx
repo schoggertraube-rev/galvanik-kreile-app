@@ -14,6 +14,13 @@ const boundary = vi.hoisted(() => {
     logout: vi.fn(),
     onMenuToggle: vi.fn(),
     openErfassung: vi.fn(),
+    permissions: {
+      granted: [] as string[],
+      initials: "",
+      loading: false,
+      name: "",
+      status: "unauthenticated" as "authenticated" | "unauthenticated" | "error",
+    },
     realtime: { status: "disabled" as RealtimeStatus },
     routerReplace: vi.fn(),
     sync: {
@@ -41,7 +48,13 @@ vi.mock("@/components/layout/RealtimeSyncManager", () => ({
   useRealtimeStatus: () => boundary.realtime,
 }));
 vi.mock("@/lib/auth/PermissionsContext", () => ({
-  usePermissions: () => ({ initials: "", name: "", status: "unauthenticated" }),
+  usePermissions: () => ({
+    hasPermission: (key: string) => boundary.permissions.granted.includes(key),
+    initials: boundary.permissions.initials,
+    loading: boundary.permissions.loading,
+    name: boundary.permissions.name,
+    status: boundary.permissions.status,
+  }),
 }));
 vi.mock("@/lib/offline/SyncContext", () => ({
   useSync: () => boundary.sync,
@@ -56,6 +69,11 @@ function renderHeader() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  boundary.permissions.granted = [];
+  boundary.permissions.initials = "";
+  boundary.permissions.loading = false;
+  boundary.permissions.name = "";
+  boundary.permissions.status = "unauthenticated";
   boundary.realtime.status = "disabled";
   boundary.sync.isOnline = true;
   boundary.sync.outboxItems = [];
@@ -119,7 +137,9 @@ describe("W2C header truth", () => {
     });
   });
 
-  it("preserves menu, generic capture and scan interactions", () => {
+  it("preserves menu, generic capture and scan interactions for permitted users", () => {
+    boundary.permissions.granted = ["perm_data_orders"];
+
     const { container } = renderHeader();
     const menuButton = container.querySelector("svg.lucide-menu")?.closest("button");
 
@@ -131,6 +151,49 @@ describe("W2C header truth", () => {
     expect(boundary.onMenuToggle).toHaveBeenCalledTimes(1);
     expect(boundary.openErfassung).toHaveBeenNthCalledWith(1, { mode: "gate" });
     expect(boundary.openErfassung).toHaveBeenNthCalledWith(2, { mode: "scan" });
+  });
+
+  it("hides both order entry points without perm_data_orders", () => {
+    boundary.permissions.granted = ["perm_view_leitstand"];
+
+    renderHeader();
+
+    expect(screen.queryByTitle("Neu anlegen")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Schnellannahme (Scan)")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Navigation öffnen")).toBeInTheDocument();
+    expect(screen.getByLabelText("Globale Suche öffnen")).toBeInTheDocument();
+  });
+
+  it("hides the order entry points fail-closed while permissions are still loading", () => {
+    boundary.permissions.granted = ["perm_data_orders"];
+    boundary.permissions.loading = true;
+
+    renderHeader();
+
+    expect(screen.queryByTitle("Neu anlegen")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Schnellannahme (Scan)")).not.toBeInTheDocument();
+    expect(boundary.openErfassung).not.toHaveBeenCalled();
+  });
+
+  it("lifts the header over the station nav only while the search dialog is open", () => {
+    const { container } = renderHeader();
+    const header = container.querySelector("header");
+
+    expect(header).not.toBeNull();
+    expect(header!.className).toContain("z-[100]");
+    expect(header!.className).not.toContain("z-[200]");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("Globale Suche öffnen"));
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(header!.className).toContain("z-[200]");
+
+    fireEvent.click(screen.getByLabelText("Globale Suche schließen"));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(header!.className).toContain("z-[100]");
+    expect(header!.className).not.toContain("z-[200]");
   });
 
   it("contains no fabricated notification or synchronization claims in the source", () => {

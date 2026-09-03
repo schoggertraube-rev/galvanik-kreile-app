@@ -21,6 +21,10 @@
       "private.v_extra_work_catalog_receipts_v1",
       "private.v_extra_work_rate_receipts_v1"
     ],
+    "src/lib/server/commands/immutableInvoiceCommand.ts": [
+      "private.v_invoice_issue_source_v1",
+      "private.v_invoice_receipt_v1"
+    ],
     "src/lib/server/commands/orderExtraWorkCommand.ts": [
       "private.v_order_freeze_state_v1",
       "private.v_order_item_extra_work_receipts_v1"
@@ -53,6 +57,10 @@
       "private.v_extra_work_catalog_receipts_v1",
       "private.v_extra_work_rate_receipts_v1",
       "private.v_order_item_extra_work_receipts_v1"
+    ],
+    "src/lib/server/invoiceRead.ts": [
+      "private.v_invoice_receipt_v1",
+      "private.v_invoice_summary_v1"
     ],
     "src/lib/server/orderCardRead.ts": [
       "private.v_extra_work_catalog_v1",
@@ -171,6 +179,15 @@
       "path": "supabase/migrations/20260820143000_f1_3_customer_summary.sql",
       "requiredSecurityInvokerViews": [
         "private.v_customer_summary_v1"
+      ],
+      "requiredLegacySource": null
+    },
+    {
+      "path": "supabase/migrations/20260821152949_f1_4_immutable_invoice_contract.sql",
+      "requiredSecurityInvokerViews": [
+        "private.v_invoice_issue_source_v1",
+        "private.v_invoice_receipt_v1",
+        "private.v_invoice_summary_v1"
       ],
       "requiredLegacySource": null
     }

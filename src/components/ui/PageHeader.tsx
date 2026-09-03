@@ -13,6 +13,10 @@ interface PageHeaderProps {
     onClick?: () => void;
     icon?: LucideIcon;
     variant?: "primary" | "outline";
+    /** Sichtbar, aber nativ deaktiviert — z. B. wenn kein Command hinterlegt ist. */
+    disabled?: boolean;
+    /** Ehrliche Begründung, warum die Aktion nicht verfügbar ist. */
+    unavailableReason?: string;
   };
 }
 
@@ -23,7 +27,8 @@ export function PageHeader({ title, subtitle, backHref, action }: PageHeaderProp
         {backHref && (
           <Link
             href={backHref}
-            className="w-9 h-9 rounded-xl bg-white border border-neutral-gray-100 flex items-center justify-center text-text-muted hover:text-navy-900 hover:border-neutral-gray-300 transition-colors shrink-0"
+            aria-label="Zurück"
+            className="w-12 h-12 min-w-[48px] min-h-[48px] rounded-xl bg-white border border-neutral-gray-100 flex items-center justify-center text-text-muted hover:text-navy-900 hover:border-neutral-gray-300 transition-colors shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
           </Link>
@@ -38,11 +43,11 @@ export function PageHeader({ title, subtitle, backHref, action }: PageHeaderProp
 
       {action && (
         <>
-          {action.href ? (
+          {action.href && !action.disabled ? (
             <Link
               href={action.href}
               className={[
-                "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shrink-0",
+                "flex items-center gap-2 px-4 py-2.5 min-h-[48px] rounded-xl text-sm font-bold transition-all shrink-0",
                 action.variant === "outline"
                   ? "bg-white border border-neutral-gray-100 text-navy-900 hover:bg-bg-app"
                   : "bg-navy-900 text-white hover:bg-navy-700 shadow-sm",
@@ -53,17 +58,27 @@ export function PageHeader({ title, subtitle, backHref, action }: PageHeaderProp
             </Link>
           ) : (
             <button
-              onClick={action.onClick}
+              type="button"
+              onClick={action.disabled ? undefined : action.onClick}
+              disabled={action.disabled}
+              title={action.disabled ? action.unavailableReason : undefined}
+              aria-describedby={action.disabled && action.unavailableReason ? "page-header-action-unavailable" : undefined}
               className={[
-                "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-all shrink-0",
+                "flex items-center gap-2 px-4 py-2.5 min-h-[48px] rounded-xl text-sm font-bold transition-all shrink-0",
                 action.variant === "outline"
                   ? "bg-white border border-neutral-gray-100 text-navy-900 hover:bg-bg-app"
                   : "bg-navy-900 text-white hover:bg-navy-700 shadow-sm",
+                action.disabled ? "opacity-50 cursor-not-allowed hover:bg-navy-900" : "",
               ].join(" ")}
             >
               {action.icon && <action.icon className="w-4 h-4" />}
               {action.label}
             </button>
+          )}
+          {action.disabled && action.unavailableReason && (
+            <span className="sr-only" id="page-header-action-unavailable">
+              {action.unavailableReason}
+            </span>
           )}
         </>
       )}

@@ -18,7 +18,6 @@ import { Customer } from "@/lib/types/customer";
 // Mock data removed
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchToolbar } from "@/components/ui/SearchToolbar";
-import { NewCustomerForm } from "@/components/customers/NewCustomerForm";
 import { getCustomersDb } from "@/app/actions/customers.actions";
 import { trackUiEvent } from "@/lib/tracking/tracking";
 import { useCustomerOverlay } from "@/components/customers/useCustomerOverlay";
@@ -33,7 +32,6 @@ export default function CustomersPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [showAddModal, setShowAddModal] = useState(false);
   const { open: openCustomer } = useCustomerOverlay();
 
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -73,8 +71,6 @@ export default function CustomersPage() {
     };
   }, [router]);
 
-  const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
-
   const filteredCustomers = customers.filter(c => {
     const cleanTerm = searchTerm.toLowerCase();
     const matchesSearch =
@@ -103,8 +99,10 @@ export default function CustomersPage() {
         title="Kundenkartei"
         action={{
           label: "Neuer Kunde",
-          onClick: () => setShowAddModal(true),
           icon: UserPlus,
+          disabled: true,
+          unavailableReason:
+            "NOT_AVAILABLE: Für die eigenständige Kundenerstellung ist kein serverseitiger Command hinterlegt.",
         }}
       />
 
@@ -205,7 +203,7 @@ export default function CustomersPage() {
           ) : (
             <div className="p-12 text-center text-text-muted bg-white border border-neutral-gray-300 rounded-xl space-y-2">
               <User className="h-8 w-8 mx-auto text-text-muted animate-pulse" />
-              <p className="font-bold text-text-muted">Noch keine Aufträge erfasst</p>
+              <p className="font-bold text-text-muted">Keine passenden Kunden gefunden</p>
               <p className="text-xs">Ändere den Filter oder passe den Suchbegriff an.</p>
             </div>
           )}
@@ -236,25 +234,6 @@ export default function CustomersPage() {
                 Wähle einen Kunden aus der linken Liste, um das vollständige Profil einzusehen.
               </p>
             </Card>
-          )}
-          {showAddModal && (
-            <NewCustomerForm
-              customerId={editingCustomerId}
-              onClose={() => {
-                setShowAddModal(false);
-                setEditingCustomerId(null);
-              }}
-              onSave={async (id) => {
-                setShowAddModal(false);
-                setEditingCustomerId(null);
-                const res = await getCustomersDb();
-                if (res.ok) {
-                  setCustomers(res.data);
-                  const newCust = res.data.find(c => c.id === id);
-                  if (newCust) setSelectedCustomer(newCust);
-                }
-              }}
-            />
           )}
         </div>
       </div>

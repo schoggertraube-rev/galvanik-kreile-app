@@ -6,6 +6,36 @@
 > oder Produkt-Backlog; sie starten weder eine Parallelmission noch ueberschreiben sie `main`.
 > Der Produktumfang bleibt geschuetzt und wird seriell ueber reale Vertikalschnitte geliefert.
 
+> **Nachtrag 2026-08-27 (Frontend-Lane):** Neben der Order-to-Cash-Lane ist
+> `missions/FRONTEND_IMPLEMENTATION_001.yml` eine zweite autorisierte Paket-Lane. Es gibt damit zwei
+> autorisierte Paket-Lanes, nicht zwei aktive Implementierungen: aktiv ist ausschliesslich die
+> Parallelplanung. Disjunktheit der Implementierung ohne Pfad-, Migrations- oder
+> Datenwahrheitsueberlappung ist erforderlich, aber noch nicht belegt; ist die Trennung nicht
+> beweisbar, wird sequenziell gearbeitet. Es gilt
+> `single_active_code_writer_across_frontend_and_f1 = true`: insgesamt genau EIN aktiver Code-Writer,
+> nicht je Teilphase einer; Frontend- und F1-Writer laufen nie parallel, read-only Reviewer und
+> Inventare duerfen parallel laufen. Die dort geschuetzten Zieloberflaechen, Routenentscheidungen und
+> die Baeder-Disposition stehen unten im Abschnitt "Frontend-Zieloberflaechen, Routen und
+> Disposition". Ratifiziertes Zielbild heisst nicht geliefert.
+
+> **Nachtrag 2026-08-27 (Owner-Autonomie-Mandat):** Owner-Provenienz
+> `KREILE_AUTONOMIE_MANDAT_2026-08-27.md`, SHA-256
+> `C244EC1C5F1FF1493420F4DCC44FEFCD8F0E76CEAEFD16853BE2A4E4C539364A`, 4904 Bytes. Die Datei liegt
+> ausserhalb des Repositories, ist ausschliesslich Herkunft, wird nicht veraendert oder kopiert und
+> ersetzt keinen Gatebeweis. Sie ist `PROVENANCE_OF_ACTIVE_OWNER_AUTHORITY`, `valid_from`
+> 2026-08-27, `valid_until` `NEXT_REAL_JOINT_OWNER_ORCHESTRATOR_DECISION`, weiterhin gueltig und
+> nicht revoziert; ihr Teil 3 war der Abschluss derselben Uebergabe. Sie ratifiziert F1.4
+> vollstaendig, ratifiziert das Frontend als Parallelpaket samt getrennter Statusachsen, setzt die
+> globale Ein-Writer-Regel und erteilt eine stehende Merge-Autoritaet:
+> `authority_status: STANDING_GRANTED`, `additional_owner_merge_approval_required: false`,
+> `owner_ux_pass_blocks_merge: false`. Davon getrennt steht die Paketreife
+> (`eligibility_status: NOT_MATURED`), die am exakten SHA gruene mergeblockierende Gates, keine
+> offenen P0/P1, vollstaendig ratifizierten Scope sowie Review, CI und E2E `PASS` verlangt. Die
+> Autoritaet ist also erteilt; das konkrete Paket ist heute noch nicht merge-eligible. Manuelle
+> Production-Promotion und manueller Deploy bleiben `FORBIDDEN`; ein bereits bestehendes
+> automatisches Vercel-Deployment als Folge eines spaeter autorisierten `main`-Merges wird nicht
+> manuell ausgeloest, sondern danach nur beobachtet und belegt.
+
 > **Nachtrag 2026-08-10 (massgeblich fuer Fundament-Stati):** Alle FUNDAMENT-Eintraege dieses
 > Registers (u.a. DB-TRUTH-001, LEDGER-CONSOLIDATION-001, RLS-CONTRACT-001, die Fundament-PR-Listen
 > #42/#43/#44 sowie die Branch-Disposition) sind durch F0 abgeschlossen bzw. ueberholt:
@@ -31,6 +61,12 @@ Dieses Register schuetzt bestaetigte Produktziele, verschobene Missionen und ver
 - `PROTECTED_BACKLOG`: bestaetigter Produktumfang, noch nicht terminiert.
 - `DONE_VERIFIED`: auf Production und im relevanten End-to-End-Weg nachgewiesen.
 - `UNKNOWN_EXTERNAL`: aus dem aktuellen Arbeitsbereich nicht belegbar.
+- `OWNER_RATIFIED_NOT_IMPLEMENTED`: Zielbild oder Vertrag vom Owner ratifiziert, Umsetzung existiert nicht.
+- `PENDING_OWNER_RATIFICATION`: eingereicht, vom Owner noch nicht ratifiziert.
+- `REFERENCE_ASSET_RECOVERY_REQUIRED`: verbindliche Referenzdatei fehlt oder ist nicht gebunden; Arbeit daran ist gesperrt.
+- `RATIFIED_CONTRACT_DRIFT`: Vertragsinhalt ist vom Owner vollstaendig ratifiziert; Mission, Migration oder Code weichen davon ab. Klasse `FAIL_INTERNAL`, keine offene Ownerentscheidung.
+- `PARALLEL_PLANNING_ACTIVE`: als Parallelpaket ratifiziert und geplant; Implementierung nicht begonnen und getrennte Ausfuehrung nicht belegt.
+- `OPEN_NOT_GRANTED`: Freigabe ist offen und ausdruecklich nicht erteilt; sie wird nie als erteilt dargestellt.
 
 ## Truth-, Quality- und Datenbankmissionen
 
@@ -154,14 +190,58 @@ Ein geschlossener PR verliert seinen Branch nicht automatisch. PR-Schliessung be
 | Kundenkarte | Kundenwissen, Beziehungen, Freitext, Quellenqualitaet und optionale Deep-Research-Anreicherung. | `PROTECTED_BACKLOG` |
 | Kommunikation | Telefonnotiz, E-Mail, Bilder, Rueckruf, Anfrage und Kundenkontext in einer Arbeitsflaeche. | `PROTECTED_BACKLOG` |
 | Marketing | Aktion -> Reichweite -> Klick -> Anfrage -> Auftrag -> Umsatz/Marge mit Attribution und Lernschleife. | `PROTECTED_BACKLOG` |
-| Lager/Baeder/Energie/QS/KVP | Operative Bestaende, Badwerte, Energie, Qualitaet, Reklamationen und Verbesserungen mit realen Daten. | `PROTECTED_BACKLOG` |
+| Lager/Energie/QS/KVP | Operative Bestaende, Energie, Qualitaet/QS, Reklamationen und Verbesserungen mit realen Daten. Baeder und Badwerte sind nach `D-ARCH-010` ausdruecklich kein Teil dieser Produktroadmap. | `PROTECTED_BACKLOG` |
 | Performance | Fluessige Tablet-/Desktop-Nutzung, kein Jank, keine flackernden oder unkontrolliert schliessenden Overlays. | `PROTECTED_BACKLOG` |
 | Modularer Kern | Tenant-Begriffe, Vertraege und Konfiguration zentral; keine Tiefimporte oder zweite Wahrheiten. | `PROTECTED_BACKLOG` |
+
+## Frontend-Zieloberflaechen, Routen und Disposition (2026-08-27)
+
+Owner-Provenienz der Lane: `KREILE_UEBERGABE_FRONTEND_UMSETZUNG_V1_2026-08-21.md`, SHA-256
+`1CC0BDD969E1E5BB8F437542FCD8208FCDD2DF5B3B7FC8A0B18030AAC21B5C8C`, 4054 Bytes; ratifiziert als
+Parallelpaket durch `KREILE_AUTONOMIE_MANDAT_2026-08-27.md`, SHA-256
+`C244EC1C5F1FF1493420F4DCC44FEFCD8F0E76CEAEFD16853BE2A4E4C539364A`, 4904 Bytes; beides kanonisiert
+in `missions/FRONTEND_IMPLEMENTATION_001.yml`. Die Owner-Dateien sind nur Herkunft, nach
+Kanonisierung ist die Mission autoritativ.
+
+Belegter Lane-Status: `PARALLEL_PLANNING_ACTIVE` / `IMPLEMENTATION_NOT_STARTED`; nur Parallelplanung
+ist aktiv, die Disjunktheit der Implementierung ist erforderlich, aber nicht belegt. Phase 0 darf im
+aktuellen dirty F1-Checkout read-only inventarisieren; `READ_ONLY` ist keine implizite
+Repo-Schreibfreigabe. Jede Repo-Evidence- oder Missionsschreibung nach diesem Control-Plane-Abgleich
+und jeder UI-Writer verlangt einen von den Projektregeln erlaubten sauberen kurzen Paketbranch vom
+live aktuellen `main`, keinen laufenden F1-Writer oder F1-Gate, keinen zweiten aktiven Code-Writer
+ueber Frontend und F1 hinweg und eine vorab berechnete exakte Produkt-Allowlist mit Schnittmenge 0
+zur aktiven Order-to-Cash-Allowlist. Kein neuer Worktree und kein Clone ohne gesonderte Autoritaet;
+ist die Trennung nicht beweisbar, gilt sequenzielle Arbeit: erst F1.4 korrigieren und mergen, danach
+der Frontend-Writer.
+
+Basisbindung: Der in der Mission gefuehrte SHA `f1c34b8f36c05912a094eb163950a24a9710df97` ist
+ausschliesslich `handoff_snapshot_sha` (`HISTORICAL_HANDOFF_SNAPSHOT_ONLY`) und niemals
+Implementierungsbasis. Fail-closed gilt
+`implementation_base_sha = BIND_CURRENT_MAIN_AT_WRITER_START`; ohne Bindung an den live aktuellen
+`origin/main` startet kein UI-Writer.
+
+Statusachsen der Lane: `FUNCTIONAL_SLICE_PASS` `NOT_STARTED`, `DATA_TRUTH_PASS` `NOT_STARTED`,
+`UI_REFERENCE_PASS` `NOT_STARTED`, `OWNER_UX_PASS` `OPEN_NOT_GRANTED` (nicht mergeblockierend),
+`PRODUCT_READY` `false`. Screenshotmatrix exakt `390x844`, `768x1024`, `1024x768`, `1366x1024`,
+`1440x900`. Die Ratifikation der vier Zielbildnamen ist eigene Metadatenwahrheit und ersetzt weder
+gebundene Referenzassets noch `UI_REFERENCE_PASS` oder `OWNER_UX_PASS`.
+
+| ID | Geschuetzter Wert | Status | Regel / naechste Aktion |
+|---|---|---|---|
+| `FE-SURFACE-ROLF-TAG-V8` | Rolf-Oberflaeche "Der Tag" V8 als einzige Chefflaeche. | `OWNER_RATIFIED_NOT_IMPLEMENTED` | Nur auf `/cockpit`; erst nach dem Phillip-Proofscreen bauen. |
+| `FE-SURFACE-PHILLIP-WERKSTATT-V4` | Phillip-Oberflaeche "Werkstatt" V4 als erster Proofscreen. | `OWNER_RATIFIED_NOT_IMPLEMENTED` | Phase 1 der Frontend-Lane; exakt an `/warendurchlauf` als rollenbasierten Werkstatt-Einstieg gebunden, Stationsunterseiten nur darunter, keine neue Dashboardroute; ausschliesslich gegen reale F1.2/F1.3-Ports. Phase 0 liefert den exakten Route-Binding-Output; ohne bestandenes hartes `PHILLIP_ROUTE_BINDING_GATE` darf Phase 1 nicht schreiben. |
+| `FE-SURFACE-AUFTRAGSKARTE-MACHART-V8` | Auftragskarte `MACHART_V8`. | `OWNER_RATIFIED_NOT_IMPLEMENTED` | Nach Rolf, gleiches Muster, keine zweite Datenwahrheit. |
+| `FE-SURFACE-KUNDENKARTE-MACHART-V2` | Kundenkarte `MACHART_V2`. | `OWNER_RATIFIED_NOT_IMPLEMENTED` | Nach der Auftragskarte, gleiches Muster. |
+| `FE-REFERENCE-ASSETS-001` | Die exakten ratifizierten Visual-Referenzdateien aller vier Oberflaechen. | `REFERENCE_ASSET_RECOVERY_REQUIRED` | Phase 0 muss sie wiederfinden, erhalten und per SHA-256 und Bytegroesse binden. Kein UI-Code ohne Bindung; bekannte HTML-Kandidaten werden nicht still zur Autoritaet erklaert; nichts nach Gefuehl gestalten. |
+| `FE-ROUTE-DECISION-001` | Routenwahrheit: `/start` nur Login-/Sessiongrenze, `/cockpit` einzige Rolf-Flaeche "Der Tag", `/` spaeter serverseitiger Rollenrouter (admin/Rolf -> `/cockpit`; developer -> `/settings`; `werkstatt`, `meister`, `buero` -> `/warendurchlauf`), `/today` und `/kontrolle` ausschliesslich Kompatibilitaetsaliase auf `/`. | `ACTIVE` | Kein fuenftes Dashboard, Rolle `inhaber` bleibt verboten, kein Alias mit eigener Datenwahrheit. |
+| `BAEDER_DISPOSITION_001` | Baeder-Tabellen, -Daten, -Migrationen und -Provenienz als rein technische Salvage. Baeder erscheinen nach `D-ARCH-010` ausschliesslich hier, nie als Produktroadmap oder `PROTECTED_BACKLOG`; keine Baeder-UI, kein spaeteres Baeder-Produktziel. | `PROTECTED_SALVAGE` | Separater Task, nicht Frontend Phase 1, noch nicht erledigt. Akzeptanz: alle sichtbaren `/baeder`-Links und Baeder-Bezeichnungen aus produktiver Navigation entfernt; `/baeder` Redirect nach `/warendurchlauf/galvanik`; `/performance/baeder-material` entfernt oder gleicher Redirect; kein erreichbarer toter oder gemockter Bath-Adapter; Galvanik bleibt exakt ein Step. Keine Remote- oder Datenloeschung. |
+| `F1.5-CONTRACT-INTAKE` | F1.5-Bauvertrag `KREILE_F1_5_BAUVERTRAG_ZAHLUNGSEINGANG_WARENAUSGANG_V1_2026-08-21.md`, SHA-256 `5BCD70BFC2BD9D6A6DF06CF48D0D95C4A288DD5C6364BE2783954DDA1196BDE1`, 5592 Bytes. | `PENDING_OWNER_RATIFICATION` | Nur Provenienz und Status. Baustart ausschliesslich nach F1.4-Merge und neuer Owner- plus Orchestrator-Ratifikation/Startfreigabe; kein F1.5-Code. |
+| `F1.4-CONTRACT-RECONCILIATION` | Abgleich des vollstaendig ratifizierten F1.4-Inhalts (19 Prozent only, `PAYMENT_TERM_DAYS` 14, `EVOLVE_PUBLIC_INVOICES` additiv, `R-JJJJ-NNNN` lueckenlos, Storno plus Neuausstellung, Stammdaten fail-closed, PDF-Download) mit gebundener Mission, Migration und Kandidat. | `RATIFIED_CONTRACT_DRIFT` | Klasse `FAIL_INTERNAL`; keine offene Ownerentscheidung. Aufloesung durch den zustaendigen F1-Writer, Details in `CURRENT_STATE.md`; keine stille Doku-Anpassung, keine erfundene Datei-Provenienz. Historische Nachweise PR `#68` / Head-Prefix `d61bb966` liegen vor der Korrektur und sind kein Mergebeleg. |
 
 ## Nutzer-Twins als Abnahmeregel
 
 - **Rolf:** Desktop primaer; Kontrolle, Geld, Termine, Freigaben und Planbarkeit ohne KPI-Wand.
-- **Philipp:** Tablet primaer; Produktion und Zahlen ohne zusaetzliche Buerarbeit.
+- **Phillip:** Tablet primaer; Produktion und Zahlen ohne zusaetzliche Buerarbeit.
 - **Michael:** stark gefuehrte Aufnahme, Telefon, E-Mail, Eingang und Ausgang; geringe Technikroutine.
 
 Keine Mission gilt als produktreif, wenn der relevante Nutzer-Twin den Kernweg nicht ohne versteckte Entwicklerkenntnisse ausfuehren kann.
