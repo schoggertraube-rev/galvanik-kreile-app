@@ -1,8 +1,8 @@
 mission_id: F1_ORDER_TO_CASH_PILOT_001
 title: Galvanik-Kreile Order-to-Cash Pilot
 status: active
-base_sha: fc551b0732c52a0867cc4b0bbdfe4f8a52ad3550
-branch: main
+base_sha: f1c34b8f36c05912a094eb163950a24a9710df97
+branch: f1/immutable-invoice-m4-20260821
 worktree: none # post-M0: kurzer Paketbranch direkt in 02_app, kein Worktree mehr
 
 # ── M0 Konsolidierungsstand ───────────────────────────────────────
@@ -36,13 +36,19 @@ delivery_order:
   - F1.5_BESTAETIGTER_ZAHLUNGSEINGANG
   - F1.6_REALER_PILOT
 
-active_package: NONE
-# F1.4 bleibt bis zu einem eigenen Auftrag ausdruecklich NOT_STARTED.
-next_gate_after_active_package: F1.4_UNVERAENDERLICHE_RECHNUNG
+active_package: F1.4_UNVERAENDERLICHE_RECHNUNG
+next_gate_after_active_package: F1.4_REAL_E2E_AND_INDEPENDENT_REVIEW
 f1_r0_status: complete
 f1_2_status: complete
 f1_3_status: complete
-f1_4_status: NOT_STARTED
+f1_4_status: IN_PROGRESS
+f1_4_v1_ratified: true
+f1_4_contract_sha256: B1F4E10ECB0C907085D9BE90E859AAFEF1C9798AE5DEEE2E3CE0DD849AD2634A
+f1_4_invoice_truth: EVOLVE_PUBLIC_INVOICES
+f1_4_master_data_source: EXISTING_COMPANY_SETTINGS_NOT_GIT
+f1_4_service_date_rule: FINAL_F1_3_FREEZE_DATE
+f1_4_pdf_scope: DOWNLOAD_ONLY_2026_TRANSITION
+f1_4_payment_term_rule: TENANT_CONFIG_REQUIRED_FAIL_CLOSED
 
 # ── F1.2 Entscheidungsgrundlage (bindend, ersetzt Altstand) ───────
 # D-F12-001A (ersetzt D-F12-001): F1.2 = genau EIN Uebergang
@@ -255,6 +261,38 @@ f1_3_allowlist:
   - src/lib/server/__tests__/cardSearchRead.test.ts
   - src/test/f1_3_foundation_ports.integration.test.ts
   - src/test/f1_3_live_card.integration.test.ts
+
+f1_4_allowlist:
+  - missions/F1_ORDER_TO_CASH_PILOT_001.yml
+  - package.json
+  - package-lock.json
+  - supabase/migrations/20260821152949_f1_4_immutable_invoice_contract.sql
+  - src/lib/server/commands/immutableInvoiceCommand.ts
+  - src/lib/server/invoiceRead.ts
+  - src/lib/pdf/ImmutableInvoiceDocument.tsx
+  - src/lib/pdf/__tests__/ImmutableInvoiceDocument.test.tsx
+  - src/app/actions/invoices.actions.ts
+  - src/app/api/invoices/[invoiceId]/pdf/route.ts
+  - src/app/buchhaltung/rechnungen/page.tsx
+  - src/app/buchhaltung/rechnungen/InvoicesClient.tsx
+  - src/app/buchhaltung/rechnungen/loading.tsx
+  - src/components/orders/OrderImmutableInvoiceButton.tsx
+  - src/components/orders/OrderOverlay.tsx
+  - src/lib/server/commands/__tests__/immutableInvoiceCommand.test.ts
+  - src/lib/server/__tests__/invoiceRead.test.ts
+  - src/app/actions/__tests__/invoices.actions.test.ts
+  - src/app/api/invoices/[invoiceId]/pdf/__tests__/route.test.ts
+  - src/components/orders/__tests__/OrderImmutableInvoiceButton.test.tsx
+  - src/app/buchhaltung/rechnungen/__tests__/page.test.tsx
+  - src/app/buchhaltung/__tests__/w2c.activeRouteContainment.test.tsx
+  - src/test/f1_4_immutable_invoice_contract.integration.test.ts
+  - src/test/f1_4_immutable_invoice.integration.test.ts
+  - e2e/f1-4-immutable-invoice.real.spec.ts
+  - docs/evidence/f1/F1_4_UNVERAENDERLICHE_RECHNUNG_E2E_EVIDENCE.md
+  - docs/evidence/f1/artifacts/f1-4/**
+  - docs/evidence/f1/F1_R0_CAPABILITY_REGISTRY.json
+  - docs/evidence/f0/W4_CROSS_MODULE_READ_PORT_INVENTORY.json
+  - .github/workflows/quality.yml
 
 f1_r0_required_gates:
   - REACHABLE_PRODUCTION_MOCKS=0

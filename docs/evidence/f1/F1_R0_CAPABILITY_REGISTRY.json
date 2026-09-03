@@ -7,12 +7,12 @@
   "note": "Machine-readable capability inventory based on snapshot_sha; the immutable review SHA is recorded separately when the candidate is frozen. Every page route, API route, Server Action group, KPI definition, and provider connection must carry exactly one of: REAL_VERIFIED | REAL_PENDING_SECRET | PENDING_CONTRACT | TEST_ONLY | LEGACY_REMOVE",
   "summary": {
     "page_routes": 78,
-    "api_routes": 18,
-    "server_action_groups": 48,
+    "api_routes": 19,
+    "server_action_groups": 49,
     "kpi_definitions": 7,
     "provider_connections": 17,
     "nav_links_without_page": 3,
-    "total": 171
+    "total": 173
   },
   "f1_1_evidence": {
     "mission": "F1.1_DIGITALER_WARENEINGANG",
@@ -960,6 +960,16 @@
       "open_reason": "Returns notAvailableResponse (503). Quarantined pending cron and Gemini contract."
     },
     {
+      "stable_id": "api.invoices.invoice-id.pdf",
+      "kind": "API_ROUTE",
+      "entry_point": "src/app/api/invoices/[invoiceId]/pdf/route.ts",
+      "route": "/api/invoices/[invoiceId]/pdf",
+      "visible": false,
+      "reachable": true,
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "F1.4 stored original/cancellation PDF download candidate. Real local E2E and independent exact-SHA acceptance are pending."
+    },
+    {
       "stable_id": "api.ocr-process",
       "kind": "API_ROUTE",
       "entry_point": "src/app/api/ocr-process/route.ts",
@@ -1257,6 +1267,22 @@
       ],
       "classification": "PENDING_CONTRACT",
       "open_reason": "Inventory/Lager management. Supabase-connected but no independent E2E evidence.",
+      "visible": false,
+      "reachable": true
+    },
+    {
+      "stable_id": "server-actions.invoices",
+      "kind": "SERVER_ACTION_GROUP",
+      "entry_point": "src/app/actions/invoices.actions.ts",
+      "exported_functions": [
+        "issueInvoiceAction",
+        "cancelInvoiceAction",
+        "getInvoiceReceiptAction",
+        "getInvoiceCancellationReceiptAction",
+        "getInvoiceSummariesAction"
+      ],
+      "classification": "PENDING_CONTRACT",
+      "open_reason": "F1.4 immutable invoice issue, cancellation and receipt/readback candidate. Real local E2E and independent exact-SHA acceptance are pending.",
       "visible": false,
       "reachable": true
     },
